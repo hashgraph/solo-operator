@@ -20,5 +20,5 @@ repositories { gradlePluginPortal() }
 
 dependencies {
     implementation("com.diffplug.spotless:spotless-plugin-gradle:6.25.0")
-    implementation("net.swiftzer.semver:semver:1.3.0")
+    implementation("net.swiftzer.semver:semver:2.0.0")
 }
