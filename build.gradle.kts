@@ -16,6 +16,7 @@
 
 plugins {
     id("com.hedera.solo.operator.conventions")
+    id("com.hedera.solo.operator.versioning")
     id("io.quarkus")
 }
 
@@ -38,6 +39,7 @@ dependencies {
 
     implementation("io.quarkus:quarkus-arc")
     implementation("io.quarkus:quarkus-container-image-docker")
+    implementation("io.quarkus:quarkus-kubernetes")
     implementation("io.quarkus:quarkus-kubernetes-client")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk-bundle-generator")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk")

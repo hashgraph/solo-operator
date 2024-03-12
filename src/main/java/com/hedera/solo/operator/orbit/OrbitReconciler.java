@@ -26,7 +26,7 @@ import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
 
-@ControllerConfiguration(name = "orbit-controller")
+@ControllerConfiguration(name = "orbit")
 public class OrbitReconciler implements Reconciler<Orbit>, ErrorStatusHandler<Orbit> {
 
     private final KubernetesClient client;
