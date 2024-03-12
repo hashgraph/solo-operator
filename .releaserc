@@ -15,7 +15,8 @@
           { "path": "build/kubernetes/kubernetes.yml", "label": "Kubernetes Operator Manifest", "name": "deployment.yml" },
           { "path": "build/kubernetes/kubernetes.json", "label": "Kubernetes Operator Manifest", "name": "deployment.json" },
           { "path": "build/kubernetes/capsules.solo.hedera.com-v1.yml", "label": "Kubernetes Capsule CRD", "name": "capsules.solo.hedera.com-v1.yml" },
-          { "path": "build/kubernetes/orbits.solo.hedera.com-v1.yml", "label": "Kubernetes Orbit CRD", "name": "orbits.solo.hedera.com-v1.yml" }
+          { "path": "build/kubernetes/orbits.solo.hedera.com-v1.yml", "label": "Kubernetes Orbit CRD", "name": "orbits.solo.hedera.com-v1.yml" },
+          { "path": "build/helm/solo-operator-${nextRelease.version}.tgz", "label": "Helm Chart", "name": "solo-operator-${nextRelease.version}.tgz" }
         ]
       }
     ]
@@ -37,15 +38,31 @@
     ],
     [
       "@semantic-release/exec",
+      { "cmd": "cd build/helm && helm package ." }
+    ],
+    [
+      "@semantic-release/exec",
+      { "cmd": "helm push build/helm/solo-operator-${nextRelease.version}.tgz oci://artifacts.swirldslabs.io/solo-operator-helm-release" }
+    ],
+    [
+      "@semantic-release/exec",
       { "cmd": "jf docker buildx --platform linux/amd64,linux/arm64 -f src/main/docker/Dockerfile.jvm --tag artifacts.swirldslabs.io/solo-operator-docker-release/solo-operator:${nextRelease.version} --push ." }
     ],
     [
       "@semantic-release/git",
       {
         "assets": [
-          "version.txt"
+          "gradle.properties"
         ]
       }
+    ],
+    [
+      "@semantic-release/exec",
+      { "cmd": "git branch release/${nextRelease.version.split('.')[0]}.${nextRelease.version.split('.')[1]}" }
+    ],
+    [
+      "@semantic-release/exec",
+      { "cmd": "git push -u origin release/${nextRelease.version.split('.')[0]}.${nextRelease.version.split('.')[1]}" }
     ]
   ],
   "branches":[
