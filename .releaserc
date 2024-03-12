@@ -42,7 +42,7 @@
     ],
     [
       "@semantic-release/exec",
-      { "cmd": "jf docker buildx --platform linux/amd64,linux/arm64 -f src/main/docker/Dockerfile.jvm --tag artifacts.swirldslabs.io/solo-operator-docker-release/solo-operator:${nextRelease.version} --push ." }
+      { "cmd": "jf docker buildx build --platform linux/amd64,linux/arm64 -f src/main/docker/Dockerfile.jvm --tag artifacts.swirldslabs.io/solo-operator-docker-release/solo-operator:${nextRelease.version} --push ." }
     ],
     [
       "@semantic-release/exec",
