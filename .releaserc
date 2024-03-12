@@ -12,11 +12,11 @@
       "@semantic-release/github",
       {
         "assets": [
-          { "path": "build/kubernetes/kubernetes.yml", "label": "Kubernetes Operator Manifest", "name": "deployment.yml" },
-          { "path": "build/kubernetes/kubernetes.json", "label": "Kubernetes Operator Manifest", "name": "deployment.json" },
-          { "path": "build/kubernetes/capsules.solo.hedera.com-v1.yml", "label": "Kubernetes Capsule CRD", "name": "capsules.solo.hedera.com-v1.yml" },
-          { "path": "build/kubernetes/orbits.solo.hedera.com-v1.yml", "label": "Kubernetes Orbit CRD", "name": "orbits.solo.hedera.com-v1.yml" },
-          { "path": "build/helm/solo-operator-${nextRelease.version}.tgz", "label": "Helm Chart", "name": "solo-operator-${nextRelease.version}.tgz" }
+          { "path": "build/kubernetes/kubernetes.yml", "label": "deployment.yml", "name": "deployment.yml" },
+          { "path": "build/kubernetes/kubernetes.json", "label": "deployment.json", "name": "deployment.json" },
+          { "path": "build/kubernetes/capsules.solo.hedera.com-v1.yml", "label": "capsules.solo.hedera.com-v1.yml", "name": "capsules.solo.hedera.com-v1.yml" },
+          { "path": "build/kubernetes/orbits.solo.hedera.com-v1.yml", "label": "orbits.solo.hedera.com-v1.yml", "name": "orbits.solo.hedera.com-v1.yml" },
+          { "path": "build/helm/solo-operator-*.tgz", "label": "solo-operator-${nextRelease.version}.tgz", "name": "solo-operator-${nextRelease.version}.tgz" }
         ]
       }
     ]
@@ -42,7 +42,7 @@
     ],
     [
       "@semantic-release/exec",
-      { "cmd": "docker buildx build --platform linux/amd64,linux/arm64 -f src/main/docker/Dockerfile.jvm --tag artifacts.swirldslabs.io/solo-operator-docker-release/solo-operator:${nextRelease.version} --push ." }
+      { "cmd": "jf docker buildx build --platform linux/amd64,linux/arm64 -f src/main/docker/Dockerfile.jvm --tag artifacts.swirldslabs.io/solo-operator-docker-release/solo-operator:${nextRelease.version} --push ." }
     ],
     [
       "@semantic-release/exec",
@@ -55,14 +55,6 @@
           "gradle.properties"
         ]
       }
-    ],
-    [
-      "@semantic-release/exec",
-      { "cmd": "git branch release/${nextRelease.version.split('.')[0]}.${nextRelease.version.split('.')[1]}" }
-    ],
-    [
-      "@semantic-release/exec",
-      { "cmd": "git push -u origin release/${nextRelease.version.split('.')[0]}.${nextRelease.version.split('.')[1]}" }
     ]
   ],
   "branches":[
