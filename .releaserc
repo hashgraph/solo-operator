@@ -67,7 +67,7 @@
   ],
   "branches":[
     {
-      "name": "00012-Fix-Helm-Release"
+      "name": "main"
     },
     {
       "name": "release/([0-9]+).([0-9]+)",
