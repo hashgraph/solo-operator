@@ -51,6 +51,23 @@ jobs:
         with:
           node-version: 20
 
+      - name: Setup Java
+        uses: actions/setup-java@9704b39bf258b59bc04b50fa2dd55e9ed76b47a8 # v4.1.0
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@29c0906b64b8fc82467890bfb7a0a7ef34bda89e # v3.1.0
+        with:
+          gradle-version: wrapper
+          cache-read-only: true
+
+      - name: Setup Helm
+        uses: azure/setup-helm@29960d0f5f19214b88e1d9ba750a9914ab0f1a2f # v4.0.0
+        with:
+          version: "v3.13.3" #  helm version
+
       - name: Install Semantic Release
         run: |
           npm install -g semantic-release@21.0.7 @semantic-release/git@10.0.1 @semantic-release/exec@6.0.3 gradle-semantic-release-plugin@1.7.6
@@ -73,7 +90,7 @@ jobs:
           echo "version=$(cat VERSION | tr -d '[:space:]')" >> ${GITHUB_OUTPUT}
 
   create-github-release:
-    name: Github / Release
+    name: Release / Publish
     runs-on: [self-hosted, Linux, medium, ephemeral]
     needs:
       - prepare-release
@@ -121,7 +138,7 @@ jobs:
         uses: gradle/gradle-build-action@29c0906b64b8fc82467890bfb7a0a7ef34bda89e # v3.1.0
         with:
           gradle-version: wrapper
-          cache-read-only: false
+          cache-read-only: true
 
       - name: Setup Helm
         uses: azure/setup-helm@29960d0f5f19214b88e1d9ba750a9914ab0f1a2f # v4.0.0
@@ -217,3 +234,65 @@ jobs:
           GIT_COMMITTER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
         if: ${{ github.event.inputs.dry-run-enabled != 'true' && !cancelled() && !failure() }}
         run: npx semantic-release
+
+  finalize-release:
+    name: Release / Finalize
+    runs-on: [self-hosted, Linux, medium, ephemeral]
+    needs:
+      - create-github-release
+    if: ${{ github.event.inputs.dry-run-enabled != 'true' && needs.create-github-release.result == 'success' }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          ref: main
+          token: ${{ secrets.GH_ACCESS_TOKEN }}
+          fetch-depth: 0
+
+      - name: Install GnuPG Tools
+        run: |
+          if ! command -v gpg2 >/dev/null 2>&1; then
+            echo "::group::Updating APT Repository Indices"
+              sudo apt update
+            echo "::endgroup::"
+            echo "::group::Installing GnuPG Tools"
+              sudo apt install -y gnupg2
+            echo "::endgroup::"
+          fi
+
+      - name: Import GPG key
+        id: gpg_key
+        uses: crazy-max/ghaction-import-gpg@01dd5d3ca463c7f10f7f4f7b4f177225ac661ee4 # v6.1.0
+        with:
+          gpg_private_key: ${{ secrets.GPG_KEY_CONTENTS }}
+          passphrase: ${{ secrets.GPG_KEY_PASSPHRASE }}
+          git_config_global: true
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+          git_tag_gpgsign: false
+
+      - name: Setup Java
+        uses: actions/setup-java@9704b39bf258b59bc04b50fa2dd55e9ed76b47a8 # v4.1.0
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@29c0906b64b8fc82467890bfb7a0a7ef34bda89e # v3.1.0
+        with:
+          gradle-version: wrapper
+          cache-read-only: true
+
+      - name: Update Version as Snapshot
+        run: ./gradlew versionAsSnapshot --scan
+
+      - name: Commit Changes
+        uses: EndBug/add-and-commit@a94899bca583c204427a224a7af87c02f9b325d5 # v9.1.4
+        with:
+          push: true
+          add: "gradle.properties"
+          author_name: ${{ secrets.GIT_USER_NAME }}
+          author_email: ${{ secrets.GIT_USER_EMAIL }}
+          message: "chore(release): prepare for next development iteration [skip ci]"
+          pathspec_error_handling: exitImmediately
+          commit: "--signoff -S"
