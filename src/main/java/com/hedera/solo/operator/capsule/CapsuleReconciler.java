@@ -23,7 +23,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import jakarta.inject.Inject;
 
-@ControllerConfiguration(name = "capsule-controller")
+@ControllerConfiguration(name = "capsule")
 public class CapsuleReconciler implements Reconciler<Capsule> {
 
     private final KubernetesClient client;

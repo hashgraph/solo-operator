@@ -87,7 +87,7 @@ jobs:
 
       - name: Publish Unit Test Report
         uses: EnricoMi/publish-unit-test-result-action@f355d34d53ad4e7f506f699478db2dd71da9de5f # v2.15.1
-        if: ${{ inputs.enable-unit-tests && steps.npm-deps.conclusion == 'success' && !cancelled() }}
+        if: ${{ inputs.enable-unit-tests && !cancelled() }}
         with:
           check_name: "Unit Test Results"
           files: "**/build/test-results/test/TEST-*.xml"
@@ -101,7 +101,7 @@ jobs:
 
       - name: Publish Test Reports
         uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
-        if: ${{ inputs.enable-unit-tests && steps.npm-deps.conclusion == 'success' && !cancelled() }}
+        if: ${{ inputs.enable-unit-tests && !cancelled() }}
         with:
           name: Test Reports
           path: "**/build/test-results/test/TEST-*.xml"

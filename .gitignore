@@ -511,3 +511,6 @@ secring.*
 
 # Plugin directory
 /.quarkus/cli/plugins/
+
+# Version Information
+VERSION
