@@ -16,6 +16,7 @@
 
 package com.hedera.solo.operator.capsule;
 
+import io.fabric8.kubernetes.api.model.KubernetesResource;
 import io.javaoperatorsdk.operator.api.ObservedGenerationAwareStatus;
 
-public class CapsuleStatus extends ObservedGenerationAwareStatus {}
+public class CapsuleStatus extends ObservedGenerationAwareStatus implements KubernetesResource {}
