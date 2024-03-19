@@ -34,6 +34,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * An abstract base class which provides the common fields and logic shared by all {@code CapsuleSpec} implementations.
@@ -286,5 +287,23 @@ public abstract class BaseCapsuleSpec<T> implements Editable<T>, KubernetesResou
     @JsonAnySetter
     public void setAdditionalProperty(@NotNull final String name, final Object value) {
         this.additionalProperties.put(requireNonNull(name), value);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean equals(final Object o) {
+        if (this == o) return true;
+        if (!(o instanceof BaseCapsuleSpec<?> that)) return false;
+        return Objects.equals(getOrbit(), that.getOrbit())
+                && Objects.equals(getAffinity(), that.getAffinity())
+                && Objects.equals(getNodeSelector(), that.getNodeSelector())
+                && Objects.equals(getTolerations(), that.getTolerations())
+                && Objects.equals(getAdditionalProperties(), that.getAdditionalProperties());
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public int hashCode() {
+        return Objects.hash(getOrbit(), getAffinity(), getNodeSelector(), getTolerations(), getAdditionalProperties());
     }
 }
