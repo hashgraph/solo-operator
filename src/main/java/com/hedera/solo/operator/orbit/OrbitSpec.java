@@ -35,58 +35,128 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+/** The desired state of an {@code Orbit}. */
 @JsonPropertyOrder({"apiVersion", "kind", "metadata", "lifetime", "finalizers"})
 public class OrbitSpec implements Editable<OrbitSpecBuilder>, KubernetesResource {
 
+    /**
+     * The lifetime of the {@code Orbit}. The string value must be one of the following:
+     *
+     * <ul>
+     *   <li>A standard textual Java duration (eg: {@code P2DT15H}).
+     *   <li>A human readable duration (eg: {@code 2 days 15 hours}).
+     * </ul>
+     */
     @JsonProperty("lifetime")
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private String lifetime;
 
+    /** A list of finalizers which should be attached to all resources in this {@code Orbit}. */
     @JsonProperty("finalizers")
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     private List<String> finalizers;
 
+    /** Additional properties which are not explicitly defined in the schema. */
     @JsonIgnore
     private final Map<String, Object> additionalProperties = new LinkedHashMap<>();
 
+    /** Constructs a new {@code OrbitSpec} with default values. */
     public OrbitSpec() {
         this.finalizers = new LinkedList<>();
     }
 
+    /**
+     * Constructs a new {@code OrbitSpec} with the given lifetime and finalizers.
+     *
+     * @param lifetime the lifetime of the {@code Orbit}. may be a {@code null} reference.
+     * @param finalizers a list of finalizers which should be attached to all resources in this {@code Orbit}. may be a
+     *     {@code null} reference.
+     */
     public OrbitSpec(@Nullable final String lifetime, @Nullable final List<String> finalizers) {
         this.lifetime = lifetime;
         this.finalizers = new LinkedList<>(requireNonNullElseGet(finalizers, LinkedList::new));
     }
 
+    /**
+     * Fluent accessor for the lifetime of the {@code Orbit}. May return a {@code null} reference.
+     *
+     * @return the lifetime of the {@code Orbit}; or {@code null} if no value is present.
+     * @see #getLifetime()
+     */
     @JsonIgnore
     @Nullable
     public String lifetime() {
         return this.lifetime;
     }
 
+    /**
+     * Gets the lifetime of the {@code Orbit}. May return a {@code null} reference.
+     *
+     * <p>The value, if present, must be one of the following:
+     *
+     * <ul>
+     *   <li>A standard textual Java duration (eg: {@code P2DT15H}).
+     *   <li>A human readable duration (eg: {@code 2 days 15 hours}).
+     * </ul>
+     *
+     * @return the lifetime of the {@code Orbit}; or {@code null} if no value is present.
+     * @see #lifetime()
+     */
     @JsonProperty("lifetime")
     @Nullable
     public String getLifetime() {
         return this.lifetime;
     }
 
+    /**
+     * Sets the lifetime of the {@code Orbit}. Passing a {@code null} reference will effectively clear the lifetime of
+     * the {@code Orbit}.
+     *
+     * <p>The value, if provided, must be one of the following:
+     *
+     * <ul>
+     *   <li>A standard textual Java duration (eg: {@code P2DT15H}).
+     *   <li>A human readable duration (eg: {@code 2 days 15 hours}).
+     * </ul>
+     *
+     * @param lifetime the lifetime of the {@code Orbit}. may be a {@code null} reference.
+     */
     @JsonProperty("lifetime")
     public void setLifetime(@Nullable final String lifetime) {
         this.lifetime = lifetime;
     }
 
+    /**
+     * Fluent accessor for the list of finalizers which should be attached to all resources in this {@code Orbit}.
+     *
+     * @return a list of finalizers. guaranteed to be non-{@code null}.
+     * @see #getFinalizers()
+     */
     @JsonIgnore
     @NotNull
     public List<String> finalizers() {
         return this.finalizers;
     }
 
+    /**
+     * Gets the list of finalizers which should be attached to all resources in this {@code Orbit}.
+     *
+     * @return a list of finalizers. guaranteed to be non-{@code null}.
+     * @see #finalizers()
+     */
     @JsonProperty("finalizers")
     @NotNull
     public List<String> getFinalizers() {
         return this.finalizers;
     }
 
+    /**
+     * Sets the list of finalizers which should be attached to all resources in this {@code Orbit}. Unlike the
+     * constructor for this class, this method does not accept a {@code null} reference.
+     *
+     * @param finalizers a list of finalizers. must not be a {@code null} reference.
+     * @throws NullPointerException if the given finalizers argument is a {@code null} reference.
+     */
     @JsonProperty("finalizers")
     public void setFinalizers(@NotNull final List<String> finalizers) {
         this.finalizers = new LinkedList<>(requireNonNull(finalizers));
@@ -145,12 +215,24 @@ public class OrbitSpec implements Editable<OrbitSpecBuilder>, KubernetesResource
         }
     }
 
+    /**
+     * Creates a new {@code OrbitSpecBuilder} with the same properties as this {@code OrbitSpec}.
+     *
+     * @return a new {@code OrbitSpecBuilder}.
+     */
     @JsonIgnore
     @Override
     public OrbitSpecBuilder edit() {
         return new OrbitSpecBuilder(this);
     }
 
+    /**
+     * Creates a new {@code OrbitSpecBuilder} with the same properties as this {@code OrbitSpec}. This method is
+     * equivalent to {@link #edit()}.
+     *
+     * @return a new {@code OrbitSpecBuilder}.
+     * @see #edit()
+     */
     @JsonIgnore
     public OrbitSpecBuilder toBuilder() {
         return edit();
