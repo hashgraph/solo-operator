@@ -30,6 +30,7 @@ import io.fabric8.kubernetes.api.model.Affinity;
 import io.fabric8.kubernetes.api.model.KubernetesResource;
 import io.fabric8.kubernetes.api.model.Toleration;
 import io.smallrye.common.constraint.NotNull;
+import io.smallrye.common.constraint.Nullable;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -287,6 +288,21 @@ public abstract class BaseCapsuleSpec<T> implements Editable<T>, KubernetesResou
     @JsonAnySetter
     public void setAdditionalProperty(@NotNull final String name, final Object value) {
         this.additionalProperties.put(requireNonNull(name), value);
+    }
+
+    /**
+     * Sets the additional properties which are not explicitly defined in the schema. This method is used to replace the
+     * entire map of additional properties with the given map. Passing a {@code null} reference will effectively clear
+     * the map of additional properties.
+     *
+     * @param additionalProperties a map of additional properties. may be a {@code null} reference.
+     */
+    @JsonIgnore
+    public void setAdditionalProperties(@Nullable final Map<String, Object> additionalProperties) {
+        this.additionalProperties.clear();
+        if (additionalProperties != null) {
+            this.additionalProperties.putAll(additionalProperties);
+        }
     }
 
     /** {@inheritDoc} */
