@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.hedera.solo.operator.orbit.Orbit;
-import com.hedera.solo.operator.orbit.OrbitSpec;
+import com.hedera.solo.operator.orbit.OrbitSpecBuilder;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
@@ -54,18 +54,25 @@ class OrbitTest {
     void test() {
         final Orbit orbit = new Orbit();
         orbit.setMetadata(new ObjectMetaBuilder().withName("test-orbit").build());
-        orbit.setSpec(new OrbitSpec());
+        orbit.setSpec(new OrbitSpecBuilder()
+                .withLifetime("P2DT15H")
+                .addToFinalizers("kubernetes")
+                .build());
 
         client.resource(orbit).create();
 
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(client.resource(orbit).get()).isNotNull();
-            assertThat(client.resource(orbit).get().getMetadata().getName()).isEqualTo("test-orbit");
-            assertThat(client.resource(orbit).get().getStatus()).isNotNull();
-            assertThat(client.resource(orbit).get().getSpec()).isNotNull();
-            assertThat(client.resource(orbit).get().getStatus().getObservedGeneration())
+            final Orbit realOrbit = client.resource(orbit).get();
+
+            assertThat(realOrbit).isNotNull();
+            assertThat(realOrbit.getMetadata().getName()).isEqualTo("test-orbit");
+            assertThat(realOrbit.getStatus()).isNotNull();
+            assertThat(realOrbit.getSpec()).isNotNull();
+            assertThat(realOrbit.getSpec().getLifetime()).isEqualTo("P2DT15H");
+            assertThat(realOrbit.getSpec().getFinalizers()).containsExactly("kubernetes");
+            assertThat(realOrbit.getStatus().getObservedGeneration())
                     .isNotNull()
-                    .isGreaterThanOrEqualTo(0);
+                    .isNotNegative();
         });
     }
 }
