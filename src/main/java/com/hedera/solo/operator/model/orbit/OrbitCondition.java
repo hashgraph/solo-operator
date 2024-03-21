@@ -14,8 +14,19 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator.orbit;
+package com.hedera.solo.operator.model.orbit;
 
-import io.javaoperatorsdk.operator.api.ObservedGenerationAwareStatus;
+import com.hedera.solo.operator.model.common.Condition;
 
-public class OrbitStatus extends ObservedGenerationAwareStatus {}
+public class OrbitCondition extends Condition<OrbitCondition, ?> {
+    public OrbitCondition() {}
+
+    public OrbitCondition(
+            final String lastTransitionTime,
+            final String message,
+            final String reason,
+            final String status,
+            final String type) {
+        super(lastTransitionTime, message, reason, status, type);
+    }
+}

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator.capsule;
+package com.hedera.solo.operator.model.common;
 
 import static java.util.Objects.requireNonNull;
 import static java.util.Objects.requireNonNullElseGet;
@@ -43,7 +43,7 @@ import java.util.Objects;
  * @param <T> the type of the concrete builder object.
  */
 @JsonPropertyOrder({"apiVersion", "kind", "metadata", "orbit", "affinity", "nodeSelector", "tolerations"})
-public abstract class BaseCapsuleSpec<T> implements Editable<T>, KubernetesResource {
+public abstract class CapsuleSpec<T> implements Editable<T>, KubernetesResource {
 
     /** The orbit to which this capsule belongs. */
     @JsonProperty("orbit")
@@ -64,18 +64,18 @@ public abstract class BaseCapsuleSpec<T> implements Editable<T>, KubernetesResou
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     private List<Toleration> tolerations;
 
-    /** Additional properties which are not explicitly defined in the {@code BaseCapsuleSpec} schema. */
+    /** Additional properties which are not explicitly defined in the {@code CapsuleSpec} schema. */
     @JsonIgnore
     private final Map<String, Object> additionalProperties = new LinkedHashMap<>();
 
-    /** Creates an empty {@code BaseCapsuleSpec} with default values. */
-    protected BaseCapsuleSpec() {
+    /** Creates an empty {@code CapsuleSpec} with default values. */
+    protected CapsuleSpec() {
         this.tolerations = new LinkedList<>();
         this.nodeSelector = new LinkedHashMap<>();
     }
 
     /**
-     * Creates a new {@code BaseCapsuleSpec} with the given orbit, affinity, node selector, and tolerations.
+     * Creates a new {@code CapsuleSpec} with the given orbit, affinity, node selector, and tolerations.
      *
      * @param orbit the orbit to which this capsule belongs. must not be {@code null}.
      * @param affinity the affinity configuration which should be applied to the deployments controlled by this capsule.
@@ -86,7 +86,7 @@ public abstract class BaseCapsuleSpec<T> implements Editable<T>, KubernetesResou
      *     {@code null}.
      * @throws NullPointerException if the given orbit argument is a {@code null} reference.
      */
-    protected BaseCapsuleSpec(
+    protected CapsuleSpec(
             @NotNull final String orbit,
             final Affinity affinity,
             final Map<String, String> nodeSelector,
@@ -309,7 +309,7 @@ public abstract class BaseCapsuleSpec<T> implements Editable<T>, KubernetesResou
     @Override
     public boolean equals(final Object o) {
         if (this == o) return true;
-        if (!(o instanceof BaseCapsuleSpec<?> that)) return false;
+        if (!(o instanceof CapsuleSpec<?> that)) return false;
         return Objects.equals(getOrbit(), that.getOrbit())
                 && Objects.equals(getAffinity(), that.getAffinity())
                 && Objects.equals(getNodeSelector(), that.getNodeSelector())

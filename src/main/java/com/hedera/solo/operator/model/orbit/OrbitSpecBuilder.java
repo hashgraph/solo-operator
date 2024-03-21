@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator.orbit;
+package com.hedera.solo.operator.model.orbit;
 
 import static java.util.Objects.requireNonNull;
 

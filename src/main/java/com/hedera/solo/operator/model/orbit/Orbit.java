@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator.orbit;
+package com.hedera.solo.operator.model.orbit;
 
+import com.hedera.solo.operator.reconciler.orbit.OrbitReconciler;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.model.annotation.Group;
 import io.fabric8.kubernetes.model.annotation.Version;

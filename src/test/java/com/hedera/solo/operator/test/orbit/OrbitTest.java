@@ -19,8 +19,8 @@ package com.hedera.solo.operator.test.orbit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-import com.hedera.solo.operator.orbit.Orbit;
-import com.hedera.solo.operator.orbit.OrbitSpecBuilder;
+import com.hedera.solo.operator.model.orbit.Orbit;
+import com.hedera.solo.operator.model.orbit.OrbitSpecBuilder;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;

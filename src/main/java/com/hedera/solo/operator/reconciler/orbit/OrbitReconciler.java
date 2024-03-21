@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator.orbit;
+package com.hedera.solo.operator.reconciler.orbit;
 
+import com.hedera.solo.operator.model.orbit.Orbit;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;

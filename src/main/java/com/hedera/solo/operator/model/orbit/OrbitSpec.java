@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator.orbit;
+package com.hedera.solo.operator.model.orbit;
 
 import static java.util.Objects.requireNonNull;
 import static java.util.Objects.requireNonNullElseGet;
@@ -86,7 +86,7 @@ public class OrbitSpec implements Editable<OrbitSpecBuilder>, KubernetesResource
     @JsonIgnore
     @Nullable
     public String lifetime() {
-        return this.lifetime;
+        return lifetime;
     }
 
     /**
@@ -105,7 +105,7 @@ public class OrbitSpec implements Editable<OrbitSpecBuilder>, KubernetesResource
     @JsonProperty("lifetime")
     @Nullable
     public String getLifetime() {
-        return this.lifetime;
+        return lifetime;
     }
 
     /**
@@ -135,7 +135,7 @@ public class OrbitSpec implements Editable<OrbitSpecBuilder>, KubernetesResource
     @JsonIgnore
     @NotNull
     public List<String> finalizers() {
-        return this.finalizers;
+        return finalizers;
     }
 
     /**
@@ -147,7 +147,7 @@ public class OrbitSpec implements Editable<OrbitSpecBuilder>, KubernetesResource
     @JsonProperty("finalizers")
     @NotNull
     public List<String> getFinalizers() {
-        return this.finalizers;
+        return finalizers;
     }
 
     /**
@@ -171,7 +171,7 @@ public class OrbitSpec implements Editable<OrbitSpecBuilder>, KubernetesResource
     @JsonIgnore
     @NotNull
     public Map<String, Object> additionalProperties() {
-        return this.additionalProperties;
+        return additionalProperties;
     }
 
     /**
@@ -184,7 +184,7 @@ public class OrbitSpec implements Editable<OrbitSpecBuilder>, KubernetesResource
     @JsonAnyGetter
     @NotNull
     public Map<String, Object> getAdditionalProperties() {
-        return this.additionalProperties;
+        return additionalProperties;
     }
 
     /**
