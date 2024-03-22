@@ -40,7 +40,8 @@ public abstract class Condition<S, T extends VisitableBuilder<S, T>> implements 
     /** The time at which the condition last transitioned from one status to another. */
     @JsonProperty("lastTransitionTime")
     private String lastTransitionTime;
-    /** T human-readable message indicating details about the transition. */
+
+    /** A human-readable message indicating details about the transition. */
     @JsonProperty("message")
     private String message;
 
@@ -187,7 +188,7 @@ public abstract class Condition<S, T extends VisitableBuilder<S, T>> implements 
     @Override
     public boolean equals(final Object o) {
         if (this == o) return true;
-        if (!(o instanceof Condition<?> condition)) return false;
+        if (!(o instanceof Condition<?, ?> condition)) return false;
         return Objects.equals(getLastTransitionTime(), condition.getLastTransitionTime())
                 && Objects.equals(getMessage(), condition.getMessage())
                 && Objects.equals(getReason(), condition.getReason())
