@@ -26,6 +26,9 @@ val quarkusPlatformVersion: String by project
 val assertjVersion: String by project
 
 dependencies {
+    annotationProcessor("io.sundr:builder-annotations:0.103.1")
+    annotationProcessor("io.fabric8:kubernetes-client:6.10.0")
+
     implementation(
         enforcedPlatform(
             "${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}"
@@ -43,6 +46,9 @@ dependencies {
     implementation("io.quarkus:quarkus-kubernetes-client")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk-bundle-generator")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk")
+
+    compileOnly("io.sundr:builder-annotations:0.103.1")
+    compileOnly("org.projectlombok:lombok:1.18.32")
 
     testImplementation("io.quarkus:quarkus-junit5")
     testImplementation("io.quarkus:quarkus-jacoco")

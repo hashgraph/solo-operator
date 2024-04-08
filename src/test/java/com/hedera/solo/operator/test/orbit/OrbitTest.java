@@ -19,8 +19,11 @@ package com.hedera.solo.operator.test.orbit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-import com.hedera.solo.operator.model.orbit.Orbit;
-import com.hedera.solo.operator.model.orbit.OrbitSpecBuilder;
+import com.hedera.solo.operator.model.v1alpha1.Orbit;
+import com.hedera.solo.operator.model.v1alpha1.OrbitSpecBuilder;
+import com.hedera.solo.operator.reconciler.orbit.dependent.OrbitConfigMap;
+import io.fabric8.kubernetes.api.model.ConfigMap;
+import io.fabric8.kubernetes.api.model.Namespace;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
@@ -73,6 +76,25 @@ class OrbitTest {
             assertThat(realOrbit.getStatus().getObservedGeneration())
                     .isNotNull()
                     .isNotNegative();
+
+            await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+                final Namespace orbitNs = client.namespaces()
+                        .withName(realOrbit.getMetadata().getName())
+                        .get();
+                assertThat(orbitNs).isNotNull();
+                assertThat(orbitNs.getMetadata().getName()).isEqualTo("test-orbit");
+
+                await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+                    final ConfigMap cm = client.configMaps()
+                            .inNamespace(realOrbit.getMetadata().getName())
+                            .withName(OrbitConfigMap.NAME)
+                            .get();
+                    assertThat(cm).isNotNull();
+                    assertThat(cm.getMetadata().getName()).isEqualTo(OrbitConfigMap.NAME);
+                    assertThat(cm.getMetadata().getNamespace())
+                            .isEqualTo(realOrbit.getMetadata().getName());
+                });
+            });
         });
     }
 }

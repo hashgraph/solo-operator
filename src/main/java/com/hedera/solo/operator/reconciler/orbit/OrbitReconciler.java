@@ -16,7 +16,11 @@
 
 package com.hedera.solo.operator.reconciler.orbit;
 
-import com.hedera.solo.operator.model.orbit.Orbit;
+import com.hedera.solo.operator.model.v1alpha1.Orbit;
+import com.hedera.solo.operator.model.v1alpha1.OrbitStatus;
+import com.hedera.solo.operator.model.v1alpha1.OrbitStatusBuilder;
+import com.hedera.solo.operator.reconciler.orbit.dependent.OrbitConfigMap;
+import com.hedera.solo.operator.reconciler.orbit.dependent.OrbitNamespace;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
@@ -24,10 +28,19 @@ import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusHandler;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
+import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
 import jakarta.inject.Inject;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.format.DateTimeFormatter;
 import org.jboss.logging.Logger;
 
-@ControllerConfiguration(name = "orbit")
+@ControllerConfiguration(
+        name = "orbit",
+        dependents = {
+            @Dependent(name = "namespace", type = OrbitNamespace.class),
+            @Dependent(type = OrbitConfigMap.class, dependsOn = "namespace"),
+        })
 public class OrbitReconciler implements Reconciler<Orbit>, ErrorStatusHandler<Orbit> {
 
     private final KubernetesClient client;
@@ -46,7 +59,8 @@ public class OrbitReconciler implements Reconciler<Orbit>, ErrorStatusHandler<Or
             log.infof(
                     "Orbit - Starting Reconciliation [ name = '%s' ]",
                     orbit.getMetadata().getName());
-            return UpdateControl.updateStatus(orbit);
+            createOrUpdateStatus(orbit);
+            return UpdateControl.patchStatus(orbit);
         } finally {
             log.infof(
                     "Orbit - Finished Reconciliation [ name = '%s' ]",
@@ -61,6 +75,33 @@ public class OrbitReconciler implements Reconciler<Orbit>, ErrorStatusHandler<Or
                 e,
                 "Orbit - Error During Reconciliation [ name = '%s' ]",
                 orbit.getMetadata().getName());
-        return ErrorStatusUpdateControl.updateStatus(orbit);
+        return ErrorStatusUpdateControl.patchStatus(orbit);
+    }
+
+    private void createOrUpdateStatus(final Orbit orbit) {
+        final OrbitStatusBuilder builder =
+                orbit.getStatus() != null ? orbit.getStatus().edit() : new OrbitStatusBuilder();
+        final Instant now = Instant.now();
+
+        builder.withPhase(OrbitStatus.Phase.RUNNING);
+
+        if (!builder.hasStartTime()) {
+            builder.withStartTime(DateTimeFormatter.ISO_INSTANT.format(now));
+        }
+
+        if (!builder.hasExpirationTime()
+                && orbit.getSpec().getLifetime() != null
+                && !orbit.getSpec().getLifetime().isEmpty()) {
+            final Duration dur = Duration.parse(orbit.getSpec().getLifetime());
+            builder.withExpirationTime(DateTimeFormatter.ISO_INSTANT.format(dur.addTo(now)));
+        }
+
+        builder.addNewCondition()
+                .withType("Ready")
+                .withStatus("True")
+                .withLastTransitionTime(DateTimeFormatter.ISO_INSTANT.format(now))
+                .endCondition();
+
+        orbit.setStatus(builder.build());
     }
 }

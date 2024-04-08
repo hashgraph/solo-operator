@@ -24,18 +24,24 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import io.fabric8.kubernetes.api.builder.Editable;
-import io.fabric8.kubernetes.api.builder.VisitableBuilder;
 import io.fabric8.kubernetes.api.model.KubernetesResource;
 import io.smallrye.common.constraint.NotNull;
 import io.smallrye.common.constraint.Nullable;
+import io.sundr.builder.annotations.Buildable;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Objects;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
 
 @JsonPropertyOrder({"apiVersion", "kind", "metadata", "lastTransitionTime", "message", "reason", "status", "type"})
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public abstract class Condition<S, T extends VisitableBuilder<S, T>> implements Editable<T>, KubernetesResource {
+@JsonDeserialize
+@ToString
+@EqualsAndHashCode
+@Buildable(editableEnabled = false, builderPackage = "io.fabric8.kubernetes.api.builder")
+public class Condition implements Editable<ConditionBuilder>, KubernetesResource {
 
     /** The time at which the condition last transitioned from one status to another. */
     @JsonProperty("lastTransitionTime")
@@ -61,9 +67,9 @@ public abstract class Condition<S, T extends VisitableBuilder<S, T>> implements 
     @JsonIgnore
     private final Map<String, Object> additionalProperties = new LinkedHashMap<>();
 
-    protected Condition() {}
+    public Condition() {}
 
-    protected Condition(
+    public Condition(
             final String lastTransitionTime,
             final String message,
             final String reason,
@@ -184,23 +190,8 @@ public abstract class Condition<S, T extends VisitableBuilder<S, T>> implements 
         }
     }
 
-    /** {@inheritDoc} */
     @Override
-    public boolean equals(final Object o) {
-        if (this == o) return true;
-        if (!(o instanceof Condition<?, ?> condition)) return false;
-        return Objects.equals(getLastTransitionTime(), condition.getLastTransitionTime())
-                && Objects.equals(getMessage(), condition.getMessage())
-                && Objects.equals(getReason(), condition.getReason())
-                && Objects.equals(getStatus(), condition.getStatus())
-                && Objects.equals(getType(), condition.getType())
-                && Objects.equals(getAdditionalProperties(), condition.getAdditionalProperties());
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public int hashCode() {
-        return Objects.hash(
-                getLastTransitionTime(), getMessage(), getReason(), getStatus(), getType(), getAdditionalProperties());
+    public ConditionBuilder edit() {
+        return new ConditionBuilder(this);
     }
 }
