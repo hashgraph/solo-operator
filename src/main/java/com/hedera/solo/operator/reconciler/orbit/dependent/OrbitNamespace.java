@@ -51,17 +51,17 @@ public class OrbitNamespace extends CRUDKubernetesDependentResource<Namespace, O
                     .endMetadata();
         }
 
+        builder.editOrNewMetadata()
+                .addToLabels(
+                        "operator.solo.hedera.com/orbit", primary.getMetadata().getName())
+                .endMetadata();
+
         if (!primary.getMetadata().getAnnotations().isEmpty()) {
             builder.editOrNewMetadata()
                     .withAnnotations(primary.getMetadata().getAnnotations())
                     .endMetadata();
         }
 
-        final Namespace namespace = builder.build();
-        log.infof(
-                "Creating namespace for Orbit [ orbit = '%s', namespace = '%s']",
-                primary.getMetadata().getName(), namespace.getMetadata().getName());
-
-        return namespace;
+        return builder.build();
     }
 }

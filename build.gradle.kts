@@ -27,7 +27,7 @@ val assertjVersion: String by project
 
 dependencies {
     annotationProcessor("io.sundr:builder-annotations:0.103.1")
-    annotationProcessor("io.fabric8:kubernetes-client:6.10.0")
+    annotationProcessor("io.fabric8:kubernetes-client:6.11.0")
 
     implementation(
         enforcedPlatform(

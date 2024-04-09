@@ -39,7 +39,7 @@ import org.jboss.logging.Logger;
         name = "orbit",
         dependents = {
             @Dependent(name = "namespace", type = OrbitNamespace.class),
-            @Dependent(type = OrbitConfigMap.class, dependsOn = "namespace"),
+            @Dependent(type = OrbitConfigMap.class, dependsOn = "namespace")
         })
 public class OrbitReconciler implements Reconciler<Orbit>, ErrorStatusHandler<Orbit> {
 
@@ -71,10 +71,6 @@ public class OrbitReconciler implements Reconciler<Orbit>, ErrorStatusHandler<Or
     @Override
     public ErrorStatusUpdateControl<Orbit> updateErrorStatus(
             final Orbit orbit, final Context<Orbit> context, final Exception e) {
-        log.errorf(
-                e,
-                "Orbit - Error During Reconciliation [ name = '%s' ]",
-                orbit.getMetadata().getName());
         return ErrorStatusUpdateControl.patchStatus(orbit);
     }
 

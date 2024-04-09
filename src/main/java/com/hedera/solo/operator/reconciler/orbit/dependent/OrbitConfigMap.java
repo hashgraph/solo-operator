@@ -20,15 +20,15 @@ import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
+import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
+import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDNoGCKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
-import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResourceConfig;
 import jakarta.inject.Inject;
 import java.util.Optional;
 import org.jboss.logging.Logger;
 
-@KubernetesDependent
-public class OrbitConfigMap extends CRUDKubernetesDependentResource<ConfigMap, Orbit> {
+@KubernetesDependent(resourceDiscriminator = OrbitConfigMap.Discriminator.class)
+public class OrbitConfigMap extends CRUDNoGCKubernetesDependentResource<ConfigMap, Orbit> {
 
     public static final String NAME = "orbit-config";
 
@@ -53,17 +53,29 @@ public class OrbitConfigMap extends CRUDKubernetesDependentResource<ConfigMap, O
                     .endMetadata();
         }
 
+        builder.editOrNewMetadata()
+                .addToLabels(
+                        "operator.solo.hedera.com/orbit", primary.getMetadata().getName())
+                .endMetadata();
+
         if (!primary.getMetadata().getAnnotations().isEmpty()) {
             builder.editOrNewMetadata()
                     .withAnnotations(primary.getMetadata().getAnnotations())
                     .endMetadata();
         }
 
-        final ConfigMap configMap = builder.build();
-        log.infof(
-                "Creating config map for Orbit [ orbit = '%s', configMap = '%s']",
-                primary.getMetadata().getName(), configMap.getMetadata().getName());
+        return builder.build();
+    }
 
-        return configMap;
+    public static class Discriminator implements ResourceDiscriminator<ConfigMap, Orbit> {
+        @Override
+        public Optional<ConfigMap> distinguish(
+                final Class<ConfigMap> resource, final Orbit primary, final Context<Orbit> context) {
+            return Optional.ofNullable(context.getClient()
+                    .configMaps()
+                    .inNamespace(primary.getMetadata().getName())
+                    .withName(NAME)
+                    .get());
+        }
     }
 }
