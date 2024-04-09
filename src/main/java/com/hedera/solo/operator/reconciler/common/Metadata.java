@@ -177,8 +177,7 @@ public final class Metadata {
      * @throws NullPointerException if the source object or destination fluent builder is {@code null}.
      */
     @NotNull
-    public static <A extends ObjectMetaFluent<A>> A copyLabels(
-            @NotNull final HasMetadata src, @NotNull final A dst) {
+    public static <A extends ObjectMetaFluent<A>> A copyLabels(@NotNull final HasMetadata src, @NotNull final A dst) {
         return copyLabels(src, dst, null);
     }
 

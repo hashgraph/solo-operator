@@ -1,0 +1,34 @@
+package com.hedera.solo.operator.reconciler.capsule.consensus.resources;
+
+import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
+import io.fabric8.kubernetes.api.model.ServiceAccount;
+import io.fabric8.kubernetes.api.model.ServiceAccountBuilder;
+import io.javaoperatorsdk.operator.api.reconciler.Context;
+import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
+import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
+
+import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
+
+@KubernetesDependent
+public class CapsuleServiceAccount extends CRUDKubernetesDependentResource<ServiceAccount, ConsensusCapsule> {
+    public static final String TEMPLATE = "sa.yaml";
+    public static final String NAME_SUFFIX = "-sa";
+
+    public CapsuleServiceAccount() {
+        super(ServiceAccount.class);
+    }
+
+    @Override
+    protected ServiceAccount desired(final ConsensusCapsule primary, final Context<ConsensusCapsule> context) {
+        final ServiceAccountBuilder sa = loadYaml(ServiceAccount.class, getClass(), TEMPLATE).edit();
+
+        String name = primary.getMetadata().getName();
+        name = name.length() > (63 - NAME_SUFFIX.length()) ? name.substring(0, 63 - NAME_SUFFIX.length()) : name;
+
+        return sa.editMetadata()
+                .withName(String.format("%s%s", name, NAME_SUFFIX))
+                .withNamespace(primary.getMetadata().getNamespace())
+                .endMetadata()
+                .build();
+    }
+}
