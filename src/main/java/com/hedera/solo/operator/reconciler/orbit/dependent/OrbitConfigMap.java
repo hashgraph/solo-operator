@@ -16,24 +16,23 @@
 
 package com.hedera.solo.operator.reconciler.orbit.dependent;
 
+import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
+
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
+import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDNoGCKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
-import jakarta.inject.Inject;
 import java.util.Optional;
-import org.jboss.logging.Logger;
 
 @KubernetesDependent(resourceDiscriminator = OrbitConfigMap.Discriminator.class)
 public class OrbitConfigMap extends CRUDNoGCKubernetesDependentResource<ConfigMap, Orbit> {
 
-    public static final String NAME = "orbit-config";
-
-    @Inject
-    Logger log;
+    public static final String TEMPLATE = "network-config-cm.yaml";
+    public static final String NAME = "network-config";
 
     public OrbitConfigMap() {
         super(ConfigMap.class);
@@ -41,30 +40,13 @@ public class OrbitConfigMap extends CRUDNoGCKubernetesDependentResource<ConfigMa
 
     @Override
     protected ConfigMap desired(final Orbit primary, final Context<Orbit> context) {
-        final ConfigMapBuilder builder = new ConfigMapBuilder();
-        builder.editOrNewMetadata()
-                .withName(NAME)
+        final ConfigMapBuilder cm =
+                loadYaml(ConfigMap.class, getClass(), TEMPLATE).edit();
+
+        return Metadata.applyOrbitMetaTo(primary, cm.editMetadata())
                 .withNamespace(primary.getMetadata().getName())
-                .endMetadata();
-
-        if (!primary.getMetadata().getLabels().isEmpty()) {
-            builder.editOrNewMetadata()
-                    .withLabels(primary.getMetadata().getLabels())
-                    .endMetadata();
-        }
-
-        builder.editOrNewMetadata()
-                .addToLabels(
-                        "operator.solo.hedera.com/orbit", primary.getMetadata().getName())
-                .endMetadata();
-
-        if (!primary.getMetadata().getAnnotations().isEmpty()) {
-            builder.editOrNewMetadata()
-                    .withAnnotations(primary.getMetadata().getAnnotations())
-                    .endMetadata();
-        }
-
-        return builder.build();
+                .endMetadata()
+                .build();
     }
 
     public static class Discriminator implements ResourceDiscriminator<ConfigMap, Orbit> {

@@ -21,7 +21,6 @@ import com.hedera.solo.operator.model.v1alpha1.OrbitStatus;
 import com.hedera.solo.operator.model.v1alpha1.OrbitStatusBuilder;
 import com.hedera.solo.operator.reconciler.orbit.dependent.OrbitConfigMap;
 import com.hedera.solo.operator.reconciler.orbit.dependent.OrbitNamespace;
-import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusHandler;
@@ -43,13 +42,10 @@ import org.jboss.logging.Logger;
         })
 public class OrbitReconciler implements Reconciler<Orbit>, ErrorStatusHandler<Orbit> {
 
-    private final KubernetesClient client;
-
     private final Logger log;
 
     @Inject
-    public OrbitReconciler(final KubernetesClient client, final Logger log) {
-        this.client = client;
+    public OrbitReconciler(final Logger log) {
         this.log = log;
     }
 
@@ -79,7 +75,7 @@ public class OrbitReconciler implements Reconciler<Orbit>, ErrorStatusHandler<Or
                 orbit.getStatus() != null ? orbit.getStatus().edit() : new OrbitStatusBuilder();
         final Instant now = Instant.now();
 
-        builder.withPhase(OrbitStatus.Phase.RUNNING);
+        builder.withPhase(OrbitStatus.Phase.Running);
 
         if (!builder.hasStartTime()) {
             builder.withStartTime(DateTimeFormatter.ISO_INSTANT.format(now));

@@ -93,15 +93,15 @@ public class OrbitStatus implements Editable<OrbitStatusBuilder>, KubernetesReso
 
     public enum Phase {
         @com.fasterxml.jackson.annotation.JsonProperty("Pending")
-        PENDING("Pending"),
+        Pending("Pending"),
         @com.fasterxml.jackson.annotation.JsonProperty("Running")
-        RUNNING("Running"),
+        Running("Running"),
         @com.fasterxml.jackson.annotation.JsonProperty("Succeeded")
-        SUCCEEDED("Succeeded"),
+        Succeeded("Succeeded"),
         @com.fasterxml.jackson.annotation.JsonProperty("Failed")
-        FAILED("Failed"),
+        Failed("Failed"),
         @com.fasterxml.jackson.annotation.JsonProperty("Unknown")
-        UNKNOWN("Unknown");
+        Unknown("Unknown");
 
         String value;
 

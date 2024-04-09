@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: network-config
+  namespace: bogus-namespace
+data:
+  settings.txt: ""
+  config.txt: ""
