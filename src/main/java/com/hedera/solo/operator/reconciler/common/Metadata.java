@@ -84,6 +84,7 @@ public final class Metadata {
      * @return the fluent builder with the Orbit metadata applied.
      * @throws NullPointerException if any of the arguments is {@code null}.
      */
+    @NotNull
     public static <A extends ObjectMetaFluent<A>> A applyOrbitMetaTo(
             @NotNull final Orbit orbit, @NotNull final A metadata) {
         Objects.requireNonNull(orbit, "orbit must not be null");
@@ -114,11 +115,12 @@ public final class Metadata {
      *
      * @param src the source object.
      * @param dst the destination object.
+     * @return the destination fluent builder with the annotations copied.
      * @throws NullPointerException if the source object is {@code null}.
      */
-    public static <A extends ObjectMetaFluent<A>> void copyAnnotations(
+    public static <A extends ObjectMetaFluent<A>> A copyAnnotations(
             @NotNull final HasMetadata src, @NotNull final A dst) {
-        copyAnnotations(src, dst, null);
+        return copyAnnotations(src, dst, null);
     }
 
     /**
@@ -145,11 +147,12 @@ public final class Metadata {
      * @param src the source object.
      * @param dst the destination object.
      * @param filter the filter to apply to the annotations.
+     * @return the destination fluent builder with the annotations copied.
      * @throws NullPointerException if the source object or destination fluent builder is {@code null}.
      */
-    public static <A extends ObjectMetaFluent<A>> void copyAnnotations(
+    public static <A extends ObjectMetaFluent<A>> A copyAnnotations(
             @NotNull final HasMetadata src, @NotNull final A dst, @Nullable final BiPredicate<String, String> filter) {
-        copyMap(src, dst, ObjectMeta::getAnnotations, ObjectMetaFluent::addToAnnotations, filter);
+        return copyMap(src, dst, ObjectMeta::getAnnotations, ObjectMetaFluent::addToAnnotations, filter);
     }
 
     /**
@@ -170,11 +173,13 @@ public final class Metadata {
      *
      * @param src the source object.
      * @param dst the destination fluent builder.
+     * @return the destination fluent builder with the labels copied.
      * @throws NullPointerException if the source object or destination fluent builder is {@code null}.
      */
-    public static <A extends ObjectMetaFluent<A>> void copyLabels(
+    @NotNull
+    public static <A extends ObjectMetaFluent<A>> A copyLabels(
             @NotNull final HasMetadata src, @NotNull final A dst) {
-        copyLabels(src, dst, null);
+        return copyLabels(src, dst, null);
     }
 
     /**
@@ -200,11 +205,13 @@ public final class Metadata {
      * @param src the source object.
      * @param dst the destination fluent builder.
      * @param filter the filter to apply to the labels.
+     * @return the destination fluent builder with the labels copied.
      * @throws NullPointerException if the source object or destination fluent builder is {@code null}.
      */
-    public static <A extends ObjectMetaFluent<A>> void copyLabels(
+    @NotNull
+    public static <A extends ObjectMetaFluent<A>> A copyLabels(
             @NotNull final HasMetadata src, @NotNull final A dst, @Nullable final BiPredicate<String, String> filter) {
-        copyMap(src, dst, ObjectMeta::getLabels, ObjectMetaFluent::addToLabels, filter);
+        return copyMap(src, dst, ObjectMeta::getLabels, ObjectMetaFluent::addToLabels, filter);
     }
 
     private static void copyMap(
@@ -220,7 +227,8 @@ public final class Metadata {
         dst.setMetadata(metadata.build());
     }
 
-    private static <A extends ObjectMetaFluent<A>> void copyMap(
+    @NotNull
+    private static <A extends ObjectMetaFluent<A>> A copyMap(
             @NotNull final HasMetadata src,
             @NotNull final A dst,
             @NotNull final Function<ObjectMeta, Map<String, String>> getter,
@@ -239,5 +247,7 @@ public final class Metadata {
                 setter.accept(dst, entry.getKey(), entry.getValue());
             }
         }
+
+        return dst;
     }
 }
