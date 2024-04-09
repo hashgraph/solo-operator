@@ -16,52 +16,30 @@
 
 package com.hedera.solo.operator.reconciler.orbit.dependent;
 
+import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
+
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
+import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.Namespace;
 import io.fabric8.kubernetes.api.model.NamespaceBuilder;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
-import jakarta.inject.Inject;
-import org.jboss.logging.Logger;
 
 @KubernetesDependent
 public class OrbitNamespace extends CRUDKubernetesDependentResource<Namespace, Orbit> {
-
-    @Inject
-    Logger log;
-
     public OrbitNamespace() {
         super(Namespace.class);
     }
 
     @Override
     protected Namespace desired(final Orbit primary, final Context<Orbit> context) {
-        final NamespaceBuilder builder = new NamespaceBuilder();
+        final NamespaceBuilder builder =
+                loadYaml(Namespace.class, getClass(), "namespace.yaml").edit();
 
-        builder.editOrNewSpec()
-                .and()
-                .editOrNewMetadata()
+        return Metadata.applyOrbitMetaTo(primary, builder.editMetadata())
                 .withName(primary.getMetadata().getName())
-                .endMetadata();
-
-        if (!primary.getMetadata().getLabels().isEmpty()) {
-            builder.editOrNewMetadata()
-                    .withLabels(primary.getMetadata().getLabels())
-                    .endMetadata();
-        }
-
-        builder.editOrNewMetadata()
-                .addToLabels(
-                        "operator.solo.hedera.com/orbit", primary.getMetadata().getName())
-                .endMetadata();
-
-        if (!primary.getMetadata().getAnnotations().isEmpty()) {
-            builder.editOrNewMetadata()
-                    .withAnnotations(primary.getMetadata().getAnnotations())
-                    .endMetadata();
-        }
-
-        return builder.build();
+                .endMetadata()
+                .build();
     }
 }

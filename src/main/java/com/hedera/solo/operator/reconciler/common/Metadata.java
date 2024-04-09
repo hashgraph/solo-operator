@@ -64,15 +64,7 @@ public final class Metadata {
     public static void applyOrbitMetaTo(@NotNull final Orbit orbit, @NotNull final HasMetadata target) {
         Objects.requireNonNull(orbit, "orbit must not be null");
         Objects.requireNonNull(target, "target must not be null");
-
-        final ObjectMetaBuilder metadata = target.getMetadata().edit();
-
-        metadata.addToLabels(ORBIT_NAME, orbit.getMetadata().getName());
-        metadata.addToLabels(ORBIT_NAMESPACE, orbit.getMetadata().getNamespace());
-        copyLabels(orbit, target, OPERATOR_FILTER);
-        copyAnnotations(orbit, target, OPERATOR_FILTER);
-
-        target.setMetadata(metadata.build());
+        target.setMetadata(applyOrbitMetaTo(orbit, target.getMetadata().edit()).build());
     }
 
     /**
@@ -98,7 +90,7 @@ public final class Metadata {
         Objects.requireNonNull(metadata, "metadata must not be null");
 
         metadata.addToLabels(ORBIT_NAME, orbit.getMetadata().getName());
-        metadata.addToLabels(ORBIT_NAMESPACE, orbit.getMetadata().getNamespace());
+        metadata.addToLabels(ORBIT_NAMESPACE, orbit.getMetadata().getName());
         copyLabels(orbit, metadata, OPERATOR_FILTER);
         copyAnnotations(orbit, metadata, OPERATOR_FILTER);
         return metadata;

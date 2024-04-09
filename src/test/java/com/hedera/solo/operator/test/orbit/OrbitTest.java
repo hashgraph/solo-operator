@@ -21,6 +21,7 @@ import static org.awaitility.Awaitility.await;
 
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitSpecBuilder;
+import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.reconciler.orbit.dependent.OrbitConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.Namespace;
@@ -83,17 +84,20 @@ class OrbitTest {
                         .get();
                 assertThat(orbitNs).isNotNull();
                 assertThat(orbitNs.getMetadata().getName()).isEqualTo("test-orbit");
+                assertThat(orbitNs.getMetadata().getLabels())
+                        .containsKeys(Metadata.ORBIT_NAME, Metadata.ORBIT_NAMESPACE);
+            });
 
-                await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-                    final ConfigMap cm = client.configMaps()
-                            .inNamespace(realOrbit.getMetadata().getName())
-                            .withName(OrbitConfigMap.NAME)
-                            .get();
-                    assertThat(cm).isNotNull();
-                    assertThat(cm.getMetadata().getName()).isEqualTo(OrbitConfigMap.NAME);
-                    assertThat(cm.getMetadata().getNamespace())
-                            .isEqualTo(realOrbit.getMetadata().getName());
-                });
+            await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+                final ConfigMap cm = client.configMaps()
+                        .inNamespace(realOrbit.getMetadata().getName())
+                        .withName(OrbitConfigMap.NAME)
+                        .get();
+                assertThat(cm).isNotNull();
+                assertThat(cm.getMetadata().getName()).isEqualTo(OrbitConfigMap.NAME);
+                assertThat(cm.getMetadata().getNamespace())
+                        .isEqualTo(realOrbit.getMetadata().getName());
+                assertThat(cm.getMetadata().getLabels()).containsKeys(Metadata.ORBIT_NAME, Metadata.ORBIT_NAMESPACE);
             });
         });
     }
