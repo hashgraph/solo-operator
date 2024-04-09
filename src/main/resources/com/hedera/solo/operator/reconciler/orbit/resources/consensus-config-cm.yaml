@@ -1,8 +1,10 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: network-config
+  name: consensus-config
   namespace: bogus-namespace
 data:
   settings.txt: ""
   config.txt: ""
+  application.properties: ""
+  bootstrap.properties: ""

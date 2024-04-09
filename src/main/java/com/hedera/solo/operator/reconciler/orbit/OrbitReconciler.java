@@ -19,8 +19,8 @@ package com.hedera.solo.operator.reconciler.orbit;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitStatus;
 import com.hedera.solo.operator.model.v1alpha1.OrbitStatusBuilder;
-import com.hedera.solo.operator.reconciler.orbit.dependent.OrbitConfigMap;
-import com.hedera.solo.operator.reconciler.orbit.dependent.OrbitNamespace;
+import com.hedera.solo.operator.reconciler.orbit.resources.ConsensusConfigMap;
+import com.hedera.solo.operator.reconciler.orbit.resources.OrbitNamespace;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusHandler;
@@ -38,7 +38,7 @@ import org.jboss.logging.Logger;
         name = "orbit",
         dependents = {
             @Dependent(name = "namespace", type = OrbitNamespace.class),
-            @Dependent(type = OrbitConfigMap.class, dependsOn = "namespace")
+            @Dependent(type = ConsensusConfigMap.class, dependsOn = "namespace")
         })
 public class OrbitReconciler implements Reconciler<Orbit>, ErrorStatusHandler<Orbit> {
 

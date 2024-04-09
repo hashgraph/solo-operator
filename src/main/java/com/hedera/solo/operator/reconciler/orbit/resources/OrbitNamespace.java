@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator.reconciler.orbit.dependent;
+package com.hedera.solo.operator.reconciler.orbit.resources;
 
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
@@ -28,6 +28,8 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDep
 
 @KubernetesDependent
 public class OrbitNamespace extends CRUDKubernetesDependentResource<Namespace, Orbit> {
+    public static final String TEMPLATE = "namespace.yaml";
+
     public OrbitNamespace() {
         super(Namespace.class);
     }
@@ -35,7 +37,7 @@ public class OrbitNamespace extends CRUDKubernetesDependentResource<Namespace, O
     @Override
     protected Namespace desired(final Orbit primary, final Context<Orbit> context) {
         final NamespaceBuilder builder =
-                loadYaml(Namespace.class, getClass(), "namespace.yaml").edit();
+                loadYaml(Namespace.class, getClass(), TEMPLATE).edit();
 
         return Metadata.applyOrbitMetaTo(primary, builder.editMetadata())
                 .withName(primary.getMetadata().getName())

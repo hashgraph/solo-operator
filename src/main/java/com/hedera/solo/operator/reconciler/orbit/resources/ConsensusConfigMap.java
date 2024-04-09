@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator.reconciler.orbit.dependent;
+package com.hedera.solo.operator.reconciler.orbit.resources;
 
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
@@ -28,13 +28,13 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDNoGCKuber
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import java.util.Optional;
 
-@KubernetesDependent(resourceDiscriminator = OrbitConfigMap.Discriminator.class)
-public class OrbitConfigMap extends CRUDNoGCKubernetesDependentResource<ConfigMap, Orbit> {
+@KubernetesDependent(resourceDiscriminator = ConsensusConfigMap.Discriminator.class)
+public class ConsensusConfigMap extends CRUDNoGCKubernetesDependentResource<ConfigMap, Orbit> {
 
-    public static final String TEMPLATE = "network-config-cm.yaml";
-    public static final String NAME = "network-config";
+    public static final String TEMPLATE = "consensus-config-cm.yaml";
+    public static final String NAME = "consensus-config";
 
-    public OrbitConfigMap() {
+    public ConsensusConfigMap() {
         super(ConfigMap.class);
     }
 
