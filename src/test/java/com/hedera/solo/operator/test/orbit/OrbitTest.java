@@ -59,12 +59,14 @@ class OrbitTest {
 
     @BeforeEach
     void setup() {
+        operator.start();
         Resources.removeByName(client, Orbit.class, TEST_ORBIT_NAME);
     }
 
     @AfterEach
     void cleanup() {
         Resources.removeByName(client, Orbit.class, TEST_ORBIT_NAME);
+        operator.stop();
     }
 
     @Test
