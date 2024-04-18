@@ -32,10 +32,9 @@ import org.jboss.logging.Logger;
 @ControllerConfiguration(
         name = "consensus-capsule",
         dependents = {
-                @Dependent(name = "sa", type = CapsuleServiceAccount.class),
-                @Dependent(type = CapsuleRoleBinding.class, dependsOn = "sa")
-        }
-)
+            @Dependent(name = "sa", type = CapsuleServiceAccount.class),
+            @Dependent(type = CapsuleRoleBinding.class, dependsOn = "sa")
+        })
 public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>, ErrorStatusHandler<ConsensusCapsule> {
 
     private final Logger log;

@@ -1,8 +1,5 @@
-import gradle.kotlin.dsl.accessors._6910d9c18a9b49f13eb41ef5fd4e7d90.sourceSets
-import org.gradle.api.Project
 import org.gradle.api.file.Directory
 import org.gradle.api.file.RegularFile
-import org.gradle.kotlin.dsl.get
 import java.io.File
 import java.io.OutputStream
 import java.io.PrintStream

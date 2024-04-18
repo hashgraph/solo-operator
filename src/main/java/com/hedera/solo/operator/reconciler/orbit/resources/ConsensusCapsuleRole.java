@@ -16,6 +16,8 @@
 
 package com.hedera.solo.operator.reconciler.orbit.resources;
 
+import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
+
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.rbac.Role;
@@ -24,10 +26,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDNoGCKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
-
 import java.util.Optional;
-
-import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
 @KubernetesDependent(resourceDiscriminator = ConsensusCapsuleRole.Discriminator.class)
 public class ConsensusCapsuleRole extends CRUDNoGCKubernetesDependentResource<Role, Orbit> {
@@ -52,11 +51,12 @@ public class ConsensusCapsuleRole extends CRUDNoGCKubernetesDependentResource<Ro
         @Override
         public Optional<Role> distinguish(
                 final Class<Role> resource, final Orbit primary, final Context<Orbit> context) {
-            return Optional.ofNullable(context.getClient().rbac().roles()
+            return Optional.ofNullable(context.getClient()
+                    .rbac()
+                    .roles()
                     .inNamespace(primary.getMetadata().getName())
                     .withName(NAME)
                     .get());
-
         }
     }
 }

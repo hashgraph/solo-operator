@@ -54,4 +54,20 @@ dependencies {
     testImplementation("io.quarkus:quarkus-jacoco")
     testImplementation("org.awaitility:awaitility")
     testImplementation("org.assertj:assertj-core:${assertjVersion}")
+
+    testFixturesImplementation(
+        enforcedPlatform(
+            "${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}"
+        )
+    )
+
+    testFixturesImplementation(
+        enforcedPlatform(
+            "${quarkusPlatformGroupId}:quarkus-operator-sdk-bom:${quarkusPlatformVersion}"
+        )
+    )
+
+    testFixturesImplementation("io.fabric8:kubernetes-client")
+    testFixturesImplementation("org.awaitility:awaitility")
+    testFixturesImplementation("org.assertj:assertj-core:${assertjVersion}")
 }
