@@ -16,7 +16,7 @@
 
 plugins {
     id("java")
-    //    id("jacoco")
+    id("java-test-fixtures")
     id("com.hedera.solo.operator.spotless-conventions")
     id("com.hedera.solo.operator.spotless-java-conventions")
     id("com.hedera.solo.operator.spotless-kotlin-conventions")
@@ -39,6 +39,7 @@ java {
 
 tasks.withType<Test>().configureEach {
     systemProperty("java.util.logging.manager", "org.jboss.logmanager.LogManager")
+    environment("QUARKUS_OPERATOR_SDK_ACTIVATE_LEADER_ELECTION_FOR_PROFILES", "prod")
 }
 
 tasks.withType<JavaCompile>().configureEach {

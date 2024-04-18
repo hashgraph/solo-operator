@@ -14,9 +14,20 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator.capsule;
+package com.hedera.solo.operator;
 
-import io.fabric8.kubernetes.api.model.KubernetesResource;
-import io.javaoperatorsdk.operator.api.ObservedGenerationAwareStatus;
+import io.javaoperatorsdk.operator.api.config.LeaderElectionConfiguration;
+import io.quarkus.arc.Unremovable;
+import jakarta.enterprise.context.ApplicationScoped;
 
-public class CapsuleStatus extends ObservedGenerationAwareStatus implements KubernetesResource {}
+@ApplicationScoped
+@Unremovable
+public class LeaderElection extends LeaderElectionConfiguration {
+
+    public static final String LEASE_NAME = "solo-operator-lease";
+    public static final String LEASE_NAMESPACE = "default";
+
+    public LeaderElection() {
+        super(LEASE_NAME, LEASE_NAMESPACE);
+    }
+}
