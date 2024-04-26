@@ -25,6 +25,7 @@ plugins {
 repositories {
     // Source Maven Central Artifacts from JFrog Artifactory
     maven { url = uri("https://artifacts.swirldslabs.io/artifactory/central-maven-external/") }
+    maven { url = uri("https://oss.sonatype.org/content/repositories/snapshots") }
 }
 
 java {
@@ -83,3 +84,7 @@ tasks.withType<Jar>().configureEach {
 // tasks.named("check").configure { dependsOn(tasks.named<JacocoReport>("jacocoTestReport")) }
 
 tasks.named("assemble").configure { dependsOn(tasks.named("testClasses")) }
+
+tasks.check { dependsOn(gradle.includedBuild("build-logic").task(":check")) }
+
+tasks.test { dependsOn(gradle.includedBuild("build-logic").task(":test")) }

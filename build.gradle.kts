@@ -18,16 +18,21 @@ plugins {
     id("com.hedera.solo.operator.conventions")
     id("com.hedera.solo.operator.versioning")
     id("io.quarkus")
+    id("com.hedera.solo.operator.omg")
 }
 
 val quarkusPlatformGroupId: String by project
 val quarkusPlatformArtifactId: String by project
 val quarkusPlatformVersion: String by project
 val assertjVersion: String by project
+val sundrVersion: String by project
+val fabric8Version: String by project
+val lombokVersion: String by project
 
 dependencies {
-    annotationProcessor("io.sundr:builder-annotations:0.103.1")
-    annotationProcessor("io.fabric8:kubernetes-client:6.11.0")
+    annotationProcessor("io.sundr:builder-annotations:${sundrVersion}")
+    annotationProcessor("io.fabric8:kubernetes-client:${fabric8Version}")
+    implementation("io.fabric8:generator-annotations:${fabric8Version}")
 
     implementation(
         enforcedPlatform(
@@ -47,8 +52,8 @@ dependencies {
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk-bundle-generator")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk")
 
-    compileOnly("io.sundr:builder-annotations:0.103.1")
-    compileOnly("org.projectlombok:lombok:1.18.32")
+    compileOnly("io.sundr:builder-annotations:${sundrVersion}")
+    compileOnly("org.projectlombok:lombok:${lombokVersion}")
 
     testImplementation("io.quarkus:quarkus-junit5")
     testImplementation("io.quarkus:quarkus-jacoco")
@@ -70,4 +75,29 @@ dependencies {
     testFixturesImplementation("io.fabric8:kubernetes-client")
     testFixturesImplementation("org.awaitility:awaitility")
     testFixturesImplementation("org.assertj:assertj-core:${assertjVersion}")
+}
+
+omg {
+    defaultConfigBuilder.uppercaseEnums(false)
+    defaultConfigBuilder.objectExtraAnnotations(true)
+    defaultConfigBuilder.packageOverrides(
+        mapOf("com.hedera.solo.operator.v1alpha1" to "com.hedera.solo.operator.model.v1alpha1")
+    )
+    removeFiles =
+        setOf(
+            file("com/hedera/solo/operator/model/Common.java"),
+            file("com/hedera/solo/operator/model/CommonSpec.java"),
+        )
+    configBuilderOverrides =
+        mapOf(
+            "common.solo.hedera.com-v1.yml" to
+                defaultConfigBuilder
+                    .build()
+                    .toBuilder()
+                    .packageOverrides(
+                        mapOf(
+                            "com.hedera.solo.operator.v1alpha1" to "com.hedera.solo.operator.model"
+                        )
+                    )
+        )
 }
