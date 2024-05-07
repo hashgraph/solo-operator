@@ -16,6 +16,7 @@
 
 package com.hedera.solo.operator.reconciler.orbit;
 
+import com.hedera.solo.operator.model.commonspec.Condition;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitStatus;
 import com.hedera.solo.operator.model.v1alpha1.OrbitStatusBuilder;
@@ -92,9 +93,11 @@ public class OrbitReconciler implements Reconciler<Orbit>, ErrorStatusHandler<Or
 
         builder.addNewCondition()
                 .withType("Ready")
-                .withStatus("True")
+                .withStatus(Condition.Status.True)
                 .withLastTransitionTime(DateTimeFormatter.ISO_INSTANT.format(now))
                 .endCondition();
+
+        builder.withObservedGeneration(orbit.getMetadata().getGeneration());
 
         orbit.setStatus(builder.build());
     }

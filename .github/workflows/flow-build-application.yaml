@@ -75,7 +75,7 @@ jobs:
     with:
       custom-job-label: Source Code
       enable-snyk-scan: true
-      enable-codecov-analysis: false
+      enable-codecov-analysis: true
       enable-codacy-coverage: false
       snyk-org-identifier: ${{ vars.SNYK_ORG_IDENTIFIER }}
     secrets:
