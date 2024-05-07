@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator.omg;
+package com.hedera.solo.operator.objectmodelgenerator;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.MappingIterator;
@@ -63,7 +63,7 @@ public class ObjectModelGeneratorTask extends DefaultTask {
     }
 
     @TaskAction
-    public void omg() throws IOException {
+    public void generateObjectModel() throws IOException {
         ObjectModelGeneratorExtension ext = getProject().getExtensions().getByType(ObjectModelGeneratorExtension.class);
         targetCrd.toFile().mkdirs();
         targetJava.toFile().mkdirs();

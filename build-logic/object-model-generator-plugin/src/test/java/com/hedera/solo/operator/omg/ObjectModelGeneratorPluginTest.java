@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator.omg;
+package com.hedera.solo.operator.objectmodelgenerator;
 
 import org.gradle.testfixtures.ProjectBuilder;
 import org.gradle.api.Project;
@@ -23,16 +23,16 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * A simple unit test for the 'com.hedera.solo.operator.omg' plugin.
+ * A simple unit test for the 'com.hedera.solo.operator.objectModelGenerator' plugin.
  */
 class ObjectModelGeneratorPluginTest {
     @Test void pluginRegistersATask() {
         // Create a test project and apply the plugin
         Project project = ProjectBuilder.builder().build();
         project.getPlugins().apply("java");
-        project.getPlugins().apply("com.hedera.solo.operator.omg");
+        project.getPlugins().apply("com.hedera.solo.operator.objectModelGenerator");
 
         // Verify the result
-        assertNotNull(project.getTasks().findByName("omg"));
+        assertNotNull(project.getTasks().findByName("objectModelGenerator"));
     }
 }

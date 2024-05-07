@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator.omg;
+package com.hedera.solo.operator.objectmodelgenerator;
 
 import io.fabric8.java.generator.Config;
 

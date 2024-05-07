@@ -40,7 +40,7 @@ spotless {
             */${"\n\n"}
         """
                     .trimIndent(),
-                "(import|plugins|pluginManagement|dependencyResolutionManagement|repositories|include|includeBuild)"
+                "(import|plugins|pluginManagement|dependencyResolutionManagement|repositories|include|includeBuild|//spotless\\(ignore-empty\\)|// spotless\\(ignore-empty\\)|//\\s*pragma\\s+comment)"
             )
             .updateYearWithLatest(true)
     }

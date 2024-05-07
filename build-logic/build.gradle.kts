@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// pragma comment
 
 tasks.register("check") {
     dependsOn(gradle.includedBuild("object-model-generator-plugin").task(":check"))

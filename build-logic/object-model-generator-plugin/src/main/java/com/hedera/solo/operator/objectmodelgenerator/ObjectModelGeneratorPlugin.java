@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator.omg;
+package com.hedera.solo.operator.objectmodelgenerator;
 
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
@@ -33,14 +33,14 @@ import java.util.function.Supplier;
  */
 public class ObjectModelGeneratorPlugin implements Plugin<Project> {
     public void apply(Project project) {
-        ObjectModelGeneratorExtension ext = project.getExtensions().create("omg", ObjectModelGeneratorExtension.class);
-        project.getTasks().getByName("compileJava").dependsOn("omg");
-        project.getTasks().register("omg", ObjectModelGeneratorTask.class, task -> {
+        ObjectModelGeneratorExtension ext = project.getExtensions().create("objectModelGenerator", ObjectModelGeneratorExtension.class);
+        project.getTasks().getByName("compileJava").dependsOn("objectModelGenerator");
+        project.getTasks().register("objectModelGenerator", ObjectModelGeneratorTask.class, task -> {
             ProjectLayout layout = project.getLayout();
             BiFunction<File, Supplier<Directory>, Path> path = (file, supplier) -> (null != file ? file : supplier.get().getAsFile()).toPath();
             task.sourceCrd = path.apply(ext.sourceCrd, () -> layout.getProjectDirectory().dir("crd"));
-            task.targetCrd = path.apply(ext.targetCrd, () -> layout.getBuildDirectory().dir("generated/omg/crd").get());
-            task.targetJava = path.apply(ext.targetJava, () -> layout.getBuildDirectory().dir("generated/omg/sources/main/java").get());
+            task.targetCrd = path.apply(ext.targetCrd, () -> layout.getBuildDirectory().dir("generated/objectmodelgenerator/crd").get());
+            task.targetJava = path.apply(ext.targetJava, () -> layout.getBuildDirectory().dir("generated/objectmodelgenerator/sources/main/java").get());
             project.getExtensions().getByType(JavaPluginExtension.class).getSourceSets().findByName(SourceSet.MAIN_SOURCE_SET_NAME)
                     .java(s -> s.srcDir(task.targetJava));
         });

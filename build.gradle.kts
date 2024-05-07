@@ -18,7 +18,7 @@ plugins {
     id("com.hedera.solo.operator.conventions")
     id("com.hedera.solo.operator.versioning")
     id("io.quarkus")
-    id("com.hedera.solo.operator.omg")
+    id("com.hedera.solo.operator.objectModelGenerator")
 }
 
 val quarkusPlatformGroupId: String by project
@@ -77,7 +77,7 @@ dependencies {
     testFixturesImplementation("org.assertj:assertj-core:${assertjVersion}")
 }
 
-omg {
+objectModelGenerator {
     defaultConfigBuilder.uppercaseEnums(false)
     defaultConfigBuilder.objectExtraAnnotations(true)
     defaultConfigBuilder.packageOverrides(

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator.omg;
+package com.hedera.solo.operator.objectmodelgenerator;
 
 import java.io.File;
 import java.io.IOException;
@@ -29,7 +29,7 @@ import org.junit.jupiter.api.io.TempDir;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * A simple functional test for the 'com.hedera.solo.operator.omg' plugin.
+ * A simple functional test for the 'com.hedera.solo.operator.objectModelGenerator' plugin.
  */
 class ObjectModelGeneratorPluginFunctionalTest {
     @TempDir
@@ -57,9 +57,9 @@ class ObjectModelGeneratorPluginFunctionalTest {
         writeString(getBuildFile(), """
                         plugins {
                           id("java")
-                          id('com.hedera.solo.operator.omg')
+                          id('com.hedera.solo.operator.objectModelGenerator')
                         }
-                        omg {
+                        objectModelGenerator {
                           sourceCrd = file('%s')
                           targetCrd = file('%s')
                           targetJava = file('%s')
@@ -70,7 +70,7 @@ class ObjectModelGeneratorPluginFunctionalTest {
         GradleRunner runner = GradleRunner.create();
         runner.forwardOutput();
         runner.withPluginClasspath();
-        runner.withArguments("omg");
+        runner.withArguments("objectModelGenerator");
         runner.withProjectDir(projectDir);
         BuildResult result = runner.build();
 

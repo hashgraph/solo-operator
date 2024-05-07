@@ -38,10 +38,11 @@ dependencies {
 
 gradlePlugin {
     // Define the plugin
-    val omg by
+    val objectModelGenerator by
         plugins.creating {
-            id = "com.hedera.solo.operator.omg"
-            implementationClass = "com.hedera.solo.operator.omg.ObjectModelGeneratorPlugin"
+            id = "com.hedera.solo.operator.objectModelGenerator"
+            implementationClass =
+                "com.hedera.solo.operator.objectmodelgenerator.ObjectModelGeneratorPlugin"
         }
 }
 
