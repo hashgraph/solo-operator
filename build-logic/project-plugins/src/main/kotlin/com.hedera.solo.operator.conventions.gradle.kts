@@ -25,7 +25,7 @@ plugins {
 repositories {
     // Source Maven Central Artifacts from JFrog Artifactory
     maven { url = uri("https://artifacts.swirldslabs.io/artifactory/central-maven-external/") }
-    maven { url = uri("https://oss.sonatype.org/content/repositories/snapshots") }
+maven { url = uri("https://artifacts.swirldslabs.io/artifactory/central-maven-snapshot-external/") }
 }
 
 java {

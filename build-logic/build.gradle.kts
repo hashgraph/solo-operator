@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-plugins
 
 tasks.register("check") {
     dependsOn(gradle.includedBuild("object-model-generator-plugin").task(":check"))
