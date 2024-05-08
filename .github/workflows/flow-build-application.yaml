@@ -80,5 +80,5 @@ jobs:
       snyk-org-identifier: ${{ vars.SNYK_ORG_IDENTIFIER }}
     secrets:
       snyk-token: ${{ secrets.SNYK_TOKEN }}
-      #codecov-token: ${{ secrets.CODECOV_TOKEN }}
+      codecov-token: ${{ secrets.CODECOV_TOKEN }}
       #codacy-project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
