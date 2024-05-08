@@ -38,7 +38,7 @@ public class ObjectModelGeneratorPlugin implements Plugin<Project> {
         project.getTasks().register("objectModelGenerator", ObjectModelGeneratorTask.class, task -> {
             ProjectLayout layout = project.getLayout();
             BiFunction<File, Supplier<Directory>, Path> path = (file, supplier) -> (null != file ? file : supplier.get().getAsFile()).toPath();
-            task.sourceCrd = path.apply(ext.sourceCrd, () -> layout.getProjectDirectory().dir("crd"));
+            task.sourceCrd = path.apply(ext.sourceCrd, () -> layout.getProjectDirectory().dir("src/main/k8s/crd"));
             task.targetCrd = path.apply(ext.targetCrd, () -> layout.getBuildDirectory().dir("generated/objectmodelgenerator/crd").get());
             task.targetJava = path.apply(ext.targetJava, () -> layout.getBuildDirectory().dir("generated/objectmodelgenerator/sources/main/java").get());
             project.getExtensions().getByType(JavaPluginExtension.class).getSourceSets().findByName(SourceSet.MAIN_SOURCE_SET_NAME)
