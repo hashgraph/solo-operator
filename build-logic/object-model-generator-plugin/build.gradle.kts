@@ -22,7 +22,9 @@ plugins {
 repositories {
     // Use Maven Central for resolving dependencies.
     mavenCentral()
-    maven { url = uri("https://oss.sonatype.org/content/repositories/snapshots") }
+    maven {
+        url = uri("https://artifacts.swirldslabs.io/artifactory/central-maven-snapshot-external/")
+    }
 }
 
 val fabric8Version: String by project
