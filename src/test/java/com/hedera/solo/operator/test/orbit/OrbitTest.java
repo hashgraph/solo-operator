@@ -31,6 +31,7 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 import org.jboss.logging.Logger;
 import org.junit.jupiter.api.AfterEach;
@@ -60,13 +61,14 @@ class OrbitTest {
     @BeforeEach
     void setup() {
         operator.start();
-        Resources.removeByName(client, Orbit.class, TEST_ORBIT_NAME);
+        cleanup();
     }
 
     @AfterEach
     void cleanup() {
         Resources.removeByName(client, Orbit.class, TEST_ORBIT_NAME);
-        operator.stop();
+        await().atMost(Duration.ofSeconds(30))
+                .until(() -> client.namespaces().withName(TEST_ORBIT_NAME).get() == null);
     }
 
     @Test

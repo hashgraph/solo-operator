@@ -17,8 +17,15 @@
 package com.hedera.solo.operator.reconciler.capsule.consensus;
 
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
+import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleConfigMap;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleDeployment;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleRoleBinding;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleSecret;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleService;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleServiceAccount;
+import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusHandler;
@@ -33,7 +40,11 @@ import org.jboss.logging.Logger;
         name = "consensus-capsule",
         dependents = {
             @Dependent(name = "sa", type = CapsuleServiceAccount.class),
-            @Dependent(type = CapsuleRoleBinding.class, dependsOn = "sa")
+            @Dependent(type = CapsuleRoleBinding.class, dependsOn = "sa"),
+            @Dependent(type = CapsuleConfigMap.class),
+            @Dependent(type = CapsuleDeployment.class),
+            @Dependent(type = CapsuleSecret.class),
+            @Dependent(type = CapsuleService.class),
         })
 public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>, ErrorStatusHandler<ConsensusCapsule> {
 
@@ -52,7 +63,20 @@ public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>,
                     "Consensus Capsule - Starting Reconciliation [ name = '%s' ]",
                     capsule.getMetadata().getName());
 
-            return UpdateControl.patchStatus(capsule);
+            Long generation = capsule.getMetadata().getGeneration();
+            ConsensusCapsuleStatus.Phase phase = 1 == context.getSecondaryResource(Deployment.class).map(Deployment::getStatus).map(DeploymentStatus::getAvailableReplicas).orElse(0) ?
+                    ConsensusCapsuleStatus.Phase.Running : ConsensusCapsuleStatus.Phase.Unknown;
+
+            ConsensusCapsuleStatus status = capsule.getStatus();
+            if (status != null && generation.equals(status.getObservedGeneration()) && phase.equals(status.getPhase())) {
+                return UpdateControl.noUpdate();
+            }
+            return UpdateControl.patchStatus(capsule.edit()
+                    .editStatus()
+                    .withObservedGeneration(generation)
+                    .withPhase(phase)
+                    .endStatus()
+                    .build());
         } finally {
             log.infof(
                     "Consensus Capsule - Finished Reconciliation [ name = '%s' ]",

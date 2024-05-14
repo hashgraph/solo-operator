@@ -1,0 +1,10 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: gossip-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: consensus-node
+  ports:
+  - port: 50111
