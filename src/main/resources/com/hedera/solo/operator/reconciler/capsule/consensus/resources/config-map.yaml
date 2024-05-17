@@ -3,11 +3,40 @@ apiVersion: v1
 metadata:
   name: bogus-name
 data:
+# address, nodeId, nickname, selfname, weight, internalHostname, internalPort, externalHostname, externalPort, memoToUse
+
+# should be overridden from orbit (require, not from bootstrap.properties):
+# swirld (bootstrap.properties#contracts.chainId)
+
+# provided:
+# memoToUse
+
+# generated from external address book and number of consensus nodes (maybe going away soon anyway):
+# nextNodeId
+
+# ???
+# 2, node2, node2, 1
+# nodeId, nickname, selfname, weight
+# nodeId - provided or generated (start at nextNodeId)
+# nickname - provided (this or selfname in key)
+# selfname - provided (this or nickname in key)
+# weight - provided
+
+
+
+#  swirld, 298
+#  app, HederaNode.jar
+#  address, 0, node0, node0, 1, network-node0-0.network-node0.solo-e2e.svc.cluster.local, 50111, network-node0.solo-e2e.svc.cluster.local, 50111, 0.0.3
+#  address, 1, node1, node1, 1, network-node1-0.network-node1.solo-e2e.svc.cluster.local, 50111, network-node1.solo-e2e.svc.cluster.local, 50111, 0.0.4
+#  address, 2, node2, node2, 1, network-node2-0.network-node2.solo-e2e.svc.cluster.local, 50111, network-node2.solo-e2e.svc.cluster.local, 50111, 0.0.5
+#  nextNodeId, 3
   config.txt: |-
     swirld, 298
     app, HederaNode.jar
     address, 0, node0, node0, 1, localhost, 50111, localhost, 50111, 0.0.3
-    nextNodeId, 3
+    nextNodeId, 1
+# settings.txt & *.properties are orbit wide
+# could get mainnet (for example) from hedera-services built in at compile time (can also be provided for us at orbit level)
   settings.txt: |+
     checkSignedStateFromDisk,                      1
     csvFileName,                                   MainNetStats
@@ -160,6 +189,7 @@ data:
     hedera.recordStream.compressFilesOnCreation=true
     balances.compressOnCreation=true
     contracts.maxNumWithHapiSigsAccess=0
+# log can be provided in consensusCapsule
   log4j2.xml: |-
     <?xml version="1.0" encoding="UTF-8"?>
     <!-- monitorInterval="600" , if any change to log level will be effective after 10 minute -->

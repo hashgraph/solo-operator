@@ -7,6 +7,7 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationStatus;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import jakarta.inject.Inject;
@@ -17,6 +18,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.jboss.logging.Logger;
 
+@ControllerConfiguration(name = "network-initialization")
 public class NetworkInitializationReconciler implements Reconciler<NetworkInitialization> {
     private final Logger log;
     private final KubernetesClient client;
@@ -62,7 +64,7 @@ public class NetworkInitializationReconciler implements Reconciler<NetworkInitia
                     .withObservedGeneration(resource.getMetadata().getGeneration())
                     .withPhase(getPhase(consensusCapsuleClient.list().getItems()))
                     .endStatus()
-                    .build()).rescheduleAfter(Duration.ofSeconds(1));
+                    .build()).rescheduleAfter(Duration.ofSeconds(30));
         } finally {
             log.infof(
                     "Network Initialization - Finished Reconciliation [ name = '%s' ]",

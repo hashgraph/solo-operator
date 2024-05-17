@@ -12,6 +12,7 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitBuilder;
+import com.hedera.solo.operator.test.fixtures.Environment;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.Secret;
@@ -44,7 +45,10 @@ public class NetworkInitializationTest {
 
     @BeforeEach
     void setup() {
-        operator.start();
+        if (!Environment.isDevModeActive()) {
+            operator.start();
+            operator.installShutdownHook(Duration.ofSeconds(30));
+        }
         cleanup();
     }
 
@@ -104,7 +108,7 @@ public class NetworkInitializationTest {
                 .build();
         client.resource(networkInitialization).create();
 
-        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+        await().atMost(90, TimeUnit.SECONDS).untilAsserted(() -> {
             NetworkInitialization netInit = client.resource(networkInitialization).get();
             assertThat(netInit).isNotNull();
             ConsensusCapsule capsule = client.resource(consensusCapsule).get();

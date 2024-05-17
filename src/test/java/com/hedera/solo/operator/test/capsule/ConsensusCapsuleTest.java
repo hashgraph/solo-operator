@@ -7,6 +7,7 @@ import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleBuilder;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitBuilder;
+import com.hedera.solo.operator.test.fixtures.Environment;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.Secret;
@@ -37,7 +38,10 @@ public class ConsensusCapsuleTest {
 
     @BeforeEach
     void setup() throws InterruptedException {
-        operator.start();
+        if (!Environment.isDevModeActive()) {
+            operator.start();
+            operator.installShutdownHook(Duration.ofSeconds(30));
+        }
         cleanup();
     }
 
