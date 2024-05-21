@@ -63,7 +63,6 @@ class OrbitTest {
     void setup() {
         if (!Environment.isDevModeActive()) {
             operator.start();
-            operator.installShutdownHook(Duration.ofSeconds(30));
         }
         cleanup();
     }

@@ -1,5 +1,6 @@
 package com.hedera.solo.operator.test;
 
+import com.hedera.solo.operator.test.fixtures.Environment;
 import io.javaoperatorsdk.operator.Operator;
 import io.quarkus.runtime.ShutdownEvent;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -12,6 +13,8 @@ public class Shutdown {
     protected Operator operator;
 
     void onShutdown(@Observes ShutdownEvent event) {
-        operator.stop();
+        if (!Environment.isDevModeActive()) {
+            operator.stop();
+        }
     }
 }
