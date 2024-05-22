@@ -1,7 +1,7 @@
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: bogus-name
+  name: cluster-config
 data:
 # address, nodeId, nickname, selfname, weight, internalHostname, internalPort, externalHostname, externalPort, memoToUse
 

@@ -37,7 +37,7 @@ public class ConsensusCapsuleTest {
     protected Logger log;
 
     @BeforeEach
-    void setup() throws InterruptedException {
+    void setup() {
         if (!Environment.isDevModeActive()) {
             operator.start();
         }
@@ -45,7 +45,7 @@ public class ConsensusCapsuleTest {
     }
 
     @AfterEach
-    void cleanup() throws InterruptedException {
+    void cleanup() {
         client.resources(ConsensusCapsule.class).inNamespace(TEST_ORBIT_NAME).delete();
         Resources.removeByName(client, Orbit.class, TEST_ORBIT_NAME);
         await().atMost(Duration.ofSeconds(30))

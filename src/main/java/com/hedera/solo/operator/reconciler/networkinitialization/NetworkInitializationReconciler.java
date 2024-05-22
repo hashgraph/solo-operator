@@ -10,12 +10,14 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
+import jakarta.annotation.PostConstruct;
 import jakarta.inject.Inject;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
 @ControllerConfiguration(name = "network-initialization")
@@ -23,6 +25,15 @@ public class NetworkInitializationReconciler implements Reconciler<NetworkInitia
     private final Logger log;
     private final KubernetesClient client;
     private final static Set<NetworkInitializationStatus.Phase> terminalPhases = Set.of(NetworkInitializationStatus.Phase.Failed, NetworkInitializationStatus.Phase.Succeeded);
+
+    // use 1 second interval in testing, 30 second interval otherwise
+    @ConfigProperty(name = "quarkus.profile")
+    String profile;
+    Duration refreshInterval;
+    @PostConstruct
+    void init() {
+        refreshInterval = Duration.ofSeconds("test".equals(profile) ? 1 : 30);
+    }
 
     @Inject
     public NetworkInitializationReconciler(final Logger log, final KubernetesClient client) {
@@ -64,7 +75,7 @@ public class NetworkInitializationReconciler implements Reconciler<NetworkInitia
                     .withObservedGeneration(resource.getMetadata().getGeneration())
                     .withPhase(getPhase(consensusCapsuleClient.list().getItems()))
                     .endStatus()
-                    .build()).rescheduleAfter(Duration.ofSeconds(30));
+                    .build()).rescheduleAfter(refreshInterval);
         } finally {
             log.infof(
                     "Network Initialization - Finished Reconciliation [ name = '%s' ]",

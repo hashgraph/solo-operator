@@ -26,41 +26,54 @@ spec:
           command: ["/init"]
           args: ["sh", "-c", "cd /opt/hgcapp/services-hedera/HapiApp2.0; cp entrypoint2.sh entrypoint2_.sh; chmod +x entrypoint2_.sh; ./entrypoint2_.sh"]
           volumeMounts:
-            - name: config-volume
+            - name: cluster-config
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/config.txt
               subPath: config.txt
-            - name: config-volume
+            - name: cluster-config
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/settings.txt
               subPath: settings.txt
-            - name: config-volume
+            - name: cluster-config
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/log4j2.xml
               subPath: log4j2.xml
-            - name: config-volume
-              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/entrypoint2.sh
-              subPath: entrypoint2.sh
-            - name: secret-volume
-              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
-            - name: secret-volume
-              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.crt
-              subPath: hedera.crt
-            - name: secret-volume
-              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.key
-              subPath: hedera.key
-            - name: config-volume
+            - name: cluster-config
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/config/api-permission.properties
               subPath: api-permission.properties
-            - name: config-volume
+            - name: cluster-config
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/config/application.properties
               subPath: application.properties
-            - name: config-volume
+            - name: cluster-config
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/config/bootstrap.properties
               subPath: bootstrap.properties
+            - name: cluster-config
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/entrypoint2.sh
+              subPath: entrypoint2.sh
+            - name: private-keys
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.crt
+              subPath: hedera.crt
+            - name: private-keys
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.key
+              subPath: hedera.key
+# the following needs to be added dynamically
+#            - name: private-keys
+#              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
+#              subPath: a-private-node0.pem
+#            - name: private-keys
+#              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
+#              subPath: s-private-node0.pem
+
+# for each file in the public-keys configmap:
+#            - name: public-keys
+#              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
+#              subPath: ${file}
       volumes:
-        - name: config-volume
+        - name: cluster-config
           configMap:
-            name: config
-        - name: secret-volume
+            name: cluster-config
+        - name: public-keys
+          configMap:
+            name: public-keys
+        - name: private-keys
           secret:
-            secretName: keys
+            secretName: private-keys
   strategy: {}
 status: {}
