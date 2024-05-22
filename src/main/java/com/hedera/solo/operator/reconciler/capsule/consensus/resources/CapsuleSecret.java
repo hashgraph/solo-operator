@@ -14,7 +14,7 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDep
 public class CapsuleSecret extends CRUDKubernetesDependentResource<Secret, ConsensusCapsule> {
 
     public static final String TEMPLATE = "secret.yaml";
-    public static final String NAME_SUFFIX = "-secret";
+    public static final String NAME_SUFFIX = "-keys";
 
     public CapsuleSecret() {
         super(Secret.class);
@@ -22,6 +22,10 @@ public class CapsuleSecret extends CRUDKubernetesDependentResource<Secret, Conse
 
     @Override
     protected Secret desired(ConsensusCapsule primary, Context<ConsensusCapsule> context) {
+        Secret existing = context.getSecondaryResource(Secret.class).orElse(null);
+        if (null != existing) {
+            return existing;
+        }
         ObjectMeta metadata = primary.getMetadata();
         String validName = validName(metadata.getName(), NAME_SUFFIX);
 
