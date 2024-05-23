@@ -148,6 +148,7 @@ public class MultiNodeDeploymentTest {
     record Node(String name, int weight, String internal, String external) {}
 
     ConfigMap config(ConfigMap configMap, Node... nodes) {
+        // should probably set the chainId in bootstrap.properties
         String chainId = configMap.getData().get("bootstrap.properties").lines().filter(s -> s.startsWith("contracts.chainId=")).findFirst().get().substring(18);
         int nodeId = 0;
         StringBuilder sb = new StringBuilder();
@@ -194,13 +195,13 @@ public class MultiNodeDeploymentTest {
         });
 
         // populate config and keys
-        Function<String, String> internalName = s -> s + "-int." + NAMESPACE + "." + "svc.cluster.local";
+//        Function<String, String> internalName = s -> s + "-int." + NAMESPACE + "." + "svc.cluster.local";
         Function<String, String> externalName = s -> s + "-ext." + NAMESPACE + "." + "svc.cluster.local";
         client.resource(config(loadYaml(ConfigMap.class, getClass(), "cluster-config.yaml").edit()
                         .editMetadata().withNamespace(NAMESPACE).endMetadata().build(),
-                new Node("node0", 1, internalName.apply("node0"), externalName.apply("node0")),
-                new Node("node1", 1, internalName.apply("node1"), externalName.apply("node1")),
-                new Node("node2", 1, internalName.apply("node2"), externalName.apply("node2"))))
+                new Node("node0", 1, "node0", externalName.apply("node0")),
+                new Node("node1", 1, "node1", externalName.apply("node1")),
+                new Node("node2", 1, "node2", externalName.apply("node2"))))
                 .create();
         client.resource(loadYaml(ConfigMap.class, getClass(), "public-keys.yaml").edit()
                         .editMetadata().withNamespace(NAMESPACE).endMetadata().build()).create();
@@ -251,9 +252,9 @@ public class MultiNodeDeploymentTest {
 //                assertThat(configMap).isNotNull();
                 Secret secret = client.secrets().inNamespace(NAMESPACE).withName(name + "-keys").get();
                 assertThat(secret).isNotNull();
-                Service service = client.services().inNamespace(NAMESPACE).withName(name + "-int").get();
-                assertThat(service).isNotNull();
-                service = client.services().inNamespace(NAMESPACE).withName(name + "-ext").get();
+//                Service service = client.services().inNamespace(NAMESPACE).withName(name + "-int").get();
+//                assertThat(service).isNotNull();
+                Service service = client.services().inNamespace(NAMESPACE).withName(name + "-ext").get();
                 assertThat(service).isNotNull();
                 assertThat(capsule.getSpec().getEligibleForDeployment()).isFalse();
             });

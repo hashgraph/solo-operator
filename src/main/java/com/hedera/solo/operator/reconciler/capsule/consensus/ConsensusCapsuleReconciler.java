@@ -43,7 +43,7 @@ import org.jboss.logging.Logger;
             @Dependent(type = CapsuleRoleBinding.class, dependsOn = "sa"),
             @Dependent(type = CapsuleDeployment.class),
             @Dependent(type = CapsuleSecret.class),
-            @Dependent(type = CapsuleInternalService.class),
+//            @Dependent(type = CapsuleInternalService.class),
             @Dependent(type = CapsuleExternalService.class),
         })
 public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>, ErrorStatusHandler<ConsensusCapsule> {
