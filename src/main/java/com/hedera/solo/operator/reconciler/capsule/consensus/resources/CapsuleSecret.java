@@ -7,11 +7,10 @@ import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 
 @KubernetesDependent
-public class CapsuleSecret extends CRUDKubernetesDependentResource<Secret, ConsensusCapsule> {
+public class CapsuleSecret extends CRDKubernetesDependentResource<Secret, ConsensusCapsule> {
 
     public static final String TEMPLATE = "secret.yaml";
     public static final String NAME_SUFFIX = "-keys";
@@ -22,10 +21,6 @@ public class CapsuleSecret extends CRUDKubernetesDependentResource<Secret, Conse
 
     @Override
     protected Secret desired(ConsensusCapsule primary, Context<ConsensusCapsule> context) {
-        Secret existing = context.getSecondaryResource(Secret.class).orElse(null);
-        if (null != existing) {
-            return existing;
-        }
         ObjectMeta metadata = primary.getMetadata();
         String validName = validName(metadata.getName(), NAME_SUFFIX);
 
