@@ -1,5 +1,6 @@
 package com.hedera.solo.operator.test.capsule;
 
+import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -11,6 +12,7 @@ import com.hedera.solo.operator.test.fixtures.Environment;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.Secret;
+import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
 import io.quarkus.test.junit.QuarkusTest;
@@ -25,7 +27,8 @@ import org.junit.jupiter.api.Test;
 
 @QuarkusTest
 public class ConsensusCapsuleTest {
-    private static final String TEST_ORBIT_NAME = MethodHandles.lookup().lookupClass().getSimpleName().toLowerCase();
+    private static final String NAMESPACE = MethodHandles.lookup().lookupClass().getSimpleName().toLowerCase();
+    private static final String TEST_ORBIT_NAME = NAMESPACE;
     @Inject
     @SuppressWarnings("CdiInjectionPointsInspection")
     protected KubernetesClient client;
@@ -46,7 +49,7 @@ public class ConsensusCapsuleTest {
 
     @AfterEach
     void cleanup() {
-        client.resources(ConsensusCapsule.class).inNamespace(TEST_ORBIT_NAME).delete();
+        client.resources(ConsensusCapsule.class).inNamespace(NAMESPACE).delete();
         Resources.removeByName(client, Orbit.class, TEST_ORBIT_NAME);
         await().atMost(Duration.ofSeconds(30))
                 .until(() -> client.namespaces().withName(TEST_ORBIT_NAME).get() == null);
@@ -65,12 +68,15 @@ public class ConsensusCapsuleTest {
             assertThat(client.resource(orbit).get()).isNotNull();
         });
 
+        client.resource(loadYaml(ConfigMap.class, getClass(), "public-keys.yaml").edit()
+                .editMetadata().withNamespace(NAMESPACE).endMetadata().build()).create();
+
         // create consensus capsule
         final String consensusCapsuleName = "alpha";
         final ConsensusCapsule consensusCapsule = new ConsensusCapsuleBuilder()
                 .withNewMetadata()
                 .withName(consensusCapsuleName)
-                .withNamespace(TEST_ORBIT_NAME)
+                .withNamespace(NAMESPACE)
                 .endMetadata()
                 .build();
         client.resource(consensusCapsule).create();
@@ -78,10 +84,12 @@ public class ConsensusCapsuleTest {
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
             ConsensusCapsule capsule = client.resource(consensusCapsule).get();
             assertThat(capsule).isNotNull();
-            ConfigMap configMap = client.configMaps().inNamespace(TEST_ORBIT_NAME).withName(consensusCapsuleName + "-cm").get();
-            assertThat(configMap).isNotNull();
-            Secret secret = client.secrets().inNamespace(TEST_ORBIT_NAME).withName(consensusCapsuleName + "-secret").get();
+//            ConfigMap configMap = client.configMaps().inNamespace(NAMESPACE).withName(consensusCapsuleName + "-cm").get();
+//            assertThat(configMap).isNotNull();
+            Secret secret = client.secrets().inNamespace(NAMESPACE).withName(consensusCapsuleName + "-keys").get();
             assertThat(secret).isNotNull();
+            Service service = client.services().inNamespace(NAMESPACE).withName(consensusCapsuleName + "-svc").get();
+            assertThat(service).isNotNull();
         });
     }
 }

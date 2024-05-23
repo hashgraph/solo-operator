@@ -16,7 +16,7 @@ import java.util.Optional;
 public class CapsuleExternalService extends CRUDKubernetesDependentResource<Service, ConsensusCapsule> implements ResourceDiscriminator<Service, ConsensusCapsule> {
 
     public static final String TEMPLATE = "external-service.yaml";
-    public static final String NAME_SUFFIX = "-ext";
+    public static final String NAME_SUFFIX = "-svc";
 
     public CapsuleExternalService() {
         super(Service.class);

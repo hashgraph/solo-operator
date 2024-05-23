@@ -1,5 +1,6 @@
 package com.hedera.solo.operator.test.networkinitialization;
 
+import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -12,6 +13,7 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitBuilder;
+import com.hedera.solo.operator.test.MultiNodeDeploymentTest;
 import com.hedera.solo.operator.test.fixtures.Environment;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import io.fabric8.kubernetes.api.model.ConfigMap;
@@ -32,7 +34,8 @@ import org.junit.jupiter.api.Test;
 
 @QuarkusTest
 public class NetworkInitializationTest {
-    private static final String TEST_ORBIT_NAME = MethodHandles.lookup().lookupClass().getSimpleName().toLowerCase();
+    private static final String NAMESPACE = MethodHandles.lookup().lookupClass().getSimpleName().toLowerCase();
+    private static final String TEST_ORBIT_NAME = NAMESPACE;
     @Inject
     @SuppressWarnings("CdiInjectionPointsInspection")
     protected KubernetesClient client;
@@ -53,8 +56,8 @@ public class NetworkInitializationTest {
 
     @AfterEach
     void cleanup() {
-        client.resources(NetworkInitialization.class).inNamespace(TEST_ORBIT_NAME).delete();
-        client.resources(ConsensusCapsule.class).inNamespace(TEST_ORBIT_NAME).delete();
+        client.resources(NetworkInitialization.class).inNamespace(NAMESPACE).delete();
+        client.resources(ConsensusCapsule.class).inNamespace(NAMESPACE).delete();
         Resources.removeByName(client, Orbit.class, TEST_ORBIT_NAME);
         await().atMost(Duration.ofSeconds(30))
                 .until(() -> client.namespaces().withName(TEST_ORBIT_NAME).get() == null);
@@ -73,12 +76,17 @@ public class NetworkInitializationTest {
             assertThat(client.resource(orbit).get()).isNotNull();
         });
 
+        client.resource(loadYaml(ConfigMap.class, getClass(), "public-keys.yaml").edit()
+                .editMetadata().withNamespace(NAMESPACE).endMetadata().build()).create();
+        client.resource(loadYaml(ConfigMap.class, getClass(), "cluster-config.yaml").edit()
+                .editMetadata().withNamespace(NAMESPACE).endMetadata().build()).create();
+
         // create consensus capsule
         final String consensusCapsuleName = "alpha";
         final ConsensusCapsule consensusCapsule = new ConsensusCapsuleBuilder()
                 .withNewMetadata()
                 .withName(consensusCapsuleName)
-                .withNamespace(TEST_ORBIT_NAME)
+                .withNamespace(NAMESPACE)
                 .endMetadata()
                 .withNewSpec().endSpec()
                 .build();
@@ -87,11 +95,11 @@ public class NetworkInitializationTest {
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
             ConsensusCapsule capsule = client.resource(consensusCapsule).get();
             assertThat(capsule).isNotNull();
-            ConfigMap configMap = client.configMaps().inNamespace(TEST_ORBIT_NAME).withName(consensusCapsuleName + "-cm").get();
-            assertThat(configMap).isNotNull();
-            Secret secret = client.secrets().inNamespace(TEST_ORBIT_NAME).withName(consensusCapsuleName + "-secret").get();
+//            ConfigMap configMap = client.configMaps().inNamespace(NAMESPACE).withName(consensusCapsuleName + "-cm").get();
+//            assertThat(configMap).isNotNull();
+            Secret secret = client.secrets().inNamespace(NAMESPACE).withName(consensusCapsuleName + "-keys").get();
             assertThat(secret).isNotNull();
-            Service service = client.services().inNamespace(TEST_ORBIT_NAME).withName(consensusCapsuleName + "-svc").get();
+            Service service = client.services().inNamespace(NAMESPACE).withName(consensusCapsuleName + "-svc").get();
             assertThat(service).isNotNull();
             assertThat(capsule.getSpec().getEligibleForDeployment()).isFalse();
         });
@@ -100,7 +108,7 @@ public class NetworkInitializationTest {
         final NetworkInitialization networkInitialization = new NetworkInitializationBuilder()
                 .withNewMetadata()
                 .withName(consensusCapsuleName)
-                .withNamespace(TEST_ORBIT_NAME)
+                .withNamespace(NAMESPACE)
                 .endMetadata()
                 .withNewSpec().withMode(NetworkInitializationSpec.Mode.FirstInitialization).endSpec()
                 .withNewStatus().endStatus()
@@ -114,7 +122,7 @@ public class NetworkInitializationTest {
             assertThat(capsule).isNotNull();
             assertThat(capsule.getSpec().getEligibleForDeployment()).isTrue();
 
-            Deployment deployment = client.resources(Deployment.class).inNamespace(TEST_ORBIT_NAME).withName(consensusCapsuleName + "-deploy").get();
+            Deployment deployment = client.resources(Deployment.class).inNamespace(NAMESPACE).withName(consensusCapsuleName + "-deploy").get();
             assertThat(deployment).isNotNull();
             assertThat(deployment.getStatus()).isNotNull();
             assertThat(deployment.getStatus().getAvailableReplicas()).isEqualTo(1);

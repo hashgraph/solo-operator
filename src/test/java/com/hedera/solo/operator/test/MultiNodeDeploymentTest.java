@@ -196,7 +196,7 @@ public class MultiNodeDeploymentTest {
 
         // populate config and keys
 //        Function<String, String> internalName = s -> s + "-int." + NAMESPACE + "." + "svc.cluster.local";
-        Function<String, String> externalName = s -> s + "-ext." + NAMESPACE + "." + "svc.cluster.local";
+        Function<String, String> externalName = s -> s + "-svc." + NAMESPACE + "." + "svc.cluster.local";
         client.resource(config(loadYaml(ConfigMap.class, getClass(), "cluster-config.yaml").edit()
                         .editMetadata().withNamespace(NAMESPACE).endMetadata().build(),
                 new Node("node0", 1, "node0", externalName.apply("node0")),
@@ -254,7 +254,7 @@ public class MultiNodeDeploymentTest {
                 assertThat(secret).isNotNull();
 //                Service service = client.services().inNamespace(NAMESPACE).withName(name + "-int").get();
 //                assertThat(service).isNotNull();
-                Service service = client.services().inNamespace(NAMESPACE).withName(name + "-ext").get();
+                Service service = client.services().inNamespace(NAMESPACE).withName(name + "-svc").get();
                 assertThat(service).isNotNull();
                 assertThat(capsule.getSpec().getEligibleForDeployment()).isFalse();
             });
