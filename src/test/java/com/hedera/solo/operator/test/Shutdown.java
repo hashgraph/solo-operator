@@ -14,20 +14,25 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator;
+package com.hedera.solo.operator.test;
 
-import io.javaoperatorsdk.operator.api.config.LeaderElectionConfiguration;
-import io.quarkus.arc.Unremovable;
+import io.javaoperatorsdk.operator.Operator;
+import io.quarkus.runtime.ShutdownEvent;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
+import jakarta.inject.Inject;
 
 @ApplicationScoped
-@Unremovable
-public class LeaderElection extends LeaderElectionConfiguration {
+public class Shutdown {
+    @Inject
+    protected Environment environment;
 
-    public static final String LEASE_NAME = "solo-operator-lease";
-    public static final String LEASE_NAMESPACE = "default";
+    @Inject
+    protected Operator operator;
 
-    public LeaderElection() {
-        super(LEASE_NAME, LEASE_NAMESPACE);
+    void onShutdown(@Observes ShutdownEvent event) {
+        if (!environment.isDevModeActive()) {
+            operator.stop();
+        }
     }
 }

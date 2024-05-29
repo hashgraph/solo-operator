@@ -83,11 +83,6 @@ objectModelGenerator {
     defaultConfigBuilder.packageOverrides(
         mapOf("com.hedera.solo.operator.v1alpha1" to "com.hedera.solo.operator.model.v1alpha1")
     )
-    removeFiles =
-        setOf(
-            file("com/hedera/solo/operator/model/Common.java"),
-            file("com/hedera/solo/operator/model/CommonSpec.java"),
-        )
     configBuilderOverrides =
         mapOf(
             "common.operator.solo.hedera.com-v1.yml" to
@@ -99,5 +94,10 @@ objectModelGenerator {
                             "com.hedera.solo.operator.v1alpha1" to "com.hedera.solo.operator.model"
                         )
                     )
+        )
+    removeFiles =
+        setOf(
+            file("com/hedera/solo/operator/model/Common.java"),
+            file("com/hedera/solo/operator/model/CommonSpec.java"),
         )
 }

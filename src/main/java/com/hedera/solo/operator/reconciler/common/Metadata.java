@@ -213,6 +213,21 @@ public final class Metadata {
         return copyMap(src, dst, ObjectMeta::getLabels, ObjectMetaFluent::addToLabels, filter);
     }
 
+    /**
+     * Shorten the name as necessary such that the shortened name and suffix do not exceed 63 characters.
+     *
+     * @param name the base name which may be shortened.
+     * @param suffix the suffix which is presumed not to exceed 63 characters.
+     * @return A string containing at most 63 characters
+     * @see <a href="https://kubernetes.io/docs/concepts/overview/working-with-objects/names/">Object Names and IDs</a>
+     */
+    public static String validName(String name, String suffix) {
+        if (name.length() + suffix.length() > 63) {
+            name = name.substring(0, 63 - suffix.length());
+        }
+        return name + suffix;
+    }
+
     private static void copyMap(
             @NotNull final HasMetadata src,
             @NotNull final HasMetadata dst,

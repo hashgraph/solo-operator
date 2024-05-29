@@ -23,6 +23,7 @@ import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitSpecBuilder;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.reconciler.orbit.resources.ConsensusConfigMap;
+import com.hedera.solo.operator.test.Environment;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.Namespace;
@@ -31,6 +32,7 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 import org.jboss.logging.Logger;
 import org.junit.jupiter.api.AfterEach;
@@ -52,6 +54,9 @@ class OrbitTest {
     protected KubernetesClient client;
 
     @Inject
+    protected Environment environment;
+
+    @Inject
     protected Operator operator;
 
     @Inject
@@ -59,14 +64,17 @@ class OrbitTest {
 
     @BeforeEach
     void setup() {
-        operator.start();
-        Resources.removeByName(client, Orbit.class, TEST_ORBIT_NAME);
+        if (!environment.isDevModeActive()) {
+            operator.start();
+        }
+        cleanup();
     }
 
     @AfterEach
     void cleanup() {
         Resources.removeByName(client, Orbit.class, TEST_ORBIT_NAME);
-        operator.stop();
+        await().atMost(Duration.ofSeconds(30))
+                .until(() -> client.namespaces().withName(TEST_ORBIT_NAME).get() == null);
     }
 
     @Test
