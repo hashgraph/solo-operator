@@ -94,7 +94,7 @@ public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>,
     }
 
     @SafeVarargs
-    final <T> boolean allMatch(T a, T b, Function<T, ?>... mappers) {
+    public static final <T> boolean allMatch(final T a, final T b, final Function<T, ?>... mappers) {
         for (Function<T, ?> mapper : mappers) {
             if (!Objects.equals(mapper.apply(a), mapper.apply(b))) {
                 return false;

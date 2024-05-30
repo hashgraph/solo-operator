@@ -43,14 +43,14 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
     }
 
     @Override
-    protected Deployment desired(ConsensusCapsule primary, Context<ConsensusCapsule> context) {
-        ObjectMeta metadata = primary.getMetadata();
-        String validName = validName(metadata.getName(), NAME_SUFFIX);
+    protected Deployment desired(final ConsensusCapsule primary, final Context<ConsensusCapsule> context) {
+        final ObjectMeta metadata = primary.getMetadata();
+        final String validName = validName(metadata.getName(), NAME_SUFFIX);
 
-        boolean eligibleForDeployment =
+        final boolean eligibleForDeployment =
                 primary.getSpec() != null && primary.getSpec().getEligibleForDeployment();
 
-        List<VolumeMount> volumeMounts = new ArrayList<>();
+        final List<VolumeMount> volumeMounts = new ArrayList<>();
         for (String name : Set.of("a", "s")) {
             String filename = name + "-private-" + metadata.getName() + ".pem";
             volumeMounts.add(new VolumeMountBuilder()

@@ -221,11 +221,12 @@ public final class Metadata {
      * @return A string containing at most 63 characters
      * @see <a href="https://kubernetes.io/docs/concepts/overview/working-with-objects/names/">Object Names and IDs</a>
      */
-    public static String validName(String name, String suffix) {
+    public static String validName(final String name, final String suffix) {
+        String finalName = name;
         if (name.length() + suffix.length() > 63) {
-            name = name.substring(0, 63 - suffix.length());
+            finalName = name.substring(0, 63 - suffix.length());
         }
-        return name + suffix;
+        return finalName + suffix;
     }
 
     private static void copyMap(

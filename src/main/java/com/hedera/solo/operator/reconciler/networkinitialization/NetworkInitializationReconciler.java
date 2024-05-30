@@ -49,13 +49,13 @@ public class NetworkInitializationReconciler implements Reconciler<NetworkInitia
 
     @Override
     public UpdateControl<NetworkInitialization> reconcile(
-            NetworkInitialization resource, Context<NetworkInitialization> context) throws Exception {
+            final NetworkInitialization resource, final Context<NetworkInitialization> context) throws Exception {
         try {
             log.infof(
                     "Network Initialization - Starting Reconciliation [ name = '%s' ]",
                     resource.getMetadata().getName());
 
-            boolean seen = resource.getStatus() != null
+            final boolean seen = resource.getStatus() != null
                     && resource.getStatus().getObservedGeneration() != null
                     && Objects.equals(
                             resource.getStatus().getObservedGeneration(),
@@ -65,7 +65,7 @@ public class NetworkInitializationReconciler implements Reconciler<NetworkInitia
                 return UpdateControl.noUpdate();
             }
 
-            var consensusCapsuleClient = client.resources(ConsensusCapsule.class)
+            final var consensusCapsuleClient = client.resources(ConsensusCapsule.class)
                     .inNamespace(resource.getMetadata().getNamespace());
 
             if (!seen) {
@@ -94,7 +94,7 @@ public class NetworkInitializationReconciler implements Reconciler<NetworkInitia
     }
 
     // collect consensus capsule status in status until any fail or all succeed.
-    private static NetworkInitializationStatus.Phase getPhase(List<ConsensusCapsule> consensusCapsules) {
+    private static NetworkInitializationStatus.Phase getPhase(final List<ConsensusCapsule> consensusCapsules) {
         Set<ConsensusCapsuleStatus.Phase> phases = consensusCapsules.stream()
                 .map(CustomResource::getStatus)
                 .map(ConsensusCapsuleStatus::getPhase)

@@ -37,9 +37,9 @@ public class CapsuleService extends CRUDKubernetesDependentResource<Service, Con
     }
 
     @Override
-    protected Service desired(ConsensusCapsule primary, Context<ConsensusCapsule> context) {
-        ObjectMeta metadata = primary.getMetadata();
-        String validName = validName(metadata.getName(), NAME_SUFFIX);
+    protected Service desired(final ConsensusCapsule primary, final Context<ConsensusCapsule> context) {
+        final ObjectMeta metadata = primary.getMetadata();
+        final String validName = validName(metadata.getName(), NAME_SUFFIX);
 
         return loadYaml(Service.class, getClass(), TEMPLATE)
                 .edit()

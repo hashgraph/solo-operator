@@ -36,9 +36,9 @@ public class CapsuleSecret extends CRDKubernetesDependentResource<Secret, Consen
     }
 
     @Override
-    protected Secret desired(ConsensusCapsule primary, Context<ConsensusCapsule> context) {
-        ObjectMeta metadata = primary.getMetadata();
-        String validName = validName(metadata.getName(), NAME_SUFFIX);
+    protected Secret desired(final ConsensusCapsule primary, final Context<ConsensusCapsule> context) {
+        final ObjectMeta metadata = primary.getMetadata();
+        final String validName = validName(metadata.getName(), NAME_SUFFIX);
 
         return loadYaml(Secret.class, getClass(), TEMPLATE)
                 .edit()
