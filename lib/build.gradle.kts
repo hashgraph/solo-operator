@@ -34,7 +34,7 @@ dependencies {
 group = "io.javaoperatorsdk"
 version = "4.8.4-SNAPSHOT"
 description = "Operator SDK - Samples - WebPage"
-java.sourceCompatibility = JavaVersion.VERSION_11
+java.sourceCompatibility = JavaVersion.VERSION_21
 
 publishing {
     publications.create<MavenPublication>("maven") {
