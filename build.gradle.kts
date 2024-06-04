@@ -51,6 +51,7 @@ dependencies {
     implementation("io.quarkus:quarkus-kubernetes-client")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk-bundle-generator")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk")
+    implementation(project(":lib"))
 
     compileOnly("io.sundr:builder-annotations:${sundrVersion}")
     compileOnly("org.projectlombok:lombok:${lombokVersion}")
