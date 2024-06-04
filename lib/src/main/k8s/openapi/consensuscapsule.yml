@@ -1,0 +1,183 @@
+# Copyright (C) 2024 Hedera Hashgraph, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+openapi: 3.0.3
+info:
+  title: OpenAPI Schema
+  version: 1.0.0
+paths: { }
+components:
+  schemas:
+    ConsensusCapsuleSpec:
+      type: object
+      description: |
+        don't yet have node add
+        
+        1. basic provisioning new set of hedera nodes
+        2. how we handle node adds
+        3. how we handle multi-k8s-cluster scenario
+
+        2/3 different deployment modes:
+          1. deterministic image
+          2. init type container (dind, java)
+        
+        1. empty orbit, need a network:
+          * init type container
+            can create container immediately upon creation of consesuscapsule, because container just runs init.
+            potential solution:
+              *** have a CR that represents the set of consensus nodes within the namespace.
+                pitfalls:
+                  1. creates very large CR definition with many nested properties
+                  2. harder to work with for CR author/user
+                  3. harder for reconciler to determine what has changed
+                  4. potential logic issues around what happens when a user creates multiple consensus capsules within the same
+                     namespace/orbit.
+        
+              *** include consensus nodes within orbit CR
+                pitfalls:
+                  1. creates very large CR definition with many nested properties
+                  2. harder to work with for CR author/user
+                  3. harder for reconciler to determine what has changed
+                  4. makes reconciler much more complex for orbit
+                  5. makes reconciler responsible for additional dependent resources
+                  6. makes upgrades potentially harder
+                  7. deletions and additions become harder to execute and handle the required freeze and restart
+        
+              *** introduce additional CR to indicate that we want the consensus capsule changes to be applied
+                pitfalls:
+                  1. more complex workflow for end users, may need to be mediated through external tooling like solo
+                  2. advantages diminish once DAB phase 3 is available, after DAB phase 3 operator won't need to freeze
+                     and restart all nodes to add or delete a node.
+                  3. in the deterministic image model this potentially imposes additional complexity on who and how the
+                     actual pod is created
+                advantage:
+                  1. works better for deterministic image models
+                  2. works better for upgrades because we need to stage resources and synchronize upgrade boundary
+                  3. better for splitting logic across multiple reconcilers
+                  4. in DAB phase 3, something has to trigger a node-add transaction or node-deletion transaction before
+                     the node can go live
+                  5. works better in multi-cluster scenarios because we need to synchronize events between clusters when
+                     starting up nodes
+                  6. single capsule per node which makes the reconciler for the consensus capsules simpler
+                implementation notes:
+                  1. may require making changes to another CR from within reconciler then waiting for events based on `informer`
+                     using condition and phase
+
+          * deterministic image
+              options 1 and 2 don't apply or are more complex then necessary, option 3 is the best fit for deterministic images              
+            implementation notes:
+              when using deterministic images we may need some way to delay the service from actually fully starting up, maybe
+              through the address book or using an init container
+
+      properties:
+        eligibleForDeployment:
+          type: boolean
+          default: false
+          description: |
+            This field should not be set by the user.
+            
+            Indicates whether the `ConsensusCapsule` is eligible for deployment. This is used to prevent the `ConsensusCapsule`
+            from being deployed until all required resources and configuration values are available.
+            
+            This field is set to `true` by the operator when the `ConsensusCapsule` is ready for deployment. Typically
+            this should be set by the `NetworkInitialization` reconciliation loop. 
+            
+            This most likely will be removed in the future when DAB Phase 2/3 is available.
+        affinity:
+          type: object
+          x-java-type: io.fabric8.kubernetes.api.model.Affinity
+        nodeSelector:
+          type: object
+          additionalProperties:
+            type: string
+        tolerations:
+          type: array
+          items:
+            type: object
+            x-java-type: io.fabric8.kubernetes.api.model.Toleration
+        topologySpreadConstraints:
+          type: array
+          items:
+            type: object
+            x-java-type: io.fabric8.kubernetes.api.model.TopologySpreadConstraint
+        resources:
+          type: object
+          x-java-type: io.fabric8.kubernetes.api.model.ResourceRequirements
+        imagePullSecrets:
+          type: array
+          items:
+            type: object
+            x-java-type: io.fabric8.kubernetes.api.model.LocalObjectReference
+        preemptionPolicy:
+          type: string
+          enum:
+            - Never
+            - PreemptLowerPriority
+        priority:
+          type: integer
+        priorityClassName:
+          type: string
+        imagePullPolicy:
+          type: string
+          enum:
+            - Always
+            - Never
+            - IfNotPresent
+        serviceAccountName:
+          type: string
+        securityContext:
+          type: object
+          x-java-type: io.fabric8.kubernetes.api.model.PodSecurityContext
+        terminationGracePeriodSeconds:
+          type: integer
+        softwareVersions:
+          type: object
+          properties:
+            consensusNode:
+              type: object
+#              x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+            openTelemetryCollector:
+              type: object
+#              x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+            streamUploader:
+              type: object
+#              x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+
+    ConsensusCapsuleStatus:
+      description: The current status of a `ConsensusCapsule`.
+      type: object
+      properties:
+        phase:
+          description: The current phase of the `ConsensusCapsule`.
+          type: string
+          enum:
+            - Pending
+            - Running
+            - Succeeded
+            - Failed
+            - Unknown
+        conditions:
+          items:
+            type: object
+#            x-java-type: com.hedera.solo.operator.model.commonspec.Condition
+          type: array
+        observedGeneration:
+          description: The generation observed by the operator.
+          type: integer
+        addressBookEntry:
+          description: |
+              The address book entry for the `ConsensusCapsule`. This is the entry that will be used by the `Orbit` to
+              communicate with the `ConsensusCapsule`.
+          type: object
+#          x-java-type: com.hedera.solo.operator.model.commonspec.AddressBookEntry

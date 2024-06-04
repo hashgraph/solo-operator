@@ -8,6 +8,8 @@ io-javaoperatorsdk-operator-framework-junit-v5 = "4.8.4-SNAPSHOT"
 org-apache-logging-log4j-log4j-slf4j-impl = "2.23.1"
 org-awaitility-awaitility = "4.2.0"
 org-takes-takes = "1.24.4"
+io-sundr = "0.103.1"
+lombok = "1.18.22"
 
 [libraries]
 io-fabric8-crd-generator-apt = { module = "io.fabric8:crd-generator-apt", version.ref = "io-fabric8-crd-generator-apt" }
@@ -16,3 +18,6 @@ io-javaoperatorsdk-operator-framework-junit-v5 = { module = "io.javaoperatorsdk:
 org-apache-logging-log4j-log4j-slf4j-impl = { module = "org.apache.logging.log4j:log4j-slf4j-impl", version.ref = "org-apache-logging-log4j-log4j-slf4j-impl" }
 org-awaitility-awaitility = { module = "org.awaitility:awaitility", version.ref = "org-awaitility-awaitility" }
 org-takes-takes = { module = "org.takes:takes", version.ref = "org-takes-takes" }
+io-sundr-builder-annotations = { module = "io.sundr:builder-annotations", version.ref = "io-sundr" }
+lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
+io-fabric8-kubernetes-client = { module = "io.fabric8:kubernetes-client", version.ref = "io-fabric8-crd-generator-apt" }

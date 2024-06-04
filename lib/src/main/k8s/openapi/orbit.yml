@@ -1,0 +1,185 @@
+# Copyright (C) 2024 Hedera Hashgraph, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+openapi: 3.0.3
+info:
+  title: OpenAPI Schema
+  version: 1.0.0
+paths: { }
+components:
+  schemas:
+    # Orbits should have a standard set of labels at a minimum:
+    # - operator.solo.hedera.com/framework
+    # - operator.solo.hedera.com/framework-version
+    OrbitSpec:
+      description: |
+        The desired state of an `Orbit`.
+        
+        Bootstrapping Multi-Cluster environments:
+          * Solo must provision one k8s cluster initially and then add more clusters as needed.
+          * Subsequent clusters must be added in such a way that their nodes do not meet the minimum quorum requirements
+            or must ensure the consensus nodes are in a down state until the initial cluster and/or other already 
+            provisioned clusters have been updated to include the new nodes.
+          * Solo must issue a freeze and reboot existing nodes via some method such as direct access or operator provided
+            CRs. The `externalAddresses` in the Orbit `addressBook` must be updated to include the new nodes.
+          * Multi-cluster environments may require additional network freezes and reboots across all K8S clusters when 
+            adding a node to any of the clusters.
+          * These complexities will be minimized and may require a change in Solo or the Operator behavior once 
+            DAB Phase 2 and/or Phase 3 are complete.
+          * Preferably the operator should potentially expose a `Freeze` and `Reboot` CRDs to allow for easier 
+            management of these operations.
+          * Many of these concerns also apply to single K8S cluster modes of operation when adding new consensus nodes.
+      type: object
+      properties:
+        deploymentModel:
+          description: |
+            The deployment model for the `Orbit`.
+          type: string
+          enum:
+            - SingleKubernetesCluster
+            - MultipleKubernetesClusters
+        lifetime:
+          description: |
+            The lifetime of the `Orbit`. The string value must be one of the following:
+
+            - A standard textual Java duration (eg: `P2DT15H`).
+            - A human readable duration (eg: `2 days 15 hours`).
+          type: string
+        finalizers:
+          description: A list of finalizers which should be attached to all resources in this `Orbit`.
+          type: array
+          items:
+            type: string
+        telemetry:
+          type: object
+          properties:
+            metrics:
+              description: Metrics configuration for all members of the `Orbit`.
+              type: object
+              properties:
+                enabled:
+                  description: Whether metrics are enabled for the `Orbit`.
+                  type: boolean
+                interval:
+                  description: The interval at which metrics are collected.
+                  type: string
+                labels:
+                  description: Labels to attach to metrics.
+                  type: object
+                  additionalProperties:
+                    type: string
+            logging:
+                description: Logging configuration for all members of the `Orbit`.
+                type: object
+                properties:
+                  enabled:
+                    description: Whether logging is enabled for the `Orbit`.
+                    type: boolean
+                  labels:
+                    description: Labels to attach to logs.
+                    type: object
+                    additionalProperties:
+                      type: string
+        consensus:
+          description: Shared (global) configuration for all `ConsensusCapsules` in the `Orbit`.
+          type: object
+          properties:
+            provisioningModel:
+              description: |
+                The deployment model for the `Orbit`. Initially the operator will support the `InitContainerJava` model.
+              type: string
+              enum:
+                - InitContainerDinD
+                - InitContainerJava
+                - DeterministicContainerImage
+            networkSettings:
+              description: |
+                The network settings for the `Orbit`. This is equivalent to the Platform SDK `settings.txt` file.
+              type: object
+              additionalProperties:
+                type: string
+            applicationConfiguration:
+              description: |
+                The application configuration for the `Orbit`. This is equivalent to the 
+                `data/config/application.properties` file.
+              type: object
+              additionalProperties:
+                type: string
+            genesis:
+              description: |
+                Configuration properties used during the genesis initialization process. Prior to DAB Phase 2,
+                some properties will be used for both genesis and non-genesis initialization. After DAB Phase 2,
+                these properties will only be used during the genesis initialization process.
+              type: object
+              properties:
+                addressBook:
+                  description: |
+                    The address book for the `Orbit`. This is a list of all nodes across all clusters that are 
+                    part of the `Orbit`. This is equivalent to the `address` line entries in the Platform SDK 
+                    `config.txt` file format. Prior to DAB Phase 2, this will be used by all nodes for both 
+                    genesis initialization and non-genesis initialization. After DAB Phase 2, this will only be
+                    used by the genesis initialization process.
+                  type: object
+                  properties:
+                    ledgerId:
+                      description: |
+                        The ledger ID to use. Equivalent to the `swirld` entry in the Platform SDK `config.txt`
+                        file format. May be removed in the DAB Phase 3 refactors. The ledger ID should never change once
+                        specified.
+                      type: string
+                    nextNodeId:
+                      description: | 
+                        The next node ID to use. Equivalent to the `nextNodeId` entry in the Platform SDK `config.txt`
+                        file format. May be removed in the DAB Phase 2/3 refactors. The next node ID should never change
+                        once specified.
+                      type: string
+                    externalAddresses:
+                      description: |
+                        The list of external `OrbitCapsules` and physical consensus nodes not managed by this 
+                        operator deployment aka `Orbit`.
+                      
+                        The operator should update the configmap deployed when this field changes.
+                      type: array
+                      items:
+                        type: object
+#                        x-java-type: com.hedera.solo.operator.model.commonspec.AddressBookEntry
+    OrbitStatus:
+      description: The current status of an `Orbit`.
+      type: object
+      properties:
+        phase:
+          description: The current phase of the `Orbit`.
+          type: string
+          enum:
+            - Pending
+            - Running
+            - Succeeded
+            - Failed
+            - Unknown
+        conditions:
+          items:
+            type: object
+#            x-java-type: com.hedera.solo.operator.model.commonspec.Condition
+          type: array
+        startTime:
+          description: The time at which the `Orbit` was started.
+          type: string
+#          format: date-time
+        expirationTime:
+          description: The time at which the `Orbit` will expire.
+          type: string
+#          format: date-time
+        observedGeneration:
+          description: The generation observed by the operator.
+          type: integer
