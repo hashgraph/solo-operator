@@ -38,9 +38,9 @@ class ReconcilerExecutorTest {
     resource.getMetadata().setAnnotations(new HashMap<>());
     resource.setKind("CustomService");
     resource.setSpec(new TestCustomResourceSpec());
-    resource.getSpec().setConfigMapName("test-config-map");
-    resource.getSpec().setKey("test-key");
-    resource.getSpec().setValue("test-value");
+    resource.getSpec().configMapName = "test-config-map";
+    resource.getSpec().key = "test-key";
+    resource.getSpec().value = "test-value";
     return resource;
   }
 
@@ -119,7 +119,7 @@ class ReconcilerExecutorTest {
                       TEST_CUSTOM_RESOURCE_NAME);
               assertThat(cr).isNotNull();
               assertThat(cr.getStatus()).isNotNull();
-              assertThat(cr.getStatus().getConfigMapStatus()).isEqualTo("ConfigMap Ready");
+              assertThat(cr.getStatus().configMapStatus).isEqualTo("ConfigMap Ready");
             });
   }
 }

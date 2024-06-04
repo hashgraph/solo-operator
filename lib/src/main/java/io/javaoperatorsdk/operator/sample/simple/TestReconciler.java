@@ -53,18 +53,18 @@ public class TestReconciler
     var statusDetail = context.getClient()
         .configMaps()
         .inNamespace(resource.getMetadata().getNamespace())
-        .withName(resource.getSpec().getConfigMapName())
+        .withName(resource.getSpec().configMapName)
         .delete();
 
     if (statusDetail.size() == 1 && statusDetail.get(0).getCauses().isEmpty()) {
       log.info(
           "Deleted ConfigMap {} for resource: {}",
-          resource.getSpec().getConfigMapName(),
+          resource.getSpec().configMapName,
           resource.getMetadata().getName());
     } else {
       log.error(
           "Failed to delete ConfigMap {} for resource: {}",
-          resource.getSpec().getConfigMapName(),
+          resource.getSpec().configMapName,
           resource.getMetadata().getName());
     }
     return DeleteControl.defaultDelete();
@@ -82,7 +82,7 @@ public class TestReconciler
         kubernetesClient
             .configMaps()
             .inNamespace(resource.getMetadata().getNamespace())
-            .withName(resource.getSpec().getConfigMapName())
+            .withName(resource.getSpec().configMapName)
             .get();
 
     if (existingConfigMap != null) {
@@ -100,7 +100,7 @@ public class TestReconciler
           new ConfigMapBuilder()
               .withMetadata(
                   new ObjectMetaBuilder()
-                      .withName(resource.getSpec().getConfigMapName())
+                      .withName(resource.getSpec().configMapName)
                       .withNamespace(resource.getMetadata().getNamespace())
                       .withLabels(labels)
                       .build())
@@ -115,7 +115,7 @@ public class TestReconciler
       if (resource.getStatus() == null) {
         resource.setStatus(new TestCustomResourceStatus());
       }
-      resource.getStatus().setConfigMapStatus("ConfigMap Ready");
+      resource.getStatus().configMapStatus = "ConfigMap Ready";
     }
     if (patchStatus) {
       return UpdateControl.patchStatus(resource);
@@ -126,7 +126,7 @@ public class TestReconciler
 
   private Map<String, String> configMapData(TestCustomResource resource) {
     Map<String, String> data = new HashMap<>();
-    data.put(resource.getSpec().getKey(), resource.getSpec().getValue());
+    data.put(resource.getSpec().key, resource.getSpec().value);
     return data;
   }
 
