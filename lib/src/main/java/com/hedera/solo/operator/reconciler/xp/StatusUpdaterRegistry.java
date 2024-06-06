@@ -176,9 +176,12 @@ public class StatusUpdaterRegistry extends CRUDKubernetesDependentResource<Confi
     public Matcher.Result<ConfigMap> match(ConfigMap actualResource,
                                          StatusUpdater primary,
                                          Context<StatusUpdater> context) {
-        log.error("StatusUpdaterRegistry::matcher {}", primary.getMetadata().getName());
+        log.error("StatusUpdaterRegistry::matcher {} {}", primary.getMetadata().getName(), actualResource.hasOwnerReferenceFor(primary));
+        ConfigMap configMap = actualResource.edit().editMetadata().withManagedFields().endMetadata().build();
+        context.getPrimaryCache().list().forEach(configMap::addOwnerReference);
         return Result.computed(actualResource.hasOwnerReferenceFor(primary),
-                actualResource.edit().editMetadata().withManagedFields().endMetadata().build());
+                //actualResource.edit().editMetadata().withManagedFields().endMetadata().build());
+                configMap);
     }
 
     @Override
