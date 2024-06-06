@@ -6,6 +6,7 @@ import static org.awaitility.Awaitility.await;
 import com.hedera.solo.operator.v1alpha1.StatusUpdater;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.OwnerReference;
+import io.javaoperatorsdk.operator.Operator;
 import io.javaoperatorsdk.operator.junit.LocallyRunOperatorExtension;
 import java.lang.invoke.MethodHandles;
 import java.time.Duration;
@@ -23,7 +24,7 @@ public class StatusUpdaterTest {
     LocallyRunOperatorExtension operator =
             LocallyRunOperatorExtension.builder().withReconciler(new StatusUpdaterReconciler()).build();
 
-    @RepeatedTest(25)
+    @RepeatedTest(10)
     void test() throws Exception {
         StatusUpdater statusUpdater = new StatusUpdater();
         List<StatusUpdater> list = new ArrayList<>();
@@ -32,24 +33,30 @@ public class StatusUpdaterTest {
             list.add(operator.create(statusUpdater));
         }
 
-        try {
-            await().atMost(Duration.ofSeconds(90)).untilAsserted(() -> {
-                ConfigMap cm = operator.get(ConfigMap.class, "status-updater");
-                ConfigMap cm2 = operator.get(ConfigMap.class, "status-updater-no-ssa");
-                assertThat(cm).isNotNull();
-                assertThat(cm2).isNotNull();
-                for (StatusUpdater updater : list) {
-                    assertThat(cm.hasOwnerReferenceFor(updater)).isTrue();
-                    assertThat(cm2.hasOwnerReferenceFor(updater)).isTrue();
-                }
-            });
-        } catch (Exception e) {
+        await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
             ConfigMap cm = operator.get(ConfigMap.class, "status-updater");
             ConfigMap cm2 = operator.get(ConfigMap.class, "status-updater-no-ssa");
-            log.error("+ssa: {}", cm.getMetadata().getOwnerReferences().stream().map(OwnerReference::getName).sorted().toList());
-            log.error("-ssa: {}", cm2.getMetadata().getOwnerReferences().stream().map(OwnerReference::getName).sorted().toList());
-            throw e;
-        }
+            assertThat(cm).isNotNull();
+            assertThat(cm2).isNotNull();
+            for (StatusUpdater updater : list) {
+                assertThat(cm.hasOwnerReferenceFor(updater)).isTrue();
+                assertThat(cm2.hasOwnerReferenceFor(updater)).isTrue();
+            }
+        });
+
+        operator.delete(operator.get(ConfigMap.class, "status-updater"));
+        operator.delete(operator.get(ConfigMap.class, "status-updater-no-ssa"));
+
+        await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
+            ConfigMap cm = operator.get(ConfigMap.class, "status-updater");
+            ConfigMap cm2 = operator.get(ConfigMap.class, "status-updater-no-ssa");
+            assertThat(cm).isNotNull();
+            assertThat(cm2).isNotNull();
+            for (StatusUpdater updater : list) {
+                assertThat(cm.hasOwnerReferenceFor(updater)).isTrue();
+                assertThat(cm2.hasOwnerReferenceFor(updater)).isTrue();
+            }
+        });
 
         list.forEach(operator::delete);
 

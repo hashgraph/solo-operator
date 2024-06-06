@@ -40,21 +40,24 @@ public class StatusUpdaterRegistryNoSSA extends CRUDKubernetesDependentResource<
 
     @Override
     protected ConfigMap desired(StatusUpdater primary, Context<StatusUpdater> context) {
-        ConfigMap existing = context.getSecondaryResources(ConfigMap.class).stream().findFirst().orElse(null);
-        if (null != existing) {
-            existing = existing.edit().editMetadata().withManagedFields().endMetadata().build();
-            return existing;
-        }
+//        ConfigMap existing = context.getSecondaryResources(ConfigMap.class).stream().findFirst().orElse(null);
+//        if (null != existing) {
+//            existing = existing.edit().editMetadata().withManagedFields().endMetadata().build();
+//            return existing;
+//        }
 
-        ConfigMap configMap = new ConfigMapBuilder()
-                .editMetadata()
-                .withNamespace(primary.getMetadata().getNamespace())
-                .withName("status-updater-no-ssa")
-                .endMetadata()
-                .build();
-        context.getClient().resources(StatusUpdater.class).inNamespace(primary.getMetadata().getNamespace()).resources()
-                .map(Gettable::get)
-                .forEach(configMap::addOwnerReference);
+        ConfigMap configMap = distinguish(ConfigMap.class, primary, context)
+                .map(x -> x.edit().editMetadata().withManagedFields().endMetadata().build())
+                .orElse(new ConfigMapBuilder()
+                        .editMetadata()
+                        .withNamespace(primary.getMetadata().getNamespace())
+                        .withName("status-updater-no-ssa")
+                        .endMetadata()
+                        .build());
+        context.getPrimaryCache().list().forEach(configMap::addOwnerReference);
+//        context.getClient().resources(StatusUpdater.class).inNamespace(primary.getMetadata().getNamespace()).resources()
+//                .map(Gettable::get)
+//                .forEach(configMap::addOwnerReference);
         return configMap;
     }
 
@@ -62,8 +65,9 @@ public class StatusUpdaterRegistryNoSSA extends CRUDKubernetesDependentResource<
     public Matcher.Result<ConfigMap> match(ConfigMap actualResource,
                                          StatusUpdater primary,
                                          Context<StatusUpdater> context) {
-        return Result.computed(actualResource.hasOwnerReferenceFor(primary),
-                actualResource.edit().editMetadata().withManagedFields().endMetadata().build());
+//        return Result.computed(actualResource.hasOwnerReferenceFor(primary),
+//                actualResource.edit().editMetadata().withManagedFields().endMetadata().build());
+        return Result.nonComputed(context.getPrimaryCache().list().allMatch(actualResource::hasOwnerReferenceFor));
     }
 
     ResourceUpdaterMatcher<ConfigMap> updater = GenericResourceUpdaterMatcher.updaterMatcherFor(ConfigMap.class);
@@ -82,6 +86,6 @@ public class StatusUpdaterRegistryNoSSA extends CRUDKubernetesDependentResource<
 
     @Override
     public Optional<ConfigMap> distinguish(Class<ConfigMap> aClass, StatusUpdater statusUpdater, Context<StatusUpdater> context) {
-        return context.getSecondaryResources(ConfigMap.class).stream().filter(x -> "status-updater-no-ssa".equals(x.getMetadata().getName())).findFirst();
+        return context.getSecondaryResources(aClass).stream().filter(x -> "status-updater-no-ssa".equals(x.getMetadata().getName())).findAny();
     }
 }

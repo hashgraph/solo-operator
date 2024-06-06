@@ -24,9 +24,11 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.ResourceUpdat
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.updatermatcher.GenericResourceUpdaterMatcher;
 import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,14 +55,14 @@ public class StatusUpdaterRegistry extends CRUDKubernetesDependentResource<Confi
 
     @Override
     protected ConfigMap desired(StatusUpdater primary, Context<StatusUpdater> context) {
-        ConfigMap existing = context.getSecondaryResources(ConfigMap.class).stream().findFirst().orElse(null);
-        log.info("existing: {}", null != existing);
-        if (null != existing) {
-            log.error("owners: {}", existing.getMetadata().getOwnerReferences().stream().map(OwnerReference::getName).toList());
-            existing = existing.edit().editMetadata().withManagedFields().endMetadata().build();
-//            existing.addOwnerReference(primary);
-            return existing;
-        }
+//        ConfigMap existing = context.getSecondaryResources(ConfigMap.class).stream().findFirst().orElse(null);
+//        log.info("existing: {}", null != existing);
+//        if (null != existing) {
+//            log.error("owners: {}", existing.getMetadata().getOwnerReferences().stream().map(OwnerReference::getName).toList());
+//            existing = existing.edit().editMetadata().withManagedFields().endMetadata().build();
+////            existing.addOwnerReference(primary);
+//            return existing;
+//        }
 
         // context.getSecondaryResources(Resources.class).iterator().next().hasOwnerReferenceFor(primary)
         // context.getSecondaryResources(Resources.class).iterator().next().addOwnerReference(primary)
@@ -73,16 +75,19 @@ public class StatusUpdaterRegistry extends CRUDKubernetesDependentResource<Confi
 //            names = new ArrayList<>(names);
 //            names.add(name);
 //        }
-        ConfigMap configMap = new ConfigMapBuilder()
-                .editMetadata()
-                .withNamespace(primary.getMetadata().getNamespace())
-                .withName("status-updater")
-                .endMetadata()
-                .build();
-        context.getClient().resources(StatusUpdater.class).inNamespace(primary.getMetadata().getNamespace()).resources()
-                .map(Gettable::get)
-                .filter(Objects::nonNull) // <- ???
-                .forEach(configMap::addOwnerReference);
+        ConfigMap configMap = distinguish(ConfigMap.class, primary, context)
+                .map(x -> x.edit().editMetadata().withManagedFields().endMetadata().build())
+                .orElse(new ConfigMapBuilder()
+                        .editMetadata()
+                        .withNamespace(primary.getMetadata().getNamespace())
+                        .withName("status-updater")
+                        .endMetadata()
+                        .build());
+//        context.getClient().resources(StatusUpdater.class).inNamespace(primary.getMetadata().getNamespace()).resources()
+//                .map(Gettable::get)
+//                .filter(Objects::nonNull) // <- ???
+//                .forEach(configMap::addOwnerReference);
+        context.getPrimaryCache().list().forEach(configMap::addOwnerReference);
         return configMap;
 //                new ConfigMapBuilder()
 //                .editMetadata()
@@ -176,16 +181,19 @@ public class StatusUpdaterRegistry extends CRUDKubernetesDependentResource<Confi
     public Matcher.Result<ConfigMap> match(ConfigMap actualResource,
                                          StatusUpdater primary,
                                          Context<StatusUpdater> context) {
-        log.error("StatusUpdaterRegistry::matcher {} {}", primary.getMetadata().getName(), actualResource.hasOwnerReferenceFor(primary));
-        ConfigMap configMap = actualResource.edit().editMetadata().withManagedFields().endMetadata().build();
-        context.getPrimaryCache().list().forEach(configMap::addOwnerReference);
-        return Result.computed(actualResource.hasOwnerReferenceFor(primary),
-                //actualResource.edit().editMetadata().withManagedFields().endMetadata().build());
-                configMap);
+//        log.error("StatusUpdaterRegistry::matcher {} {}", primary.getMetadata().getName(), actualResource.hasOwnerReferenceFor(primary));
+//        ConfigMap configMap = actualResource.edit().editMetadata().withManagedFields().endMetadata().build();
+//        context.getPrimaryCache().list().forEach(configMap::addOwnerReference);
+//        return Result.computed(new HashSet<>(actualResource.getMetadata().getOwnerReferences()).containsAll(configMap.getMetadata().getOwnerReferences())
+////                actualResource.hasOwnerReferenceFor(primary)
+//                //actualResource.edit().editMetadata().withManagedFields().endMetadata().build());
+//                ,configMap);
+////        );
+        return Result.nonComputed(context.getPrimaryCache().list().allMatch(actualResource::hasOwnerReferenceFor));
     }
 
     @Override
     public Optional<ConfigMap> distinguish(Class<ConfigMap> aClass, StatusUpdater statusUpdater, Context<StatusUpdater> context) {
-        return context.getSecondaryResources(ConfigMap.class).stream().filter(x -> "status-updater".equals(x.getMetadata().getName())).findFirst();
+        return context.getSecondaryResources(aClass).stream().filter(x -> "status-updater".equals(x.getMetadata().getName())).findAny();
     }
 }

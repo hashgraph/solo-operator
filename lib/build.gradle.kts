@@ -34,7 +34,7 @@ dependencies {
     annotationProcessor(libs.io.sundr.builder.annotations)
     annotationProcessor(libs.io.fabric8.kubernetes.client)
     annotationProcessor(libs.io.fabric8.crd.generator.apt)
-    annotationProcessor("org.slf4j:slf4j-simple:2.0.13")
+//    annotationProcessor("org.slf4j:slf4j-simple:2.0.13")
 //    testAnnotationProcessor(libs.io.fabric8.crd.generator.apt)
 //    testAnnotationProcessor("org.slf4j:slf4j-nop:2.0.13")
     api(libs.io.javaoperatorsdk.operator.framework)
@@ -47,7 +47,7 @@ dependencies {
     compileOnly(libs.io.sundr.builder.annotations)
     compileOnly(libs.lombok)
 
-    implementation("org.slf4j:slf4j-simple:2.0.13")
+//    implementation("org.slf4j:slf4j-simple:2.0.13")
 }
 
 group = "io.javaoperatorsdk"
