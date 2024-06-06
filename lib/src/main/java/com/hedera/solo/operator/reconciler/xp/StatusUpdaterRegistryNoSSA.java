@@ -34,6 +34,7 @@ import org.slf4j.LoggerFactory;
 public class StatusUpdaterRegistryNoSSA extends CRUDKubernetesDependentResource<ConfigMap, StatusUpdater>
     implements ResourceUpdaterMatcher<ConfigMap>, ResourceDiscriminator<ConfigMap, StatusUpdater>
 {
+    private final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
     public StatusUpdaterRegistryNoSSA() {
         super(ConfigMap.class);
     }
@@ -67,6 +68,7 @@ public class StatusUpdaterRegistryNoSSA extends CRUDKubernetesDependentResource<
                                          Context<StatusUpdater> context) {
 //        return Result.computed(actualResource.hasOwnerReferenceFor(primary),
 //                actualResource.edit().editMetadata().withManagedFields().endMetadata().build());
+        log.info("match f: {}", primary.getMetadata().getName());
         return Result.nonComputed(context.getPrimaryCache().list().allMatch(actualResource::hasOwnerReferenceFor));
     }
 

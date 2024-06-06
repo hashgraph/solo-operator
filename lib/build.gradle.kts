@@ -47,7 +47,7 @@ dependencies {
     compileOnly(libs.io.sundr.builder.annotations)
     compileOnly(libs.lombok)
 
-//    implementation("org.slf4j:slf4j-simple:2.0.13")
+    implementation("org.slf4j:slf4j-simple:2.0.13")
 }
 
 group = "io.javaoperatorsdk"

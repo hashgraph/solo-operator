@@ -189,6 +189,7 @@ public class StatusUpdaterRegistry extends CRUDKubernetesDependentResource<Confi
 //                //actualResource.edit().editMetadata().withManagedFields().endMetadata().build());
 //                ,configMap);
 ////        );
+        log.info("match t: {}", primary.getMetadata().getName());
         return Result.nonComputed(context.getPrimaryCache().list().allMatch(actualResource::hasOwnerReferenceFor));
     }
 
