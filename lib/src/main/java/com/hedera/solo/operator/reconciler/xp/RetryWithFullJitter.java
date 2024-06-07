@@ -2,7 +2,6 @@ package com.hedera.solo.operator.reconciler.xp;
 
 import io.javaoperatorsdk.operator.processing.retry.RetryExecution;
 import java.lang.invoke.MethodHandles;
-import java.time.Duration;
 import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;

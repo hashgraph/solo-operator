@@ -1,7 +1,6 @@
 package com.hedera.solo.operator.reconciler.xp;
 
 import io.javaoperatorsdk.operator.api.config.AnnotationConfigurable;
-import io.javaoperatorsdk.operator.processing.retry.GradualRetry;
 import io.javaoperatorsdk.operator.processing.retry.Retry;
 import io.javaoperatorsdk.operator.processing.retry.RetryExecution;
 
