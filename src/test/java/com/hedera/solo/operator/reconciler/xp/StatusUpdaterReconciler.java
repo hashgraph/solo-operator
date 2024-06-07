@@ -1,6 +1,6 @@
 package com.hedera.solo.operator.reconciler.xp;
 
-import com.hedera.solo.operator.v1alpha1.StatusUpdater;
+import com.hedera.solo.operator.model.v1alpha1.StatusUpdater;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusHandler;
@@ -55,7 +55,7 @@ public class StatusUpdaterReconciler implements /*EventSourceInitializer<StatusU
 
     @Override
     public ErrorStatusUpdateControl<StatusUpdater> updateErrorStatus(StatusUpdater statusUpdater, Context<StatusUpdater> context, Exception e) {
-        log.info("Updating status update failed {} {} {}", statusUpdater.getMetadata().getName(), context.getRetryInfo().get().getAttemptCount(), context.getRetryInfo().get().isLastAttempt());
+//        log.info("Updating status update failed {} {} {}", statusUpdater.getMetadata().getName(), context.getRetryInfo().get().getAttemptCount(), context.getRetryInfo().get().isLastAttempt());
         return ErrorStatusUpdateControl.noStatusUpdate();
     }
 }

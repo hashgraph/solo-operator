@@ -3,7 +3,7 @@ package com.hedera.solo.operator.reconciler.xp;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-import com.hedera.solo.operator.v1alpha1.StatusUpdater;
+import com.hedera.solo.operator.model.v1alpha1.StatusUpdater;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.OwnerReference;
 import io.javaoperatorsdk.operator.Operator;

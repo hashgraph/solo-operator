@@ -1,6 +1,6 @@
 package com.hedera.solo.operator.reconciler.xp;
 
-import com.hedera.solo.operator.v1alpha1.StatusUpdater;
+import com.hedera.solo.operator.model.v1alpha1.StatusUpdater;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.javaoperatorsdk.operator.api.reconciler.Context;

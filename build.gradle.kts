@@ -32,6 +32,7 @@ val lombokVersion: String by project
 dependencies {
     annotationProcessor("io.sundr:builder-annotations:${sundrVersion}")
     annotationProcessor("io.fabric8:kubernetes-client:${fabric8Version}")
+    annotationProcessor(libs.io.fabric8.crd.generator.apt)
     implementation("io.fabric8:generator-annotations:${fabric8Version}")
 
     implementation(
@@ -60,6 +61,7 @@ dependencies {
     testImplementation("io.quarkus:quarkus-jacoco")
     testImplementation("org.awaitility:awaitility")
     testImplementation("org.assertj:assertj-core:${assertjVersion}")
+    testImplementation(libs.io.javaoperatorsdk.operator.framework.junit.v5)
 
     testFixturesImplementation(
         enforcedPlatform(
@@ -81,6 +83,7 @@ dependencies {
 objectModelGenerator {
     defaultConfigBuilder.uppercaseEnums(false)
     defaultConfigBuilder.objectExtraAnnotations(true)
+    defaultConfigBuilder.generatedAnnotations(false)
     defaultConfigBuilder.packageOverrides(
         mapOf("com.hedera.solo.operator.v1alpha1" to "com.hedera.solo.operator.model.v1alpha1")
     )
