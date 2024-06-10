@@ -17,7 +17,6 @@
 package com.hedera.solo.operator.objectmodelgenerator;
 
 import io.fabric8.java.generator.Config;
-
 import java.io.File;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -30,18 +29,6 @@ public class ObjectModelGeneratorExtension {
      */
     public Config.ConfigBuilder defaultConfigBuilder = Config.builder();
     /**
-     * Source directory for CRDs
-     */
-    public File sourceCrd;
-    /**
-     * Target directory for generated CRDs
-     */
-    public File targetCrd;
-    /**
-     * Target directory for generated Java source
-     */
-    public File targetJava;
-    /**
      * Builder override for specific file named by map key
      */
     public Map<String, Config.ConfigBuilder> configBuilderOverrides = new HashMap<>();
@@ -49,4 +36,12 @@ public class ObjectModelGeneratorExtension {
      * Optional set of generated files to remove.
      */
     public Set<File> removeFiles = new HashSet<>();
+    /**
+     * File locations for source set main
+     * */
+    public ObjectModelGeneratorFiles main = new ObjectModelGeneratorFiles();
+    /**
+     * File locations for source set test
+     * */
+    public ObjectModelGeneratorFiles test = new ObjectModelGeneratorFiles();
 }

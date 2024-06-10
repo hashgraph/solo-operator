@@ -32,17 +32,34 @@ import java.util.function.Supplier;
  * Object Model Generator plugin.
  */
 public class ObjectModelGeneratorPlugin implements Plugin<Project> {
+    @Override
     public void apply(Project project) {
+        BiFunction<File, Supplier<Directory>, Path> path = (file, supplier) -> (null != file ? file : supplier.get().getAsFile()).toPath();
+        ProjectLayout layout = project.getLayout();
         ObjectModelGeneratorExtension ext = project.getExtensions().create("objectModelGenerator", ObjectModelGeneratorExtension.class);
         project.getTasks().getByName("compileJava").dependsOn("objectModelGenerator");
         project.getTasks().register("objectModelGenerator", ObjectModelGeneratorTask.class, task -> {
-            ProjectLayout layout = project.getLayout();
-            BiFunction<File, Supplier<Directory>, Path> path = (file, supplier) -> (null != file ? file : supplier.get().getAsFile()).toPath();
-            task.sourceCrd = path.apply(ext.sourceCrd, () -> layout.getProjectDirectory().dir("src/main/k8s/crd"));
-            task.targetCrd = path.apply(ext.targetCrd, () -> layout.getBuildDirectory().dir("generated/objectmodelgenerator/crd").get());
-            task.targetJava = path.apply(ext.targetJava, () -> layout.getBuildDirectory().dir("generated/objectmodelgenerator/sources/main/java").get());
-            project.getExtensions().getByType(JavaPluginExtension.class).getSourceSets().findByName(SourceSet.MAIN_SOURCE_SET_NAME)
-                    .java(s -> s.srcDir(task.targetJava));
+            task.sourceCrd = path.apply(ext.main.sourceCrd, () -> layout.getProjectDirectory().dir("src/main/k8s/crd"));
+            task.targetCrd = path.apply(ext.main.targetCrd, () -> layout.getBuildDirectory().dir("generated/object-model-generator/main/crd").get());
+            task.targetJava = path.apply(ext.main.targetJava, () -> layout.getBuildDirectory().dir("generated/object-model-generator/main/java").get());
+            if (task.sourceCrd.toFile().exists()) {
+                project.getExtensions().getByType(JavaPluginExtension.class).getSourceSets().findByName(SourceSet.MAIN_SOURCE_SET_NAME)
+                        .java(s -> s.srcDir(task.targetJava));
+            } else {
+                task.onlyIf($ -> false);
+            }
+        });
+        project.getTasks().getByName("compileTestJava").dependsOn("objectModelTestGenerator");
+        project.getTasks().register("objectModelTestGenerator", ObjectModelGeneratorTask.class, task -> {
+            task.sourceCrd = path.apply(ext.test.sourceCrd, () -> layout.getProjectDirectory().dir("src/test/k8s/crd"));
+            task.targetCrd = path.apply(ext.test.targetCrd, () -> layout.getBuildDirectory().dir("generated/object-model-generator/test/crd").get());
+            task.targetJava = path.apply(ext.test.targetJava, () -> layout.getBuildDirectory().dir("generated/object-model-generator/test/java").get());
+            if (task.sourceCrd.toFile().exists()) {
+                project.getExtensions().getByType(JavaPluginExtension.class).getSourceSets().findByName(SourceSet.TEST_SOURCE_SET_NAME)
+                        .java(s -> s.srcDir(task.targetJava));
+            } else {
+                task.onlyIf($ -> false);
+            }
         });
     }
 }

@@ -45,24 +45,25 @@ class ObjectModelGeneratorPluginFunctionalTest {
     File targetJava;
 
     private File getBuildFile() {
-        return new File(projectDir, "build.gradle");
+        return new File(projectDir, "build.gradle.kts");
     }
 
     private File getSettingsFile() {
         return new File(projectDir, "settings.gradle");
     }
 
-    @Test void canRunTask() throws IOException {
+    @Test
+    void canRunTask() throws IOException {
         writeString(getSettingsFile(), "");
         writeString(getBuildFile(), """
                         plugins {
                           id("java")
-                          id('com.hedera.solo.operator.objectModelGenerator')
+                          id("com.hedera.solo.operator.objectModelGenerator")
                         }
                         objectModelGenerator {
-                          sourceCrd = file('%s')
-                          targetCrd = file('%s')
-                          targetJava = file('%s')
+                            main.sourceCrd = project.layout.projectDirectory.asFile.resolve("%s")
+                            main.targetCrd = project.layout.buildDirectory.get().asFile.resolve("%s")
+                            main.targetJava = project.layout.buildDirectory.get().asFile.resolve("%s")
                         }
                         """.formatted(sourceCrd, targetCrd, targetJava));
 
