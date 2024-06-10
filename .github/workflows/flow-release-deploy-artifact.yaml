@@ -116,7 +116,7 @@ jobs:
           containerd-version: v1.7.2
 
       - name: Setup Docker Support
-        uses: crazy-max/ghaction-setup-docker@5bddaa4323ffd60efb2b5045b75b9637c12d4e50 # v3.2.0
+        uses: crazy-max/ghaction-setup-docker@78318f8be53384b971671f27d81f5e72526c102d # v3.3.0
         env:
           HOME: /x
         with:
