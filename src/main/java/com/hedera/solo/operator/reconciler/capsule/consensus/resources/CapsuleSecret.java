@@ -19,6 +19,7 @@ package com.hedera.solo.operator.reconciler.capsule.consensus.resources;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
+import com.hedera.solo.operator.library.dependentresources.CRUDNoUpdateKubernetesDependentResource;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Secret;
@@ -26,7 +27,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 
 @KubernetesDependent
-public class CapsuleSecret extends CRDKubernetesDependentResource<Secret, ConsensusCapsule> {
+public class CapsuleSecret extends CRUDNoUpdateKubernetesDependentResource<Secret, ConsensusCapsule> {
 
     public static final String TEMPLATE = "secret.yaml";
     public static final String NAME_SUFFIX = "-keys";

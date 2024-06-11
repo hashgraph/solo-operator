@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator.reconciler.capsule.consensus.resources;
+package com.hedera.solo.operator.library.dependentresources;
 
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.GarbageCollected;
 import io.javaoperatorsdk.operator.processing.dependent.Creator;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResource;
 
-public abstract class CRDKubernetesDependentResource<R extends HasMetadata, P extends HasMetadata>
+public abstract class CRUDNoUpdateKubernetesDependentResource<R extends HasMetadata, P extends HasMetadata>
         extends KubernetesDependentResource<R, P> implements Creator<R, P>, GarbageCollected<P> {
 
-    public CRDKubernetesDependentResource(Class<R> resourceType) {
+    public CRUDNoUpdateKubernetesDependentResource(Class<R> resourceType) {
         super(resourceType);
     }
 }

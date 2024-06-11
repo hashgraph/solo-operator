@@ -16,6 +16,7 @@
 
 package com.hedera.solo.operator.reconciler.capsule.consensus;
 
+import com.hedera.solo.operator.library.generic.Compare;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleDeployment;
@@ -33,8 +34,6 @@ import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
 import jakarta.inject.Inject;
-import java.util.Objects;
-import java.util.function.Function;
 import org.jboss.logging.Logger;
 
 @ControllerConfiguration(
@@ -79,7 +78,7 @@ public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>,
                     .build();
 
             try {
-                if (allMatch(capsule, desired, o -> o.getStatus().getObservedGeneration(), o -> o.getStatus()
+                if (Compare.allMatch(capsule, desired, o -> o.getStatus().getObservedGeneration(), o -> o.getStatus()
                         .getPhase())) {
                     return UpdateControl.noUpdate();
                 }
@@ -91,16 +90,6 @@ public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>,
                     "Consensus Capsule - Finished Reconciliation [ name = '%s' ]",
                     capsule.getMetadata().getName());
         }
-    }
-
-    @SafeVarargs
-    public static final <T> boolean allMatch(final T a, final T b, final Function<T, ?>... mappers) {
-        for (Function<T, ?> mapper : mappers) {
-            if (!Objects.equals(mapper.apply(a), mapper.apply(b))) {
-                return false;
-            }
-        }
-        return true;
     }
 
     @Override
