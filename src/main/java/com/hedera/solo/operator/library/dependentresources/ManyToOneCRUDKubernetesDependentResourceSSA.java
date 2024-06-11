@@ -1,4 +1,4 @@
-package com.hedera.solo.operator.reconciler.xp;
+package com.hedera.solo.operator.library.dependentresources;
 
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -7,15 +7,19 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernete
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import java.util.Optional;
 
-public abstract class ManyToOneCRUDKubernetesDependentResource<R extends HasMetadata, P extends HasMetadata>
+/**
+ * Abstract dependent resource to manage many-to-one relation through garbage collected owner references, uses server side apply
+ * Derived dependent resource class should implement create method and be configured to use itself as resource discriminator with SSA.
+ * */
+public abstract class ManyToOneCRUDKubernetesDependentResourceSSA<R extends HasMetadata, P extends HasMetadata>
         extends CRUDKubernetesDependentResource<R, P>
         implements ResourceDiscriminator<R, P>
 {
-    public ManyToOneCRUDKubernetesDependentResource(Class<R> resourceType) {
+    public ManyToOneCRUDKubernetesDependentResourceSSA(Class<R> resourceType) {
         super(resourceType);
     }
 
-    abstract R create(P primary);
+    protected abstract R create(P primary);
 
     @Override
     protected R desired(P primary, Context<P> context) {

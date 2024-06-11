@@ -1,5 +1,6 @@
 package com.hedera.solo.operator.reconciler.xp;
 
+import com.hedera.solo.operator.library.dependentresources.ManyToOneCRUDKubernetesDependentResourceNoSSA;
 import com.hedera.solo.operator.model.v1alpha1.StatusUpdater;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
@@ -14,7 +15,7 @@ public class StatusUpdaterRegistryNoSSA extends ManyToOneCRUDKubernetesDependent
     }
 
     @Override
-    ConfigMap create(StatusUpdater primary) {
+    protected ConfigMap create(StatusUpdater primary) {
         return new ConfigMapBuilder()
                 .editMetadata()
                 .withNamespace(primary.getMetadata().getNamespace())
