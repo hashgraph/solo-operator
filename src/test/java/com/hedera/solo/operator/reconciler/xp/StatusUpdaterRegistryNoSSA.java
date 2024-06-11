@@ -3,77 +3,23 @@ package com.hedera.solo.operator.reconciler.xp;
 import com.hedera.solo.operator.model.v1alpha1.StatusUpdater;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
-import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
-import io.javaoperatorsdk.operator.processing.dependent.Matcher;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.BooleanWithUndefined;
-import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
-import io.javaoperatorsdk.operator.processing.dependent.kubernetes.ResourceUpdaterMatcher;
-import io.javaoperatorsdk.operator.processing.dependent.kubernetes.updatermatcher.GenericResourceUpdaterMatcher;
-import java.lang.invoke.MethodHandles;
-import java.util.Optional;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 @KubernetesDependent(useSSA = BooleanWithUndefined.FALSE, resourceDiscriminator = StatusUpdaterRegistryNoSSA.class)
-public class StatusUpdaterRegistryNoSSA extends CRUDKubernetesDependentResource<ConfigMap, StatusUpdater>
-    implements ResourceUpdaterMatcher<ConfigMap>, ResourceDiscriminator<ConfigMap, StatusUpdater>
+public class StatusUpdaterRegistryNoSSA extends ManyToOneCRUDKubernetesDependentResourceNoSSA<ConfigMap, StatusUpdater>
 {
-    private final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
     public StatusUpdaterRegistryNoSSA() {
         super(ConfigMap.class);
     }
 
     @Override
-    protected ConfigMap desired(StatusUpdater primary, Context<StatusUpdater> context) {
-//        ConfigMap existing = context.getSecondaryResources(ConfigMap.class).stream().findFirst().orElse(null);
-//        if (null != existing) {
-//            existing = existing.edit().editMetadata().withManagedFields().endMetadata().build();
-//            return existing;
-//        }
-
-        ConfigMap configMap = distinguish(ConfigMap.class, primary, context)
-                .map(x -> x.edit().editMetadata().withManagedFields().endMetadata().build())
-                .orElse(new ConfigMapBuilder()
-                        .editMetadata()
-                        .withNamespace(primary.getMetadata().getNamespace())
-                        .withName("status-updater-no-ssa")
-                        .endMetadata()
-                        .build());
-        context.getPrimaryCache().list().forEach(configMap::addOwnerReference);
-//        context.getClient().resources(StatusUpdater.class).inNamespace(primary.getMetadata().getNamespace()).resources()
-//                .map(Gettable::get)
-//                .forEach(configMap::addOwnerReference);
-        return configMap;
-    }
-
-    @Override
-    public Matcher.Result<ConfigMap> match(ConfigMap actualResource,
-                                         StatusUpdater primary,
-                                         Context<StatusUpdater> context) {
-//        return Result.computed(actualResource.hasOwnerReferenceFor(primary),
-//                actualResource.edit().editMetadata().withManagedFields().endMetadata().build());
-        log.info("match f: {}", primary.getMetadata().getName());
-        return Result.nonComputed(context.getPrimaryCache().list().allMatch(actualResource::hasOwnerReferenceFor));
-    }
-
-    ResourceUpdaterMatcher<ConfigMap> updater = GenericResourceUpdaterMatcher.updaterMatcherFor(ConfigMap.class);
-
-    @Override
-    public ConfigMap updateResource(ConfigMap actual, ConfigMap desired, Context<?> context) {
-        ConfigMap updated = updater.updateResource(actual, desired, context);
-        context.getPrimaryCache().list().forEach(updated::addOwnerReference);
-        return updated;
-    }
-
-    @Override
-    public boolean matches(ConfigMap actual, ConfigMap desired, Context<?> context) {
-        return updater.matches(actual, desired, context) && context.getPrimaryCache().list().allMatch(actual::hasOwnerReferenceFor);
-    }
-
-    @Override
-    public Optional<ConfigMap> distinguish(Class<ConfigMap> aClass, StatusUpdater statusUpdater, Context<StatusUpdater> context) {
-        return context.getSecondaryResources(aClass).stream().filter(x -> "status-updater-no-ssa".equals(x.getMetadata().getName())).findAny();
+    ConfigMap create(StatusUpdater primary) {
+        return new ConfigMapBuilder()
+                .editMetadata()
+                .withNamespace(primary.getMetadata().getNamespace())
+                .withName("status-updater-no-ssa")
+                .endMetadata()
+                .build();
     }
 }
