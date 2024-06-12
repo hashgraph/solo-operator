@@ -20,6 +20,7 @@ import com.hedera.solo.operator.library.generic.Compare;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleDeployment;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleRegistry;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleRoleBinding;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleSecret;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleService;
@@ -42,6 +43,7 @@ import org.jboss.logging.Logger;
             @Dependent(name = "sa", type = CapsuleServiceAccount.class),
             @Dependent(type = CapsuleRoleBinding.class, dependsOn = "sa"),
             @Dependent(type = CapsuleDeployment.class),
+            @Dependent(type = CapsuleRegistry.class),
             @Dependent(type = CapsuleSecret.class),
             @Dependent(type = CapsuleService.class),
         })

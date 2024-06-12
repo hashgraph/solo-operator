@@ -11,12 +11,13 @@ import java.util.Optional;
  * Abstract dependent resource to manage many-to-one relation through garbage collected owner references, uses server side apply
  * Derived dependent resource class should implement create method and be configured to use itself as resource discriminator with SSA.
  * */
-public abstract class ManyToOneCRUDKubernetesDependentResourceSSA<R extends HasMetadata, P extends HasMetadata>
+public abstract class ManyToOneKubernetesDependentResource<R extends HasMetadata, P extends HasMetadata>
         extends CRUDKubernetesDependentResource<R, P>
         implements ResourceDiscriminator<R, P>
 {
-    public ManyToOneCRUDKubernetesDependentResourceSSA(Class<R> resourceType) {
+    public ManyToOneKubernetesDependentResource(Class<R> resourceType) {
         super(resourceType);
+        setResourceDiscriminator(this);
     }
 
     protected abstract R create(P primary);
@@ -38,5 +39,10 @@ public abstract class ManyToOneCRUDKubernetesDependentResourceSSA<R extends HasM
     @Override
     public Result<R> match(R actual, P primary, Context<P> context) {
         return Result.nonComputed(context.getPrimaryCache().list().allMatch(actual::hasOwnerReferenceFor));
+    }
+
+    @Override
+    protected boolean useSSA(Context<P> context) {
+        return true;
     }
 }

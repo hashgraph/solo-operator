@@ -9,13 +9,13 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.updatermatche
  * Abstract dependent resource to manage many-to-one relation through garbage collected owner references, uses server side apply
  * Derived dependent resource class should implement create method and be configured to use itself as resource discriminator without SSA.
  * */
-public abstract class ManyToOneCRUDKubernetesDependentResourceNoSSA<R extends HasMetadata, P extends HasMetadata>
-        extends ManyToOneCRUDKubernetesDependentResourceSSA<R, P>
+public abstract class ManyToOneNoSSAKubernetesDependentResource<R extends HasMetadata, P extends HasMetadata>
+        extends ManyToOneKubernetesDependentResource<R, P>
         implements ResourceUpdaterMatcher<R>
 {
     ResourceUpdaterMatcher<R> updater = GenericResourceUpdaterMatcher.updaterMatcherFor(resourceType());
 
-    public ManyToOneCRUDKubernetesDependentResourceNoSSA(Class<R> resourceType) {
+    public ManyToOneNoSSAKubernetesDependentResource(Class<R> resourceType) {
         super(resourceType);
     }
 
@@ -29,5 +29,10 @@ public abstract class ManyToOneCRUDKubernetesDependentResourceNoSSA<R extends Ha
         R updated = updater.updateResource(actual, desired, context);
         context.getPrimaryCache().list().forEach(updated::addOwnerReference);
         return updated;
+    }
+
+    @Override
+    protected boolean useSSA(Context<P> context) {
+        return false;
     }
 }

@@ -21,10 +21,10 @@ import io.javaoperatorsdk.operator.api.reconciler.dependent.GarbageCollected;
 import io.javaoperatorsdk.operator.processing.dependent.Creator;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResource;
 
-public abstract class CRUDNoUpdateKubernetesDependentResource<R extends HasMetadata, P extends HasMetadata>
+public abstract class CreateOnlyKubernetesDependentResource<R extends HasMetadata, P extends HasMetadata>
         extends KubernetesDependentResource<R, P> implements Creator<R, P>, GarbageCollected<P> {
 
-    public CRUDNoUpdateKubernetesDependentResource(Class<R> resourceType) {
+    public CreateOnlyKubernetesDependentResource(Class<R> resourceType) {
         super(resourceType);
     }
 }

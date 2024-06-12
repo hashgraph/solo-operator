@@ -1,14 +1,13 @@
 package com.hedera.solo.operator.reconciler.xp;
 
-import com.hedera.solo.operator.library.dependentresources.ManyToOneCRUDKubernetesDependentResourceNoSSA;
+import com.hedera.solo.operator.library.dependentresources.ManyToOneNoSSAKubernetesDependentResource;
 import com.hedera.solo.operator.model.v1alpha1.StatusUpdater;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
-import io.javaoperatorsdk.operator.processing.dependent.kubernetes.BooleanWithUndefined;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 
-@KubernetesDependent(useSSA = BooleanWithUndefined.FALSE, resourceDiscriminator = StatusUpdaterRegistryNoSSA.class)
-public class StatusUpdaterRegistryNoSSA extends ManyToOneCRUDKubernetesDependentResourceNoSSA<ConfigMap, StatusUpdater>
+@KubernetesDependent
+public class StatusUpdaterRegistryNoSSA extends ManyToOneNoSSAKubernetesDependentResource<ConfigMap, StatusUpdater>
 {
     public StatusUpdaterRegistryNoSSA() {
         super(ConfigMap.class);

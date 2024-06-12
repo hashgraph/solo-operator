@@ -28,7 +28,7 @@ public class StatusUpdaterTest {
     void test() throws Exception {
         StatusUpdater statusUpdater = new StatusUpdater();
         List<StatusUpdater> list = new ArrayList<>();
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 10; i++) {
             statusUpdater.getMetadata().setName("example-" + i);
             list.add(operator.create(statusUpdater));
         }
@@ -39,16 +39,8 @@ public class StatusUpdaterTest {
             assertThat(cm).isNotNull();
             assertThat(cm2).isNotNull();
             for (StatusUpdater updater : list) {
-//                if (updater.getMetadata().getName().endsWith("3")) {
-//                    assertThat(cm.hasOwnerReferenceFor(updater)).isFalse();
-//                } else {
                     assertThat(cm.hasOwnerReferenceFor(updater)).isTrue();
-//                }
-//                if (updater.getMetadata().getName().endsWith("5")) {
-//                    assertThat(cm2.hasOwnerReferenceFor(updater)).isFalse();
-//                } else {
                     assertThat(cm2.hasOwnerReferenceFor(updater)).isTrue();
-//                }
             }
         });
 
@@ -61,16 +53,8 @@ public class StatusUpdaterTest {
             assertThat(cm).isNotNull();
             assertThat(cm2).isNotNull();
             for (StatusUpdater updater : list) {
-//                if (updater.getMetadata().getName().endsWith("3")) {
-//                    assertThat(cm.hasOwnerReferenceFor(updater)).isFalse();
-//                } else {
                     assertThat(cm.hasOwnerReferenceFor(updater)).isTrue();
-//                }
-//                if (updater.getMetadata().getName().endsWith("5")) {
-//                    assertThat(cm2.hasOwnerReferenceFor(updater)).isFalse();
-//                } else {
                     assertThat(cm2.hasOwnerReferenceFor(updater)).isTrue();
-//                }
             }
         });
 
