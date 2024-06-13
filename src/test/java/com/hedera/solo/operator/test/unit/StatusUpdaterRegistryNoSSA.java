@@ -1,15 +1,15 @@
-package com.hedera.solo.operator.reconciler.xp;
+package com.hedera.solo.operator.test.unit;
 
-import com.hedera.solo.operator.library.dependentresources.ManyToOneKubernetesDependentResource;
+import com.hedera.solo.operator.library.dependentresources.ManyToOneNoSSAKubernetesDependentResource;
 import com.hedera.solo.operator.model.v1alpha1.StatusUpdater;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 
 @KubernetesDependent
-public class StatusUpdaterRegistry extends ManyToOneKubernetesDependentResource<ConfigMap, StatusUpdater>
+public class StatusUpdaterRegistryNoSSA extends ManyToOneNoSSAKubernetesDependentResource<ConfigMap, StatusUpdater>
 {
-    public StatusUpdaterRegistry() {
+    public StatusUpdaterRegistryNoSSA() {
         super(ConfigMap.class);
     }
 
@@ -18,7 +18,7 @@ public class StatusUpdaterRegistry extends ManyToOneKubernetesDependentResource<
         return new ConfigMapBuilder()
                 .editMetadata()
                 .withNamespace(primary.getMetadata().getNamespace())
-                .withName("status-updater")
+                .withName("status-updater-no-ssa")
                 .endMetadata()
                 .build();
     }

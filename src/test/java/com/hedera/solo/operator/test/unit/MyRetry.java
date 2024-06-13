@@ -1,4 +1,4 @@
-package com.hedera.solo.operator.reconciler.xp;
+package com.hedera.solo.operator.test.unit;
 
 import io.javaoperatorsdk.operator.api.config.AnnotationConfigurable;
 import io.javaoperatorsdk.operator.processing.retry.Retry;

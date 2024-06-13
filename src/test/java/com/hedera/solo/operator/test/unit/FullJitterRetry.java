@@ -1,4 +1,4 @@
-package com.hedera.solo.operator.reconciler.xp;
+package com.hedera.solo.operator.test.unit;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Inherited;

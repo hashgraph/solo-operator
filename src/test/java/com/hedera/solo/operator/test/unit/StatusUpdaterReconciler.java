@@ -1,4 +1,4 @@
-package com.hedera.solo.operator.reconciler.xp;
+package com.hedera.solo.operator.test.unit;
 
 import com.hedera.solo.operator.model.v1alpha1.StatusUpdater;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
