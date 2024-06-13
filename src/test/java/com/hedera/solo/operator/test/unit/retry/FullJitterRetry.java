@@ -1,4 +1,4 @@
-package com.hedera.solo.operator.test.unit;
+package com.hedera.solo.operator.test.unit.retry;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Inherited;

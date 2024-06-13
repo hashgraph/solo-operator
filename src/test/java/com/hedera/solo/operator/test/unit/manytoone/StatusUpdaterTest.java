@@ -1,4 +1,4 @@
-package com.hedera.solo.operator.test.unit;
+package com.hedera.solo.operator.test.unit.manytoone;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;

@@ -1,4 +1,4 @@
-package com.hedera.solo.operator.test.unit;
+package com.hedera.solo.operator.test.unit.retry;
 
 import io.javaoperatorsdk.operator.processing.retry.RetryExecution;
 import java.lang.invoke.MethodHandles;

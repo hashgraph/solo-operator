@@ -1,4 +1,4 @@
-package com.hedera.solo.operator.test.unit;
+package com.hedera.solo.operator.test.unit.manytoone;
 
 import com.hedera.solo.operator.library.dependentresources.ManyToOneNoSSAKubernetesDependentResource;
 import com.hedera.solo.operator.model.v1alpha1.StatusUpdater;
