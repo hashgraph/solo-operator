@@ -21,13 +21,13 @@ public abstract class ManyToOneNoSSAKubernetesDependentResource<R extends HasMet
 
     @Override
     public boolean matches(R actual, R desired, Context<?> context) {
-        return updater.matches(actual, desired, context) && context.getPrimaryCache().list().allMatch(actual::hasOwnerReferenceFor);
+        return updater.matches(actual, desired, context) && Cached.primaries(actual, context).allMatch(actual::hasOwnerReferenceFor);
     }
 
     @Override
     public R updateResource(R actual, R desired, Context<?> context) {
         R updated = updater.updateResource(actual, desired, context);
-        context.getPrimaryCache().list().forEach(updated::addOwnerReference);
+        Cached.primaries(updated, context).forEach(updated::addOwnerReference);
         return updated;
     }
 

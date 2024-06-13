@@ -20,22 +20,37 @@ import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitialization;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationStatus;
+import com.hedera.solo.operator.reconciler.networkinitialization.resources.NetworkInitializationCapsules;
+import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.javaoperatorsdk.operator.api.config.informer.InformerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
+import io.javaoperatorsdk.operator.api.reconciler.EventSourceContext;
+import io.javaoperatorsdk.operator.api.reconciler.EventSourceInitializer;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
+import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
+import io.javaoperatorsdk.operator.processing.event.source.EventSource;
+import io.javaoperatorsdk.operator.processing.event.source.informer.InformerEventSource;
 import jakarta.inject.Inject;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.jboss.logging.Logger;
 
-@ControllerConfiguration(name = "network-initialization")
-public class NetworkInitializationReconciler implements Reconciler<NetworkInitialization> {
+@ControllerConfiguration(name = "network-initialization", dependents = {
+        @Dependent(type = NetworkInitializationCapsules.class),
+})
+public class NetworkInitializationReconciler
+        implements
+//        EventSourceInitializer<NetworkInitialization>,
+        Reconciler<NetworkInitialization> {
     private final Logger log;
     private final KubernetesClient client;
     private static final Set<NetworkInitializationStatus.Phase> terminalPhases =
@@ -113,4 +128,13 @@ public class NetworkInitializationReconciler implements Reconciler<NetworkInitia
         }
         return phase;
     }
+
+//    @Override
+//    public Map<String, EventSource> prepareEventSources(EventSourceContext<NetworkInitialization> context) {
+//        var configMapEventSource =
+//                new InformerEventSource<>(InformerConfiguration.from(ConfigMap.class, context)
+//                        .withSecondaryToPrimaryMapper(r -> Set.of(new ResourceID("network-initialization", r.getMetadata().getNamespace())))
+//                        .build(), context);
+//        return EventSourceInitializer.nameEventSources(configMapEventSource);
+//    }
 }

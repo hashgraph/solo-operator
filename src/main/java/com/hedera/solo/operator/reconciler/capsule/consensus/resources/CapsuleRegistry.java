@@ -4,11 +4,13 @@ import com.hedera.solo.operator.library.dependentresources.ManyToOneKubernetesDe
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
-import io.javaoperatorsdk.operator.processing.dependent.kubernetes.BooleanWithUndefined;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 
-@KubernetesDependent(useSSA = BooleanWithUndefined.TRUE, resourceDiscriminator = CapsuleRegistry.class)
-public class CapsuleRegistry extends ManyToOneKubernetesDependentResource<ConfigMap, ConsensusCapsule> {
+@KubernetesDependent
+public class CapsuleRegistry
+        extends ManyToOneKubernetesDependentResource<ConfigMap, ConsensusCapsule> {
+    public static final String NAME = "consensus-capsules";
+
     public CapsuleRegistry() {
         super(ConfigMap.class);
     }
@@ -18,7 +20,7 @@ public class CapsuleRegistry extends ManyToOneKubernetesDependentResource<Config
         return new ConfigMapBuilder()
                 .editMetadata()
                 .withNamespace(primary.getMetadata().getNamespace())
-                .withName("consensus-capsules")
+                .withName(NAME)
                 .endMetadata()
                 .build();
     }

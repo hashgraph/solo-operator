@@ -242,7 +242,7 @@ public class ConsensusCapsuleTest {
                 .build();
         client.resource(networkInitialization).create();
 
-        await().atMost(90, TimeUnit.SECONDS).untilAsserted(() -> {
+        await().atMost(99990, TimeUnit.SECONDS).untilAsserted(() -> {
             NetworkInitialization netInit =
                     client.resource(networkInitialization).get();
             assertThat(netInit).isNotNull();

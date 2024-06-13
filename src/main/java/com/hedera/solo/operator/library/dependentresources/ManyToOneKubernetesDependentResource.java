@@ -26,7 +26,7 @@ public abstract class ManyToOneKubernetesDependentResource<R extends HasMetadata
     protected R desired(P primary, Context<P> context) {
         R resource = distinguish(resourceType(), primary, context).orElseGet(() -> create(primary));
         resource.getMetadata().setManagedFields(null);
-        context.getPrimaryCache().list().forEach(resource::addOwnerReference);
+        Cached.primaries(primary, context).forEach(resource::addOwnerReference);
         return resource;
     }
 
@@ -38,7 +38,7 @@ public abstract class ManyToOneKubernetesDependentResource<R extends HasMetadata
 
     @Override
     public Result<R> match(R actual, P primary, Context<P> context) {
-        return Result.nonComputed(context.getPrimaryCache().list().allMatch(actual::hasOwnerReferenceFor));
+        return Result.nonComputed(Cached.primaries(primary, context).allMatch(actual::hasOwnerReferenceFor));
     }
 
     @Override

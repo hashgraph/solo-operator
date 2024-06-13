@@ -29,6 +29,8 @@ val sundrVersion: String by project
 val fabric8Version: String by project
 val lombokVersion: String by project
 
+// fixme: quarkus finds and runs all reconcilers in test source set as well as main source set to prevent this from happening quarkus tests should be in separate source set from josdk tests
+
 dependencies {
     annotationProcessor("io.sundr:builder-annotations:${sundrVersion}")
     annotationProcessor("io.fabric8:kubernetes-client:${fabric8Version}")
