@@ -12,7 +12,9 @@ import java.util.Optional;
 
 @KubernetesDependent
 public class NetworkInitializationCapsules extends ReadOnlyKubernetesDependentResource<ConfigMap, NetworkInitialization>
-        implements ResourceDiscriminator<ConfigMap, NetworkInitialization>
+        implements
+//        SecondaryToPrimaryMapper<ConfigMap>,
+        ResourceDiscriminator<ConfigMap, NetworkInitialization>
 {
     public NetworkInitializationCapsules() {
         super(ConfigMap.class);
@@ -24,4 +26,21 @@ public class NetworkInitializationCapsules extends ReadOnlyKubernetesDependentRe
         ResourceID id = new ResourceID(CapsuleRegistry.NAME, primary.getMetadata().getNamespace());
         return context.getSecondaryResources(aClass).stream().filter(r -> id.equals(ResourceID.fromResource(r))).findAny();
     }
+
+//    @Override
+//    public Map<String, EventSource> prepareEventSources(EventSourceContext<ConfigMap> context) {
+//        var configMapEventSource =
+//                new InformerEventSource<>(InformerConfiguration.from(ConfigMap.class, context)
+//                        .withSecondaryToPrimaryMapper(s -> Set.of(new ResourceID("network-initialization", s.getMetadata().getNamespace())))
+//                        .build(), context);
+//        return EventSourceInitializer.nameEventSources(configMapEventSource);
+//    }
+
+//    @Override
+//    public Set<ResourceID> toPrimaryResourceIDs(ConfigMap resource) {
+//        if (CapsuleRegistry.NAME.equals(resource.getMetadata().getName())) {
+//            return Set.of(new ResourceID("network-initialization", resource.getMetadata().getNamespace()));
+//        }
+//        return Collections.emptySet();
+//    }
 }
