@@ -1,4 +1,4 @@
-package com.hedera.solo.operator.test.unit.retry;
+package com.hedera.solo.operator.test.framework.retry;
 
 import io.javaoperatorsdk.operator.api.config.AnnotationConfigurable;
 import io.javaoperatorsdk.operator.processing.retry.Retry;

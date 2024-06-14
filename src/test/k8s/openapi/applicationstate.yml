@@ -1,0 +1,27 @@
+openapi: 3.0.3
+info:
+  title: OpenAPI Schema
+  version: 1.0.0
+paths: { }
+components:
+  schemas:
+    Spec:
+      type: object
+      properties:
+        desiredState:
+          type: string
+          enum:
+            - Initialized
+        initializeCapsuleNames:
+          type: array
+          items:
+            type: string
+    Status:
+      type: object
+      properties:
+        currentState:
+          type: string
+          enum:
+            - Uninitialized
+            - Initializing
+            - Initialized

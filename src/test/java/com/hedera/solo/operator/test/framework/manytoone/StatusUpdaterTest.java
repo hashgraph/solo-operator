@@ -1,27 +1,29 @@
-package com.hedera.solo.operator.test.unit.manytoone;
+package com.hedera.solo.operator.test.framework.manytoone;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.hedera.solo.operator.model.v1alpha1.StatusUpdater;
+import com.hedera.solo.operator.test.framework.TestFramework;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.javaoperatorsdk.operator.junit.LocallyRunOperatorExtension;
 import java.lang.invoke.MethodHandles;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import org.junit.jupiter.api.RepeatedTest;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+@TestFramework
 public class StatusUpdaterTest {
     private final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
     @RegisterExtension
     LocallyRunOperatorExtension operator =
             LocallyRunOperatorExtension.builder().withReconciler(new StatusUpdaterReconciler()).build();
 
-    @RepeatedTest(1)
+    @Test
     void test() throws Exception {
         StatusUpdater statusUpdater = new StatusUpdater();
         List<StatusUpdater> list = new ArrayList<>();
