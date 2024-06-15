@@ -6,6 +6,7 @@ import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Abstract dependent resource to manage many-to-one relation through garbage collected owner references, uses server side apply
@@ -30,14 +31,22 @@ public abstract class ManyToOneKubernetesDependentResource<R extends HasMetadata
         return resource;
     }
 
+    public static AtomicInteger counter = new AtomicInteger();
     @Override
     public Optional<R> distinguish(Class<R> aClass, P primary, Context<P> context) {
         ResourceID id = ResourceID.fromResource(create(primary));
         return context.getSecondaryResources(aClass).stream().filter(r -> id.equals(ResourceID.fromResource(r))).findAny();
+//        Optional<R> fromCache = context.getSecondaryResources(aClass).stream().filter(r -> id.equals(ResourceID.fromResource(r))).findAny();
+//        if (fromCache.isPresent()) {
+//            return fromCache;
+//        }
+//        counter.incrementAndGet();
+//        return Optional.ofNullable(context.getClient().resources(aClass).inNamespace(primary.getMetadata().getNamespace()).withName(id.getName()).get());
     }
 
     @Override
     public Result<R> match(R actual, P primary, Context<P> context) {
+//        return Result.nonComputed(actual.hasOwnerReferenceFor(primary));
         return Result.nonComputed(Cached.primaries(primary, context).allMatch(actual::hasOwnerReferenceFor));
     }
 
