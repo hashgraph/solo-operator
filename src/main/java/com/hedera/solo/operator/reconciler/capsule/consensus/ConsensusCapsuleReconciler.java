@@ -20,12 +20,12 @@ import com.hedera.solo.operator.library.generic.Compare;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleDeployment;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsulePod;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleRoleBinding;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleSecret;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleService;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleServiceAccount;
-import io.fabric8.kubernetes.api.model.apps.Deployment;
-import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
+import io.fabric8.kubernetes.api.model.Pod;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusHandler;
@@ -34,6 +34,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
 import jakarta.inject.Inject;
+import java.util.Set;
 import org.jboss.logging.Logger;
 
 @ControllerConfiguration(
@@ -44,6 +45,7 @@ import org.jboss.logging.Logger;
             @Dependent(type = CapsuleDeployment.class),
             @Dependent(type = CapsuleSecret.class),
             @Dependent(type = CapsuleService.class),
+            @Dependent(type = CapsulePod.class)
         })
 public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>, ErrorStatusHandler<ConsensusCapsule> {
 
@@ -62,13 +64,17 @@ public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>,
                     "Consensus Capsule - Starting Reconciliation [ name = '%s' ]",
                     capsule.getMetadata().getName());
 
-            ConsensusCapsuleStatus.Phase phase = 1
-                            == context.getSecondaryResource(Deployment.class)
-                                    .map(Deployment::getStatus)
-                                    .map(DeploymentStatus::getAvailableReplicas)
-                                    .orElse(0)
-                    ? ConsensusCapsuleStatus.Phase.Running
-                    : ConsensusCapsuleStatus.Phase.Unknown;
+            ConsensusCapsuleStatus.Phase phase = ConsensusCapsuleStatus.Phase.Unknown;
+            Set<Pod> pods = context.getSecondaryResources(Pod.class);
+            if (1 == pods.size()) {
+                switch (pods.iterator().next().getStatus().getPhase()) {
+                    case "Failed" -> phase = ConsensusCapsuleStatus.Phase.Failed;
+                    case "Pending" -> phase = ConsensusCapsuleStatus.Phase.Pending;
+                    case "Running" -> phase = ConsensusCapsuleStatus.Phase.Running;
+                    case "Succeeded" -> phase = ConsensusCapsuleStatus.Phase.Succeeded;
+                    default -> phase = ConsensusCapsuleStatus.Phase.Unknown;
+                }
+            }
 
             ConsensusCapsule desired = capsule.edit()
                     .editStatus()
