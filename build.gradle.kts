@@ -51,6 +51,12 @@ dependencies {
     implementation("io.quarkus:quarkus-kubernetes-client")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk-bundle-generator")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk")
+    runtimeOnly("org.hyperledger.besu:secp256k1:0.8.2")
+//    testRuntimeOnly("org.hyperledger.besu:secp256k1:0.8.2")
+    implementation("org.bouncycastle:bcpkix-jdk18on:1.78")
+    implementation("com.swirlds:swirlds-platform-core:0.51.0")
+//    implementation(files("/var/home/devenv/dev/hedera-services/hedera-node/data/lib/swirlds-common-0.51.0.jar"))
+//    implementation(files("/var/home/devenv/dev/hedera-services/hedera-node/data/lib/swirlds-platform-core-0.51.0.jar"))
 
     compileOnly("io.sundr:builder-annotations:${sundrVersion}")
     compileOnly("org.projectlombok:lombok:${lombokVersion}")

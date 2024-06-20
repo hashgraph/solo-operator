@@ -175,6 +175,7 @@ public class ConsensusCapsuleTest {
 
         // create network initialization
         createNetworkInitialization(nodes);
+        int i = 1;
     }
 
     Orbit createOrbit() {
