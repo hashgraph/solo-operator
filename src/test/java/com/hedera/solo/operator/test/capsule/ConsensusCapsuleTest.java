@@ -111,13 +111,11 @@ public class ConsensusCapsuleTest {
         StringBuilder sb = new StringBuilder();
         sb.append("swirld, ").append(external.getLedgerId()).append("\n");
         sb.append("app, HederaNode.jar\n");
-        SortedSet<AddressBookEntry> addressBookEntries =
-                new TreeSet<>(Comparator.comparing(AddressBookEntry::getNodeId,
-                        Comparator.comparing(String::length).thenComparing(String.CASE_INSENSITIVE_ORDER)));
+        SortedSet<AddressBookEntry> addressBookEntries = new TreeSet<>(Comparator.comparing(AddressBookEntry::getNodeId));
         addressBookEntries.addAll(external.getExternalAddresses());
         addressBookEntries.addAll(entries);
         for (AddressBookEntry entry : addressBookEntries) {
-            sb.append(String.join(", ", "address", entry.getNodeId(), entry.getNickName(),
+            sb.append(String.join(", ", "address", entry.getNodeId().toString(), entry.getNickName(),
                     entry.getSelfName(), entry.getWeight().toString(), entry.getInternalHostname(),
                     entry.getInternalPort().toString(), entry.getExternalHostname(), entry.getExternalPort().toString(),
                     entry.getNodeAccount())).append("\n");
@@ -138,10 +136,10 @@ public class ConsensusCapsuleTest {
                 .get()
                 .substring(18);
         List<AddressBookEntry> entries = new ArrayList<>();
-        int nodeId = 0;
+        long nodeId = 0;
         for (Node node : nodes) {
             entries.add(new AddressBookEntryBuilder()
-                    .withNodeId(String.valueOf(nodeId))
+                    .withNodeId(nodeId)
                     .withNickName(node.name)
                     .withSelfName(node.name)
                     .withWeight(1L)
@@ -363,7 +361,7 @@ public class ConsensusCapsuleTest {
         return orbit;
     }
 
-    record NodeX(int id, String name) {}
+    record NodeX(long id, String name) {}
 
     List<ConsensusCapsule> createConsensusCapsule(NodeX... nodes) {
         List<ConsensusCapsule> list = new ArrayList<>();
@@ -374,8 +372,7 @@ public class ConsensusCapsuleTest {
                     .withNamespace(NAMESPACE)
                     .endMetadata()
                     .withNewSpec()
-                    .withNodeId(String.valueOf(node.id))
-                    .withNodeAccount("0.0." + (node.id + 3))
+                    .withNodeId(node.id)
                     .endSpec()
                     .build();
             list.add(client.resource(consensusCapsule).create());

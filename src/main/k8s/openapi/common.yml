@@ -72,7 +72,7 @@ components:
       type: object
       properties:
         nodeId:
-          type: string
+          type: integer
         nickName:
           type: string
         selfName:

@@ -23,7 +23,6 @@ components:
       type: object
       required:
         - nodeId
-        - nodeAccount
       description: |
         don't yet have node add
         
@@ -101,10 +100,7 @@ components:
           type: object
           x-java-type: io.fabric8.kubernetes.api.model.Affinity
         nodeId:
-          type: string
-        nodeAccount:
-          type: string
-        # weight, port ? (maybe use sub-object)
+          type: integer
         nodeSelector:
           type: object
           additionalProperties:

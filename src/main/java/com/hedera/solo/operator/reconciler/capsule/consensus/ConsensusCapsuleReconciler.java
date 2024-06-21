@@ -82,9 +82,9 @@ public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>,
                     .withWeight(1L)
                     .withInternalHostname(capsule.getMetadata().getName())
                     .withInternalPort(50111L)
-                    .withExternalHostname("")
+                    .withExternalHostname(capsule.getMetadata().getName() + "." + capsule.getMetadata().getNamespace() + ".svc." /*+ orbit.getSpec().getClusterDomain()*/)
                     .withExternalPort(50111L)
-                    .withNodeAccount(capsule.getSpec().getNodeAccount())
+                    .withNodeAccount("0.0." + capsule.getSpec().getNodeId())
                     .endAddressBookEntry()
                     .endStatus()
                     .build();
