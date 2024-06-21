@@ -57,18 +57,19 @@ public class KeyTest {
     }
 
     void write(String filename, String label, byte[] data) throws Exception {
-        try (PrintStream out = new PrintStream(new FileOutputStream(filename), true, StandardCharsets.UTF_8)) {
+        try (PrintStream out = new PrintStream(new FileOutputStream(filename))) {
             out.println("-----BEGIN " + label + "-----");
 //            byte[] enc = Base64.getEncoder().encode(data);
 //            out.println(new String(enc));
 //            ByteBuffer in = ByteBuffer.wrap(data);
-            ByteBuffer bb = Base64.getEncoder().encode(ByteBuffer.wrap(data));
-            byte[] tmp = new byte[64];
-            while (bb.hasRemaining()) {
-                int length = Math.min(64, bb.remaining());
-                bb.get(tmp, 0, length);
-                out.println(new String(tmp, 0, length, StandardCharsets.ISO_8859_1));
-            }
+            out.println(new String(Base64.getMimeEncoder(65, new byte[]{'\n'}).encode(data)));
+//            ByteBuffer bb = Base64.getEncoder().encode(ByteBuffer.wrap(data));
+//            byte[] tmp = new byte[64];
+//            while (bb.hasRemaining()) {
+//                int length = Math.min(64, bb.remaining());
+//                bb.get(tmp, 0, length);
+//                out.println(new String(tmp, 0, length, StandardCharsets.ISO_8859_1));
+//            }
 //            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
 //            PrintStream ps = new PrintStream(Base64.getEncoder().wrap(byteArrayOutputStream), true, StandardCharsets.UTF_8);
 //            ps.write(data);
