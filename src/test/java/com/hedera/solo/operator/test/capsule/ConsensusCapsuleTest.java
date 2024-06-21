@@ -18,8 +18,11 @@ package com.hedera.solo.operator.test.capsule;
 
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 import static org.awaitility.Awaitility.await;
 
+import com.hedera.solo.operator.model.commonspec.AddressBookEntry;
+import com.hedera.solo.operator.model.commonspec.AddressBookEntryBuilder;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleBuilder;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
@@ -29,25 +32,44 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitBuilder;
+import com.hedera.solo.operator.model.v1alpha1.orbitspec.consensus.genesis.AddressBook;
 import com.hedera.solo.operator.test.Environment;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import io.fabric8.kubernetes.api.model.ConfigMap;
+import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
+import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.Service;
+import io.fabric8.kubernetes.api.model.VolumeMount;
+import io.fabric8.kubernetes.api.model.VolumeMountBuilder;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.dsl.PodResource;
+import io.fabric8.kubernetes.client.dsl.Resource;
 import io.javaoperatorsdk.operator.Operator;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import java.lang.invoke.MethodHandles;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @QuarkusTest
 public class ConsensusCapsuleTest {
@@ -84,7 +106,28 @@ public class ConsensusCapsuleTest {
 
     record Node(String name, int weight, String internal, String external) {}
 
-    ConfigMap config(ConfigMap configMap, Node... nodes) {
+    String config(ConfigMap configMap, AddressBook external, List<AddressBookEntry> entries) {
+        // should probably set the chainId in bootstrap.properties
+        StringBuilder sb = new StringBuilder();
+        sb.append("swirld, ").append(external.getLedgerId()).append("\n");
+        sb.append("app, HederaNode.jar\n");
+        SortedSet<AddressBookEntry> addressBookEntries =
+                new TreeSet<>(Comparator.comparing(AddressBookEntry::getNodeId,
+                        Comparator.comparing(String::length).thenComparing(String.CASE_INSENSITIVE_ORDER)));
+        addressBookEntries.addAll(external.getExternalAddresses());
+        addressBookEntries.addAll(entries);
+        for (AddressBookEntry entry : addressBookEntries) {
+            sb.append(String.join(", ", "address", entry.getNodeId(), entry.getNickName(),
+                    entry.getSelfName(), entry.getWeight().toString(), entry.getInternalHostname(),
+                    entry.getInternalPort().toString(), entry.getExternalHostname(), entry.getExternalPort().toString(),
+                    entry.getNodeAccount())).append("\n");
+        }
+        sb.append("nextNodeId, ").append(external.getNextNodeId()).append("\n");
+        //return configMap.edit().addToData("config.txt", sb.toString()).build();
+        return sb.toString();
+    }
+
+    List<AddressBookEntry> config(ConfigMap configMap, Node... nodes) {
         // should probably set the chainId in bootstrap.properties
         String chainId = configMap
                 .getData()
@@ -94,23 +137,140 @@ public class ConsensusCapsuleTest {
                 .findFirst()
                 .get()
                 .substring(18);
+        List<AddressBookEntry> entries = new ArrayList<>();
         int nodeId = 0;
-        StringBuilder sb = new StringBuilder();
-        sb.append("swirld, ").append(chainId).append("\n");
-        sb.append("app, HederaNode.jar\n");
         for (Node node : nodes) {
-            sb.append("address, %d, %s, %s, 1, %s, 50111, %s, 50111, 0.0.%d\n"
-                    .formatted(nodeId, node.name, node.name, node.internal, node.external, nodeId + 3));
+            entries.add(new AddressBookEntryBuilder()
+                    .withNodeId(String.valueOf(nodeId))
+                    .withNickName(node.name)
+                    .withSelfName(node.name)
+                    .withWeight(1L)
+                    .withInternalHostname(node.internal)
+                    .withInternalPort(50111L)
+                    .withExternalHostname(node.external)
+                    .withExternalPort(50111L)
+                    .withNodeAccount("0.0." + (nodeId + 3))
+                    .build());
             nodeId++;
         }
-        sb.append("nextNodeId, ").append(nodeId);
-        return configMap.edit().addToData("config.txt", sb.toString()).build();
+//        return new AddressBookBuilder()
+//                .withExternalAddresses(entries)
+//                .withLedgerId(chainId)
+//                .withNextNodeId(String.valueOf(nodeId))
+//                .build();
+        return entries;
+    }
+
+    ConfigMap configOld(ConfigMap configMap, Orbit orbit, Node... nodes) {
+        AddressBook addressBook = orbit.getSpec().getConsensus().getGenesis().getAddressBook();
+        String config = config(configMap, addressBook, config(configMap, nodes));
+        return configMap.edit().addToData("config.txt", config).build();
+    }
+
+    @Test
+    void foo() {
+        Orbit orbit = new OrbitBuilder()
+                .withNewMetadata()
+                .withName(TEST_ORBIT_NAME)
+                .endMetadata()
+                .withNewSpec()
+                .editConsensus()
+                .editGenesis()
+                .editAddressBook()
+                .withLedgerId("321")
+                .withNextNodeId("3")
+                .endAddressBook()
+                .endGenesis()
+                .endConsensus()
+                .endSpec()
+                .build();
+        Function<String, String> externalName = s -> s + "-svc." + NAMESPACE + ".svc." + orbit.getSpec().getClusterDomain();
+        ConfigMap cm = configOld(
+                        loadYaml(ConfigMap.class, getClass(), "cluster-config.yaml")
+                                .edit()
+                                .editMetadata()
+                                .withNamespace(NAMESPACE)
+                                .endMetadata()
+                                .build(),
+                        orbit,
+                        new Node("node0", 1, "node0", externalName.apply("node0")),
+                        new Node("node1", 1, "node1", externalName.apply("node1")),
+                        new Node("node2", 1, "node2", externalName.apply("node2")));
+        int i = 1;
+    }
+
+    String base64enc(String in) {
+        return new String(Base64.getUrlEncoder().encode(in.getBytes(StandardCharsets.UTF_8))).replace('=', '.');
+    }
+
+    static class With<T> implements AutoCloseable {
+        T val;
+        Runnable close;
+        public With(T val, Runnable close) {
+            this.close = close;
+        }
+
+        @Override
+        public void close() {
+            close.run();
+        }
+    }
+    String run(String namespace, String image, Map<String, String> files, String... args) {
+        String name = "run-" + UUID.randomUUID().toString().replace("-", "");
+        Resource<ConfigMap> cm = client.configMaps().inNamespace(namespace).resource(new ConfigMapBuilder()
+                .withNewMetadata()
+                .withName(name)
+                .endMetadata()
+                .addToData(files.entrySet().stream().collect(Collectors.toMap(e -> base64enc(e.getKey()), Map.Entry::getValue)))
+                .build());
+        final List<VolumeMount> volumeMounts = files.entrySet().stream().map(e -> new VolumeMountBuilder()
+                .withName(name)
+                .withMountPath(e.getKey())
+                .withSubPath(base64enc(e.getKey()))
+                .build()).toList();
+        PodResource pod = client.pods().inNamespace(namespace).resource(new PodBuilder()
+                .withNewMetadata()
+                .withName(name)
+                .endMetadata()
+                .withNewSpec()
+                .addNewContainer()
+                .withName(name)
+                .withImage(image)
+                .withArgs(args)
+                .addAllToVolumeMounts(volumeMounts)
+                .endContainer()
+                .addNewVolume()
+                .withName(name)
+                .editConfigMap()
+                .withName(name)
+                .endConfigMap()
+                .endVolume()
+                .withRestartPolicy("Never")
+                .endSpec()
+                .build());
+        try (With<ConfigMap> withCm = new With<>(cm.create(), cm::delete);
+             With<Pod> withPod = new With<>(pod.create(), pod::delete)) {
+            pod.waitUntilCondition(p -> Set.of("Failed", "Succeeded").contains(p.getStatus().getPhase()), 1, TimeUnit.MINUTES);
+            return pod.getLog();
+        }
+    }
+
+    private final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
+
+    @Test
+    void bar() {
+        String out = run("default", "alpine:3.20.1",
+                Map.of("ab/c", "foo",
+                        "cde", "bat"),
+                "cat", "/etc/resolv.conf");
+        log.info("out: {}", out);
+        int i = 1;
     }
 
     @Test
     void testSingleNodeDeployment() {
         // create orbit
-        createOrbit();
+        createOrbit(1);
 
         client.resource(loadYaml(ConfigMap.class, getClass(), "public-keys.yaml")
                         .edit()
@@ -128,7 +288,7 @@ public class ConsensusCapsuleTest {
                 .create();
 
         // create consensus capsule
-        List<ConsensusCapsule> consensusCapsules = createConsensusCapsule("node0");
+        List<ConsensusCapsule> consensusCapsules = createConsensusCapsule(new NodeX(0, "node0"));
 
         // create network initialization
         createNetworkInitialization(consensusCapsules);
@@ -137,17 +297,18 @@ public class ConsensusCapsuleTest {
     @Test
     void testMultiNodeDeployment() {
         // create orbit
-        createOrbit();
+        Orbit orbit = createOrbit(3);
 
         // populate config and keys
-        Function<String, String> externalName = s -> s + "-svc." + NAMESPACE + "." + "svc.cluster.local";
-        client.resource(config(
+        Function<String, String> externalName = s -> s + "-svc." + NAMESPACE + ".svc." + orbit.getSpec().getClusterDomain();
+        client.resource(configOld(
                         loadYaml(ConfigMap.class, getClass(), "cluster-config.yaml")
                                 .edit()
                                 .editMetadata()
                                 .withNamespace(NAMESPACE)
                                 .endMetadata()
                                 .build(),
+                        orbit,
                         new Node("node0", 1, "node0", externalName.apply("node0")),
                         new Node("node1", 1, "node1", externalName.apply("node1")),
                         new Node("node2", 1, "node2", externalName.apply("node2"))))
@@ -161,7 +322,8 @@ public class ConsensusCapsuleTest {
                 .create();
 
         // create consensus capsule
-        List<ConsensusCapsule> nodes = createConsensusCapsule("node0", "node1", "node2");
+        List<ConsensusCapsule> nodes = createConsensusCapsule(
+                new NodeX(0, "node0"), new NodeX(1, "node1"), new NodeX(2, "node2"));
 
         client.resource(loadYaml(Secret.class, getClass(), "node0-keys.yaml"))
                 .inNamespace(NAMESPACE)
@@ -177,15 +339,22 @@ public class ConsensusCapsuleTest {
         createNetworkInitialization(nodes);
     }
 
-    Orbit createOrbit() {
-        Orbit orbit = new OrbitBuilder()
+    Orbit createOrbit(int nextNodeId) {
+        Orbit orbit = client.resource(new OrbitBuilder()
                 .withNewMetadata()
                 .withName(TEST_ORBIT_NAME)
                 .endMetadata()
                 .withNewSpec()
+                .editConsensus()
+                .editGenesis()
+                .editAddressBook()
+                .withLedgerId("321")
+                .withNextNodeId(String.valueOf(nextNodeId))
+                .endAddressBook()
+                .endGenesis()
+                .endConsensus()
                 .endSpec()
-                .build();
-        client.resource(orbit).create();
+                .build()).create();
 
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
             assertThat(client.resource(orbit).get()).isNotNull();
@@ -194,15 +363,19 @@ public class ConsensusCapsuleTest {
         return orbit;
     }
 
-    List<ConsensusCapsule> createConsensusCapsule(String... names) {
+    record NodeX(int id, String name) {}
+
+    List<ConsensusCapsule> createConsensusCapsule(NodeX... nodes) {
         List<ConsensusCapsule> list = new ArrayList<>();
-        for (String name : names) {
+        for (NodeX node : nodes) {
             final ConsensusCapsule consensusCapsule = new ConsensusCapsuleBuilder()
                     .withNewMetadata()
-                    .withName(name)
+                    .withName(node.name)
                     .withNamespace(NAMESPACE)
                     .endMetadata()
                     .withNewSpec()
+                    .withNodeId(String.valueOf(node.id))
+                    .withNodeAccount("0.0." + (node.id + 3))
                     .endSpec()
                     .build();
             list.add(client.resource(consensusCapsule).create());

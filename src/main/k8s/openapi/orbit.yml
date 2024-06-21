@@ -61,6 +61,10 @@ components:
           type: array
           items:
             type: string
+        clusterDomain:
+          description: Domain suffix of kubernetes cluster
+          type: string
+          default: cluster.local
         telemetry:
           type: object
           properties:
@@ -151,6 +155,7 @@ components:
                       
                         The operator should update the configmap deployed when this field changes.
                       type: array
+                      default: []
                       items:
                         type: object
                         x-java-type: com.hedera.solo.operator.model.commonspec.AddressBookEntry

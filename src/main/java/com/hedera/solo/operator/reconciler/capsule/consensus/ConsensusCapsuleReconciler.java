@@ -75,6 +75,17 @@ public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>,
                     .editStatus()
                     .withObservedGeneration(capsule.getMetadata().getGeneration())
                     .withPhase(phase)
+                    .withNewAddressBookEntry()
+                    .withNodeId(capsule.getSpec().getNodeId())
+                    .withNickName(capsule.getMetadata().getName())
+                    .withSelfName(capsule.getMetadata().getName())
+                    .withWeight(1L)
+                    .withInternalHostname(capsule.getMetadata().getName())
+                    .withInternalPort(50111L)
+                    .withExternalHostname("")
+                    .withExternalPort(50111L)
+                    .withNodeAccount(capsule.getSpec().getNodeAccount())
+                    .endAddressBookEntry()
                     .endStatus()
                     .build();
 

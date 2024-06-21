@@ -21,6 +21,9 @@ components:
   schemas:
     ConsensusCapsuleSpec:
       type: object
+      required:
+        - nodeId
+        - nodeAccount
       description: |
         don't yet have node add
         
@@ -97,6 +100,11 @@ components:
         affinity:
           type: object
           x-java-type: io.fabric8.kubernetes.api.model.Affinity
+        nodeId:
+          type: string
+        nodeAccount:
+          type: string
+        # weight, port ? (maybe use sub-object)
         nodeSelector:
           type: object
           additionalProperties:
