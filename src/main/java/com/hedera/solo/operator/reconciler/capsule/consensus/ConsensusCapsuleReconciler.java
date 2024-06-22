@@ -18,7 +18,9 @@ package com.hedera.solo.operator.reconciler.capsule.consensus;
 
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
+import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleDeployment;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleOrbit;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleRoleBinding;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleSecret;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleService;
@@ -45,6 +47,7 @@ import org.jboss.logging.Logger;
             @Dependent(type = CapsuleDeployment.class),
             @Dependent(type = CapsuleSecret.class),
             @Dependent(type = CapsuleService.class),
+            @Dependent(type = CapsuleOrbit.class)
         })
 public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>, ErrorStatusHandler<ConsensusCapsule> {
 
@@ -67,9 +70,8 @@ public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>,
                             == context.getSecondaryResource(Deployment.class)
                                     .map(Deployment::getStatus)
                                     .map(DeploymentStatus::getAvailableReplicas)
-                                    .orElse(0)
-                    ? ConsensusCapsuleStatus.Phase.Running
-                    : ConsensusCapsuleStatus.Phase.Unknown;
+                                    .orElse(0) ? ConsensusCapsuleStatus.Phase.Running :
+                    !capsule.getSpec().getEligibleForDeployment() ? ConsensusCapsuleStatus.Phase.Pending : ConsensusCapsuleStatus.Phase.Unknown;
 
             ConsensusCapsule desired = capsule.edit()
                     .editStatus()
@@ -82,9 +84,9 @@ public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>,
                     .withWeight(1L)
                     .withInternalHostname(capsule.getMetadata().getName())
                     .withInternalPort(50111L)
-                    .withExternalHostname(capsule.getMetadata().getName() + "." + capsule.getMetadata().getNamespace() + ".svc." /*+ orbit.getSpec().getClusterDomain()*/)
+                    .withExternalHostname(capsule.getMetadata().getName() + "." + capsule.getMetadata().getNamespace() + ".svc." + context.getSecondaryResource(Orbit.class).get().getSpec().getClusterDomain())
                     .withExternalPort(50111L)
-                    .withNodeAccount("0.0." + capsule.getSpec().getNodeId())
+                    .withNodeAccount("0.0." + (3 + capsule.getSpec().getNodeId()))
                     .endAddressBookEntry()
                     .endStatus()
                     .build();

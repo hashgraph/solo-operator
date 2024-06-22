@@ -22,7 +22,7 @@ spec:
           resources: {}
           env:
             - name: JAVA_OPTS
-              value: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
+              value: -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=5005
           volumeMounts:
             - name: cluster-config
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/config.txt

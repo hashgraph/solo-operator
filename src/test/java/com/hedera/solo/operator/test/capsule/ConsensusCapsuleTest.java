@@ -257,6 +257,9 @@ public class ConsensusCapsuleTest {
 
     @Test
     void bar() {
+        // requires headless service:
+        // ipaddr -o show scope global | awk '{gsub("/.*", ""); print "nslookup " $4}' | sh | awk '/name = .*\.svc\..*/{gsub(".*\.svc\.", ""); print}'
+        // kubectl run -it --image alpine:latest --restart=Never --rm foo2 -- sh -c "sleep 1; $(printf "ipaddr -o show scope global | awk '{gsub(\"/.*\", \"\"); print \"nslookup \" \$4}' | sh | awk '/name = .*\.svc\..*/{gsub(\".*\.svc\.\", \"\"); print}'")"
         String out = run("default", "alpine:3.20.1",
                 Map.of("ab/c", "foo",
                         "cde", "bat"),
@@ -434,6 +437,7 @@ public class ConsensusCapsuleTest {
                 assertThat(netInit.getStatus().getPhase()).isEqualTo(NetworkInitializationStatus.Phase.Succeeded);
             }
         });
+
         return networkInitialization;
     }
 }
