@@ -4,10 +4,10 @@ import com.hedera.solo.operator.library.dependentresources.ManyToOneKubernetesDe
 import com.hedera.solo.operator.model.v1alpha1.ApplicationState;
 import com.hedera.solo.operator.model.v1alpha1.ApplicationStateBuilder;
 import io.fabric8.kubernetes.api.model.HasMetadata;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
 
 public abstract class AbstractApplicationState<P extends HasMetadata>
         extends ManyToOneKubernetesDependentResource<ApplicationState, P>
-//        implements PrimaryToSecondaryMapper<P>
 {
     public AbstractApplicationState() {
         super(ApplicationState.class);
@@ -22,9 +22,9 @@ public abstract class AbstractApplicationState<P extends HasMetadata>
                 .endMetadata()
                 .build();
     }
-//
-//    @Override
-//    public Set<ResourceID> toSecondaryResourceIDs(P primary) {
-//        return Set.of(new ResourceID("application-state", primary.getMetadata().getNamespace()));
-//    }
+
+    @Override
+    protected ResourceID resourceID(P primary) {
+        return new ResourceID("application-state", primary.getMetadata().getNamespace());
+    }
 }

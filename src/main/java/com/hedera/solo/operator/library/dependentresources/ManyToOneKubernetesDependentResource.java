@@ -1,11 +1,14 @@
 package com.hedera.solo.operator.library.dependentresources;
 
 import io.fabric8.kubernetes.api.model.HasMetadata;
+import io.javaoperatorsdk.operator.api.config.informer.InformerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
+import io.javaoperatorsdk.operator.processing.event.source.PrimaryToSecondaryMapper;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -14,7 +17,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * */
 public abstract class ManyToOneKubernetesDependentResource<R extends HasMetadata, P extends HasMetadata>
         extends CRUDKubernetesDependentResource<R, P>
-        implements ResourceDiscriminator<R, P>
+        implements PrimaryToSecondaryMapper<P>, ResourceDiscriminator<R, P>
 {
     public ManyToOneKubernetesDependentResource(Class<R> resourceType) {
         super(resourceType);
@@ -22,6 +25,10 @@ public abstract class ManyToOneKubernetesDependentResource<R extends HasMetadata
     }
 
     protected abstract R create(P primary);
+
+    protected ResourceID resourceID(P primary) {
+        return ResourceID.fromResource(create(primary));
+    }
 
     @Override
     protected R desired(P primary, Context<P> context) {
@@ -34,8 +41,8 @@ public abstract class ManyToOneKubernetesDependentResource<R extends HasMetadata
     public static AtomicInteger counter = new AtomicInteger();
     @Override
     public Optional<R> distinguish(Class<R> aClass, P primary, Context<P> context) {
-        ResourceID id = ResourceID.fromResource(create(primary));
-        return context.getSecondaryResources(aClass).stream().filter(r -> id.equals(ResourceID.fromResource(r))).findAny();
+        ResourceID resourceID = resourceID(primary);
+        return context.getSecondaryResources(aClass).stream().filter(r -> resourceID.equals(ResourceID.fromResource(r))).findAny();
 //        Optional<R> fromCache = context.getSecondaryResources(aClass).stream().filter(r -> id.equals(ResourceID.fromResource(r))).findAny();
 //        if (fromCache.isPresent()) {
 //            return fromCache;
@@ -53,5 +60,15 @@ public abstract class ManyToOneKubernetesDependentResource<R extends HasMetadata
     @Override
     protected boolean useSSA(Context<P> context) {
         return true;
+    }
+
+    @Override
+    protected InformerConfiguration.InformerConfigurationBuilder<R> informerConfigurationBuilder() {
+        return super.informerConfigurationBuilder().withPrimaryToSecondaryMapper(this);
+    }
+
+    @Override
+    public Set<ResourceID> toSecondaryResourceIDs(P primary) {
+        return Set.of(resourceID(primary));
     }
 }

@@ -11,6 +11,7 @@ import java.lang.invoke.MethodHandles;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.slf4j.Logger;
@@ -23,11 +24,11 @@ public class StatusUpdaterTest {
     LocallyRunOperatorExtension operator =
             LocallyRunOperatorExtension.builder().withReconciler(new StatusUpdaterReconciler()).build();
 
-    @Test
+    @RepeatedTest(5)
     void test() throws Exception {
         StatusUpdater statusUpdater = new StatusUpdater();
         List<StatusUpdater> list = new ArrayList<>();
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 100; i++) {
             statusUpdater.getMetadata().setName("example-" + i);
             list.add(operator.create(statusUpdater));
         }
