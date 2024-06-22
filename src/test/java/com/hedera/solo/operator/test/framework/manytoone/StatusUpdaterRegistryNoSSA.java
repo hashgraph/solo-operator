@@ -14,7 +14,7 @@ public class StatusUpdaterRegistryNoSSA extends ManyToOneNoSSAKubernetesDependen
     }
 
     @Override
-    protected ConfigMap create(StatusUpdater primary) {
+    protected ConfigMap createSecondaryResource(StatusUpdater primary) {
         return new ConfigMapBuilder()
                 .editMetadata()
                 .withNamespace(primary.getMetadata().getNamespace())

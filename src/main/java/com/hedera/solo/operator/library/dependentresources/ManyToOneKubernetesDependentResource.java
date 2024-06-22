@@ -24,15 +24,15 @@ public abstract class ManyToOneKubernetesDependentResource<R extends HasMetadata
         setResourceDiscriminator(this);
     }
 
-    protected abstract R create(P primary);
+    protected abstract R createSecondaryResource(P primary);
 
-    protected ResourceID resourceID(P primary) {
-        return ResourceID.fromResource(create(primary));
+    protected ResourceID secondaryResourceID(P primary) {
+        return ResourceID.fromResource(createSecondaryResource(primary));
     }
 
     @Override
     protected R desired(P primary, Context<P> context) {
-        R resource = distinguish(resourceType(), primary, context).orElseGet(() -> create(primary));
+        R resource = distinguish(resourceType(), primary, context).orElseGet(() -> createSecondaryResource(primary));
         resource.getMetadata().setManagedFields(null);
         Cached.primaries(primary, context).forEach(resource::addOwnerReference);
         return resource;
@@ -41,7 +41,7 @@ public abstract class ManyToOneKubernetesDependentResource<R extends HasMetadata
     public static AtomicInteger counter = new AtomicInteger();
     @Override
     public Optional<R> distinguish(Class<R> aClass, P primary, Context<P> context) {
-        ResourceID resourceID = resourceID(primary);
+        ResourceID resourceID = secondaryResourceID(primary);
         return context.getSecondaryResources(aClass).stream().filter(r -> resourceID.equals(ResourceID.fromResource(r))).findAny();
 //        Optional<R> fromCache = context.getSecondaryResources(aClass).stream().filter(r -> id.equals(ResourceID.fromResource(r))).findAny();
 //        if (fromCache.isPresent()) {
@@ -69,6 +69,6 @@ public abstract class ManyToOneKubernetesDependentResource<R extends HasMetadata
 
     @Override
     public Set<ResourceID> toSecondaryResourceIDs(P primary) {
-        return Set.of(resourceID(primary));
+        return Set.of(secondaryResourceID(primary));
     }
 }

@@ -16,7 +16,7 @@ public class CapsuleRegistry
     }
 
     @Override
-    protected ConfigMap create(ConsensusCapsule primary) {
+    protected ConfigMap createSecondaryResource(ConsensusCapsule primary) {
         return new ConfigMapBuilder()
                 .editMetadata()
                 .withNamespace(primary.getMetadata().getNamespace())

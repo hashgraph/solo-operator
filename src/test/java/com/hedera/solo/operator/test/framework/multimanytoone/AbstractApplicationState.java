@@ -14,7 +14,7 @@ public abstract class AbstractApplicationState<P extends HasMetadata>
     }
 
     @Override
-    protected ApplicationState create(P primary) {
+    protected ApplicationState createSecondaryResource(P primary) {
         return new ApplicationStateBuilder()
                 .editOrNewMetadata()
                 .withName("application-state")
@@ -24,7 +24,7 @@ public abstract class AbstractApplicationState<P extends HasMetadata>
     }
 
     @Override
-    protected ResourceID resourceID(P primary) {
+    protected ResourceID secondaryResourceID(P primary) {
         return new ResourceID("application-state", primary.getMetadata().getNamespace());
     }
 }
