@@ -53,6 +53,9 @@ public class ConsensusConfigMap extends CRUDNoGCKubernetesDependentResource<Conf
         final ConfigMapBuilder cm =
                 loadYaml(ConfigMap.class, getClass(), TEMPLATE).edit();
 
+        // questions:
+        // 1. Are bootstrap.properties a copy of application.properties?
+        // 2. Do we need api-permission.properties?
         cm.addToData("settings.txt", get(primary, "hedera/mainnet/settings.txt", Consensus::getNetworkSettings, ","));
         cm.addToData("application.properties", get(primary, "hedera/mainnet/application.properties", Consensus::getApplicationConfiguration, "="));
         cm.addToData("bootstrap.properties", cm.getData().get("application.properties"));
