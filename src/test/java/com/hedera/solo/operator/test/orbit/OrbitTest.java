@@ -16,10 +16,12 @@
 
 package com.hedera.solo.operator.test.orbit;
 
+import static com.hedera.solo.operator.library.resource.SystemResource.getSystemResourceAsString;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
+import com.hedera.solo.operator.model.v1alpha1.OrbitBuilder;
 import com.hedera.solo.operator.model.v1alpha1.OrbitSpecBuilder;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.reconciler.orbit.resources.ConsensusConfigMap;
@@ -32,7 +34,11 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import org.jboss.logging.Logger;
 import org.junit.jupiter.api.AfterEach;
@@ -121,7 +127,35 @@ class OrbitTest {
                 assertThat(cm.getMetadata().getNamespace())
                         .isEqualTo(realOrbit.getMetadata().getName());
                 assertThat(cm.getMetadata().getLabels()).containsKeys(Metadata.ORBIT_NAME, Metadata.ORBIT_NAMESPACE);
+                assertThat(cm.getData().get("settings.txt")).isEqualTo(getSystemResourceAsString("hedera/mainnet/settings.txt"));
+                assertThat(cm.getData().get("application.properties")).isEqualTo(getSystemResourceAsString("hedera/mainnet/application.properties"));
+                assertThat(cm.getData().get("bootstrap.properties")).isEqualTo(getSystemResourceAsString("hedera/mainnet/application.properties"));
             });
+        });
+
+        client.resource(orbit).edit(o -> new OrbitBuilder(o)
+                .editSpec()
+                .editConsensus()
+                .addToNetworkSettings("setting", "value")
+                .addToApplicationConfiguration("config", "value")
+                .endConsensus()
+                .endSpec()
+                .build());
+
+        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+            final Orbit realOrbit = client.resource(orbit).get();
+            final ConfigMap cm = client.configMaps()
+                    .inNamespace(realOrbit.getMetadata().getName())
+                    .withName(ConsensusConfigMap.NAME)
+                    .get();
+            assertThat(cm).isNotNull();
+            assertThat(cm.getMetadata().getName()).isEqualTo(ConsensusConfigMap.NAME);
+            assertThat(cm.getMetadata().getNamespace())
+                    .isEqualTo(realOrbit.getMetadata().getName());
+            assertThat(cm.getMetadata().getLabels()).containsKeys(Metadata.ORBIT_NAME, Metadata.ORBIT_NAMESPACE);
+            assertThat(cm.getData().get("settings.txt")).isEqualTo("setting,value\n");
+            assertThat(cm.getData().get("application.properties")).isEqualTo("config=value\n");
+            assertThat(cm.getData().get("bootstrap.properties")).isEqualTo("config=value\n");
         });
     }
 }

@@ -16,17 +16,27 @@
 
 package com.hedera.solo.operator.reconciler.orbit.resources;
 
+import static com.hedera.solo.operator.library.resource.SystemResource.getSystemResourceAsString;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
+import com.hedera.solo.operator.model.v1alpha1.OrbitSpec;
+import com.hedera.solo.operator.model.v1alpha1.orbitspec.Consensus;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
+import io.fabric8.kubernetes.client.CustomResource;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDNoGCKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @KubernetesDependent(resourceDiscriminator = ConsensusConfigMap.Discriminator.class)
 public class ConsensusConfigMap extends CRUDNoGCKubernetesDependentResource<ConfigMap, Orbit> {
@@ -43,6 +53,10 @@ public class ConsensusConfigMap extends CRUDNoGCKubernetesDependentResource<Conf
         final ConfigMapBuilder cm =
                 loadYaml(ConfigMap.class, getClass(), TEMPLATE).edit();
 
+        cm.addToData("settings.txt", get(primary, "hedera/mainnet/settings.txt", Consensus::getNetworkSettings, ","));
+        cm.addToData("application.properties", get(primary, "hedera/mainnet/application.properties", Consensus::getApplicationConfiguration, "="));
+        cm.addToData("bootstrap.properties", cm.getData().get("application.properties"));
+
         return Metadata.applyOrbitMetaTo(primary, cm.editMetadata())
                 .withNamespace(primary.getMetadata().getName())
                 .endMetadata()
@@ -58,6 +72,19 @@ public class ConsensusConfigMap extends CRUDNoGCKubernetesDependentResource<Conf
                     .inNamespace(primary.getMetadata().getName())
                     .withName(NAME)
                     .get());
+        }
+    }
+
+    String get(final Orbit primary, final String resource, final Function<Consensus, Map<String, String>> configMap, final String delimiter) {
+        Optional<Map<String, String>> networkSetting = Optional.ofNullable(primary).map(CustomResource::getSpec).map(OrbitSpec::getConsensus).map(configMap);
+        if (networkSetting.isPresent()) {
+            return networkSetting.get().entrySet().stream().map(e -> e.getKey() + delimiter + e.getValue()).collect(Collectors.joining("\n","", "\n"));
+        } else {
+            try {
+                return getSystemResourceAsString(resource);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
     }
 }
