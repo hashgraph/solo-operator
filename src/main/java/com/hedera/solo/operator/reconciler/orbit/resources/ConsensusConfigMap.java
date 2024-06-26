@@ -56,6 +56,7 @@ public class ConsensusConfigMap extends CRUDNoGCKubernetesDependentResource<Conf
         cm.addToData("settings.txt", get(primary, "hedera/mainnet/settings.txt", Consensus::getNetworkSettings, ","));
         cm.addToData("application.properties", get(primary, "hedera/mainnet/application.properties", Consensus::getApplicationConfiguration, "="));
         cm.addToData("bootstrap.properties", cm.getData().get("application.properties"));
+//        cm.addToData("api-permission.properties", get(primary, "hedera/mainnet/api-permission.properties", $ -> null, "="));
 
         return Metadata.applyOrbitMetaTo(primary, cm.editMetadata())
                 .withNamespace(primary.getMetadata().getName())
