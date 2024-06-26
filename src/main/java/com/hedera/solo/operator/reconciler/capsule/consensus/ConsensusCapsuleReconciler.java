@@ -19,12 +19,14 @@ package com.hedera.solo.operator.reconciler.capsule.consensus;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleConfigMap;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleDeployment;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleOrbit;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleRoleBinding;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleSecret;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleService;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleServiceAccount;
+import com.hedera.solo.operator.reconciler.orbit.resources.ConsensusConfigMap;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -47,7 +49,8 @@ import org.jboss.logging.Logger;
             @Dependent(type = CapsuleDeployment.class),
             @Dependent(type = CapsuleSecret.class),
             @Dependent(type = CapsuleService.class),
-            @Dependent(type = CapsuleOrbit.class)
+            @Dependent(type = CapsuleOrbit.class),
+            @Dependent(type = CapsuleConfigMap.class),
         })
 public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>, ErrorStatusHandler<ConsensusCapsule> {
 

@@ -45,7 +45,6 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
     @Override
     protected Deployment desired(final ConsensusCapsule primary, final Context<ConsensusCapsule> context) {
         final ObjectMeta metadata = primary.getMetadata();
-        final String validName = validName(metadata.getName(), NAME_SUFFIX);
 
         final boolean eligibleForDeployment =
                 primary.getSpec() != null && primary.getSpec().getEligibleForDeployment();
@@ -73,10 +72,16 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
                     .build());
         }
 
+        volumeMounts.add(new VolumeMountBuilder()
+                .withName(validName(primary, CapsuleConfigMap.NAME_SUFFIX))
+                .withMountPath("/opt/hgcapp/services-hedera/HapiApp2.0/log4j2.xml")
+                .withSubPath("log4j2.xml")
+                .build());
+
         return loadYaml(Deployment.class, getClass(), TEMPLATE)
                 .edit()
                 .editMetadata()
-                .withName(validName)
+                .withName(validName(primary, NAME_SUFFIX))
                 .withNamespace(metadata.getNamespace())
                 .endMetadata()
                 .editSpec()
@@ -89,8 +94,14 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
                 .withHostname(metadata.getName())
                 .editMatchingVolume(v -> "private-keys".equals(v.getName()))
                 .editSecret()
-                .withSecretName(validName(metadata.getName(), "-keys"))
+                .withSecretName(validName(primary, CapsuleSecret.NAME_SUFFIX))
                 .endSecret()
+                .endVolume()
+                .addNewVolume()
+                .withName(validName(primary, CapsuleConfigMap.NAME_SUFFIX))
+                .editConfigMap()
+                .withName(validName(primary, CapsuleConfigMap.NAME_SUFFIX))
+                .endConfigMap()
                 .endVolume()
                 .editMatchingContainer(c -> "consensus-node".equals(c.getName()))
                 .addAllToVolumeMounts(volumeMounts)

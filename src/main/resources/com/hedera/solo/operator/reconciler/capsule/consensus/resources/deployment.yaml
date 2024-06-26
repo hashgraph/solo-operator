@@ -22,24 +22,24 @@ spec:
           resources: {}
           env:
             - name: JAVA_OPTS
-              value: -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=5005
+              value: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
           volumeMounts:
             - name: cluster-config
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/config.txt
               subPath: config.txt
-            - name: cluster-config
+            - name: consensus-config
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/settings.txt
               subPath: settings.txt
-            - name: cluster-config
-              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/log4j2.xml
-              subPath: log4j2.xml
-            - name: cluster-config
-              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/config/api-permission.properties
-              subPath: api-permission.properties
-            - name: cluster-config
+#            - name: cluster-config
+#              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/log4j2.xml
+#              subPath: log4j2.xml
+#            - name: cluster-config
+#              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/config/api-permission.properties
+#              subPath: api-permission.properties
+            - name: consensus-config
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/config/application.properties
               subPath: application.properties
-            - name: cluster-config
+            - name: consensus-config
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/config/bootstrap.properties
               subPath: bootstrap.properties
             - name: private-keys
@@ -61,6 +61,9 @@ spec:
 #              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
 #              subPath: ${file}
       volumes:
+        - name: consensus-config
+          configMap:
+            name: consensus-config
         - name: cluster-config
           configMap:
             name: cluster-config

@@ -96,6 +96,9 @@ components:
             this should be set by the `NetworkInitialization` reconciliation loop. 
             
             This most likely will be removed in the future when DAB Phase 2/3 is available.
+        log4j2.xml:
+          description: Logging configuration
+          type: string
         affinity:
           type: object
           x-java-type: io.fabric8.kubernetes.api.model.Affinity
