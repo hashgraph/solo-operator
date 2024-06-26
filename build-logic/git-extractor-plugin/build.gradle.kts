@@ -38,25 +38,28 @@ dependencies {
 
 gradlePlugin {
     // Define the plugin
-    val gitExtractor by plugins.creating {
-        id = "com.hedera.solo.operator.buildlogic.gitExtractor"
-        implementationClass = "com.hedera.solo.operator.buildlogic.gitextractor.GitExtractorPluginPlugin"
-    }
+    val gitExtractor by
+        plugins.creating {
+            id = "com.hedera.solo.operator.buildlogic.gitExtractor"
+            implementationClass =
+                "com.hedera.solo.operator.buildlogic.gitextractor.GitExtractorPluginPlugin"
+        }
 }
 
 // Add a source set for the functional test suite
-val functionalTestSourceSet = sourceSets.create("functionalTest") {
-}
+val functionalTestSourceSet = sourceSets.create("functionalTest") {}
 
 configurations["functionalTestImplementation"].extendsFrom(configurations["testImplementation"])
+
 configurations["functionalTestRuntimeOnly"].extendsFrom(configurations["testRuntimeOnly"])
 
 // Add a task to run the functional tests
-val functionalTest by tasks.registering(Test::class) {
-    testClassesDirs = functionalTestSourceSet.output.classesDirs
-    classpath = functionalTestSourceSet.runtimeClasspath
-    useJUnitPlatform()
-}
+val functionalTest by
+    tasks.registering(Test::class) {
+        testClassesDirs = functionalTestSourceSet.output.classesDirs
+        classpath = functionalTestSourceSet.runtimeClasspath
+        useJUnitPlatform()
+    }
 
 gradlePlugin.testSourceSets.add(functionalTestSourceSet)
 

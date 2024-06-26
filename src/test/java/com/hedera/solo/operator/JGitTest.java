@@ -1,16 +1,25 @@
+/*
+ * Copyright (C) 2024 Hedera Hashgraph, LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.hedera.solo.operator;
 
-import com.google.common.jimfs.Configuration;
-import com.google.common.jimfs.Jimfs;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.io.PipedInputStream;
-import java.io.PipedOutputStream;
 import java.lang.invoke.MethodHandles;
-import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -20,13 +29,11 @@ import org.eclipse.jgit.api.ArchiveCommand;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.archive.ZipFormat;
 import org.eclipse.jgit.lib.ObjectId;
-import org.eclipse.jgit.lib.ObjectLoader;
 import org.eclipse.jgit.lib.Ref;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevTree;
 import org.eclipse.jgit.revwalk.RevWalk;
-import org.eclipse.jgit.transport.TagOpt;
 import org.eclipse.jgit.transport.URIish;
 import org.eclipse.jgit.treewalk.TreeWalk;
 import org.eclipse.jgit.treewalk.filter.PathFilter;
@@ -40,16 +47,17 @@ public class JGitTest {
 
     @TempDir
     public File tempDir;
+
     @Test
     public void test() throws Exception {
-        try (//FileSystem fs = Jimfs.newFileSystem(Configuration.unix());
-             Git git = Git.cloneRepository()
+        try ( // FileSystem fs = Jimfs.newFileSystem(Configuration.unix());
+        Git git = Git.cloneRepository()
                 .setURI("https://github.com/hashgraph/hedera-services")
                 .setDirectory(tempDir)
-//                .setBranch("v0.52.0-alpha.0")
-//                .setNoCheckout(true)
-//                .setDepth(1)
-//                .setTagOption(TagOpt.AUTO_FOLLOW)
+                //                .setBranch("v0.52.0-alpha.0")
+                //                .setNoCheckout(true)
+                //                .setDepth(1)
+                //                .setTagOption(TagOpt.AUTO_FOLLOW)
                 .call()) {
             Repository repository = git.getRepository();
             log.info("Repository dir:  {}", repository.getDirectory());
@@ -59,20 +67,20 @@ public class JGitTest {
 
             ObjectId version = repository.resolve("v0.52.0-alpha.0");
 
-//            ObjectLoader loader = repository.open(version);
-//            loader.copyTo(System.out);
-//
-//            try (RevWalk walk = new RevWalk(repository)) {
-//                RevCommit commit = walk.parseCommit(version);
-//                RevTree tree = walk.parseTree(commit.getTree().getId());
-//                System.out.println("Found Tree: " + tree);
-//                loader = repository.open(tree.getId());
-//                loader.copyTo(System.out);
-//
-//                walk.dispose();
-//            }
+            //            ObjectLoader loader = repository.open(version);
+            //            loader.copyTo(System.out);
+            //
+            //            try (RevWalk walk = new RevWalk(repository)) {
+            //                RevCommit commit = walk.parseCommit(version);
+            //                RevTree tree = walk.parseTree(commit.getTree().getId());
+            //                System.out.println("Found Tree: " + tree);
+            //                loader = repository.open(tree.getId());
+            //                loader.copyTo(System.out);
+            //
+            //                walk.dispose();
+            //            }
 
-//            System.out.println("end commit");
+            //            System.out.println("end commit");
 
             // a RevWalk allows to walk over commits based on some filtering that is defined
             try (RevWalk walk = new RevWalk(repository)) {
@@ -99,15 +107,15 @@ public class JGitTest {
 
     @Test
     public void test2() throws Exception {
-        try (//FileSystem fs = Jimfs.newFileSystem(Configuration.unix());
-             Git git = Git.init()
-                     //.setURI("https://github.com/hashgraph/hedera-services")
-                     .setDirectory(tempDir)
-//                .setBranch("v0.52.0-alpha.0")
-//                .setNoCheckout(true)
-//                .setDepth(1)
-//                .setTagOption(TagOpt.AUTO_FOLLOW)
-                     .call()) {
+        try ( // FileSystem fs = Jimfs.newFileSystem(Configuration.unix());
+        Git git = Git.init()
+                // .setURI("https://github.com/hashgraph/hedera-services")
+                .setDirectory(tempDir)
+                //                .setBranch("v0.52.0-alpha.0")
+                //                .setNoCheckout(true)
+                //                .setDepth(1)
+                //                .setTagOption(TagOpt.AUTO_FOLLOW)
+                .call()) {
             log.info("remotes: {}", git.remoteList().call());
             git.remoteAdd()
                     .setName("origin")
@@ -120,14 +128,16 @@ public class JGitTest {
             git.fetch()
                     .setRemote("origin")
                     .setRefSpecs("refs/tags/v0.52.0-alpha.0")
-//                    .setCheckFetchedObjects(true)
+                    //                    .setCheckFetchedObjects(true)
                     .setDepth(1)
                     .call();
-            //git.fetch().setRefSpecs("refs/tags/v0.52.0-alpha.0:refs/tags/origin/v0.52.0-alpha.0").setDepth(1).call();
-//            git.fetch().setInitialBranch("v0.52.0-alpha.0").setDepth(1).call();
+            // git.fetch().setRefSpecs("refs/tags/v0.52.0-alpha.0:refs/tags/origin/v0.52.0-alpha.0").setDepth(1).call();
+            //            git.fetch().setInitialBranch("v0.52.0-alpha.0").setDepth(1).call();
             Repository repository = git.getRepository();
             ObjectId version =
-//                    git.lsRemote().setTags(true).setHeads(false).setRemote("origin").call().stream().filter(x -> "refs/tags/v0.52.0-alpha.0".equals(x.getName())).findAny().get().getPeeledObjectId();
+                    //
+                    // git.lsRemote().setTags(true).setHeads(false).setRemote("origin").call().stream().filter(x ->
+                    // "refs/tags/v0.52.0-alpha.0".equals(x.getName())).findAny().get().getPeeledObjectId();
                     repository.resolve("v0.52.0-alpha.0");
             ArchiveCommand.registerFormat("zip", new ZipFormat());
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -140,53 +150,58 @@ public class JGitTest {
             String prefix = "/tmp/resources-123/";
             try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(baos.toByteArray()))) {
 
-//                Thread.startVirtualThread(() -> {
-//                            try {
-//                            } catch (Exception e) {
-//                                throw new RuntimeException(e);
-//                            }
-//                        });
+                //                Thread.startVirtualThread(() -> {
+                //                            try {
+                //                            } catch (Exception e) {
+                //                                throw new RuntimeException(e);
+                //                            }
+                //                        });
 
-//                Thread.sleep(999);
+                //                Thread.sleep(999);
                 ZipEntry ze;
-                while((ze = zis.getNextEntry()) != null) {
-                    Path path = Path.of(prefix, "hs/hn/cfg/mn").resolve(Path.of("hedera-node/configuration/mainnet").relativize(Path.of(ze.getName()))).normalize();
+                while ((ze = zis.getNextEntry()) != null) {
+                    Path path = Path.of(prefix, "hs/hn/cfg/mn")
+                            .resolve(
+                                    Path.of("hedera-node/configuration/mainnet").relativize(Path.of(ze.getName())))
+                            .normalize();
                     //
                     if (ze.isDirectory()) {
                         path.toFile().mkdirs();
-//                        Path.of(prefix, ze.getName()).toFile().mkdirs();
+                        //                        Path.of(prefix, ze.getName()).toFile().mkdirs();
                     } else {
                         var bytes = zis.readAllBytes();
                         System.out.printf("Entry: %s, bytes read: %s%n", ze.getName(), bytes.length);
-                        Files.write(/*Path.of(prefix, ze.getName())*/path, bytes);
+                        Files.write(/*Path.of(prefix, ze.getName())*/ path, bytes);
                     }
                 }
             } finally {
                 ArchiveCommand.unregisterFormat("zip");
             }
-            if (true) { return; }
-//            Repository repository = git.getRepository();
+            if (true) {
+                return;
+            }
+            //            Repository repository = git.getRepository();
             log.info("Repository dir:  {}", repository.getDirectory());
             log.info("Repository bare: {}", repository.isBare());
             log.info("Repository head: {}", repository.resolve("HEAD"));
             log.info("Repository files: {}", Arrays.asList(tempDir.listFiles()));
 
-//            ObjectId version = repository.resolve("v0.52.0-alpha.0");
+            //            ObjectId version = repository.resolve("v0.52.0-alpha.0");
 
-//            ObjectLoader loader = repository.open(version);
-//            loader.copyTo(System.out);
-//
-//            try (RevWalk walk = new RevWalk(repository)) {
-//                RevCommit commit = walk.parseCommit(version);
-//                RevTree tree = walk.parseTree(commit.getTree().getId());
-//                System.out.println("Found Tree: " + tree);
-//                loader = repository.open(tree.getId());
-//                loader.copyTo(System.out);
-//
-//                walk.dispose();
-//            }
+            //            ObjectLoader loader = repository.open(version);
+            //            loader.copyTo(System.out);
+            //
+            //            try (RevWalk walk = new RevWalk(repository)) {
+            //                RevCommit commit = walk.parseCommit(version);
+            //                RevTree tree = walk.parseTree(commit.getTree().getId());
+            //                System.out.println("Found Tree: " + tree);
+            //                loader = repository.open(tree.getId());
+            //                loader.copyTo(System.out);
+            //
+            //                walk.dispose();
+            //            }
 
-//            System.out.println("end commit");
+            //            System.out.println("end commit");
 
             // a RevWalk allows to walk over commits based on some filtering that is defined
             try (RevWalk walk = new RevWalk(repository)) {
@@ -210,17 +225,18 @@ public class JGitTest {
             int i = 1;
         }
     }
+
     @Test
     public void branch() throws Exception {
-        try (//FileSystem fs = Jimfs.newFileSystem(Configuration.unix());
-             Git git = Git.init()
-                     //.setURI("https://github.com/hashgraph/hedera-services")
-                     .setDirectory(tempDir)
-//                .setBranch("v0.52.0-alpha.0")
-//                .setNoCheckout(true)
-//                .setDepth(1)
-//                .setTagOption(TagOpt.AUTO_FOLLOW)
-                     .call()) {
+        try ( // FileSystem fs = Jimfs.newFileSystem(Configuration.unix());
+        Git git = Git.init()
+                // .setURI("https://github.com/hashgraph/hedera-services")
+                .setDirectory(tempDir)
+                //                .setBranch("v0.52.0-alpha.0")
+                //                .setNoCheckout(true)
+                //                .setDepth(1)
+                //                .setTagOption(TagOpt.AUTO_FOLLOW)
+                .call()) {
             log.info("remotes: {}", git.remoteList().call());
             git.remoteAdd()
                     .setName("origin")
@@ -231,23 +247,25 @@ public class JGitTest {
             // git.fetch().setRemote("origin").setRefSpecs("refs/tags/v0.52.0-alpha.0").setTagOpt(TagOpt.AUTO_FOLLOW).setDepth(1).call()
 
             String ref =
-//                    "refs/heads/develop";
+                    //                    "refs/heads/develop";
                     "refs/tags/v0.52.0-alpha.0";
             Ref ref1 = git.fetch()
                     .setRemote("origin")
                     .setRefSpecs(ref)
-//                    .setCheckFetchedObjects(true)
+                    //                    .setCheckFetchedObjects(true)
                     .setDepth(1)
                     .call()
                     .getAdvertisedRef(ref);
-            ObjectId version = ref1.getObjectId(); //ref1.isPeeled() ? ref1.getPeeledObjectId() : ref1.getObjectId();
-                    log.info("version: {}", version.toString());
-            //git.fetch().setRefSpecs("refs/tags/v0.52.0-alpha.0:refs/tags/origin/v0.52.0-alpha.0").setDepth(1).call();
-//            git.fetch().setInitialBranch("v0.52.0-alpha.0").setDepth(1).call();
+            ObjectId version = ref1.getObjectId(); // ref1.isPeeled() ? ref1.getPeeledObjectId() : ref1.getObjectId();
+            log.info("version: {}", version.toString());
+            // git.fetch().setRefSpecs("refs/tags/v0.52.0-alpha.0:refs/tags/origin/v0.52.0-alpha.0").setDepth(1).call();
+            //            git.fetch().setInitialBranch("v0.52.0-alpha.0").setDepth(1).call();
             Repository repository = git.getRepository();
-//            ObjectId version =
-////                    git.lsRemote().setTags(true).setHeads(false).setRemote("origin").call().stream().filter(x -> "refs/tags/v0.52.0-alpha.0".equals(x.getName())).findAny().get().getPeeledObjectId();
-//                    repository.resolve("develop");
+            //            ObjectId version =
+            ////
+            // git.lsRemote().setTags(true).setHeads(false).setRemote("origin").call().stream().filter(x ->
+            // "refs/tags/v0.52.0-alpha.0".equals(x.getName())).findAny().get().getPeeledObjectId();
+            //                    repository.resolve("develop");
             ArchiveCommand.registerFormat("zip", new ZipFormat());
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             git.archive()
@@ -259,53 +277,58 @@ public class JGitTest {
             String prefix = "/tmp/resources-123/";
             try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(baos.toByteArray()))) {
 
-//                Thread.startVirtualThread(() -> {
-//                            try {
-//                            } catch (Exception e) {
-//                                throw new RuntimeException(e);
-//                            }
-//                        });
+                //                Thread.startVirtualThread(() -> {
+                //                            try {
+                //                            } catch (Exception e) {
+                //                                throw new RuntimeException(e);
+                //                            }
+                //                        });
 
-//                Thread.sleep(999);
+                //                Thread.sleep(999);
                 ZipEntry ze;
-                while((ze = zis.getNextEntry()) != null) {
-                    Path path = Path.of(prefix, "hs/hn/cfg/mn").resolve(Path.of("hedera-node/configuration/mainnet").relativize(Path.of(ze.getName()))).normalize();
+                while ((ze = zis.getNextEntry()) != null) {
+                    Path path = Path.of(prefix, "hs/hn/cfg/mn")
+                            .resolve(
+                                    Path.of("hedera-node/configuration/mainnet").relativize(Path.of(ze.getName())))
+                            .normalize();
                     //
                     if (ze.isDirectory()) {
                         path.toFile().mkdirs();
-//                        Path.of(prefix, ze.getName()).toFile().mkdirs();
+                        //                        Path.of(prefix, ze.getName()).toFile().mkdirs();
                     } else {
                         var bytes = zis.readAllBytes();
                         System.out.printf("Entry: %s, bytes read: %s%n", ze.getName(), bytes.length);
-                        Files.write(/*Path.of(prefix, ze.getName())*/path, bytes);
+                        Files.write(/*Path.of(prefix, ze.getName())*/ path, bytes);
                     }
                 }
             } finally {
                 ArchiveCommand.unregisterFormat("zip");
             }
-            if (true) { return; }
-//            Repository repository = git.getRepository();
+            if (true) {
+                return;
+            }
+            //            Repository repository = git.getRepository();
             log.info("Repository dir:  {}", repository.getDirectory());
             log.info("Repository bare: {}", repository.isBare());
             log.info("Repository head: {}", repository.resolve("HEAD"));
             log.info("Repository files: {}", Arrays.asList(tempDir.listFiles()));
 
-//            ObjectId version = repository.resolve("v0.52.0-alpha.0");
+            //            ObjectId version = repository.resolve("v0.52.0-alpha.0");
 
-//            ObjectLoader loader = repository.open(version);
-//            loader.copyTo(System.out);
-//
-//            try (RevWalk walk = new RevWalk(repository)) {
-//                RevCommit commit = walk.parseCommit(version);
-//                RevTree tree = walk.parseTree(commit.getTree().getId());
-//                System.out.println("Found Tree: " + tree);
-//                loader = repository.open(tree.getId());
-//                loader.copyTo(System.out);
-//
-//                walk.dispose();
-//            }
+            //            ObjectLoader loader = repository.open(version);
+            //            loader.copyTo(System.out);
+            //
+            //            try (RevWalk walk = new RevWalk(repository)) {
+            //                RevCommit commit = walk.parseCommit(version);
+            //                RevTree tree = walk.parseTree(commit.getTree().getId());
+            //                System.out.println("Found Tree: " + tree);
+            //                loader = repository.open(tree.getId());
+            //                loader.copyTo(System.out);
+            //
+            //                walk.dispose();
+            //            }
 
-//            System.out.println("end commit");
+            //            System.out.println("end commit");
 
             // a RevWalk allows to walk over commits based on some filtering that is defined
             try (RevWalk walk = new RevWalk(repository)) {

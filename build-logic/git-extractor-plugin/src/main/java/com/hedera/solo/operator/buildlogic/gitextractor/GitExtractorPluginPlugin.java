@@ -28,6 +28,7 @@ public class GitExtractorPluginPlugin implements Plugin<Project> {
     public void apply(Project project) {
         GitExtractorExtension ext = project.getExtensions().create(name, GitExtractorExtension.class);
         project.getTasks().getByName("processResources").dependsOn(name);
+        project.getTasks().getByName("spotlessKotlinGradle").dependsOn(name);
         project.getTasks().register(name, GitExtractorTask.class, task -> {
             task.outputDirectories = ext.extractions.stream().map(GitExtraction::destination).map(File::toPath).collect(Collectors.toSet());
         });

@@ -70,8 +70,11 @@ public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>,
                             == context.getSecondaryResource(Deployment.class)
                                     .map(Deployment::getStatus)
                                     .map(DeploymentStatus::getAvailableReplicas)
-                                    .orElse(0) ? ConsensusCapsuleStatus.Phase.Running :
-                    !capsule.getSpec().getEligibleForDeployment() ? ConsensusCapsuleStatus.Phase.Pending : ConsensusCapsuleStatus.Phase.Unknown;
+                                    .orElse(0)
+                    ? ConsensusCapsuleStatus.Phase.Running
+                    : !capsule.getSpec().getEligibleForDeployment()
+                            ? ConsensusCapsuleStatus.Phase.Pending
+                            : ConsensusCapsuleStatus.Phase.Unknown;
 
             ConsensusCapsule desired = capsule.edit()
                     .editStatus()
@@ -84,7 +87,12 @@ public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>,
                     .withWeight(1L)
                     .withInternalHostname(capsule.getMetadata().getName())
                     .withInternalPort(50111L)
-                    .withExternalHostname(capsule.getMetadata().getName() + "." + capsule.getMetadata().getNamespace() + ".svc." + context.getSecondaryResource(Orbit.class).get().getSpec().getClusterDomain())
+                    .withExternalHostname(capsule.getMetadata().getName() + "."
+                            + capsule.getMetadata().getNamespace() + ".svc."
+                            + context.getSecondaryResource(Orbit.class)
+                                    .get()
+                                    .getSpec()
+                                    .getClusterDomain())
                     .withExternalPort(50111L)
                     .withNodeAccount("0.0." + (3 + capsule.getSpec().getNodeId()))
                     .endAddressBookEntry()
