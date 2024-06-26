@@ -138,14 +138,14 @@ public class ConsensusCapsuleTest {
 
     List<AddressBookEntry> config(ConfigMap configMap, Node... nodes) {
         // should probably set the chainId in bootstrap.properties
-        String chainId = configMap
-                .getData()
-                .get("bootstrap.properties")
-                .lines()
-                .filter(s -> s.startsWith("contracts.chainId="))
-                .findFirst()
-                .get()
-                .substring(18);
+//        String chainId = configMap
+//                .getData()
+//                .get("bootstrap.properties")
+//                .lines()
+//                .filter(s -> s.startsWith("contracts.chainId="))
+//                .findFirst()
+//                .get()
+//                .substring(18);
         List<AddressBookEntry> entries = new ArrayList<>();
         long nodeId = 0;
         for (Node node : nodes) {
