@@ -1,3 +1,5 @@
+import com.hedera.solo.operator.buildlogic.gitextractor.GitExtraction
+
 /*
  * Copyright (C) 2024 Hedera Hashgraph, LLC
  *
@@ -18,7 +20,8 @@ plugins {
     id("com.hedera.solo.operator.conventions")
     id("com.hedera.solo.operator.versioning")
     id("io.quarkus")
-    id("com.hedera.solo.operator.objectModelGenerator")
+    id("com.hedera.solo.operator.buildlogic.objectModelGenerator")
+    id("com.hedera.solo.operator.buildlogic.gitExtractor")
 }
 
 val quarkusPlatformGroupId: String by project
@@ -51,6 +54,9 @@ dependencies {
     implementation("io.quarkus:quarkus-kubernetes-client")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk-bundle-generator")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk")
+    implementation("org.eclipse.jgit:org.eclipse.jgit:6.10.0.202406032230-r")
+    implementation("org.eclipse.jgit:org.eclipse.jgit.archive:6.10.0.202406032230-r")
+    implementation("com.google.jimfs:jimfs:1.3.0")
 
     compileOnly("io.sundr:builder-annotations:${sundrVersion}")
     compileOnly("org.projectlombok:lombok:${lombokVersion}")
@@ -75,6 +81,15 @@ dependencies {
     testFixturesImplementation("io.fabric8:kubernetes-client")
     testFixturesImplementation("org.awaitility:awaitility")
     testFixturesImplementation("org.assertj:assertj-core:${assertjVersion}")
+}
+
+gitExtractor {
+     extractions = listOf(
+         GitExtraction("https://github.com/hashgraph/hedera-services",
+             "refs/tags/v0.52.0-alpha.0",
+             "hedera-node/configuration/mainnet",
+             file("src/main/resources/hedera/mainnet")),
+     )
 }
 
 objectModelGenerator {

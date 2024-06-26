@@ -29,7 +29,11 @@ components:
           enum:
               - FirstInitialization
               - NodeAddition
-
+        capsules:
+          description: Capsules to include
+          type: array
+          items:
+            type: string
     NetworkInitializationStatus:
       type: object
       description: |

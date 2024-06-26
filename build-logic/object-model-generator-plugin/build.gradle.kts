@@ -42,9 +42,9 @@ gradlePlugin {
     // Define the plugin
     val objectModelGenerator by
         plugins.creating {
-            id = "com.hedera.solo.operator.objectModelGenerator"
+            id = "com.hedera.solo.operator.buildlogic.objectModelGenerator"
             implementationClass =
-                "com.hedera.solo.operator.objectmodelgenerator.ObjectModelGeneratorPlugin"
+                "com.hedera.solo.operator.buildlogic.objectmodelgenerator.ObjectModelGeneratorPlugin"
         }
 }
 

@@ -13,43 +13,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-package com.hedera.solo.operator.objectmodelgenerator;
+package com.hedera.solo.operator.buildlogic.gitextractor;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.Writer;
 import java.io.FileWriter;
-
 import org.gradle.testkit.runner.GradleRunner;
 import org.gradle.testkit.runner.BuildResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * A simple functional test for the 'com.hedera.solo.operator.objectModelGenerator' plugin.
+ * A simple functional test for the 'com.hedera.solo.operator.buildlogic.gitExtractor' plugin.
  */
-class ObjectModelGeneratorPluginFunctionalTest {
+class GitExtractorPluginPluginFunctionalTest {
     @TempDir
     File projectDir;
 
-    @TempDir
-    File sourceCrd;
-
-    @TempDir
-    File targetCrd;
-
-    @TempDir
-    File targetJava;
-
     private File getBuildFile() {
-        return new File(projectDir, "build.gradle");
+        return new File(projectDir, "build.gradle.kts");
     }
 
     private File getSettingsFile() {
-        return new File(projectDir, "settings.gradle");
+        return new File(projectDir, "settings.gradle.kts");
     }
 
     @Test void canRunTask() throws IOException {
@@ -57,20 +45,15 @@ class ObjectModelGeneratorPluginFunctionalTest {
         writeString(getBuildFile(), """
                         plugins {
                           id("java")
-                          id('com.hedera.solo.operator.objectModelGenerator')
+                          id("com.hedera.solo.operator.buildlogic.gitExtractor")
                         }
-                        objectModelGenerator {
-                          sourceCrd = file('%s')
-                          targetCrd = file('%s')
-                          targetJava = file('%s')
-                        }
-                        """.formatted(sourceCrd, targetCrd, targetJava));
+                        """);
 
         // Run the build
         GradleRunner runner = GradleRunner.create();
         runner.forwardOutput();
         runner.withPluginClasspath();
-        runner.withArguments("objectModelGenerator");
+        runner.withArguments("gitExtractor");
         runner.withProjectDir(projectDir);
         BuildResult result = runner.build();
 

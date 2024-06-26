@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator.objectmodelgenerator;
+package com.hedera.solo.operator.buildlogic.objectmodelgenerator;
 
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;

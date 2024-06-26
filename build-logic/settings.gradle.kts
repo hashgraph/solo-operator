@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+includeBuild("git-extractor-plugin")
+
 includeBuild("object-model-generator-plugin")
 
 includeBuild("project-plugins")

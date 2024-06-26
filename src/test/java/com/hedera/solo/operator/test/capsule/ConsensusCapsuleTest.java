@@ -37,6 +37,7 @@ import com.hedera.solo.operator.test.Environment;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
+import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.api.model.Secret;
@@ -44,6 +45,7 @@ import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.api.model.VolumeMount;
 import io.fabric8.kubernetes.api.model.VolumeMountBuilder;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.dsl.PodResource;
 import io.fabric8.kubernetes.client.dsl.Resource;
@@ -409,6 +411,7 @@ public class ConsensusCapsuleTest {
                 .endMetadata()
                 .withNewSpec()
                 .withMode(NetworkInitializationSpec.Mode.FirstInitialization)
+                .withCapsules(consensusCapsules.stream().map(CustomResource::getMetadata).map(ObjectMeta::getName).toList())
                 .endSpec()
                 .withNewStatus()
                 .endStatus()

@@ -17,9 +17,11 @@
 // pragma comment
 
 tasks.register("check") {
+    dependsOn(gradle.includedBuild("git-extractor-plugin").task(":check"))
     dependsOn(gradle.includedBuild("object-model-generator-plugin").task(":check"))
 }
 
 tasks.register("test") {
+    dependsOn(gradle.includedBuild("git-extractor-plugin").task(":test"))
     dependsOn(gradle.includedBuild("object-model-generator-plugin").task(":test"))
 }

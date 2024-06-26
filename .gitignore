@@ -514,3 +514,6 @@ secring.*
 
 # Version Information
 VERSION
+
+# extra resources added at build time
+src/main/resources/hedera/
