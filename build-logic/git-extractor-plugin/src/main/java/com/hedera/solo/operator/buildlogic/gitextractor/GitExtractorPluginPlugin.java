@@ -16,19 +16,26 @@
 package com.hedera.solo.operator.buildlogic.gitextractor;
 
 import java.io.File;
+import java.util.List;
 import java.util.stream.Collectors;
 import org.gradle.api.Project;
 import org.gradle.api.Plugin;
+import org.gradle.api.UnknownTaskException;
+import org.gradle.api.tasks.TaskContainer;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * Git Extractor plugin.
  */
 public class GitExtractorPluginPlugin implements Plugin<Project> {
     static final String name = "gitExtractor";
-    public void apply(Project project) {
+    public void apply(@NotNull Project project) {
+        for (String taskName : List.of("processResources", "spotlessKotlinGradle")) {
+            try {
+                project.getTasks().getByName(taskName).dependsOn(name);
+            } catch (UnknownTaskException ignored) {}
+        }
         GitExtractorExtension ext = project.getExtensions().create(name, GitExtractorExtension.class);
-        project.getTasks().getByName("processResources").dependsOn(name);
-        project.getTasks().getByName("spotlessKotlinGradle").dependsOn(name);
         project.getTasks().register(name, GitExtractorTask.class, task -> {
             task.outputDirectories = ext.extractions.stream().map(GitExtraction::destination).map(File::toPath).collect(Collectors.toSet());
         });
