@@ -285,6 +285,7 @@ public class ConsensusCapsuleTest {
         // requires headless service:
         // ipaddr -o show scope global | awk '{gsub("/.*", ""); print "nslookup " $4}' | sh | awk '/name = .*\.svc\..*/{gsub(".*\.svc\.", ""); print}'
         // kubectl run -it --image alpine:latest --restart=Never --rm foo2 -- sh -c "sleep 1; $(printf "ipaddr -o show scope global | awk '{gsub(\"/.*\", \"\"); print \"nslookup \" \$4}' | sh | awk '/name = .*\.svc\..*/{gsub(\".*\.svc\.\", \"\"); print}'")"
+        // nslookup $(hostname) | awk '/^Name:/{sub(".*\\.svc\\.", ""); print}'
         String out = run("default", "alpine:3.20.1", Map.of("ab/c", "foo", "cde", "bat"), "cat", "/etc/resolv.conf");
         log.info("out: {}", out);
         int i = 1;
@@ -297,7 +298,7 @@ public class ConsensusCapsuleTest {
         YAMLFactory yamlFactory = new YAMLFactory();
         ObjectMapper mapper = new ObjectMapper(yamlFactory);
         String yaml = client.configMaps().inNamespace("kube-system").withName("kubeadm-config").get().getData().get("ClusterConfiguration");
-        String dnsDomain = mapper.readTree(yaml).get("networking").get("dnsDomain").textValue();
+        String dnsDomain = mapper.readTree(yaml).at("/networking/dnsDomain").textValue();
         log.info("dnsDomain: {}", dnsDomain);
     }
 
