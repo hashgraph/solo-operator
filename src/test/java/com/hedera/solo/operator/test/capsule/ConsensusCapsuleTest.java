@@ -20,6 +20,9 @@ import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.hedera.solo.operator.model.commonspec.AddressBookEntry;
 import com.hedera.solo.operator.model.commonspec.AddressBookEntryBuilder;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
@@ -285,6 +288,17 @@ public class ConsensusCapsuleTest {
         String out = run("default", "alpine:3.20.1", Map.of("ab/c", "foo", "cde", "bat"), "cat", "/etc/resolv.conf");
         log.info("out: {}", out);
         int i = 1;
+    }
+
+    @Test
+    void readConfig() throws JsonProcessingException {
+//        client.nodes().list().getItems();
+//        client.raw("/api/v1/nodes/kind-control-plane/proxy/configz");
+        YAMLFactory yamlFactory = new YAMLFactory();
+        ObjectMapper mapper = new ObjectMapper(yamlFactory);
+        String yaml = client.configMaps().inNamespace("kube-system").withName("kubeadm-config").get().getData().get("ClusterConfiguration");
+        String dnsDomain = mapper.readTree(yaml).get("networking").get("dnsDomain").textValue();
+        log.info("dnsDomain: {}", dnsDomain);
     }
 
     @Test
