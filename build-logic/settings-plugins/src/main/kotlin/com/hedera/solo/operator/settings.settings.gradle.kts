@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+package com.hedera.solo.operator
+
 pluginManagement {
     repositories {
         gradlePluginPortal()
@@ -28,6 +30,7 @@ pluginManagement {
 plugins {
     id("com.gradle.enterprise")
     id("org.gradle.toolchains.foojay-resolver-convention")
+    id("com.hedera.solo.operator.version-catalog")
 }
 
 val isCiServer = System.getenv().containsKey("CI")

@@ -17,33 +17,19 @@
 plugins {
     id("com.hedera.solo.operator.conventions")
     id("com.hedera.solo.operator.versioning")
-    id("io.quarkus")
+    alias(libs.plugins.quarkus)
     id("com.hedera.solo.operator.objectModelGenerator")
 }
 
-val quarkusPlatformGroupId: String by project
-val quarkusPlatformArtifactId: String by project
-val quarkusPlatformVersion: String by project
-val assertjVersion: String by project
-val sundrVersion: String by project
-val fabric8Version: String by project
-val lombokVersion: String by project
-
 dependencies {
-    annotationProcessor("io.sundr:builder-annotations:${sundrVersion}")
-    annotationProcessor("io.fabric8:kubernetes-client:${fabric8Version}")
-    implementation("io.fabric8:generator-annotations:${fabric8Version}")
+    annotationProcessor(libs.sundr.builder.annotations)
+    annotationProcessor(libs.fabric8.k8s.client)
+    implementation("io.fabric8", "generator-annotations")
 
-    implementation(
-        enforcedPlatform(
-            "${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}"
-        )
-    )
-    implementation(
-        enforcedPlatform(
-            "${quarkusPlatformGroupId}:quarkus-operator-sdk-bom:${quarkusPlatformVersion}"
-        )
-    )
+    implementation(enforcedPlatform(libs.quarkus.platform))
+    implementation(enforcedPlatform(libs.quarkus.operator.sdk))
+    implementation(platform(libs.java.operator.sdk))
+    implementation(platform(libs.fabric8.k8s.client.bom))
 
     implementation("io.quarkus:quarkus-arc")
     implementation("io.quarkus:quarkus-container-image-docker")
@@ -52,29 +38,20 @@ dependencies {
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk-bundle-generator")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk")
 
-    compileOnly("io.sundr:builder-annotations:${sundrVersion}")
-    compileOnly("org.projectlombok:lombok:${lombokVersion}")
+    compileOnly(libs.sundr.builder.annotations)
+    compileOnly(libs.lombok)
 
     testImplementation("io.quarkus:quarkus-junit5")
     testImplementation("io.quarkus:quarkus-jacoco")
     testImplementation("org.awaitility:awaitility")
-    testImplementation("org.assertj:assertj-core:${assertjVersion}")
+    testImplementation(libs.assertj)
 
-    testFixturesImplementation(
-        enforcedPlatform(
-            "${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}"
-        )
-    )
-
-    testFixturesImplementation(
-        enforcedPlatform(
-            "${quarkusPlatformGroupId}:quarkus-operator-sdk-bom:${quarkusPlatformVersion}"
-        )
-    )
+    testFixturesImplementation(enforcedPlatform(libs.quarkus.platform))
+    testFixturesImplementation(enforcedPlatform(libs.quarkus.operator.sdk))
 
     testFixturesImplementation("io.fabric8:kubernetes-client")
     testFixturesImplementation("org.awaitility:awaitility")
-    testFixturesImplementation("org.assertj:assertj-core:${assertjVersion}")
+    testFixturesImplementation(libs.assertj)
 }
 
 objectModelGenerator {

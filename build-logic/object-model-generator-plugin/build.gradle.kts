@@ -35,7 +35,7 @@ dependencies {
 
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
-    implementation("io.fabric8:java-generator-core:${fabric8Version}")
+    implementation(libs.fabric8.k8s.client.java.generator)
 }
 
 gradlePlugin {

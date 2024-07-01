@@ -14,14 +14,7 @@
  * limitations under the License.
  */
 
-pluginManagement {
-    val quarkusPluginVersion: String by settings
-    val quarkusPluginId: String by settings
-
-    includeBuild("build-logic")
-
-    plugins { id(quarkusPluginId) version quarkusPluginVersion }
-}
+pluginManagement { includeBuild("build-logic") }
 
 plugins { id("com.hedera.solo.operator.settings") }
 
