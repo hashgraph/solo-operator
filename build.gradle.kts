@@ -18,7 +18,7 @@ plugins {
     id("com.hedera.solo.operator.conventions")
     id("com.hedera.solo.operator.versioning")
     id("io.quarkus")
-    id("com.hedera.solo.operator.objectModelGenerator")
+    id("com.hedera.solo.operator.buildlogic.objectModelGenerator")
 }
 
 val quarkusPlatformGroupId: String by project

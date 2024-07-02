@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator.objectmodelgenerator;
+package com.hedera.solo.operator.buildlogic.objectmodelgenerator;
 
 import java.io.File;
 import java.io.IOException;
@@ -29,7 +29,7 @@ import org.junit.jupiter.api.io.TempDir;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * A simple functional test for the 'com.hedera.solo.operator.objectModelGenerator' plugin.
+ * A simple functional test for the 'com.hedera.solo.operator.buildlogic.objectModelGenerator' plugin.
  */
 class ObjectModelGeneratorPluginFunctionalTest {
     @TempDir
@@ -58,7 +58,7 @@ class ObjectModelGeneratorPluginFunctionalTest {
         writeString(getBuildFile(), """
                         plugins {
                           id("java")
-                          id("com.hedera.solo.operator.objectModelGenerator")
+                          id("com.hedera.solo.operator.buildlogic.objectModelGenerator")
                         }
                         objectModelGenerator {
                             main.sourceCrd = project.layout.projectDirectory.asFile.resolve("%s")
