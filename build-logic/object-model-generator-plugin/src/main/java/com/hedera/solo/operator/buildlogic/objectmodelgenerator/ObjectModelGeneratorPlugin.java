@@ -16,6 +16,10 @@
 
 package com.hedera.solo.operator.buildlogic.objectmodelgenerator;
 
+import java.io.File;
+import java.nio.file.Path;
+import java.util.function.BiFunction;
+import java.util.function.Supplier;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.file.Directory;
@@ -23,43 +27,34 @@ import org.gradle.api.file.ProjectLayout;
 import org.gradle.api.plugins.JavaPluginExtension;
 import org.gradle.api.tasks.SourceSet;
 
-import java.io.File;
-import java.nio.file.Path;
-import java.util.function.BiFunction;
-import java.util.function.Supplier;
-
 /**
  * Object Model Generator plugin.
  */
 public class ObjectModelGeneratorPlugin implements Plugin<Project> {
     @Override
     public void apply(Project project) {
-        BiFunction<File, Supplier<Directory>, Path> path = (file, supplier) -> (null != file ? file : supplier.get().getAsFile()).toPath();
-        ProjectLayout layout = project.getLayout();
         ObjectModelGeneratorExtension ext = project.getExtensions().create("objectModelGenerator", ObjectModelGeneratorExtension.class);
-        project.getTasks().getByName("compileJava").dependsOn("objectModelGenerator");
-        project.getTasks().register("objectModelGenerator", ObjectModelGeneratorTask.class, task -> {
-            task.sourceCrd = path.apply(ext.main.sourceCrd, () -> layout.getProjectDirectory().dir("src/main/k8s/crd"));
-            task.targetCrd = path.apply(ext.main.targetCrd, () -> layout.getBuildDirectory().dir("generated/object-model-generator/main/crd").get());
-            task.targetJava = path.apply(ext.main.targetJava, () -> layout.getBuildDirectory().dir("generated/object-model-generator/main/java").get());
+        apply(project, "objectModelGenerator", "compileJava", "main", ext.main, SourceSet.MAIN_SOURCE_SET_NAME);
+        apply(project, "objectModelTestGenerator", "compileTestJava", "test", ext.test, SourceSet.TEST_SOURCE_SET_NAME);
+    }
+
+    void apply(final Project project, final String taskName, final String taskHook, final String dirName, final ObjectModelGeneratorFiles files, final String sourceSet) {
+        ProjectLayout layout = project.getLayout();
+        project.getTasks().register(taskName, ObjectModelGeneratorTask.class, task -> {
+            task.sourceCrd = path(files.sourceCrd, () -> layout.getProjectDirectory().dir("src/" + dirName + "/k8s/crd"));
+            task.targetCrd = path(files.targetCrd, () -> layout.getBuildDirectory().dir("generated/object-model-generator/" + dirName + "/crd").get());
+            task.targetJava = path(files.targetJava, () -> layout.getBuildDirectory().dir("generated/object-model-generator/" + dirName + "/java").get());
             if (task.sourceCrd.toFile().exists()) {
-                project.getExtensions().getByType(JavaPluginExtension.class).getSourceSets().findByName(SourceSet.MAIN_SOURCE_SET_NAME)
+                project.getExtensions().getByType(JavaPluginExtension.class).getSourceSets().findByName(sourceSet)
                         .java(s -> s.srcDir(task.targetJava));
             } else {
                 task.onlyIf($ -> false);
             }
         });
-        project.getTasks().getByName("compileTestJava").dependsOn("objectModelTestGenerator");
-        project.getTasks().register("objectModelTestGenerator", ObjectModelGeneratorTask.class, task -> {
-            task.sourceCrd = path.apply(ext.test.sourceCrd, () -> layout.getProjectDirectory().dir("src/test/k8s/crd"));
-            task.targetCrd = path.apply(ext.test.targetCrd, () -> layout.getBuildDirectory().dir("generated/object-model-generator/test/crd").get());
-            task.targetJava = path.apply(ext.test.targetJava, () -> layout.getBuildDirectory().dir("generated/object-model-generator/test/java").get());
-            if (task.sourceCrd.toFile().exists()) {
-                project.getExtensions().getByType(JavaPluginExtension.class).getSourceSets().findByName(SourceSet.TEST_SOURCE_SET_NAME)
-                        .java(s -> s.srcDir(task.targetJava));
-            } else {
-                task.onlyIf($ -> false);
-            }
-        });
+        project.getTasks().getByName(taskHook).dependsOn(taskName);
+    }
+
+    Path path(final File file, final Supplier<Directory> supplier) {
+        return (null != file ? file : supplier.get().getAsFile()).toPath();
     }
 }
