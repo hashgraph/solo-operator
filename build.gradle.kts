@@ -29,9 +29,15 @@ val sundrVersion: String by project
 val fabric8Version: String by project
 val lombokVersion: String by project
 
+// fixme: quarkus finds and runs all reconcilers in test source set as well as main source set to prevent this from happening quarkus tests should be in separate source set from josdk tests
+
 dependencies {
     annotationProcessor("io.sundr:builder-annotations:${sundrVersion}")
     annotationProcessor("io.fabric8:kubernetes-client:${fabric8Version}")
+    annotationProcessor(libs.io.fabric8.crd.generator.apt)
+    testAnnotationProcessor("io.sundr:builder-annotations:${sundrVersion}")
+    testAnnotationProcessor("io.fabric8:kubernetes-client:${fabric8Version}")
+    testAnnotationProcessor(libs.io.fabric8.crd.generator.apt)
     implementation("io.fabric8:generator-annotations:${fabric8Version}")
 
     implementation(
@@ -51,14 +57,18 @@ dependencies {
     implementation("io.quarkus:quarkus-kubernetes-client")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk-bundle-generator")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk")
+//    implementation(project(":lib"))
 
     compileOnly("io.sundr:builder-annotations:${sundrVersion}")
     compileOnly("org.projectlombok:lombok:${lombokVersion}")
+    testCompileOnly("io.sundr:builder-annotations:${sundrVersion}")
+    testCompileOnly("org.projectlombok:lombok:${lombokVersion}")
 
     testImplementation("io.quarkus:quarkus-junit5")
     testImplementation("io.quarkus:quarkus-jacoco")
     testImplementation("org.awaitility:awaitility")
     testImplementation("org.assertj:assertj-core:${assertjVersion}")
+    testImplementation(libs.io.javaoperatorsdk.operator.framework.junit.v5)
 
     testFixturesImplementation(
         enforcedPlatform(
@@ -80,6 +90,7 @@ dependencies {
 objectModelGenerator {
     defaultConfigBuilder.uppercaseEnums(false)
     defaultConfigBuilder.objectExtraAnnotations(true)
+    defaultConfigBuilder.generatedAnnotations(false)
     defaultConfigBuilder.packageOverrides(
         mapOf("com.hedera.solo.operator.v1alpha1" to "com.hedera.solo.operator.model.v1alpha1")
     )
@@ -100,4 +111,11 @@ objectModelGenerator {
             file("com/hedera/solo/operator/model/Common.java"),
             file("com/hedera/solo/operator/model/CommonSpec.java"),
         )
+//    main.sourceCrd = project.layout.projectDirectory.asFile.resolve("src/main/k8s/crd")
+//    main.targetCrd = project.layout.buildDirectory.get().asFile.resolve("generated/object-model-generator/sources/main/crd")
+//    main.targetJava = project.layout.buildDirectory.get().asFile.resolve("generated/object-model-generator/sources/main/java")
+//    test = ObjectModelGeneratorFiles(
+//        project.layout.projectDirectory.asFile.resolve("src/test/k8s/crd"),
+//        project.layout.buildDirectory.get().asFile.resolve("generated/object-model-generator/sources/test/crd"),
+//        project.layout.buildDirectory.get().asFile.resolve("generated/object-model-generator/sources/test/java"))
 }

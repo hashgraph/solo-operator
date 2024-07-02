@@ -20,22 +20,41 @@ import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitialization;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationStatus;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleRegistry;
+import com.hedera.solo.operator.reconciler.networkinitialization.resources.NetworkInitializationCapsule;
+import com.hedera.solo.operator.reconciler.networkinitialization.resources.NetworkInitializationCapsules;
+import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.javaoperatorsdk.operator.api.config.informer.InformerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
+import io.javaoperatorsdk.operator.api.reconciler.EventSourceContext;
+import io.javaoperatorsdk.operator.api.reconciler.EventSourceInitializer;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
+import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
+import io.javaoperatorsdk.operator.processing.event.source.EventSource;
+import io.javaoperatorsdk.operator.processing.event.source.informer.InformerEventSource;
 import jakarta.inject.Inject;
-import java.time.Duration;
-import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.jboss.logging.Logger;
 
-@ControllerConfiguration(name = "network-initialization")
-public class NetworkInitializationReconciler implements Reconciler<NetworkInitialization> {
+@ControllerConfiguration(dependents = {
+        @Dependent(type = NetworkInitializationCapsule.class
+                , useEventSourceWithName = "NetworkInitializationCapsule"
+        ),
+        @Dependent(type = NetworkInitializationCapsules.class, useEventSourceWithName = "NetworkInitializationCapsules"),
+})
+public class NetworkInitializationReconciler
+        implements
+        EventSourceInitializer<NetworkInitialization>,
+        Reconciler<NetworkInitialization> {
     private final Logger log;
     private final KubernetesClient client;
     private static final Set<NetworkInitializationStatus.Phase> terminalPhases =
@@ -54,6 +73,11 @@ public class NetworkInitializationReconciler implements Reconciler<NetworkInitia
             log.infof(
                     "Network Initialization - Starting Reconciliation [ name = '%s' ]",
                     resource.getMetadata().getName());
+            if (!"network-initialization".equals(resource.getMetadata().getName())) {
+                return UpdateControl.noUpdate();
+            }
+
+            // context.getSecondaryResource(ConfigMap.class).map(x -> x.getMetadata().getOwnerReferences().stream().map(OwnerReference::getName).toList()).orElse(Collections.emptyList())
 
             final boolean seen = resource.getStatus() != null
                     && resource.getStatus().getObservedGeneration() != null
@@ -70,22 +94,32 @@ public class NetworkInitializationReconciler implements Reconciler<NetworkInitia
 
             if (!seen) {
                 // process new generation by marking all consensus capsules eligible for deployment
-                consensusCapsuleClient
-                        .resources()
-                        .forEach(rc -> rc.edit(cc -> cc.edit()
+/*
+                context.getSecondaryResources(ConsensusCapsule.class)
+//                consensusCapsuleClient
+//                        .resources()
+                        .forEach(
+//                                rc -> rc.edit(
+                                cc -> cc.edit()
                                 .editSpec()
                                 .withEligibleForDeployment(true)
                                 .endSpec()
-                                .build()));
+                                .build()
+//                                )
+                        );
+*/
             }
 
             return UpdateControl.patchStatus(resource.edit()
                             .editStatus()
                             .withObservedGeneration(resource.getMetadata().getGeneration())
-                            .withPhase(getPhase(consensusCapsuleClient.list().getItems()))
+                            .withPhase(getPhase(
+                                    context.getSecondaryResourcesAsStream(ConsensusCapsule.class)
+//                                    consensusCapsuleClient.list().getItems())
+                            ))
                             .endStatus()
                             .build())
-                    .rescheduleAfter(Duration.ofSeconds(30));
+                    ;//.rescheduleAfter(Duration.ofSeconds(30));
         } finally {
             log.infof(
                     "Network Initialization - Finished Reconciliation [ name = '%s' ]",
@@ -94,8 +128,8 @@ public class NetworkInitializationReconciler implements Reconciler<NetworkInitia
     }
 
     // collect consensus capsule status in status until any fail or all succeed.
-    private static NetworkInitializationStatus.Phase getPhase(final List<ConsensusCapsule> consensusCapsules) {
-        Set<ConsensusCapsuleStatus.Phase> phases = consensusCapsules.stream()
+    private static NetworkInitializationStatus.Phase getPhase(final Stream<ConsensusCapsule> consensusCapsules) {
+        Set<ConsensusCapsuleStatus.Phase> phases = consensusCapsules//.stream()
                 .map(CustomResource::getStatus)
                 .map(ConsensusCapsuleStatus::getPhase)
                 .collect(Collectors.toSet());
@@ -112,5 +146,26 @@ public class NetworkInitializationReconciler implements Reconciler<NetworkInitia
             phase = NetworkInitializationStatus.Phase.Unknown;
         }
         return phase;
+    }
+
+    @Override
+    public Map<String, EventSource> prepareEventSources(EventSourceContext<NetworkInitialization> context) {
+        var networkInitializationCapsule =
+                new InformerEventSource<>(InformerConfiguration.from(ConsensusCapsule.class, context)
+                        .withPrimaryToSecondaryMapper(p -> Set.of(
+                                new ResourceID("node0", p.getMetadata().getNamespace()),
+                                new ResourceID("node1", p.getMetadata().getNamespace()),
+                                new ResourceID("node2", p.getMetadata().getNamespace())
+                        ))
+                        .withSecondaryToPrimaryMapper(r -> Set.of(new ResourceID("network-initialization", r.getMetadata().getNamespace())))
+                        .build(), context);
+        var networkInitializationCapsules =
+                new InformerEventSource<>(InformerConfiguration.from(ConfigMap.class, context)
+                        .withPrimaryToSecondaryMapper(p -> Set.of(new ResourceID(CapsuleRegistry.NAME, p.getMetadata().getNamespace())))
+                        .withSecondaryToPrimaryMapper(r -> Set.of(new ResourceID("network-initialization", r.getMetadata().getNamespace())))
+                        .build(), context);
+        return Map.of(
+                "NetworkInitializationCapsule", networkInitializationCapsule,
+                "NetworkInitializationCapsules", networkInitializationCapsules);
     }
 }
