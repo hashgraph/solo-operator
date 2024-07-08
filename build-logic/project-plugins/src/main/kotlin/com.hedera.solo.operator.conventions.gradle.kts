@@ -41,6 +41,7 @@ java {
 }
 
 tasks.withType<Test>().configureEach {
+    environment("CI", "true")
     systemProperty("java.util.logging.manager", "org.jboss.logmanager.LogManager")
 }
 

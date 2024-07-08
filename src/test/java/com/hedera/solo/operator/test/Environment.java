@@ -16,26 +16,15 @@
 
 package com.hedera.solo.operator.test;
 
-import static java.net.http.HttpResponse.BodyHandlers.ofString;
-
 import jakarta.enterprise.context.ApplicationScoped;
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 
 @ApplicationScoped
 public class Environment {
-    static final URI devModeEndpoint = URI.create("http://localhost:8080/q/arc");
-    static final HttpClient httpClient = HttpClient.newHttpClient();
-    static final HttpRequest devModeRequest =
-            HttpRequest.newBuilder(devModeEndpoint).GET().build();
+    public boolean isCI() {
+        return System.getenv("CI") != null;
+    }
 
     public boolean isDevModeActive() {
-        try {
-            return httpClient.send(devModeRequest, ofString()).statusCode() == 200;
-        } catch (IOException | InterruptedException e) {
-            return false;
-        }
+        return !isCI();
     }
 }
