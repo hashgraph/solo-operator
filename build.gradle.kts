@@ -68,8 +68,7 @@ dependencies {
     testImplementation("org.awaitility:awaitility")
     testImplementation("org.assertj:assertj-core:${assertjVersion}")
     testImplementation(libs.io.javaoperatorsdk.operator.framework.junit.v5)
-//    implementation(platform("org.testcontainers:testcontainers-bom:1.19.8"))
-    testImplementation("org.testcontainers", "testcontainers")
+//    testImplementation("org.testcontainers", "testcontainers")
     testImplementation("org.testcontainers", "junit-jupiter")
     testImplementation("com.dajudge.kindcontainer", "kindcontainer")
 
