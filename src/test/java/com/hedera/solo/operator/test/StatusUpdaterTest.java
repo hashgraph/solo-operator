@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2024 Hedera Hashgraph, LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.hedera.solo.operator.test.framework.manytoone;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -12,7 +28,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.RepeatedTest;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,9 +35,11 @@ import org.slf4j.LoggerFactory;
 @TestFramework
 public class StatusUpdaterTest {
     private final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
+
     @RegisterExtension
-    LocallyRunOperatorExtension operator =
-            LocallyRunOperatorExtension.builder().withReconciler(new StatusUpdaterReconciler()).build();
+    LocallyRunOperatorExtension operator = LocallyRunOperatorExtension.builder()
+            .withReconciler(new StatusUpdaterReconciler())
+            .build();
 
     @RepeatedTest(5)
     void test() throws Exception {
@@ -39,8 +56,8 @@ public class StatusUpdaterTest {
             assertThat(cm).isNotNull();
             assertThat(cm2).isNotNull();
             for (StatusUpdater updater : list) {
-                    assertThat(cm.hasOwnerReferenceFor(updater)).isTrue();
-                    assertThat(cm2.hasOwnerReferenceFor(updater)).isTrue();
+                assertThat(cm.hasOwnerReferenceFor(updater)).isTrue();
+                assertThat(cm2.hasOwnerReferenceFor(updater)).isTrue();
             }
         });
 
@@ -53,8 +70,8 @@ public class StatusUpdaterTest {
             assertThat(cm).isNotNull();
             assertThat(cm2).isNotNull();
             for (StatusUpdater updater : list) {
-                    assertThat(cm.hasOwnerReferenceFor(updater)).isTrue();
-                    assertThat(cm2.hasOwnerReferenceFor(updater)).isTrue();
+                assertThat(cm.hasOwnerReferenceFor(updater)).isTrue();
+                assertThat(cm2.hasOwnerReferenceFor(updater)).isTrue();
             }
         });
 

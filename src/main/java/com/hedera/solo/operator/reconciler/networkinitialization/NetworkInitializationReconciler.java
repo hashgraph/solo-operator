@@ -45,16 +45,17 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.jboss.logging.Logger;
 
-@ControllerConfiguration(dependents = {
-        @Dependent(type = NetworkInitializationCapsule.class
-                , useEventSourceWithName = "NetworkInitializationCapsule"
-        ),
-        @Dependent(type = NetworkInitializationCapsules.class, useEventSourceWithName = "NetworkInitializationCapsules"),
-})
+@ControllerConfiguration(
+        dependents = {
+            @Dependent(
+                    type = NetworkInitializationCapsule.class,
+                    useEventSourceWithName = "NetworkInitializationCapsule"),
+            @Dependent(
+                    type = NetworkInitializationCapsules.class,
+                    useEventSourceWithName = "NetworkInitializationCapsules"),
+        })
 public class NetworkInitializationReconciler
-        implements
-        EventSourceInitializer<NetworkInitialization>,
-        Reconciler<NetworkInitialization> {
+        implements EventSourceInitializer<NetworkInitialization>, Reconciler<NetworkInitialization> {
     private final Logger log;
     private final KubernetesClient client;
     private static final Set<NetworkInitializationStatus.Phase> terminalPhases =
@@ -77,7 +78,8 @@ public class NetworkInitializationReconciler
                 return UpdateControl.noUpdate();
             }
 
-            // context.getSecondaryResource(ConfigMap.class).map(x -> x.getMetadata().getOwnerReferences().stream().map(OwnerReference::getName).toList()).orElse(Collections.emptyList())
+            // context.getSecondaryResource(ConfigMap.class).map(x ->
+            // x.getMetadata().getOwnerReferences().stream().map(OwnerReference::getName).toList()).orElse(Collections.emptyList())
 
             final boolean seen = resource.getStatus() != null
                     && resource.getStatus().getObservedGeneration() != null
@@ -94,32 +96,31 @@ public class NetworkInitializationReconciler
 
             if (!seen) {
                 // process new generation by marking all consensus capsules eligible for deployment
-/*
-                context.getSecondaryResources(ConsensusCapsule.class)
-//                consensusCapsuleClient
-//                        .resources()
-                        .forEach(
-//                                rc -> rc.edit(
-                                cc -> cc.edit()
-                                .editSpec()
-                                .withEligibleForDeployment(true)
-                                .endSpec()
-                                .build()
-//                                )
-                        );
-*/
+                /*
+                                context.getSecondaryResources(ConsensusCapsule.class)
+                //                consensusCapsuleClient
+                //                        .resources()
+                                        .forEach(
+                //                                rc -> rc.edit(
+                                                cc -> cc.edit()
+                                                .editSpec()
+                                                .withEligibleForDeployment(true)
+                                                .endSpec()
+                                                .build()
+                //                                )
+                                        );
+                */
             }
 
             return UpdateControl.patchStatus(resource.edit()
-                            .editStatus()
-                            .withObservedGeneration(resource.getMetadata().getGeneration())
-                            .withPhase(getPhase(
-                                    context.getSecondaryResourcesAsStream(ConsensusCapsule.class)
-//                                    consensusCapsuleClient.list().getItems())
+                    .editStatus()
+                    .withObservedGeneration(resource.getMetadata().getGeneration())
+                    .withPhase(getPhase(
+                            context.getSecondaryResourcesAsStream(ConsensusCapsule.class)
+                            //                                    consensusCapsuleClient.list().getItems())
                             ))
-                            .endStatus()
-                            .build())
-                    ;//.rescheduleAfter(Duration.ofSeconds(30));
+                    .endStatus()
+                    .build()); // .rescheduleAfter(Duration.ofSeconds(30));
         } finally {
             log.infof(
                     "Network Initialization - Finished Reconciliation [ name = '%s' ]",
@@ -129,7 +130,7 @@ public class NetworkInitializationReconciler
 
     // collect consensus capsule status in status until any fail or all succeed.
     private static NetworkInitializationStatus.Phase getPhase(final Stream<ConsensusCapsule> consensusCapsules) {
-        Set<ConsensusCapsuleStatus.Phase> phases = consensusCapsules//.stream()
+        Set<ConsensusCapsuleStatus.Phase> phases = consensusCapsules // .stream()
                 .map(CustomResource::getStatus)
                 .map(ConsensusCapsuleStatus::getPhase)
                 .collect(Collectors.toSet());
@@ -150,20 +151,24 @@ public class NetworkInitializationReconciler
 
     @Override
     public Map<String, EventSource> prepareEventSources(EventSourceContext<NetworkInitialization> context) {
-        var networkInitializationCapsule =
-                new InformerEventSource<>(InformerConfiguration.from(ConsensusCapsule.class, context)
+        var networkInitializationCapsule = new InformerEventSource<>(
+                InformerConfiguration.from(ConsensusCapsule.class, context)
                         .withPrimaryToSecondaryMapper(p -> Set.of(
                                 new ResourceID("node0", p.getMetadata().getNamespace()),
                                 new ResourceID("node1", p.getMetadata().getNamespace()),
-                                new ResourceID("node2", p.getMetadata().getNamespace())
-                        ))
-                        .withSecondaryToPrimaryMapper(r -> Set.of(new ResourceID("network-initialization", r.getMetadata().getNamespace())))
-                        .build(), context);
-        var networkInitializationCapsules =
-                new InformerEventSource<>(InformerConfiguration.from(ConfigMap.class, context)
-                        .withPrimaryToSecondaryMapper(p -> Set.of(new ResourceID(CapsuleRegistry.NAME, p.getMetadata().getNamespace())))
-                        .withSecondaryToPrimaryMapper(r -> Set.of(new ResourceID("network-initialization", r.getMetadata().getNamespace())))
-                        .build(), context);
+                                new ResourceID("node2", p.getMetadata().getNamespace())))
+                        .withSecondaryToPrimaryMapper(r -> Set.of(new ResourceID(
+                                "network-initialization", r.getMetadata().getNamespace())))
+                        .build(),
+                context);
+        var networkInitializationCapsules = new InformerEventSource<>(
+                InformerConfiguration.from(ConfigMap.class, context)
+                        .withPrimaryToSecondaryMapper(p -> Set.of(new ResourceID(
+                                CapsuleRegistry.NAME, p.getMetadata().getNamespace())))
+                        .withSecondaryToPrimaryMapper(r -> Set.of(new ResourceID(
+                                "network-initialization", r.getMetadata().getNamespace())))
+                        .build(),
+                context);
         return Map.of(
                 "NetworkInitializationCapsule", networkInitializationCapsule,
                 "NetworkInitializationCapsules", networkInitializationCapsules);

@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2024 Hedera Hashgraph, LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.hedera.solo.operator.test.framework.multimanytoone;
 
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitialization;
@@ -9,38 +25,14 @@ import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
 
 @Ignore
-@ControllerConfiguration(dependents = {
-        @Dependent(type = NetworkInitializationApplicationState.class/*, useEventSourceWithName = "abc"*/)
-})
-public class NetworkInitializationReconciler implements
-//        ErrorStatusHandler<NetworkInitialization>,
-//        EventSourceInitializer<ApplicationState>,
-        Reconciler<NetworkInitialization>
-{
+@ControllerConfiguration(
+        dependents = {
+            @Dependent(type = NetworkInitializationApplicationState.class)
+        })
+public class NetworkInitializationReconciler implements Reconciler<NetworkInitialization> {
     @Override
-    public UpdateControl<NetworkInitialization> reconcile(NetworkInitialization resource, Context<NetworkInitialization> context) throws Exception {
+    public UpdateControl<NetworkInitialization> reconcile(
+            NetworkInitialization resource, Context<NetworkInitialization> context) {
         return UpdateControl.noUpdate();
     }
-
-//    @Override
-//    public Map<String, EventSource> prepareEventSources(EventSourceContext<ApplicationState> context) {
-//        var configMapEventSource =
-//                new InformerEventSource<>(InformerConfiguration.from(ApplicationState.class, context)
-//                        .withPrimaryToSecondaryMapper(p -> Set.of(new ResourceID("application-state", p.getMetadata().getNamespace())))
-//                        .withSecondaryToPrimaryMapper(r ->
-//                        Collections.emptySet()
-////                                r.getMetadata().getOwnerReferences().stream()
-////                                .filter(x -> x.getKind().equals("ConsensusCapsule"))
-////                                .map(x -> new ResourceID(x.getName(), r.getMetadata().getNamespace())).collect(Collectors.toSet())
-//                        )
-//                        .build(), context);
-//        return Map.of("abc", configMapEventSource);
-//    }
-
-//    public static AtomicInteger counter = new AtomicInteger();
-//    @Override
-//    public ErrorStatusUpdateControl<NetworkInitialization> updateErrorStatus(NetworkInitialization resource, Context<NetworkInitialization> context, Exception e) {
-//        counter.incrementAndGet();
-//        return ErrorStatusUpdateControl.noStatusUpdate();
-//    }
 }

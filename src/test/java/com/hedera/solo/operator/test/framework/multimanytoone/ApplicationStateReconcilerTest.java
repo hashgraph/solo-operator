@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2024 Hedera Hashgraph, LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.hedera.solo.operator.test.framework.multimanytoone;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -12,7 +28,6 @@ import io.javaoperatorsdk.operator.junit.LocallyRunOperatorExtension;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import java.lang.invoke.MethodHandles;
 import org.junit.jupiter.api.RepeatedTest;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +35,7 @@ import org.slf4j.LoggerFactory;
 @TestFramework
 public class ApplicationStateReconcilerTest {
     private final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
+
     @RegisterExtension
     LocallyRunOperatorExtension operator = LocallyRunOperatorExtension.builder()
             .withReconciler(new ApplicationStateReconciler())
@@ -31,35 +47,25 @@ public class ApplicationStateReconcilerTest {
     void test() throws Exception {
         // deploy capsules
         for (int i = 0; i < 50; ++i) {
-            ConsensusCapsule cc = new ConsensusCapsuleBuilder().withNewMetadata().withName("node" + i).endMetadata().build();
+            ConsensusCapsule cc = new ConsensusCapsuleBuilder()
+                    .withNewMetadata()
+                    .withName("node" + i)
+                    .endMetadata()
+                    .build();
             operator.create(cc);
-//            Thread.sleep(100);
-            NetworkInitialization networkInitialization = new NetworkInitializationBuilder().withNewMetadata().withName("ni" + i).endMetadata().build();
+            NetworkInitialization networkInitialization = new NetworkInitializationBuilder()
+                    .withNewMetadata()
+                    .withName("ni" + i)
+                    .endMetadata()
+                    .build();
             operator.create(networkInitialization);
-//            Thread.sleep(100);
         }
         Thread.sleep(5000);
         ApplicationState applicationState = operator.get(ApplicationState.class, "application-state");
         assertEquals(100, applicationState.getMetadata().getOwnerReferences().size());
         operator.delete(operator.get(ApplicationState.class, "application-state"));
-//        applicationState.getMetadata().getOwnerReferences()
-//                .stream()
-//                .filter(x -> x.getKind().equals("NetworkInitialization"))
-//                .forEach(o -> operator.delete(new NetworkInitializationBuilder().withNewMetadata().withName(o.getName()).endMetadata().build()));
         Thread.sleep(5000);
         applicationState = operator.get(ApplicationState.class, "application-state");
         assertEquals(100, applicationState.getMetadata().getOwnerReferences().size());
-        log.info("cc: {}", operator.resources(ConsensusCapsule.class).list().getItems().stream().map(ResourceID::fromResource).toList());
-
-//        // deploy network initialization
-//        NetworkInitialization networkInitialization = new NetworkInitializationBuilder().withNewMetadata().withName("ni").endMetadata().build();
-//        operator.create(networkInitialization);
-
-//        while (b) {
-//            Thread.sleep(1000);
-//        }
-//        log.info("errors: {} {}", ConsensusCapsuleReconciler.counter, NetworkInitializationReconciler.counter);
-        int i = 1;
     }
-    boolean b = true;
 }

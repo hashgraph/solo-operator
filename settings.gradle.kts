@@ -26,5 +26,3 @@ pluginManagement {
 plugins { id("com.hedera.solo.operator.settings") }
 
 rootProject.name = "solo-operator"
-
-//include("lib")

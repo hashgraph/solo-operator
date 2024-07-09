@@ -22,9 +22,7 @@ import io.javaoperatorsdk.operator.processing.dependent.Creator;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResource;
 
 public abstract class CreateOnlyKubernetesDependentResource<R extends HasMetadata, P extends HasMetadata>
-        extends KubernetesDependentResource<R, P>
-        implements Creator<R, P>, GarbageCollected<P>
-{
+        extends KubernetesDependentResource<R, P> implements Creator<R, P>, GarbageCollected<P> {
 
     public CreateOnlyKubernetesDependentResource(Class<R> resourceType) {
         super(resourceType);

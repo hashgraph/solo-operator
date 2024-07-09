@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2024 Hedera Hashgraph, LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.hedera.solo.operator.test.framework.multimanytoone;
 
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
@@ -9,38 +25,12 @@ import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
 
 @Ignore
-@ControllerConfiguration(dependents = {
-        @Dependent(type = ConsensusCapsuleApplicationState.class/*, useEventSourceWithName = "xyz"*/)
-})
-public class ConsensusCapsuleReconciler implements
-        //ErrorStatusHandler<ConsensusCapsule>,
-//        EventSourceInitializer<ApplicationState>,
-        Reconciler<ConsensusCapsule>
-{
+@ControllerConfiguration(
+        dependents = {@Dependent(type = ConsensusCapsuleApplicationState.class)}
+)
+public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule> {
     @Override
-    public UpdateControl<ConsensusCapsule> reconcile(ConsensusCapsule resource, Context<ConsensusCapsule> context) throws Exception {
+    public UpdateControl<ConsensusCapsule> reconcile(ConsensusCapsule resource, Context<ConsensusCapsule> context) {
         return UpdateControl.noUpdate();
     }
-
-//    @Override
-//    public Map<String, EventSource> prepareEventSources(EventSourceContext<ApplicationState> context) {
-//        var configMapEventSource =
-//                new InformerEventSource<>(InformerConfiguration.from(ApplicationState.class, context)
-//                        .withPrimaryToSecondaryMapper(p -> Set.of(new ResourceID("application-state", p.getMetadata().getNamespace())))
-//                        .withSecondaryToPrimaryMapper(r ->
-//                                Collections.emptySet()
-////                                r.getMetadata().getOwnerReferences().stream()
-////                                .filter(x -> x.getKind().equals("ConsensusCapsule"))
-////                                .map(x -> new ResourceID(x.getName(), r.getMetadata().getNamespace())).collect(Collectors.toSet())
-//                        )
-//                        .build(), context);
-//        return Map.of("xyz", configMapEventSource);
-//    }
-
-//    public static AtomicInteger counter = new AtomicInteger();
-//    @Override
-//    public ErrorStatusUpdateControl<ConsensusCapsule> updateErrorStatus(ConsensusCapsule resource, Context<ConsensusCapsule> context, Exception e) {
-//        counter.incrementAndGet();
-//        return ErrorStatusUpdateControl.noStatusUpdate();
-//    }
 }

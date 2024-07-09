@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2024 Hedera Hashgraph, LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.hedera.solo.operator.reconciler.networkinitialization.resources;
 
 import com.hedera.solo.operator.library.dependentresources.ReadOnlyKubernetesDependentResource;
@@ -13,34 +29,38 @@ import java.util.Optional;
 @KubernetesDependent
 public class NetworkInitializationCapsules extends ReadOnlyKubernetesDependentResource<ConfigMap, NetworkInitialization>
         implements
-//        SecondaryToPrimaryMapper<ConfigMap>,
-        ResourceDiscriminator<ConfigMap, NetworkInitialization>
-{
+        //        SecondaryToPrimaryMapper<ConfigMap>,
+        ResourceDiscriminator<ConfigMap, NetworkInitialization> {
     public NetworkInitializationCapsules() {
         super(ConfigMap.class);
         setResourceDiscriminator(this);
     }
 
     @Override
-    public Optional<ConfigMap> distinguish(Class<ConfigMap> aClass, NetworkInitialization primary, Context<NetworkInitialization> context) {
-        ResourceID id = new ResourceID(CapsuleRegistry.NAME, primary.getMetadata().getNamespace());
-        return context.getSecondaryResources(aClass).stream().filter(r -> id.equals(ResourceID.fromResource(r))).findAny();
+    public Optional<ConfigMap> distinguish(
+            Class<ConfigMap> aClass, NetworkInitialization primary, Context<NetworkInitialization> context) {
+        ResourceID id =
+                new ResourceID(CapsuleRegistry.NAME, primary.getMetadata().getNamespace());
+        return context.getSecondaryResources(aClass).stream()
+                .filter(r -> id.equals(ResourceID.fromResource(r)))
+                .findAny();
     }
 
-//    @Override
-//    public Map<String, EventSource> prepareEventSources(EventSourceContext<ConfigMap> context) {
-//        var configMapEventSource =
-//                new InformerEventSource<>(InformerConfiguration.from(ConfigMap.class, context)
-//                        .withSecondaryToPrimaryMapper(s -> Set.of(new ResourceID("network-initialization", s.getMetadata().getNamespace())))
-//                        .build(), context);
-//        return EventSourceInitializer.nameEventSources(configMapEventSource);
-//    }
+    //    @Override
+    //    public Map<String, EventSource> prepareEventSources(EventSourceContext<ConfigMap> context) {
+    //        var configMapEventSource =
+    //                new InformerEventSource<>(InformerConfiguration.from(ConfigMap.class, context)
+    //                        .withSecondaryToPrimaryMapper(s -> Set.of(new ResourceID("network-initialization",
+    // s.getMetadata().getNamespace())))
+    //                        .build(), context);
+    //        return EventSourceInitializer.nameEventSources(configMapEventSource);
+    //    }
 
-//    @Override
-//    public Set<ResourceID> toPrimaryResourceIDs(ConfigMap resource) {
-//        if (CapsuleRegistry.NAME.equals(resource.getMetadata().getName())) {
-//            return Set.of(new ResourceID("network-initialization", resource.getMetadata().getNamespace()));
-//        }
-//        return Collections.emptySet();
-//    }
+    //    @Override
+    //    public Set<ResourceID> toPrimaryResourceIDs(ConfigMap resource) {
+    //        if (CapsuleRegistry.NAME.equals(resource.getMetadata().getName())) {
+    //            return Set.of(new ResourceID("network-initialization", resource.getMetadata().getNamespace()));
+    //        }
+    //        return Collections.emptySet();
+    //    }
 }
