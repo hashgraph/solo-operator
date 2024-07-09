@@ -25,7 +25,6 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkInitialization;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationBuilder;
 import com.hedera.solo.operator.test.framework.TestFramework;
 import io.javaoperatorsdk.operator.junit.LocallyRunOperatorExtension;
-import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import java.lang.invoke.MethodHandles;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.extension.RegisterExtension;

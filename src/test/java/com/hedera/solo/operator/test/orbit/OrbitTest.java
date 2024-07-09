@@ -19,6 +19,9 @@ package com.hedera.solo.operator.test.orbit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitSpecBuilder;
 import com.hedera.solo.operator.reconciler.common.Metadata;
@@ -27,6 +30,7 @@ import com.hedera.solo.operator.test.Environment;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.Namespace;
+import io.fabric8.kubernetes.api.model.Node;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
@@ -63,7 +67,10 @@ class OrbitTest {
     protected Logger log;
 
     @BeforeEach
-    void setup() {
+    void setup() throws JsonProcessingException {
+        YAMLFactory yamlFactory = new YAMLFactory();
+        ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper(yamlFactory);
+        System.out.println("config:\n" + mapper.writerWithDefaultPrettyPrinter().writeValueAsString(client.getConfiguration()));
         if (!environment.isDevModeActive()) {
             operator.start();
         }
@@ -73,8 +80,12 @@ class OrbitTest {
     @AfterEach
     void cleanup() {
         Resources.removeByName(client, Orbit.class, TEST_ORBIT_NAME);
-        await().atMost(Duration.ofSeconds(30))
-                .until(() -> client.namespaces().withName(TEST_ORBIT_NAME).get() == null);
+//        client.namespaces().withName(TEST_ORBIT_NAME).delete();
+        boolean apiOnly = client.resources(Node.class).list().getItems().isEmpty();
+        if (!apiOnly) {
+            await().atMost(Duration.ofSeconds(30))
+                    .until(() -> client.namespaces().withName(TEST_ORBIT_NAME).get() == null);
+        }
     }
 
     @Test

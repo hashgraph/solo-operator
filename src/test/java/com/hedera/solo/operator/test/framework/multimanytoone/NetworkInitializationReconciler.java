@@ -25,10 +25,7 @@ import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
 
 @Ignore
-@ControllerConfiguration(
-        dependents = {
-            @Dependent(type = NetworkInitializationApplicationState.class)
-        })
+@ControllerConfiguration(dependents = {@Dependent(type = NetworkInitializationApplicationState.class)})
 public class NetworkInitializationReconciler implements Reconciler<NetworkInitialization> {
     @Override
     public UpdateControl<NetworkInitialization> reconcile(

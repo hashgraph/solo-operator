@@ -14,34 +14,54 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator.test.framework.manytoone;
+package com.hedera.solo.operator.test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.hedera.solo.operator.model.v1alpha1.StatusUpdater;
 import com.hedera.solo.operator.test.framework.TestFramework;
+import com.hedera.solo.operator.test.framework.manytoone.StatusUpdaterReconciler;
 import io.fabric8.kubernetes.api.model.ConfigMap;
+import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.junit.LocallyRunOperatorExtension;
+import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.callback.QuarkusTestAfterAllCallback;
+import io.quarkus.test.junit.callback.QuarkusTestAfterEachCallback;
+import io.quarkus.test.junit.callback.QuarkusTestBeforeClassCallback;
+import io.quarkus.test.junit.callback.QuarkusTestBeforeEachCallback;
+import io.quarkus.test.junit.callback.QuarkusTestContext;
+import io.quarkus.test.junit.callback.QuarkusTestMethodContext;
+import jakarta.inject.Inject;
 import java.lang.invoke.MethodHandles;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.RepeatedTest;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@TestFramework
-public class StatusUpdaterTest {
+@QuarkusTest
+//@ExtendWith(LocallyRunOperatorExtension.class)
+public class StatusUpdaterTest implements QuarkusTestBeforeClassCallback, QuarkusTestBeforeEachCallback, QuarkusTestAfterAllCallback, QuarkusTestAfterEachCallback {
     private final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
-    @RegisterExtension
-    LocallyRunOperatorExtension operator = LocallyRunOperatorExtension.builder()
-            .withReconciler(new StatusUpdaterReconciler())
-            .build();
+    @Inject
+    @SuppressWarnings("CdiInjectionPointsInspection")
+    protected KubernetesClient client;
 
-    @RepeatedTest(5)
+//    @RegisterExtension
+    LocallyRunOperatorExtension operator;
+//        = LocallyRunOperatorExtension.builder()
+//            .withReconciler(new StatusUpdaterReconciler())
+//            .withKubernetesClient(client)
+//            .oneNamespacePerClass(true)
+//            .build();
+
+    @Test
     void test() throws Exception {
         StatusUpdater statusUpdater = new StatusUpdater();
         List<StatusUpdater> list = new ArrayList<>();
@@ -81,5 +101,30 @@ public class StatusUpdaterTest {
             assertThat(operator.get(ConfigMap.class, "status-updater")).isNull();
             assertThat(operator.get(ConfigMap.class, "status-updater-no-ssa")).isNull();
         });
+    }
+
+    @Override
+    public void afterAll(QuarkusTestContext context) {
+
+    }
+
+    @Override
+    public void afterEach(QuarkusTestMethodContext context) {
+
+    }
+
+    @Override
+    public void beforeClass(Class<?> testClass) {
+
+    }
+
+    @Override
+    public void beforeEach(QuarkusTestMethodContext context) {
+        operator = LocallyRunOperatorExtension.builder()
+                .withReconciler(new StatusUpdaterReconciler())
+                .withKubernetesClient(client)
+                .oneNamespacePerClass(true)
+                .build();
+//        operator.beforeEach();
     }
 }

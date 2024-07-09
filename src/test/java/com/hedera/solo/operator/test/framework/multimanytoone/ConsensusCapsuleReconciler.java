@@ -25,9 +25,7 @@ import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
 
 @Ignore
-@ControllerConfiguration(
-        dependents = {@Dependent(type = ConsensusCapsuleApplicationState.class)}
-)
+@ControllerConfiguration(dependents = {@Dependent(type = ConsensusCapsuleApplicationState.class)})
 public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule> {
     @Override
     public UpdateControl<ConsensusCapsule> reconcile(ConsensusCapsule resource, Context<ConsensusCapsule> context) {

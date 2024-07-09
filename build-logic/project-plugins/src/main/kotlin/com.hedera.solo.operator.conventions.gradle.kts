@@ -28,6 +28,7 @@ repositories {
     maven {
         url = uri("https://artifacts.swirldslabs.io/artifactory/central-maven-snapshot-external/")
     }
+    mavenCentral()
 }
 
 java {

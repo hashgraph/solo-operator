@@ -22,7 +22,8 @@ import com.hedera.solo.operator.model.v1alpha1.ApplicationStateBuilder;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 
-public abstract class AbstractApplicationState<P extends HasMetadata> extends ManyToOneKubernetesDependentResource<ApplicationState, P> {
+public abstract class AbstractApplicationState<P extends HasMetadata>
+        extends ManyToOneKubernetesDependentResource<ApplicationState, P> {
     public AbstractApplicationState() {
         super(ApplicationState.class);
     }

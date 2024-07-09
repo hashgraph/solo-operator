@@ -1,4 +1,95 @@
 package com.hedera.solo.operator.test;
 
+import com.dajudge.kindcontainer.ApiServerContainer;
+import com.dajudge.kindcontainer.K3sContainer;
+import com.dajudge.kindcontainer.KindContainer;
+import com.dajudge.kindcontainer.client.KubeConfigUtils;
+import com.dajudge.kindcontainer.client.config.KubeConfig;
+import com.hedera.solo.operator.test.framework.manytoone.StatusUpdaterReconciler;
+import io.fabric8.kubernetes.api.model.ContextBuilder;
+import io.fabric8.kubernetes.api.model.NamedContext;
+import io.fabric8.kubernetes.api.model.NamedContextBuilder;
+import io.fabric8.kubernetes.client.Config;
+import io.fabric8.kubernetes.client.ConfigBuilder;
+import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientBuilder;
+import io.fabric8.kubernetes.client.utils.KubernetesSerialization;
+import io.javaoperatorsdk.operator.ReconcilerUtils;
+import io.javaoperatorsdk.operator.junit.LocallyRunOperatorExtension;
+import java.lang.invoke.MethodHandles;
+import java.nio.charset.StandardCharsets;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.RegisterExtension;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.testcontainers.shaded.org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter;
+
 public class KindContainerTest {
+    private final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
+
+//    KindContainer<?> kind;
+
+    Config config(String kubeConfigS) {
+        KubeConfig kubeConfig = KubeConfigUtils.parseKubeConfig(kubeConfigS);
+        return new ConfigBuilder()
+//                .withApiVersion(kubeConfig.getApiVersion())
+//                .withCurrentContext(new NamedContextBuilder().withName(kubeConfig.getCurrentContext()).build())
+//                .withContexts(new NamedContextBuilder()
+//                        .withName(kubeConfig.getContexts().get(0).getName())
+//                        .withContext(new ContextBuilder()
+//                                .withCluster(kubeConfig.getContexts().get(0).getName())
+//                                .withUser(kubeConfig.getContexts().get(0).getContext().getUser())
+//                                .build())
+//                        .build())
+                .withMasterUrl(kubeConfig.getClusters().get(0).getCluster().getServer())
+                .withCaCertData(kubeConfig.getClusters().get(0).getCluster().getCertificateAuthorityData())
+                .withClientCertData(kubeConfig.getUsers().get(0).getUser().getClientCertificateData())
+                .withClientKeyData(kubeConfig.getUsers().get(0).getUser().getClientKeyData())
+                .withClientKeyAlgo(Config.getKeyAlgorithm(null, kubeConfig.getUsers().get(0).getUser().getClientKeyData()))
+//                .withClientKeyPassphrase("")
+                .build();
+    }
+
+    KubernetesClient get() {
+        var kind =
+//                new ApiServerContainer<>(); // namespace stuck terminating after test
+//                new K3sContainer<>();  // namespace stuck terminating after test
+//        kind.setDockerImageName("docker.io/rancher/k3s:v1.27.4-k3s1");
+                new KindContainer<>();
+        kind.start();
+//        String yaml = kind.copyFileFromContainer("/etc/rancher/k3s/k3s.yaml", is -> new String(is.readAllBytes(), StandardCharsets.UTF_8));
+        KubeConfig kubeConfig = KubeConfigUtils.parseKubeConfig(kind.getKubeconfig());
+        Config config = new ConfigBuilder()
+//                .withApiVersion(kubeConfig.getApiVersion())
+//                .withCurrentContext(new NamedContextBuilder().withName(kubeConfig.getCurrentContext()).build())
+//                .withContexts(new NamedContextBuilder()
+//                        .withName(kubeConfig.getContexts().get(0).getName())
+//                        .withContext(new ContextBuilder()
+//                                .withCluster(kubeConfig.getContexts().get(0).getName())
+//                                .withUser(kubeConfig.getContexts().get(0).getContext().getUser())
+//                                .build())
+//                        .build())
+                .withMasterUrl(kubeConfig.getClusters().get(0).getCluster().getServer())
+                .withCaCertData(kubeConfig.getClusters().get(0).getCluster().getCertificateAuthorityData())
+                .withClientCertData(kubeConfig.getUsers().get(0).getUser().getClientCertificateData())
+                .withClientKeyData(kubeConfig.getUsers().get(0).getUser().getClientKeyData())
+                .withClientKeyAlgo(Config.getKeyAlgorithm(null, kubeConfig.getUsers().get(0).getUser().getClientKeyData()))
+//                .withClientKeyPassphrase("")
+                .build();
+//        KubernetesSerialization kubernetesSerialization = new KubernetesSerialization();
+//        Config config = kubernetesSerialization.unmarshal(kind.getKubeconfig(), Config.class);
+        //ReconcilerUtils.loadYaml(Config.class, getClass(), kind.getKubeconfig());
+        return new KubernetesClientBuilder().withConfig(config).build();
+    }
+
+    @RegisterExtension
+    LocallyRunOperatorExtension operator = LocallyRunOperatorExtension.builder()
+            .withReconciler(new StatusUpdaterReconciler())
+            .withKubernetesClient(get())
+            .build();
+
+    @Test
+    void runKindContainer() {
+        log.info("operator: {}", operator);
+    }
 }

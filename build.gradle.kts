@@ -55,6 +55,8 @@ dependencies {
     implementation("io.quarkus:quarkus-kubernetes-client")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk-bundle-generator")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk")
+//    implementation("org.bouncycastle:bcprov-jdk15on:1.70")
+    implementation("org.bouncycastle:bcpkix-jdk18on")
 
     compileOnly("io.sundr:builder-annotations:${sundrVersion}")
     compileOnly("org.projectlombok:lombok:${lombokVersion}")
@@ -66,6 +68,10 @@ dependencies {
     testImplementation("org.awaitility:awaitility")
     testImplementation("org.assertj:assertj-core:${assertjVersion}")
     testImplementation(libs.io.javaoperatorsdk.operator.framework.junit.v5)
+//    implementation(platform("org.testcontainers:testcontainers-bom:1.19.8"))
+    testImplementation("org.testcontainers", "testcontainers")
+    testImplementation("org.testcontainers", "junit-jupiter")
+    testImplementation("com.dajudge.kindcontainer", "kindcontainer")
 
     testFixturesImplementation(
         enforcedPlatform(
