@@ -18,6 +18,7 @@ import io.javaoperatorsdk.operator.ReconcilerUtils;
 import io.javaoperatorsdk.operator.junit.LocallyRunOperatorExtension;
 import java.lang.invoke.MethodHandles;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.slf4j.Logger;
@@ -53,9 +54,10 @@ public class KindContainerTest {
     KubernetesClient get() {
         var kind =
 //                new ApiServerContainer<>(); // namespace stuck terminating after test
-//                new K3sContainer<>();  // namespace stuck terminating after test
+                new K3sContainer<>(); // namespace stuck terminating after test
 //        kind.setDockerImageName("docker.io/rancher/k3s:v1.27.4-k3s1");
-                new KindContainer<>();
+//                new KindContainer<>();
+        kind.setBinds(Collections.emptyList()); // needed for k3s
         kind.start();
 //        String yaml = kind.copyFileFromContainer("/etc/rancher/k3s/k3s.yaml", is -> new String(is.readAllBytes(), StandardCharsets.UTF_8));
         KubeConfig kubeConfig = KubeConfigUtils.parseKubeConfig(kind.getKubeconfig());
