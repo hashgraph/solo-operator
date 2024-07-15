@@ -113,7 +113,7 @@ public class KeyTest {
         write("/tmp/cert.key", PRIVATE_KEY, sigKeyPair.getPrivate().getEncoded());
     }
 
-    private static final int SERIAL_NUMBER_BITS = 160;
+    private static final int SERIAL_NUMBER_BITS = 64;
 
     public static X509Certificate generateCertificate(
             String distinguishedName,
