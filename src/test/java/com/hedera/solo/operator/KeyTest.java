@@ -83,8 +83,7 @@ public class KeyTest {
         }
     }
 
-    @Test
-    void foo() throws Exception {
+    void generate(String name) throws Exception {
         Security.addProvider(new BouncyCastleProvider());
 
         final KeyPairGenerator sigKeyGen;
@@ -101,7 +100,7 @@ public class KeyTest {
         final KeyPair sigKeyPair = sigKeyGen.generateKeyPair();
 //        final KeyPair agrKeyPair = agrKeyGen.generateKeyPair();
 
-        final String dn = "CN=node0";//,OID.2.5.29.17=localhost\\,node0";
+        final String dn = "CN=" + name;//,OID.2.5.29.17=localhost\\,node0";
 
         // create the 2 certs (java.security.cert.Certificate)
         // both are signed by sigKeyPair, so sigCert is self-signed
@@ -109,8 +108,15 @@ public class KeyTest {
         final X509Certificate cert =
                 generateCertificate(dn, sigKeyPair, dn, sigKeyPair, SecureRandom.getInstanceStrong());
 
-        write("/tmp/cert.crt", CERTIFICATE, cert.getEncoded());
-        write("/tmp/cert.key", PRIVATE_KEY, sigKeyPair.getPrivate().getEncoded());
+        write("/tmp/" + name + ".crt", CERTIFICATE, cert.getEncoded());
+        write("/tmp/" + name + ".key", PRIVATE_KEY, sigKeyPair.getPrivate().getEncoded());
+    }
+
+    @Test
+    void foo() throws Exception {
+        generate("node0");
+        generate("node1");
+        generate("node2");
     }
 
     private static final int SERIAL_NUMBER_BITS = 64;
