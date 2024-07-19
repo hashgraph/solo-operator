@@ -1,0 +1,8 @@
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: NetworkInitialization
+metadata:
+  name: network-initialization
+  namespace: consensuscapsuletest
+spec:
+  mode: FirstInitialization
+status: {}
