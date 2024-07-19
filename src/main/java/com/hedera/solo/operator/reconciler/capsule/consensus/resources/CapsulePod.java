@@ -22,6 +22,7 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDep
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.javaoperatorsdk.operator.processing.event.source.SecondaryToPrimaryMapper;
+import java.util.Collections;
 import java.util.Set;
 
 @KubernetesDependent
@@ -33,8 +34,9 @@ public class CapsulePod extends KubernetesDependentResource<Pod, ConsensusCapsul
 
     @Override
     public Set<ResourceID> toPrimaryResourceIDs(Pod resource) {
-        return Set.of(new ResourceID(
-                resource.getMetadata().getLabels().get("consensus-capsule"),
-                resource.getMetadata().getNamespace()));
+        String name = resource.getMetadata().getLabels().get("consensus-capsule");
+        return null == name
+                ? Collections.emptySet()
+                : Set.of(new ResourceID(name, resource.getMetadata().getNamespace()));
     }
 }
