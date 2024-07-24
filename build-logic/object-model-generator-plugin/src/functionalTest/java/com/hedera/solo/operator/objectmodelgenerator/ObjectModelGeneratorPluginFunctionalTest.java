@@ -39,6 +39,9 @@ class ObjectModelGeneratorPluginFunctionalTest {
     File sourceCrd;
 
     @TempDir
+    File sourceOpenAPI;
+
+    @TempDir
     File targetCrd;
 
     @TempDir
@@ -61,10 +64,11 @@ class ObjectModelGeneratorPluginFunctionalTest {
                         }
                         objectModelGenerator {
                           sourceCrd = file('%s')
+                          sourceOpenAPI = file('%s')
                           targetCrd = file('%s')
                           targetJava = file('%s')
                         }
-                        """.formatted(sourceCrd, targetCrd, targetJava));
+                        """.formatted(sourceCrd, sourceOpenAPI, targetCrd, targetJava));
 
         // Run the build
         GradleRunner runner = GradleRunner.create();

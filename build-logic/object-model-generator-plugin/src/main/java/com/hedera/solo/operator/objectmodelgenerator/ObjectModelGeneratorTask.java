@@ -45,6 +45,9 @@ public class ObjectModelGeneratorTask extends DefaultTask {
     @PathSensitive(PathSensitivity.ABSOLUTE)
     @InputDirectory
     Path sourceCrd;
+    @PathSensitive(PathSensitivity.ABSOLUTE)
+    @InputDirectory
+    Path sourceOpenAPI;
     @OutputDirectory
     Path targetCrd;
     @OutputDirectory
@@ -52,6 +55,10 @@ public class ObjectModelGeneratorTask extends DefaultTask {
 
     public Path getSourceCrd() {
         return sourceCrd;
+    }
+
+    public Path getSourceOpenAPI() {
+        return sourceOpenAPI;
     }
 
     public Path getTargetCrd() {
