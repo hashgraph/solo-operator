@@ -34,6 +34,10 @@ public class ObjectModelGeneratorExtension {
      */
     public File sourceCrd;
     /**
+     * Source directory for OpenAPI
+     */
+    public File sourceOpenAPI;
+    /**
      * Target directory for generated CRDs
      */
     public File targetCrd;
