@@ -29,6 +29,10 @@ components:
           $ref: "#/components/schemas/SoftwareVersion"
         AddressBookEntry:
           $ref: "#/components/schemas/AddressBookEntry"
+        streamUploader:
+          $ref: "#/components/schemas/StreamUploader"
+        openTelemetryCollector:
+          $ref: "#/components/schemas/OpenTelemetryCollector"
 
     Condition:
       type: object
@@ -68,6 +72,7 @@ components:
           items:
             type: string
 
+
     AddressBookEntry:
       type: object
       properties:
@@ -96,3 +101,52 @@ components:
           description: |
             The public signing key for the node. This should be in PEM format.
           type: string
+
+    StreamUploader:
+      type: object
+      properties:
+        resources:
+          type: object
+          x-java-type: io.fabric8.kubernetes.api.model.ResourceRequirements
+        softwareVersion:
+          type: object
+          x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+        config:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+
+    OpenTelemetryCollector:
+      type: object
+      properties:
+        resources:
+          type: object
+          x-java-type: io.fabric8.kubernetes.api.model.ResourceRequirements
+        softwareVersion:
+          type: object
+          x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+        receivers:
+          type: object
+          properties:
+            prometheus:
+              type: object
+              properties:
+                scrapeTargets:
+                  type: array
+                  items:
+                    type: string #[ 0.0.0.0:9999 ]
+                scrapeInterval:
+                  type: string #5s
+        exporters:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            endpoint:
+              type: string
+            tls:
+              type: object
+              properties:
+                insecure:
+                  type: boolean
