@@ -72,7 +72,6 @@ components:
           items:
             type: string
 
-
     AddressBookEntry:
       type: object
       properties:
@@ -105,17 +104,48 @@ components:
     StreamUploader:
       type: object
       properties:
+        image:
+          type: string
+        imagePullPolicy:
+          type: string
+          enum:
+            - Always
+            - Never
+            - IfNotPresent
         resources:
           type: object
           x-java-type: io.fabric8.kubernetes.api.model.ResourceRequirements
-        softwareVersion:
-          type: object
-          x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+        enabled:
+          type: boolean
+        nameOverride:
+          type: string
         config:
           type: object
           properties:
-            enabled:
+            debug:
               type: boolean
+            compression:
+              type: boolean
+            sidecar:
+              type: boolean
+            reaper:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                minKeep:
+                  type: integer
+                interval:
+                  type: integer
+                defaultBackoff:
+                  type: integer
+            signature:
+              type: object
+              properties:
+                require:
+                  type: boolean
+                prioritize:
+                  type: boolean
 
     OpenTelemetryCollector:
       type: object

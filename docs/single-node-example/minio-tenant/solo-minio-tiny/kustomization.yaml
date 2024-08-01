@@ -5,7 +5,6 @@ namespace: minio-tenant
 
 resources:
   - ../base
-  - solo-minio-secrets.yaml
 
 patches:
   - path: tenant.yaml

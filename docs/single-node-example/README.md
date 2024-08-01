@@ -8,7 +8,7 @@ You will need a kubernetes cluster with the operator running. For example by run
 
 ```
 $ kubectl apply -f orbit.yml
-orbit.operator.solo.hedera.com/consensuscapsuletest created
+orbit.operator.solo.hedera.com/solo-network created
 
 $ kubectl apply -f cluster-config.yml
 configmap/cluster-config created
@@ -22,7 +22,7 @@ consensuscapsule.operator.solo.hedera.com/node0 created
 $ kubectl apply -f network-inistialization.yml
 networkinitialization.operator.solo.hedera.com/network-initialization created
 
-$ kubectl -n consensuscapsuletest get all
+$ kubectl -n solo-network get all
 NAME                                READY   STATUS    RESTARTS   AGE
 pod/node0-deploy-84cfc84bcc-bmvwr   1/1     Running   0          11s
 
@@ -39,6 +39,6 @@ replicaset.apps/node0-deploy-84cfc84bcc   1         1         1       18s
 ## Cleanup
 
 ```
-$ kubectl delete orbits.operator.solo.hedera.com consensuscapsuletest
-orbit.operator.solo.hedera.com "consensuscapsuletest" deleted
+$ kubectl delete orbits.operator.solo.hedera.com solo-network
+orbit.operator.solo.hedera.com "solo-network" deleted
 ```

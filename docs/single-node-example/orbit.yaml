@@ -1,5 +1,5 @@
 apiVersion: operator.solo.hedera.com/v1alpha1
 kind: Orbit
 metadata:
-  name: consensuscapsuletest
+  name: solo-network
 spec: {}
