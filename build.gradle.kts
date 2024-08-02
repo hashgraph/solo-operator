@@ -59,7 +59,7 @@ dependencies {
     testImplementation("io.quarkus:quarkus-jacoco")
     testImplementation("org.awaitility:awaitility")
     testImplementation("org.assertj:assertj-core:${assertjVersion}")
-    testImplementation("com.hedera.hashgraph:sdk:2.35.1")
+    testImplementation("com.hedera.hashgraph:sdk:2.36.0")
     testImplementation("io.grpc:grpc-netty")
 
     testFixturesImplementation(
@@ -76,7 +76,7 @@ dependencies {
 
     testFixturesImplementation("io.fabric8:kubernetes-client")
     testFixturesImplementation("org.awaitility:awaitility")
-    testFixturesImplementation("com.hedera.hashgraph:sdk:2.35.1")
+    testFixturesImplementation("com.hedera.hashgraph:sdk:2.36.0")
 }
 
 objectModelGenerator {
