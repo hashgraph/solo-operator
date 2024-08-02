@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: public-keys
-  namespace: solo-network
+  namespace: consensuscapsuletest
 data:
   a-public-node0.pem: |
     -----BEGIN CERTIFICATE-----

@@ -4,6 +4,9 @@ metadata:
   name: minio-tenant
   namespace: minio-tenant
 spec:
+  buckets:
+    - name: "solo-streams"
+    - name: "solo-backups"
   ## Specification for MinIO Pool(s) in this Tenant.
   pools:
     ## Servers specifies the number of MinIO Tenant Pods / Servers in this pool.

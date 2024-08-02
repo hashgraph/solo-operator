@@ -1,0 +1,7 @@
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: ConsensusCapsule
+metadata:
+  name: node0
+  namespace: consensuscapsuletest
+spec:
+  eligibleForDeployment: false

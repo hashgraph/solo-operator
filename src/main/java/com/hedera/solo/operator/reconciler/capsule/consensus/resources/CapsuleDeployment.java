@@ -67,6 +67,12 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
                 .get()
                 .getData()
                 .keySet()) {
+
+            // skip entries like hedera-*
+            if (name.startsWith("hedera")) {
+                continue;
+            }
+
             volumeMounts.add(new VolumeMountBuilder()
                     .withName("public-keys")
                     .withMountPath("/opt/hgcapp/services-hedera/HapiApp2.0/data/keys/" + name)

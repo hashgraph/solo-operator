@@ -7,8 +7,10 @@ data:
   config.txt: |-
     swirld, 298
     app, HederaNode.jar
-    address, 0, node0, node0, 1, localhost, 50111, localhost, 50111, 0.0.3
-    nextNodeId, 1
+    address, 0, node0, node0, 1, node0.consensus.solo-network.svc.cluster.local, 50111, node0-svc.solo-network.svc.cluster.local, 50111, 0.0.3
+    address, 1, node1, node1, 1, node1.consensus.solo-network.svc.cluster.local, 50111, node1-svc.solo-network.svc.cluster.local, 50111, 0.0.4
+    address, 2, node2, node2, 1, node2.consensus.solo-network.svc.cluster.local, 50111, node2-svc.solo-network.svc.cluster.local, 50111, 0.0.5
+    nextNodeId, 3
   settings.txt: |
     checkSignedStateFromDisk,                      1
     csvFileName,                                   MainNetStats
@@ -34,11 +36,78 @@ data:
     transactionMaxBytes,                           6144
     loadKeysFromPfxFiles,                          true
     crypto.enableNewKeyStoreModel,                 true
-  api-permission.properties: "# Crypto\ncreateAccount=0-*\ncryptoTransfer=0-*\nupdateAccount=0-*\ncryptoGetBalance=0-*\ngetAccountInfo=0-*\ncryptoDelete=0-*\ngetAccountRecords=0-*\ngetTxRecordByTxID=0-*\ngetTransactionReceipts=0-*\napproveAllowances=0-*\ndeleteAllowances=0-*\n# File\ncreateFile=0-*\nupdateFile=0-*\ndeleteFile=0-*\nappendContent=0-*\ngetFileContent=0-*\ngetFileInfo=0-*\n# Contract\ncreateContract=0-*\nupdateContract=0-*\ncontractCallMethod=0-*\ngetContractInfo=0-*\ncontractCallLocalMethod=0-*\ncontractGetBytecode=0-*\ngetTxRecordByContractID=0-*\ndeleteContract=0-*\n# Consensus\ncreateTopic=0-*\nupdateTopic=0-*\ndeleteTopic=0-*\nsubmitMessage=0-*\ngetTopicInfo=0-*\n# Ethereum\nethereumTransaction=0-*\n# Scheduling\nscheduleCreate=0-*\nscheduleSign=0-*\nscheduleDelete=0-*\nscheduleGetInfo=0-*\n# Token\ntokenCreate=0-*\ntokenFreezeAccount=0-*\ntokenUnfreezeAccount=0-*\ntokenGrantKycToAccount=0-*\ntokenRevokeKycFromAccount=0-*\ntokenDelete=0-*\ntokenMint=0-*\ntokenBurn=0-*\ntokenAccountWipe=0-*\ntokenUpdate=0-*\ntokenGetInfo=0-*\ntokenGetNftInfo=0-*\ntokenGetNftInfos=0-*\ntokenGetAccountNftInfos=0-*\ntokenAssociateToAccount=0-*\ntokenDissociateFromAccount=0-*\ntokenFeeScheduleUpdate=0-*\ntokenPause=0-*\ntokenUnpause=0-*\n# Network \ngetVersionInfo=0-*\nnetworkGetExecutionTime=2-50\nsystemDelete=2-59\nsystemUndelete=2-60\nfreeze=2-58\ngetAccountDetails=2-50\n# Util\nutilPrng=0-*\n"
+  api-permission.properties: |
+    # Crypto
+    createAccount=0-*
+    cryptoTransfer=0-*
+    updateAccount=0-*
+    cryptoGetBalance=0-*
+    getAccountInfo=0-*
+    cryptoDelete=0-*
+    getAccountRecords=0-*
+    getTxRecordByTxID=0-*
+    getTransactionReceipts=0-*
+    approveAllowances=0-*
+    deleteAllowances=0-*
+    # File
+    createFile=0-*
+    updateFile=0-*
+    deleteFile=0-*
+    appendContent=0-*
+    getFileContent=0-*
+    getFileInfo=0-*
+    # Contract
+    createContract=0-*
+    updateContract=0-*
+    contractCallMethod=0-*
+    getContractInfo=0-*
+    contractCallLocalMethod=0-*
+    contractGetBytecode=0-*
+    getTxRecordByContractID=0-*
+    deleteContract=0-*
+    # Consensus
+    createTopic=0-*
+    updateTopic=0-*
+    deleteTopic=0-*
+    submitMessage=0-*
+    getTopicInfo=0-*
+    # Ethereum
+    ethereumTransaction=0-*
+    # Scheduling
+    scheduleCreate=0-*
+    scheduleSign=0-*
+    scheduleDelete=0-*
+    scheduleGetInfo=0-*
+    # Token
+    tokenCreate=0-*
+    tokenFreezeAccount=0-*
+    tokenUnfreezeAccount=0-*
+    tokenGrantKycToAccount=0-*
+    tokenRevokeKycFromAccount=0-*
+    tokenDelete=0-*
+    tokenMint=0-*
+    tokenBurn=0-*
+    tokenAccountWipe=0-*
+    tokenUpdate=0-*
+    tokenGetInfo=0-*
+    tokenGetNftInfo=0-*
+    tokenGetNftInfos=0-*
+    tokenGetAccountNftInfos=0-*
+    tokenAssociateToAccount=0-*
+    tokenDissociateFromAccount=0-*
+    tokenFeeScheduleUpdate=0-*
+    tokenPause=0-*
+    tokenUnpause=0-*
+    # Network
+    getVersionInfo=0-*
+    networkGetExecutionTime=2-50
+    systemDelete=2-59
+    systemUndelete=2-60
+    freeze=2-58
+    getAccountDetails=2-50
+    # Util
+    utilPrng=0-*
   application.properties: |
-    autoRenew.targetTypes=
-    hedera.config.version=0
-  bootstrap.properties: |
     ledger.id=0x01
     netty.mode=DEV
     contracts.chainId=298
@@ -48,6 +117,8 @@ data:
     hedera.recordStream.compressFilesOnCreation=true
     balances.compressOnCreation=true
     contracts.maxNumWithHapiSigsAccess=0
+    autoRenew.targetTypes=
+    hedera.config.version=0
   log4j2.xml: |-
     <?xml version="1.0" encoding="UTF-8"?>
     <!-- monitorInterval="600" , if any change to log level will be effective after 10 minute -->
@@ -104,7 +175,7 @@ data:
 
       </Appenders>
       <Loggers>
-        <Root level="TRACE">
+        <Root level="FATAL">
           <!-- <AppenderRef ref="Console"/> -->
           <AppenderRef ref="fileLog"/>
         </Root>

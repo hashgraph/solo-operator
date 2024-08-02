@@ -47,6 +47,11 @@ spec:
             - name: private-keys
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.key
               subPath: hedera.key
+            - name: hgcapp-record-streams
+              mountPath: /opt/hgcapp/recordStreams
+              subPath: record0.0.3 # FIXME make it configurable
+            - name: hgcapp-output
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/output
 # the following needs to be added dynamically
 #            - name: private-keys
 #              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
@@ -81,6 +86,8 @@ spec:
             - name: hgcapp-record-streams
               mountPath: /opt/hgcapp/recordStreams
               subPath: record0.0.3
+            - name: hgcapp-output
+              mountPath: /opt/hgcapp/output
           env: # overwrite from config
             - name: DEBUG
               value: "true"
@@ -130,6 +137,8 @@ spec:
           secret:
             secretName: private-keys
         - name: hgcapp-record-streams
+          emptyDir: {}
+        - name: hgcapp-output
           emptyDir: {}
   strategy: {}
 status: {}
