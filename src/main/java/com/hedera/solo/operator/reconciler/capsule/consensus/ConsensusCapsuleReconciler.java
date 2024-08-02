@@ -34,7 +34,6 @@ import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
 import jakarta.inject.Inject;
-import java.util.Set;
 import org.jboss.logging.Logger;
 
 @ControllerConfiguration(
@@ -65,15 +64,9 @@ public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>,
                     capsule.getMetadata().getName());
 
             ConsensusCapsuleStatus.Phase phase = ConsensusCapsuleStatus.Phase.Unknown;
-            Set<Pod> pods = context.getSecondaryResources(Pod.class);
-            if (1 == pods.size()) {
-                switch (pods.iterator().next().getStatus().getPhase()) {
-                    case "Failed" -> phase = ConsensusCapsuleStatus.Phase.Failed;
-                    case "Pending" -> phase = ConsensusCapsuleStatus.Phase.Pending;
-                    case "Running" -> phase = ConsensusCapsuleStatus.Phase.Running;
-                    case "Succeeded" -> phase = ConsensusCapsuleStatus.Phase.Succeeded;
-                    default -> phase = ConsensusCapsuleStatus.Phase.Unknown;
-                }
+            Pod[] pods = context.getSecondaryResources(Pod.class).toArray(Pod[]::new);
+            if (1 == pods.length) {
+                phase = ConsensusCapsuleStatus.Phase.valueOf(pods[0].getStatus().getPhase());
             }
 
             ConsensusCapsule desired = capsule.edit()

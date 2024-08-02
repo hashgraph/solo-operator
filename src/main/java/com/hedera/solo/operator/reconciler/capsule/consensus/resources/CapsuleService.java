@@ -23,10 +23,12 @@ import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Service;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import io.javaoperatorsdk.operator.processing.dependent.kubernetes.BooleanWithUndefined;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
+import java.util.stream.Collectors;
 
-@KubernetesDependent
+@KubernetesDependent(useSSA = BooleanWithUndefined.FALSE, labelSelector = "app=consensus-node")
 public class CapsuleService extends CRUDKubernetesDependentResource<Service, ConsensusCapsule> {
 
     public static final String TEMPLATE = "service.yaml";
@@ -44,6 +46,8 @@ public class CapsuleService extends CRUDKubernetesDependentResource<Service, Con
         return loadYaml(Service.class, getClass(), TEMPLATE)
                 .edit()
                 .editMetadata()
+                .addToLabels(primary.getSpec().getDependentResourceLabels().stream()
+                        .collect(Collectors.toMap(e -> e.getName(), e -> e.getValue())))
                 .withName(validName)
                 .withNamespace(metadata.getNamespace())
                 .endMetadata()

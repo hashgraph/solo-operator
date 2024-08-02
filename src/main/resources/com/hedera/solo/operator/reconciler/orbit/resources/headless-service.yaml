@@ -1,0 +1,11 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: consensus
+spec:
+  clusterIP: None
+  clusterIPs:
+    - None
+  selector:
+    app: consensus-node
+  publishNotReadyAddresses: true
