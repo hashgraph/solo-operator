@@ -153,7 +153,22 @@ components:
             streamUploader:
               type: object
               x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
-
+        dependentResourceLabels:
+          type: array
+          default: []
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+                pattern: '([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]'
+                minLength: 1
+                maxLength: 63
+              value:
+                type: string
+                pattern: '(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?'
+                minLength: 0
+                maxLength: 63
     ConsensusCapsuleStatus:
       description: The current status of a `ConsensusCapsule`.
       type: object

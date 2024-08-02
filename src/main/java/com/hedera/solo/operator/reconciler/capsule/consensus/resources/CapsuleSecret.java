@@ -23,10 +23,12 @@ import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
+import java.util.stream.Collectors;
 
 @KubernetesDependent
-public class CapsuleSecret extends CRDKubernetesDependentResource<Secret, ConsensusCapsule> {
+public class CapsuleSecret extends CRUDKubernetesDependentResource<Secret, ConsensusCapsule> {
 
     public static final String TEMPLATE = "secret.yaml";
     public static final String NAME_SUFFIX = "-keys";
@@ -40,11 +42,15 @@ public class CapsuleSecret extends CRDKubernetesDependentResource<Secret, Consen
         final ObjectMeta metadata = primary.getMetadata();
         final String validName = validName(metadata.getName(), NAME_SUFFIX);
 
-        return loadYaml(Secret.class, getClass(), TEMPLATE)
+        return context.getSecondaryResource(Secret.class)
+                .orElse(loadYaml(Secret.class, getClass(), TEMPLATE))
                 .edit()
                 .editMetadata()
+                .addToLabels(primary.getSpec().getDependentResourceLabels().stream()
+                        .collect(Collectors.toMap(e -> e.getName(), e -> e.getValue())))
                 .withName(validName)
                 .withNamespace(metadata.getNamespace())
+                .addToLabels("consensus-capsule", metadata.getName())
                 .endMetadata()
                 .build();
     }

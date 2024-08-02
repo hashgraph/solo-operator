@@ -31,9 +31,8 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernete
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
-@KubernetesDependent(useSSA = BooleanWithUndefined.FALSE)
+@KubernetesDependent(useSSA = BooleanWithUndefined.FALSE, labelSelector = "app=consensus-node")
 public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deployment, ConsensusCapsule> {
 
     public static final String TEMPLATE = "deployment.yaml";
@@ -52,7 +51,7 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
                 primary.getSpec() != null && primary.getSpec().getEligibleForDeployment();
 
         final List<VolumeMount> volumeMounts = new ArrayList<>();
-        for (String name : Set.of("a", "s")) {
+        for (String name : List.of("a", "s")) {
             String filename = name + "-private-" + metadata.getName() + ".pem";
             volumeMounts.add(new VolumeMountBuilder()
                     .withName("private-keys")

@@ -1,10 +1,17 @@
 kind: Service
 apiVersion: v1
 metadata:
-  name: gossip-service
+  name: consensus-service
+  labels:
+    app: consensus-node
 spec:
   type: LoadBalancer
   selector:
     app: consensus-node
   ports:
-  - port: 50111
+    - name: gossip
+      port: 50111
+    - name: grpc
+      port: 50211
+    - name: grpc-tls
+      port: 50212

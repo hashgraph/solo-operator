@@ -2,7 +2,6 @@ kind: Deployment
 apiVersion: apps/v1
 metadata:
   name: consensus-node
-  creationTimestamp: null
   labels:
     app: consensus-node
 spec:
@@ -12,13 +11,13 @@ spec:
       app: consensus-node
   template:
     metadata:
-      creationTimestamp: null
       labels:
         app: consensus-node
     spec:
+      subdomain: consensus
       containers:
         - name: consensus-node
-          image: gcr.io/hedera-registry/consensus-node:0.51.0-alpha.0
+          image: gcr.io/hedera-registry/consensus-node:0.52.0-alpha.6
           resources: {}
           env:
             - name: JAVA_OPTS

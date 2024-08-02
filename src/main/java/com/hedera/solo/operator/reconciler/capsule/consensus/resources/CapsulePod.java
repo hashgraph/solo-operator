@@ -25,7 +25,7 @@ import io.javaoperatorsdk.operator.processing.event.source.SecondaryToPrimaryMap
 import java.util.Collections;
 import java.util.Set;
 
-@KubernetesDependent
+@KubernetesDependent(labelSelector = "app=consensus-node")
 public class CapsulePod extends KubernetesDependentResource<Pod, ConsensusCapsule>
         implements SecondaryToPrimaryMapper<Pod> {
     public CapsulePod() {
