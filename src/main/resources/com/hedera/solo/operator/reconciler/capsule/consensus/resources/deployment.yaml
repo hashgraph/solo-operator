@@ -49,7 +49,6 @@ spec:
               subPath: hedera.key
             - name: hgcapp-record-streams
               mountPath: /opt/hgcapp/recordStreams
-              subPath: record0.0.3 # FIXME make it configurable
             - name: hgcapp-output
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/output
 # the following needs to be added dynamically
@@ -85,7 +84,6 @@ spec:
           volumeMounts:
             - name: hgcapp-record-streams
               mountPath: /opt/hgcapp/recordStreams
-              subPath: record0.0.3
             - name: hgcapp-output
               mountPath: /opt/hgcapp/output
           env: # overwrite from config

@@ -20,10 +20,7 @@ import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
-import io.fabric8.kubernetes.api.model.ConfigMap;
-import io.fabric8.kubernetes.api.model.ObjectMeta;
-import io.fabric8.kubernetes.api.model.VolumeMount;
-import io.fabric8.kubernetes.api.model.VolumeMountBuilder;
+import io.fabric8.kubernetes.api.model.*;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.BooleanWithUndefined;
@@ -37,6 +34,7 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
 
     public static final String TEMPLATE = "deployment.yaml";
     public static final String NAME_SUFFIX = "-deploy";
+    public static final String ACCOUNT_ID_LABEL = "account-id";
 
     public CapsuleDeployment() {
         super(Deployment.class);
@@ -46,6 +44,11 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
     protected Deployment desired(final ConsensusCapsule primary, final Context<ConsensusCapsule> context) {
         final ObjectMeta metadata = primary.getMetadata();
         final String validName = validName(metadata.getName(), NAME_SUFFIX);
+
+        final String accountId = metadata.getLabels().get(ACCOUNT_ID_LABEL);
+        if (accountId == null || accountId.isEmpty()) {
+            throw new RuntimeException("Missing account ID for deployment " + primary.getMetadata().getName());
+        }
 
         final boolean eligibleForDeployment =
                 primary.getSpec() != null && primary.getSpec().getEligibleForDeployment();
@@ -80,35 +83,54 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
                     .build());
         }
 
+        final Probe startupProbe = new ProbeBuilder()
+                .editExec()
+                .withCommand("/bin/sh", "-c", String.format("""
+                        task() {
+                          mkdir -p /opt/hgcapp/recordStreams/record%s/sidecar
+                          chown -r hedera:hedera /opt/hgcapp/recordStreams
+                          # enable below curl command and remove the return statement once the otelCollector sidecar is enabled
+                          #curl %s.consensus.%s.svc.cluster.local:13133
+                          return 0
+                        }
+                        task""", accountId, metadata.getName(), metadata.getNamespace()))
+                .endExec()
+                .withFailureThreshold(30)
+                .withPeriodSeconds(10)
+                .withTimeoutSeconds(5)
+                .build();
+
         // spotless:off
         return loadYaml(Deployment.class, getClass(), TEMPLATE).edit()
                 .editMetadata()
-                    .withName(validName)
-                    .withNamespace(metadata.getNamespace())
-                    .addToLabels("consensus-capsule", metadata.getName())
+                .withName(validName)
+                .withNamespace(metadata.getNamespace())
+                .addToLabels("consensus-capsule", metadata.getName())
                 .endMetadata()
                 .editSpec()
-                    .withReplicas(eligibleForDeployment ? 1 : 0)
-                    .editSelector()
-                        .addToMatchLabels("consensus-capsule", metadata.getName())
-                    .endSelector()
-                    .editTemplate()
-                        .editMetadata()
-                            .addToLabels("name", metadata.getName())
-                            .addToLabels("consensus-capsule", metadata.getName())
-                        .endMetadata()
-                        .editSpec()
-                            .withHostname(metadata.getName())
-                            .editMatchingVolume(v -> "private-keys".equals(v.getName()))
-                                .editSecret()
-                                    .withSecretName(validName(metadata.getName(), "-keys"))
-                                .endSecret()
-                            .endVolume()
-                            .editMatchingContainer(c -> "consensus-node".equals(c.getName()))
-                                .addAllToVolumeMounts(volumeMounts)
-                            .endContainer()
-                        .endSpec()
-                    .endTemplate()
+                .withReplicas(eligibleForDeployment ? 1 : 0)
+                .editSelector()
+                .addToMatchLabels("consensus-capsule", metadata.getName())
+                .endSelector()
+                .editTemplate()
+                .editMetadata()
+                .addToLabels("name", metadata.getName())
+                .addToLabels("consensus-capsule", metadata.getName())
+                .addToLabels(ACCOUNT_ID_LABEL, accountId)
+                .endMetadata()
+                .editSpec()
+                .withHostname(metadata.getName())
+                .editMatchingVolume(v -> "private-keys".equals(v.getName()))
+                .editSecret()
+                .withSecretName(validName(metadata.getName(), "-keys"))
+                .endSecret()
+                .endVolume()
+                .editMatchingContainer(c -> "consensus-node".equals(c.getName()))
+                .addAllToVolumeMounts(volumeMounts)
+                .withStartupProbe(startupProbe)
+                .endContainer()
+                .endSpec()
+                .endTemplate()
                 .endSpec()
                 .build();
         // spotless:on
