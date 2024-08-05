@@ -6,7 +6,10 @@ namespace: solo-network
 resources:
   - namespace.yaml
   - cluster-config.yaml
-  - public-keys.yaml
   - minio-secrets.yaml
+  - node0-keys.yaml
+  - node1-keys.yaml
+  - node2-keys.yaml
+  - public-keys.yaml
   - orbit.yaml
   - headless-service.yaml

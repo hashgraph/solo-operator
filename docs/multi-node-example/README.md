@@ -13,10 +13,22 @@ $ quarkus dev
 ```
 For example by running `kind` and `quarkus dev`.
 
-## Deploy 
+## Setup cluster 
 
 ```
 $ source script.sh && setup
+```
+
+## Deploy Network
+
+```
+$ source script.sh && deploy 
+```
+
+## Destroy Network
+
+```
+$ source script.sh && destroy
 ```
 
 ## Cleanup

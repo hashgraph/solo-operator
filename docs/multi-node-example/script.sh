@@ -17,7 +17,6 @@ function destroy() {
 }
 
 function cleanup() {
-    destroy
     kubectl delete -k minio-tenant/solo-minio-tiny
     helm uninstall minio-operator -n minio-operator
     kubectl delete namespace minio-operator
