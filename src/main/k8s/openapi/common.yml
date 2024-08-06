@@ -146,6 +146,20 @@ components:
                   type: boolean
                 prioritize:
                   type: boolean
+            streamFileExtension:
+              type: string
+            streamSigExtension:
+              type: string
+            streamExtension:
+              type: string
+            sigExtension:
+              type: string
+            bucketName:
+              type: string
+            s3Enable:
+              type: boolean
+            gcsEnable:
+              type: boolean
 
     OpenTelemetryCollector:
       type: object

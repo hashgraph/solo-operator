@@ -4,6 +4,7 @@ metadata:
   name: cluster-config
   namespace: solo-network
 data:
+  s3Endpoint: "http://minio-tenant-hl.minio-tenant.svc.cluster.local:9000"
 # address, nodeId, nickname, selfname, weight, internalHostname, internalPort, externalHostname, externalPort, memoToUse
 
 # should be overridden from orbit (require, not from bootstrap.properties):

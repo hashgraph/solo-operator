@@ -1,0 +1,23 @@
+enabled: true
+image: gcr.io/hedera-registry/uploader-mirror:1.3.0
+imagePullPolicy: IfNotPresent
+nameOverride: "record-stream-uploader"
+config:
+  debug: true
+  compression: true
+  sidecar: true
+  reaper:
+    enabled: true
+    minKeep: 1
+    interval: 1
+    defaultBackoff: 1
+  signature:
+    require: true
+    prioritize: true
+  streamFileExtension: "rcd"
+  streamSigExtension: "rcd_sig"
+  streamExtension: "rcd.gz"
+  sigExtension: "rcd_sig"
+  bucketName: "fst-streams"
+  s3Enable: true
+  gcsEnable: true
