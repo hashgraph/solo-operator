@@ -1,11 +1,15 @@
 #!/bin/sh
 function setup() {
-    helm repo add minio https://operator.min.io/
+    helm repo add minio-operator https://operator.min.io/
     helm install \
       --namespace minio-operator \
       --create-namespace \
-      minio-operator minio/operator
-    kubectl apply -k minio-tenant/solo-minio-tiny
+      minio-operator minio-operator/operator
+    helm install \
+        --namespace minio-tenant \
+        --create-namespace \
+        --values minio-tenant/values.yaml \
+        minio-tenant minio-operator/tenant
 }
 
 function deploy() {
@@ -17,7 +21,8 @@ function destroy() {
 }
 
 function cleanup() {
-    kubectl delete -k minio-tenant/solo-minio-tiny
     helm uninstall minio-operator -n minio-operator
+    helm uninstall minio-tenant -n minio-tenant
+    kubectl delete namespace minio-tenant
     kubectl delete namespace minio-operator
 }
