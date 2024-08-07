@@ -1,3 +1,5 @@
+import com.hedera.solo.operator.buildlogic.objectmodelgenerator.ObjectModelGeneratorPlugin
+
 /*
  * Copyright (C) 2024 Hedera Hashgraph, LLC
  *
@@ -117,26 +119,109 @@ objectModelGenerator {
 
 testing {
     suites {
-        val test by getting(JvmTestSuite::class) {
-            useJUnitJupiter()
-        }
+//        val test by getting(JvmTestSuite::class) {
+//            useJUnitJupiter()
+//        }
 
-        register<JvmTestSuite>("componentTest") {
+        named<JvmTestSuite>("componentTest") {
+//        register<JvmTestSuite>("componentTest") {
+//            plugins {
+//                id("java")
+//                id("com.hedera.solo.operator.buildlogic.objectModelGenerator")
+//            }
             dependencies {
+                annotationProcessor("io.sundr:builder-annotations:${sundrVersion}")
+                annotationProcessor("io.fabric8:kubernetes-client:${fabric8Version}")
+                annotationProcessor(libs.io.fabric8.crd.generator.apt)
+
+                compileOnly("io.sundr:builder-annotations:${sundrVersion}")
+                compileOnly("org.projectlombok:lombok:${lombokVersion}")
+
                 implementation(project())
+                implementation(
+                    enforcedPlatform(
+                        "${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}"
+                    )
+                )
+                implementation(
+                    enforcedPlatform(
+                        "${quarkusPlatformGroupId}:quarkus-operator-sdk-bom:${quarkusPlatformVersion}"
+                    )
+                )
+                implementation("org.testcontainers:junit-jupiter")
+                implementation("com.dajudge.kindcontainer:kindcontainer")
+                implementation("io.quarkus:quarkus-kubernetes-client")
+
+//                implementation("io.quarkus:quarkus-arc")
+                implementation("io.quarkus:quarkus-junit5")
+                implementation("io.quarkus:quarkus-jacoco")
+
+                implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk")
+                implementation(libs.io.javaoperatorsdk.operator.framework.junit.v5)
+                implementation("org.jboss.slf4j:slf4j-jboss-logmanager")
             }
 
-            targets {
-                all {
-                    testTask.configure {
-                        shouldRunAfter(test)
-                    }
-                }
-            }
+//            apply(plugin = "java")
+////            apply(plugin = "com.hedera.solo.operator.buildlogic.objectModelGenerator")
+//            apply<ObjectModelGeneratorPlugin>()
+//            objectModelGenerator {}
+//            targets {
+//                all {
+//                    testTask.configure {
+////                        systemProperty("java.util.logging.manager", "org.jboss.logmanager.LogManager")
+////                        systemProperty("quarkus.log.level", "INFO")
+////                        systemProperty("java.util.logging.config.file", "${projectDir}/src/componentTest/resources/logging.properties")
+//
+////                        shouldRunAfter(testing.suites.named("test"))
+//                    }
+//                }
+//            }
         }
     }
 }
 
+tasks.named("assemble") {
+    dependsOn(tasks.named("compileComponentTestJava"))
+}
+
 tasks.named("check") {
     dependsOn(testing.suites.named("componentTest"))
+}
+
+sourceSets {
+    create("intTest") {
+        compileClasspath += sourceSets.main.get().output
+        runtimeClasspath += sourceSets.main.get().output
+    }
+}
+
+val intTestImplementation by configurations.getting {
+    extendsFrom(configurations.implementation.get())
+}
+val intTestRuntimeOnly by configurations.getting
+
+configurations["intTestRuntimeOnly"].extendsFrom(configurations.runtimeOnly.get())
+
+val intTest = task<Test>("intTest") {
+    description = "Runs integration tests."
+    group = "verification"
+
+    testClassesDirs = sourceSets["intTest"].output.classesDirs
+    classpath = sourceSets["intTest"].runtimeClasspath
+    shouldRunAfter("test")
+
+    useJUnitPlatform()
+
+    testLogging {
+        events("passed")
+    }
+}
+
+tasks.check { dependsOn(intTest) }
+
+sourceSets.forEach() {
+    println(it)
+//    it.allSource.forEach() {
+//        println(it)
+//    }
 }

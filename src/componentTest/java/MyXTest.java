@@ -1,2 +1,16 @@
+import io.quarkus.logging.Log;
+import java.lang.invoke.MethodHandles;
+import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class MyXTest {
+    private final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
+//    private final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
+    @Test
+    public void test() {
+        Log.debug("Hello World!");
+        Log.info("Hello World!");
+        Log.error("Hello World!");
+    }
 }

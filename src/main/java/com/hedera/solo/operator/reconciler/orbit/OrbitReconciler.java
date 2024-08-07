@@ -50,6 +50,7 @@ public class OrbitReconciler implements Reconciler<Orbit>, ErrorStatusHandler<Or
     @Inject
     public OrbitReconciler(final Logger log) {
         this.log = log;
+        log.infof("Reconciler initialized");
     }
 
     @Override

@@ -90,3 +90,14 @@ tasks.named("assemble").configure { dependsOn(tasks.named("testClasses")) }
 tasks.check { dependsOn(gradle.includedBuild("build-logic").task(":check")) }
 
 tasks.test { dependsOn(gradle.includedBuild("build-logic").task(":test")) }
+
+testing {
+    suites {
+//        val test by getting(JvmTestSuite::class) {
+//            useJUnitJupiter()
+//        }
+
+        register<JvmTestSuite>("componentTest") {
+        }
+    }
+}

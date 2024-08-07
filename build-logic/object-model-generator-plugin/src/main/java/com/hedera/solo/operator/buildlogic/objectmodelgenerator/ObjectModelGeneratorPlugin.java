@@ -34,27 +34,22 @@ public class ObjectModelGeneratorPlugin implements Plugin<Project> {
     @Override
     public void apply(Project project) {
         ObjectModelGeneratorExtension ext = project.getExtensions().create("objectModelGenerator", ObjectModelGeneratorExtension.class);
-        apply(project, "objectModelGenerator", "compileJava", "main", ext.main, SourceSet.MAIN_SOURCE_SET_NAME);
-        apply(project, "objectModelTestGenerator", "compileTestJava", "test", ext.test, SourceSet.TEST_SOURCE_SET_NAME);
-    }
-
-    void apply(final Project project, final String taskName, final String taskHook, final String dirName, final ObjectModelGeneratorFiles files, final String sourceSet) {
         ProjectLayout layout = project.getLayout();
-        project.getTasks().register(taskName, ObjectModelGeneratorTask.class, task -> {
-            task.sourceCrd = path(files.sourceCrd, () -> layout.getProjectDirectory().dir("src/" + dirName + "/k8s/crd"));
-            task.targetCrd = path(files.targetCrd, () -> layout.getBuildDirectory().dir("generated/object-model-generator/" + dirName + "/crd").get());
-            task.targetJava = path(files.targetJava, () -> layout.getBuildDirectory().dir("generated/object-model-generator/" + dirName + "/java").get());
-            if (task.sourceCrd.toFile().exists()) {
-                project.getExtensions().getByType(JavaPluginExtension.class).getSourceSets().findByName(sourceSet)
-                        .java(s -> s.srcDir(task.targetJava));
-            } else {
-                task.onlyIf($ -> false);
-            }
-        });
-        project.getTasks().getByName(taskHook).dependsOn(taskName);
-    }
+        for (SourceSet sourceSet : project.getExtensions().getByType(JavaPluginExtension.class).getSourceSets()) {
+            String dirName = sourceSet.getName();
+            File sourceCrd = layout.getProjectDirectory().dir("src").dir(dirName).dir("k8s").dir("crd").getAsFile();
+            if (sourceCrd.exists()) {
+                String taskName = sourceSet.getTaskName("generate", "object-model");
+                project.getTasks().register(taskName, ObjectModelGeneratorTask.class, task -> {
+                    Directory target = layout.getBuildDirectory().get().dir("generated").dir("object-model-generator");
+                    task.sourceCrd = sourceCrd.toPath();
+                    task.targetCrd = target.dir(dirName).dir("crd").getAsFile().toPath();
+                    task.targetJava = target.dir(dirName).dir("java").getAsFile().toPath();
+                    sourceSet.java(s -> s.srcDir(task.targetJava));
+                });
+                project.getTasks().getByName(sourceSet.getCompileJavaTaskName()).dependsOn(taskName);
 
-    Path path(final File file, final Supplier<Directory> supplier) {
-        return (null != file ? file : supplier.get().getAsFile()).toPath();
+            }
+        }
     }
 }
