@@ -114,3 +114,29 @@ objectModelGenerator {
             file("com/hedera/solo/operator/model/CommonSpec.java"),
         )
 }
+
+testing {
+    suites {
+        val test by getting(JvmTestSuite::class) {
+            useJUnitJupiter()
+        }
+
+        register<JvmTestSuite>("componentTest") {
+            dependencies {
+                implementation(project())
+            }
+
+            targets {
+                all {
+                    testTask.configure {
+                        shouldRunAfter(test)
+                    }
+                }
+            }
+        }
+    }
+}
+
+tasks.named("check") {
+    dependsOn(testing.suites.named("componentTest"))
+}
