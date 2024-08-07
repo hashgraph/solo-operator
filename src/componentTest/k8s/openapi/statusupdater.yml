@@ -1,0 +1,27 @@
+openapi: 3.0.3
+info:
+  title: OpenAPI Schema
+  version: 1.0.0
+paths: { }
+components:
+  schemas:
+    Spec:
+      type: object
+      properties:
+        name:
+          type: string
+        num:
+          type: number
+        bool:
+          type: boolean
+        map:
+          type: object
+          additionalProperties:
+            type: string
+    Status:
+      type: object
+      properties:
+        name:
+          type: string
+        count:
+          type: number

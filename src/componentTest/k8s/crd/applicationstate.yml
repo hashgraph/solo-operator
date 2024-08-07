@@ -1,0 +1,24 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: applicationstate.operator.solo.hedera.com
+spec:
+  group: operator.solo.hedera.com
+  names:
+    kind: ApplicationState
+    singular: applicationstate
+    plural: applicationstates
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          properties:
+            spec:
+              $ref: "../openapi/applicationstate.yml#/components/schemas/Spec"
+            status:
+              $ref: "../openapi/applicationstate.yml#/components/schemas/Status"
+      served: true
+      storage: true
+      subresources:
+        status: { }
