@@ -156,10 +156,26 @@ components:
               type: string
             bucketName:
               type: string
-            s3Enable:
-              type: boolean
-            gcsEnable:
-              type: boolean
+            s3:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  default: false
+                url:
+                  type: string
+                accessKey:
+                  type: string
+            gcs:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  default: false
+                url:
+                  type: string
+                accessKey:
+                  type: string
 
     OpenTelemetryCollector:
       type: object

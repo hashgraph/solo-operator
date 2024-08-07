@@ -24,6 +24,13 @@ spec:
         signature:
           require: true
           prioritize: true
+        bucketName: "solo-streams"
+        s3:
+          enabled: true
+          accessKey: solo
+          url: http://minio-tenant-hl.minio-tenant.svc.cluster.local:9000
+        gcs:
+          enabled: false
       resources: { }
 #    recordStreamSidecarUploader:
 #      enabled: true

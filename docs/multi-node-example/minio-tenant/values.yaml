@@ -19,8 +19,8 @@
 #
 secrets:
   name: myminio-env-configuration
-  accessKey: minio
-  secretKey: minio123
+  accessKey: solo
+  secretKey: changeme
   ###
   # If this variable is set, then enable the usage of an existing Kubernetes secret to set environment variables for the Tenant.
   # The existing Kubernetes secret name must be placed under .tenant.configuration.name e.g. existing-minio-env-configuration
@@ -266,7 +266,7 @@ tenant:
     externalCertSecret: [ ]
     ###
     # Enable automatic Kubernetes based `certificate generation and signing <https://kubernetes.io/docs/tasks/tls/managing-tls-in-a-cluster>`__
-    requestAutoCert: true
+    requestAutoCert: false
     ###
     # The minimum number of days to expiry before an alert for an expiring certificate is fired.
     # In the below example, if a given certificate will expire in 7 days then expiration events will only be triggered 1 day before expiry
@@ -358,7 +358,9 @@ tenant:
   serviceMetadata: { }
   ###
   # Add environment variables to be set in MinIO container (https://github.com/minio/minio/tree/master/docs/config)
-  env: [ ]
+  env:
+    - name: MINIO_BROWSER_LOGIN_ANIMATION
+      value: "off" # https://github.com/minio/console/issues/2539#issuecomment-1619211962
   ###
   # PriorityClassName indicates the Pod priority and hence importance of a Pod relative to other Pods.
   # This is applied to MinIO pods only.

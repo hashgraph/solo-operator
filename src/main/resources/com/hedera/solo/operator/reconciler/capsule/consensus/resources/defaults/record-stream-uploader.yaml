@@ -18,6 +18,10 @@ config:
   streamSigExtension: "rcd_sig"
   streamExtension: "rcd.gz"
   sigExtension: "rcd_sig"
-  bucketName: "fst-streams"
-  s3Enable: true
-  gcsEnable: true
+  bucketName: "solo-streams"
+  s3:
+    enabled: true
+    accessKey: solo
+    url: "http://minio-tenant-hl.minio-tenant.svc.cluster.local:9000"
+  gcs:
+    enabled: false

@@ -33,6 +33,7 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDep
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @KubernetesDependent(useSSA = BooleanWithUndefined.FALSE, labelSelector = "app=consensus-node")
 public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deployment, ConsensusCapsule> {
@@ -55,14 +56,6 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         if (accountId == null || accountId.isEmpty()) {
             throw new RuntimeException("Missing account ID for deployment " + primary.getMetadata().getName());
         }
-
-
-        final Map<String, String> clusterConfig = context.getClient()
-                .resources(ConfigMap.class)
-                .inNamespace(primary.getMetadata().getNamespace())
-                .withName("cluster-config")
-                .get()
-                .getData();
 
         final boolean eligibleForDeployment =
                 primary.getSpec() != null && primary.getSpec().getEligibleForDeployment();
@@ -140,29 +133,28 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         // spotless:on
 
         // prepare sidecars
-        this.prepareRecordStreamUploader(primary, clusterConfig, builder);
+        this.prepareRecordStreamUploader(primary, builder);
 
         return builder.build();
     }
 
     private void prepareRecordStreamUploader(
             final ConsensusCapsule primary,
-            final Map<String, String> clusterConfig,
             final DeploymentBuilder builder) {
 
         if (!primary.getSpec().getSidecars().getRecordStreamUploader().getEnabled()) {
             return;
         }
 
+        final StreamUploader recordStream = primary.getSpec().getSidecars().getRecordStreamUploader();
+
         final String accountId = primary.getMetadata().getLabels().get(ACCOUNT_ID_LABEL);
         if (accountId == null || accountId.isEmpty()) {
             throw new RuntimeException("Missing account ID for record-stream-uploader deployment " + primary.getMetadata().getName());
         }
 
-        final String s3Endpoint = clusterConfig.get("s3Endpoint");
-        if (s3Endpoint == null || s3Endpoint.isEmpty()) {
-            throw new RuntimeException("Missing S3 Endpoint for record-stream-uploader deployment " + primary.getMetadata().getName());
-        }
+        final String s3Endpoint = recordStream.getConfig().getS3().getUrl();
+        final String gcsEndpoint = recordStream.getConfig().getGcs().getUrl();
 
         // setup volume
         final List<VolumeMount> recordStreamVolumeMounts = new ArrayList<>();
@@ -174,7 +166,6 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
 
 
         // setup envVars from sidecar config
-        final StreamUploader recordStream = primary.getSpec().getSidecars().getRecordStreamUploader();
         final StreamUploader defaultStreamLoader = loadYaml(StreamUploader.class, getClass(), "defaults/record-stream-uploader.yaml");
         final StreamUploader.ImagePullPolicy imagePullPolicy = recordStream.getImagePullPolicy() != null ?
                 recordStream.getImagePullPolicy() : defaultStreamLoader.getImagePullPolicy();
@@ -197,17 +188,20 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
                         "python3.7",
                         "/usr/local/bin/mirror.py",
                         "--linux",
+                        "--debug",
                         "--watch-directory",
                         "/opt/hgcapp/recordStreams",
                         "--csv-stats-directory",
                         "/opt/hgcapp/recordStreams/uploader-stats",
                         "--s3-endpoint",
-                        s3Endpoint
+                        s3Endpoint,
+                        "--gcs-endpoint",
+                        gcsEndpoint
                 )
                 .addAllToVolumeMounts(recordStreamVolumeMounts)
                 .withEnv(envVars)
                 .withEnvFrom(new EnvFromSourceBuilder()
-                        .withSecretRef(new SecretEnvSourceBuilder().withName("solo-minio-secrets").build())
+                        .withSecretRef(new SecretEnvSourceBuilder().withName("uploader-secrets").build())
                         .build())
                 .endContainer()
                 .endSpec()
@@ -241,11 +235,13 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
                 config.getSigExtension() : defaults.getSigExtension();
         final String bucketName = config.getBucketName() != null ?
                 config.getBucketName() : defaults.getBucketName();
-        final Boolean s3Enable = config.getS3Enable() != null ?
-                config.getS3Enable() : defaults.getS3Enable();
-        final Boolean gcsEnable = config.getGcsEnable() != null ?
-                config.getGcsEnable() : defaults.getGcsEnable();
+        final Boolean s3Enable = config.getS3().getEnabled() != null ?
+                config.getS3().getEnabled() : defaults.getS3().getEnabled();
+        final Boolean gcsEnable = config.getGcs().getEnabled() != null ?
+                config.getGcs().getEnabled() : defaults.getGcs().getEnabled();
 
+        final String s3AccessKey = config.getS3().getAccessKey();
+        final String gcsAccessKey = config.getGcs().getAccessKey();
 
         final List<EnvVar> envVars = new ArrayList<>();
         envVars.add(new EnvVarBuilder().withName("DEBUG").withValue(debug.toString()).build());
@@ -267,7 +263,10 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
                 .withValue(signaturePrioritize.toString()).build());
         envVars.add(new EnvVarBuilder().withName("BUCKET_NAME").withValue(bucketName).build());
         envVars.add(new EnvVarBuilder().withName("S3_ENABLE").withValue(s3Enable.toString()).build());
+        envVars.add(new EnvVarBuilder().withName("S3_ACCESS_KEY").withValue(s3AccessKey).build());
+        envVars.add(new EnvVarBuilder().withName("S3_ACCESS_KEY").withValue(s3AccessKey).build());
         envVars.add(new EnvVarBuilder().withName("GCS_ENABLE").withValue(gcsEnable.toString()).build());
+        envVars.add(new EnvVarBuilder().withName("GCS_ACCESS_KEY").withValue(gcsAccessKey).build());
 
         return envVars;
     }
