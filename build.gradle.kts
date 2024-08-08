@@ -54,7 +54,9 @@ tasks.componentTest {
     finalizedBy(tasks.named("jacocoComponenetTestReport"))
     //    finalizedBy(tasks.jacocoTestReport)
     extensions.configure<JacocoTaskExtension> {
-        setDestinationFile(layout.buildDirectory.file("jacoco/jacoco-component-test.exec").get().asFile)
+        setDestinationFile(
+            layout.buildDirectory.file("jacoco/jacoco-component-test.exec").get().asFile
+        )
     }
     //    extensions.configure<ReportingExtension> {
     //        reports.named("jacoco") {
@@ -70,7 +72,8 @@ tasks.register("jacocoComponenetTestReport", JacocoReport::class) {
     enabled = true
     executionData(layout.buildDirectory.file("jacoco/jacoco-component-test.exec").get().asFile)
     reports.xml.required = true
-    reports.xml.outputLocation = layout.buildDirectory.file("jacoco/jacoco-component-test.xml").get().asFile
+    reports.xml.outputLocation =
+        layout.buildDirectory.file("jacoco/jacoco-component-test.xml").get().asFile
 }
 
 // tasks.jacocoTestReport {
