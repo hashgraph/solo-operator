@@ -41,6 +41,7 @@ import java.util.concurrent.TimeUnit;
 import org.jboss.logging.Logger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -48,6 +49,7 @@ import org.junit.jupiter.api.Test;
  *
  * <p>NOTE: The tests defined in this suite are only intended for execution in Quarkus Dev Mode.
  */
+@Disabled
 @QuarkusTest
 class OrbitTest {
 
