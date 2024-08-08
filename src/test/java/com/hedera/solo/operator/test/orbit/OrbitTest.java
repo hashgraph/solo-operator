@@ -70,7 +70,8 @@ class OrbitTest {
     void setup() throws JsonProcessingException {
         YAMLFactory yamlFactory = new YAMLFactory();
         ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper(yamlFactory);
-        System.out.println("config:\n" + mapper.writerWithDefaultPrettyPrinter().writeValueAsString(client.getConfiguration()));
+        System.out.println(
+                "config:\n" + mapper.writerWithDefaultPrettyPrinter().writeValueAsString(client.getConfiguration()));
         if (!environment.isDevModeActive()) {
             operator.start();
         }
@@ -80,7 +81,7 @@ class OrbitTest {
     @AfterEach
     void cleanup() {
         Resources.removeByName(client, Orbit.class, TEST_ORBIT_NAME);
-//        client.namespaces().withName(TEST_ORBIT_NAME).delete();
+        //        client.namespaces().withName(TEST_ORBIT_NAME).delete();
         boolean apiOnly = client.resources(Node.class).list().getItems().isEmpty();
         if (!apiOnly) {
             await().atMost(Duration.ofSeconds(30))

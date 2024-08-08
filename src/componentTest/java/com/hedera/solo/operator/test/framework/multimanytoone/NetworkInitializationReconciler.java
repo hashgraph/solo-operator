@@ -19,12 +19,11 @@ package com.hedera.solo.operator.test.framework.multimanytoone;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitialization;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
-import io.javaoperatorsdk.operator.api.reconciler.Ignore;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
 
-//@Ignore
+// @Ignore
 @ControllerConfiguration(dependents = {@Dependent(type = NetworkInitializationApplicationState.class)})
 public class NetworkInitializationReconciler implements Reconciler<NetworkInitialization> {
     @Override

@@ -93,12 +93,10 @@ tasks.test { dependsOn(gradle.includedBuild("build-logic").task(":test")) }
 
 testing {
     suites {
-//        val test by getting(JvmTestSuite::class) {
-//            useJUnitJupiter()
-//        }
+        //        val test by getting(JvmTestSuite::class) {
+        //            useJUnitJupiter()
+        //        }
 
-        register<JvmTestSuite>("componentTest") {
-            useJUnitJupiter()
-        }
+        register<JvmTestSuite>("componentTest") { useJUnitJupiter() }
     }
 }

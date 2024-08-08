@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2024 Hedera Hashgraph, LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 import static io.fabric8.kubernetes.client.Config.fromKubeconfig;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -31,14 +47,21 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 public class MyTest {
 
     private final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
-//    @Container
-//    private static final KindContainer<?> container = new KindContainer<>();
+    //    @Container
+    //    private static final KindContainer<?> container = new KindContainer<>();
 
     static KubernetesContainer<?> container;
+
     KubernetesContainer<?> container() {
-        boolean enabled = ConfigProvider.getConfig().getOptionalValue("quarkus.kubernetes-client.devservices.enabled", Boolean.class).orElse(true);
-        boolean override = ConfigProvider.getConfig().getOptionalValue("quarkus.kubernetes-client.devservices.override-kubeconfig", Boolean.class).orElse(false);
-        String flavor = ConfigProvider.getConfig().getOptionalValue("quarkus.kubernetes-client.devservices.flavor", String.class).orElse("api-only");
+        boolean enabled = ConfigProvider.getConfig()
+                .getOptionalValue("quarkus.kubernetes-client.devservices.enabled", Boolean.class)
+                .orElse(true);
+        boolean override = ConfigProvider.getConfig()
+                .getOptionalValue("quarkus.kubernetes-client.devservices.override-kubeconfig", Boolean.class)
+                .orElse(false);
+        String flavor = ConfigProvider.getConfig()
+                .getOptionalValue("quarkus.kubernetes-client.devservices.flavor", String.class)
+                .orElse("api-only");
         if (!enabled || !override) {
             return null;
         }
@@ -63,16 +86,18 @@ public class MyTest {
             builder.withKubernetesClient(new KubernetesClientBuilder().build());
         } else {
             container.start();
-            builder.withKubernetesClient(new KubernetesClientBuilder().withConfig(fromKubeconfig(container.getKubeconfig())).build());
+            builder.withKubernetesClient(new KubernetesClientBuilder()
+                    .withConfig(fromKubeconfig(container.getKubeconfig()))
+                    .build());
         }
         return builder;
-////                .withReconciler(new StatusUpdaterReconciler())
-//                .withKubernetesClient(get())
-//                .build();
+        ////                .withReconciler(new StatusUpdaterReconciler())
+        //                .withKubernetesClient(get())
+        //                .build();
     }
 
-//    @Container
-//    private K3sContainer<?> container2 = k3s();
+    //    @Container
+    //    private K3sContainer<?> container2 = k3s();
 
     @RegisterExtension
     AbstractOperatorExtension operator = operatorExtensionBuilder()
@@ -95,38 +120,58 @@ public class MyTest {
 
     @Test
     void test() {
-//        assertThat(container).isNotNull();
-//        assertThat(container2).isNotNull();
+        //        assertThat(container).isNotNull();
+        //        assertThat(container2).isNotNull();
 
-//        try (
+        //        try (
         KubernetesClient client = operator.getKubernetesClient();
-        Namespace ns = client.resource(new NamespaceBuilder().editMetadata().withName("test123").endMetadata().build()).create();
-        log.error("namespaces: {}", client.namespaces().list().getItems().stream().map(x -> x.getMetadata().getName()).toList());
+        Namespace ns = client.resource(new NamespaceBuilder()
+                        .editMetadata()
+                        .withName("test123")
+                        .endMetadata()
+                        .build())
+                .create();
+        log.error(
+                "namespaces: {}",
+                client.namespaces().list().getItems().stream()
+                        .map(x -> x.getMetadata().getName())
+                        .toList());
         client.resource(ns).delete();
         await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
             assertThat(client.resource(ns).get()).isNull();
         });
-        log.error("namespaces: {}", client.namespaces().list().getItems().stream().map(x -> x.getMetadata().getName()).toList());
-//        }
-//        try (KubernetesClient client = new KubernetesClientBuilder().withConfig(fromKubeconfig(container2.getKubeconfig())).build()) {
-//            String kubeconfig = container2.getKubeconfig();
-//            String config = Serialization.asYaml(client.getConfiguration());
-//            Namespace ns = client.resource(new NamespaceBuilder().editMetadata().withName("test123").endMetadata().build()).create();
-//            log.info("namespaces: {}", client.namespaces().list().getItems().stream().map(x -> x.getMetadata().getName()).toList());
-//            client.resource(ns).delete();
-//            await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
-//                assertThat(client.resource(ns).get()).isNull();
-//            });
-//            log.info("namespaces: {}", client.namespaces().list().getItems().stream().map(x -> x.getMetadata().getName()).toList());
-//        }
-//        try (KubernetesClient client = new KubernetesClientBuilder().build()) {
-//            Namespace ns = client.resource(new NamespaceBuilder().editMetadata().withName("test123").endMetadata().build()).create();
-//            log.info("namespaces: {}", client.namespaces().list().getItems().stream().map(x -> x.getMetadata().getName()).toList());
-//            client.resource(ns).delete();
-//            await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
-//                assertThat(client.resource(ns).get()).isNull();
-//            });
-//            log.info("namespaces: {}", client.namespaces().list().getItems().stream().map(x -> x.getMetadata().getName()).toList());
-//        }
+        log.error(
+                "namespaces: {}",
+                client.namespaces().list().getItems().stream()
+                        .map(x -> x.getMetadata().getName())
+                        .toList());
+        //        }
+        //        try (KubernetesClient client = new
+        // KubernetesClientBuilder().withConfig(fromKubeconfig(container2.getKubeconfig())).build()) {
+        //            String kubeconfig = container2.getKubeconfig();
+        //            String config = Serialization.asYaml(client.getConfiguration());
+        //            Namespace ns = client.resource(new
+        // NamespaceBuilder().editMetadata().withName("test123").endMetadata().build()).create();
+        //            log.info("namespaces: {}", client.namespaces().list().getItems().stream().map(x ->
+        // x.getMetadata().getName()).toList());
+        //            client.resource(ns).delete();
+        //            await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
+        //                assertThat(client.resource(ns).get()).isNull();
+        //            });
+        //            log.info("namespaces: {}", client.namespaces().list().getItems().stream().map(x ->
+        // x.getMetadata().getName()).toList());
+        //        }
+        //        try (KubernetesClient client = new KubernetesClientBuilder().build()) {
+        //            Namespace ns = client.resource(new
+        // NamespaceBuilder().editMetadata().withName("test123").endMetadata().build()).create();
+        //            log.info("namespaces: {}", client.namespaces().list().getItems().stream().map(x ->
+        // x.getMetadata().getName()).toList());
+        //            client.resource(ns).delete();
+        //            await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
+        //                assertThat(client.resource(ns).get()).isNull();
+        //            });
+        //            log.info("namespaces: {}", client.namespaces().list().getItems().stream().map(x ->
+        // x.getMetadata().getName()).toList());
+        //        }
     }
 }

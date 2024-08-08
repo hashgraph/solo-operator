@@ -1,5 +1,3 @@
-import com.hedera.solo.operator.buildlogic.objectmodelgenerator.ObjectModelGeneratorPlugin
-
 /*
  * Copyright (C) 2024 Hedera Hashgraph, LLC
  *
@@ -25,7 +23,7 @@ plugins {
 }
 
 tasks.jacocoTestReport {
-//    sourceSets(sourceSets.main.get(), sourceSets.componentTest.get())
+    //    sourceSets(sourceSets.main.get(), sourceSets.componentTest.get())
     reports {
         html.required = true
         xml.required = true
@@ -54,19 +52,19 @@ tasks.test {
 */
 tasks.componentTest {
     finalizedBy(tasks.named("jacocoComponenetTestReport"))
-//    finalizedBy(tasks.jacocoTestReport)
+    //    finalizedBy(tasks.jacocoTestReport)
     extensions.configure<JacocoTaskExtension> {
         setDestinationFile(layout.buildDirectory.file("component-test.exec").get().asFile)
     }
-//    extensions.configure<ReportingExtension> {
-//        reports.named("jacoco") {
-//
-//        }
-//    }
+    //    extensions.configure<ReportingExtension> {
+    //        reports.named("jacoco") {
+    //
+    //        }
+    //    }
 }
 
 tasks.register("jacocoComponenetTestReport", JacocoReport::class) {
-//    shouldRunAfter(tasks.componentTest)
+    //    shouldRunAfter(tasks.componentTest)
     sourceSets(sourceSets.main.get())
     dependsOn(tasks.componentTest)
     enabled = true
@@ -75,7 +73,7 @@ tasks.register("jacocoComponenetTestReport", JacocoReport::class) {
     reports.xml.outputLocation = file(executionData.asPath.plus(".xml"))
 }
 
-//tasks.jacocoTestReport {
+// tasks.jacocoTestReport {
 ////    dependsOn(tasks.test) // tests are required to run before generating the report
 ////    dependsOn(tasks.componentTest)
 ////    executionData = files(fileTree(layout.buildDirectory).include("/jacoco/*.exec"))
@@ -83,33 +81,36 @@ tasks.register("jacocoComponenetTestReport", JacocoReport::class) {
 ////    enabled = true
 //    reports.xml.required = true
 ////    reports.xml.outputLocation = file(executionData.asPath.plus(".xml"))
-////    println("project.gradle.startParameter.taskNames: " + project.gradle.startParameter.taskNames)
+////    println("project.gradle.startParameter.taskNames: " +
+// project.gradle.startParameter.taskNames)
 ////    if (project.gradle.startParameter.taskNames.stream().anyMatch("componentTest"::equals)) {
-////        reports.xml.outputLocation = project.layout.buildDirectory.file("jacoco-report/componentTest-jacoco.xml")
+////        reports.xml.outputLocation =
+// project.layout.buildDirectory.file("jacoco-report/componentTest-jacoco.xml")
 ////    }
 ////    if (project.hasProperty("jacocoTestReport.reports.xml.outputLocation")) {
-////        reports.xml.outputLocation = file(project.property("jacocoTestReport.reports.xml.outputLocation").toString())
+////        reports.xml.outputLocation =
+// file(project.property("jacocoTestReport.reports.xml.outputLocation").toString())
 ////    }
 ////    println("reports.xml.outputLocation: " + reports.xml.outputLocation.get())
-//}
+// }
 
-//tasks.jacocoTestReport {
+// tasks.jacocoTestReport {
 //    afterEvaluate {
 //        classDirectories.setFrom(files(classDirectories.files.stream()
-//            .filter { file -> !file.absolutePath.contains("testFixtures") } // build/classes/java/testFixtures
+//            .filter { file -> !file.absolutePath.contains("testFixtures") } //
+// build/classes/java/testFixtures
 //        ))
 //    }
-//}
+// }
 
-//tasks.test {
+// tasks.test {
 //    finalizedBy(tasks.) jacocoTestReport
 //            jacoco {
 //                excludeClassLoaders = ["*QuarkusClassLoader"]
 //                destinationFile = layout.buildDirectory.file("jacoco-quarkus.exec").get().asFile
 //            }
 //    jacocoTestReport.enabled = false
-//}
-
+// }
 
 val quarkusPlatformGroupId: String by project
 val quarkusPlatformArtifactId: String by project
@@ -145,7 +146,7 @@ dependencies {
     implementation("io.quarkus:quarkus-kubernetes-client")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk-bundle-generator")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk")
-//    implementation("org.bouncycastle:bcprov-jdk15on:1.70")
+    //    implementation("org.bouncycastle:bcprov-jdk15on:1.70")
     implementation("org.bouncycastle:bcpkix-jdk18on")
 
     compileOnly("io.sundr:builder-annotations:${sundrVersion}")
@@ -158,7 +159,7 @@ dependencies {
     testImplementation("org.awaitility:awaitility")
     testImplementation("org.assertj:assertj-core:${assertjVersion}")
     testImplementation(libs.io.javaoperatorsdk.operator.framework.junit.v5)
-//    testImplementation("org.testcontainers", "testcontainers")
+    //    testImplementation("org.testcontainers", "testcontainers")
     testImplementation("org.testcontainers", "junit-jupiter")
     testImplementation("com.dajudge.kindcontainer", "kindcontainer")
 
@@ -182,9 +183,11 @@ dependencies {
 configurations.named("componentTestImplementation").configure {
     extendsFrom(configurations.named("testImplementation").get())
 }
+
 configurations.named("componentTestAnnotationProcessor").configure {
     extendsFrom(configurations.named("annotationProcessor").get())
 }
+
 configurations.named("componentTestCompileOnly").configure {
     extendsFrom(configurations.named("compileOnly").get())
 }
@@ -280,13 +283,9 @@ testing {
 }
 */
 
-tasks.named("assemble") {
-    dependsOn(tasks.named("compileComponentTestJava"))
-}
+tasks.named("assemble") { dependsOn(tasks.named("compileComponentTestJava")) }
 
-tasks.named("check") {
-    dependsOn(testing.suites.named("componentTest"))
-}
+tasks.named("check") { dependsOn(testing.suites.named("componentTest")) }
 
 /*
 sourceSets {
@@ -323,7 +322,7 @@ tasks.check { dependsOn(intTest) }
 
 sourceSets.forEach() {
     println(it)
-//    it.allSource.forEach() {
-//        println(it)
-//    }
+    //    it.allSource.forEach() {
+    //        println(it)
+    //    }
 }

@@ -20,7 +20,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.hedera.solo.operator.model.v1alpha1.StatusUpdater;
-import com.hedera.solo.operator.test.framework.TestFramework;
 import com.hedera.solo.operator.test.framework.manytoone.StatusUpdaterReconciler;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -38,30 +37,31 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Disabled;
-import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.api.extension.RegisterExtension;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @Disabled
 @QuarkusTest
-//@ExtendWith(LocallyRunOperatorExtension.class)
-public class StatusUpdaterTest implements QuarkusTestBeforeClassCallback, QuarkusTestBeforeEachCallback, QuarkusTestAfterAllCallback, QuarkusTestAfterEachCallback {
+// @ExtendWith(LocallyRunOperatorExtension.class)
+public class StatusUpdaterTest
+        implements QuarkusTestBeforeClassCallback,
+                QuarkusTestBeforeEachCallback,
+                QuarkusTestAfterAllCallback,
+                QuarkusTestAfterEachCallback {
     private final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
     @Inject
     @SuppressWarnings("CdiInjectionPointsInspection")
     protected KubernetesClient client;
 
-//    @RegisterExtension
+    //    @RegisterExtension
     LocallyRunOperatorExtension operator;
-//        = LocallyRunOperatorExtension.builder()
-//            .withReconciler(new StatusUpdaterReconciler())
-//            .withKubernetesClient(client)
-//            .oneNamespacePerClass(true)
-//            .build();
+    //        = LocallyRunOperatorExtension.builder()
+    //            .withReconciler(new StatusUpdaterReconciler())
+    //            .withKubernetesClient(client)
+    //            .oneNamespacePerClass(true)
+    //            .build();
 
     @Test
     void test() throws Exception {
@@ -106,19 +106,13 @@ public class StatusUpdaterTest implements QuarkusTestBeforeClassCallback, Quarku
     }
 
     @Override
-    public void afterAll(QuarkusTestContext context) {
-
-    }
+    public void afterAll(QuarkusTestContext context) {}
 
     @Override
-    public void afterEach(QuarkusTestMethodContext context) {
-
-    }
+    public void afterEach(QuarkusTestMethodContext context) {}
 
     @Override
-    public void beforeClass(Class<?> testClass) {
-
-    }
+    public void beforeClass(Class<?> testClass) {}
 
     @Override
     public void beforeEach(QuarkusTestMethodContext context) {
@@ -127,6 +121,6 @@ public class StatusUpdaterTest implements QuarkusTestBeforeClassCallback, Quarku
                 .withKubernetesClient(client)
                 .oneNamespacePerClass(true)
                 .build();
-//        operator.beforeEach();
+        //        operator.beforeEach();
     }
 }
