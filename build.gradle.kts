@@ -21,7 +21,95 @@ plugins {
     id("com.hedera.solo.operator.versioning")
     id("io.quarkus")
     id("com.hedera.solo.operator.buildlogic.objectModelGenerator")
+    jacoco
 }
+
+tasks.jacocoTestReport {
+//    sourceSets(sourceSets.main.get(), sourceSets.componentTest.get())
+    reports {
+        html.required = true
+        xml.required = true
+    }
+}
+
+/*
+tasks.test {
+    finalizedBy(tasks.jacocoTestReport) // report is always generated after tests run
+    extensions.configure<JacocoTaskExtension>("jacoco") {
+        excludeClassLoaders = listOf("*QuarkusClassLoader")
+//        setDestinationFile(layout.buildDirectory.file("jacoco-quarkus.exec").get().asFile)
+//        exclude("com.hedera.solo.operator.test.fixtures.Finalizers")
+//        exclude("com.hedera.solo.operator.test.fixtures.*")
+//        exclude("com.hedera.solo.operator.test.fixtures.**")
+//        setTestNameIncludePatterns(listOf("com.hedera.solo.operator.test.fixtures.Finalizers"))
+//        enabled = false
+//        reports {
+//            require(true)
+//        }
+    }
+//    extensions.configure<JacocoExtens> {
+//        exclude("com.hedera.solo.operator.test.fixtures.*")
+//    }
+}
+*/
+tasks.componentTest {
+    finalizedBy(tasks.named("jacocoComponenetTestReport"))
+//    finalizedBy(tasks.jacocoTestReport)
+    extensions.configure<JacocoTaskExtension> {
+        setDestinationFile(layout.buildDirectory.file("component-test.exec").get().asFile)
+    }
+//    extensions.configure<ReportingExtension> {
+//        reports.named("jacoco") {
+//
+//        }
+//    }
+}
+
+tasks.register("jacocoComponenetTestReport", JacocoReport::class) {
+//    shouldRunAfter(tasks.componentTest)
+    sourceSets(sourceSets.main.get())
+    dependsOn(tasks.componentTest)
+    enabled = true
+    executionData(layout.buildDirectory.file("component-test.exec").get().asFile)
+    reports.xml.required = true
+    reports.xml.outputLocation = file(executionData.asPath.plus(".xml"))
+}
+
+//tasks.jacocoTestReport {
+////    dependsOn(tasks.test) // tests are required to run before generating the report
+////    dependsOn(tasks.componentTest)
+////    executionData = files(fileTree(layout.buildDirectory).include("/jacoco/*.exec"))
+////    println("executionData: " + executionData.asPath)
+////    enabled = true
+//    reports.xml.required = true
+////    reports.xml.outputLocation = file(executionData.asPath.plus(".xml"))
+////    println("project.gradle.startParameter.taskNames: " + project.gradle.startParameter.taskNames)
+////    if (project.gradle.startParameter.taskNames.stream().anyMatch("componentTest"::equals)) {
+////        reports.xml.outputLocation = project.layout.buildDirectory.file("jacoco-report/componentTest-jacoco.xml")
+////    }
+////    if (project.hasProperty("jacocoTestReport.reports.xml.outputLocation")) {
+////        reports.xml.outputLocation = file(project.property("jacocoTestReport.reports.xml.outputLocation").toString())
+////    }
+////    println("reports.xml.outputLocation: " + reports.xml.outputLocation.get())
+//}
+
+//tasks.jacocoTestReport {
+//    afterEvaluate {
+//        classDirectories.setFrom(files(classDirectories.files.stream()
+//            .filter { file -> !file.absolutePath.contains("testFixtures") } // build/classes/java/testFixtures
+//        ))
+//    }
+//}
+
+//tasks.test {
+//    finalizedBy(tasks.) jacocoTestReport
+//            jacoco {
+//                excludeClassLoaders = ["*QuarkusClassLoader"]
+//                destinationFile = layout.buildDirectory.file("jacoco-quarkus.exec").get().asFile
+//            }
+//    jacocoTestReport.enabled = false
+//}
+
 
 val quarkusPlatformGroupId: String by project
 val quarkusPlatformArtifactId: String by project
@@ -91,6 +179,16 @@ dependencies {
     testFixturesImplementation("org.assertj:assertj-core:${assertjVersion}")
 }
 
+configurations.named("componentTestImplementation").configure {
+    extendsFrom(configurations.named("testImplementation").get())
+}
+configurations.named("componentTestAnnotationProcessor").configure {
+    extendsFrom(configurations.named("annotationProcessor").get())
+}
+configurations.named("componentTestCompileOnly").configure {
+    extendsFrom(configurations.named("compileOnly").get())
+}
+
 objectModelGenerator {
     defaultConfigBuilder.uppercaseEnums(false)
     defaultConfigBuilder.objectExtraAnnotations(true)
@@ -117,6 +215,7 @@ objectModelGenerator {
         )
 }
 
+/*
 testing {
     suites {
 //        val test by getting(JvmTestSuite::class) {
@@ -137,28 +236,28 @@ testing {
                 compileOnly("io.sundr:builder-annotations:${sundrVersion}")
                 compileOnly("org.projectlombok:lombok:${lombokVersion}")
 
-                implementation(project())
-                implementation(
-                    enforcedPlatform(
-                        "${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}"
-                    )
-                )
-                implementation(
-                    enforcedPlatform(
-                        "${quarkusPlatformGroupId}:quarkus-operator-sdk-bom:${quarkusPlatformVersion}"
-                    )
-                )
-                implementation("org.testcontainers:junit-jupiter")
-                implementation("com.dajudge.kindcontainer:kindcontainer")
-                implementation("io.quarkus:quarkus-kubernetes-client")
-
-//                implementation("io.quarkus:quarkus-arc")
-                implementation("io.quarkus:quarkus-junit5")
-                implementation("io.quarkus:quarkus-jacoco")
-
-                implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk")
-                implementation(libs.io.javaoperatorsdk.operator.framework.junit.v5)
-                implementation("org.jboss.slf4j:slf4j-jboss-logmanager")
+//                implementation(project())
+//                implementation(
+//                    enforcedPlatform(
+//                        "${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}"
+//                    )
+//                )
+//                implementation(
+//                    enforcedPlatform(
+//                        "${quarkusPlatformGroupId}:quarkus-operator-sdk-bom:${quarkusPlatformVersion}"
+//                    )
+//                )
+//                implementation("org.testcontainers:junit-jupiter")
+//                implementation("com.dajudge.kindcontainer:kindcontainer")
+//                implementation("io.quarkus:quarkus-kubernetes-client")
+//
+////                implementation("io.quarkus:quarkus-arc")
+//                implementation("io.quarkus:quarkus-junit5")
+//                implementation("io.quarkus:quarkus-jacoco")
+//
+//                implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk")
+//                implementation(libs.io.javaoperatorsdk.operator.framework.junit.v5)
+//                implementation("org.jboss.slf4j:slf4j-jboss-logmanager")
             }
 
 //            apply(plugin = "java")
@@ -179,6 +278,7 @@ testing {
         }
     }
 }
+*/
 
 tasks.named("assemble") {
     dependsOn(tasks.named("compileComponentTestJava"))
@@ -188,6 +288,7 @@ tasks.named("check") {
     dependsOn(testing.suites.named("componentTest"))
 }
 
+/*
 sourceSets {
     create("intTest") {
         compileClasspath += sourceSets.main.get().output
@@ -218,6 +319,7 @@ val intTest = task<Test>("intTest") {
 }
 
 tasks.check { dependsOn(intTest) }
+*/
 
 sourceSets.forEach() {
     println(it)

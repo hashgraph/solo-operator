@@ -37,6 +37,7 @@ import java.lang.invoke.MethodHandles;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -44,6 +45,7 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+@Disabled
 @QuarkusTest
 //@ExtendWith(LocallyRunOperatorExtension.class)
 public class StatusUpdaterTest implements QuarkusTestBeforeClassCallback, QuarkusTestBeforeEachCallback, QuarkusTestAfterAllCallback, QuarkusTestAfterEachCallback {

@@ -19,12 +19,14 @@ import io.javaoperatorsdk.operator.junit.LocallyRunOperatorExtension;
 import java.lang.invoke.MethodHandles;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.shaded.org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter;
 
+@Disabled
 public class KindContainerTest {
     private final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 

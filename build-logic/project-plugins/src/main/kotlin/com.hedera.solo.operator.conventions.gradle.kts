@@ -98,6 +98,7 @@ testing {
 //        }
 
         register<JvmTestSuite>("componentTest") {
+            useJUnitJupiter()
         }
     }
 }

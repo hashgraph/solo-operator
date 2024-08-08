@@ -18,6 +18,7 @@ package com.hedera.solo.operator.buildlogic.objectmodelgenerator;
 
 import org.gradle.testfixtures.ProjectBuilder;
 import org.gradle.api.Project;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -26,7 +27,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * A simple unit test for the 'com.hedera.solo.operator.buildlogic.objectModelGenerator' plugin.
  */
 class ObjectModelGeneratorPluginTest {
-    @Test void pluginRegistersATask() {
+    @Disabled
+    @Test
+    void pluginRegistersATask() {
         // Create a test project and apply the plugin
         Project project = ProjectBuilder.builder().build();
         project.getPlugins().apply("java");

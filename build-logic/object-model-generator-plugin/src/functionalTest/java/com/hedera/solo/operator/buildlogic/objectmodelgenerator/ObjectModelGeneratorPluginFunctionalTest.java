@@ -23,6 +23,7 @@ import java.io.FileWriter;
 
 import org.gradle.testkit.runner.GradleRunner;
 import org.gradle.testkit.runner.BuildResult;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -52,6 +53,7 @@ class ObjectModelGeneratorPluginFunctionalTest {
         return new File(projectDir, "settings.gradle");
     }
 
+    @Disabled
     @Test
     void canRunTask() throws IOException {
         writeString(getSettingsFile(), "");

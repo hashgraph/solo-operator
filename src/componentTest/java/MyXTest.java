@@ -1,3 +1,4 @@
+import com.hedera.solo.operator.library.generic.Compare;
 import io.quarkus.logging.Log;
 import java.lang.invoke.MethodHandles;
 import org.junit.jupiter.api.Test;
@@ -12,5 +13,6 @@ public class MyXTest {
         Log.debug("Hello World!");
         Log.info("Hello World!");
         Log.error("Hello World!");
+        Compare.sub(3,4);
     }
 }
