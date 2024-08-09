@@ -22,6 +22,7 @@ import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.commonspec.streamuploader.Config;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
+import com.hedera.solo.operator.reconciler.common.Constants;
 import io.fabric8.kubernetes.api.model.*;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
@@ -142,19 +143,42 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
             final ConsensusCapsule primary,
             final DeploymentBuilder builder) {
 
-        if (!primary.getSpec().getSidecars().getRecordStreamUploader().getEnabled()) {
+        if (primary.getSpec().getSidecars() == null ||
+                primary.getSpec().getSidecars().getRecordStreamUploader() == null ||
+                !primary.getSpec().getSidecars().getRecordStreamUploader().getEnabled()) {
             return;
         }
 
         final StreamUploader recordStream = primary.getSpec().getSidecars().getRecordStreamUploader();
+
+        // validate record-stream-uploader sidecar spec
+        if (recordStream.getConfig() == null) {
+            throw new RuntimeException("Missing record stream uploader config");
+        }
+
+        if (recordStream.getConfig().getS3() == null) {
+            throw new RuntimeException("Missing record stream uploader S3 config");
+        }
+
+        if (recordStream.getConfig().getGcs() == null) {
+            throw new RuntimeException("Missing record stream uploader GCS config");
+        }
+
+        final StreamUploader defaultStreamLoader = loadYaml(StreamUploader.class, getClass(), "defaults/record-stream-uploader.yaml");
 
         final String accountId = primary.getMetadata().getLabels().get(ACCOUNT_ID_LABEL);
         if (accountId == null || accountId.isEmpty()) {
             throw new RuntimeException("Missing account ID for record-stream-uploader deployment " + primary.getMetadata().getName());
         }
 
-        final String s3Endpoint = recordStream.getConfig().getS3().getUrl();
-        final String gcsEndpoint = recordStream.getConfig().getGcs().getUrl();
+        final String s3Endpoint = recordStream.getConfig().getS3() != null ?
+                recordStream.getConfig().getS3().getUrl() : defaultStreamLoader.getConfig().getS3().getUrl();
+        final String gcsEndpoint = recordStream.getConfig().getGcs() != null ?
+                recordStream.getConfig().getGcs().getUrl() : defaultStreamLoader.getConfig().getGcs().getUrl();
+
+        if ((s3Endpoint == null || s3Endpoint.isEmpty()) && (gcsEndpoint == null || gcsEndpoint.isEmpty())) {
+            throw new RuntimeException("Either s3-endpoint gcs-endpoint URL is required");
+        }
 
         // setup volume
         final List<VolumeMount> recordStreamVolumeMounts = new ArrayList<>();
@@ -166,38 +190,26 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
 
 
         // setup envVars from sidecar config
-        final StreamUploader defaultStreamLoader = loadYaml(StreamUploader.class, getClass(), "defaults/record-stream-uploader.yaml");
         final StreamUploader.ImagePullPolicy imagePullPolicy = recordStream.getImagePullPolicy() != null ?
                 recordStream.getImagePullPolicy() : defaultStreamLoader.getImagePullPolicy();
-        final List<EnvVar> envVars = this.streamUploaderEnvVars(RECORD_STREAM_PREFIX,
-                recordStream.getConfig(), defaultStreamLoader.getConfig());
+        final List<EnvVar> envVars = this.streamUploaderEnvVars(recordStream.getConfig(),
+                defaultStreamLoader.getConfig(), RECORD_STREAM_PREFIX);
         envVars.add(new EnvVarBuilder().withName("BUCKET_PATH")
                 .withValue(String.format("recordstreams/record%s", accountId)).build());
+        final String name = recordStream.getNameOverride() != null ? recordStream.getNameOverride() : defaultStreamLoader.getNameOverride();
+        final String image = recordStream.getImage() != null ? recordStream.getImage() : defaultStreamLoader.getImage();
+        final ArrayList<String> uploaderCommand = getUploadCmd(s3Endpoint, gcsEndpoint);
 
         builder
                 .editSpec()
                 .editTemplate()
                 .editSpec()
                 .addNewContainer()
-                .withName(recordStream.getNameOverride())
-                .withImage(recordStream.getImage())
+                .withName(name)
+                .withImage(image)
                 .withImagePullPolicy(imagePullPolicy.toString())
                 .withSecurityContext(SECURITY_CONTEXT_BUILDER.build())
-                .withCommand(
-                        "/usr/bin/env",
-                        "python3.7",
-                        "/usr/local/bin/mirror.py",
-                        "--linux",
-                        "--debug",
-                        "--watch-directory",
-                        "/opt/hgcapp/recordStreams",
-                        "--csv-stats-directory",
-                        "/opt/hgcapp/recordStreams/uploader-stats",
-                        "--s3-endpoint",
-                        s3Endpoint,
-                        "--gcs-endpoint",
-                        gcsEndpoint
-                )
+                .withCommand(uploaderCommand)
                 .addAllToVolumeMounts(recordStreamVolumeMounts)
                 .withEnv(envVars)
                 .withEnvFrom(new EnvFromSourceBuilder()
@@ -209,21 +221,46 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
                 .endSpec();
     }
 
-    private List<EnvVar> streamUploaderEnvVars(String envPrefix, Config config, Config defaults) {
+    private static ArrayList<String> getUploadCmd(String s3Endpoint, String gcsEndpoint) {
+        final ArrayList<String> uploaderCommand = new ArrayList<>(List.of(
+                "/usr/bin/env",
+                "python3.7",
+                "/usr/local/bin/mirror.py",
+                "--linux",
+                "--debug",
+                "--watch-directory",
+                "/opt/hgcapp/recordStreams",
+                "--csv-stats-directory",
+                "/opt/hgcapp/recordStreams/uploader-stats"));
+
+        if (s3Endpoint != null) {
+            uploaderCommand.add("--s3-endpoint");
+            uploaderCommand.add(s3Endpoint);
+        }
+
+        if (gcsEndpoint != null) {
+            uploaderCommand.add("--gcs-endpoint");
+            uploaderCommand.add(gcsEndpoint);
+        }
+
+        return uploaderCommand;
+    }
+
+    private List<EnvVar> streamUploaderEnvVars(Config config, Config defaults, String envPrefix) {
         final Boolean debug = config.getDebug() != null ? config.getDebug() : defaults.getDebug();
         final Boolean compression = config.getCompression() != null ? config.getCompression() : defaults.getCompression();
         final Boolean sidecar = config.getSidecar() != null ? config.getSidecar() : defaults.getSidecar();
-        final Boolean reaperEnabled = config.getReaper().getEnabled() != null ?
+        final Boolean reaperEnabled = config.getReaper() != null && config.getReaper().getEnabled() != null ?
                 config.getReaper().getEnabled() : defaults.getReaper().getEnabled();
-        final Long reaperMinKeep = config.getReaper().getMinKeep() != null ?
+        final Long reaperMinKeep = config.getReaper() != null && config.getReaper().getMinKeep() != null ?
                 config.getReaper().getMinKeep() : defaults.getReaper().getMinKeep();
-        final Long reaperInterval = config.getReaper().getInterval() != null ?
+        final Long reaperInterval = config.getReaper() != null && config.getReaper().getInterval() != null ?
                 config.getReaper().getInterval() : defaults.getReaper().getInterval();
-        final Long reaperBackoff = config.getReaper().getDefaultBackoff() != null ?
+        final Long reaperBackoff = config.getReaper() != null && config.getReaper().getDefaultBackoff() != null ?
                 config.getReaper().getDefaultBackoff() : defaults.getReaper().getDefaultBackoff();
-        final Boolean signatureRequired = config.getSignature().getRequire() != null ?
+        final Boolean signatureRequired = config.getSignature() != null && config.getSignature().getRequire() != null ?
                 config.getSignature().getRequire() : defaults.getSignature().getRequire();
-        final Boolean signaturePrioritize = config.getSignature().getPrioritize() != null ?
+        final Boolean signaturePrioritize = config.getSignature() != null && config.getSignature().getPrioritize() != null ?
                 config.getSignature().getPrioritize() : defaults.getSignature().getPrioritize();
         final String streamFileExtension = config.getStreamFileExtension() != null ?
                 config.getStreamFileExtension() : defaults.getStreamFileExtension();
@@ -240,8 +277,10 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         final Boolean gcsEnable = config.getGcs().getEnabled() != null ?
                 config.getGcs().getEnabled() : defaults.getGcs().getEnabled();
 
-        final String s3AccessKey = config.getS3().getAccessKey();
-        final String gcsAccessKey = config.getGcs().getAccessKey();
+        final String s3AccessKey = config.getS3().getAccessKey() != null ?
+                config.getS3().getAccessKey() : defaults.getS3().getAccessKey();
+        final String gcsAccessKey = config.getGcs().getAccessKey() != null ?
+                config.getGcs().getAccessKey() : defaults.getGcs().getAccessKey();
 
         final List<EnvVar> envVars = new ArrayList<>();
         envVars.add(new EnvVarBuilder().withName("DEBUG").withValue(debug.toString()).build());

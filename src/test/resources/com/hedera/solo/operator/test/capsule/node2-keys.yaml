@@ -2,6 +2,9 @@ kind: Secret
 apiVersion: v1
 metadata:
   name: node2-keys
+  namespace: solo-orbit
+  labels:
+    consensus-capsule: node0
 data:
   # keys with a- prefix will soon not be needed
   # pfx not needed anymore

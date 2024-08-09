@@ -22,6 +22,6 @@ config:
   s3:
     enabled: true
     accessKey: solo
-    url: "http://minio-tenant-hl.minio-tenant.svc.cluster.local:9000"
+    url: ""
   gcs:
     enabled: false

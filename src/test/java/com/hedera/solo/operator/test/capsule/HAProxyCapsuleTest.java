@@ -39,7 +39,7 @@ import org.junit.jupiter.api.Test;
 @QuarkusTest
 public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
     public HAProxyCapsuleTest() {
-        setNamespace(MethodHandles.lookup().lookupClass());
+        setNamespace(MethodHandles.lookup().lookupClass().getSimpleName().toLowerCase());
     }
 
     @Override

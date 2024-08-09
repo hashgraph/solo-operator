@@ -30,6 +30,7 @@ components:
               - FirstInitialization
               - NodeAddition
 
+
     NetworkInitializationStatus:
       type: object
       description: |
