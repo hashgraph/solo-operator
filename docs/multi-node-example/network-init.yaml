@@ -2,7 +2,7 @@ apiVersion: operator.solo.hedera.com/v1alpha1
 kind: NetworkInitialization
 metadata:
   name: network-init
-  namespace: solo-network
+  namespace: solo-orbit
 spec:
   mode: FirstInitialization
 status: {}

@@ -2,7 +2,7 @@ kind: ConfigMap
 apiVersion: v1
 metadata:
   name: cluster-config
-  namespace: solo-network
+  namespace: solo-orbit
 data:
 # address, nodeId, nickname, selfname, weight, internalHostname, internalPort, externalHostname, externalPort, memoToUse
 
@@ -34,9 +34,9 @@ data:
   config.txt: |-
     swirld, 298
     app, HederaNode.jar
-    address, 0, node0, node0, 1, node0.consensus.solo-network.svc.cluster.local, 50111, node0-svc.solo-network.svc.cluster.local, 50111, 0.0.3
-    address, 1, node1, node1, 1, node1.consensus.solo-network.svc.cluster.local, 50111, node1-svc.solo-network.svc.cluster.local, 50111, 0.0.4
-    address, 2, node2, node2, 1, node2.consensus.solo-network.svc.cluster.local, 50111, node2-svc.solo-network.svc.cluster.local, 50111, 0.0.5
+    address, 0, node0, node0, 1, node0.consensus.solo-orbit.svc.cluster.local, 50111, node0-svc.solo-orbit.svc.cluster.local, 50111, 0.0.3
+    address, 1, node1, node1, 1, node1.consensus.solo-orbit.svc.cluster.local, 50111, node1-svc.solo-orbit.svc.cluster.local, 50111, 0.0.4
+    address, 2, node2, node2, 1, node2.consensus.solo-orbit.svc.cluster.local, 50111, node2-svc.solo-orbit.svc.cluster.local, 50111, 0.0.5
     nextNodeId, 3
 # settings.txt & *.properties are orbit wide
 # could get mainnet (for example) from hedera-services built in at compile time (can also be provided for us at orbit level)

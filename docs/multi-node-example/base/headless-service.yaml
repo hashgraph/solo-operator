@@ -2,7 +2,7 @@ kind: Service
 apiVersion: v1
 metadata:
   name: consensus
-  namespace: solo-network
+  namespace: solo-orbit
 spec:
   clusterIP: None
   clusterIPs:

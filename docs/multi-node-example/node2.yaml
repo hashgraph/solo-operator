@@ -2,7 +2,7 @@ apiVersion: operator.solo.hedera.com/v1alpha1
 kind: ConsensusCapsule
 metadata:
   name: node2
-  namespace: solo-network
+  namespace: solo-orbit
   labels:
     account-id: "0.0.5"
 spec:
