@@ -123,7 +123,7 @@ public abstract class ConsensusCapsuleTestAbstract {
 
         Resources.removeByName(kubernetesClient, Orbit.class, namespace);
 
-        await().atMost(Duration.ofSeconds(30))
+        await().atMost(Duration.ofSeconds(120))
                 .until(() -> kubernetesClient.namespaces().withName(namespace).get() == null);
     }
 
@@ -256,10 +256,6 @@ public abstract class ConsensusCapsuleTestAbstract {
                 "mirror-secrets.yaml"
         ));
 
-        for (NodeInfo node : nodes) {
-            secretFiles.add(String.format("%s-keys.yaml", node.name));
-        }
-
         for (String sf : secretFiles) {
             kubernetesClient
                     .resource(loadYaml(Secret.class, getClass(), sf)
@@ -270,6 +266,19 @@ public abstract class ConsensusCapsuleTestAbstract {
                             .build())
                     .create();
 
+        }
+
+        for (NodeInfo node : nodes) {
+            final String nodeKeyFile = String.format("%s-keys.yaml", node.name);
+            kubernetesClient
+                    .resource(loadYaml(Secret.class, getClass(), nodeKeyFile)
+                            .edit()
+                            .editMetadata()
+                            .withNamespace(namespace)
+                            .addToLabels("consensus-capsule", node.name)
+                            .endMetadata()
+                            .build())
+                    .create();
         }
     }
 
@@ -309,7 +318,9 @@ public abstract class ConsensusCapsuleTestAbstract {
         // test with client
         await().atMost(90, TimeUnit.SECONDS).untilAsserted(() -> {
             HederaSdkClientFactory sdkClientFactory = new HederaSdkClientFactory(kubernetesClient, namespace);
-            checkAddressBook(sdkClientFactory.directContextCreator(nodeNames.getFirst()), 3);
+            for(NodeInfo node : nodes) {
+                checkAddressBook(sdkClientFactory.directContextCreator(node.name), 3);
+            }
         });
     }
 
