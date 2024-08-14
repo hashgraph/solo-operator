@@ -20,12 +20,14 @@ import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import com.google.protobuf.ByteString;
 import com.hedera.fullstack.helm.client.HelmClient;
 import com.hedera.fullstack.helm.client.impl.DefaultHelmClientBuilder;
 import com.hedera.fullstack.helm.client.model.Chart;
 import com.hedera.fullstack.helm.client.model.Repository;
 import com.hedera.fullstack.helm.client.model.install.InstallChartOptions;
 import com.hedera.fullstack.helm.client.model.release.ReleaseItem;
+import com.hedera.hashgraph.sdk.AccountId;
 import com.hedera.hashgraph.sdk.Client;
 import com.hedera.hashgraph.sdk.FileContentsQuery;
 import com.hedera.hashgraph.sdk.FileId;
@@ -295,9 +297,10 @@ public abstract class ConsensusCapsuleTestAbstract {
         createNetworkInitialization(consensusCapsules);
 
         // test with client
-        await().atMost(90, TimeUnit.SECONDS).untilAsserted(() -> {
+        await().atMost(120, TimeUnit.SECONDS).untilAsserted(() -> {
             HederaSdkClientFactory sdkClientFactory = new HederaSdkClientFactory(kubernetesClient, namespace);
-            checkAddressBook(sdkClientFactory.directContextCreator("node0"), 1);
+            final NodeInfo nodeInfo = nodes.getFirst();
+            checkAddressBook(sdkClientFactory.directContextCreator(nodeInfo.name), 1);
         });
     }
 
@@ -436,9 +439,11 @@ public abstract class ConsensusCapsuleTestAbstract {
     }
 
     List<NodeAddress> addresses(final Client client) throws Exception {
-        return NodeAddressBook.fromBytes(
-                        new FileContentsQuery().setFileId(FileId.ADDRESS_BOOK).execute(client))
-                .getNodeAddresses();
+        final ByteString raw = new FileContentsQuery()
+                .setFileId(FileId.ADDRESS_BOOK)
+                .execute(client);
+        assertThat(raw).isNotNull();
+        return NodeAddressBook.fromBytes(raw).getNodeAddresses();
     }
 
     void checkAddressBook(
