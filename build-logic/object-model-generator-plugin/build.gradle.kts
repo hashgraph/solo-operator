@@ -15,16 +15,13 @@
  */
 
 plugins {
-    // Apply the Java Gradle plugin development plugin to add support for developing Gradle plugins
+    `kotlin-dsl`
     `java-gradle-plugin`
 }
 
 repositories {
     // Use Maven Central for resolving dependencies.
-    mavenCentral()
-    maven {
-        url = uri("https://artifacts.swirldslabs.io/artifactory/central-maven-snapshot-external/")
-    }
+    maven { url = uri("https://artifacts.swirldslabs.io/artifactory/central-maven-external/") }
 }
 
 val fabric8Version: String by project
@@ -42,9 +39,9 @@ gradlePlugin {
     // Define the plugin
     val objectModelGenerator by
         plugins.creating {
-            id = "com.hedera.solo.operator.objectModelGenerator"
+            id = "com.hedera.solo.operator.buildlogic.objectModelGenerator"
             implementationClass =
-                "com.hedera.solo.operator.objectmodelgenerator.ObjectModelGeneratorPlugin"
+                "com.hedera.solo.operator.buildlogic.objectmodelgenerator.ObjectModelGeneratorPlugin"
         }
 }
 
