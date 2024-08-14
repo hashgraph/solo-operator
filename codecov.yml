@@ -7,9 +7,7 @@ comment:
   show_carryforward_flags: false
 coverage:
   precision: 2
-  range:
-    - 60.0
-    - 80.0
+  range: 60..80
   round: down
   status:
     changes: false
@@ -19,3 +17,5 @@ coverage:
     project: true
 github_checks:
   annotations: true
+ignore:
+  - "src/testFixtures"

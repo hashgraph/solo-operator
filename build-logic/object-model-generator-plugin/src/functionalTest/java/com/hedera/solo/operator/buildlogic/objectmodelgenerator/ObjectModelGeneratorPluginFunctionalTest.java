@@ -14,22 +14,21 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator.objectmodelgenerator;
-
-import java.io.File;
-import java.io.IOException;
-import java.io.Writer;
-import java.io.FileWriter;
-
-import org.gradle.testkit.runner.GradleRunner;
-import org.gradle.testkit.runner.BuildResult;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+package com.hedera.solo.operator.buildlogic.objectmodelgenerator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.Writer;
+import org.gradle.testkit.runner.BuildResult;
+import org.gradle.testkit.runner.GradleRunner;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
 /**
- * A simple functional test for the 'com.hedera.solo.operator.objectModelGenerator' plugin.
+ * A simple functional test for the 'com.hedera.solo.operator.buildlogic.objectModelGenerator' plugin.
  */
 class ObjectModelGeneratorPluginFunctionalTest {
     @TempDir
@@ -41,40 +40,35 @@ class ObjectModelGeneratorPluginFunctionalTest {
     @TempDir
     File sourceOpenAPI;
 
-    @TempDir
-    File targetCrd;
-
-    @TempDir
-    File targetJava;
-
     private File getBuildFile() {
-        return new File(projectDir, "build.gradle");
+        return new File(projectDir, "build.gradle.kts");
     }
 
     private File getSettingsFile() {
         return new File(projectDir, "settings.gradle");
     }
 
-    @Test void canRunTask() throws IOException {
+    @Test
+    void canRunTask() throws IOException {
         writeString(getSettingsFile(), "");
         writeString(getBuildFile(), """
                         plugins {
                           id("java")
-                          id('com.hedera.solo.operator.objectModelGenerator')
+                          id("com.hedera.solo.operator.buildlogic.objectModelGenerator")
                         }
                         objectModelGenerator {
-                          sourceCrd = file('%s')
-                          sourceOpenAPI = file('%s')
-                          targetCrd = file('%s')
-                          targetJava = file('%s')
+                            register(sourceSets.main) {
+                                sourceCrd = file("%s")
+                                sourceOpenAPI = file("%s")
+                            }
                         }
-                        """.formatted(sourceCrd, sourceOpenAPI, targetCrd, targetJava));
+                        """.formatted(sourceCrd, sourceOpenAPI));
 
         // Run the build
         GradleRunner runner = GradleRunner.create();
         runner.forwardOutput();
         runner.withPluginClasspath();
-        runner.withArguments("objectModelGenerator");
+        runner.withArguments("generateObjectModel");
         runner.withProjectDir(projectDir);
         BuildResult result = runner.build();
 
