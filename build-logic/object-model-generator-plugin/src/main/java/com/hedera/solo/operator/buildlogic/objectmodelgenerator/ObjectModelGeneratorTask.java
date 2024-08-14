@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator.objectmodelgenerator;
+package com.hedera.solo.operator.buildlogic.objectmodelgenerator;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.MappingIterator;
@@ -24,6 +24,12 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.fabric8.java.generator.Config;
 import io.fabric8.java.generator.FileJavaGenerator;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.stream.Stream;
+import javax.inject.Inject;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.tasks.CacheableTask;
 import org.gradle.api.tasks.InputDirectory;
@@ -32,16 +38,11 @@ import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.TaskAction;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.stream.Stream;
-
 @CacheableTask
 public class ObjectModelGeneratorTask extends DefaultTask {
     YAMLFactory yamlFactory = new YAMLFactory();
     ObjectMapper mapper = new ObjectMapper(yamlFactory);
+    ObjectModelGeneratorExtension extension;
     @PathSensitive(PathSensitivity.ABSOLUTE)
     @InputDirectory
     Path sourceCrd;
@@ -53,37 +54,61 @@ public class ObjectModelGeneratorTask extends DefaultTask {
     @OutputDirectory
     Path targetJava;
 
+    @Inject
+    public ObjectModelGeneratorTask(ObjectModelGeneratorExtension extension) {
+        this.extension = extension;
+        this.sourceCrd = extension.sourceCrd.toPath();
+        this.sourceOpenAPI = extension.sourceOpenAPI.toPath();
+        this.targetCrd = extension.targetCrd.toPath();
+        this.targetJava = extension.targetJava.toPath();
+    }
+
     public Path getSourceCrd() {
         return sourceCrd;
+    }
+
+    public void setSourceCrd(Path sourceCrd) {
+        this.sourceCrd = sourceCrd;
     }
 
     public Path getSourceOpenAPI() {
         return sourceOpenAPI;
     }
 
+    public void setSourceOpenAPI(Path sourceOpenAPI) {
+        this.sourceOpenAPI = sourceOpenAPI;
+    }
+
     public Path getTargetCrd() {
         return targetCrd;
+    }
+
+    public void setTargetCrd(Path targetCrd) {
+        this.targetCrd = targetCrd;
     }
 
     public Path getTargetJava() {
         return targetJava;
     }
 
+    public void setTargetJava(Path targetJava) {
+        this.targetJava = targetJava;
+    }
+
     @TaskAction
     public void generateObjectModel() throws IOException {
-        ObjectModelGeneratorExtension ext = getProject().getExtensions().getByType(ObjectModelGeneratorExtension.class);
         targetCrd.toFile().mkdirs();
         targetJava.toFile().mkdirs();
         try (Stream<Path> stream = Files.walk(sourceCrd)) {
-            stream.filter(path -> path.toFile().isFile()).forEach(path -> process(ext, path));
+            stream.filter(path -> path.toFile().isFile()).forEach(this::process);
         }
-        for (File file : ext.removeFiles) {
+        for (File file : extension.removeFiles) {
             targetJava.resolve(getProject().getLayout().getProjectDirectory().getAsFile().toPath().relativize(file.toPath())).toFile().delete();
         }
     }
 
-    void process(ObjectModelGeneratorExtension ext, Path file) {
-        Config config = ext.configBuilderOverrides.getOrDefault(file.getFileName().toString(), ext.defaultConfigBuilder).build();
+    void process(Path file) {
+        Config config = extension.configBuilderOverrides.getOrDefault(file.getFileName().toString(), extension.defaultConfigBuilder).build();
         if (config.getFilesSuffixes().stream().noneMatch(suffix -> file.getFileName().toString().endsWith(suffix))) {
             return;
         }

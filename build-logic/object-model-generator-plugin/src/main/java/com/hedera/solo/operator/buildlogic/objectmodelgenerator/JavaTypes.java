@@ -14,20 +14,19 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator.objectmodelgenerator;
+package com.hedera.solo.operator.buildlogic.objectmodelgenerator;
+
+import static io.fabric8.java.generator.nodes.AbstractJSONSchema2Pojo.packageName;
+import static io.fabric8.java.generator.nodes.AbstractJSONSchema2Pojo.sanitizeString;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import io.fabric8.java.generator.Config;
-
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-
-import static io.fabric8.java.generator.nodes.AbstractJSONSchema2Pojo.packageName;
-import static io.fabric8.java.generator.nodes.AbstractJSONSchema2Pojo.sanitizeString;
 
 /**
  * Utility class to generate classname remapping for CRD annotated with x-java-type

@@ -17,11 +17,7 @@
 pluginManagement {
     repositories {
         gradlePluginPortal()
-        mavenCentral()
-        maven {
-            url =
-                uri("https://artifacts.swirldslabs.io/artifactory/central-maven-snapshot-external/")
-        }
+        maven { url = uri("https://artifacts.swirldslabs.io/artifactory/central-maven-external/") }
     }
 }
 

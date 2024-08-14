@@ -107,6 +107,8 @@ jobs:
       - name: Publish To Codecov
         uses: codecov/codecov-action@e28ff129e5465c2c0dcc6f003fc735cb6ae0c673 # v4.5.0
         if: ${{ inputs.enable-codecov-analysis && !cancelled() && !failure() }}
+        with:
+          files: ./build/jacoco-report/jacoco.xml,./build/jacoco/jacoco-component-test.xml
         env:
           CODECOV_TOKEN: ${{ secrets.codecov-token }}
 

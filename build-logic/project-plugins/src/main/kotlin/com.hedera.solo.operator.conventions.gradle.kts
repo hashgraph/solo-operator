@@ -17,17 +17,18 @@
 plugins {
     id("java")
     id("java-test-fixtures")
+    id("com.hedera.solo.operator.component-test")
     id("com.hedera.solo.operator.spotless-conventions")
     id("com.hedera.solo.operator.spotless-java-conventions")
     id("com.hedera.solo.operator.spotless-kotlin-conventions")
+    if (!System.getenv().containsKey("CI")) {
+        idea
+    }
 }
 
 repositories {
     // Source Maven Central Artifacts from JFrog Artifactory
     maven { url = uri("https://artifacts.swirldslabs.io/artifactory/central-maven-external/") }
-    maven {
-        url = uri("https://artifacts.swirldslabs.io/artifactory/central-maven-snapshot-external/")
-    }
 }
 
 java {

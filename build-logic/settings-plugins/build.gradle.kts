@@ -16,10 +16,7 @@
 
 plugins { `kotlin-dsl` }
 
-repositories {
-    gradlePluginPortal()
-    mavenCentral()
-}
+repositories { gradlePluginPortal() }
 
 dependencies {
     implementation("org.gradle.toolchains:foojay-resolver:0.7.0")
