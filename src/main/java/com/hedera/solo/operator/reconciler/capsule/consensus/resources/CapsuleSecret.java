@@ -84,7 +84,7 @@ public class CapsuleSecret extends CRUDKubernetesDependentResource<Secret, Conse
      */
     private static Map<String, String> prepareSecretsDataPayload(ObjectMeta metadata) {
         // FIXME: do not load hardcoded keys from a file rather autogenerate
-        final Secret secretSample = loadYaml(Secret.class, CapsuleSecret.class, TEMPLATE);
+        final Secret secretSample = loadYaml(Secret.class, CapsuleSecret.class, "node-keys.yaml");
         final Map<String, String> keys = secretSample.getData();
 
         final Map<String, String> secretsData = new HashMap<>();
