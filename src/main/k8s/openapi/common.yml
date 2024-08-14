@@ -192,10 +192,13 @@ components:
             prometheus:
               type: object
               properties:
+                # list of prometheus scrape targets
+                # target format: <IP or FQDN>:<Port>
+                # e.g. [ 0.0.0.0:9999 ]
                 scrapeTargets:
                   type: array
                   items:
-                    type: string #[ 0.0.0.0:9999 ]
+                    type: string
                 scrapeInterval:
                   type: string #5s
         exporters:
