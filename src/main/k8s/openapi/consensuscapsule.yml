@@ -144,8 +144,6 @@ components:
         softwareVersion:
           type: object
           x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
-        extraEnv:
-          type: object
         sidecars:
           type: object
           properties:
