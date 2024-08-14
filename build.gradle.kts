@@ -61,7 +61,7 @@ dependencies {
     testImplementation("io.quarkus:quarkus-jacoco")
     testImplementation("org.awaitility:awaitility")
     testImplementation("org.assertj:assertj-core:${assertjVersion}")
-    testImplementation("com.hedera.hashgraph:sdk:2.35.1")
+    testImplementation("com.hedera.hashgraph:sdk:2.37.0")
     testImplementation("io.grpc:grpc-netty")
     componentTestImplementation(
         "io.javaoperatorsdk:operator-framework-junit-5:${javaoperatorsdkVersion}"
