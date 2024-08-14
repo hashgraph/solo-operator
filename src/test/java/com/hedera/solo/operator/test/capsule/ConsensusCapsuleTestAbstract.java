@@ -34,7 +34,6 @@ import com.hedera.hashgraph.sdk.NodeAddressBook;
 import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.commonspec.StreamUploaderBuilder;
 import com.hedera.solo.operator.model.commonspec.streamuploader.ConfigBuilder;
-import com.hedera.solo.operator.model.commonspec.streamuploader.config.Gcs;
 import com.hedera.solo.operator.model.commonspec.streamuploader.config.GcsBuilder;
 import com.hedera.solo.operator.model.commonspec.streamuploader.config.S3;
 import com.hedera.solo.operator.model.commonspec.streamuploader.config.S3Builder;
@@ -339,24 +338,24 @@ public abstract class ConsensusCapsuleTestAbstract {
                 assertThat(kubernetesClient.resource(orbit).get()).isNotNull());
     }
 
-    S3 s3Config = new S3Builder()
-            .withEnabled()
-            .withUrl("http://minio-tenant-hl.minio.svc.cluster.local:9000")
-            .build();
-    StreamUploader recordStreamUploader = new StreamUploaderBuilder()
-            .withEnabled()
-            .withConfig(new ConfigBuilder()
-                    .withDebug()
-                    .withCompression()
-                    .withS3(s3Config)
-                    .withGcs(new GcsBuilder().withEnabled(false).build())
-                    .build())
-            .build();
-    Sidecars sidecars = new SidecarsBuilder()
-            .withRecordStreamUploader(recordStreamUploader)
-            .build();
-
     List<ConsensusCapsule> createConsensusCapsule(List<NodeInfo> nodes) {
+        S3 s3Config = new S3Builder()
+                .withEnabled()
+                .withUrl("http://minio-tenant-hl.minio.svc.cluster.local:9000")
+                .build();
+        StreamUploader recordStreamUploader = new StreamUploaderBuilder()
+                .withEnabled()
+                .withConfig(new ConfigBuilder()
+                        .withDebug()
+                        .withCompression()
+                        .withS3(s3Config)
+                        .withGcs(new GcsBuilder().withEnabled(false).build())
+                        .build())
+                .build();
+        Sidecars sidecars = new SidecarsBuilder()
+                .withRecordStreamUploader(recordStreamUploader)
+                .build();
+
         List<ConsensusCapsule> list = new ArrayList<>();
         for (NodeInfo node : nodes) {
             final ConsensusCapsule consensusCapsule = new ConsensusCapsuleBuilder()
