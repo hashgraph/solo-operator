@@ -22,6 +22,7 @@ import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleDeployment;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsulePod;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleRoleBinding;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleSecret;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleService;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleServiceAccount;
 import io.fabric8.kubernetes.api.model.Pod;
@@ -38,11 +39,12 @@ import org.jboss.logging.Logger;
 @ControllerConfiguration(
         name = "consensus-capsule",
         dependents = {
-            @Dependent(name = "sa", type = CapsuleServiceAccount.class),
-            @Dependent(type = CapsuleRoleBinding.class, dependsOn = "sa"),
-            @Dependent(type = CapsuleDeployment.class),
-            @Dependent(type = CapsuleService.class),
-            @Dependent(type = CapsulePod.class)
+                @Dependent(name = "sa", type = CapsuleServiceAccount.class),
+                @Dependent(type = CapsuleRoleBinding.class, dependsOn = "sa"),
+                @Dependent(type = CapsuleSecret.class),
+                @Dependent(type = CapsuleDeployment.class),
+                @Dependent(type = CapsuleService.class),
+                @Dependent(type = CapsulePod.class)
         })
 public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>, ErrorStatusHandler<ConsensusCapsule> {
 

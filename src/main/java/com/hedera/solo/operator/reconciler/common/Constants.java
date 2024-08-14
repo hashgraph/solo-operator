@@ -3,6 +3,8 @@ package com.hedera.solo.operator.reconciler.common;
 import com.hedera.hashgraph.sdk.AccountId;
 import com.hedera.hashgraph.sdk.PrivateKey;
 
+import java.util.List;
+
 public final class Constants {
     private Constants() {
         throw new UnsupportedOperationException("Utility class");
@@ -21,4 +23,8 @@ public final class Constants {
     public final static String MINIO_TENANT_CHART = String.format("%s/tenant", MINIO_CHART_REPO);
     public final static String MINIO_OPERATOR_RELEASE = "minio-operator";
     public final static String MINIO_TENANT_RELEASE = "minio-tenant";
+
+    // Templates
+    public final static List<String> NODE_KEYS_FILENAMES_TEMPLATE = List.of(
+            "a-private-%s.pem", "s-private-%s.pem", "hedera-%s.key", "hedera-%s.crt");
 }

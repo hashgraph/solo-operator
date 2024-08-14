@@ -33,8 +33,6 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDep
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 
 @KubernetesDependent(useSSA = BooleanWithUndefined.FALSE, labelSelector = "app=consensus-node")
 public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deployment, ConsensusCapsule> {
@@ -58,38 +56,8 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
             throw new RuntimeException("Missing account ID for deployment " + primary.getMetadata().getName());
         }
 
-        final boolean eligibleForDeployment =
-                primary.getSpec() != null && primary.getSpec().getEligibleForDeployment();
-
-        final List<VolumeMount> volumeMounts = new ArrayList<>();
-        for (String name : List.of("a", "s")) {
-            String filename = name + "-private-" + metadata.getName() + ".pem";
-            volumeMounts.add(new VolumeMountBuilder()
-                    .withName("private-keys")
-                    .withMountPath("/opt/hgcapp/services-hedera/HapiApp2.0/data/keys/" + filename)
-                    .withSubPath(filename)
-                    .build());
-        }
-
-        for (String name : context.getClient()
-                .resources(ConfigMap.class)
-                .inNamespace(primary.getMetadata().getNamespace())
-                .withName("public-keys")
-                .get()
-                .getData()
-                .keySet()) {
-
-            // skip entries like hedera-* (if any)
-            if (name.startsWith("hedera")) {
-                continue;
-            }
-
-            volumeMounts.add(new VolumeMountBuilder()
-                    .withName("public-keys")
-                    .withMountPath("/opt/hgcapp/services-hedera/HapiApp2.0/data/keys/" + name)
-                    .withSubPath(name)
-                    .build());
-        }
+        final List<VolumeMount> volumeMounts = prepareVolumeMountsMapping(primary, context, metadata);
+        final boolean eligibleForDeployment = primary.getSpec() != null && primary.getSpec().getEligibleForDeployment();
 
         // spotless:off
         final DeploymentBuilder builder = loadYaml(Deployment.class, getClass(), TEMPLATE).edit()
@@ -137,6 +105,42 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         this.prepareRecordStreamUploader(primary, builder);
 
         return builder.build();
+    }
+
+    private static List<VolumeMount> prepareVolumeMountsMapping(ConsensusCapsule primary, Context<ConsensusCapsule> context, ObjectMeta metadata) {
+        final List<VolumeMount> volumeMounts = new ArrayList<>();
+        for (String nameTemplate : Constants.NODE_KEYS_FILENAMES_TEMPLATE) {
+            String filename = String.format(nameTemplate, metadata.getName());
+
+            String subPath = filename;
+            if (nameTemplate.equals("hedera-%.crt")) {
+                subPath = "hedera.crt";
+            } else if (nameTemplate.equals("hedera-%.key")) {
+                subPath = "hedera.key";
+            }
+
+            volumeMounts.add(new VolumeMountBuilder()
+                    .withName("private-keys")
+                    .withMountPath("/opt/hgcapp/services-hedera/HapiApp2.0/data/keys/" + filename)
+                    .withSubPath(subPath)
+                    .build());
+        }
+
+        for (String name : context.getClient()
+                .resources(ConfigMap.class)
+                .inNamespace(primary.getMetadata().getNamespace())
+                .withName("public-keys")
+                .get()
+                .getData()
+                .keySet()) {
+
+            volumeMounts.add(new VolumeMountBuilder()
+                    .withName("public-keys")
+                    .withMountPath("/opt/hgcapp/services-hedera/HapiApp2.0/data/keys/" + name)
+                    .withSubPath(name)
+                    .build());
+        }
+        return volumeMounts;
     }
 
     private void prepareRecordStreamUploader(
