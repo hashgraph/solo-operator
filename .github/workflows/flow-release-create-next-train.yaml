@@ -34,7 +34,7 @@ permissions:
 jobs:
   prepare-release-train:
     name: Release Train / Prepare
-    runs-on: [self-hosted, Linux, medium, ephemeral]
+    runs-on: solo-linux-medium
     outputs:
       version: ${{ steps.current.outputs.version }}
       tag: ${{ steps.current.outputs.tag }}
@@ -103,7 +103,7 @@ jobs:
 
   create-release-branch:
     name: Release Train / Branch
-    runs-on: [self-hosted, Linux, medium, ephemeral]
+    runs-on: solo-linux-medium
     needs:
       - prepare-release-train
     steps:
@@ -144,7 +144,7 @@ jobs:
 
   finalize-release-train:
     name: Release Train / Finalize
-    runs-on: [self-hosted, Linux, medium, ephemeral]
+    runs-on: solo-linux-medium
     needs:
       - prepare-release-train
     steps:
