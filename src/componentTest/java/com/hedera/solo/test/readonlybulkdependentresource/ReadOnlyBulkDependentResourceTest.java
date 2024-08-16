@@ -62,7 +62,7 @@ public class ReadOnlyBulkDependentResourceTest extends AbstractOperatorTest {
 
         int i = 1;
         // verify dependent resource was is created as expected
-        await().atMost(Duration.ofSeconds(999930)).untilAsserted(() -> {
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
             ConfigMap configMap = operator().get(ConfigMap.class, "example");
             assertThat(configMap).hasFieldOrPropertyWithValue("metadata.name", "example");
             assertThat(configMap).hasFieldOrPropertyWithValue("data.message", "hello world!");
