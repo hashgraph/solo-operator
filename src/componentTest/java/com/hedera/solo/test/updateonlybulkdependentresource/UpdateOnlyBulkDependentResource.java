@@ -1,4 +1,4 @@
-package com.hedera.solo.test.readonlybulkdependentresource;
+package com.hedera.solo.test.updateonlybulkdependentresource;
 
 import static com.hedera.solo.operator.library.builder.BuilderHelper.edit;
 
@@ -6,7 +6,6 @@ import com.hedera.solo.operator.test.v1alpha1.Example;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.javaoperatorsdk.operator.api.config.informer.InformerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.api.reconciler.dependent.ReconcileResult;
 import io.javaoperatorsdk.operator.processing.dependent.BulkDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.Updater;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
@@ -19,12 +18,12 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @KubernetesDependent
-public class ReadOnlyBulkDependentResource extends KubernetesDependentResource<ConfigMap, Example>
+public class UpdateOnlyBulkDependentResource extends KubernetesDependentResource<ConfigMap, Example>
         implements BulkDependentResource<ConfigMap, Example>
         , SecondaryToPrimaryMapper<ConfigMap>
     , Updater<ConfigMap, Example>
 {
-    public ReadOnlyBulkDependentResource() {
+    public UpdateOnlyBulkDependentResource() {
         super(ConfigMap.class);
     }
 

@@ -1,4 +1,4 @@
-package com.hedera.solo.test.readonlybulkdependentresource;
+package com.hedera.solo.test.updateonlybulkdependentresource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -14,18 +14,17 @@ import io.javaoperatorsdk.operator.junit.LocallyRunOperatorExtension;
 import java.lang.invoke.MethodHandles;
 import java.time.Duration;
 import java.util.Arrays;
-import java.util.List;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class ReadOnlyBulkDependentResourceTest extends AbstractOperatorTest {
+public class UpdateOnlyBulkDependentResourceTest extends AbstractOperatorTest {
     private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
     @Override
     protected LocallyRunOperatorExtension.Builder configure(LocallyRunOperatorExtension.Builder builder) {
-        return builder.withReconciler(ReadOnlyBulkDependentResourceReconciler.class);
+        return builder.withReconciler(UpdateOnlyBulkDependentResourceReconciler.class);
     }
 
     <T> T x(T builder, Consumer<T>... consumer) {
