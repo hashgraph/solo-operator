@@ -60,12 +60,13 @@ public class ReadOnlyBulkDependentResourceTest extends AbstractOperatorTest {
                 .build();
         example = operator().create(example);
 
-        int i = 1;
         // verify dependent resource was is created as expected
-        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
-            ConfigMap configMap = operator().get(ConfigMap.class, "example");
-            assertThat(configMap).hasFieldOrPropertyWithValue("metadata.name", "example");
-            assertThat(configMap).hasFieldOrPropertyWithValue("data.message", "hello world!");
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {
+            for (int i = 0; i < 3; ++i) {
+                ConfigMap configMap = operator().get(ConfigMap.class, "name" + i);
+                assertThat(configMap).hasFieldOrPropertyWithValue("metadata.name", "name" + i);
+                assertThat(configMap).hasFieldOrPropertyWithValue("data.updated", "true");
+            }
         });
     }
 }
