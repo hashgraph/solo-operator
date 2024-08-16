@@ -45,7 +45,7 @@ public class ExpTest {
         public <AA, BB extends Nested<AA>> Wrapper2<AA, BB, A, B> editx(Function<B, BB> function) {
             return new Wrapper2<>(function.apply(object), this);
         }
-        public <U> Wrapper<A, B> apply(Function<B, U> function) {
+        public <U> Wrapper<A, B> with(Function<B, U> function) {
             if (function.apply(object) instanceof Nested<?> nested) {
                 for (Object obj = nested.and(); obj instanceof Nested<?>; obj = ((Nested<?>) obj).and()) {}
             }
@@ -119,17 +119,17 @@ public class ExpTest {
     void test2() {
         new OrbitBuilder().editSpec().editOrbitspecConsensus().and().and().build();
         Deployment primary = edit(new Deployment())
-                .apply(this::metadata)
-                .apply(b -> b
+                .with(this::metadata)
+                .with(b -> b
                         .editSpec()
                         .editTemplate()
                         .editSpec()
                         .addNewContainer()
                         .withImage("image"))
-                .apply(b -> b
+                .with(b -> b
                         .editMetadata()
                         .addToLabels("key", "value"))
-                .apply(b -> b
+                .with(b -> b
                         .editMetadata()
                         .addToLabels("key2", "label2"))
 //                .nest(builder -> builder.editSpec())
@@ -142,7 +142,7 @@ public class ExpTest {
                 .build();
         log.info("asYaml: {}", ks.asYaml(primary));
         Deployment secondary = edit(new Deployment())
-                .apply(metadata("fred", primary))
+                .with(metadata("fred", primary))
                 .build();
         log.info("asYaml: {}", ks.asYaml(secondary));
     }
