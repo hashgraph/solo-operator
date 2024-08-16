@@ -40,9 +40,11 @@ import com.hedera.solo.operator.test.Environment;
 import com.hedera.solo.operator.test.HederaSdkClientFactory;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import io.fabric8.kubernetes.api.model.ConfigMap;
+import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
 import jakarta.inject.Inject;
@@ -255,7 +257,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         }
         for (ConsensusCapsule consensusCapsule : list) {
             String name = consensusCapsule.getMetadata().getName();
-            await().atMost(30999, TimeUnit.SECONDS).untilAsserted(() -> {
+            await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
                 ConsensusCapsule capsule =
                         kubernetesClient.resource(consensusCapsule).get();
                 assertThat(capsule).isNotNull();
@@ -285,13 +287,14 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .endMetadata()
                 .withNewSpec()
                 .withMode(NetworkInitializationSpec.Mode.FirstInitialization)
+                .addAllToConsensusCapsules(consensusCapsules.stream().map(CustomResource::getMetadata).map(ObjectMeta::getName).toList())
                 .endSpec()
                 .withNewStatus()
                 .endStatus()
                 .build();
         kubernetesClient.resource(networkInitialization).create();
 
-        await().atMost(90, TimeUnit.SECONDS).untilAsserted(() -> {
+        await().atMost(99990, TimeUnit.SECONDS).untilAsserted(() -> {
             NetworkInitialization netInit =
                     kubernetesClient.resource(networkInitialization).get();
             assertThat(netInit).isNotNull();

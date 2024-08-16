@@ -20,12 +20,15 @@ import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitialization;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationStatus;
+import com.hedera.solo.operator.reconciler.networkinitialization.resources.NetworkInitializationConsensusCapsule;
+import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
+import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
 import jakarta.inject.Inject;
 import java.time.Duration;
 import java.util.List;
@@ -34,7 +37,11 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.jboss.logging.Logger;
 
-@ControllerConfiguration(name = "network-initialization")
+@ControllerConfiguration(name = "network-initialization",
+dependents = {
+        @Dependent(type = NetworkInitializationConsensusCapsule.class)
+}
+)
 public class NetworkInitializationReconciler implements Reconciler<NetworkInitialization> {
     private final Logger log;
     private final KubernetesClient client;
@@ -51,6 +58,8 @@ public class NetworkInitializationReconciler implements Reconciler<NetworkInitia
     public UpdateControl<NetworkInitialization> reconcile(
             final NetworkInitialization resource, final Context<NetworkInitialization> context) throws Exception {
         try {
+            log.info("NetworkInitializationReconciler capsules: " + context.getSecondaryResources(ConsensusCapsule.class).size());
+            log.info("NetworkInitializationReconciler capsules: " + context.getSecondaryResourcesAsStream(ConsensusCapsule.class).map(CustomResource::getMetadata).map(ObjectMeta::getName).toList());
             log.infof(
                     "Network Initialization - Starting Reconciliation [ name = '%s' ]",
                     resource.getMetadata().getName());

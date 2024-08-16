@@ -29,6 +29,12 @@ components:
           enum:
               - FirstInitialization
               - NodeAddition
+        consensusCapsules:
+          description: Names of consensus-capsules to initialize
+          type: array
+          items:
+            type:
+              string
 
     NetworkInitializationStatus:
       type: object

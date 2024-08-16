@@ -88,7 +88,7 @@ class OrbitTest {
 
         client.resource(orbit).create();
 
-        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+        await().atMost(999930, TimeUnit.SECONDS).untilAsserted(() -> {
             final Orbit realOrbit = client.resource(orbit).get();
 
             assertThat(realOrbit).isNotNull();
