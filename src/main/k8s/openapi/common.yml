@@ -192,10 +192,11 @@ components:
             prometheus:
               type: object
               properties:
-                # list of prometheus scrape targets
-                # target format: <IP or FQDN>:<Port>
-                # e.g. [ 0.0.0.0:9999 ]
                 scrapeTargets:
+                  description: |
+                    list of prometheus scrape targets
+                    target format: <IP or FQDN>:<Port>
+                    e.g. [ 0.0.0.0:9999 ]                    
                   type: array
                   items:
                     type: string
