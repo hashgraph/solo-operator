@@ -15,7 +15,7 @@ import java.util.stream.StreamSupport;
 public abstract class AbstractKubernetesBulkDependentResource<R extends HasMetadata, P extends HasMetadata> extends KubernetesDependentResource<R, P>
         implements BulkDependentResource<R, P>
 {
-    public AbstractKubernetesBulkDependentResource(Class<R> resourceType) {
+    public AbstractKubernetesBulkDependentResource(final Class<R> resourceType) {
         super(resourceType);
     }
 
@@ -27,7 +27,7 @@ public abstract class AbstractKubernetesBulkDependentResource<R extends HasMetad
         return false;
     }
 
-    protected Map<String, R> toMap(Iterable<R> iterable) {
+    protected Map<String, R> toMap(final Iterable<R> iterable) {
         return StreamSupport.stream(iterable.spliterator(), false).collect(Collectors.toMap(ResourceID::toString, Function.identity()));
     }
 

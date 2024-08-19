@@ -20,7 +20,7 @@ public class KubernetesBulkDependentResourceTest extends AbstractOperatorTest {
     private static final ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
 
     @Override
-    protected LocallyRunOperatorExtension.Builder configure(LocallyRunOperatorExtension.Builder builder) {
+    protected LocallyRunOperatorExtension.Builder configure(final LocallyRunOperatorExtension.Builder builder) {
         KubernetesBulkDependentResource crud = new KubernetesBulkDependentResourceUpdater(true, true);
         KubernetesBulkDependentResource readOnly = new KubernetesBulkDependentResource(false, false);
         KubernetesBulkDependentResource updateOnly = new KubernetesBulkDependentResourceUpdater(false, false);

@@ -5,7 +5,7 @@ import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.javaoperatorsdk.operator.processing.dependent.Updater;
 
 public class KubernetesBulkDependentResourceUpdater extends KubernetesBulkDependentResource implements Updater<ConfigMap, Example> {
-    public KubernetesBulkDependentResourceUpdater(boolean create, boolean delete) {
+    public KubernetesBulkDependentResourceUpdater(final boolean create, final boolean delete) {
         super(create, delete);
     }
 }

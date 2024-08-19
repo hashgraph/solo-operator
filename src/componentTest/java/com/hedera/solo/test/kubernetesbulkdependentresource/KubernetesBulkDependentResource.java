@@ -31,7 +31,7 @@ public class KubernetesBulkDependentResource extends AbstractKubernetesBulkDepen
     private final boolean create;
     private final boolean delete;
 
-    public KubernetesBulkDependentResource(boolean create, boolean delete) {
+    public KubernetesBulkDependentResource(final boolean create, final boolean delete) {
         super(ConfigMap.class);
         this.create = create;
         this.delete = delete;
@@ -47,7 +47,7 @@ public class KubernetesBulkDependentResource extends AbstractKubernetesBulkDepen
         return delete;
     }
 
-    List<String> targetList(Example primary) {
+    List<String> targetList(final Example primary) {
         try {
             return mapper.readValue(primary.getMetadata().getAnnotations().getOrDefault("target/list", "[]"), new TypeReference<List<String>>(){});
         } catch (JsonProcessingException ignored) {}

@@ -31,5 +31,5 @@ public abstract class AbstractOperatorTest {
         return operator;
     }
 
-    protected abstract LocallyRunOperatorExtension.Builder configure(LocallyRunOperatorExtension.Builder builder);
+    protected abstract LocallyRunOperatorExtension.Builder configure(final LocallyRunOperatorExtension.Builder builder);
 }

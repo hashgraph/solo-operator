@@ -20,7 +20,7 @@ import java.util.Map;
 public class KubernetesBulkDependentResourceReconciler implements EventSourceInitializer<Example>, Reconciler<Example> {
     private final Workflow<Example> workflow;
 
-    public KubernetesBulkDependentResourceReconciler(DependentResource<ConfigMap, Example> dependentResource) {
+    public KubernetesBulkDependentResourceReconciler(final DependentResource<ConfigMap, Example> dependentResource) {
         workflow = new WorkflowBuilder<Example>()
                 .addDependentResource(dependentResource)
                 .build();
