@@ -10,6 +10,14 @@ components:
       properties:
         message:
           type: string
+#        names:
+#          type: array
+#          items:
+#            type: string
+        map:
+          type: object
+          additionalProperties:
+            type: string
     Status:
       type: object
       properties:

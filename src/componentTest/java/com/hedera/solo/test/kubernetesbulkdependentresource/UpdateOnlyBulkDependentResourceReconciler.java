@@ -1,4 +1,4 @@
-package com.hedera.solo.test.updateonlybulkdependentresource;
+package com.hedera.solo.test.kubernetesbulkdependentresource;
 
 import com.hedera.solo.operator.test.v1alpha1.Example;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -10,7 +10,10 @@ import java.lang.invoke.MethodHandles;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@ControllerConfiguration(dependents = @Dependent(type = UpdateOnlyBulkDependentResource.class))
+@ControllerConfiguration(dependents = {
+        @Dependent(type = ResourceCreate.class),
+        @Dependent(type = ResourceNoCreate.class)
+})
 public class UpdateOnlyBulkDependentResourceReconciler implements Reconciler<Example> {
     private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
     @Override
