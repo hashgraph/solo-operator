@@ -1,112 +1,74 @@
 package com.hedera.solo.test.kubernetesbulkdependentresource;
 
-import io.fabric8.kubernetes.api.model.HasMetadata;
-import io.javaoperatorsdk.operator.api.config.informer.InformerConfiguration;
+import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.hedera.solo.operator.test.v1alpha1.Example;
+import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.processing.dependent.BulkDependentResource;
-import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResource;
+import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
-import io.javaoperatorsdk.operator.processing.event.source.PrimaryToSecondaryMapper;
-import io.javaoperatorsdk.operator.processing.event.source.SecondaryToPrimaryMapper;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
+import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
 
-//@KubernetesDependent
-public abstract class KubernetesBulkDependentResource<R extends HasMetadata, P extends HasMetadata> extends KubernetesDependentResource<R, P>
-        implements BulkDependentResource<R, P>
-        , SecondaryToPrimaryMapper<R>
-//    , Updater<R, P>
-    , PrimaryToSecondaryMapper<P>
-{
-    public KubernetesBulkDependentResource(Class<R> resourceType) {
-        super(resourceType);
-    }
+@KubernetesDependent
+public class KubernetesBulkDependentResource extends AbstractKubernetesBulkDependentResource<ConfigMap, Example> {
+    private static final ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
+    private final boolean create;
+    private final boolean delete;
 
-    protected abstract boolean create();
-    protected abstract boolean delete();
-
-    @Override
-    protected R handleCreate(R desired, P primary, Context<P> context) {
-        return create() ? super.handleCreate(desired, primary, context) : null;
-    }
-
-//    @Override
-//    public Map<String, ConfigMap> desiredResources(Example primary, Context<Example> context) {
-////        return Map.of("a", edit(new ConfigMap())
-////                .with(b -> b
-////                        .editMetadata()
-////                        .withNamespace(primary.getMetadata().getNamespace())
-////                        .withName("deleteme"))
-////                .build());
-//        return getSecondaryResources(primary, context).entrySet().stream()
-//                .map(e -> Map.entry(e.getKey(), edit(e.getValue())
-//                        .with(b -> b
-//                                .addToData("updated", "true"))
-//                        .build()))
-//                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-//    }
-
-    protected Map<String, R> toMap(Iterable<R> iterable) {
-        return StreamSupport.stream(iterable.spliterator(), false).collect(Collectors.toMap(ResourceID::toString, Function.identity()));
+    public KubernetesBulkDependentResource(boolean create, boolean delete) {
+        super(ConfigMap.class);
+        this.create = create;
+        this.delete = delete;
     }
 
     @Override
-    public Map<String, R> getSecondaryResources(P primary, Context<P> context) {
-        return toMap(context.getSecondaryResources(resourceType()));
+    protected boolean create() {
+        return create;
     }
 
     @Override
-    protected InformerConfiguration.InformerConfigurationBuilder<R> informerConfigurationBuilder() {
-        return super.informerConfigurationBuilder().withPrimaryToSecondaryMapper(this);
+    protected boolean delete() {
+        return delete;
+    }
+
+    List<String> targetList(Example primary) {
+        try {
+            return mapper.readValue(primary.getMetadata().getAnnotations().getOrDefault("target/list", "[]"), new TypeReference<List<String>>(){});
+        } catch (JsonProcessingException ignored) {}
+        return Collections.emptyList();
     }
 
     @Override
-    public R create(R desired, P primary, Context<P> context) {
-        return create() ? super.create(desired, primary, context) : null;
+    public Map<String, ConfigMap> desiredResources(Example primary, Context<Example> context) {
+        String namespace = primary.getMetadata().getNamespace();
+        return toMap(targetList(primary).stream()
+                .map(name -> edit(new ConfigMap())
+                        .with(builder -> builder
+                                .editMetadata()
+                                .withName(name)
+                                .withNamespace(namespace))
+                        .with(builder -> builder
+                                .addToData("updated", "true"))
+                        .build()).toList());
     }
 
     @Override
-    public void delete(P primary, Context<P> context) {
-        if (delete()) {
-            super.delete(primary, context);
-        }
+    public Set<ResourceID> toSecondaryResourceIDs(Example primary) {
+        String namespace = primary.getMetadata().getNamespace();
+        return targetList(primary).stream()
+                .map(name -> new ResourceID(name, namespace)).collect(Collectors.toSet());
     }
 
     @Override
-    protected void handleDelete(P primary, R secondary, Context<P> context) {
-        if (delete()) {
-            super.handleDelete(primary, secondary, context);
-        }
+    public Set<ResourceID> toPrimaryResourceIDs(ConfigMap resource) {
+        return Set.of(new ResourceID(resource.getMetadata().getLabels().get("primary"), resource.getMetadata().getNamespace()));
     }
-
-    @Override
-    public void deleteTargetResource(P primary, R resource, String key, Context<P> context) {
-        if (delete()) {
-            super.deleteTargetResource(primary, resource, key, context);
-        }
-    }
-
-//    @Override
-//    public Set<ResourceID> toPrimaryResourceIDs(ConfigMap resource) {
-//        return Collections.emptySet();
-//    }
-
-    @Override
-    protected void onCreated(P primary, R created, Context<P> context) {
-        if (create()) {
-            super.onCreated(primary, created, context);
-        }
-    }
-
-//    @Override
-//    public Set<ResourceID> toSecondaryResourceIDs(Example primary) {
-//        return Set.of(
-//                new ResourceID("name0", primary.getMetadata().getNamespace()),
-//                new ResourceID("name1", primary.getMetadata().getNamespace()),
-//                new ResourceID("name2", primary.getMetadata().getNamespace())
-//        );
-//    }
 }

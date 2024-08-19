@@ -11,8 +11,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @ControllerConfiguration(dependents = {
-        @Dependent(type = ResourceCreate.class),
-        @Dependent(type = ResourceNoCreate.class)
+//        @Dependent(type = ResourceCreate.class),
+//        @Dependent(type = ResourceDelete.class),
+//        @Dependent(type = ResourceNoCreate.class),
+//        @Dependent(type = ResourceNoDelete.class),
 })
 public class UpdateOnlyBulkDependentResourceReconciler implements Reconciler<Example> {
     private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());

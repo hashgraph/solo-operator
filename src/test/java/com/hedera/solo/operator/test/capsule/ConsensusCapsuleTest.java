@@ -17,11 +17,6 @@
 package com.hedera.solo.operator.test.capsule;
 
 import io.quarkus.test.junit.QuarkusTest;
-import java.lang.invoke.MethodHandles;
 
 @QuarkusTest
-public class ConsensusCapsuleTest extends ConsensusCapsuleTestAbstract {
-    public ConsensusCapsuleTest() {
-        setNamespace(MethodHandles.lookup().lookupClass());
-    }
-}
+public class ConsensusCapsuleTest extends ConsensusCapsuleTestAbstract {}

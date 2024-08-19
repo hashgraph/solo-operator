@@ -1,23 +1,15 @@
 package com.hedera.solo.test.labelselector;
 
-import static com.hedera.solo.operator.library.builder.BuilderHelper.edit;
+import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 
 import com.hedera.solo.operator.test.v1alpha1.Example;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.processing.dependent.Updater;
+import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
-import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResource;
-import io.javaoperatorsdk.operator.processing.event.ResourceID;
-import io.javaoperatorsdk.operator.processing.event.source.SecondaryToPrimaryMapper;
-import java.util.Map;
-import java.util.Set;
 
-@KubernetesDependent(labelSelector = "test-label-selector")
-public class NormalResource extends KubernetesDependentResource<ConfigMap, Example> implements
-        SecondaryToPrimaryMapper<ConfigMap>,
-        Updater<ConfigMap, Example>
-{
+@KubernetesDependent
+public class NormalResource extends CRUDKubernetesDependentResource<ConfigMap, Example> {
     public NormalResource() {
         super(ConfigMap.class);
     }
@@ -27,15 +19,8 @@ public class NormalResource extends KubernetesDependentResource<ConfigMap, Examp
         return edit(new ConfigMap())
                 .with(builder -> builder
                         .editMetadata()
-                        .withName(primary.getMetadata().getName())
+                        .withName("normal")
                         .withLabels(primary.getMetadata().getLabels()))
-                .with(builder -> builder
-                        .withData(Map.of("updated", "true")))
                 .build();
-    }
-
-    @Override
-    public Set<ResourceID> toPrimaryResourceIDs(ConfigMap resource) {
-        return Set.of(ResourceID.fromResource(resource));
     }
 }
