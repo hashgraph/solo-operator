@@ -13,5 +13,7 @@ components:
     Status:
       type: object
       properties:
+        message:
+          type: string
         observedGeneration:
           type: integer

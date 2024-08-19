@@ -32,6 +32,7 @@ public class KubernetesBulkDependentResourceReconciler implements EventSourceIni
         return UpdateControl.patchStatus(edit(resource)
                 .with(builder -> builder
                         .editStatus()
+                        .withMessage(String.valueOf(context.getSecondaryResources(ConfigMap.class).size()))
                         .withObservedGeneration(resource.getMetadata().getGeneration()))
                 .build());
     }

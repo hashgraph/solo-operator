@@ -12,6 +12,7 @@ import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.javaoperatorsdk.operator.junit.LocallyRunOperatorExtension;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResourceConfigBuilder;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -25,61 +26,71 @@ public class KubernetesBulkDependentResourceTest extends AbstractOperatorTest {
     protected LocallyRunOperatorExtension.Builder configure(LocallyRunOperatorExtension.Builder builder) {
         KubernetesBulkDependentResource crud = new KubernetesBulkDependentResourceUpdater(true, true);
         KubernetesBulkDependentResource readOnly = new KubernetesBulkDependentResource(false, false);
+        KubernetesBulkDependentResource updateOnly = new KubernetesBulkDependentResourceUpdater(false, false);
         crud.configureWith(new KubernetesDependentResourceConfigBuilder<ConfigMap>()
                 .withLabelSelector("primary=crud")
                 .build());
         readOnly.configureWith(new KubernetesDependentResourceConfigBuilder<ConfigMap>()
                 .withLabelSelector("primary=read-only")
                 .build());
+        updateOnly.configureWith(new KubernetesDependentResourceConfigBuilder<ConfigMap>()
+                .withLabelSelector("primary=update-only")
+                .build());
         return builder
                 .withReconciler(new KubernetesBulkDependentResourceReconciler(crud), cfg -> cfg.withLabelSelector("crud").withName("crud"))
-                .withReconciler(new KubernetesBulkDependentResourceReconciler(readOnly), cfg -> cfg.withLabelSelector("read-only").withName("read-only"));
+                .withReconciler(new KubernetesBulkDependentResourceReconciler(readOnly), cfg -> cfg.withLabelSelector("read-only").withName("read-only"))
+                .withReconciler(new KubernetesBulkDependentResourceReconciler(updateOnly), cfg -> cfg.withLabelSelector("update-only").withName("update-only"));
     }
 
-    record KeyValues(String key, String... values) {}
+    record Config(String primary, String... names) {}
 
-    /*
-     * This test is expected to produce logged exceptions (Created resource cannot be null).
-     *
-     * The BulkDependentResource implements the Creator interface by default, but here we test a
-     * dependent resource which extends BulkDependentResource that intentionally fails to create.
-     * */
     @Test
     void test() {
-        for (KeyValues keyValues : List.of(
-                new KeyValues("crud", "update", "delete"),
-                new KeyValues("read-only", "no-update", "no-delete"))) {
-            for (String value: keyValues.values) {
+        for (Config config : List.of(
+                new Config("crud", "crud-update", "crud-delete"),
+                new Config("read-only", "read-only-no-update", "read-only-no-delete"),
+                new Config("update-only", "update-only-update", "update-only-no-delete"))) {
+            for (String name: config.names) {
                 operator().create(edit(new ConfigMap())
                         .with(builder -> builder
                                 .editMetadata()
-                                .addToLabels("primary", keyValues.key)
-                                .withName(value))
+                                .addToLabels("primary", config.primary)
+                                .withName(name))
                         .with(builder -> builder
                                 .addToData("updated", "false"))
                         .build());
             }
         }
-        for (KeyValues keyValues : List.of(
-                new KeyValues("crud", "create", "update"),
-                new KeyValues("read-only", "no-create", "no-update"))) {
-            operator().create(edit(new Example())
+
+        List<Example> examples = new ArrayList<>();
+        for (Config config : List.of(
+                new Config("crud", "crud-create", "crud-update"),
+                new Config("read-only", "read-only-no-create", "read-only-no-update"),
+                new Config("update-only", "update-only-no-create", "update-only-update"))) {
+            examples.add(operator().create(edit(new Example())
                     .with(builder -> builder
                             .editMetadata()
-                            .withName(keyValues.key)
-                            .addToLabels(keyValues.key, "true")
-                            .addToAnnotations("target/list", mapper.writeValueAsString(keyValues.values)))
-                    .build());
+                            .withName(config.primary)
+                            .addToLabels(config.primary, "true")
+                            .addToAnnotations("target/list", mapper.writeValueAsString(config.names)))
+                    .build()));
         }
 
         await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
-            for (String name : List.of("create", "update")) {
+            assertThat(operator().get(Example.class, "crud")).hasFieldOrPropertyWithValue("status.message", "2");
+            assertThat(operator().get(Example.class, "read-only")).hasFieldOrPropertyWithValue("status.message", "1");
+            assertThat(operator().get(Example.class, "update-only")).hasFieldOrPropertyWithValue("status.message", "1");
+            for (String name : List.of("crud-create", "crud-update", "update-only-update")) {
                 assertThat(operator().get(ConfigMap.class, name)).hasFieldOrPropertyWithValue("data.updated", "true");
             }
-            for (String name : List.of("no-update", "no-delete")) {
+            for (String name : List.of("read-only-no-update", "read-only-no-delete", "update-only-no-delete")) {
                 assertThat(operator().get(ConfigMap.class, name)).hasFieldOrPropertyWithValue("data.updated", "false");
             }
-            assertThat(operator().get(ConfigMap.class, "no-create")).isNull();
+            for (String name : List.of("crud-delete", "read-only-no-create", "update-only-no-create")) {
+                assertThat(operator().get(ConfigMap.class, name)).isNull();
+            }
         });
+
+        examples.forEach(operator()::delete);
     }
 }

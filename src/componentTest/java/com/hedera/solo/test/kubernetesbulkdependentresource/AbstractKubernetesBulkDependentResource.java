@@ -8,7 +8,9 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDep
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.javaoperatorsdk.operator.processing.event.source.PrimaryToSecondaryMapper;
 import io.javaoperatorsdk.operator.processing.event.source.SecondaryToPrimaryMapper;
+import io.javaoperatorsdk.operator.processing.event.source.informer.InformerEventSource;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
@@ -59,7 +61,9 @@ public abstract class AbstractKubernetesBulkDependentResource<R extends HasMetad
 
     @Override
     public Map<String, R> getSecondaryResources(P primary, Context<P> context) {
-        return toMap(context.getSecondaryResources(resourceType()));
+//        return toMap(context.getClient().resources(resourceType()).inNamespace(primary.getMetadata().getNamespace()).withLabel("primary", primary.getMetadata().getName()).list().getItems());
+        return toMap(eventSource().orElseThrow().list().toList());
+//        return toMap(context.getSecondaryResources(resourceType()));
     }
 
     @Override

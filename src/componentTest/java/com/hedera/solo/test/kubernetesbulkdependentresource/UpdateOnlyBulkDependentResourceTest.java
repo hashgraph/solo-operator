@@ -134,7 +134,7 @@ public class UpdateOnlyBulkDependentResourceTest extends AbstractOperatorTest {
                         .withName("test-no-create"))
 //                .with(builder -> builder
 //                        .editSpec()
-//                        .withMap(Map.of(ResourceNoCreate.class.getSimpleName(), String.join(",", values))))
+//                        .withMap(Map.of(ResourceNoCreate.class.getSimpleName(), String.join(",", names))))
                 .build());
 
         await().atLeast(Duration.ofSeconds(5)).untilTrue(new AtomicBoolean());
