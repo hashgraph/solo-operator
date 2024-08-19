@@ -16,9 +16,6 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/*
-* Add test for update without create or delete!
-* */
 public class KubernetesBulkDependentResourceTest extends AbstractOperatorTest {
     private static final ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
 

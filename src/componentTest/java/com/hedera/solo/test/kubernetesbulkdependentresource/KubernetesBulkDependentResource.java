@@ -9,22 +9,23 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.hedera.solo.operator.test.v1alpha1.Example;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.api.reconciler.dependent.GarbageCollected;
-import io.javaoperatorsdk.operator.processing.dependent.Updater;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
+import io.javaoperatorsdk.operator.processing.event.source.PrimaryToSecondaryMapper;
+import io.javaoperatorsdk.operator.processing.event.source.SecondaryToPrimaryMapper;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/*
-* may need to modiy match, see one to many
-* */
 @KubernetesDependent
-public class KubernetesBulkDependentResource extends AbstractKubernetesBulkDependentResource<ConfigMap, Example> /*implements GarbageCollected<Example>*/ {
+public class KubernetesBulkDependentResource extends AbstractKubernetesBulkDependentResource<ConfigMap, Example>
+    implements
+        SecondaryToPrimaryMapper<ConfigMap>
+    , PrimaryToSecondaryMapper<Example>
+
+{
     private static final ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
     private final boolean create;
     private final boolean delete;
@@ -70,21 +71,7 @@ public class KubernetesBulkDependentResource extends AbstractKubernetesBulkDepen
             desiredResources = desiredResources.entrySet().stream()
                     .filter(e -> resources.containsKey(e.getKey()))
                     .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-//            desiredResources = desiredResources.entrySet().stream()
-//                    .filter(e -> resources.containsKey(e.getKey()))
-//                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
         }
-//        if (this instanceof Updater<?,?>) {
-//            desiredResources.forEach(resources::replace);
-//        }
-//        if (create) {
-//            desiredResources.forEach(resources::putIfAbsent);
-//        }
-//        if (delete) {
-//            resources = resources.entrySet().stream()
-//                    .filter(e -> desiredResources.containsKey(e.getKey()))
-//                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-//        }
         return desiredResources;
     }
 
