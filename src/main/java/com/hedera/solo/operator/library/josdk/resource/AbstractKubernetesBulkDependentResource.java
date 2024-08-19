@@ -1,4 +1,4 @@
-package com.hedera.solo.test.kubernetesbulkdependentresource;
+package com.hedera.solo.operator.library.josdk.resource;
 
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.javaoperatorsdk.operator.api.config.informer.InformerConfiguration;
