@@ -28,7 +28,6 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
-
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -60,10 +59,7 @@ public class CapsuleSecret extends CRUDKubernetesDependentResource<Secret, Conse
         }
 
         final Map<String, String> secretsData = prepareSecretsDataPayload(metadata);
-        final Map<String, String> labels = primary
-                .getSpec()
-                .getDependentResourceLabels()
-                .stream()
+        final Map<String, String> labels = primary.getSpec().getDependentResourceLabels().stream()
                 .collect(Collectors.toMap(DependentResourceLabels::getName, DependentResourceLabels::getValue));
         labels.put("consensus-capsule", metadata.getName());
 
@@ -79,9 +75,7 @@ public class CapsuleSecret extends CRUDKubernetesDependentResource<Secret, Conse
                 .build();
     }
 
-    /**
-     * Extract and update the data payload keys
-     */
+    /** Extract and update the data payload keys */
     private static Map<String, String> prepareSecretsDataPayload(ObjectMeta metadata) {
         // FIXME: do not load hardcoded keys from a file rather autogenerate
         final Secret secretSample = loadYaml(Secret.class, CapsuleSecret.class, "node-keys.yaml");
@@ -98,8 +92,8 @@ public class CapsuleSecret extends CRUDKubernetesDependentResource<Secret, Conse
 
     public static class Discriminator implements ResourceDiscriminator<Secret, ConsensusCapsule> {
         @Override
-        public Optional<Secret> distinguish(final Class<Secret> resource, final ConsensusCapsule primary,
-                                            final Context<ConsensusCapsule> context) {
+        public Optional<Secret> distinguish(
+                final Class<Secret> resource, final ConsensusCapsule primary, final Context<ConsensusCapsule> context) {
 
             final String validName = validName(primary.getMetadata().getName(), NAME_SUFFIX);
             final Set<Secret> resources = context.getSecondaryResources(Secret.class);

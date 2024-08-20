@@ -231,6 +231,7 @@ public final class Metadata {
 
     /**
      * Prepare label with correct prefix
+     *
      * @param suffix label suffix
      * @return A string representing a valid label with operator prefix
      */

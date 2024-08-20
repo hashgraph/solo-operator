@@ -27,7 +27,6 @@ import com.hedera.fullstack.helm.client.model.Chart;
 import com.hedera.fullstack.helm.client.model.Repository;
 import com.hedera.fullstack.helm.client.model.install.InstallChartOptions;
 import com.hedera.fullstack.helm.client.model.release.ReleaseItem;
-import com.hedera.hashgraph.sdk.AccountId;
 import com.hedera.hashgraph.sdk.Client;
 import com.hedera.hashgraph.sdk.FileContentsQuery;
 import com.hedera.hashgraph.sdk.FileId;
@@ -61,7 +60,6 @@ import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
 import jakarta.inject.Inject;
-
 import java.io.File;
 import java.lang.invoke.MethodHandles;
 import java.net.URL;
@@ -69,7 +67,6 @@ import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
-
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -86,7 +83,6 @@ public abstract class ConsensusCapsuleTestAbstract {
 
     @Inject
     protected Operator operator;
-
 
     public ConsensusCapsuleTestAbstract() {
         setNamespace(MethodHandles.lookup().lookupClass().getSimpleName().toLowerCase());
@@ -128,8 +124,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .until(() -> kubernetesClient.namespaces().withName(namespace).get() == null);
     }
 
-    record NodeInfo(String name, String accountId, int weight, String internal, String external) {
-    }
+    record NodeInfo(String name, String accountId, int weight, String internal, String external) {}
 
     ConfigMap prepareClusterConfig(ConfigMap configMap, List<NodeInfo> nodes) {
         // should probably set the chainId in bootstrap.properties
@@ -168,7 +163,6 @@ public abstract class ConsensusCapsuleTestAbstract {
         final URL valuesFile = getClass().getClassLoader().getResource("minio-values.yaml");
         assert valuesFile != null;
 
-
         final List<Repository> repositories = helmClient.listRepositories();
         boolean hasRepository = false;
         for (Repository repository : repositories) {
@@ -194,20 +188,21 @@ public abstract class ConsensusCapsuleTestAbstract {
         }
 
         if (!hasMinioOperator) {
-            helmClient.installChart(Constants.MINIO_OPERATOR_RELEASE,
+            helmClient.installChart(
+                    Constants.MINIO_OPERATOR_RELEASE,
                     new Chart(Constants.MINIO_OPERATOR_CHART),
-                    InstallChartOptions.builder()
-                            .createNamespace(true).build());
+                    InstallChartOptions.builder().createNamespace(true).build());
         }
 
         if (!hasMinioTenant) {
-            helmClient.installChart(Constants.MINIO_TENANT_RELEASE,
+            helmClient.installChart(
+                    Constants.MINIO_TENANT_RELEASE,
                     new Chart(Constants.MINIO_TENANT_CHART),
                     InstallChartOptions.builder()
                             .values(List.of(valuesFile.getPath()))
-                            .createNamespace(true).build());
+                            .createNamespace(true)
+                            .build());
         }
-
     }
 
     private List<NodeInfo> prepareNodes(List<String> nodeNames) {
@@ -219,8 +214,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                     String.format("0.0.%d", accStart++),
                     1,
                     String.format("%s.consensus.%s.svc.cluster.local", nodeName, namespace),
-                    String.format("%s-svc.%s.svc.cluster.local", nodeName, namespace)
-            ));
+                    String.format("%s-svc.%s.svc.cluster.local", nodeName, namespace)));
         }
 
         return nodes;
@@ -228,7 +222,8 @@ public abstract class ConsensusCapsuleTestAbstract {
 
     private void setupConfigMaps(List<NodeInfo> nodes) {
         // create cluster-config configmap
-        kubernetesClient.resource(prepareClusterConfig(
+        kubernetesClient
+                .resource(prepareClusterConfig(
                         loadYaml(ConfigMap.class, getClass(), "cluster-config.yaml")
                                 .edit()
                                 .editMetadata()
@@ -252,10 +247,7 @@ public abstract class ConsensusCapsuleTestAbstract {
     }
 
     private void setupSecrets(List<NodeInfo> nodes) {
-        final ArrayList<String> secretFiles = new ArrayList<>(List.of(
-                "uploader-secrets.yaml",
-                "mirror-secrets.yaml"
-        ));
+        final ArrayList<String> secretFiles = new ArrayList<>(List.of("uploader-secrets.yaml", "mirror-secrets.yaml"));
 
         for (String sf : secretFiles) {
             kubernetesClient
@@ -266,7 +258,6 @@ public abstract class ConsensusCapsuleTestAbstract {
                             .endMetadata()
                             .build())
                     .create();
-
         }
 
         for (NodeInfo node : nodes) {
@@ -320,7 +311,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         // test with client
         await().atMost(90, TimeUnit.SECONDS).untilAsserted(() -> {
             HederaSdkClientFactory sdkClientFactory = new HederaSdkClientFactory(kubernetesClient, namespace);
-            for(NodeInfo node : nodes) {
+            for (NodeInfo node : nodes) {
                 checkAddressBook(sdkClientFactory.directContextCreator(node.name), 3);
             }
         });
@@ -337,8 +328,9 @@ public abstract class ConsensusCapsuleTestAbstract {
 
         kubernetesClient.resource(orbit).create();
 
-        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() ->
-                assertThat(kubernetesClient.resource(orbit).get()).isNotNull());
+        await().atMost(30, TimeUnit.SECONDS)
+                .untilAsserted(
+                        () -> assertThat(kubernetesClient.resource(orbit).get()).isNotNull());
     }
 
     List<ConsensusCapsule> createConsensusCapsule(List<NodeInfo> nodes) {
@@ -439,9 +431,8 @@ public abstract class ConsensusCapsuleTestAbstract {
     }
 
     List<NodeAddress> addresses(final Client client) throws Exception {
-        final ByteString raw = new FileContentsQuery()
-                .setFileId(FileId.ADDRESS_BOOK)
-                .execute(client);
+        final ByteString raw =
+                new FileContentsQuery().setFileId(FileId.ADDRESS_BOOK).execute(client);
         assertThat(raw).isNotNull();
         return NodeAddressBook.fromBytes(raw).getNodeAddresses();
     }
