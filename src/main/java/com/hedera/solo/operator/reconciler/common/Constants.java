@@ -25,6 +25,9 @@ public final class Constants {
         throw new UnsupportedOperationException("Utility class");
     }
 
+    // defaults
+    public static final String DEFAULT_NAMESPACE = "default";
+
     // HEDERA related
     public static final int HEDERA_ACCOUNT_START = 3;
     public static final AccountId OPERATOR_ACCOUNT_ID = AccountId.fromString("0.0.2");
@@ -37,7 +40,11 @@ public final class Constants {
     public static final String MINIO_OPERATOR_CHART = String.format("%s/operator", MINIO_CHART_REPO);
     public static final String MINIO_TENANT_CHART = String.format("%s/tenant", MINIO_CHART_REPO);
     public static final String MINIO_OPERATOR_RELEASE = "minio-operator";
+    public static final String MINIO_OPERATOR_LABEL = "app.kubernetes.io/instance";
     public static final String MINIO_TENANT_RELEASE = "minio-tenant";
+    public static final String MINIO_TENANT_LABEL = "v1.min.io/tenant";
+    public static final String MINIO_OPERATOR_NAMESPACE = "minio-operator";
+    public static final String MINIO_TENANT_NAMESPACE = "minio-tenant";
 
     // Templates
     public static final List<String> NODE_KEYS_FILENAMES_TEMPLATE =

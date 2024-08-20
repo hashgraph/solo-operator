@@ -21,12 +21,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.google.protobuf.ByteString;
-import com.hedera.fullstack.helm.client.HelmClient;
-import com.hedera.fullstack.helm.client.impl.DefaultHelmClientBuilder;
-import com.hedera.fullstack.helm.client.model.Chart;
-import com.hedera.fullstack.helm.client.model.Repository;
-import com.hedera.fullstack.helm.client.model.install.InstallChartOptions;
-import com.hedera.fullstack.helm.client.model.release.ReleaseItem;
 import com.hedera.hashgraph.sdk.Client;
 import com.hedera.hashgraph.sdk.FileContentsQuery;
 import com.hedera.hashgraph.sdk.FileId;
@@ -53,6 +47,7 @@ import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.test.Environment;
 import com.hedera.solo.operator.test.HederaSdkClientFactory;
 import com.hedera.solo.operator.test.fixtures.Resources;
+import com.hedera.solo.operator.test.setup.ClusterSetupManager;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.Service;
@@ -60,9 +55,7 @@ import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
 import jakarta.inject.Inject;
-import java.io.File;
 import java.lang.invoke.MethodHandles;
-import java.net.URL;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -76,13 +69,16 @@ public abstract class ConsensusCapsuleTestAbstract {
 
     @Inject
     @SuppressWarnings("CdiInjectionPointsInspection")
-    protected KubernetesClient kubernetesClient;
+    KubernetesClient kubernetesClient;
 
     @Inject
-    protected Environment environment;
+    Environment environment;
 
     @Inject
-    protected Operator operator;
+    Operator operator;
+
+    @Inject
+    ClusterSetupManager clusterSetupManager;
 
     public ConsensusCapsuleTestAbstract() {
         setNamespace(MethodHandles.lookup().lookupClass().getSimpleName().toLowerCase());
@@ -100,7 +96,7 @@ public abstract class ConsensusCapsuleTestAbstract {
 
         cleanup();
 
-        this.setupMinio();
+        clusterSetupManager.setup();
 
         // create orbit
         createOrbit();
@@ -152,57 +148,6 @@ public abstract class ConsensusCapsuleTestAbstract {
         }
         sb.append("nextNodeId, ").append(nodeId);
         return configMap.edit().addToData("config.txt", sb.toString()).build();
-    }
-
-    private void setupMinio() {
-
-        final HelmClient helmClient = new DefaultHelmClientBuilder()
-                .defaultNamespace("minio")
-                .workingDirectory(new File(".").toPath())
-                .build();
-        final URL valuesFile = getClass().getClassLoader().getResource("minio-values.yaml");
-        assert valuesFile != null;
-
-        final List<Repository> repositories = helmClient.listRepositories();
-        boolean hasRepository = false;
-        for (Repository repository : repositories) {
-            if (repository.name().equals(Constants.MINIO_CHART_REPO)) {
-                hasRepository = true;
-                break;
-            }
-        }
-
-        if (!hasRepository) {
-            helmClient.addRepository(new Repository(Constants.MINIO_CHART_REPO, Constants.MINIO_CHART_REPO_URL));
-        }
-
-        final List<ReleaseItem> releases = helmClient.listReleases(true);
-        boolean hasMinioOperator = false;
-        boolean hasMinioTenant = false;
-        for (ReleaseItem release : releases) {
-            if (release.name().equals(Constants.MINIO_OPERATOR_RELEASE)) {
-                hasMinioOperator = true;
-            } else if (release.name().equals(Constants.MINIO_TENANT_RELEASE)) {
-                hasMinioTenant = true;
-            }
-        }
-
-        if (!hasMinioOperator) {
-            helmClient.installChart(
-                    Constants.MINIO_OPERATOR_RELEASE,
-                    new Chart(Constants.MINIO_OPERATOR_CHART),
-                    InstallChartOptions.builder().createNamespace(true).build());
-        }
-
-        if (!hasMinioTenant) {
-            helmClient.installChart(
-                    Constants.MINIO_TENANT_RELEASE,
-                    new Chart(Constants.MINIO_TENANT_CHART),
-                    InstallChartOptions.builder()
-                            .values(List.of(valuesFile.getPath()))
-                            .createNamespace(true)
-                            .build());
-        }
     }
 
     private List<NodeInfo> prepareNodes(List<String> nodeNames) {
