@@ -46,7 +46,6 @@ import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
 import jakarta.inject.Inject;
-import java.lang.invoke.MethodHandles;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -58,7 +57,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 public abstract class ConsensusCapsuleTestAbstract {
-    protected String namespace;
+    protected final String namespace = getClass().getSimpleName().toLowerCase();
 
     @Inject
     @SuppressWarnings("CdiInjectionPointsInspection")
@@ -69,14 +68,6 @@ public abstract class ConsensusCapsuleTestAbstract {
 
     @Inject
     protected Operator operator;
-
-    public ConsensusCapsuleTestAbstract() {
-        setNamespace(MethodHandles.lookup().lookupClass());
-    }
-
-    protected void setNamespace(final Class<?> aClass) {
-        namespace = aClass.getSimpleName().toLowerCase();
-    }
 
     @BeforeEach
     void setup() {
@@ -255,7 +246,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         }
         for (ConsensusCapsule consensusCapsule : list) {
             String name = consensusCapsule.getMetadata().getName();
-            await().atMost(30999, TimeUnit.SECONDS).untilAsserted(() -> {
+            await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
                 ConsensusCapsule capsule =
                         kubernetesClient.resource(consensusCapsule).get();
                 assertThat(capsule).isNotNull();

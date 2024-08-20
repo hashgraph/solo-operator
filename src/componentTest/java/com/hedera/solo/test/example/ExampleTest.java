@@ -29,7 +29,7 @@ import org.junit.jupiter.api.Test;
 
 public class ExampleTest extends AbstractOperatorTest {
     @Override
-    protected LocallyRunOperatorExtension.Builder configure(LocallyRunOperatorExtension.Builder builder) {
+    protected LocallyRunOperatorExtension.Builder configure(final LocallyRunOperatorExtension.Builder builder) {
         return builder.withReconciler(new ExampleReconciler());
     }
 
