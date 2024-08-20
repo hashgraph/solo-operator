@@ -113,9 +113,9 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
             String filename = String.format(nameTemplate, metadata.getName());
 
             String subPath = filename;
-            if (nameTemplate.equals("hedera-%.crt")) {
+            if (nameTemplate.equals("hedera-%s.crt")) {
                 subPath = "hedera.crt";
-            } else if (nameTemplate.equals("hedera-%.key")) {
+            } else if (nameTemplate.equals("hedera-%s.key")) {
                 subPath = "hedera.key";
             }
 
