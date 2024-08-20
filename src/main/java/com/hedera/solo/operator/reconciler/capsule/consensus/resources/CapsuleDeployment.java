@@ -113,18 +113,18 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
             ConsensusCapsule primary, Context<ConsensusCapsule> context, ObjectMeta metadata) {
         final List<VolumeMount> volumeMounts = new ArrayList<>();
         for (String nameTemplate : Constants.NODE_KEYS_FILENAMES_TEMPLATE) {
-            String filename = String.format(nameTemplate, metadata.getName());
+            String subPath = String.format(nameTemplate, metadata.getName());
 
-            String subPath = filename;
+            String mounthPath = String.format("/opt/hgcapp/services-hedera/HapiApp2.0/data/keys/%s", subPath);
             if (nameTemplate.equals("hedera-%s.crt")) {
-                subPath = "hedera.crt";
+                mounthPath = "/opt/hgcapp/services-hedera/HapiApp2.0/hedera.crt";
             } else if (nameTemplate.equals("hedera-%s.key")) {
-                subPath = "hedera.key";
+                mounthPath = "/opt/hgcapp/services-hedera/HapiApp2.0/hedera.key";
             }
 
             volumeMounts.add(new VolumeMountBuilder()
                     .withName("private-keys")
-                    .withMountPath("/opt/hgcapp/services-hedera/HapiApp2.0/data/keys/" + filename)
+                    .withMountPath(mounthPath)
                     .withSubPath(subPath)
                     .build());
         }
