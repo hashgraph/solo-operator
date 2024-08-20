@@ -37,11 +37,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.jboss.logging.Logger;
 
-@ControllerConfiguration(name = "network-initialization",
-dependents = {
-        @Dependent(type = NetworkInitializationConsensusCapsule.class)
-}
-)
+@ControllerConfiguration(
+        name = "network-initialization",
+        dependents = {@Dependent(type = NetworkInitializationConsensusCapsule.class)})
 public class NetworkInitializationReconciler implements Reconciler<NetworkInitialization> {
     private final Logger log;
     private final KubernetesClient client;
@@ -58,8 +56,13 @@ public class NetworkInitializationReconciler implements Reconciler<NetworkInitia
     public UpdateControl<NetworkInitialization> reconcile(
             final NetworkInitialization resource, final Context<NetworkInitialization> context) throws Exception {
         try {
-            log.info("NetworkInitializationReconciler capsules: " + context.getSecondaryResources(ConsensusCapsule.class).size());
-            log.info("NetworkInitializationReconciler capsules: " + context.getSecondaryResourcesAsStream(ConsensusCapsule.class).map(CustomResource::getMetadata).map(ObjectMeta::getName).toList());
+            log.info("NetworkInitializationReconciler capsules: "
+                    + context.getSecondaryResources(ConsensusCapsule.class).size());
+            log.info("NetworkInitializationReconciler capsules: "
+                    + context.getSecondaryResourcesAsStream(ConsensusCapsule.class)
+                            .map(CustomResource::getMetadata)
+                            .map(ObjectMeta::getName)
+                            .toList());
             log.infof(
                     "Network Initialization - Starting Reconciliation [ name = '%s' ]",
                     resource.getMetadata().getName());

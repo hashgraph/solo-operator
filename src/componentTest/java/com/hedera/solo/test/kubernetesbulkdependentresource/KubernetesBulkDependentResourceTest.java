@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2024 Hedera Hashgraph, LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.hedera.solo.test.kubernetesbulkdependentresource;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
@@ -33,10 +49,15 @@ public class KubernetesBulkDependentResourceTest extends AbstractOperatorTest {
         updateOnly.configureWith(new KubernetesDependentResourceConfigBuilder<ConfigMap>()
                 .withLabelSelector("primary=update-only")
                 .build());
-        return builder
-                .withReconciler(new KubernetesBulkDependentResourceReconciler(crud), cfg -> cfg.withLabelSelector("crud").withName("crud"))
-                .withReconciler(new KubernetesBulkDependentResourceReconciler(readOnly), cfg -> cfg.withLabelSelector("read-only").withName("read-only"))
-                .withReconciler(new KubernetesBulkDependentResourceReconciler(updateOnly), cfg -> cfg.withLabelSelector("update-only").withName("update-only"));
+        return builder.withReconciler(
+                        new KubernetesBulkDependentResourceReconciler(crud),
+                        cfg -> cfg.withLabelSelector("crud").withName("crud"))
+                .withReconciler(
+                        new KubernetesBulkDependentResourceReconciler(readOnly),
+                        cfg -> cfg.withLabelSelector("read-only").withName("read-only"))
+                .withReconciler(
+                        new KubernetesBulkDependentResourceReconciler(updateOnly),
+                        cfg -> cfg.withLabelSelector("update-only").withName("update-only"));
     }
 
     record Config(String primary, String... names) {}
@@ -47,15 +68,14 @@ public class KubernetesBulkDependentResourceTest extends AbstractOperatorTest {
                 new Config("crud", "crud-update", "crud-delete"),
                 new Config("read-only", "read-only-no-update", "read-only-no-delete"),
                 new Config("update-only", "update-only-update", "update-only-no-delete"))) {
-            for (String name: config.names) {
-                operator().create(edit(new ConfigMap())
-                        .with(builder -> builder
-                                .editMetadata()
-                                .addToLabels("primary", config.primary)
-                                .withName(name))
-                        .with(builder -> builder
-                                .addToData("updated", "false"))
-                        .build());
+            for (String name : config.names) {
+                operator()
+                        .create(edit(new ConfigMap())
+                                .with(builder -> builder.editMetadata()
+                                        .addToLabels("primary", config.primary)
+                                        .withName(name))
+                                .with(builder -> builder.addToData("updated", "false"))
+                                .build());
             }
         }
 
@@ -64,13 +84,13 @@ public class KubernetesBulkDependentResourceTest extends AbstractOperatorTest {
                 new Config("crud", "crud-create", "crud-update"),
                 new Config("read-only", "read-only-no-create", "read-only-no-update"),
                 new Config("update-only", "update-only-no-create", "update-only-update"))) {
-            examples.add(operator().create(edit(new Example())
-                    .with(builder -> builder
-                            .editMetadata()
-                            .withName(config.primary)
-                            .addToLabels(config.primary, "true")
-                            .addToAnnotations("target/list", mapper.writeValueAsString(config.names)))
-                    .build()));
+            examples.add(operator()
+                    .create(edit(new Example())
+                            .with(builder -> builder.editMetadata()
+                                    .withName(config.primary)
+                                    .addToLabels(config.primary, "true")
+                                    .addToAnnotations("target/list", mapper.writeValueAsString(config.names)))
+                            .build()));
         }
 
         await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {

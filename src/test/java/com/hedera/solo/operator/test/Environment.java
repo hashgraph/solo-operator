@@ -25,6 +25,6 @@ public class Environment {
     }
 
     public boolean isDevModeActive() {
-        return false;//!isCI();
+        return false; // !isCI();
     }
 }

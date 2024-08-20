@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2024 Hedera Hashgraph, LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.hedera.solo.test.kubernetesbulkdependentresource;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
@@ -22,11 +38,8 @@ import java.util.stream.Collectors;
 
 @KubernetesDependent
 public class KubernetesBulkDependentResource extends AbstractKubernetesBulkDependentResource<ConfigMap, Example>
-    implements
-        SecondaryToPrimaryMapper<ConfigMap>
-    , PrimaryToSecondaryMapper<Example>
+        implements SecondaryToPrimaryMapper<ConfigMap>, PrimaryToSecondaryMapper<Example> {
 
-{
     private static final ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
     private final boolean create;
     private final boolean delete;
@@ -49,8 +62,11 @@ public class KubernetesBulkDependentResource extends AbstractKubernetesBulkDepen
 
     List<String> targetList(final Example primary) {
         try {
-            return mapper.readValue(primary.getMetadata().getAnnotations().getOrDefault("target/list", "[]"), new TypeReference<List<String>>(){});
-        } catch (JsonProcessingException ignored) {}
+            return mapper.readValue(
+                    primary.getMetadata().getAnnotations().getOrDefault("target/list", "[]"),
+                    new TypeReference<List<String>>() {});
+        } catch (JsonProcessingException ignored) {
+        }
         return Collections.emptyList();
     }
 
@@ -60,14 +76,13 @@ public class KubernetesBulkDependentResource extends AbstractKubernetesBulkDepen
         Map<String, ConfigMap> resources = getSecondaryResources(primary, context);
         Map<String, ConfigMap> desiredResources = toMap(targetList(primary).stream()
                 .map(name -> edit(new ConfigMap())
-                        .with(builder -> builder
-                                .editMetadata()
+                        .with(builder -> builder.editMetadata()
                                 .addToLabels("primary", primary.getMetadata().getName())
                                 .withName(name)
                                 .withNamespace(namespace))
-                        .with(builder -> builder
-                                .addToData("updated", "true"))
-                        .build()).toList());
+                        .with(builder -> builder.addToData("updated", "true"))
+                        .build())
+                .toList());
         if (!create) {
             desiredResources = desiredResources.entrySet().stream()
                     .filter(e -> resources.containsKey(e.getKey()))
@@ -80,11 +95,14 @@ public class KubernetesBulkDependentResource extends AbstractKubernetesBulkDepen
     public Set<ResourceID> toSecondaryResourceIDs(Example primary) {
         String namespace = primary.getMetadata().getNamespace();
         return targetList(primary).stream()
-                .map(name -> new ResourceID(name, namespace)).collect(Collectors.toSet());
+                .map(name -> new ResourceID(name, namespace))
+                .collect(Collectors.toSet());
     }
 
     @Override
     public Set<ResourceID> toPrimaryResourceIDs(ConfigMap resource) {
-        return Set.of(new ResourceID(resource.getMetadata().getLabels().get("primary"), resource.getMetadata().getNamespace()));
+        return Set.of(new ResourceID(
+                resource.getMetadata().getLabels().get("primary"),
+                resource.getMetadata().getNamespace()));
     }
 }
