@@ -25,7 +25,7 @@ public interface BuilderFunction<B extends Builder<?>> {
         try {
             return applyChecked(builder);
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            throw e instanceof RuntimeException r ? r : new RuntimeException(e);
         }
     }
 }
