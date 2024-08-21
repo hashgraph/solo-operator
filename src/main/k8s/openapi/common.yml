@@ -121,6 +121,7 @@ components:
           type: string
         config:
           type: object
+          default: { }
           properties:
             debug:
               type: boolean
@@ -130,6 +131,7 @@ components:
               type: boolean
             reaper:
               type: object
+              default: { }
               properties:
                 enabled:
                   type: boolean
@@ -141,6 +143,7 @@ components:
                   type: integer
             signature:
               type: object
+              default: { }
               properties:
                 require:
                   type: boolean
@@ -158,6 +161,7 @@ components:
               type: string
             s3:
               type: object
+              default: { }
               properties:
                 enabled:
                   type: boolean
@@ -168,6 +172,7 @@ components:
                   type: string
             gcs:
               type: object
+              default: { }
               properties:
                 enabled:
                   type: boolean
@@ -188,6 +193,7 @@ components:
           x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
         receivers:
           type: object
+          default: { }
           properties:
             prometheus:
               type: object
@@ -204,6 +210,7 @@ components:
                   type: string #5s
         exporters:
           type: object
+          default: {}
           properties:
             enabled:
               type: boolean
