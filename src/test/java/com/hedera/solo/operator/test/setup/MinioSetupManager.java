@@ -55,6 +55,7 @@ public class MinioSetupManager {
 
     /**
      * Set up a temporary kubeconfig file This is only needed to support testcontainer
+     *
      * @return Path to temporary kube configuration file
      */
     private Path setupKubeConfig() {
