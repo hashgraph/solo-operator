@@ -47,7 +47,6 @@ import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.test.Environment;
 import com.hedera.solo.operator.test.HederaSdkClientFactory;
 import com.hedera.solo.operator.test.fixtures.Resources;
-import com.hedera.solo.operator.test.setup.ClusterSetupManager;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.Service;
@@ -77,9 +76,6 @@ public abstract class ConsensusCapsuleTestAbstract {
     @Inject
     Operator operator;
 
-    @Inject
-    ClusterSetupManager clusterSetupManager;
-
     public ConsensusCapsuleTestAbstract() {
         setNamespace(MethodHandles.lookup().lookupClass().getSimpleName().toLowerCase());
     }
@@ -95,8 +91,6 @@ public abstract class ConsensusCapsuleTestAbstract {
         }
 
         cleanup();
-
-        clusterSetupManager.setup();
 
         // create orbit
         createOrbit();

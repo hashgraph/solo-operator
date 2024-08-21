@@ -41,8 +41,8 @@ import org.jboss.logging.Logger;
         dependents = {
             @Dependent(name = "sa", type = CapsuleServiceAccount.class),
             @Dependent(type = CapsuleRoleBinding.class, dependsOn = "sa"),
-            @Dependent(type = CapsuleSecret.class),
-            @Dependent(type = CapsuleDeployment.class),
+            @Dependent(name = "capsule-secret", type = CapsuleSecret.class),
+            @Dependent(type = CapsuleDeployment.class, dependsOn = "capsule-secret"),
             @Dependent(type = CapsuleService.class),
             @Dependent(type = CapsulePod.class)
         })

@@ -17,10 +17,14 @@
 package com.hedera.solo.operator.test.setup;
 
 import io.quarkus.arc.Lock;
+import io.quarkus.runtime.ShutdownEvent;
+import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
+import java.util.concurrent.TimeUnit;
 
-@Lock
+@Lock(time = 10, unit = TimeUnit.MINUTES) // this lock is needed when tests are run in parallel
 @ApplicationScoped
 public class ClusterSetupManager {
     private static boolean setupDone = false;
@@ -28,7 +32,7 @@ public class ClusterSetupManager {
     @Inject
     MinioSetupManager minioSetupManager;
 
-    public void setup() {
+    public void setup(@Observes StartupEvent event) {
         if (setupDone) {
             return;
         }
@@ -37,7 +41,7 @@ public class ClusterSetupManager {
         setupDone = true;
     }
 
-    public void cleanup() {
+    public void cleanup(@Observes ShutdownEvent event) {
         if (!setupDone) {
             return;
         }

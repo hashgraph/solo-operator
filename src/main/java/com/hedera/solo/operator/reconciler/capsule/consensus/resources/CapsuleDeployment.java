@@ -42,6 +42,7 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
     public static final SecurityContextBuilder SECURITY_CONTEXT_BUILDER =
             new SecurityContextBuilder().withRunAsUser(2000L).withRunAsGroup(2000L);
     public static final String RECORD_STREAM_PREFIX = "RECORD_STREAM";
+    public static final String RECORD_STREAM_TEMPLATE = "sidecars/record-stream-uploader.yaml";
 
     public CapsuleDeployment() {
         super(Deployment.class);
@@ -169,8 +170,7 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
             throw new RuntimeException("Missing record stream uploader GCS config");
         }
 
-        final StreamUploader defaultStreamLoader =
-                loadYaml(StreamUploader.class, getClass(), "defaults/record-stream-uploader.yaml");
+        final StreamUploader defaultStreamLoader = loadYaml(StreamUploader.class, getClass(), RECORD_STREAM_TEMPLATE);
 
         final String accountId = primary.getMetadata().getLabels().get(ACCOUNT_ID_LABEL);
         if (accountId == null || accountId.isEmpty()) {

@@ -28,7 +28,7 @@ val assertjVersion: String by project
 val sundrVersion: String by project
 val fabric8Version: String by project
 val lombokVersion: String by project
-var hederaSdkVersion = "2.35.1" // FIXME: String by project
+val hederaSdkVersion: String by project
 val javaoperatorsdkVersion: String by project
 
 dependencies {

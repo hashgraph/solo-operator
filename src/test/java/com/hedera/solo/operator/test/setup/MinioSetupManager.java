@@ -24,19 +24,22 @@ import com.hedera.fullstack.helm.client.model.install.InstallChartOptions;
 import com.hedera.fullstack.helm.client.model.release.ReleaseItem;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import io.fabric8.kubernetes.api.model.Namespace;
+import io.fabric8.kubernetes.client.Config;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.quarkus.arc.Lock;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.io.File;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import org.jboss.logging.Logger;
 
-@Lock
+@Lock(time = 5, unit = TimeUnit.MINUTES) // this lock is needed when tests are run in parallel
 @ApplicationScoped
 public class MinioSetupManager {
     private static boolean minioRepoAdded = false;
@@ -46,25 +49,73 @@ public class MinioSetupManager {
     Logger logger;
 
     @Inject
-    @SuppressWarnings("CdiInjectionPointsInspection")
-    protected KubernetesClient kubernetesClient;
+    KubernetesClient kubernetesClient;
+
+    private Path kubeConfigFile = null;
+
+    /**
+     * Set up a temporary kubeconfig file This is only needed to support testcontainer
+     * @return Path to temporary kube configuration file
+     */
+    private Path setupKubeConfig() {
+        if (!Objects.isNull(kubeConfigFile)) {
+            return kubeConfigFile;
+        }
+
+        Config config = kubernetesClient.getConfiguration();
+        final String kubeConfig =
+                """
+                        apiVersion: v1
+                        clusters:
+                        - cluster:
+                            certificate-authority-data: %s
+                            server: %s
+                          name: default
+                        contexts:
+                        - context:
+                            cluster: default
+                            user: default
+                          name: default
+                        current-context: default
+                        kind: Config
+                        preferences: {}
+                        users:
+                        - name: default
+                          user:
+                            client-certificate-data: %s
+                            client-key-data: %s
+                        """
+                        .formatted(
+                                config.getCaCertData(),
+                                config.getMasterUrl(),
+                                config.getClientCertData(),
+                                config.getClientKeyData());
+
+        try {
+            kubeConfigFile = File.createTempFile("kube", "config").toPath();
+            Files.writeString(kubeConfigFile, kubeConfig);
+            return kubeConfigFile;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     private HelmClient getHelmClient(String namespace) {
         // FIXME currently HelmClient does not let us set namespace for different operations
         // Therefore we need to create new instances for different namespaces.
+
         return new DefaultHelmClientBuilder()
+                .kubeConfig(this.setupKubeConfig())
                 .defaultNamespace(namespace)
                 .workingDirectory(new File(".").toPath())
                 .build();
     }
 
     private void addMinioRepository(HelmClient helmClient) {
+        Objects.requireNonNull(helmClient, "helmClient is null");
+
         if (minioRepoAdded) {
             return;
-        }
-
-        if (Objects.isNull(helmClient)) {
-            helmClient = this.getHelmClient(Constants.DEFAULT_NAMESPACE);
         }
 
         final List<Repository> repositories = helmClient.listRepositories();
@@ -80,9 +131,7 @@ public class MinioSetupManager {
     }
 
     private boolean isChartInstalled(HelmClient helmClient, String releaseName) {
-        if (Objects.isNull(helmClient)) {
-            helmClient = this.getHelmClient(Constants.DEFAULT_NAMESPACE);
-        }
+        Objects.requireNonNull(helmClient, "helmClient is null");
 
         final List<ReleaseItem> releases = helmClient.listReleases(true);
         for (ReleaseItem release : releases) {
@@ -95,9 +144,7 @@ public class MinioSetupManager {
     }
 
     private void installMinioOperator(HelmClient helmClient) {
-        if (Objects.isNull(helmClient)) {
-            helmClient = this.getHelmClient(Constants.MINIO_OPERATOR_NAMESPACE);
-        }
+        Objects.requireNonNull(helmClient, "helmClient is null");
 
         if (!isChartInstalled(helmClient, Constants.MINIO_OPERATOR_RELEASE)) {
             helmClient.installChart(
@@ -114,7 +161,7 @@ public class MinioSetupManager {
                                     && pod.getStatus().getContainerStatuses().stream()
                                             .allMatch(containerStatus ->
                                                     containerStatus.getReady() && containerStatus.getStarted()),
-                            1,
+                            5,
                             TimeUnit.MINUTES);
 
             logger.debug("installed MinIO operator");
@@ -124,9 +171,7 @@ public class MinioSetupManager {
     }
 
     private void installMinioTenant(HelmClient helmClient) {
-        if (Objects.isNull(helmClient)) {
-            helmClient = this.getHelmClient(Constants.MINIO_TENANT_NAMESPACE);
-        }
+        Objects.requireNonNull(helmClient, "helmClient is null");
 
         if (!isChartInstalled(helmClient, Constants.MINIO_TENANT_RELEASE)) {
             final URL valuesFile = getClass().getClassLoader().getResource("minio-values.yaml");
@@ -151,7 +196,7 @@ public class MinioSetupManager {
                                     && pod.getStatus().getContainerStatuses().stream()
                                             .allMatch(containerStatus ->
                                                     containerStatus.getReady() && containerStatus.getStarted()),
-                            2,
+                            5,
                             TimeUnit.MINUTES);
 
             logger.debug("installed MinIO tenant");
@@ -165,10 +210,12 @@ public class MinioSetupManager {
             return;
         }
 
-        final HelmClient helmClient = this.getHelmClient(Constants.MINIO_OPERATOR_NAMESPACE);
+        HelmClient helmClient = this.getHelmClient(Constants.MINIO_OPERATOR_NAMESPACE);
         this.addMinioRepository(helmClient);
         this.installMinioOperator(helmClient);
-        this.installMinioTenant(null);
+
+        helmClient = this.getHelmClient(Constants.MINIO_TENANT_NAMESPACE);
+        this.installMinioTenant(helmClient);
 
         minioInstalled = true;
     }
