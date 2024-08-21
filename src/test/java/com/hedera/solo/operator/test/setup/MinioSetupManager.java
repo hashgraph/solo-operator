@@ -86,7 +86,7 @@ public class MinioSetupManager {
 
         helmClient.version();
 
-        final List<ReleaseItem> releases = helmClient.listReleases(true);
+        final List<ReleaseItem> releases = helmClient.listReleases(false);
         for (ReleaseItem release : releases) {
             if (release.name().equals(releaseName)) {
                 return true;
