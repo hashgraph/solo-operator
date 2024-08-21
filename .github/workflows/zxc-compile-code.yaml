@@ -84,6 +84,8 @@ jobs:
       - name: Pre Unit Tests
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
         run: ./gradlew test -i --tests ConsensusCapsuleTest.testMultiNodeDeployment --scan
+        env:
+          HELM_DEBUG: true
 
       - name: Unit Tests
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
