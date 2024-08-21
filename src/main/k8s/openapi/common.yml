@@ -196,7 +196,7 @@ components:
                   description: |
                     list of prometheus scrape targets
                     target format: <IP or FQDN>:<Port>
-                    e.g. [ 0.0.0.0:9999 ]                    
+                    e.g. [ 0.0.0.0:9999 ]
                   type: array
                   items:
                     type: string
