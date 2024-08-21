@@ -81,6 +81,10 @@ jobs:
         if: ${{ inputs.enable-spotless-check && !cancelled() && !failure() }}
         run: ./gradlew spotlessCheck --scan
 
+      - name: Pre Unit Tests
+        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
+        run: ./gradlew test -i --tests ConsensusCapsuleTest.testMultiNodeDeployment --scan
+
       - name: Unit Tests
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
         run: ./gradlew check --scan
