@@ -17,6 +17,7 @@
 package com.hedera.solo.operator.test.setup;
 
 import com.hedera.fullstack.helm.client.HelmClient;
+import com.hedera.fullstack.helm.client.impl.DefaultHelmClient;
 import com.hedera.fullstack.helm.client.impl.DefaultHelmClientBuilder;
 import com.hedera.fullstack.helm.client.model.Chart;
 import com.hedera.fullstack.helm.client.model.Repository;
@@ -29,7 +30,10 @@ import io.quarkus.arc.Lock;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.io.File;
+import java.lang.reflect.Field;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -84,7 +88,22 @@ public class MinioSetupManager {
             helmClient = this.getHelmClient(Constants.DEFAULT_NAMESPACE);
         }
 
-        helmClient.version();
+        try {
+            helmClient.version();
+            Field field = DefaultHelmClient.class.getDeclaredField("helmExecutable");
+            field.setAccessible(true);
+            Path helmExecutable = (Path) field.get(helmClient);
+            ProcessBuilder pb = new ProcessBuilder(helmExecutable.toString(), "--debug", "-v6", "list", "--all-namespaces", "--output", "json", "--namespace", "minio-operator");
+            File error = new File(".helm.error");
+            File output = new File(".helm.output");
+            pb.redirectError(error);
+            pb.redirectOutput(output);
+            Process p = pb.start();
+            p.waitFor(10, TimeUnit.SECONDS);
+            logger.info("helm exit code: " + p.exitValue());
+            logger.info("helm out: " + Files.readString(output.toPath()));
+            logger.info("helm err: " + Files.readString(error.toPath()));
+        } catch (Exception e) {}
 
         final List<ReleaseItem> releases = helmClient.listReleases(true);
         for (ReleaseItem release : releases) {
