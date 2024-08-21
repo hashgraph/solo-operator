@@ -93,7 +93,16 @@ public class MinioSetupManager {
             Field field = DefaultHelmClient.class.getDeclaredField("helmExecutable");
             field.setAccessible(true);
             Path helmExecutable = (Path) field.get(helmClient);
-            ProcessBuilder pb = new ProcessBuilder(helmExecutable.toString(), "--debug", "-v6", "list", "--all-namespaces", "--output", "json", "--namespace", "minio-operator");
+            ProcessBuilder pb = new ProcessBuilder(
+                    helmExecutable.toString(),
+                    "--debug",
+                    "-v6",
+                    "list",
+                    "--all-namespaces",
+                    "--output",
+                    "json",
+                    "--namespace",
+                    "minio-operator");
             File error = new File(".helm.error");
             File output = new File(".helm.output");
             pb.redirectError(error);
@@ -103,7 +112,8 @@ public class MinioSetupManager {
             logger.info("helm exit code: " + p.exitValue());
             logger.info("helm out: " + Files.readString(output.toPath()));
             logger.info("helm err: " + Files.readString(error.toPath()));
-        } catch (Exception e) {}
+        } catch (Exception e) {
+        }
 
         final List<ReleaseItem> releases = helmClient.listReleases(true);
         for (ReleaseItem release : releases) {
