@@ -25,6 +25,7 @@ import com.hedera.fullstack.helm.client.model.install.InstallChartOptions;
 import com.hedera.fullstack.helm.client.model.release.ReleaseItem;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import io.fabric8.kubernetes.api.model.Namespace;
+import io.fabric8.kubernetes.client.Config;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.quarkus.arc.Lock;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -56,7 +57,44 @@ public class MinioSetupManager {
     private HelmClient getHelmClient(String namespace) {
         // FIXME currently HelmClient does not let us set namespace for different operations
         // Therefore we need to create new instances for different namespaces.
-        return new DefaultHelmClientBuilder()
+        Config config = kubernetesClient.getConfiguration();
+        final String kubeConfig =
+                """
+                apiVersion: v1
+                clusters:
+                - cluster:
+                    certificate-authority-data: %s
+                    server: %s
+                  name: default
+                contexts:
+                - context:
+                    cluster: default
+                    user: default
+                  name: default
+                current-context: default
+                kind: Config
+                preferences: {}
+                users:
+                - name: default
+                  user:
+                    client-certificate-data: %s
+                    client-key-data: %s
+                """
+                        .formatted(
+                                config.getCaCertData(),
+                                config.getMasterUrl(),
+                                config.getClientCertData(),
+                                config.getClientKeyData());
+
+        DefaultHelmClientBuilder defaultHelmClientBuilder = new DefaultHelmClientBuilder();
+        try {
+            Path tempFile = File.createTempFile("kube", "config").toPath();
+            Files.writeString(tempFile, kubeConfig);
+            defaultHelmClientBuilder.kubeConfig(tempFile);
+        } catch (Exception e) {
+        }
+
+        return defaultHelmClientBuilder
                 .defaultNamespace(namespace)
                 .workingDirectory(new File(".").toPath())
                 .build();
