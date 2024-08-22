@@ -27,7 +27,6 @@ import com.hedera.solo.operator.test.HederaSdkClientFactory;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.quarkus.test.junit.QuarkusTest;
-import java.lang.invoke.MethodHandles;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -38,10 +37,6 @@ import org.junit.jupiter.api.Test;
 
 @QuarkusTest
 public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
-    public HAProxyCapsuleTest() {
-        setNamespace(MethodHandles.lookup().lookupClass().getSimpleName().toLowerCase());
-    }
-
     @Override
     @AfterEach
     void cleanup() {
