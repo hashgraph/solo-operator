@@ -55,6 +55,7 @@ public class MinioSetupManager {
 
     /**
      * Set up a temporary kubeconfig file This is only needed to support testcontainer
+     *
      * @return Path to temporary kube configuration file
      */
     private Path setupKubeConfig() {
@@ -68,7 +69,7 @@ public class MinioSetupManager {
                         apiVersion: v1
                         clusters:
                         - cluster:
-                            certificate-authority-data: %s
+                            certificate-authority%s
                             server: %s
                           name: default
                         contexts:
@@ -82,14 +83,20 @@ public class MinioSetupManager {
                         users:
                         - name: default
                           user:
-                            client-certificate-data: %s
-                            client-key-data: %s
+                            client-certificate%s
+                            client-key%s
                         """
                         .formatted(
-                                config.getCaCertData(),
+                                null != config.getCaCertData()
+                                        ? "-data: " + config.getCaCertData()
+                                        : ": " + config.getCaCertFile(),
                                 config.getMasterUrl(),
-                                config.getClientCertData(),
-                                config.getClientKeyData());
+                                null != config.getClientCertData()
+                                        ? "-data: " + config.getClientCertData()
+                                        : ": " + config.getClientCertFile(),
+                                null != config.getClientKeyData()
+                                        ? "-data: " + config.getClientKeyData()
+                                        : ": " + config.getClientKeyFile());
 
         try {
             kubeConfigFile = File.createTempFile("kube", "config").toPath();
