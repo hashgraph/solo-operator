@@ -42,13 +42,15 @@ public class HAProxyConfigMap extends CRUDKubernetesDependentResource<ConfigMap,
     @Override
     protected ConfigMap desired(HAProxyCapsule primary, Context<HAProxyCapsule> context) {
         final ObjectMeta metadata = primary.getMetadata();
+        final String nodeName = metadata.getName();
         final String validName = validName(metadata.getName(), NAME_SUFFIX);
         final Base64.Decoder decoder = Base64.getDecoder();
         BiFunction<Secret, String, String> get =
                 (secret, name) -> new String(decoder.decode(secret.getData().get(name)), StandardCharsets.UTF_8);
+        Secret sec = context.getSecondaryResource(Secret.class).get();
         String pem = context.getSecondaryResource(Secret.class)
-                .map(secret -> get.apply(secret, "hedera.key").trim() + "\n"
-                        + get.apply(secret, "hedera.crt").trim() + "\n")
+                .map(secret -> get.apply(secret, "hedera-%s.key".formatted(nodeName)).trim() + "\n"
+                        + get.apply(secret, "hedera-%s.crt".formatted(nodeName)).trim() + "\n")
                 .orElse(null);
 
         return loadYaml(ConfigMap.class, getClass(), TEMPLATE)
