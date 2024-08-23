@@ -22,8 +22,6 @@ import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
-
-import javax.annotation.Priority;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Priority;
 

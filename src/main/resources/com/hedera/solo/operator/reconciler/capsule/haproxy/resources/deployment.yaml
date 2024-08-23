@@ -4,42 +4,36 @@ metadata:
   name: haproxy
   labels:
     app: haproxy
-    consensus-capsule: node0
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: haproxy
-      consensus-capsule: node0
+      consensus-capsule: bogus # dynamically updated
   template:
     metadata:
       labels:
         app: haproxy
-        consensus-capsule: node0
     spec:
       containers:
         - name: haproxy
           image: haproxy:2.8.10-alpine3.20
           resources: {}
-          env:
-          - name: HAPROXY_TARGET_IP
-            value: node0-svc.consensuscapsuletest
-          - name: HAPROXY_USER
-            value: user
-          - name: HAPROXY_AUTH
-            value: auth
           volumeMounts:
           - name: haproxy-cm
             mountPath: /usr/local/etc/haproxy/haproxy.cfg
             subPath: haproxy.cfg
           - name: haproxy-cm
-            mountPath: /usr/local/etc/haproxy/hedera.pem
-            subPath: hedera.pem
-          - name: haproxy-cm
             mountPath: /var/opt/ofac-blocklist.acl
             subPath: ofac-blocklist.acl
+          - name: haproxy-secrets
+            mountPath: /usr/local/etc/haproxy/hedera.pem
+            subPath: hedera.pem
       volumes:
       - name: haproxy-cm
         configMap:
-          name: haproxy-cm
+          name: bogus # dynamically added
+      - name: haproxy-secrets
+        secret:
+          secretName: bogus # dynamically added
   strategy: {}

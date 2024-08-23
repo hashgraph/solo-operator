@@ -16,11 +16,10 @@
 
 package com.hedera.solo.operator.reconciler.capsule.haproxy;
 
+import com.hedera.solo.operator.library.generic.Compare;
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsule;
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsuleStatus;
 import com.hedera.solo.operator.reconciler.capsule.haproxy.resources.HAProxyConfigMap;
-import com.hedera.solo.operator.reconciler.capsule.haproxy.resources.HAProxyConsensusCapsule;
-import com.hedera.solo.operator.reconciler.capsule.haproxy.resources.HAProxyConsensusService;
 import com.hedera.solo.operator.reconciler.capsule.haproxy.resources.HAProxyDeployment;
 import com.hedera.solo.operator.reconciler.capsule.haproxy.resources.HAProxyPod;
 import com.hedera.solo.operator.reconciler.capsule.haproxy.resources.HAProxySecret;
@@ -32,16 +31,15 @@ import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
 import jakarta.inject.Inject;
+import java.util.Objects;
 import org.jboss.logging.Logger;
 
 @ControllerConfiguration(
         dependents = {
-            @Dependent(type = HAProxyConfigMap.class, dependsOn = "HAProxySecret"),
-            @Dependent(type = HAProxyConsensusCapsule.class),
-            @Dependent(type = HAProxyConsensusService.class),
-            @Dependent(type = HAProxyDeployment.class, reconcilePrecondition = HAProxyDeployment.Ready.class),
-            @Dependent(type = HAProxyPod.class),
+            @Dependent(type = HAProxyConfigMap.class),
             @Dependent(type = HAProxySecret.class, name = "HAProxySecret"),
+            @Dependent(type = HAProxyDeployment.class, dependsOn = "HAProxySecret"),
+            @Dependent(type = HAProxyPod.class),
             @Dependent(type = HAProxyService.class),
         })
 public class HAProxyCapsuleReconciler implements Reconciler<HAProxyCapsule> {
@@ -55,27 +53,44 @@ public class HAProxyCapsuleReconciler implements Reconciler<HAProxyCapsule> {
     @Override
     public UpdateControl<HAProxyCapsule> reconcile(HAProxyCapsule resource, Context<HAProxyCapsule> context)
             throws Exception {
-        try {
-            log.infof(
-                    "HAProxy Capsule - Starting Reconciliation [ name = '%s' ]",
-                    resource.getMetadata().getName());
 
-            HAProxyCapsuleStatus.Phase phase = HAProxyCapsuleStatus.Phase.Unknown;
-            Pod[] pods = context.getSecondaryResources(Pod.class).toArray(Pod[]::new);
-            if (1 == pods.length) {
-                phase = HAProxyCapsuleStatus.Phase.valueOf(pods[0].getStatus().getPhase());
-            }
+        HAProxyCapsule desired = resource.edit()
+                .editStatus()
+                .withObservedGeneration(resource.getMetadata().getGeneration())
+                .withPhase(this.getDesiredPhase(context))
+                .endStatus()
+                .build();
 
-            return UpdateControl.patchStatus(resource.edit()
-                    .editStatus()
-                    .withObservedGeneration(resource.getMetadata().getGeneration())
-                    .withPhase(phase)
-                    .endStatus()
-                    .build());
-        } finally {
+        if (!requireUpdate(resource, desired)) {
             log.infof(
-                    "HAProxy Capsule - Finished Reconciliation [ name = '%s' ]",
-                    resource.getMetadata().getName());
+                    "HAProxy Capsule Reconciler - No update required [ phase = '%s', observedGeneration = '%s' ]",
+                    desired.getStatus().getPhase(), desired.getStatus().getObservedGeneration());
+
+            return UpdateControl.noUpdate();
         }
+
+        log.infof(
+                "HAProxy Capsule Reconciler - Reconciling [ phase = '%s' observedGeneration = '%d' ]",
+                desired.getStatus().getPhase(), desired.getStatus().getObservedGeneration());
+
+        return UpdateControl.patchStatus(desired);
+    }
+
+    private HAProxyCapsuleStatus.Phase getDesiredPhase(Context<HAProxyCapsule> context) {
+        HAProxyCapsuleStatus.Phase phase = HAProxyCapsuleStatus.Phase.Unknown;
+        Pod[] pods = context.getSecondaryResources(Pod.class).toArray(Pod[]::new);
+        if (1 == pods.length) {
+            phase = HAProxyCapsuleStatus.Phase.valueOf(pods[0].getStatus().getPhase());
+        }
+
+        return phase;
+    }
+
+    private boolean requireUpdate(HAProxyCapsule current, HAProxyCapsule desired) {
+        return !Compare.allMatch(
+                current,
+                desired,
+                o -> !Objects.isNull(o.getStatus()) ? o.getStatus().getObservedGeneration() : -1,
+                o -> !Objects.isNull(o.getStatus()) ? o.getStatus().getPhase() : HAProxyCapsuleStatus.Phase.Unknown);
     }
 }

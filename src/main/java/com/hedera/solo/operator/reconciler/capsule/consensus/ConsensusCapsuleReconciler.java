@@ -83,6 +83,7 @@ public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>,
                 }
             } catch (NullPointerException e) {
             }
+
             return UpdateControl.patchStatus(desired);
         } finally {
             log.infof(

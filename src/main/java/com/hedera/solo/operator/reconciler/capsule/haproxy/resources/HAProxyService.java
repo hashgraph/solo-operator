@@ -23,21 +23,15 @@ import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsule;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Service;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.BooleanWithUndefined;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import java.util.Map;
-import java.util.Optional;
 
-@KubernetesDependent(
-        useSSA = BooleanWithUndefined.FALSE,
-        resourceDiscriminator = HAProxyService.class,
-        labelSelector = "app=haproxy")
-public class HAProxyService extends CRUDKubernetesDependentResource<Service, HAProxyCapsule>
-        implements ResourceDiscriminator<Service, HAProxyCapsule> {
+@KubernetesDependent(useSSA = BooleanWithUndefined.FALSE, labelSelector = "app=haproxy")
+public class HAProxyService extends CRUDKubernetesDependentResource<Service, HAProxyCapsule> {
     public static final String TEMPLATE = "service.yaml";
-    public static final String NAME_SUFFIX = "-ha-svc";
+    public static final String NAME_SUFFIX = "-haproxy-svc";
 
     public HAProxyService() {
         super(Service.class);
@@ -62,13 +56,5 @@ public class HAProxyService extends CRUDKubernetesDependentResource<Service, HAP
                         primary.getSpec().getConsensus().getNode()))
                 .endSpec()
                 .build();
-    }
-
-    @Override
-    public Optional<Service> distinguish(
-            Class<Service> resource, HAProxyCapsule primary, Context<HAProxyCapsule> context) {
-        return context.getSecondaryResources(Service.class).stream()
-                .filter(svc -> "haproxy".equals(svc.getMetadata().getLabels().get("app")))
-                .findAny();
     }
 }

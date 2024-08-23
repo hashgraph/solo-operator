@@ -26,7 +26,6 @@ import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import java.util.Optional;
-import java.util.Set;
 
 @KubernetesDependent(resourceDiscriminator = CapsuleSecret.Discriminator.class)
 public class CapsuleSecret extends CRUDKubernetesDependentResource<Secret, ConsensusCapsule> {
@@ -38,18 +37,22 @@ public class CapsuleSecret extends CRUDKubernetesDependentResource<Secret, Conse
         super(Secret.class);
     }
 
+    public static String prepareName(String nodeName) {
+        return validName(nodeName, NAME_SUFFIX);
+    }
+
     @Override
     protected Secret desired(final ConsensusCapsule primary, final Context<ConsensusCapsule> context) {
         final ObjectMeta metadata = primary.getMetadata();
-        final String validName = validName(metadata.getName(), NAME_SUFFIX);
+        final String secretName = prepareName(metadata.getName());
         Secret secret = context.getClient()
                 .resources(Secret.class)
                 .inNamespace(primary.getMetadata().getNamespace())
-                .withName(validName)
+                .withName(secretName)
                 .get();
 
         if (secret == null) {
-            throw new IllegalArgumentException("Secret " + validName + " not found");
+            throw new IllegalArgumentException("Secret " + secretName + " not found");
         }
 
         return secret;
@@ -60,12 +63,11 @@ public class CapsuleSecret extends CRUDKubernetesDependentResource<Secret, Conse
         public Optional<Secret> distinguish(
                 final Class<Secret> resource, final ConsensusCapsule primary, final Context<ConsensusCapsule> context) {
 
-            final String validName = validName(primary.getMetadata().getName(), NAME_SUFFIX);
-            final Set<Secret> resources = context.getSecondaryResources(Secret.class);
+            final String secretName = validName(primary.getMetadata().getName(), NAME_SUFFIX);
             final Secret secret = context.getClient()
                     .resources(Secret.class)
                     .inNamespace(primary.getMetadata().getNamespace())
-                    .withName(validName)
+                    .withName(secretName)
                     .get();
 
             return Optional.ofNullable(secret);

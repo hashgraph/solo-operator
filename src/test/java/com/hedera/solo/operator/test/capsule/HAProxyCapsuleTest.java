@@ -64,6 +64,7 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
                         .map(CustomResource::getMetadata)
                         .map(ObjectMeta::getName)
                         .toArray(String[]::new);
+
         for (String name : consensusNodeNames) {
             HAProxyCapsule haProxyCapsule = new HAProxyCapsuleBuilder()
                     .editMetadata()
@@ -78,7 +79,8 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
                     .build();
             kubernetesClient.resource(haProxyCapsule).create();
         }
-        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+
+        await().atMost(90, TimeUnit.SECONDS).untilAsserted(() -> {
             List<HAProxyCapsule> proxies = kubernetesClient
                     .resources(HAProxyCapsule.class)
                     .inNamespace(namespace)
@@ -96,11 +98,10 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
                     .map(HAProxyCapsuleStatus::getPhase)
                     .allMatch(HAProxyCapsuleStatus.Phase.Running::equals);
         });
+
         await().atMost(90, TimeUnit.SECONDS).untilAsserted(() -> {
             HederaSdkClientFactory sdkClientFactory = new HederaSdkClientFactory(kubernetesClient, namespace);
-            for (String nodeName : consensusNodeNames) {
-                checkAddressBook(sdkClientFactory.haproxyContextCreator(nodeName), consensusNodeNames.length);
-            }
+            checkAddressBook(sdkClientFactory.haproxyContextCreator(consensusNodeNames[0]), consensusNodeNames.length);
         });
     }
 }

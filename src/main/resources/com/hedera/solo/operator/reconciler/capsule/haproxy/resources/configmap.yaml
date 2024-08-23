@@ -57,7 +57,7 @@ data:
     backend http_backend
         mode http
         http-reuse always
-        server hedera-services-node "${HAPROXY_TARGET_IP}":50211 proto h2 check inter 10s downinter 10s observe layer4 error-limit 5 on-error mark-down minconn 5 maxconn 1000
+        server hedera-services-node "${HAPROXY_TARGET}":50211 proto h2 check inter 10s downinter 10s observe layer4 error-limit 5 on-error mark-down minconn 5 maxconn 1000
         # server options: https://www.haproxy.com/documentation/haproxy-configuration-manual/latest/#5.2
             # proto h2                Force HTTP/2 on clear TCP, because it is faster than HTTP/1.1
             # check                   enable health checks on the server, all below options are health check options:
@@ -87,7 +87,7 @@ data:
     backend tls_backend
         mode http
         http-reuse always
-        server server1 "${HAPROXY_TARGET_IP}":50212 alpn h2 ssl check inter 10s downinter 10s error-limit 5 on-error mark-down minconn 5 maxconn 1000
+        server server1 "${HAPROXY_TARGET}":50212 alpn h2 ssl check inter 10s downinter 10s error-limit 5 on-error mark-down minconn 5 maxconn 1000
         # server options: https://www.haproxy.com/documentation/haproxy-configuration-manual/latest/#5.2
             # alpn h2             prefer HTTP/2
             # ssl                 enable TLS (we set "ssl-server-verify none" in global section above)
@@ -4551,66 +4551,3 @@ data:
     194.145.221.0/24
     91.242.208.0/22
     176.111.32.0/20
-  hedera.pem: |
-    -----BEGIN PRIVATE KEY-----
-    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
-    qJb2p1zd3Q4Hl2TCvfzVGUM=
-    -----END PRIVATE KEY-----
-    -----BEGIN CERTIFICATE-----
-    MIIDuDCCAiCgAwIBAgIJANStjsVDLpMoMA0GCSqGSIb3DQEBDAUAMBAxDjAMBgNV
-    BAMTBW5vZGUwMCAXDTAwMDEwMTAwMDAwMFoYDzIxMDAwMTAxMDAwMDAwWjAQMQ4w
-    DAYDVQQDEwVub2RlMDCCAaIwDQYJKoZIhvcNAQEBBQADggGPADCCAYoCggGBAOAA
-    4QqOAjatVUdbu1wBAto+jjO4vzwjOOFbc/+KOv4lpNjT9hcP33n95KNaDLH2jGUo
-    k0okw1JK+RkVWW4dAQIS6nUtr6qTeOvQOBN3YDWnBocxKS8NYSFESG1a/a4kbuv1
-    sKf9mSrcGbMiBRj9bZcsX3mskA8uhIVi3BrZXzaNzhAUlNim0cnCV5jMk3ulmF78
-    kIxTthZ6Pl4q5htJIQb1YIc0AyVXoVPG/r03AjRKdgDwvFLZ7PBRSg2BFVWwnWe+
-    2+UwFA8HiFo6SvHlMHC9bofXHiSNbZU6RrIWSgJ+se8WdSH9oF9P2or8eK+xRwcJ
-    Ks8DYjQ/1fm85r6MdKPLmMH2L8gUANRrCaSI6pAeGIA0xzifP2rL33FAmeEm5U0I
-    tkitouhxkYRtq3Ia5T69n8ZWvYWKy6aOBsN0Wm7ImqdZvddmzg2rr9BfysuC4ucw
-    kQQQqg1uI3ZVycZ60b9puYliq7uPtlRgrETjjnuha9sBupTdEQzTanjAaOa1QQID
-    AQABoxMwETAPBgNVHREECDAGhwR/AAABMA0GCSqGSIb3DQEBDAUAA4IBgQDIrtlg
-    hCBLfdLNsTUxzx0gjrOtzoLmh2jjnhBdQ5gr27gc38zXB4cCyCogdQ1+UdRZky0g
-    NB7nsaIk7Vf90g0UDk2S/TZuvmTmNT7VHE6sL/ilfU+Bv81oAP6wgVK2kKNyi375
-    LsFn+a1ip73/4rS0R/mfzwzesdqgSyZ6ea5irjABIxI+oIsV0SG3IleBu3b2c8Zu
-    TQNkwfYLsXk2DJoH6U6B8y6Hoih+V4joyJc1ORtcPLBN8mfxpVh1EJ+UU4Kren5d
-    bQcVvP9Xz+mEZh1ByCN7hdlJaN3HnW/WxwNSn3hM2F+8ypgs82KGzYSD+Yum3KLJ
-    U/DTlhHIN6nqD3/ev01pvNYIp2ktuwomfJiLTiBrbXCariGl/0mmyQtYijaTCFps
-    8oD1+HrjBPiy/q9zxnCXzXYHnBvIwfOuGUsqi7yfWAaxU9vxyH3pQ0etwx9hx8oR
-    t+Yq1IN0AlPLhmIS8bV0wz9iEufZ2Bso/rUmA6d81bkM0Vw9tlJ9y51hPok=
-    -----END CERTIFICATE-----

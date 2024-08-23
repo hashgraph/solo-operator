@@ -34,7 +34,7 @@ import io.javaoperatorsdk.operator.processing.dependent.workflow.Condition;
 @KubernetesDependent(useSSA = BooleanWithUndefined.FALSE, labelSelector = "app=haproxy")
 public class HAProxyDeployment extends CRUDKubernetesDependentResource<Deployment, HAProxyCapsule> {
     public static final String TEMPLATE = "deployment.yaml";
-    public static final String NAME_SUFFIX = "-ha-deploy";
+    public static final String NAME_SUFFIX = "-haproxy-deploy";
 
     public HAProxyDeployment() {
         super(Deployment.class);
@@ -43,6 +43,7 @@ public class HAProxyDeployment extends CRUDKubernetesDependentResource<Deploymen
     @Override
     protected Deployment desired(HAProxyCapsule primary, Context<HAProxyCapsule> context) {
         final ObjectMeta metadata = primary.getMetadata();
+        final String nodeName = primary.getSpec().getConsensus().getNode();
         final String validName = validName(metadata.getName(), NAME_SUFFIX);
 
         return loadYaml(Deployment.class, getClass(), TEMPLATE)
@@ -70,16 +71,8 @@ public class HAProxyDeployment extends CRUDKubernetesDependentResource<Deploymen
                 .editMatchingContainer(c -> "haproxy".equalsIgnoreCase(c.getName()))
                 .withEnv(
                         new EnvVar(
-                                "HAPROXY_TARGET_IP",
-                                context.getSecondaryResources(Service.class).stream()
-                                        .filter(svc -> "consensus-node"
-                                                .equals(svc.getMetadata()
-                                                        .getLabels()
-                                                        .get("app")))
-                                        .findAny()
-                                        .map(Service::getMetadata)
-                                        .map(ObjectMeta::getName)
-                                        .orElse(null),
+                                "HAPROXY_TARGET",
+                                "%s-svc.%s.svc.cluster.local".formatted(nodeName, metadata.getNamespace()),
                                 null),
                         new EnvVar(
                                 "HAPROXY_USER", primary.getSpec().getHaproxy().getUser(), null),
@@ -88,8 +81,13 @@ public class HAProxyDeployment extends CRUDKubernetesDependentResource<Deploymen
                 .endContainer()
                 .editMatchingVolume(vb -> "haproxy-cm".equals(vb.getName()))
                 .editConfigMap()
-                .withName(validName(metadata.getName(), HAProxyConfigMap.NAME_SUFFIX))
+                .withName(HAProxyConfigMap.prepareName(metadata.getName()))
                 .endConfigMap()
+                .endVolume()
+                .editMatchingVolume(v -> "haproxy-secrets".equals(v.getName()))
+                .editSecret()
+                .withSecretName(HAProxySecret.prepareName(nodeName))
+                .endSecret()
                 .endVolume()
                 .endSpec()
                 .endTemplate()
