@@ -23,6 +23,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Priority;
 
 @Lock(time = 10, unit = TimeUnit.MINUTES) // this lock is needed when tests are run in parallel
 @ApplicationScoped
@@ -32,7 +33,7 @@ public class ClusterSetupManager {
     @Inject
     MinioSetupManager minioSetupManager;
 
-    public void setup(@Observes StartupEvent event) {
+    public void setup(@Observes @Priority(1) StartupEvent event) {
         if (setupDone) {
             return;
         }
@@ -41,7 +42,7 @@ public class ClusterSetupManager {
         setupDone = true;
     }
 
-    public void cleanup(@Observes ShutdownEvent event) {
+    public void cleanup(@Observes @Priority(1) ShutdownEvent event) {
         if (!setupDone) {
             return;
         }

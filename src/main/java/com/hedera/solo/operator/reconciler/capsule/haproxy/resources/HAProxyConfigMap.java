@@ -49,7 +49,8 @@ public class HAProxyConfigMap extends CRUDKubernetesDependentResource<ConfigMap,
                 (secret, name) -> new String(decoder.decode(secret.getData().get(name)), StandardCharsets.UTF_8);
         Secret sec = context.getSecondaryResource(Secret.class).get();
         String pem = context.getSecondaryResource(Secret.class)
-                .map(secret -> get.apply(secret, "hedera-%s.key".formatted(nodeName)).trim() + "\n"
+                .map(secret -> get.apply(secret, "hedera-%s.key".formatted(nodeName))
+                                .trim() + "\n"
                         + get.apply(secret, "hedera-%s.crt".formatted(nodeName)).trim() + "\n")
                 .orElse(null);
 
