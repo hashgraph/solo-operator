@@ -101,7 +101,11 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
 
         await().atMost(90, TimeUnit.SECONDS).untilAsserted(() -> {
             HederaSdkClientFactory sdkClientFactory = new HederaSdkClientFactory(kubernetesClient, namespace);
-            checkAddressBook(sdkClientFactory.haproxyContextCreator(consensusNodeNames[0]), consensusNodeNames.length);
+            int nodeIndex = 0;
+            for (String nodeName : consensusNodeNames) {
+                checkAddressBook(
+                        sdkClientFactory.haproxyContextCreator(nodeName, nodeIndex++), consensusNodeNames.length);
+            }
         });
     }
 }

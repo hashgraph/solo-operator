@@ -50,6 +50,7 @@ public class HederaSdkClientFactory {
     KubernetesClient kubernetesClient;
     String namespace;
     Workaround workaround = new Workaround();
+    private final Map<String, Integer> portOffsetMap = Map.of("consensus-node", 1000, "haproxy", 2000);
 
     public HederaSdkClientFactory(final KubernetesClient kubernetesClient, final String namespace) throws Exception {
         this.kubernetesClient = kubernetesClient;
@@ -60,17 +61,18 @@ public class HederaSdkClientFactory {
         List<LocalPortForward> create(final PortForwardable portForwardable);
     }
 
-    public Supplier<ClientContext> directContextCreator(final String consensusNode) {
-        return createClientContext(direct(), consensusNode);
+    public Supplier<ClientContext> directContextCreator(final String consensusNode, final int nodeIndex) {
+        return createClientContext(direct(), consensusNode, portOffsetMap.get("consensus-node") + nodeIndex);
     }
 
-    public Supplier<ClientContext> haproxyContextCreator(final String consensusNode) {
-        return createClientContext(haproxy(), consensusNode);
+    public Supplier<ClientContext> haproxyContextCreator(final String consensusNode, final int nodeIndex) {
+        return createClientContext(haproxy(), consensusNode, portOffsetMap.get("haproxy") + nodeIndex);
     }
 
-    Supplier<ClientContext> createClientContext(final Map<String, String> nodeService, final String consensusNode) {
+    Supplier<ClientContext> createClientContext(
+            final Map<String, String> nodeService, final String consensusNode, final int portOffset) {
         return () -> getClientContext(nodeService, consensusNode::equals, resource -> Stream.of(50211, 50212)
-                .map(port -> resource.portForward(port, port))
+                .map(port -> resource.portForward(port, port - portOffset))
                 .toList());
     }
 

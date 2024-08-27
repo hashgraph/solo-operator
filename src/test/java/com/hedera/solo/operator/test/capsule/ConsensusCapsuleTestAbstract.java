@@ -221,7 +221,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         await().atMost(120, TimeUnit.SECONDS).untilAsserted(() -> {
             HederaSdkClientFactory sdkClientFactory = new HederaSdkClientFactory(kubernetesClient, namespace);
             final NodeInfo nodeInfo = nodes.getFirst();
-            checkAddressBook(sdkClientFactory.directContextCreator(nodeInfo.name), 1);
+            checkAddressBook(sdkClientFactory.directContextCreator(nodeInfo.name, 0), 1);
         });
     }
 
@@ -241,8 +241,9 @@ public abstract class ConsensusCapsuleTestAbstract {
         // test with client
         await().atMost(90, TimeUnit.SECONDS).untilAsserted(() -> {
             HederaSdkClientFactory sdkClientFactory = new HederaSdkClientFactory(kubernetesClient, namespace);
+            int nodeIndex = 0;
             for (NodeInfo node : nodes) {
-                checkAddressBook(sdkClientFactory.directContextCreator(node.name), 3);
+                checkAddressBook(sdkClientFactory.directContextCreator(node.name, nodeIndex++), nodes.size());
             }
         });
     }
