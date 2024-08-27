@@ -23,7 +23,6 @@ import com.hedera.fullstack.helm.client.model.Repository;
 import com.hedera.fullstack.helm.client.model.install.InstallChartOptions;
 import com.hedera.fullstack.helm.client.model.release.ReleaseItem;
 import com.hedera.solo.operator.reconciler.common.Constants;
-import io.fabric8.kubernetes.api.model.Namespace;
 import io.fabric8.kubernetes.client.Config;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.quarkus.arc.Lock;
@@ -240,16 +239,6 @@ public class MinioSetupManager {
         helmClient = this.getHelmClient(Constants.MINIO_OPERATOR_NAMESPACE);
         if (isChartInstalled(helmClient, Constants.MINIO_OPERATOR_RELEASE)) {
             helmClient.uninstallChart(Constants.MINIO_OPERATOR_RELEASE);
-        }
-
-        final List<String> namespaces = List.of(Constants.MINIO_OPERATOR_NAMESPACE, Constants.MINIO_TENANT_NAMESPACE);
-        for (String namespace : namespaces) {
-            final Namespace ns =
-                    kubernetesClient.namespaces().withName(namespace).get();
-
-            if (!Objects.isNull(ns)) {
-                kubernetesClient.resource(ns).delete();
-            }
         }
 
         minioInstalled = false;
