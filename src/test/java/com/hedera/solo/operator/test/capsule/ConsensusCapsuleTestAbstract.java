@@ -40,9 +40,11 @@ import com.hedera.solo.operator.test.Environment;
 import com.hedera.solo.operator.test.HederaSdkClientFactory;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import io.fabric8.kubernetes.api.model.ConfigMap;
+import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
 import jakarta.inject.Inject;
@@ -51,7 +53,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Supplier;
+import java.util.function.BiFunction;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -126,7 +128,7 @@ public abstract class ConsensusCapsuleTestAbstract {
     }
 
     @Test
-    void testSingleNodeDeployment() {
+    void testSingleNodeDeployment() throws Exception {
         // create orbit
         createOrbit();
 
@@ -158,12 +160,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         createNetworkInitialization(consensusCapsules);
 
         // test with client
-        await().atMost(90, TimeUnit.SECONDS).untilAsserted(() -> {
-            HederaSdkClientFactory sdkClientFactory = new HederaSdkClientFactory(kubernetesClient, namespace);
-            for (String nodeName : List.of("node0")) {
-                checkAddressBook(sdkClientFactory.directContextCreator(nodeName), 1);
-            }
-        });
+        checkAddressBook(HederaSdkClientFactory::directContextCreator);
     }
 
     @Test
@@ -213,12 +210,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         createNetworkInitialization(nodes);
 
         // test with client
-        await().atMost(90, TimeUnit.SECONDS).untilAsserted(() -> {
-            HederaSdkClientFactory sdkClientFactory = new HederaSdkClientFactory(kubernetesClient, namespace);
-            for (String nodeName : List.of("node0", "node1", "node2")) {
-                checkAddressBook(sdkClientFactory.directContextCreator(nodeName), 3);
-            }
-        });
+        checkAddressBook(HederaSdkClientFactory::directContextCreator);
     }
 
     Orbit createOrbit() {
@@ -322,20 +314,35 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .getNodeAddresses();
     }
 
+    String[] consensusNodeNames() {
+        return kubernetesClient.resources(ConsensusCapsule.class).inNamespace(namespace).list().getItems().stream()
+                .map(CustomResource::getMetadata)
+                .map(ObjectMeta::getName)
+                .toArray(String[]::new);
+    }
+
     void checkAddressBook(
-            final Supplier<HederaSdkClientFactory.ClientContext> clientContextSupplier, final int expectedAddresses)
-            throws Exception {
-        try (HederaSdkClientFactory.ClientContext context = clientContextSupplier.get()) {
-            context.client.setOperator(
-                    AccountId.fromString("0.0.2"),
-                    PrivateKey.fromString(
-                            "302e020100300506032b65700422042091132178e72057a1d7528025956fe39b0b847f200ab59b2fdd367017f3087137"));
+            final BiFunction<HederaSdkClientFactory, String, HederaSdkClientFactory.ClientContext> clientContext)
+            throws AssertionError, Exception {
+        String[] consensusNodeNames = consensusNodeNames();
+        HederaSdkClientFactory sdkClientFactory = new HederaSdkClientFactory(kubernetesClient, namespace);
+        for (String nodeName : consensusNodeNames) {
+            for (int attempt = 0; attempt < 10; attempt++) {
+                try (HederaSdkClientFactory.ClientContext context = clientContext.apply(sdkClientFactory, nodeName)) {
+                    await().atMost(15, TimeUnit.SECONDS).untilAsserted(() -> {
+                        Client client = context.client;
+                        client.setOperator(
+                                AccountId.fromString(HederaSdkClientFactory.DEFAULT_ACCOUNT_ID),
+                                PrivateKey.fromString(HederaSdkClientFactory.DEFAULT_PRIVATE_KEY));
 
-            context.client.setTransportSecurity(false);
-            assertThat(addresses(context.client).size()).isEqualTo(expectedAddresses);
+                        client.setTransportSecurity(false);
+                        assertThat(addresses(client).size()).isEqualTo(consensusNodeNames.length);
 
-            context.client.setTransportSecurity(true).setVerifyCertificates(true);
-            assertThat(addresses(context.client).size()).isEqualTo(expectedAddresses);
+                        client.setTransportSecurity(true).setVerifyCertificates(true);
+                        assertThat(addresses(client).size()).isEqualTo(consensusNodeNames.length);
+                    });
+                }
+            }
         }
     }
 }

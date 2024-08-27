@@ -16,22 +16,27 @@
 
 package com.hedera.solo.operator.test.capsule;
 
+import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_SELECTOR_CONSENSUS_NODE;
+import static com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleConstants.LABEL_SELECTOR_HAPROXY;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsule;
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsuleBuilder;
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsuleStatus;
 import com.hedera.solo.operator.test.HederaSdkClientFactory;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
+import io.fabric8.kubernetes.api.model.Secret;
+import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.quarkus.test.junit.QuarkusTest;
 import java.lang.invoke.MethodHandles;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -51,9 +56,10 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
 
     @Override
     @Test
-    void testSingleNodeDeployment() {
+    void testSingleNodeDeployment() throws Exception {
         super.testSingleNodeDeployment();
         createHAProxyCapsule();
+        simulateCertificateUpdate();
     }
 
     @Override
@@ -61,14 +67,11 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
     void testMultiNodeDeployment() throws Exception {
         super.testMultiNodeDeployment();
         createHAProxyCapsule();
+        simulateCertificateUpdate();
     }
 
-    void createHAProxyCapsule() {
-        String[] consensusNodeNames =
-                kubernetesClient.resources(ConsensusCapsule.class).inNamespace(namespace).list().getItems().stream()
-                        .map(CustomResource::getMetadata)
-                        .map(ObjectMeta::getName)
-                        .toArray(String[]::new);
+    void createHAProxyCapsule() throws Exception {
+        String[] consensusNodeNames = consensusNodeNames();
         for (String name : consensusNodeNames) {
             HAProxyCapsule haProxyCapsule = new HAProxyCapsuleBuilder()
                     .editMetadata()
@@ -101,11 +104,60 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
                     .map(HAProxyCapsuleStatus::getPhase)
                     .allMatch(HAProxyCapsuleStatus.Phase.Running::equals);
         });
-        await().atMost(90, TimeUnit.SECONDS).untilAsserted(() -> {
-            HederaSdkClientFactory sdkClientFactory = new HederaSdkClientFactory(kubernetesClient, namespace);
-            for (String nodeName : consensusNodeNames) {
-                checkAddressBook(sdkClientFactory.haproxyContextCreator(nodeName), consensusNodeNames.length);
-            }
+
+        // test with client
+        checkAddressBook(HederaSdkClientFactory::haproxyContextCreator);
+    }
+
+    void simulateCertificateUpdate() throws Exception {
+        Supplier<Map<String, Long>> currentGenerations =
+                () -> kubernetesClient
+                        .resources(Deployment.class)
+                        .inNamespace(namespace)
+                        .withLabel(LABEL_SELECTOR_HAPROXY)
+                        .list()
+                        .getItems()
+                        .stream()
+                        .collect(Collectors.toMap(
+                                deployment -> deployment.getMetadata().getName(),
+                                deployment -> deployment.getStatus().getObservedGeneration()));
+
+        // initial observed generations
+        Map<String, Long> initialGenerations = currentGenerations.get();
+
+        // modify hedera.crt in consensus secret
+        for (Secret secret : kubernetesClient
+                .secrets()
+                .inNamespace(namespace)
+                .withLabel(LABEL_SELECTOR_CONSENSUS_NODE)
+                .list()
+                .getItems()) {
+            kubernetesClient.resource(secret).edit(s -> s.edit()
+                    .addToData("hedera.crt.orig", s.getData().get("hedera.crt"))
+                    .addToData("hedera.crt", "AA==")
+                    .build());
+        }
+
+        // verify haproxy deployments are updated
+        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+            assertThat(currentGenerations.get().entrySet())
+                    .noneMatch(e -> Objects.equals(initialGenerations.get(e.getKey()), e.getValue()));
         });
+
+        // restore hedera.crt consensus secret
+        for (Secret secret : kubernetesClient
+                .secrets()
+                .inNamespace(namespace)
+                .withLabel(LABEL_SELECTOR_CONSENSUS_NODE)
+                .list()
+                .getItems()) {
+            kubernetesClient.resource(secret).edit(s -> s.edit()
+                    .addToData("hedera.crt", s.getData().get("hedera.crt.orig"))
+                    .removeFromData("hedera.crt.orig")
+                    .build());
+        }
+
+        // test with client
+        checkAddressBook(HederaSdkClientFactory::haproxyContextCreator);
     }
 }
