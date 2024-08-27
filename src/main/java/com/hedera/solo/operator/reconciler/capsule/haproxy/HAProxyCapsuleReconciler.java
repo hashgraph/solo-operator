@@ -90,7 +90,7 @@ public class HAProxyCapsuleReconciler implements Reconciler<HAProxyCapsule> {
         return !Compare.allMatch(
                 current,
                 desired,
-                o -> !Objects.isNull(o.getStatus()) ? o.getStatus().getObservedGeneration() : -1,
+                o -> !Objects.isNull(o.getStatus()) ? o.getStatus().getObservedGeneration() : 1,
                 o -> !Objects.isNull(o.getStatus()) ? o.getStatus().getPhase() : HAProxyCapsuleStatus.Phase.Unknown);
     }
 }

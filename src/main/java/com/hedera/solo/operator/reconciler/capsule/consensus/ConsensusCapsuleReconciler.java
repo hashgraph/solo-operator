@@ -19,6 +19,7 @@ package com.hedera.solo.operator.reconciler.capsule.consensus;
 import com.hedera.solo.operator.library.generic.Compare;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
+import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsuleStatus;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleDeployment;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsulePod;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleRoleBinding;
@@ -34,6 +35,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
 import jakarta.inject.Inject;
+import java.util.Objects;
 import org.jboss.logging.Logger;
 
 @ControllerConfiguration(
@@ -58,38 +60,44 @@ public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>,
     @Override
     public UpdateControl<ConsensusCapsule> reconcile(
             final ConsensusCapsule capsule, final Context<ConsensusCapsule> context) throws Exception {
-        try {
+
+        ConsensusCapsule desired = capsule.edit()
+                .editStatus()
+                .withObservedGeneration(capsule.getMetadata().getGeneration())
+                .withPhase(this.getDesiredPhase(context))
+                .endStatus()
+                .build();
+
+        if (!requireUpdate(capsule, desired)) {
             log.infof(
-                    "Consensus Capsule - Starting Reconciliation [ name = '%s' ]",
-                    capsule.getMetadata().getName());
+                    "Consensus Capsule Reconciler - No update required [ phase = '%s', observedGeneration = '%s' ]",
+                    desired.getStatus().getPhase(), desired.getStatus().getObservedGeneration());
 
-            ConsensusCapsuleStatus.Phase phase = ConsensusCapsuleStatus.Phase.Unknown;
-            Pod[] pods = context.getSecondaryResources(Pod.class).toArray(Pod[]::new);
-            if (1 == pods.length) {
-                phase = ConsensusCapsuleStatus.Phase.valueOf(pods[0].getStatus().getPhase());
-            }
-
-            ConsensusCapsule desired = capsule.edit()
-                    .editStatus()
-                    .withObservedGeneration(capsule.getMetadata().getGeneration())
-                    .withPhase(phase)
-                    .endStatus()
-                    .build();
-
-            try {
-                if (Compare.allMatch(capsule, desired, o -> o.getStatus().getObservedGeneration(), o -> o.getStatus()
-                        .getPhase())) {
-                    return UpdateControl.noUpdate();
-                }
-            } catch (NullPointerException e) {
-            }
-
-            return UpdateControl.patchStatus(desired);
-        } finally {
-            log.infof(
-                    "Consensus Capsule - Finished Reconciliation [ name = '%s' ]",
-                    capsule.getMetadata().getName());
+            return UpdateControl.noUpdate();
         }
+
+        log.infof(
+                "Consensus Capsule Reconciler - Reconciling [ phase = '%s' observedGeneration = '%d' ]",
+                desired.getStatus().getPhase(), desired.getStatus().getObservedGeneration());
+
+        return UpdateControl.patchStatus(desired);
+    }
+
+    private ConsensusCapsuleStatus.Phase getDesiredPhase(Context<ConsensusCapsule> context) {
+        ConsensusCapsuleStatus.Phase phase = ConsensusCapsuleStatus.Phase.Unknown;
+        Pod[] pods = context.getSecondaryResources(Pod.class).toArray(Pod[]::new);
+        if (1 == pods.length) {
+            phase = ConsensusCapsuleStatus.Phase.valueOf(pods[0].getStatus().getPhase());
+        }
+        return phase;
+    }
+
+    private boolean requireUpdate(ConsensusCapsule current, ConsensusCapsule desired) {
+        return !Compare.allMatch(
+                current,
+                desired,
+                o -> !Objects.isNull(o.getStatus()) ? o.getStatus().getObservedGeneration() : 1,
+                o -> !Objects.isNull(o.getStatus()) ? o.getStatus().getPhase() : HAProxyCapsuleStatus.Phase.Unknown);
     }
 
     @Override
