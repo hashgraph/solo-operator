@@ -28,7 +28,6 @@ import io.fabric8.kubernetes.client.LocalPortForward;
 import io.fabric8.kubernetes.client.dsl.PortForwardable;
 import java.io.ByteArrayInputStream;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.cert.CertificateFactory;
@@ -241,7 +240,6 @@ public class HederaSdkClientFactory {
         Field networkNodesField;
         Field nodeAccountIdField;
         Field nodeAddressBookEntry;
-        Method networkSetNetwork;
 
         Workaround() throws Exception {
             try (Client sdkClient = Client.forNetwork(Map.of("localhost:0", new AccountId(0)))) {
@@ -253,8 +251,6 @@ public class HederaSdkClientFactory {
                 networkAddressBookField.setAccessible(true);
                 networkNodesField = networkClass.getSuperclass().getDeclaredField("nodes");
                 networkNodesField.setAccessible(true);
-                networkSetNetwork = networkClass.getSuperclass().getDeclaredMethod("setNetwork", Map.class);
-                networkSetNetwork.setAccessible(true);
                 List<?> nodes = (List<?>) networkNodesField.get(network);
                 Class<?> nodeClass = nodes.getFirst().getClass();
                 nodeAccountIdField = nodeClass.getDeclaredField("accountId");
@@ -284,18 +280,8 @@ public class HederaSdkClientFactory {
             nodeAddressBookEntry.set(node, nodeAddress);
         }
 
-        void setNetwork(final Client client, final Map<String, AccountId> addressBook) throws Exception {
-            networkSetNetwork.invoke(clientNetworkField.get(client), addressBook);
-        }
-
         Client setNetworkFromAddressBook(final Client client, final NodeAddressBook nodeAddressBook) throws Exception {
-            setNetwork(
-                    client,
-                    nodeAddressBook.getNodeAddresses().stream()
-                            .flatMap(nodeAddress -> nodeAddress.getAddresses().stream()
-                                    .map(endpoint -> Map.entry(
-                                            endpoint.toString(), Objects.requireNonNull(nodeAddress.getAccountId()))))
-                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
+            client.setNetworkFromAddressBook(nodeAddressBook);
             Map<AccountId, NodeAddress> addressBook = nodeAddressBook.getNodeAddresses().stream()
                     .filter(nodeAddress -> Objects.nonNull(nodeAddress.getAccountId()))
                     .collect(Collectors.toMap(NodeAddress::getAccountId, Function.identity()));
