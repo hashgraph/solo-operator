@@ -51,7 +51,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -173,9 +172,8 @@ public abstract class ConsensusCapsuleTestAbstract {
         createOrbit();
 
         // populate config and keys
-        String internalSuffix = ".consensus." + namespace + ".svc.cluster.local";
-        String externalSuffix = "-svc." + namespace + ".svc.cluster.local";
-        Function<String, String> externalName = s -> s + "-svc." + namespace + "." + "svc.cluster.local";
+        String internalSuffix = ".consensus";
+        String externalSuffix = "-svc";
         kubernetesClient
                 .resource(config(
                         loadYaml(ConfigMap.class, getClass(), "cluster-config.yaml")
