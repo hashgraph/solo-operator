@@ -16,6 +16,7 @@
 
 package com.hedera.solo.operator.reconciler.orbit.resources;
 
+import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_SELECTOR_CONSENSUS_NODE;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
@@ -27,7 +28,9 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDNoGCKuber
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import java.util.Optional;
 
-@KubernetesDependent(resourceDiscriminator = ConsensusHeadlessService.class)
+@KubernetesDependent(
+        labelSelector = LABEL_SELECTOR_CONSENSUS_NODE,
+        resourceDiscriminator = ConsensusHeadlessService.class)
 public class ConsensusHeadlessService extends CRUDNoGCKubernetesDependentResource<Service, Orbit>
         implements ResourceDiscriminator<Service, Orbit> {
     public static final String TEMPLATE = "headless-service.yaml";
@@ -49,8 +52,6 @@ public class ConsensusHeadlessService extends CRUDNoGCKubernetesDependentResourc
     @Override
     public Optional<Service> distinguish(Class<Service> resource, Orbit primary, Context<Orbit> context) {
         return context.getSecondaryResources(Service.class).stream()
-                .filter(service ->
-                        "consensus-node".equals(service.getSpec().getSelector().get("app")))
                 .filter(service -> "None".equalsIgnoreCase(service.getSpec().getClusterIP()))
                 .findAny();
     }

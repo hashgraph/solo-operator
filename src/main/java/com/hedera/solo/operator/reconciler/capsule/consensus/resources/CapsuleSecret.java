@@ -16,6 +16,7 @@
 
 package com.hedera.solo.operator.reconciler.capsule.consensus.resources;
 
+import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_SELECTOR_CONSENSUS_NODE;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
@@ -25,9 +26,8 @@ import io.fabric8.kubernetes.api.model.Secret;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
-import java.util.stream.Collectors;
 
-@KubernetesDependent
+@KubernetesDependent(labelSelector = LABEL_SELECTOR_CONSENSUS_NODE)
 public class CapsuleSecret extends CRUDKubernetesDependentResource<Secret, ConsensusCapsule> {
 
     public static final String TEMPLATE = "secret.yaml";
@@ -46,8 +46,6 @@ public class CapsuleSecret extends CRUDKubernetesDependentResource<Secret, Conse
                 .orElse(loadYaml(Secret.class, getClass(), TEMPLATE))
                 .edit()
                 .editMetadata()
-                .addToLabels(primary.getSpec().getDependentResourceLabels().stream()
-                        .collect(Collectors.toMap(e -> e.getName(), e -> e.getValue())))
                 .withName(validName)
                 .withNamespace(metadata.getNamespace())
                 .addToLabels("consensus-capsule", metadata.getName())

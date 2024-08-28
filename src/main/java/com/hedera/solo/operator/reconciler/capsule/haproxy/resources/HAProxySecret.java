@@ -16,27 +16,73 @@
 
 package com.hedera.solo.operator.reconciler.capsule.haproxy.resources;
 
+import static com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleConstants.LABEL_SELECTOR_HAPROXY;
+import static com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleReconciler.HAS_LABEL_SELECTOR_HAPROXY;
+import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
+import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
+
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsule;
+import com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleReconciler;
+import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Secret;
+import io.javaoperatorsdk.operator.api.reconciler.Context;
+import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
+import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
-import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResource;
-import io.javaoperatorsdk.operator.processing.event.ResourceID;
-import io.javaoperatorsdk.operator.processing.event.source.SecondaryToPrimaryMapper;
-import java.util.Collections;
-import java.util.Set;
+import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResourceConfigBuilder;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import java.util.Optional;
+import java.util.function.BiFunction;
 
 @KubernetesDependent
-public class HAProxySecret extends KubernetesDependentResource<Secret, HAProxyCapsule>
-        implements SecondaryToPrimaryMapper<Secret> {
-    public HAProxySecret() {
+public class HAProxySecret extends CRUDKubernetesDependentResource<Secret, HAProxyCapsule>
+        implements ResourceDiscriminator<Secret, HAProxyCapsule> {
+
+    public static final String TEMPLATE = "secret.yaml";
+    public static final String NAME_SUFFIX = "-ha-keys";
+    private final HAProxyCapsuleReconciler reconciler;
+
+    public HAProxySecret(final HAProxyCapsuleReconciler reconciler) {
         super(Secret.class);
+        this.reconciler = reconciler;
+        configureWith(new KubernetesDependentResourceConfigBuilder<Secret>()
+                .withLabelSelector(LABEL_SELECTOR_HAPROXY)
+                .withResourceDiscriminator(this)
+                .build());
     }
 
     @Override
-    public Set<ResourceID> toPrimaryResourceIDs(Secret resource) {
-        String name = resource.getMetadata().getLabels().get("haproxy");
-        return null == name
-                ? Collections.emptySet()
-                : Set.of(new ResourceID(name, resource.getMetadata().getNamespace()));
+    protected Secret desired(final HAProxyCapsule primary, final Context<HAProxyCapsule> context) {
+        final ObjectMeta metadata = primary.getMetadata();
+        final String validName = validName(metadata.getName(), NAME_SUFFIX);
+        final Base64.Decoder decoder = Base64.getDecoder();
+        final Base64.Encoder encoder = Base64.getEncoder();
+        BiFunction<Secret, String, String> get =
+                (secret, name) -> new String(decoder.decode(secret.getData().get(name)), StandardCharsets.UTF_8);
+        String pem = reconciler
+                .haProxyConsensusSecret
+                .getSecondaryResource(primary, context)
+                .map(secret -> get.apply(secret, "hedera.key").trim() + "\n"
+                        + get.apply(secret, "hedera.crt").trim() + "\n")
+                .map(s -> encoder.encodeToString(s.getBytes(StandardCharsets.UTF_8)))
+                .orElseThrow();
+
+        return loadYaml(Secret.class, getClass(), TEMPLATE)
+                .edit()
+                .editMetadata()
+                .withName(validName)
+                .withNamespace(metadata.getNamespace())
+                .endMetadata()
+                .addToData("hedera.pem", pem)
+                .build();
+    }
+
+    @Override
+    public Optional<Secret> distinguish(
+            final Class<Secret> resource, final HAProxyCapsule primary, final Context<HAProxyCapsule> context) {
+        return context.getSecondaryResources(Secret.class).stream()
+                .filter(HAS_LABEL_SELECTOR_HAPROXY)
+                .findAny();
     }
 }
