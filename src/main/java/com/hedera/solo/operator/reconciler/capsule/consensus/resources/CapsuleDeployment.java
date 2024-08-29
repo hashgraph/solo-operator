@@ -42,6 +42,7 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
     public static final SecurityContextBuilder SECURITY_CONTEXT_BUILDER =
             new SecurityContextBuilder().withRunAsUser(2000L).withRunAsGroup(2000L);
     public static final String RECORD_STREAM_PREFIX = "RECORD_STREAM";
+    public static final String RECORD_STREAM_TEMPLATE = "sidecars/record-stream-uploader.yaml";
 
     public CapsuleDeployment() {
         super(Deployment.class);
@@ -75,7 +76,6 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
                 .endSelector()
                 .editTemplate()
                 .editMetadata()
-                .addToLabels("name", metadata.getName())
                 .addToLabels("consensus-capsule", metadata.getName())
                 .addToLabels(ACCOUNT_ID_LABEL, accountId)
                 .endMetadata()
@@ -169,8 +169,7 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
             throw new RuntimeException("Missing record stream uploader GCS config");
         }
 
-        final StreamUploader defaultStreamLoader =
-                loadYaml(StreamUploader.class, getClass(), "defaults/record-stream-uploader.yaml");
+        final StreamUploader defaultStreamLoader = loadYaml(StreamUploader.class, getClass(), RECORD_STREAM_TEMPLATE);
 
         final String accountId = primary.getMetadata().getLabels().get(ACCOUNT_ID_LABEL);
         if (accountId == null || accountId.isEmpty()) {
@@ -181,6 +180,7 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         final String s3Endpoint = recordStream.getConfig().getS3() != null
                 ? recordStream.getConfig().getS3().getUrl()
                 : defaultStreamLoader.getConfig().getS3().getUrl();
+
         final String gcsEndpoint = recordStream.getConfig().getGcs() != null
                 ? recordStream.getConfig().getGcs().getUrl()
                 : defaultStreamLoader.getConfig().getGcs().getUrl();
@@ -201,15 +201,19 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         final StreamUploader.ImagePullPolicy imagePullPolicy = recordStream.getImagePullPolicy() != null
                 ? recordStream.getImagePullPolicy()
                 : defaultStreamLoader.getImagePullPolicy();
+
         final List<EnvVar> envVars = this.streamUploaderEnvVars(
                 recordStream.getConfig(), defaultStreamLoader.getConfig(), RECORD_STREAM_PREFIX);
+
         envVars.add(new EnvVarBuilder()
                 .withName("BUCKET_PATH")
                 .withValue(String.format("recordstreams/record%s", accountId))
                 .build());
+
         final String name = recordStream.getNameOverride() != null
                 ? recordStream.getNameOverride()
                 : defaultStreamLoader.getNameOverride();
+
         final String image = recordStream.getImage() != null ? recordStream.getImage() : defaultStreamLoader.getImage();
         final ArrayList<String> uploaderCommand = getUploadCmd(s3Endpoint, gcsEndpoint);
 
@@ -262,47 +266,56 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
 
     private List<EnvVar> streamUploaderEnvVars(Config config, Config defaults, String envPrefix) {
         final Boolean debug = config.getDebug() != null ? config.getDebug() : defaults.getDebug();
+
         final Boolean compression =
                 config.getCompression() != null ? config.getCompression() : defaults.getCompression();
+
         final Boolean sidecar = config.getSidecar() != null ? config.getSidecar() : defaults.getSidecar();
-        final Boolean reaperEnabled =
-                config.getReaper() != null && config.getReaper().getEnabled() != null
-                        ? config.getReaper().getEnabled()
-                        : defaults.getReaper().getEnabled();
-        final Long reaperMinKeep =
-                config.getReaper() != null && config.getReaper().getMinKeep() != null
-                        ? config.getReaper().getMinKeep()
-                        : defaults.getReaper().getMinKeep();
-        final Long reaperInterval =
-                config.getReaper() != null && config.getReaper().getInterval() != null
-                        ? config.getReaper().getInterval()
-                        : defaults.getReaper().getInterval();
-        final Long reaperBackoff =
-                config.getReaper() != null && config.getReaper().getDefaultBackoff() != null
-                        ? config.getReaper().getDefaultBackoff()
-                        : defaults.getReaper().getDefaultBackoff();
-        final Boolean signatureRequired =
-                config.getSignature() != null && config.getSignature().getRequire() != null
-                        ? config.getSignature().getRequire()
-                        : defaults.getSignature().getRequire();
-        final Boolean signaturePrioritize =
-                config.getSignature() != null && config.getSignature().getPrioritize() != null
-                        ? config.getSignature().getPrioritize()
-                        : defaults.getSignature().getPrioritize();
+
+        final Boolean reaperEnabled = config.getReaper().getEnabled() != null
+                ? config.getReaper().getEnabled()
+                : defaults.getReaper().getEnabled();
+
+        final Long reaperMinKeep = config.getReaper().getMinKeep() != null
+                ? config.getReaper().getMinKeep()
+                : defaults.getReaper().getMinKeep();
+
+        final Long reaperInterval = config.getReaper().getInterval() != null
+                ? config.getReaper().getInterval()
+                : defaults.getReaper().getInterval();
+
+        final Long reaperBackoff = config.getReaper().getDefaultBackoff() != null
+                ? config.getReaper().getDefaultBackoff()
+                : defaults.getReaper().getDefaultBackoff();
+
+        final Boolean signatureRequired = config.getSignature().getRequire() != null
+                ? config.getSignature().getRequire()
+                : defaults.getSignature().getRequire();
+
+        final Boolean signaturePrioritize = config.getSignature().getPrioritize() != null
+                ? config.getSignature().getPrioritize()
+                : defaults.getSignature().getPrioritize();
+
         final String streamFileExtension = config.getStreamFileExtension() != null
                 ? config.getStreamFileExtension()
                 : defaults.getStreamFileExtension();
+
         final String streamSigExtension = config.getStreamSigExtension() != null
                 ? config.getStreamSigExtension()
                 : defaults.getStreamSigExtension();
+
         final String streamExtension =
                 config.getStreamExtension() != null ? config.getStreamExtension() : defaults.getStreamExtension();
+
         final String sigExtension =
                 config.getStreamExtension() != null ? config.getSigExtension() : defaults.getSigExtension();
+
         final String bucketName = config.getBucketName() != null ? config.getBucketName() : defaults.getBucketName();
+
         final Boolean s3Enable = config.getS3().getEnabled() != null
                 ? config.getS3().getEnabled()
                 : defaults.getS3().getEnabled();
+
         final Boolean gcsEnable = config.getGcs().getEnabled() != null
                 ? config.getGcs().getEnabled()
                 : defaults.getGcs().getEnabled();
@@ -310,6 +323,7 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         final String s3AccessKey = config.getS3().getAccessKey() != null
                 ? config.getS3().getAccessKey()
                 : defaults.getS3().getAccessKey();
+
         final String gcsAccessKey = config.getGcs().getAccessKey() != null
                 ? config.getGcs().getAccessKey()
                 : defaults.getGcs().getAccessKey();

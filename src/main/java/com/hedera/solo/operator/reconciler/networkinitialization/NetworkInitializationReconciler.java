@@ -85,7 +85,7 @@ public class NetworkInitializationReconciler implements Reconciler<NetworkInitia
                             .withPhase(getPhase(consensusCapsuleClient.list().getItems()))
                             .endStatus()
                             .build())
-                    .rescheduleAfter(Duration.ofSeconds(1));
+                    .rescheduleAfter(Duration.ofSeconds(30));
         } finally {
             log.infof(
                     "Network Initialization - Finished Reconciliation [ name = '%s' ]",

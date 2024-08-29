@@ -2,6 +2,8 @@ kind: Service
 apiVersion: v1
 metadata:
   name: consensus
+  labels:
+    app: consensus-node
 spec:
   clusterIP: None
   clusterIPs:
@@ -9,20 +11,3 @@ spec:
   selector:
     app: consensus-node
   publishNotReadyAddresses: true
-  ports:
-    - name: gossip
-      port: 50111
-      protocol: TCP
-      targetPort: 50111
-    - name: grpc
-      port: 50211
-      protocol: TCP
-      targetPort: 50211
-    - name: grpc-tls
-      port: 50212
-      protocol: TCP
-      targetPort: 50212
-    - name: prometheus
-      port: 9090
-      protocol: TCP
-      targetPort: 9090

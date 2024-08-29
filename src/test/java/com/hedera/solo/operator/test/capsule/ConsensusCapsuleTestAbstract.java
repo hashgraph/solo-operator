@@ -21,11 +21,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.google.protobuf.ByteString;
+import com.hedera.hashgraph.sdk.AccountId;
 import com.hedera.hashgraph.sdk.Client;
 import com.hedera.hashgraph.sdk.FileContentsQuery;
 import com.hedera.hashgraph.sdk.FileId;
 import com.hedera.hashgraph.sdk.NodeAddress;
 import com.hedera.hashgraph.sdk.NodeAddressBook;
+import com.hedera.hashgraph.sdk.PrivateKey;
 import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.commonspec.StreamUploaderBuilder;
 import com.hedera.solo.operator.model.commonspec.streamuploader.ConfigBuilder;
@@ -47,25 +49,26 @@ import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.test.Environment;
 import com.hedera.solo.operator.test.HederaSdkClientFactory;
 import com.hedera.solo.operator.test.fixtures.Resources;
-import com.hedera.solo.operator.test.setup.ClusterSetupManager;
 import io.fabric8.kubernetes.api.model.ConfigMap;
+import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
 import jakarta.inject.Inject;
-import java.lang.invoke.MethodHandles;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Supplier;
+import java.util.function.BiFunction;
+import org.awaitility.core.ConditionTimeoutException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 public abstract class ConsensusCapsuleTestAbstract {
-    protected String namespace;
+    protected final String namespace = getClass().getSimpleName().toLowerCase();
 
     @Inject
     @SuppressWarnings("CdiInjectionPointsInspection")
@@ -77,17 +80,6 @@ public abstract class ConsensusCapsuleTestAbstract {
     @Inject
     Operator operator;
 
-    @Inject
-    ClusterSetupManager clusterSetupManager;
-
-    public ConsensusCapsuleTestAbstract() {
-        setNamespace(MethodHandles.lookup().lookupClass().getSimpleName().toLowerCase());
-    }
-
-    protected void setNamespace(String namespace) {
-        this.namespace = namespace;
-    }
-
     @BeforeEach
     void setup() {
         if (!environment.isDevModeActive()) {
@@ -95,8 +87,6 @@ public abstract class ConsensusCapsuleTestAbstract {
         }
 
         cleanup();
-
-        clusterSetupManager.setup();
 
         // create orbit
         createOrbit();
@@ -158,8 +148,8 @@ public abstract class ConsensusCapsuleTestAbstract {
                     nodeName,
                     String.format("0.0.%d", accStart++),
                     1,
-                    String.format("%s.consensus.%s.svc.cluster.local", nodeName, namespace),
-                    String.format("%s-svc.%s.svc.cluster.local", nodeName, namespace)));
+                    String.format("%s.consensus", nodeName),
+                    String.format("%s-svc", nodeName)));
         }
 
         return nodes;
@@ -220,7 +210,7 @@ public abstract class ConsensusCapsuleTestAbstract {
     }
 
     @Test
-    void testSingleNodeDeployment() {
+    void testSingleNodeDeployment() throws Exception {
         final List<String> nodeNames = List.of("node0");
         final List<NodeInfo> nodes = prepareNodes(nodeNames);
         this.setupConfigMaps(nodes);
@@ -233,11 +223,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         createNetworkInitialization(consensusCapsules);
 
         // test with client
-        await().atMost(120, TimeUnit.SECONDS).untilAsserted(() -> {
-            HederaSdkClientFactory sdkClientFactory = new HederaSdkClientFactory(kubernetesClient, namespace);
-            final NodeInfo nodeInfo = nodes.getFirst();
-            checkAddressBook(sdkClientFactory.directContextCreator(nodeInfo.name), 1);
-        });
+        checkAddressBook(HederaSdkClientFactory::directContextCreator);
     }
 
     @Test
@@ -254,12 +240,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         createNetworkInitialization(consensusCapsules);
 
         // test with client
-        await().atMost(90, TimeUnit.SECONDS).untilAsserted(() -> {
-            HederaSdkClientFactory sdkClientFactory = new HederaSdkClientFactory(kubernetesClient, namespace);
-            for (NodeInfo node : nodes) {
-                checkAddressBook(sdkClientFactory.directContextCreator(node.name), 3);
-            }
-        });
+        checkAddressBook(HederaSdkClientFactory::directContextCreator);
     }
 
     void createOrbit() {
@@ -281,7 +262,7 @@ public abstract class ConsensusCapsuleTestAbstract {
     List<ConsensusCapsule> createConsensusCapsule(List<NodeInfo> nodes) {
         S3 s3Config = new S3Builder()
                 .withEnabled()
-                .withUrl("http://minio-tenant-hl.minio.svc.cluster.local:9000")
+                .withUrl("http://minio-tenant-hl.minio:9000")
                 .build();
         StreamUploader recordStreamUploader = new StreamUploaderBuilder()
                 .withEnabled()
@@ -313,7 +294,7 @@ public abstract class ConsensusCapsuleTestAbstract {
 
         for (ConsensusCapsule consensusCapsule : list) {
             String name = consensusCapsule.getMetadata().getName();
-            await().atMost(30999, TimeUnit.SECONDS).untilAsserted(() -> {
+            await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
                 ConsensusCapsule capsule =
                         kubernetesClient.resource(consensusCapsule).get();
                 assertThat(capsule).isNotNull();
@@ -382,16 +363,52 @@ public abstract class ConsensusCapsuleTestAbstract {
         return NodeAddressBook.fromBytes(raw).getNodeAddresses();
     }
 
-    void checkAddressBook(
-            final Supplier<HederaSdkClientFactory.ClientContext> clientContextSupplier, final int expectedAddresses)
-            throws Exception {
+    String[] consensusNodeNames() {
+        return kubernetesClient.resources(ConsensusCapsule.class).inNamespace(namespace).list().getItems().stream()
+                .map(CustomResource::getMetadata)
+                .map(ObjectMeta::getName)
+                .toArray(String[]::new);
+    }
 
-        try (HederaSdkClientFactory.ClientContext context = clientContextSupplier.get()) {
-            context.client.setOperator(Constants.OPERATOR_ACCOUNT_ID, Constants.OPERATOR_PRIVATE_KEY);
-            context.client.setTransportSecurity(false);
-            assertThat(addresses(context.client).size()).isEqualTo(expectedAddresses);
-            context.client.setTransportSecurity(true).setVerifyCertificates(true);
-            assertThat(addresses(context.client).size()).isEqualTo(expectedAddresses);
+    void checkAddressBook(
+            final BiFunction<HederaSdkClientFactory, String, HederaSdkClientFactory.ClientContext> clientContext)
+            throws AssertionError, Exception {
+        String[] consensusNodeNames = consensusNodeNames();
+        HederaSdkClientFactory sdkClientFactory = new HederaSdkClientFactory(kubernetesClient, namespace);
+        for (String nodeName : consensusNodeNames) {
+            AssertionError assertion = null;
+            ConditionTimeoutException timeout = null;
+            for (int attempt = 0; attempt < 10; attempt++) {
+                assertion = null;
+                timeout = null;
+                try (HederaSdkClientFactory.ClientContext context = clientContext.apply(sdkClientFactory, nodeName)) {
+                    await().atMost(15, TimeUnit.SECONDS).untilAsserted(() -> {
+                        Client client = context.client;
+                        client.setOperator(
+                                AccountId.fromString(HederaSdkClientFactory.DEFAULT_ACCOUNT_ID),
+                                PrivateKey.fromString(HederaSdkClientFactory.DEFAULT_PRIVATE_KEY));
+
+                        client.setTransportSecurity(false);
+                        assertThat(addresses(client).size()).isEqualTo(consensusNodeNames.length);
+
+                        client.setTransportSecurity(true).setVerifyCertificates(true);
+                        assertThat(addresses(client).size()).isEqualTo(consensusNodeNames.length);
+                    });
+                } catch (AssertionError e) {
+                    assertion = e;
+                } catch (ConditionTimeoutException e) {
+                    timeout = e;
+                }
+                if (assertion == null && timeout == null) {
+                    break;
+                }
+            }
+            if (assertion != null) {
+                throw assertion;
+            }
+            if (timeout != null) {
+                throw timeout;
+            }
         }
     }
 }
