@@ -83,7 +83,7 @@ jobs:
 
       - name: Unit Tests
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
-        run: ./gradlew check --scan -i
+        run: ./gradlew check --scan
 
       - name: Publish Unit Test Report
         uses: EnricoMi/publish-unit-test-result-action@567cc7f8dcea3eba5da355f6ebc95663310d8a07 # v2.17.0
