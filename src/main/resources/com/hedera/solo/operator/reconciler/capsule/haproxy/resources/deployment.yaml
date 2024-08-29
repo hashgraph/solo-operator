@@ -32,7 +32,7 @@ spec:
           - name: haproxy-cm
             mountPath: /usr/local/etc/haproxy/haproxy.cfg
             subPath: haproxy.cfg
-          - name: haproxy-cm
+          - name: haproxy-secret
             mountPath: /usr/local/etc/haproxy/hedera.pem
             subPath: hedera.pem
           - name: haproxy-cm
@@ -42,4 +42,7 @@ spec:
       - name: haproxy-cm
         configMap:
           name: haproxy-cm
+      - name: haproxy-secret
+        secret:
+          secretName: haproxy-secret
   strategy: {}

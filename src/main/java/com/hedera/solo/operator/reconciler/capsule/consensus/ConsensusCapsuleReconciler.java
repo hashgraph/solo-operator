@@ -16,6 +16,10 @@
 
 package com.hedera.solo.operator.reconciler.capsule.consensus;
 
+import static com.hedera.solo.operator.library.model.Labels.hasLabel;
+import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_SELECTOR_CONSENSUS_NODE_KEY;
+import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_SELECTOR_CONSENSUS_NODE_VALUE;
+
 import com.hedera.solo.operator.library.generic.Compare;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
@@ -25,6 +29,7 @@ import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleRo
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleSecret;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleService;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleServiceAccount;
+import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
@@ -34,6 +39,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
 import jakarta.inject.Inject;
+import java.util.function.Predicate;
 import org.jboss.logging.Logger;
 
 @ControllerConfiguration(
@@ -48,6 +54,8 @@ import org.jboss.logging.Logger;
         })
 public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>, ErrorStatusHandler<ConsensusCapsule> {
 
+    public static final Predicate<HasMetadata> HAS_LABEL_SELECTOR_CONSENSUS_NODE =
+            hasLabel(LABEL_SELECTOR_CONSENSUS_NODE_KEY, LABEL_SELECTOR_CONSENSUS_NODE_VALUE);
     private final Logger log;
 
     @Inject

@@ -16,43 +16,34 @@
 
 package com.hedera.solo.operator.reconciler.capsule.haproxy.resources;
 
+import static com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleConstants.LABEL_SELECTOR_HAPROXY;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsule;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
-import io.fabric8.kubernetes.api.model.Secret;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
-import java.util.function.BiFunction;
+import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResourceConfigBuilder;
 
-@KubernetesDependent(labelSelector = "app=haproxy")
+@KubernetesDependent
 public class HAProxyConfigMap extends CRUDKubernetesDependentResource<ConfigMap, HAProxyCapsule> {
     public static final String TEMPLATE = "configmap.yaml";
     public static final String NAME_SUFFIX = "-ha-cm";
 
     public HAProxyConfigMap() {
         super(ConfigMap.class);
+        configureWith(new KubernetesDependentResourceConfigBuilder<ConfigMap>()
+                .withLabelSelector(LABEL_SELECTOR_HAPROXY)
+                .build());
     }
 
     @Override
     protected ConfigMap desired(HAProxyCapsule primary, Context<HAProxyCapsule> context) {
         final ObjectMeta metadata = primary.getMetadata();
-        final String nodeName = metadata.getName();
         final String validName = validName(metadata.getName(), NAME_SUFFIX);
-        final Base64.Decoder decoder = Base64.getDecoder();
-        BiFunction<Secret, String, String> get =
-                (secret, name) -> new String(decoder.decode(secret.getData().get(name)), StandardCharsets.UTF_8);
-        Secret sec = context.getSecondaryResource(Secret.class).get();
-        String pem = context.getSecondaryResource(Secret.class)
-                .map(secret -> get.apply(secret, "hedera-%s.key".formatted(nodeName))
-                                .trim() + "\n"
-                        + get.apply(secret, "hedera-%s.crt".formatted(nodeName)).trim() + "\n")
-                .orElse(null);
 
         return loadYaml(ConfigMap.class, getClass(), TEMPLATE)
                 .edit()
@@ -60,7 +51,6 @@ public class HAProxyConfigMap extends CRUDKubernetesDependentResource<ConfigMap,
                 .withName(validName)
                 .withNamespace(metadata.getNamespace())
                 .endMetadata()
-                .addToData("hedera.pem", pem)
                 .build();
     }
 }

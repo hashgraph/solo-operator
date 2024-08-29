@@ -16,6 +16,7 @@
 
 package com.hedera.solo.operator.reconciler.capsule.consensus.resources;
 
+import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_SELECTOR_CONSENSUS_NODE;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
@@ -28,7 +29,9 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDep
 import java.util.Optional;
 import java.util.Set;
 
-@KubernetesDependent(resourceDiscriminator = CapsuleSecret.Discriminator.class)
+@KubernetesDependent(
+        labelSelector = LABEL_SELECTOR_CONSENSUS_NODE,
+        resourceDiscriminator = CapsuleSecret.Discriminator.class)
 public class CapsuleSecret extends CRUDKubernetesDependentResource<Secret, ConsensusCapsule> {
 
     public static final String TEMPLATE = "secret.yaml";

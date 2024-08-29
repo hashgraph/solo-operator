@@ -4,6 +4,7 @@ metadata:
   name: node2-keys
   namespace: solo-orbit
   labels:
+    app: consensus-node
     consensus-capsule: node0
 data:
   # keys with a- prefix will soon not be needed

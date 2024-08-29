@@ -76,7 +76,6 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
                 .endSelector()
                 .editTemplate()
                 .editMetadata()
-                .addToLabels("name", metadata.getName())
                 .addToLabels("consensus-capsule", metadata.getName())
                 .addToLabels(ACCOUNT_ID_LABEL, accountId)
                 .endMetadata()

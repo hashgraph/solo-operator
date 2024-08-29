@@ -16,28 +16,37 @@
 
 package com.hedera.solo.operator.reconciler.capsule.haproxy.resources;
 
+import static com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleConstants.LABEL_SELECTOR_HAPROXY;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
+import com.hedera.solo.operator.library.data.Digest;
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsule;
+import com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleReconciler;
 import io.fabric8.kubernetes.api.model.EnvVar;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.DependentResource;
-import io.javaoperatorsdk.operator.processing.dependent.kubernetes.BooleanWithUndefined;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
+import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResourceConfigBuilder;
 import io.javaoperatorsdk.operator.processing.dependent.workflow.Condition;
 
-@KubernetesDependent(useSSA = BooleanWithUndefined.FALSE, labelSelector = "app=haproxy")
+@KubernetesDependent
 public class HAProxyDeployment extends CRUDKubernetesDependentResource<Deployment, HAProxyCapsule> {
     public static final String TEMPLATE = "deployment.yaml";
     public static final String NAME_SUFFIX = "-ha-deploy";
+    private final HAProxyCapsuleReconciler reconciler;
 
-    public HAProxyDeployment() {
+    public HAProxyDeployment(final HAProxyCapsuleReconciler reconciler) {
         super(Deployment.class);
+        this.reconciler = reconciler;
+        configureWith(new KubernetesDependentResourceConfigBuilder<Deployment>()
+                .withUseSSA(Boolean.FALSE)
+                .withLabelSelector(LABEL_SELECTOR_HAPROXY)
+                .build());
     }
 
     @Override
@@ -65,21 +74,25 @@ public class HAProxyDeployment extends CRUDKubernetesDependentResource<Deploymen
                 .addToLabels(
                         "consensus-capsule", primary.getSpec().getConsensus().getNode())
                 .addToLabels("haproxy", metadata.getName())
+                .addToAnnotations(
+                        "checksum/secret",
+                        Digest.of(reconciler
+                                .haProxySecret
+                                .getSecondaryResource(primary, context)
+                                .orElseThrow()
+                                .getData()))
                 .endMetadata()
                 .editSpec()
                 .editMatchingContainer(c -> "haproxy".equalsIgnoreCase(c.getName()))
                 .withEnv(
                         new EnvVar(
                                 "HAPROXY_TARGET_IP",
-                                context.getSecondaryResources(Service.class).stream()
-                                        .filter(svc -> "consensus-node"
-                                                .equals(svc.getMetadata()
-                                                        .getLabels()
-                                                        .get("app")))
-                                        .findAny()
+                                reconciler
+                                        .haProxyConsensusService
+                                        .getSecondaryResource(primary, context)
                                         .map(Service::getMetadata)
                                         .map(ObjectMeta::getName)
-                                        .orElse(null),
+                                        .orElseThrow(),
                                 null),
                         new EnvVar(
                                 "HAPROXY_USER", primary.getSpec().getHaproxy().getUser(), null),
@@ -91,6 +104,11 @@ public class HAProxyDeployment extends CRUDKubernetesDependentResource<Deploymen
                 .withName(validName(metadata.getName(), HAProxyConfigMap.NAME_SUFFIX))
                 .endConfigMap()
                 .endVolume()
+                .editMatchingVolume(vb -> "haproxy-secret".equals(vb.getName()))
+                .editSecret()
+                .withSecretName(validName(metadata.getName(), HAProxySecret.NAME_SUFFIX))
+                .endSecret()
+                .endVolume()
                 .endSpec()
                 .endTemplate()
                 .endSpec()
@@ -98,13 +116,21 @@ public class HAProxyDeployment extends CRUDKubernetesDependentResource<Deploymen
     }
 
     public static class Ready implements Condition<Deployment, HAProxyCapsule> {
+        private final HAProxyCapsuleReconciler reconciler;
+
+        public Ready(final HAProxyCapsuleReconciler reconciler) {
+            this.reconciler = reconciler;
+        }
+
         @Override
         public boolean isMet(
                 DependentResource<Deployment, HAProxyCapsule> dependentResource,
                 HAProxyCapsule primary,
                 Context<HAProxyCapsule> context) {
-            return context.getSecondaryResources(Service.class).stream().anyMatch(svc -> "consensus-node"
-                    .equals(svc.getMetadata().getLabels().get("app")));
+            return reconciler
+                    .haProxyConsensusService
+                    .getSecondaryResource(primary, context)
+                    .isPresent();
         }
     }
 }
