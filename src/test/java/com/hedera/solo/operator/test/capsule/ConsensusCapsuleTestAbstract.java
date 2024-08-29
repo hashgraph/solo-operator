@@ -54,6 +54,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
+import org.awaitility.core.ConditionTimeoutException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -327,7 +328,11 @@ public abstract class ConsensusCapsuleTestAbstract {
         String[] consensusNodeNames = consensusNodeNames();
         HederaSdkClientFactory sdkClientFactory = new HederaSdkClientFactory(kubernetesClient, namespace);
         for (String nodeName : consensusNodeNames) {
+            AssertionError assertion = null;
+            ConditionTimeoutException timeout = null;
             for (int attempt = 0; attempt < 10; attempt++) {
+                assertion = null;
+                timeout = null;
                 try (HederaSdkClientFactory.ClientContext context = clientContext.apply(sdkClientFactory, nodeName)) {
                     await().atMost(15, TimeUnit.SECONDS).untilAsserted(() -> {
                         Client client = context.client;
@@ -341,7 +346,20 @@ public abstract class ConsensusCapsuleTestAbstract {
                         client.setTransportSecurity(true).setVerifyCertificates(true);
                         assertThat(addresses(client).size()).isEqualTo(consensusNodeNames.length);
                     });
+                } catch (AssertionError e) {
+                    assertion = e;
+                } catch (ConditionTimeoutException e) {
+                    timeout = e;
                 }
+                if (assertion == null && timeout == null) {
+                    break;
+                }
+            }
+            if (assertion != null) {
+                throw assertion;
+            }
+            if (timeout != null) {
+                throw timeout;
             }
         }
     }
