@@ -16,18 +16,22 @@
 
 package com.hedera.solo.operator.test.setup;
 
+import com.hedera.fullstack.helm.client.HelmExecutionException;
 import io.quarkus.arc.Lock;
 import io.quarkus.runtime.ShutdownEvent;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
+import java.lang.invoke.MethodHandles;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Priority;
+import org.jboss.logging.Logger;
 
 @Lock(time = 10, unit = TimeUnit.MINUTES) // this lock is needed when tests are run in parallel
 @ApplicationScoped
 public class ClusterSetupManager {
+    private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
     private static boolean setupDone = false;
 
     @Inject
@@ -38,7 +42,12 @@ public class ClusterSetupManager {
             return;
         }
 
-        minioSetupManager.install();
+        try {
+            minioSetupManager.install();
+        } catch (HelmExecutionException e) {
+            log.error(e.getStdErr());
+            throw e;
+        }
         setupDone = true;
     }
 
@@ -47,7 +56,12 @@ public class ClusterSetupManager {
             return;
         }
 
-        minioSetupManager.uninstall();
+        try {
+            minioSetupManager.uninstall();
+        } catch (HelmExecutionException e) {
+            log.error(e.getStdErr());
+            throw e;
+        }
         setupDone = false;
     }
 }
