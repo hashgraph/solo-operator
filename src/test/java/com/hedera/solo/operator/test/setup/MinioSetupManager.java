@@ -16,6 +16,9 @@
 
 package com.hedera.solo.operator.test.setup;
 
+import static java.nio.file.attribute.PosixFilePermission.OWNER_READ;
+import static java.nio.file.attribute.PosixFilePermission.OWNER_WRITE;
+
 import com.hedera.fullstack.helm.client.HelmClient;
 import com.hedera.fullstack.helm.client.impl.DefaultHelmClientBuilder;
 import com.hedera.fullstack.helm.client.model.Chart;
@@ -35,6 +38,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import org.jboss.logging.Logger;
 
@@ -99,6 +103,7 @@ public class MinioSetupManager {
 
         try {
             kubeConfigFile = File.createTempFile("kube", "config").toPath();
+            Files.setPosixFilePermissions(kubeConfigFile, Set.of(OWNER_READ, OWNER_WRITE));
             Files.writeString(kubeConfigFile, kubeConfig);
             return kubeConfigFile;
         } catch (Exception e) {
