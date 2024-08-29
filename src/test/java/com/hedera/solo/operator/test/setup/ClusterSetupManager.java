@@ -45,8 +45,8 @@ public class ClusterSetupManager {
         try {
             minioSetupManager.install();
         } catch (HelmExecutionException e) {
-            log.error(e.getStdOut());
-            log.error(e.getStdErr());
+            log.error("helm stdout: " + e.getStdOut());
+            log.error("helm stderr: " + e.getStdErr());
             throw e;
         }
         setupDone = true;
@@ -60,8 +60,8 @@ public class ClusterSetupManager {
         try {
             minioSetupManager.uninstall();
         } catch (HelmExecutionException e) {
-            log.error(e.getStdOut());
-            log.error(e.getStdErr());
+            log.error("helm stdout: " + e.getStdOut());
+            log.error("helm stderr: " + e.getStdErr());
             throw e;
         }
         setupDone = false;
