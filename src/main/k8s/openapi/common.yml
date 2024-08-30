@@ -104,6 +104,8 @@ components:
     StreamUploader:
       type: object
       properties:
+        name:
+          type: string
         image:
           type: string
         imagePullPolicy:
@@ -112,43 +114,49 @@ components:
             - Always
             - Never
             - IfNotPresent
+          default: IfNotPresent
         resources:
           type: object
           x-java-type: io.fabric8.kubernetes.api.model.ResourceRequirements
         enabled:
           type: boolean
-        nameOverride:
-          type: string
+          default: false
         config:
           type: object
-          default: { }
           properties:
             debug:
               type: boolean
-            compression:
+              default: true
+            enableCompression:
               type: boolean
-            sidecar:
+              default: true
+            enableSidecarFiles:
               type: boolean
+              default: false
             reaper:
               type: object
-              default: { }
               properties:
                 enabled:
                   type: boolean
+                  default: true
                 minKeep:
                   type: integer
+                  default: 1
                 interval:
                   type: integer
+                  default: 1
                 defaultBackoff:
                   type: integer
+                  default: 1
             signature:
               type: object
-              default: { }
               properties:
                 require:
                   type: boolean
+                  default: true
                 prioritize:
                   type: boolean
+                  default: true
             streamFileExtension:
               type: string
             streamSigExtension:
@@ -159,27 +167,30 @@ components:
               type: string
             bucketName:
               type: string
+            bucketPath:
+              type: string
             s3:
               type: object
-              default: { }
               properties:
                 enabled:
                   type: boolean
                   default: false
-                url:
-                  type: string
                 accessKey:
                   type: string
+                  default: "solo-operator"
+                url:
+                  type: string
+                  default: "" # http://minio-tenant-hl.minio-tenant.svc.cluster.local:9000
             gcs:
               type: object
-              default: { }
               properties:
                 enabled:
                   type: boolean
                   default: false
-                url:
-                  type: string
                 accessKey:
+                  type: string
+                  default: "solo-operator"
+                url:
                   type: string
 
     OpenTelemetryCollector:

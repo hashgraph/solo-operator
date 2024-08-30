@@ -103,7 +103,7 @@ tenant:
   #
   configSecret:
     name: myminio-env-configuration
-    accessKey: solo
+    accessKey: solo-operator
     secretKey: changeme
   ###
   # If this variable is set to true, then enable the usage of an existing Kubernetes secret to set environment variables for the Tenant.

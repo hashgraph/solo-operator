@@ -54,6 +54,7 @@ dependencies {
     implementation("io.quarkus:quarkus-kubernetes-client")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk-bundle-generator")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk")
+    implementation("io.quarkus:quarkus-resteasy-qute:3.14.1")
     implementation("com.hedera.hashgraph:sdk:${hederaSdkVersion}")
 
     compileOnly("io.sundr:builder-annotations:${sundrVersion}")

@@ -70,6 +70,8 @@ import org.junit.jupiter.api.Test;
 public abstract class ConsensusCapsuleTestAbstract {
     protected final String namespace = getClass().getSimpleName().toLowerCase();
 
+    public static final String RECORD_STREAM_TEMPLATE = "sidecars/record-stream-uploader.yaml";
+
     @Inject
     @SuppressWarnings("CdiInjectionPointsInspection")
     KubernetesClient kubernetesClient;
@@ -260,19 +262,7 @@ public abstract class ConsensusCapsuleTestAbstract {
     }
 
     List<ConsensusCapsule> createConsensusCapsule(List<NodeInfo> nodes) {
-        S3 s3Config = new S3Builder()
-                .withEnabled()
-                .withUrl("http://minio-tenant-hl.minio:9000")
-                .build();
-        StreamUploader recordStreamUploader = new StreamUploaderBuilder()
-                .withEnabled()
-                .withConfig(new ConfigBuilder()
-                        .withDebug()
-                        .withCompression()
-                        .withS3(s3Config)
-                        .withGcs(new GcsBuilder().withEnabled(false).build())
-                        .build())
-                .build();
+        StreamUploader recordStreamUploader = loadYaml(StreamUploader.class, getClass(), RECORD_STREAM_TEMPLATE);
         Sidecars sidecars = new SidecarsBuilder()
                 .withRecordStreamUploader(recordStreamUploader)
                 .build();
