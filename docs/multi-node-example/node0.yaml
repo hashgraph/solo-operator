@@ -3,17 +3,39 @@ kind: ConsensusCapsule
 metadata:
   name: node0
   namespace: solo-orbit
-  labels:
-    account-id: "0.0.3"
 spec:
+  account-id: "0.0.3"
   eligibleForDeployment: false
   sidecars:
     recordStreamUploader:
       enabled: true
+      name: "record-stream-uploader"
+      image: gcr.io/hedera-registry/uploader-mirror:1.3.0
+      imagePullPolicy: IfNotPresent
       config:
+        debug: true
+        enableCompression: true
+        enableSidecarFiles: true
+        reaper:
+          enabled: true
+          minKeep: 1
+          interval: 1
+          defaultBackoff: 1
+        signature:
+          require: true
+          prioritize: true
+        streamFileExtension: "rcd"
+        streamSigExtension: "rcd_sig"
+        streamExtension: "rcd.gz"
+        sigExtension: "rcd_sig"
+        bucketName: "solo-streams"
+        bucketPath: "not-set"
         s3:
           enabled: true
-          url: http://minio-tenant-hl.minio-tenant.svc.cluster.local:9000
+          accessKey: solo-operator
+          url: "http://minio-tenant-hl.minio-tenant.svc.cluster.local:9000"
+        gcs:
+          enabled: false
 #    recordStreamSidecarUploader:
 #      enabled: true
 #      nameOverride: "record-stream-sidecar-uploader"

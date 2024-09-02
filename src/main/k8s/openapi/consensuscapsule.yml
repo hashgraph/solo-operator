@@ -81,6 +81,8 @@ components:
               through the address book or using an init container
 
       properties:
+        accountId:
+          type: string
         eligibleForDeployment:
           type: boolean
           default: false

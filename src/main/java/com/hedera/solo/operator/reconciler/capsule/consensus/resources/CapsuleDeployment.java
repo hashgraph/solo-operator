@@ -16,15 +16,14 @@
 
 package com.hedera.solo.operator.reconciler.capsule.consensus.resources;
 
+import static com.hedera.solo.operator.reconciler.common.Constants.SECURITY_CONTEXT_BUILDER;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Sidecars;
 import io.fabric8.kubernetes.api.model.*;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
-import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
 import io.fabric8.kubernetes.client.utils.Serialization;
-import io.javaoperatorsdk.operator.BuilderUtils;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.BooleanWithUndefined;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
@@ -42,8 +41,6 @@ import java.util.Objects;
 public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deployment, ConsensusCapsule> {
     public static final String NAME_SUFFIX = "-deploy";
     public static final String ACCOUNT_ID_LABEL = "account-id";
-    public static final SecurityContextBuilder SECURITY_CONTEXT_BUILDER =
-            new SecurityContextBuilder().withRunAsUser(2000L).withRunAsGroup(2000L);
 
     @Location("consensus-capsule/deployment.yaml")
     Template tpl;
@@ -56,7 +53,9 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
     protected Deployment desired(final ConsensusCapsule primary, final Context<ConsensusCapsule> context) {
         Objects.requireNonNull(primary);
         Objects.requireNonNull(primary.getMetadata());
+        Objects.requireNonNull(primary.getMetadata().getName());
         Objects.requireNonNull(primary.getSpec());
+        Objects.requireNonNull(primary.getSpec().getAccountId());
         Objects.requireNonNull(context);
         Objects.requireNonNull(context.getClient());
 
@@ -64,16 +63,15 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         final String validName = validName(metadata.getName(), NAME_SUFFIX);
         final boolean eligibleForDeployment = primary.getSpec().getEligibleForDeployment();
 
-        final String accountId = metadata.getLabels().get(ACCOUNT_ID_LABEL);
-        if (accountId == null || accountId.isEmpty()) {
-            throw new RuntimeException(
-                    "missing account ID for deployment " + primary.getMetadata().getName());
-        }
-
-        final Deployment deployment = renderDeploymentTemplate(primary, context, accountId);
+        final Deployment deployment =
+                renderDeploymentTemplate(primary, context, primary.getSpec().getAccountId());
 
         // FIXME standardize labels
-        final Map<String, String> labels = Map.of("consensus-capsule", metadata.getName(), ACCOUNT_ID_LABEL, accountId);
+        final Map<String, String> labels = Map.of(
+                "consensus-capsule",
+                metadata.getName(),
+                ACCOUNT_ID_LABEL,
+                primary.getSpec().getAccountId());
 
         // return desired deployment
         return deployment

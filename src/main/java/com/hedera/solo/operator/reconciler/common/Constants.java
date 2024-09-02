@@ -18,6 +18,7 @@ package com.hedera.solo.operator.reconciler.common;
 
 import com.hedera.hashgraph.sdk.AccountId;
 import com.hedera.hashgraph.sdk.PrivateKey;
+import io.fabric8.kubernetes.api.model.SecurityContextBuilder;
 import java.util.List;
 
 public final class Constants {
@@ -27,6 +28,8 @@ public final class Constants {
 
     // defaults
     public static final String DEFAULT_NAMESPACE = "default";
+    public static final SecurityContextBuilder SECURITY_CONTEXT_BUILDER =
+            new SecurityContextBuilder().withRunAsUser(2000L).withRunAsGroup(2000L);
 
     // HEDERA related
     public static final int HEDERA_ACCOUNT_START = 3;

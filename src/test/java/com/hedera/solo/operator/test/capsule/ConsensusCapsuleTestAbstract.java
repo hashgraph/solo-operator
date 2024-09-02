@@ -29,11 +29,6 @@ import com.hedera.hashgraph.sdk.NodeAddress;
 import com.hedera.hashgraph.sdk.NodeAddressBook;
 import com.hedera.hashgraph.sdk.PrivateKey;
 import com.hedera.solo.operator.model.commonspec.StreamUploader;
-import com.hedera.solo.operator.model.commonspec.StreamUploaderBuilder;
-import com.hedera.solo.operator.model.commonspec.streamuploader.ConfigBuilder;
-import com.hedera.solo.operator.model.commonspec.streamuploader.config.GcsBuilder;
-import com.hedera.solo.operator.model.commonspec.streamuploader.config.S3;
-import com.hedera.solo.operator.model.commonspec.streamuploader.config.S3Builder;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleBuilder;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
@@ -273,9 +268,9 @@ public abstract class ConsensusCapsuleTestAbstract {
                     .withNewMetadata()
                     .withName(node.name)
                     .withNamespace(namespace)
-                    .withLabels(Map.of("account-id", node.accountId))
                     .endMetadata()
                     .withNewSpec()
+                    .withAccountId(node.accountId)
                     .withSidecars(sidecars)
                     .endSpec()
                     .build();
