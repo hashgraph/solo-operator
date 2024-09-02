@@ -1,10 +1,10 @@
 apiVersion: operator.solo.hedera.com/v1alpha1
 kind: ConsensusCapsule
 metadata:
-  name: node0
+  name: node2
   namespace: solo-orbit
 spec:
-  account-id: "0.0.3"
+  accountId: "0.0.5"
   eligibleForDeployment: false
   sidecars:
     recordStreamUploader:

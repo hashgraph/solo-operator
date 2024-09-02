@@ -2,5 +2,4 @@ apiVersion: operator.solo.hedera.com/v1alpha1
 kind: Orbit
 metadata:
   name: solo-orbit
-  namespace: solo-orbit
 spec: {}

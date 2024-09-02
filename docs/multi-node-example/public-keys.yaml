@@ -2,6 +2,7 @@ kind: ConfigMap
 apiVersion: v1
 metadata:
   name: public-keys
+  namespace: solo-orbit
 data:
   a-public-node0.pem: |
     -----BEGIN CERTIFICATE-----
