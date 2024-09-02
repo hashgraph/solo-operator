@@ -21,7 +21,8 @@ import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Sidecars;
-import io.fabric8.kubernetes.api.model.*;
+import io.fabric8.kubernetes.api.model.ConfigMap;
+import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.utils.Serialization;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
