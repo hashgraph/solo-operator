@@ -62,7 +62,7 @@ public class MinioSetupManager {
      * @return Path to temporary kube configuration file
      */
     private Path setupKubeConfig() {
-        if (!Objects.isNull(kubeConfigFile)) {
+        if (Objects.nonNull(kubeConfigFile)) {
             return kubeConfigFile;
         }
 
