@@ -32,6 +32,7 @@ import io.fabric8.kubernetes.client.LocalPortForward;
 import io.fabric8.kubernetes.client.dsl.PortForwardable;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -50,6 +51,8 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class HederaSdkClientFactory {
     public static final String DEFAULT_ACCOUNT_ID = "0.0.2";
@@ -76,9 +79,16 @@ public class HederaSdkClientFactory {
         return createClientContext(haproxy(), consensusNode);
     }
 
+    private static final Logger log =
+            LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
+
     ClientContext createClientContext(final Map<String, String> nodeService, final String consensusNode) {
         return getClientContext(nodeService, consensusNode::equals, resource -> Stream.of(50211, 50212)
-                .map(port -> resource.portForward(port, port))
+                .map(port -> {
+                    LocalPortForward portForward = resource.portForward(port, port);
+                    log.info("opened portForward: {}", portForward.getLocalPort());
+                    return portForward;
+                })
                 .toList());
     }
 
@@ -220,6 +230,8 @@ public class HederaSdkClientFactory {
     }
 
     public static class ClientContext implements AutoCloseable {
+        private static final Logger log =
+                LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
         public final Client client;
         private final Collection<LocalPortForward> portForwards;
 
@@ -238,7 +250,9 @@ public class HederaSdkClientFactory {
             }
             for (LocalPortForward portForward : portForwards) {
                 try {
+                    int port = portForward.getLocalPort();
                     portForward.close();
+                    log.info("portForward closed: {}", port);
                 } catch (IOException e) {
                     exceptions.add(e);
                 }
