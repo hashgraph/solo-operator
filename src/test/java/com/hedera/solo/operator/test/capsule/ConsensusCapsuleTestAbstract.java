@@ -117,7 +117,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .inNamespace(namespace)
                 .delete();
         Resources.removeByName(kubernetesClient, Orbit.class, namespace);
-        await().atMost(Duration.ofSeconds(30))
+        await().atMost(Duration.ofSeconds(150))
                 .until(() -> kubernetesClient.namespaces().withName(namespace).get() == null);
     }
 
