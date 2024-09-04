@@ -17,7 +17,7 @@ spec:
       subdomain: consensus
       containers:
         - name: consensus-node
-          image: gcr.io/hedera-registry/consensus-node:0.52.0-alpha.6
+          image: gcr.io/hedera-registry/consensus-node:0.53.5
           resources: {}
           env:
             - name: JAVA_OPTS

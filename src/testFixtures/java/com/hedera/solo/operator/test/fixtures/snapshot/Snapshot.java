@@ -124,6 +124,7 @@ public class Snapshot {
         for (String namespace : namespaces) {
             for (Pod pod : client.pods().inNamespace(namespace).list().getItems()) {
                 for (Container container : pod.getSpec().getContainers()) {
+                    // handle exception inside loop, by logging message.
                     ContainerResource resource = containerResource(pod, container);
                     LogResult result = new LogResult(resource.usingTimestamps().getLog());
                     try {
@@ -151,6 +152,7 @@ public class Snapshot {
                     .withLabelSelector(selector)
                     .list()
                     .getItems()) {
+                // handle exception inside loop, by logging message.
                 PodResource resource = podResource(pod);
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
                 ByteArrayOutputStream err = new ByteArrayOutputStream();

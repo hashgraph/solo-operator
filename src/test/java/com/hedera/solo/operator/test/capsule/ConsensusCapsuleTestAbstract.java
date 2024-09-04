@@ -102,7 +102,13 @@ public abstract class ConsensusCapsuleTestAbstract {
                             """
                                     find services-hedera/HapiApp2.0/data -type f -name currentAddressBook.txt | \\
                                         xargs ls -1t | head -n 1 | xargs cat
-                                    """);
+                                    """)
+                    // add support for reading files.
+                    .exec(
+                            "swirlds-log",
+                            "app=consensus-node",
+                            "consensus-node",
+                            "cat services-hedera/HapiApp2.0/output/swirlds.log");
         }
         cleanup();
     }
