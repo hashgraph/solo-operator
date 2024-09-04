@@ -32,9 +32,6 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDep
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
-import java.io.ByteArrayInputStream;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Objects;
 
@@ -98,13 +95,6 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
 
     private Deployment renderDeploymentTemplate(
             ConsensusCapsule primary, Context<ConsensusCapsule> context, String accountId) {
-        Objects.requireNonNull(primary);
-        Objects.requireNonNull(primary.getSpec());
-        Objects.requireNonNull(primary.getSpec().getSidecars());
-        Objects.requireNonNull(context);
-        Objects.requireNonNull(context.getClient());
-        Objects.requireNonNull(accountId);
-
         final TemplateInstance tplInstance = tpl.instance();
         final Sidecars sidecars = primary.getSpec().getSidecars();
         final String nodeId = primary.getMetadata().getName();
@@ -123,10 +113,7 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         tplInstance.data("publicKeyFiles", publicKeys.getData().keySet());
         tplInstance.data("recordStreamUploader", sidecars.getRecordStreamUploader());
 
-        // render deployment template
-        final InputStream is = new ByteArrayInputStream(tplInstance.render().getBytes(StandardCharsets.UTF_8));
-
         // return an instance of Deployment
-        return Serialization.unmarshal(is, Deployment.class);
+        return Serialization.unmarshal(tplInstance.render(), Deployment.class);
     }
 }
