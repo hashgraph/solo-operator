@@ -18,14 +18,25 @@ package com.hedera.solo.test.framework;
 
 import static com.hedera.solo.test.framework.KubernetesDevServiceExecutionListener.operatorExtensionBuilder;
 
+import com.hedera.solo.operator.test.fixtures.callbacks.AfterTestHandler;
 import io.javaoperatorsdk.operator.junit.AbstractOperatorExtension;
 import io.javaoperatorsdk.operator.junit.LocallyRunOperatorExtension;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
 public abstract class AbstractOperatorTest {
     @RegisterExtension
     private AbstractOperatorExtension operator =
             configure(operatorExtensionBuilder()).build();
+
+    @Order(Order.DEFAULT + 1)
+    @RegisterExtension
+    private AfterEachCallback afterEachCallback = context -> AfterTestHandler.afterTest(
+            context.getRequiredTestInstances().getEnclosingInstances(),
+            context.getRequiredTestInstances().getInnermostInstance(),
+            context.getRequiredTestMethod(),
+            context.getExecutionException().orElse(null));
 
     public AbstractOperatorExtension operator() {
         return operator;

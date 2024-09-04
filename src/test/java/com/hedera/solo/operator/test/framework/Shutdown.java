@@ -14,17 +14,25 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator.test;
+package com.hedera.solo.operator.test.framework;
 
+import io.javaoperatorsdk.operator.Operator;
+import io.quarkus.runtime.ShutdownEvent;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
+import jakarta.inject.Inject;
 
 @ApplicationScoped
-public class Environment {
-    public boolean isCI() {
-        return System.getenv("CI") != null;
-    }
+public class Shutdown {
+    @Inject
+    protected Environment environment;
 
-    public boolean isDevModeActive() {
-        return !isCI();
+    @Inject
+    protected Operator operator;
+
+    void onShutdown(@Observes ShutdownEvent event) {
+        if (!environment.isDevModeActive()) {
+            operator.stop();
+        }
     }
 }

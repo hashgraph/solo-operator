@@ -83,6 +83,7 @@ dependencies {
 
     testFixturesImplementation("io.fabric8:kubernetes-client")
     testFixturesImplementation("org.awaitility:awaitility")
+    testFixturesImplementation("org.junit.jupiter:junit-jupiter-api")
 }
 
 objectModelGenerator {

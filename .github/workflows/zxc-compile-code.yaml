@@ -105,3 +105,10 @@ jobs:
         with:
           name: Test Reports
           path: "**/build/test-results/test/TEST-*.xml"
+
+      - name: Publish Test Snapshots
+        uses: actions/upload-artifact@89ef406dd8d7e03cfd12d9e0a4a378f454709029 # v4.3.5
+        if: ${{ inputs.enable-unit-tests && !cancelled() }}
+        with:
+          name: Test Snapshots
+          path: "**/build/snapshots"

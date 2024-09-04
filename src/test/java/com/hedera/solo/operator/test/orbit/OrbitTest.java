@@ -16,6 +16,8 @@
 
 package com.hedera.solo.operator.test.orbit;
 
+import static com.hedera.solo.operator.test.fixtures.snapshot.Snapshot.NO_NAMESPACE;
+import static com.hedera.solo.operator.test.fixtures.snapshot.Snapshot.snapshot;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -23,8 +25,9 @@ import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitSpecBuilder;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.reconciler.orbit.resources.ConsensusConfigMap;
-import com.hedera.solo.operator.test.Environment;
 import com.hedera.solo.operator.test.fixtures.Resources;
+import com.hedera.solo.operator.test.fixtures.annotations.AfterTest;
+import com.hedera.solo.operator.test.framework.Environment;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.Namespace;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
@@ -32,10 +35,11 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+import java.io.IOException;
+import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 import org.jboss.logging.Logger;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -70,7 +74,14 @@ class OrbitTest {
         cleanup();
     }
 
-    @AfterEach
+    @AfterTest
+    void afterTest(Method method, Throwable throwable) throws IOException {
+        if (throwable != null) {
+            snapshot(method, client, TEST_ORBIT_NAME, NO_NAMESPACE);
+        }
+        cleanup();
+    }
+
     void cleanup() {
         Resources.removeByName(client, Orbit.class, TEST_ORBIT_NAME);
         await().atMost(Duration.ofSeconds(30))

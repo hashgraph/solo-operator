@@ -24,7 +24,7 @@ import static org.awaitility.Awaitility.await;
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsule;
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsuleBuilder;
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsuleStatus;
-import com.hedera.solo.operator.test.HederaSdkClientFactory;
+import com.hedera.solo.operator.test.framework.HederaSdkClientFactory;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
@@ -38,7 +38,6 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
@@ -48,7 +47,6 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
     }
 
     @Override
-    @AfterEach
     void cleanup() {
         kubernetesClient.resources(HAProxyCapsule.class).inNamespace(namespace).delete();
         super.cleanup();

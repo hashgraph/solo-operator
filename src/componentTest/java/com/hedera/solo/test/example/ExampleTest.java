@@ -16,14 +16,17 @@
 
 package com.hedera.solo.test.example;
 
+import static com.hedera.solo.operator.test.fixtures.snapshot.Snapshot.snapshot;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import com.hedera.solo.operator.test.fixtures.annotations.AfterTest;
 import com.hedera.solo.operator.test.v1alpha1.Example;
 import com.hedera.solo.operator.test.v1alpha1.ExampleBuilder;
 import com.hedera.solo.test.framework.AbstractOperatorTest;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.javaoperatorsdk.operator.junit.LocallyRunOperatorExtension;
+import java.lang.reflect.Method;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
@@ -31,6 +34,13 @@ public class ExampleTest extends AbstractOperatorTest {
     @Override
     protected LocallyRunOperatorExtension.Builder configure(LocallyRunOperatorExtension.Builder builder) {
         return builder.withReconciler(new ExampleReconciler());
+    }
+
+    @AfterTest
+    void afterTest(Method method, Throwable throwable) throws Exception {
+        if (throwable != null) {
+            snapshot(method, operator().getKubernetesClient(), operator().getNamespace());
+        }
     }
 
     @Test

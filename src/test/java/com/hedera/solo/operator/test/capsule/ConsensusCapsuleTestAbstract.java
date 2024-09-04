@@ -16,6 +16,8 @@
 
 package com.hedera.solo.operator.test.capsule;
 
+import static com.hedera.solo.operator.test.fixtures.snapshot.Snapshot.NO_NAMESPACE;
+import static com.hedera.solo.operator.test.fixtures.snapshot.Snapshot.snapshot;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -36,9 +38,10 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitBuilder;
-import com.hedera.solo.operator.test.Environment;
-import com.hedera.solo.operator.test.HederaSdkClientFactory;
 import com.hedera.solo.operator.test.fixtures.Resources;
+import com.hedera.solo.operator.test.fixtures.annotations.AfterTest;
+import com.hedera.solo.operator.test.framework.Environment;
+import com.hedera.solo.operator.test.framework.HederaSdkClientFactory;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Secret;
@@ -49,13 +52,13 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
 import jakarta.inject.Inject;
 import java.lang.invoke.MethodHandles;
+import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import org.awaitility.core.ConditionTimeoutException;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -88,7 +91,22 @@ public abstract class ConsensusCapsuleTestAbstract {
         cleanup();
     }
 
-    @AfterEach
+    @AfterTest
+    void afterTest(Method method, Throwable throwable) throws Exception {
+        if (throwable != null) {
+            snapshot(method, kubernetesClient, namespace, NO_NAMESPACE)
+                    .exec(
+                            "current-address-book",
+                            "app=consensus-node",
+                            "consensus-node",
+                            """
+                                    find services-hedera/HapiApp2.0/data -type f -name currentAddressBook.txt | \\
+                                        xargs ls -1t | head -n 1 | xargs cat
+                                    """);
+        }
+        cleanup();
+    }
+
     void cleanup() {
         kubernetesClient
                 .resources(NetworkInitialization.class)
