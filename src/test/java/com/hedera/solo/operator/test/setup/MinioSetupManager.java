@@ -102,7 +102,8 @@ public class MinioSetupManager {
                                         : ": " + config.getClientKeyFile());
 
         try {
-            kubeConfigFile = File.createTempFile("kube", "config").toPath();
+            kubeConfigFile = File.createTempFile("kube-", ".config").toPath();
+            kubeConfigFile.toFile().deleteOnExit();
             Files.setPosixFilePermissions(kubeConfigFile, Set.of(OWNER_READ, OWNER_WRITE));
             Files.writeString(kubeConfigFile, kubeConfig);
             return kubeConfigFile;
