@@ -85,6 +85,7 @@ public class HederaSdkClientFactory {
     ClientContext createClientContext(final Map<String, String> nodeService, final String consensusNode) {
         return getClientContext(nodeService, consensusNode::equals, resource -> Stream.of(50211, 50212)
                 .map(port -> {
+                    // include address here
                     LocalPortForward portForward = resource.portForward(port, port);
                     log.info("opened portForward: {}", portForward.getLocalPort());
                     return portForward;
@@ -211,7 +212,7 @@ public class HederaSdkClientFactory {
                             .setNodeId(Long.parseLong(nodeId));
             for (LocalPortForward portForward : portForwards) {
                 builder.addServiceEndpoint(ServiceEndpoint.newBuilder()
-                        .setIpAddressV4(ByteString.copyFrom(new byte[] {127, 0, 0, 1}))
+                        .setIpAddressV4(ByteString.copyFrom(new byte[] {127, 0, 0, 1})) // portForward.getLocalAddress()
                         .setPort(portForward.getLocalPort())
                         .build());
             }
