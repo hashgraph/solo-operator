@@ -510,5 +510,6 @@ data:
 
     printf "\n\n#### Hedera Services Node Software Stopped ####\n\n"
     set -x
+    find . -type f -ls
     cat output/swirlds.log
     tail -f /dev/null
