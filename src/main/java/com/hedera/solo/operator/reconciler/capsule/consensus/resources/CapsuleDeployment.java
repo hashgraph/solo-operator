@@ -16,8 +16,10 @@
 
 package com.hedera.solo.operator.reconciler.capsule.consensus.resources;
 
+import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_BUCKET_PATH_TEMPLATE;
 import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_EXTENSION;
 import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_SIG_EXTENSION;
+import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM_BUCKET_PATH_TEMPLATE;
 import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM_EXTENSION;
 import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM_SIG_EXTENSION;
 import static com.hedera.solo.operator.reconciler.common.Constants.SECURITY_CONTEXT_BUILDER;
@@ -138,14 +140,28 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
             rsu.getConfig().setStreamExtension("%s.gz".formatted(RECORD_STREAM_EXTENSION));
         }
 
+        if (Objects.nonNull(rsu)) {
+            rsu.getConfig()
+                    .setBucketPath(RECORD_STREAM_BUCKET_PATH_TEMPLATE.formatted(
+                            primary.getSpec().getAccountId()));
+        }
+
         return rsu;
     }
 
     private StreamUploader prepareEventStreamUploader(ConsensusCapsule primary) {
-        return this.setStreamUploaderExtensions(
+        final StreamUploader esu = this.setStreamUploaderExtensions(
                 primary.getSpec().getSidecars().getEventStreamUploader(),
                 EVENT_STREAM_EXTENSION,
                 EVENT_STREAM_SIG_EXTENSION);
+
+        if (Objects.nonNull(esu)) {
+            esu.getConfig()
+                    .setBucketPath(EVENT_STREAM_BUCKET_PATH_TEMPLATE.formatted(
+                            primary.getSpec().getAccountId()));
+        }
+
+        return esu;
     }
 
     private StreamUploader setStreamUploaderExtensions(

@@ -58,8 +58,11 @@ public final class Constants {
     public static final String TPL_VAR_EVENT_STREAM_UPLOADER = "eventStreamUploader";
 
     // Sidecars
+    public static final String RECORD_STREAM_BUCKET_PATH_TEMPLATE = "recordstreams/record%s";
     public static final String RECORD_STREAM_EXTENSION = "rcd";
     public static final String RECORD_STREAM_SIG_EXTENSION = "rcd_sig";
+
+    public static final String EVENT_STREAM_BUCKET_PATH_TEMPLATE = "eventsStreams/events_%s";
     public static final String EVENT_STREAM_EXTENSION = "evts";
     public static final String EVENT_STREAM_SIG_EXTENSION = "evts_sig";
 

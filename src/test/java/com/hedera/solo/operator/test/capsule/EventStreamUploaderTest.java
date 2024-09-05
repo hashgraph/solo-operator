@@ -16,6 +16,7 @@
 
 package com.hedera.solo.operator.test.capsule;
 
+import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_BUCKET_PATH_TEMPLATE;
 import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_EXTENSION;
 import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_SIG_EXTENSION;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_ACCOUNT_ID;
@@ -51,7 +52,7 @@ public class EventStreamUploaderTest extends ConsensusCapsuleTestAbstract {
     @Test
     void testMultiNodeDeployment() throws Exception {
         super.testMultiNodeDeployment();
-        this.checkEventStreamUploader(2);
+        this.checkEventStreamUploader(3);
     }
 
     @Override
@@ -80,7 +81,8 @@ public class EventStreamUploaderTest extends ConsensusCapsuleTestAbstract {
                         assertThat(envMap.get("STREAM_FILE_EXTENSION")).isEqualTo(EVENT_STREAM_EXTENSION);
                         assertThat(envMap.get("STREAM_SIG_EXTENSION")).isEqualTo(EVENT_STREAM_SIG_EXTENSION);
                         assertThat(envMap.get("SIG_EXTENSION")).isEqualTo(EVENT_STREAM_SIG_EXTENSION);
-                        assertThat(envMap.get("BUCKET_PATH")).isEqualTo("eventStreams/events_%s".formatted(accountId));
+                        assertThat(envMap.get("BUCKET_PATH"))
+                                .isEqualTo(EVENT_STREAM_BUCKET_PATH_TEMPLATE.formatted(accountId));
 
                         break;
                     }

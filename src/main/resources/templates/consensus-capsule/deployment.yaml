@@ -146,7 +146,7 @@ spec:
             - name: SIG_PRIORITIZE
               value: {recordStreamUploader.config.signature.prioritize}
             - name: BUCKET_PATH
-              value:  "recordstreams/record{accountId}"
+              value: {recordStreamUploader.config.bucketPath}
             - name: BUCKET_NAME
               value: {recordStreamUploader.config.bucketName}
             - name: S3_ENABLE
@@ -213,7 +213,7 @@ spec:
             - name: SIG_PRIORITIZE
               value: {eventStreamUploader.config.signature.prioritize}
             - name: BUCKET_PATH
-              value:  "eventsStreams/events_{accountId}"
+              value: {eventStreamUploader.config.bucketPath}
             - name: BUCKET_NAME
               value: {eventStreamUploader.config.bucketName}
             - name: S3_ENABLE

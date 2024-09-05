@@ -17,6 +17,7 @@
 package com.hedera.solo.operator.test.capsule;
 
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_ACCOUNT_ID;
+import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM_BUCKET_PATH_TEMPLATE;
 import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM_EXTENSION;
 import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM_SIG_EXTENSION;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
@@ -81,7 +82,8 @@ public class RecordStreamUploaderTest extends ConsensusCapsuleTestAbstract {
                         assertThat(envMap.get("STREAM_FILE_EXTENSION")).isEqualTo(RECORD_STREAM_EXTENSION);
                         assertThat(envMap.get("STREAM_SIG_EXTENSION")).isEqualTo(RECORD_STREAM_SIG_EXTENSION);
                         assertThat(envMap.get("SIG_EXTENSION")).isEqualTo(RECORD_STREAM_SIG_EXTENSION);
-                        assertThat(envMap.get("BUCKET_PATH")).isEqualTo("recordstreams/record%s".formatted(accountId));
+                        assertThat(envMap.get("BUCKET_PATH"))
+                                .isEqualTo(RECORD_STREAM_BUCKET_PATH_TEMPLATE.formatted(accountId));
                         break;
                     }
                 }
