@@ -101,6 +101,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                             "consensus-node",
                             """
                                     set -x
+                                    find services-hedera/HapiApp2.0/data -type f -name currentAddressBook.txt
                                     find services-hedera/HapiApp2.0/data -type f -name currentAddressBook.txt | \\
                                         xargs ls -1t | head -n 1 | xargs cat
                                     """)
