@@ -12,7 +12,7 @@ resources:
   - node2-keys.yaml
   - public-keys.yaml
   - headless-service.yaml
-  - capsule-node0.yaml
-  - capsule-node1.yaml
-  - capsule-node2.yaml
+  - consensus-capsule-node0.yaml
+  - consensus-capsule-node1.yaml
+  - consensus-capsule-node2.yaml
   - network-init.yaml
