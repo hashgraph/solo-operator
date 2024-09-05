@@ -21,6 +21,7 @@ import static com.hedera.solo.operator.test.fixtures.snapshot.CallStack.calledFr
 import io.fabric8.kubernetes.api.model.APIResource;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
+import io.fabric8.kubernetes.api.model.GroupVersionForDiscovery;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinition;
 import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinitionVersion;
@@ -48,6 +49,7 @@ import java.util.zip.ZipEntry;
 
 public class Snapshot {
     public static final String NO_NAMESPACE = null;
+    public static final String ALL_NAMESPACES = "*"; // todo: currently unused
     private static final String RESOURCE_LOCATION = "META-INF/fabric8";
     private static final String JAR_FILE = "jar:file:";
     private static final String FILE = "file:";
@@ -56,6 +58,8 @@ public class Snapshot {
     private final KubernetesClient client;
     private final List<String> namespaces;
     private final boolean noNamespace;
+
+    // todo: would be nice to be able specify which resources in which namespaces to retrieve.
 
     public Snapshot(final SnapshotWriter writer, final KubernetesClient client, final String... namespaces) {
         this.writer = writer;
@@ -85,10 +89,12 @@ public class Snapshot {
 
     public Snapshot resources(final String... groupVersions) throws IOException {
         for (String groupVersion : groupVersions) {
+            // try
             for (APIResource resource : client.getApiResources(groupVersion).getResources()) {
                 if (resource.getVerbs().contains("list")) {
                     if (resource.getNamespaced()) {
                         for (String namespace : namespaces) {
+                            // try
                             for (GenericKubernetesResource object : client.genericKubernetesResources(
                                             groupVersion, resource.getKind())
                                     .inNamespace(namespace)
@@ -103,6 +109,7 @@ public class Snapshot {
                             }
                         }
                     } else if (noNamespace) {
+                        // try
                         for (GenericKubernetesResource object : client.genericKubernetesResources(
                                         groupVersion, resource.getKind())
                                 .list()
@@ -122,6 +129,7 @@ public class Snapshot {
 
     public Snapshot logs() throws IOException {
         for (String namespace : namespaces) {
+            // try
             for (Pod pod : client.pods().inNamespace(namespace).list().getItems()) {
                 for (Container container : pod.getSpec().getContainers()) {
                     // handle exception inside loop, by logging message.
@@ -147,6 +155,7 @@ public class Snapshot {
     public Snapshot exec(final String name, final String selector, final String container, final String... exec)
             throws IOException {
         for (String namespace : namespaces) {
+            // try
             for (Pod pod : client.pods()
                     .inNamespace(namespace)
                     .withLabelSelector(selector)
@@ -203,7 +212,17 @@ public class Snapshot {
         return result;
     }
 
-    private String[] groupVersions() throws IOException {
+    private String[] groupVersions() {
+        var zz = client.getApiGroups().getGroups().stream()
+                .flatMap(x -> x.getVersions().stream())
+                .map(GroupVersionForDiscovery::getGroupVersion)
+                .toList();
+        zz = new ArrayList<>(zz);
+        zz.add("v1");
+        return zz.toArray(new String[0]);
+    }
+
+    private String[] groupVersions1() throws IOException {
         Set<String> result = new LinkedHashSet<>(List.of("v1"));
         for (String resource : listResources()) {
             for (URL url : Collections.list(ClassLoader.getSystemResources(resource))) {
