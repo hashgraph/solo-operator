@@ -53,6 +53,7 @@ import io.javaoperatorsdk.operator.Operator;
 import jakarta.inject.Inject;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Method;
+import java.net.BindException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -238,6 +239,7 @@ public abstract class ConsensusCapsuleTestAbstract {
 
         // test with client
         checkAddressBook(HederaSdkClientFactory::directContextCreator);
+        //        fail();
     }
 
     Orbit createOrbit() {
@@ -376,6 +378,13 @@ public abstract class ConsensusCapsuleTestAbstract {
                     assertion = e;
                 } catch (ConditionTimeoutException e) {
                     timeout = e;
+                } catch (IllegalStateException e) {
+                    if (e.getCause() instanceof BindException) {
+                        Thread.sleep(100);
+                        continue;
+                    } else {
+                        throw e;
+                    }
                 }
                 if (assertion == null && timeout == null) {
                     break;

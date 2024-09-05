@@ -16,6 +16,7 @@
 
 pluginManagement {
     repositories {
+        //        mavenLocal()
         gradlePluginPortal()
         maven { url = uri("https://artifacts.swirldslabs.io/artifactory/central-maven-external/") }
     }

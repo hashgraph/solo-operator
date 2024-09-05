@@ -20,6 +20,7 @@ plugins {
 }
 
 repositories {
+    //    mavenLocal()
     // Use Maven Central for resolving dependencies.
     maven { url = uri("https://artifacts.swirldslabs.io/artifactory/central-maven-external/") }
 }

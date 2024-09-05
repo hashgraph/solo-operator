@@ -57,6 +57,7 @@ public class ExampleTest extends AbstractOperatorTest {
         }
     }
 
+    //    boolean b = true;
     @Test
     void test() {
         // create custom resource
@@ -106,6 +107,16 @@ public class ExampleTest extends AbstractOperatorTest {
             });
         }
 
+        //        while (b) {
+        //            try (LocalPortForward lpf =
+        //
+        // operator().getKubernetesClient().pods().inNamespace(operator().getNamespace()).withName("demo-pod1").portForward(8080, 8080)) {
+        //                System.out.println("port forwarded!");
+        //            } catch (Exception e) {
+        //                System.out.println(e.getMessage());
+        //                fail();
+        //            }
+        //        }
         //        fail();
 
         // update custom resource

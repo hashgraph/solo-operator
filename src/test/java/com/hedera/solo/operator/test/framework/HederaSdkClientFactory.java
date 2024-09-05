@@ -96,14 +96,27 @@ public class HederaSdkClientFactory {
         } catch (Exception e) {
             log.info("netstat: {}", e.getMessage());
         }
-        return getClientContext(nodeService, consensusNode::equals, resource -> Stream.of(50211, 50212)
-                .map(port -> {
-                    // include address here
-                    LocalPortForward portForward = resource.portForward(port, port);
-                    log.info("opened portForward: {}", portForward.getLocalPort());
-                    return portForward;
-                })
-                .toList());
+        List<LocalPortForward> portForwards = new ArrayList<>();
+        try {
+            return getClientContext(nodeService, consensusNode::equals, resource -> Stream.of(50211, 50212)
+                    .map(port -> {
+                        // include address here
+                        LocalPortForward portForward = resource.portForward(port, port);
+                        portForwards.add(portForward);
+                        log.info("opened portForward: {}", portForward.getLocalPort());
+                        return portForward;
+                    })
+                    .toList());
+        } catch (Exception e) {
+            for (LocalPortForward portForward : portForwards) {
+                try {
+                    portForward.close();
+                } catch (IOException ex) {
+                    throw new RuntimeException(ex);
+                }
+            }
+            throw e;
+        }
     }
 
     ClientContext getClientContext(

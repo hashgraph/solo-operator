@@ -27,6 +27,7 @@ plugins {
 }
 
 repositories {
+    //    mavenLocal()
     // Source Maven Central Artifacts from JFrog Artifactory
     maven { url = uri("https://artifacts.swirldslabs.io/artifactory/central-maven-external/") }
 }
