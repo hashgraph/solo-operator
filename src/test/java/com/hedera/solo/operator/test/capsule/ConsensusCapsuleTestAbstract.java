@@ -16,6 +16,8 @@
 
 package com.hedera.solo.operator.test.capsule;
 
+import static com.hedera.solo.operator.reconciler.common.Constants.CONSENSUS_NODE;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_APP;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -28,7 +30,6 @@ import com.hedera.hashgraph.sdk.FileId;
 import com.hedera.hashgraph.sdk.NodeAddress;
 import com.hedera.hashgraph.sdk.NodeAddressBook;
 import com.hedera.hashgraph.sdk.PrivateKey;
-import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleBuilder;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
@@ -46,6 +47,7 @@ import com.hedera.solo.operator.test.HederaSdkClientFactory;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
+import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
@@ -64,7 +66,6 @@ import org.junit.jupiter.api.Test;
 
 public abstract class ConsensusCapsuleTestAbstract {
     protected final String namespace = getClass().getSimpleName().toLowerCase();
-
     public static final String RECORD_STREAM_TEMPLATE = "sidecars/record-stream-uploader.yaml";
 
     @Inject
@@ -256,11 +257,21 @@ public abstract class ConsensusCapsuleTestAbstract {
                         () -> assertThat(kubernetesClient.resource(orbit).get()).isNotNull());
     }
 
+    protected Sidecars prepareSideCars() {
+        return new SidecarsBuilder().build();
+    }
+
+    protected List<Pod> fetchConsensusPods() {
+        return kubernetesClient
+                .resources(Pod.class)
+                .inNamespace(namespace)
+                .withLabels(Map.of(LABEL_APP, CONSENSUS_NODE))
+                .list()
+                .getItems();
+    }
+
     List<ConsensusCapsule> createConsensusCapsule(List<NodeInfo> nodes) {
-        StreamUploader recordStreamUploader = loadYaml(StreamUploader.class, getClass(), RECORD_STREAM_TEMPLATE);
-        Sidecars sidecars = new SidecarsBuilder()
-                .withRecordStreamUploader(recordStreamUploader)
-                .build();
+        Sidecars sidecars = this.prepareSideCars();
 
         List<ConsensusCapsule> list = new ArrayList<>();
         for (NodeInfo node : nodes) {
@@ -298,6 +309,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                 assertThat(capsule.getSpec().getEligibleForDeployment()).isFalse();
             });
         }
+
         return list;
     }
 

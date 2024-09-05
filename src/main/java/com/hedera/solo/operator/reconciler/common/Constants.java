@@ -19,7 +19,6 @@ package com.hedera.solo.operator.reconciler.common;
 import com.hedera.hashgraph.sdk.AccountId;
 import com.hedera.hashgraph.sdk.PrivateKey;
 import io.fabric8.kubernetes.api.model.SecurityContextBuilder;
-import java.util.List;
 
 public final class Constants {
     private Constants() {
@@ -27,7 +26,8 @@ public final class Constants {
     }
 
     // defaults
-    public static final String DEFAULT_NAMESPACE = "default";
+    public static final String DEFAULT = "default";
+    public static final String CONSENSUS_NODE = "consensus-node";
     public static final SecurityContextBuilder SECURITY_CONTEXT_BUILDER =
             new SecurityContextBuilder().withRunAsUser(2000L).withRunAsGroup(2000L);
 
@@ -49,7 +49,22 @@ public final class Constants {
     public static final String MINIO_OPERATOR_NAMESPACE = "minio-operator";
     public static final String MINIO_TENANT_NAMESPACE = "minio-tenant";
 
-    // Templates
-    public static final List<String> NODE_KEYS_FILENAMES_TEMPLATE =
-            List.of("a-private-%s.pem", "s-private-%s.pem", "hedera-%s.key", "hedera-%s.crt");
+    // template variables
+    public static final String TPL_VAR_NODE_ID = "nodeId";
+    public static final String TPL_VAR_ACCOUNT_ID = "accountId";
+    public static final String TPL_VAR_SECURITY_CONTEXT = "securityContext";
+    public static final String TPL_VAR_PUBLIC_KEY_FILES = "publicKeyFiles";
+    public static final String TPL_VAR_RECORD_STREAM_UPLOADER = "recordStreamUploader";
+    public static final String TPL_VAR_EVENT_STREAM_UPLOADER = "eventStreamUploader";
+
+    // Sidecars
+    public static final String RECORD_STREAM_EXTENSION = "rcd";
+    public static final String RECORD_STREAM_SIG_EXTENSION = "rcd_sig";
+    public static final String EVENT_STREAM_EXTENSION = "evts";
+    public static final String EVENT_STREAM_SIG_EXTENSION = "evts_sig";
+
+    // labels
+    // FIXME all label key should have a prefix
+    public static final String LABEL_APP = "app";
+    public static final String LABEL_ACCOUNT_ID = "account-id";
 }

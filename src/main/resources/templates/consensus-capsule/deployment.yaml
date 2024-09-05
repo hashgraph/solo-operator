@@ -2,6 +2,7 @@
 {@String accountId}
 {@io.fabric8.kubernetes.api.model.PodSecurityContext securityContext}
 {@com.hedera.solo.operator.model.commonspec.StreamUploader recordStreamUploader}
+{@com.hedera.solo.operator.model.commonspec.StreamUploader eventStreamUploader}
 kind: Deployment
 apiVersion: apps/v1
 metadata:
@@ -26,6 +27,8 @@ spec:
           volumeMounts:
             - name: hgcapp-record-streams
               mountPath: /opt/hgcapp/recordStreams
+            - name: hgcapp-events-streams
+              mountPath: /opt/hgcapp/eventsStreams
           command:
             - "/bin/sh"
             - "-c"
@@ -33,6 +36,8 @@ spec:
               setupDirs() \{
                 mkdir -p /opt/hgcapp/recordStreams/record{accountId}/sidecar
                 chown -r hedera:hedera /opt/hgcapp/recordStreams
+                mkdir -p /opt/hgcapp/eventsStreams/events_{accountId}
+                chown -r hedera:hedera /opt/hgcapp/eventsStreams
                 return 0
               \}
               setupDirs
@@ -63,6 +68,8 @@ spec:
               subPath: bootstrap.properties
             - name: hgcapp-record-streams
               mountPath: /opt/hgcapp/recordStreams
+            - name: hgcapp-events-streams
+              mountPath: /opt/hgcapp/eventsStreams
             - name: hgcapp-output
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/output
             - name: private-keys
@@ -82,7 +89,7 @@ spec:
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/{publicKeyFile}
               subPath: {publicKeyFile}
             {/for}
-        {#if recordStreamUploader.enabled}
+        {#if recordStreamUploader && recordStreamUploader.enabled}
         # Sidecar: record-stream-uploader
         - name: record-stream-uploader
           image: gcr.io/hedera-registry/uploader-mirror:1.3.0
@@ -105,7 +112,7 @@ spec:
             {/if}
             {#if recordStreamUploader.config.gcs.enabled}
             - --gcs-endpoint
-            - {recordStreamUploader.config.s3.url}
+            - {recordStreamUploader.config.gcs.url}
             {/if}
           volumeMounts:
             - name: hgcapp-record-streams
@@ -144,12 +151,83 @@ spec:
               value: {recordStreamUploader.config.bucketName}
             - name: S3_ENABLE
               value: {recordStreamUploader.config.s3.enabled}
+            - name: S3_ACCESS_KEY
+              value: {eventStreamUploader.config.s3.accessKey}
             - name: GCS_ENABLE
               value: {recordStreamUploader.config.gcs.enabled}
+            - name: GCS_ACCESS_KEY
+              value: {eventStreamUploader.config.gcs.accessKey}
           envFrom:
             - secretRef:
-                name: uploader-secrets
-          {/if}
+                name: {recordStreamUploader.config.envFromSecret}
+        {/if}
+        {#if eventStreamUploader && eventStreamUploader.enabled}
+        # Sidecar: event-stream-uploader
+        - name: event-stream-uploader
+          image: gcr.io/hedera-registry/uploader-mirror:1.3.0
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: {securityContext.runAsUser}
+            runAsGroup: {securityContext.runAsGroup}
+          command:
+            - /usr/bin/env
+            - python3.7
+            - /usr/local/bin/mirror.py
+            - --linux
+            - --watch-directory
+            - /opt/hgcapp/eventsStreams
+            - --debug
+            {#if eventStreamUploader.config.s3.enabled}
+            - --s3-endpoint
+            - {eventStreamUploader.config.s3.url}
+            {/if}
+            {#if eventStreamUploader.config.gcs.enabled}
+            - --gcs-endpoint
+            - {eventStreamUploader.config.gcs.url}
+            {/if}
+          volumeMounts:
+            - name: hgcapp-events-streams
+              mountPath: /opt/hgcapp/eventsStreams
+              subPath: events_{accountId}
+          env:
+            - name: DEBUG
+              value: {eventStreamUploader.config.debug}
+            - name: REAPER_ENABLE
+              value: {eventStreamUploader.config.reaper.enabled}
+            - name: REAPER_MIN_KEEP
+              value: {eventStreamUploader.config.reaper.minKeep}
+            - name: REAPER_INTERVAL
+              value: {eventStreamUploader.config.reaper.interval}
+            - name: REAPER_DEFAULT_BACKOFF
+              value: {eventStreamUploader.config.reaper.defaultBackoff}
+            - name: STREAM_FILE_EXTENSION
+              value: {eventStreamUploader.config.streamFileExtension}
+            - name: STREAM_SIG_EXTENSION
+              value: {eventStreamUploader.config.streamSigExtension}
+            - name: STREAM_EXTENSION
+              value: {eventStreamUploader.config.streamExtension}
+            - name: SIG_EXTENSION
+              value: {eventStreamUploader.config.sigExtension}
+            - name: SIG_REQUIRE
+              value: {eventStreamUploader.config.signature.require}
+            - name: SIG_PRIORITIZE
+              value: {eventStreamUploader.config.signature.prioritize}
+            - name: BUCKET_PATH
+              value:  "eventsStreams/events_{accountId}"
+            - name: BUCKET_NAME
+              value: {eventStreamUploader.config.bucketName}
+            - name: S3_ENABLE
+              value: {eventStreamUploader.config.s3.enabled}
+            - name: S3_ACCESS_KEY
+              value: {eventStreamUploader.config.s3.accessKey}
+            - name: GCS_ENABLE
+              value: {eventStreamUploader.config.gcs.enabled}
+            - name: GCS_ACCESS_KEY
+              value: {eventStreamUploader.config.gcs.accessKey}
+          envFrom:
+            - secretRef:
+                name: {eventStreamUploader.config.envFromSecret}
+        {/if}
       volumes:
         - name: cluster-config
           configMap:
@@ -161,6 +239,8 @@ spec:
           secret:
             secretName: {nodeId}-keys
         - name: hgcapp-record-streams
+          emptyDir: {}
+        - name: hgcapp-events-streams
           emptyDir: {}
         - name: hgcapp-output
           emptyDir: {}
