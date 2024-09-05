@@ -129,7 +129,7 @@ components:
               default: true
             enableCompression:
               type: boolean
-              default: true
+              default: false
             enableSidecarFiles:
               type: boolean
               default: false
@@ -159,12 +159,16 @@ components:
                   default: true
             streamFileExtension:
               type: string
+              default: ""
             streamSigExtension:
               type: string
+              default: ""
             streamExtension:
               type: string
+              default: ""
             sigExtension:
               type: string
+              default: ""
             bucketName:
               type: string
             bucketPath:
@@ -192,6 +196,8 @@ components:
                   default: "solo-operator"
                 url:
                   type: string
+            envFromSecret:
+              type: string
 
     OpenTelemetryCollector:
       type: object
@@ -221,7 +227,7 @@ components:
                   type: string #5s
         exporters:
           type: object
-          default: {}
+          default: { }
           properties:
             enabled:
               type: boolean

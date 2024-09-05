@@ -16,11 +16,23 @@
 
 package com.hedera.solo.operator.reconciler.capsule.consensus.resources;
 
+import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_BUCKET_PATH_TEMPLATE;
+import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_EXTENSION;
+import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_SIG_EXTENSION;
+import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM_BUCKET_PATH_TEMPLATE;
+import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM_EXTENSION;
+import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM_SIG_EXTENSION;
 import static com.hedera.solo.operator.reconciler.common.Constants.SECURITY_CONTEXT_BUILDER;
+import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_ACCOUNT_ID;
+import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_EVENT_STREAM_UPLOADER;
+import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_ID;
+import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_PUBLIC_KEY_FILES;
+import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_RECORD_STREAM_UPLOADER;
+import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_SECURITY_CONTEXT;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 
+import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Sidecars;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
@@ -32,6 +44,7 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDep
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
+import io.quarkus.runtime.util.StringUtil;
 import java.util.Map;
 import java.util.Objects;
 
@@ -96,7 +109,6 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
     private Deployment renderDeploymentTemplate(
             ConsensusCapsule primary, Context<ConsensusCapsule> context, String accountId) {
         final TemplateInstance tplInstance = tpl.instance();
-        final Sidecars sidecars = primary.getSpec().getSidecars();
         final String nodeId = primary.getMetadata().getName();
 
         // fetch public keys configmap
@@ -106,14 +118,78 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
                 .withName("public-keys")
                 .get();
 
-        // set template data
-        tplInstance.data("nodeId", nodeId);
-        tplInstance.data("accountId", accountId);
-        tplInstance.data("securityContext", SECURITY_CONTEXT_BUILDER.build());
-        tplInstance.data("publicKeyFiles", publicKeys.getData().keySet());
-        tplInstance.data("recordStreamUploader", sidecars.getRecordStreamUploader());
+        // set template variables
+        tplInstance.data(TPL_VAR_NODE_ID, nodeId);
+        tplInstance.data(TPL_VAR_ACCOUNT_ID, accountId);
+        tplInstance.data(TPL_VAR_SECURITY_CONTEXT, SECURITY_CONTEXT_BUILDER.build());
+        tplInstance.data(TPL_VAR_PUBLIC_KEY_FILES, publicKeys.getData().keySet());
+        tplInstance.data(TPL_VAR_RECORD_STREAM_UPLOADER, this.prepareRecordStreamUploader(primary));
+        tplInstance.data(TPL_VAR_EVENT_STREAM_UPLOADER, this.prepareEventStreamUploader(primary));
 
         // return an instance of Deployment
         return Serialization.unmarshal(tplInstance.render(), Deployment.class);
+    }
+
+    private StreamUploader prepareRecordStreamUploader(ConsensusCapsule primary) {
+        final StreamUploader rsu = this.setStreamUploaderExtensions(
+                primary.getSpec().getSidecars().getRecordStreamUploader(),
+                RECORD_STREAM_EXTENSION,
+                RECORD_STREAM_SIG_EXTENSION);
+
+        if (Objects.nonNull(rsu) && rsu.getConfig().getEnableCompression()) {
+            rsu.getConfig().setStreamExtension("%s.gz".formatted(RECORD_STREAM_EXTENSION));
+        }
+
+        if (Objects.nonNull(rsu)) {
+            rsu.getConfig()
+                    .setBucketPath(RECORD_STREAM_BUCKET_PATH_TEMPLATE.formatted(
+                            primary.getSpec().getAccountId()));
+        }
+
+        return rsu;
+    }
+
+    private StreamUploader prepareEventStreamUploader(ConsensusCapsule primary) {
+        final StreamUploader esu = this.setStreamUploaderExtensions(
+                primary.getSpec().getSidecars().getEventStreamUploader(),
+                EVENT_STREAM_EXTENSION,
+                EVENT_STREAM_SIG_EXTENSION);
+
+        if (Objects.nonNull(esu)) {
+            esu.getConfig()
+                    .setBucketPath(EVENT_STREAM_BUCKET_PATH_TEMPLATE.formatted(
+                            primary.getSpec().getAccountId()));
+        }
+
+        return esu;
+    }
+
+    private StreamUploader setStreamUploaderExtensions(
+            final StreamUploader uploader, final String streamExtension, String streamSigExtension) {
+
+        if (Objects.isNull(uploader)) {
+            return null;
+        }
+
+        Objects.requireNonNull(streamExtension);
+        Objects.requireNonNull(streamSigExtension);
+
+        if (StringUtil.isNullOrEmpty(uploader.getConfig().getStreamFileExtension())) {
+            uploader.getConfig().setStreamFileExtension(streamExtension);
+        }
+
+        if (StringUtil.isNullOrEmpty(uploader.getConfig().getStreamSigExtension())) {
+            uploader.getConfig().setStreamSigExtension(streamSigExtension);
+        }
+
+        if (StringUtil.isNullOrEmpty(uploader.getConfig().getStreamExtension())) {
+            uploader.getConfig().setStreamExtension(streamExtension);
+        }
+
+        if (StringUtil.isNullOrEmpty(uploader.getConfig().getSigExtension())) {
+            uploader.getConfig().setSigExtension(streamSigExtension);
+        }
+
+        return uploader;
     }
 }
