@@ -23,12 +23,18 @@ spec:
           env:
             - name: JAVA_OPTS
               value: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
-          command: ["/init"]
-          args: ["sh", "-c", "cd /opt/hgcapp/services-hedera/HapiApp2.0; cp entrypoint2.sh entrypoint2_.sh; chmod +x entrypoint2_.sh; ./entrypoint2_.sh"]
+          command:
+            - /init
+          args:
+            - sh
+            - -c
+            - |
+              set -x
+              /opt/hgcapp/services-hedera/HapiApp2.0/entrypoint.sh
+              find . -type f -ls
+              cat output/swirlds.log
+              tail -f /dev/null
           volumeMounts:
-            - name: cluster-config
-              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/entrypoint2.sh
-              subPath: entrypoint2.sh
             - name: cluster-config
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/config.txt
               subPath: config.txt
