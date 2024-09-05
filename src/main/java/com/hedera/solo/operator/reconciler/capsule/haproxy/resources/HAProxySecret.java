@@ -55,6 +55,7 @@ public class HAProxySecret extends CRUDKubernetesDependentResource<Secret, HAPro
     @Override
     protected Secret desired(final HAProxyCapsule primary, final Context<HAProxyCapsule> context) {
         final ObjectMeta metadata = primary.getMetadata();
+        final String nodeName = metadata.getName();
         final String validName = validName(metadata.getName(), NAME_SUFFIX);
         final Base64.Decoder decoder = Base64.getDecoder();
         final Base64.Encoder encoder = Base64.getEncoder();
@@ -63,8 +64,9 @@ public class HAProxySecret extends CRUDKubernetesDependentResource<Secret, HAPro
         String pem = reconciler
                 .haProxyConsensusSecret
                 .getSecondaryResource(primary, context)
-                .map(secret -> get.apply(secret, "hedera.key").trim() + "\n"
-                        + get.apply(secret, "hedera.crt").trim() + "\n")
+                .map(secret -> get.apply(secret, "hedera-%s.key".formatted(nodeName))
+                                .trim() + "\n"
+                        + get.apply(secret, "hedera-%s.crt".formatted(nodeName)).trim() + "\n")
                 .map(s -> encoder.encodeToString(s.getBytes(StandardCharsets.UTF_8)))
                 .orElseThrow();
 

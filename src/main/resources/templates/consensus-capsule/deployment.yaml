@@ -1,0 +1,168 @@
+{@String nodeId}
+{@String accountId}
+{@io.fabric8.kubernetes.api.model.PodSecurityContext securityContext}
+{@com.hedera.solo.operator.model.commonspec.StreamUploader recordStreamUploader}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: consensus-node
+  labels:
+    app: consensus-node
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: consensus-node
+  template:
+    metadata:
+      labels:
+        app: consensus-node
+    spec:
+      hostname: {nodeId}
+      subdomain: consensus
+      initContainers:
+        - name: "consensus-init"
+          image: gcr.io/hedera-registry/consensus-node:0.52.0-alpha.6
+          volumeMounts:
+            - name: hgcapp-record-streams
+              mountPath: /opt/hgcapp/recordStreams
+          command:
+            - "/bin/sh"
+            - "-c"
+            - |
+              setupDirs() \{
+                mkdir -p /opt/hgcapp/recordStreams/record{accountId}/sidecar
+                chown -r hedera:hedera /opt/hgcapp/recordStreams
+                return 0
+              \}
+              setupDirs
+      containers:
+        - name: consensus-node
+          image: gcr.io/hedera-registry/consensus-node:0.52.0-alpha.6
+          env:
+            - name: JAVA_OPTS
+              value: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
+          volumeMounts:
+            - name: cluster-config
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/config.txt
+              subPath: config.txt
+            - name: cluster-config
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/settings.txt
+              subPath: settings.txt
+            - name: cluster-config
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/log4j2.xml
+              subPath: log4j2.xml
+            - name: cluster-config
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/config/api-permission.properties
+              subPath: api-permission.properties
+            - name: cluster-config
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/config/application.properties
+              subPath: application.properties
+            - name: cluster-config
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/config/bootstrap.properties
+              subPath: bootstrap.properties
+            - name: hgcapp-record-streams
+              mountPath: /opt/hgcapp/recordStreams
+            - name: hgcapp-output
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/output
+            - name: private-keys
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.crt
+              subPath: hedera-{nodeId}.crt
+            - name: private-keys
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.key
+              subPath: hedera-{nodeId}.key
+            - name: private-keys
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/a-private-{nodeId}.pem
+              subPath: a-private-{nodeId}.pem
+            - name: private-keys
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/s-private-{nodeId}.pem
+              subPath: s-private-{nodeId}.pem
+            {#for publicKeyFile in publicKeyFiles}
+            - name: public-keys
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/{publicKeyFile}
+              subPath: {publicKeyFile}
+            {/for}
+        {#if recordStreamUploader.enabled}
+        # Sidecar: record-stream-uploader
+        - name: record-stream-uploader
+          image: gcr.io/hedera-registry/uploader-mirror:1.3.0
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: {securityContext.runAsUser}
+            runAsGroup: {securityContext.runAsGroup}
+          command:
+            - /usr/bin/env
+            - python3.7
+            - /usr/local/bin/mirror.py
+            - --linux
+            - --watch-directory
+            - /opt/hgcapp/recordStreams
+            - --csv-stats-directory
+            - /opt/hgcapp/recordStreams/uploader-stats
+            {#if recordStreamUploader.config.s3.enabled}
+            - --s3-endpoint
+            - {recordStreamUploader.config.s3.url}
+            {/if}
+            {#if recordStreamUploader.config.gcs.enabled}
+            - --gcs-endpoint
+            - {recordStreamUploader.config.s3.url}
+            {/if}
+          volumeMounts:
+            - name: hgcapp-record-streams
+              mountPath: /opt/hgcapp/recordStreams
+              subPath: record{accountId}
+          env:
+            - name: DEBUG
+              value: {recordStreamUploader.config.debug}
+            - name: REAPER_ENABLE
+              value: {recordStreamUploader.config.reaper.enabled}
+            - name: REAPER_MIN_KEEP
+              value: {recordStreamUploader.config.reaper.minKeep}
+            - name: REAPER_INTERVAL
+              value: {recordStreamUploader.config.reaper.interval}
+            - name: REAPER_DEFAULT_BACKOFF
+              value: {recordStreamUploader.config.reaper.defaultBackoff}
+            - name: STREAM_FILE_EXTENSION
+              value: {recordStreamUploader.config.streamFileExtension}
+            - name: STREAM_SIG_EXTENSION
+              value: {recordStreamUploader.config.streamSigExtension}
+            - name: STREAM_EXTENSION
+              value: {recordStreamUploader.config.streamExtension}
+            - name: SIG_EXTENSION
+              value: {recordStreamUploader.config.sigExtension}
+            - name: RECORD_STREAM_COMPRESSION
+              value: {recordStreamUploader.config.enableCompression}
+            - name: RECORD_STREAM_SIDECAR
+              value: {recordStreamUploader.config.enableSidecarFiles}
+            - name: SIG_REQUIRE
+              value: {recordStreamUploader.config.signature.require}
+            - name: SIG_PRIORITIZE
+              value: {recordStreamUploader.config.signature.prioritize}
+            - name: BUCKET_PATH
+              value:  "recordstreams/record{accountId}"
+            - name: BUCKET_NAME
+              value: {recordStreamUploader.config.bucketName}
+            - name: S3_ENABLE
+              value: {recordStreamUploader.config.s3.enabled}
+            - name: GCS_ENABLE
+              value: {recordStreamUploader.config.gcs.enabled}
+          envFrom:
+            - secretRef:
+                name: uploader-secrets
+          {/if}
+      volumes:
+        - name: cluster-config
+          configMap:
+            name: cluster-config
+        - name: public-keys
+          configMap:
+            name: public-keys
+        - name: private-keys
+          secret:
+            secretName: {nodeId}-keys
+        - name: hgcapp-record-streams
+          emptyDir: {}
+        - name: hgcapp-output
+          emptyDir: {}
+  strategy: {}
+status: {}

@@ -112,14 +112,17 @@ public class HederaSdkClientFactory {
     NodeAddressBook nodeAddressBook(final Map<String, List<LocalPortForward>> services) throws Exception {
         Map<String, byte[]> certificates = certificates();
         Map<String, String> pubKeys = pubKeys();
+        final List<com.hedera.hashgraph.sdk.proto.NodeAddress> nodeAddresses = Arrays.stream(
+                        configText().split("\n"))
+                .filter(line -> line.startsWith("address"))
+                .map(line -> line.split("\s*,\s*"))
+                .map(cfg -> nodeAddress(
+                        cfg[1], cfg[9], services.get(cfg[2]), pubKeys.get(cfg[2]), certificates.get(cfg[2])))
+                .filter(Objects::nonNull)
+                .toList();
+
         return NodeAddressBook.fromBytes(com.hedera.hashgraph.sdk.proto.NodeAddressBook.newBuilder()
-                .addAllNodeAddress(Arrays.stream(configText().split("\n"))
-                        .filter(line -> line.startsWith("address"))
-                        .map(line -> line.split("\s*,\s*"))
-                        .map(cfg -> nodeAddress(
-                                cfg[1], cfg[9], services.get(cfg[2]), pubKeys.get(cfg[2]), certificates.get(cfg[2])))
-                        .filter(Objects::nonNull)
-                        .toList())
+                .addAllNodeAddress(nodeAddresses)
                 .build()
                 .toByteString());
     }
@@ -159,10 +162,16 @@ public class HederaSdkClientFactory {
         Base64.Decoder decoder = Base64.getDecoder();
         return kubernetesClient.secrets().inNamespace(namespace).list().getItems().stream()
                 .filter(secret -> secret.getMetadata().getLabels().containsKey("consensus-capsule"))
-                .filter(secret -> secret.getData().containsKey("hedera.crt"))
+                .filter(secret -> secret.getData()
+                        .containsKey(String.format(
+                                "hedera-%s.crt",
+                                secret.getMetadata().getLabels().get("consensus-capsule"))))
                 .collect(Collectors.toMap(
                         secret -> secret.getMetadata().getLabels().get("consensus-capsule"),
-                        secret -> decoder.decode(secret.getData().get("hedera.crt"))));
+                        secret -> decoder.decode(secret.getData()
+                                .get(String.format(
+                                        "hedera-%s.crt",
+                                        secret.getMetadata().getLabels().get("consensus-capsule"))))));
     }
 
     Map<String, String> pubKeys() {

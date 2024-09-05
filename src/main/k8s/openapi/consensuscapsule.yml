@@ -81,6 +81,8 @@ components:
               through the address book or using an init container
 
       properties:
+        accountId:
+          type: string
         eligibleForDeployment:
           type: boolean
           default: false
@@ -141,18 +143,30 @@ components:
           x-java-type: io.fabric8.kubernetes.api.model.PodSecurityContext
         terminationGracePeriodSeconds:
           type: integer
-        softwareVersions:
+        softwareVersion:
+          type: object
+          x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+        sidecars:
           type: object
           properties:
-            consensusNode:
+            recordStreamUploader:
               type: object
-              x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
-            openTelemetryCollector:
+              x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
+            recordStreamSidecarUploader:
               type: object
-              x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
-            streamUploader:
+              x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
+            eventStreamUploader:
               type: object
-              x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+              x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
+            backupUploader:
+              type: object
+              x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
+            accountBalanceUploader:
+              type: object
+              x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
+            otelCollector:
+              type: object
+              x-java-type: com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector
     ConsensusCapsuleStatus:
       description: The current status of a `ConsensusCapsule`.
       type: object

@@ -30,7 +30,6 @@ import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.quarkus.test.junit.QuarkusTest;
-import java.lang.invoke.MethodHandles;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -43,10 +42,6 @@ import org.junit.jupiter.api.Test;
 
 @QuarkusTest
 public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
-    public HAProxyCapsuleTest() {
-        setNamespace(MethodHandles.lookup().lookupClass());
-    }
-
     @Override
     @AfterEach
     void cleanup() {
@@ -132,9 +127,13 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
                 .withLabel(LABEL_SELECTOR_CONSENSUS_NODE)
                 .list()
                 .getItems()) {
+            String fieldName = secret.getData().keySet().stream()
+                    .filter(s -> s.startsWith("hedera") && s.endsWith(".crt"))
+                    .findAny()
+                    .orElse("hedera.crt");
             kubernetesClient.resource(secret).edit(s -> s.edit()
-                    .addToData("hedera.crt.orig", s.getData().get("hedera.crt"))
-                    .addToData("hedera.crt", "AA==")
+                    .addToData(fieldName + ".orig", s.getData().get(fieldName))
+                    .addToData(fieldName, "AA==")
                     .build());
         }
 
@@ -151,9 +150,14 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
                 .withLabel(LABEL_SELECTOR_CONSENSUS_NODE)
                 .list()
                 .getItems()) {
+            String fieldName = secret.getData().keySet().stream()
+                    .filter(s -> s.startsWith("hedera") && s.endsWith(".crt.orig"))
+                    .map(s -> s.substring(0, s.length() - 5))
+                    .findAny()
+                    .orElse("hedera.crt");
             kubernetesClient.resource(secret).edit(s -> s.edit()
-                    .addToData("hedera.crt", s.getData().get("hedera.crt.orig"))
-                    .removeFromData("hedera.crt.orig")
+                    .addToData(fieldName, s.getData().get(fieldName + ".orig"))
+                    .removeFromData(fieldName + ".orig")
                     .build());
         }
 

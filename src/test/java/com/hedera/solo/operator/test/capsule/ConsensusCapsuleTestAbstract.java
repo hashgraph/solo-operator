@@ -20,6 +20,7 @@ import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import com.google.protobuf.ByteString;
 import com.hedera.hashgraph.sdk.AccountId;
 import com.hedera.hashgraph.sdk.Client;
 import com.hedera.hashgraph.sdk.FileContentsQuery;
@@ -27,6 +28,7 @@ import com.hedera.hashgraph.sdk.FileId;
 import com.hedera.hashgraph.sdk.NodeAddress;
 import com.hedera.hashgraph.sdk.NodeAddressBook;
 import com.hedera.hashgraph.sdk.PrivateKey;
+import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleBuilder;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
@@ -36,6 +38,9 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitBuilder;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Sidecars;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.SidecarsBuilder;
+import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.test.Environment;
 import com.hedera.solo.operator.test.HederaSdkClientFactory;
 import com.hedera.solo.operator.test.fixtures.Resources;
@@ -48,10 +53,8 @@ import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
 import jakarta.inject.Inject;
-import java.lang.invoke.MethodHandles;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import org.awaitility.core.ConditionTimeoutException;
@@ -60,32 +63,30 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 public abstract class ConsensusCapsuleTestAbstract {
-    protected String namespace;
+    protected final String namespace = getClass().getSimpleName().toLowerCase();
+
+    public static final String RECORD_STREAM_TEMPLATE = "sidecars/record-stream-uploader.yaml";
 
     @Inject
     @SuppressWarnings("CdiInjectionPointsInspection")
-    protected KubernetesClient kubernetesClient;
+    KubernetesClient kubernetesClient;
 
     @Inject
-    protected Environment environment;
+    Environment environment;
 
     @Inject
-    protected Operator operator;
-
-    public ConsensusCapsuleTestAbstract() {
-        setNamespace(MethodHandles.lookup().lookupClass());
-    }
-
-    protected void setNamespace(final Class<?> aClass) {
-        namespace = aClass.getSimpleName().toLowerCase();
-    }
+    Operator operator;
 
     @BeforeEach
     void setup() {
         if (!environment.isDevModeActive()) {
             operator.start();
         }
+
         cleanup();
+
+        // create orbit
+        createOrbit();
     }
 
     @AfterEach
@@ -94,32 +95,40 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .resources(NetworkInitialization.class)
                 .inNamespace(namespace)
                 .delete();
+
         kubernetesClient
                 .resources(ConsensusCapsule.class)
                 .inNamespace(namespace)
                 .delete();
+
         Resources.removeByName(kubernetesClient, Orbit.class, namespace);
-        await().atMost(Duration.ofSeconds(30))
+
+        await().atMost(Duration.ofSeconds(120))
                 .until(() -> kubernetesClient.namespaces().withName(namespace).get() == null);
     }
 
-    record Node(String name, int weight, String internal, String external) {}
+    record NodeInfo(String name, String accountId, int weight, String internal, String external) {}
 
-    ConfigMap config(ConfigMap configMap, Node... nodes) {
+    ConfigMap prepareClusterConfig(ConfigMap configMap, List<NodeInfo> nodes) {
         // should probably set the chainId in bootstrap.properties
-        String chainId = configMap
+        final Optional<String> cid = configMap
                 .getData()
                 .get("bootstrap.properties")
                 .lines()
                 .filter(s -> s.startsWith("contracts.chainId="))
-                .findFirst()
-                .get()
-                .substring(18);
+                .findFirst();
+
+        if (cid.isEmpty()) {
+            throw new RuntimeException("contacts.chainid property not found");
+        }
+
+        String chainId = cid.get().substring(18);
+
         int nodeId = 0;
         StringBuilder sb = new StringBuilder();
         sb.append("swirld, ").append(chainId).append("\n");
         sb.append("app, HederaNode.jar\n");
-        for (Node node : nodes) {
+        for (NodeInfo node : nodes) {
             sb.append("address, %d, %s, %s, 1, %s, 50111, %s, 50111, 0.0.%d\n"
                     .formatted(nodeId, node.name, node.name, node.internal, node.external, nodeId + 3));
             nodeId++;
@@ -128,34 +137,84 @@ public abstract class ConsensusCapsuleTestAbstract {
         return configMap.edit().addToData("config.txt", sb.toString()).build();
     }
 
+    private List<NodeInfo> prepareNodes(List<String> nodeNames) {
+        List<NodeInfo> nodes = new ArrayList<>();
+        int accStart = Constants.HEDERA_ACCOUNT_START;
+        for (String nodeName : nodeNames) {
+            nodes.add(new NodeInfo(
+                    nodeName,
+                    String.format("0.0.%d", accStart++),
+                    1,
+                    String.format("%s.consensus", nodeName),
+                    String.format("%s-svc", nodeName)));
+        }
+
+        return nodes;
+    }
+
+    private void setupConfigMaps(List<NodeInfo> nodes) {
+        // create cluster-config configmap
+        kubernetesClient
+                .resource(prepareClusterConfig(
+                        loadYaml(ConfigMap.class, getClass(), "cluster-config.yaml")
+                                .edit()
+                                .editMetadata()
+                                .withNamespace(namespace)
+                                .endMetadata()
+                                .build(),
+                        nodes))
+                .create();
+
+        // create other config-maps
+        for (String cmFile : List.of("public-keys.yaml")) {
+            kubernetesClient
+                    .resource(loadYaml(ConfigMap.class, getClass(), cmFile)
+                            .edit()
+                            .editMetadata()
+                            .withNamespace(namespace)
+                            .endMetadata()
+                            .build())
+                    .create();
+        }
+    }
+
+    private void setupSecrets(List<NodeInfo> nodes) {
+        final ArrayList<String> secretFiles = new ArrayList<>(List.of("uploader-secrets.yaml", "mirror-secrets.yaml"));
+
+        for (String sf : secretFiles) {
+            kubernetesClient
+                    .resource(loadYaml(Secret.class, getClass(), sf)
+                            .edit()
+                            .editMetadata()
+                            .withNamespace(namespace)
+                            .endMetadata()
+                            .build())
+                    .create();
+        }
+
+        for (NodeInfo node : nodes) {
+            final String nodeKeyFile = String.format("%s-keys.yaml", node.name);
+            kubernetesClient
+                    .resource(loadYaml(Secret.class, getClass(), nodeKeyFile)
+                            .edit()
+                            .editMetadata()
+                            .withNamespace(namespace)
+                            .addToLabels("consensus-capsule", node.name)
+                            .endMetadata()
+                            .build())
+                    .create();
+        }
+    }
+
     @Test
     void testSingleNodeDeployment() throws Exception {
-        // create orbit
-        createOrbit();
-
-        kubernetesClient
-                .resource(loadYaml(ConfigMap.class, getClass(), "public-keys.yaml")
-                        .edit()
-                        .editMetadata()
-                        .withNamespace(namespace)
-                        .endMetadata()
-                        .build())
-                .create();
-        kubernetesClient
-                .resource(loadYaml(ConfigMap.class, getClass(), "cluster-config.yaml")
-                        .edit()
-                        .editMetadata()
-                        .withNamespace(namespace)
-                        .endMetadata()
-                        .build())
-                .create();
+        final List<String> nodeNames = List.of("node0");
+        final List<NodeInfo> nodes = prepareNodes(nodeNames);
+        this.setupConfigMaps(nodes);
+        this.setupSecrets(nodes);
 
         // create consensus capsule
-        List<ConsensusCapsule> consensusCapsules = createConsensusCapsule("node0");
-
-        kubernetesClient.secrets().inNamespace(namespace).withName("node0-keys").edit(secret -> secret.edit()
-                .withData(loadYaml(Secret.class, getClass(), "node0-keys.yaml").getData())
-                .build());
+        List<ConsensusCapsule> consensusCapsules = createConsensusCapsule(nodes);
 
         // create network initialization
         createNetworkInitialization(consensusCapsules);
@@ -166,55 +225,22 @@ public abstract class ConsensusCapsuleTestAbstract {
 
     @Test
     void testMultiNodeDeployment() throws Exception {
-        // create orbit
-        createOrbit();
-
-        // populate config and keys
-        String internalSuffix = ".consensus";
-        String externalSuffix = "-svc";
-        kubernetesClient
-                .resource(config(
-                        loadYaml(ConfigMap.class, getClass(), "cluster-config.yaml")
-                                .edit()
-                                .editMetadata()
-                                .withNamespace(namespace)
-                                .endMetadata()
-                                .build(),
-                        new Node("node0", 1, "node0" + internalSuffix, "node0" + externalSuffix),
-                        new Node("node1", 1, "node1" + internalSuffix, "node1" + externalSuffix),
-                        new Node("node2", 1, "node2" + internalSuffix, "node2" + externalSuffix)))
-                .create();
-        kubernetesClient
-                .resource(loadYaml(ConfigMap.class, getClass(), "public-keys.yaml")
-                        .edit()
-                        .editMetadata()
-                        .withNamespace(namespace)
-                        .endMetadata()
-                        .build())
-                .create();
+        final List<String> nodeNames = List.of("node0", "node1", "node2");
+        final List<NodeInfo> nodes = prepareNodes(nodeNames);
+        this.setupConfigMaps(nodes);
+        this.setupSecrets(nodes);
 
         // create consensus capsule
-        List<ConsensusCapsule> nodes = createConsensusCapsule("node0", "node1", "node2");
-
-        for (String node : List.of("node0", "node1", "node2")) {
-            kubernetesClient
-                    .secrets()
-                    .inNamespace(namespace)
-                    .withName(node + "-keys")
-                    .edit(secret -> secret.edit()
-                            .withData(loadYaml(Secret.class, getClass(), node + "-keys.yaml")
-                                    .getData())
-                            .build());
-        }
+        List<ConsensusCapsule> consensusCapsules = createConsensusCapsule(nodes);
 
         // create network initialization
-        createNetworkInitialization(nodes);
+        createNetworkInitialization(consensusCapsules);
 
         // test with client
         checkAddressBook(HederaSdkClientFactory::directContextCreator);
     }
 
-    Orbit createOrbit() {
+    void createOrbit() {
         Orbit orbit = new OrbitBuilder()
                 .withNewMetadata()
                 .withName(namespace)
@@ -222,31 +248,38 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .withNewSpec()
                 .endSpec()
                 .build();
+
         kubernetesClient.resource(orbit).create();
 
-        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(kubernetesClient.resource(orbit).get()).isNotNull();
-        });
-
-        return orbit;
+        await().atMost(30, TimeUnit.SECONDS)
+                .untilAsserted(
+                        () -> assertThat(kubernetesClient.resource(orbit).get()).isNotNull());
     }
 
-    List<ConsensusCapsule> createConsensusCapsule(String... names) {
+    List<ConsensusCapsule> createConsensusCapsule(List<NodeInfo> nodes) {
+        StreamUploader recordStreamUploader = loadYaml(StreamUploader.class, getClass(), RECORD_STREAM_TEMPLATE);
+        Sidecars sidecars = new SidecarsBuilder()
+                .withRecordStreamUploader(recordStreamUploader)
+                .build();
+
         List<ConsensusCapsule> list = new ArrayList<>();
-        for (String name : names) {
+        for (NodeInfo node : nodes) {
             final ConsensusCapsule consensusCapsule = new ConsensusCapsuleBuilder()
                     .withNewMetadata()
-                    .withName(name)
+                    .withName(node.name)
                     .withNamespace(namespace)
                     .endMetadata()
                     .withNewSpec()
+                    .withAccountId(node.accountId)
+                    .withSidecars(sidecars)
                     .endSpec()
                     .build();
             list.add(kubernetesClient.resource(consensusCapsule).create());
         }
+
         for (ConsensusCapsule consensusCapsule : list) {
             String name = consensusCapsule.getMetadata().getName();
-            await().atMost(30999, TimeUnit.SECONDS).untilAsserted(() -> {
+            await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
                 ConsensusCapsule capsule =
                         kubernetesClient.resource(consensusCapsule).get();
                 assertThat(capsule).isNotNull();
@@ -268,7 +301,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         return list;
     }
 
-    NetworkInitialization createNetworkInitialization(List<ConsensusCapsule> consensusCapsules) {
+    void createNetworkInitialization(List<ConsensusCapsule> consensusCapsules) {
         final NetworkInitialization networkInitialization = new NetworkInitializationBuilder()
                 .withNewMetadata()
                 .withName("network-initialization")
@@ -306,13 +339,13 @@ public abstract class ConsensusCapsuleTestAbstract {
                 assertThat(netInit.getStatus().getPhase()).isEqualTo(NetworkInitializationStatus.Phase.Succeeded);
             }
         });
-        return networkInitialization;
     }
 
     List<NodeAddress> addresses(final Client client) throws Exception {
-        return NodeAddressBook.fromBytes(
-                        new FileContentsQuery().setFileId(FileId.ADDRESS_BOOK).execute(client))
-                .getNodeAddresses();
+        final ByteString raw =
+                new FileContentsQuery().setFileId(FileId.ADDRESS_BOOK).execute(client);
+        assertThat(raw).isNotNull();
+        return NodeAddressBook.fromBytes(raw).getNodeAddresses();
     }
 
     String[] consensusNodeNames() {
