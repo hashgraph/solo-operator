@@ -152,11 +152,11 @@ spec:
             - name: S3_ENABLE
               value: {recordStreamUploader.config.s3.enabled}
             - name: S3_ACCESS_KEY
-              value: {eventStreamUploader.config.s3.accessKey}
+              value: {recordStreamUploader.config.s3.accessKey}
             - name: GCS_ENABLE
               value: {recordStreamUploader.config.gcs.enabled}
             - name: GCS_ACCESS_KEY
-              value: {eventStreamUploader.config.gcs.accessKey}
+              value: {recordStreamUploader.config.gcs.accessKey}
           envFrom:
             - secretRef:
                 name: {recordStreamUploader.config.envFromSecret}
