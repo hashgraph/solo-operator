@@ -49,7 +49,6 @@ import java.util.zip.ZipEntry;
 
 public class Snapshot {
     public static final String NO_NAMESPACE = null;
-    public static final String ALL_NAMESPACES = "*"; // todo: currently unused
     private static final String RESOURCE_LOCATION = "META-INF/fabric8";
     private static final String JAR_FILE = "jar:file:";
     private static final String FILE = "file:";
@@ -57,6 +56,7 @@ public class Snapshot {
     private final SnapshotWriter writer;
     private final KubernetesClient client;
     private final List<String> namespaces;
+    private final boolean allNamespaces; // todo: use me
     private final boolean noNamespace;
 
     // todo: would be nice to be able specify which resources in which namespaces to retrieve.
@@ -66,7 +66,8 @@ public class Snapshot {
         this.client = client;
         this.namespaces =
                 Arrays.stream(namespaces).filter(Objects::nonNull).distinct().toList();
-        noNamespace = Arrays.stream(namespaces).anyMatch(Objects::isNull);
+        allNamespaces = namespaces.length == 0;
+        noNamespace = allNamespaces || Arrays.stream(namespaces).anyMatch(Objects::isNull);
     }
 
     public static Snapshot snapshot(final KubernetesClient client, final String... namespaces) throws IOException {

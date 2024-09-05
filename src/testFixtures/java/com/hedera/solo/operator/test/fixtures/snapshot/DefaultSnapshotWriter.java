@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HexFormat;
 import java.util.Objects;
 
 public class DefaultSnapshotWriter implements SnapshotWriter {
@@ -48,13 +49,23 @@ public class DefaultSnapshotWriter implements SnapshotWriter {
 
     @Override
     public void write(final Object object, final String... source) throws IOException {
-        Path path = distinct(append(snapshots.resolve(Path.of("", source)), ".yml"));
+        Path path = distinct(escape(append(snapshots.resolve(Path.of("", source)), ".yml")));
         path.getParent().toFile().mkdirs();
         Files.writeString(path, serialization.asYaml(object));
     }
 
     private Path append(final Path path, final String suffix) {
         return Path.of(path + suffix);
+    }
+
+    private static Path escape(Path path) {
+        HexFormat hex = HexFormat.of();
+        String special = "&\":<>|*?\r\n";
+        String string = path.toString();
+        for (char c : special.toCharArray()) {
+            string = string.replace(String.valueOf(c), "&#x" + hex.toHexDigits(c) + ";");
+        }
+        return Path.of(string);
     }
 
     private Path distinct(final Path path) {
