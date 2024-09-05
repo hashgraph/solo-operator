@@ -100,6 +100,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                             "app=consensus-node",
                             "consensus-node",
                             """
+                                    set -x
                                     find services-hedera/HapiApp2.0/data -type f -name currentAddressBook.txt | \\
                                         xargs ls -1t | head -n 1 | xargs cat
                                     """)
@@ -108,7 +109,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                             "swirlds-log",
                             "app=consensus-node",
                             "consensus-node",
-                            "cat services-hedera/HapiApp2.0/output/swirlds.log");
+                            "set -x; cat services-hedera/HapiApp2.0/output/swirlds.log");
         }
         cleanup();
     }
