@@ -396,7 +396,7 @@ data:
         </Logger>
       </Loggers>
     </Configuration>
-  entrypoint.sh: |
+  entrypoint2.sh: |
     #!/command/with-contenv bash
 
     ########################################################################################################################
