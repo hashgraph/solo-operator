@@ -19,7 +19,6 @@ package com.hedera.solo.test.example;
 import static com.hedera.solo.operator.test.fixtures.snapshot.Snapshot.snapshot;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
-import static org.junit.jupiter.api.Assertions.fail;
 
 import com.hedera.solo.operator.test.fixtures.annotations.AfterTest;
 import com.hedera.solo.operator.test.v1alpha1.Example;
@@ -44,7 +43,11 @@ public class ExampleTest extends AbstractOperatorTest {
     void afterTest(Method method, Throwable throwable) throws Exception {
         if (throwable != null) {
             snapshot(method, operator().getKubernetesClient(), operator().getNamespace())
-                    .exec("create-files", "app=test", "root", """
+                    .exec(
+                            "create-files",
+                            "app=test",
+                            "root",
+                            """
                             mkdir -p /tmp/a/b/c
                             echo aaa > /tmp/a/aaa
                             echo bbb > /tmp/a/b/bbb
@@ -103,7 +106,7 @@ public class ExampleTest extends AbstractOperatorTest {
             });
         }
 
-//        fail();
+        //        fail();
 
         // update custom resource
         example = example.edit()
