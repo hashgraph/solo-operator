@@ -87,7 +87,7 @@ public class HederaSdkClientFactory {
 
     ClientContext createClientContext(final Map<String, String> nodeService, final String consensusNode) {
         try {
-            ProcessBuilder pb = new ProcessBuilder("netstat", "-nalp");
+            ProcessBuilder pb = new ProcessBuilder("./netstat", "-nalp");
             File output = File.createTempFile(".netstat-", ".out");
             pb.redirectOutput(output);
             Process p = pb.start();
