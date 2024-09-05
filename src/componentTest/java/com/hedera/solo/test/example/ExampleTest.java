@@ -19,15 +19,19 @@ package com.hedera.solo.test.example;
 import static com.hedera.solo.operator.test.fixtures.snapshot.Snapshot.snapshot;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import com.hedera.solo.operator.test.fixtures.annotations.AfterTest;
 import com.hedera.solo.operator.test.v1alpha1.Example;
 import com.hedera.solo.operator.test.v1alpha1.ExampleBuilder;
 import com.hedera.solo.test.framework.AbstractOperatorTest;
 import io.fabric8.kubernetes.api.model.ConfigMap;
+import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.javaoperatorsdk.operator.junit.LocallyRunOperatorExtension;
 import java.lang.reflect.Method;
 import java.time.Duration;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 public class ExampleTest extends AbstractOperatorTest {
@@ -39,7 +43,14 @@ public class ExampleTest extends AbstractOperatorTest {
     @AfterTest
     void afterTest(Method method, Throwable throwable) throws Exception {
         if (throwable != null) {
-            snapshot(method, operator().getKubernetesClient(), operator().getNamespace());
+            snapshot(method, operator().getKubernetesClient(), operator().getNamespace())
+                    .exec("create-files", "app=test", "root", """
+                            mkdir -p /tmp/a/b/c
+                            echo aaa > /tmp/a/aaa
+                            echo bbb > /tmp/a/b/bbb
+                            """)
+                    .exec("list-files", "app=test", "root", "ls -al /tmp");
+            // operator().getKubernetesClient().pods().inNamespace(operator().getNamespace()).withName("demo-pod1").file("/tmp/a/").copy(Path.of("/tmp/"))
         }
     }
 
@@ -62,6 +73,37 @@ public class ExampleTest extends AbstractOperatorTest {
             assertThat(configMap).hasFieldOrPropertyWithValue("metadata.name", "example");
             assertThat(configMap).hasFieldOrPropertyWithValue("data.message", "hello world!");
         });
+
+        for (int i = 0; i < 2; ++i) {
+            String name = "demo-pod" + i;
+            Pod aPod = new PodBuilder()
+                    .withNewMetadata()
+                    .withName(name)
+                    .withLabels(Map.of("app", "test"))
+                    .endMetadata()
+                    .withNewSpec()
+                    //                .withShareProcessNamespace()
+                    .addNewContainer()
+                    .withName("root")
+                    .withImage("alpine:latest")
+                    .withCommand(
+                            "/bin/sh",
+                            "-c",
+                            """
+                            echo he}{o >> /proc/1/fd/1;
+                            echo goodbye >> /proc/1/fd/1;
+                            tail -f /dev/null
+                            """)
+                    .endContainer()
+                    .endSpec()
+                    .build();
+            operator().create(aPod);
+            await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+                assertThat(operator().get(Pod.class, name)).isNotNull();
+            });
+        }
+
+//        fail();
 
         // update custom resource
         example = example.edit()
