@@ -22,6 +22,8 @@ import io.fabric8.kubernetes.api.model.APIResource;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import io.fabric8.kubernetes.api.model.GroupVersionForDiscovery;
+import io.fabric8.kubernetes.api.model.Namespace;
+import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinition;
 import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinitionVersion;
@@ -56,7 +58,6 @@ public class Snapshot {
     private final SnapshotWriter writer;
     private final KubernetesClient client;
     private final List<String> namespaces;
-    private final boolean allNamespaces; // todo: use me
     private final boolean noNamespace;
 
     // todo: would be nice to be able specify which resources in which namespaces to retrieve.
@@ -64,10 +65,19 @@ public class Snapshot {
     public Snapshot(final SnapshotWriter writer, final KubernetesClient client, final String... namespaces) {
         this.writer = writer;
         this.client = client;
-        this.namespaces =
-                Arrays.stream(namespaces).filter(Objects::nonNull).distinct().toList();
-        allNamespaces = namespaces.length == 0;
-        noNamespace = allNamespaces || Arrays.stream(namespaces).anyMatch(Objects::isNull);
+        if (namespaces.length == 0) {
+            this.namespaces = client.namespaces().list().getItems().stream()
+                    .map(Namespace::getMetadata)
+                    .map(ObjectMeta::getName)
+                    .toList();
+            noNamespace = true;
+        } else {
+            this.namespaces = Arrays.stream(namespaces)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .toList();
+            noNamespace = Arrays.stream(namespaces).anyMatch(Objects::isNull);
+        }
     }
 
     public static Snapshot snapshot(final KubernetesClient client, final String... namespaces) throws IOException {

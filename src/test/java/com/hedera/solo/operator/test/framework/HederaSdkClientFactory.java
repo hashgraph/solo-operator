@@ -19,6 +19,7 @@ package com.hedera.solo.operator.test.framework;
 import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_CONSENSUS_CAPSULE_NAME_KEY;
 import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_SELECTOR_CONSENSUS_NODE;
 import static com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleConstants.LABEL_SELECTOR_HAPROXY;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.google.protobuf.ByteString;
 import com.hedera.hashgraph.sdk.AccountId;
@@ -31,10 +32,12 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.LocalPortForward;
 import io.fabric8.kubernetes.client.dsl.PortForwardable;
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.security.cert.CertificateFactory;
 import java.util.ArrayList;
@@ -83,6 +86,16 @@ public class HederaSdkClientFactory {
             LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
     ClientContext createClientContext(final Map<String, String> nodeService, final String consensusNode) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("netstat", "-nalp");
+            File output = File.createTempFile(".netstat-", ".out");
+            pb.redirectOutput(output);
+            Process p = pb.start();
+            p.waitFor(10, SECONDS);
+            log.info("netstat: {}", Files.readString(output.toPath()));
+        } catch (Exception e) {
+            log.info("netstat: {}", e.getMessage());
+        }
         return getClientContext(nodeService, consensusNode::equals, resource -> Stream.of(50211, 50212)
                 .map(port -> {
                     // include address here
