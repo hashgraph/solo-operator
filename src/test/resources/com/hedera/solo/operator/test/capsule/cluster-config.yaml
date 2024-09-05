@@ -139,6 +139,7 @@ data:
         </Root>
 
         <Logger name="com.swirlds" level="TRACE" additivity="false">
+          <AppenderRef ref="Console"/>
           <AppenderRef ref="fileLog">
             <Filters>
               <!-- JasperDB & Virtual Merkle -->
