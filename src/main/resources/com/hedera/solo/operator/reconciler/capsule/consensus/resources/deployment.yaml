@@ -18,6 +18,7 @@ spec:
       initContainers:
         # wait for all pods to come up before attempting to start consensus service
         # maybe we do need name resolution working, still seeing failure even after waiting for internal address ping
+        # not working as initContainer, could also try as startupProbe
         - name: sync
           image: alpine:3.20.2
           command:
@@ -47,7 +48,7 @@ spec:
           command:
             - /init
           args:
-            - sh
+            - bash
             - -c
             - |
               addresses_ready() {
@@ -56,6 +57,49 @@ spec:
                 }' /opt/hgcapp/services-hedera/HapiApp2.0/config.txt | sh -x # &> /dev/null
               }
               until addresses_ready; do
+                sleep 1
+              done
+              jshell --version &>/dev/null
+              for ((i=0;i<15;++i)); do
+                cat << EOF | jshell /dev/stdin
+                import java.nio.charset.StandardCharsets;
+                boolean pass = false;
+                boolean fail = false;
+                Path path = Path.of("services-hedera/HapiApp2.0/config.txt");
+                List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8).stream().
+                          filter(line -> line.startsWith("address")).
+                          toList();
+                List<String> internalAddr = lines.stream().
+                          map(line -> line.split("\\s*,\\s*")[5]).
+                          toList();
+                List<String> externalAddr = lines.stream().
+                          map(line -> line.split("\\s*,\\s*")[7]).
+                          toList();
+                List<InetAddress> interfaceAddr = Collections.list(NetworkInterface.getNetworkInterfaces()).stream().
+                          flatMap(x -> Collections.list(x.getInetAddresses()).stream()).
+                          toList();
+                for (String addr : externalAddr) {
+                  try {
+                    InetAddress.getByName(addr);
+                  } catch (Exception e) {
+                    System.out.println("failed to resolve external address: " + addr);
+                    fail = true;
+                  }
+                }
+                for (String addr : internalAddr) {
+                  try {
+                    if (interfaceAddr.contains(InetAddress.getByName(addr))) {
+                      System.out.println("found internal address matching interface: " + addr);
+                      pass = true;
+                    }
+                  } catch (Exception e) {
+                    System.out.println("failed to resolve internal address: " + addr);
+                    fail = true;
+                  }
+                }
+                int rc = pass && !fail ? 0 : 1;
+              /exit rc
+              EOF
                 sleep 1
               done
               set -x
