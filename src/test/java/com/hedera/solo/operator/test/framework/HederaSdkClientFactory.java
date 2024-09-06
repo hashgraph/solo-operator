@@ -81,7 +81,7 @@ public class HederaSdkClientFactory {
         return createClientContext(direct(), consensusNode);
     }
 
-    public ClientContext haproxyContextCreator(final String consensusNode) throws IOException{
+    public ClientContext haproxyContextCreator(final String consensusNode) throws IOException {
         return createClientContext(haproxy(), consensusNode);
     }
 
@@ -89,11 +89,11 @@ public class HederaSdkClientFactory {
             LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
     static AtomicInteger atomicInteger = new AtomicInteger();
 
-    ClientContext createClientContext(final Map<String, String> nodeService, final String consensusNode) throws IOException {
+    ClientContext createClientContext(final Map<String, String> nodeService, final String consensusNode)
+            throws IOException {
         try {
-            ProcessBuilder pb = new ProcessBuilder(
-                    "./netstat", "-nalp");
-//                    "ss", "-lntp");
+            ProcessBuilder pb = new ProcessBuilder("./netstat", "-nalp");
+            //                    "ss", "-lntp");
             File output = File.createTempFile(".netstat-", ".out");
             pb.redirectOutput(output);
             Process p = pb.start();
@@ -105,7 +105,8 @@ public class HederaSdkClientFactory {
         List<LocalPortForward> portForwards = new ArrayList<>();
         try {
             int i = Math.min(0xfffffe, Math.max(1, atomicInteger.incrementAndGet() & 0xffffff));
-            InetAddress inetAddress = InetAddress.getByAddress(BigInteger.valueOf(127<<24 | i).toByteArray());
+            InetAddress inetAddress =
+                    InetAddress.getByAddress(BigInteger.valueOf(127 << 24 | i).toByteArray());
             return getClientContext(nodeService, consensusNode::equals, resource -> Stream.of(50211, 50212)
                     .map(port -> {
                         // include address here
@@ -246,7 +247,8 @@ public class HederaSdkClientFactory {
                             .setNodeId(Long.parseLong(nodeId));
             for (LocalPortForward portForward : portForwards) {
                 builder.addServiceEndpoint(ServiceEndpoint.newBuilder()
-                        .setIpAddressV4(ByteString.copyFrom(portForward.getLocalAddress().getAddress()))
+                        .setIpAddressV4(ByteString.copyFrom(
+                                portForward.getLocalAddress().getAddress()))
                         .setPort(portForward.getLocalPort())
                         .build());
             }

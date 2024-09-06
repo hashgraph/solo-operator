@@ -58,7 +58,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.function.BiFunction;
 import org.awaitility.core.ConditionTimeoutException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -363,8 +362,10 @@ public abstract class ConsensusCapsuleTestAbstract {
          */
         R apply(T t, U u) throws Exception;
     }
+
     void checkAddressBook(
-            final ExceptionalBiFunction<HederaSdkClientFactory, String, HederaSdkClientFactory.ClientContext> clientContext)
+            final ExceptionalBiFunction<HederaSdkClientFactory, String, HederaSdkClientFactory.ClientContext>
+                    clientContext)
             throws AssertionError, Exception {
         String[] consensusNodeNames = consensusNodeNames();
         HederaSdkClientFactory sdkClientFactory = new HederaSdkClientFactory(kubernetesClient, namespace);
