@@ -97,6 +97,9 @@ spec:
                     fail = true;
                   }
                 }
+                if (!pass) {
+                  System.out.println("internal address matching interface not found");
+                }
                 int rc = pass && !fail ? 0 : 1;
               /exit rc
               EOF
