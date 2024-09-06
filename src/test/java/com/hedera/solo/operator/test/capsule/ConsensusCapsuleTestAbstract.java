@@ -275,7 +275,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         }
         for (ConsensusCapsule consensusCapsule : list) {
             String name = consensusCapsule.getMetadata().getName();
-            await().atMost(30999, TimeUnit.SECONDS).untilAsserted(() -> {
+            await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
                 ConsensusCapsule capsule =
                         kubernetesClient.resource(consensusCapsule).get();
                 assertThat(capsule).isNotNull();
