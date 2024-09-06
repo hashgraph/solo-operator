@@ -98,6 +98,7 @@ public class Snapshot {
         return resources(groupVersions());
     }
 
+    // why am I getting events twice?
     public Snapshot resources(final String... groupVersions) throws IOException {
         for (String groupVersion : groupVersions) {
             // try
@@ -138,10 +139,12 @@ public class Snapshot {
         return this;
     }
 
+    // can also accept some filter
     public Snapshot logs() throws IOException {
         for (String namespace : namespaces) {
             // try
             for (Pod pod : client.pods().inNamespace(namespace).list().getItems()) {
+                // can also get logs from initContainers
                 for (Container container : pod.getSpec().getContainers()) {
                     // handle exception inside loop, by logging message.
                     ContainerResource resource = containerResource(pod, container);

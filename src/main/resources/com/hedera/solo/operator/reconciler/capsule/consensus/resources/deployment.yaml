@@ -50,8 +50,15 @@ spec:
             - sh
             - -c
             - |
+              addresses_ready() {
+                awk -F, '/^address/ {
+                  printf("getent ahosts %s && getent ahosts %s || exit 1\n", $6, $8);
+                }' /opt/hgcapp/services-hedera/HapiApp2.0/config.txt | sh -x # &> /dev/null
+              }
+              until addresses_ready; do
+                sleep 1
+              done
               set -x
-              find . -type f -ls
               /opt/hgcapp/services-hedera/HapiApp2.0/entrypoint.sh
               find . -type f -ls
               cat output/swirlds.log
