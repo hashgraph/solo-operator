@@ -238,7 +238,9 @@ public abstract class ConsensusCapsuleTestAbstract {
         createNetworkInitialization(nodes);
 
         // test with client
-        checkAddressBook(HederaSdkClientFactory::directContextCreator);
+        for (int i = 0; i < 1; ++i) {
+            checkAddressBook(HederaSdkClientFactory::directContextCreator);
+        }
         //        fail();
     }
 
@@ -350,8 +352,19 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .toArray(String[]::new);
     }
 
+    public interface ExceptionalBiFunction<T, U, R> {
+
+        /**
+         * Applies this function to the given arguments.
+         *
+         * @param t the first function argument
+         * @param u the second function argument
+         * @return the function result
+         */
+        R apply(T t, U u) throws Exception;
+    }
     void checkAddressBook(
-            final BiFunction<HederaSdkClientFactory, String, HederaSdkClientFactory.ClientContext> clientContext)
+            final ExceptionalBiFunction<HederaSdkClientFactory, String, HederaSdkClientFactory.ClientContext> clientContext)
             throws AssertionError, Exception {
         String[] consensusNodeNames = consensusNodeNames();
         HederaSdkClientFactory sdkClientFactory = new HederaSdkClientFactory(kubernetesClient, namespace);

@@ -15,6 +15,21 @@ spec:
         app: consensus-node
     spec:
       subdomain: consensus
+      initContainers:
+        # wait for all pods to come up before attempting to start consensus service
+        - name: sync
+          image: busybox:1.36.1
+          command:
+            - sh
+            - -c
+            - |
+              until awk -F, '/^address/{printf("ping -c 1 %s || exit 1\n", $6)}' /opt/hgcapp/services-hedera/HapiApp2.0/config.txt | sh &> /dev/null; do
+                sleep 1
+              done
+          volumeMounts:
+            - name: cluster-config
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/config.txt
+              subPath: config.txt
       containers:
         - name: consensus-node
 #          image: gcr.io/hedera-registry/consensus-node:0.53.5

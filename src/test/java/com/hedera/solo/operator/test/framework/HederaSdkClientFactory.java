@@ -36,6 +36,8 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Field;
+import java.math.BigInteger;
+import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.security.MessageDigest;
@@ -50,6 +52,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -74,20 +77,23 @@ public class HederaSdkClientFactory {
         List<LocalPortForward> create(final PortForwardable portForwardable);
     }
 
-    public ClientContext directContextCreator(final String consensusNode) {
+    public ClientContext directContextCreator(final String consensusNode) throws IOException {
         return createClientContext(direct(), consensusNode);
     }
 
-    public ClientContext haproxyContextCreator(final String consensusNode) {
+    public ClientContext haproxyContextCreator(final String consensusNode) throws IOException{
         return createClientContext(haproxy(), consensusNode);
     }
 
     private static final Logger log =
             LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
+    static AtomicInteger atomicInteger = new AtomicInteger();
 
-    ClientContext createClientContext(final Map<String, String> nodeService, final String consensusNode) {
+    ClientContext createClientContext(final Map<String, String> nodeService, final String consensusNode) throws IOException {
         try {
-            ProcessBuilder pb = new ProcessBuilder("./netstat", "-nalp");
+            ProcessBuilder pb = new ProcessBuilder(
+                    "./netstat", "-nalp");
+//                    "ss", "-lntp");
             File output = File.createTempFile(".netstat-", ".out");
             pb.redirectOutput(output);
             Process p = pb.start();
@@ -98,10 +104,12 @@ public class HederaSdkClientFactory {
         }
         List<LocalPortForward> portForwards = new ArrayList<>();
         try {
+            int i = Math.min(0xfffffe, Math.max(1, atomicInteger.incrementAndGet() & 0xffffff));
+            InetAddress inetAddress = InetAddress.getByAddress(BigInteger.valueOf(127<<24 | i).toByteArray());
             return getClientContext(nodeService, consensusNode::equals, resource -> Stream.of(50211, 50212)
                     .map(port -> {
                         // include address here
-                        LocalPortForward portForward = resource.portForward(port, port);
+                        LocalPortForward portForward = resource.portForward(port, inetAddress, port);
                         portForwards.add(portForward);
                         log.info("opened portForward: {}", portForward.getLocalPort());
                         return portForward;
@@ -238,7 +246,7 @@ public class HederaSdkClientFactory {
                             .setNodeId(Long.parseLong(nodeId));
             for (LocalPortForward portForward : portForwards) {
                 builder.addServiceEndpoint(ServiceEndpoint.newBuilder()
-                        .setIpAddressV4(ByteString.copyFrom(new byte[] {127, 0, 0, 1})) // portForward.getLocalAddress()
+                        .setIpAddressV4(ByteString.copyFrom(portForward.getLocalAddress().getAddress()))
                         .setPort(portForward.getLocalPort())
                         .build());
             }
