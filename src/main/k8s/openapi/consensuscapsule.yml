@@ -152,7 +152,7 @@ components:
             recordStreamUploader:
               type: object
               x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
-            recordStreamSidecarUploader:
+            recordStreamSidecarFilesUploader:
               type: object
               x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
             eventStreamUploader:

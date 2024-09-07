@@ -28,6 +28,7 @@ import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_BACKU
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_EVENT_STREAM_UPLOADER;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_ID;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_PUBLIC_KEY_FILES;
+import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_RECORD_STREAM_UPLOADER;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_SECURITY_CONTEXT;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
@@ -128,6 +129,8 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         tplInstance.data(TPL_VAR_RECORD_STREAM_UPLOADER, this.prepareRecordStreamUploader(primary));
         tplInstance.data(TPL_VAR_EVENT_STREAM_UPLOADER, this.prepareEventStreamUploader(primary));
         tplInstance.data(TPL_VAR_BACKUP_UPLOADER, this.prepareBackupUploader(primary));
+        tplInstance.data(
+                TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER, this.prepareRecordStreamSidecarFilesUploader(primary));
 
         // return an instance of Deployment
         return Serialization.unmarshal(tplInstance.render(), Deployment.class);
@@ -150,6 +153,25 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         }
 
         return rsu;
+    }
+
+    private StreamUploader prepareRecordStreamSidecarFilesUploader(ConsensusCapsule primary) {
+        final StreamUploader rssu = this.setStreamUploaderExtensions(
+                primary.getSpec().getSidecars().getRecordStreamSidecarFilesUploader(),
+                RECORD_STREAM_EXTENSION,
+                RECORD_STREAM_SIG_EXTENSION);
+
+        if (Objects.nonNull(rssu) && rssu.getConfig().getEnableCompression()) {
+            rssu.getConfig().setStreamExtension("%s.gz".formatted(RECORD_STREAM_EXTENSION));
+        }
+
+        if (Objects.nonNull(rssu)) {
+            rssu.getConfig()
+                    .setBucketPath(RECORD_STREAM_BUCKET_PATH_TEMPLATE.formatted(
+                            primary.getSpec().getAccountId()));
+        }
+
+        return rssu;
     }
 
     private StreamUploader prepareEventStreamUploader(ConsensusCapsule primary) {

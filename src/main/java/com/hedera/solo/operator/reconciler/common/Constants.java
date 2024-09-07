@@ -57,6 +57,7 @@ public final class Constants {
     public static final String TPL_VAR_RECORD_STREAM_UPLOADER = "recordStreamUploader";
     public static final String TPL_VAR_EVENT_STREAM_UPLOADER = "eventStreamUploader";
     public static final String TPL_VAR_BACKUP_UPLOADER = "backupUploader";
+    public static final String TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER = "recordStreamSidecarFilesUploader";
 
     // Sidecars
     public static final String RECORD_STREAM_BUCKET_PATH_TEMPLATE = "recordstreams/record%s";
