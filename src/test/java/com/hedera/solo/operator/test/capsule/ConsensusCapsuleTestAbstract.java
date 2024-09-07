@@ -180,8 +180,16 @@ public abstract class ConsensusCapsuleTestAbstract {
 
         for (int i = 0; i < 3; ++i) {
             {
-                List<ConsensusCapsule> consensusCapsules = kubernetesClient.resources(ConsensusCapsule.class).inNamespace(namespace).list().getItems();
-                List<NetworkInitialization> networkInitialization = kubernetesClient.resources(NetworkInitialization.class).inNamespace(namespace).list().getItems();
+                List<ConsensusCapsule> consensusCapsules = kubernetesClient
+                        .resources(ConsensusCapsule.class)
+                        .inNamespace(namespace)
+                        .list()
+                        .getItems();
+                List<NetworkInitialization> networkInitialization = kubernetesClient
+                        .resources(NetworkInitialization.class)
+                        .inNamespace(namespace)
+                        .list()
+                        .getItems();
                 kubernetesClient
                         .resources(NetworkInitialization.class)
                         .inNamespace(namespace)
@@ -206,16 +214,29 @@ public abstract class ConsensusCapsuleTestAbstract {
             // create consensus capsule
             List<ConsensusCapsule> consensusCapsules = createConsensusCapsule("node0");
 
-            kubernetesClient.secrets().inNamespace(namespace).withName("node0-keys").edit(secret -> secret.edit()
-                    .withData(loadYaml(Secret.class, getClass(), "node0-keys.yaml").getData())
-                    .build());
+            kubernetesClient
+                    .secrets()
+                    .inNamespace(namespace)
+                    .withName("node0-keys")
+                    .edit(secret -> secret.edit()
+                            .withData(loadYaml(Secret.class, getClass(), "node0-keys.yaml")
+                                    .getData())
+                            .build());
 
             // create network initialization
             createNetworkInitialization(consensusCapsules);
 
             {
-                List<ConsensusCapsule> consensusCapsules1 = kubernetesClient.resources(ConsensusCapsule.class).inNamespace(namespace).list().getItems();
-                List<NetworkInitialization> networkInitialization1 = kubernetesClient.resources(NetworkInitialization.class).inNamespace(namespace).list().getItems();
+                List<ConsensusCapsule> consensusCapsules1 = kubernetesClient
+                        .resources(ConsensusCapsule.class)
+                        .inNamespace(namespace)
+                        .list()
+                        .getItems();
+                List<NetworkInitialization> networkInitialization1 = kubernetesClient
+                        .resources(NetworkInitialization.class)
+                        .inNamespace(namespace)
+                        .list()
+                        .getItems();
 
                 await().atMost(90, TimeUnit.SECONDS).untilAsserted(() -> {
                     for (NetworkInitialization ni : networkInitialization1) {
@@ -263,8 +284,16 @@ public abstract class ConsensusCapsuleTestAbstract {
 
         for (int i = 0; i < 10; ++i) {
             {
-                List<ConsensusCapsule> consensusCapsules = kubernetesClient.resources(ConsensusCapsule.class).inNamespace(namespace).list().getItems();
-                List<NetworkInitialization> networkInitialization = kubernetesClient.resources(NetworkInitialization.class).inNamespace(namespace).list().getItems();
+                List<ConsensusCapsule> consensusCapsules = kubernetesClient
+                        .resources(ConsensusCapsule.class)
+                        .inNamespace(namespace)
+                        .list()
+                        .getItems();
+                List<NetworkInitialization> networkInitialization = kubernetesClient
+                        .resources(NetworkInitialization.class)
+                        .inNamespace(namespace)
+                        .list()
+                        .getItems();
                 kubernetesClient
                         .resources(NetworkInitialization.class)
                         .inNamespace(namespace)
@@ -304,8 +333,16 @@ public abstract class ConsensusCapsuleTestAbstract {
             createNetworkInitialization(nodes);
 
             {
-                List<ConsensusCapsule> consensusCapsules1 = kubernetesClient.resources(ConsensusCapsule.class).inNamespace(namespace).list().getItems();
-                List<NetworkInitialization> networkInitialization1 = kubernetesClient.resources(NetworkInitialization.class).inNamespace(namespace).list().getItems();
+                List<ConsensusCapsule> consensusCapsules1 = kubernetesClient
+                        .resources(ConsensusCapsule.class)
+                        .inNamespace(namespace)
+                        .list()
+                        .getItems();
+                List<NetworkInitialization> networkInitialization1 = kubernetesClient
+                        .resources(NetworkInitialization.class)
+                        .inNamespace(namespace)
+                        .list()
+                        .getItems();
 
                 await().atMost(90, TimeUnit.SECONDS).untilAsserted(() -> {
                     for (NetworkInitialization ni : networkInitialization1) {
@@ -443,6 +480,7 @@ public abstract class ConsensusCapsuleTestAbstract {
     }
 
     Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
+
     void checkAddressBook(
             final ExceptionalBiFunction<HederaSdkClientFactory, String, HederaSdkClientFactory.ClientContext>
                     clientContext)

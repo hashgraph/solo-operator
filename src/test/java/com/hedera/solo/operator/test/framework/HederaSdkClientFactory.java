@@ -19,7 +19,6 @@ package com.hedera.solo.operator.test.framework;
 import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_CONSENSUS_CAPSULE_NAME_KEY;
 import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_SELECTOR_CONSENSUS_NODE;
 import static com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleConstants.LABEL_SELECTOR_HAPROXY;
-import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.google.protobuf.ByteString;
 import com.hedera.hashgraph.sdk.AccountId;
@@ -32,14 +31,12 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.LocalPortForward;
 import io.fabric8.kubernetes.client.dsl.PortForwardable;
 import java.io.ByteArrayInputStream;
-import java.io.File;
 import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Field;
 import java.math.BigInteger;
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.security.cert.CertificateFactory;
 import java.util.ArrayList;
@@ -91,17 +88,17 @@ public class HederaSdkClientFactory {
 
     ClientContext createClientContext(final Map<String, String> nodeService, final String consensusNode)
             throws IOException {
-//        try {
-//            ProcessBuilder pb = new ProcessBuilder("./netstat", "-nalp");
-//            //                    "ss", "-lntp");
-//            File output = File.createTempFile(".netstat-", ".out");
-//            pb.redirectOutput(output);
-//            Process p = pb.start();
-//            p.waitFor(10, SECONDS);
-//            log.info("netstat: {}", Files.readString(output.toPath()));
-//        } catch (Exception e) {
-//            log.info("netstat: {}", e.getMessage());
-//        }
+        //        try {
+        //            ProcessBuilder pb = new ProcessBuilder("./netstat", "-nalp");
+        //            //                    "ss", "-lntp");
+        //            File output = File.createTempFile(".netstat-", ".out");
+        //            pb.redirectOutput(output);
+        //            Process p = pb.start();
+        //            p.waitFor(10, SECONDS);
+        //            log.info("netstat: {}", Files.readString(output.toPath()));
+        //        } catch (Exception e) {
+        //            log.info("netstat: {}", e.getMessage());
+        //        }
         List<LocalPortForward> portForwards = new ArrayList<>();
         try {
             int i = Math.min(0xfffffe, Math.max(1, atomicInteger.incrementAndGet() & 0xffffff));
