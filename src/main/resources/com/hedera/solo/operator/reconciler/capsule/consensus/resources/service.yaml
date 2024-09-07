@@ -5,10 +5,13 @@ metadata:
   labels:
     app: consensus-node
 spec:
+  publishNotReadyAddresses: true
   type: LoadBalancer
   selector:
     app: consensus-node
   ports:
+    - name: sync
+      port: 31337
     - name: gossip
       port: 50111
     - name: grpc

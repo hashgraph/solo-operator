@@ -18,28 +18,36 @@ spec:
         runAsUser: 0
         runAsGroup: 0
       subdomain: consensus
-#      initContainers:
-#        # wait for all pods to come up before attempting to start consensus service
-#        # maybe we do need name resolution working, still seeing failure even after waiting for internal address ping
-#        # not working as initContainer, could also try as startupProbe
-#        - name: sync
-#          image: alpine:3.20.2
-#          command:
-#            - sh
-#            - -c
-#            - |
-#              addresses_ready() {
-#                awk -F, '/^address/ {
-#                  printf("getent ahosts %s && getent ahosts %s || exit 1\n", $6, $8);
-#                }' /opt/hgcapp/services-hedera/HapiApp2.0/config.txt | sh -x # &> /dev/null
-#              }
-#              until addresses_ready; do
-#                sleep 1
-#              done
-#          volumeMounts:
-#            - name: cluster-config
-#              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/config.txt
-#              subPath: config.txt
+      initContainers:
+        # wait for all pods to come up before attempting to start consensus service
+        # maybe we do need name resolution working, still seeing failure even after waiting for internal address ping
+        # not working as initContainer, could also try as startupProbe
+        - name: sync
+          image: alpine:3.20.2
+          command:
+            - sh
+            - -c
+            - |
+              # could add port to service just for the purpose of performing this sync
+              # also would be better to only operate on addresses local to k8s cluster
+              PORT=31337
+              nc -lk -p ${PORT} -e true &
+              addresses_ready() {
+                awk -v PORT="${PORT}" -F, '/^address/ {
+                  printf("(nc -z %s %s || nc -z %s %s) && (nc -z %s %s || nc -z %s %s) || exit 1\n",
+                    $6, PORT,
+                    $6, 50111,
+                    $8, PORT,
+                    $8, 50111);
+                }' /opt/hgcapp/services-hedera/HapiApp2.0/config.txt | sh -x # &> /dev/null
+              }
+              until addresses_ready; do
+                sleep 1
+              done
+          volumeMounts:
+            - name: cluster-config
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/config.txt
+              subPath: config.txt
       containers:
         - name: consensus-node
 #          image: gcr.io/hedera-registry/consensus-node:0.53.5
@@ -117,7 +125,8 @@ spec:
               # wait here until pod ip matches dns entry, this is necessary, but not sufficient
               # really we want to wait until this is true for all pods and their services.
               # ultimately this will probably require some assistance.
-              until getent hosts $(hostname -f) | grep "^$(hostname -i)\s" &> /dev/null; do sleep 1; done
+              # could use netcat to listen and tcp ping known port.
+              # until getent hosts $(hostname -f) | grep "^$(hostname -i)\s" &> /dev/null; do sleep 1; done
               /opt/hgcapp/services-hedera/HapiApp2.0/entrypoint.sh
               cat /opt/hgcapp/services-hedera/HapiApp2.0/tcpdump.log
               find . -type f -ls
