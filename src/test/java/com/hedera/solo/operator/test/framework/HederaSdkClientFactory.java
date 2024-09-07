@@ -91,17 +91,17 @@ public class HederaSdkClientFactory {
 
     ClientContext createClientContext(final Map<String, String> nodeService, final String consensusNode)
             throws IOException {
-        try {
-            ProcessBuilder pb = new ProcessBuilder("./netstat", "-nalp");
-            //                    "ss", "-lntp");
-            File output = File.createTempFile(".netstat-", ".out");
-            pb.redirectOutput(output);
-            Process p = pb.start();
-            p.waitFor(10, SECONDS);
-            log.info("netstat: {}", Files.readString(output.toPath()));
-        } catch (Exception e) {
-            log.info("netstat: {}", e.getMessage());
-        }
+//        try {
+//            ProcessBuilder pb = new ProcessBuilder("./netstat", "-nalp");
+//            //                    "ss", "-lntp");
+//            File output = File.createTempFile(".netstat-", ".out");
+//            pb.redirectOutput(output);
+//            Process p = pb.start();
+//            p.waitFor(10, SECONDS);
+//            log.info("netstat: {}", Files.readString(output.toPath()));
+//        } catch (Exception e) {
+//            log.info("netstat: {}", e.getMessage());
+//        }
         List<LocalPortForward> portForwards = new ArrayList<>();
         try {
             int i = Math.min(0xfffffe, Math.max(1, atomicInteger.incrementAndGet() & 0xffffff));

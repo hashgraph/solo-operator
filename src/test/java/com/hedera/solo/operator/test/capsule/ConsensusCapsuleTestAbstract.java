@@ -61,6 +61,8 @@ import java.util.concurrent.TimeUnit;
 import org.awaitility.core.ConditionTimeoutException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public abstract class ConsensusCapsuleTestAbstract {
     protected String namespace;
@@ -176,18 +178,58 @@ public abstract class ConsensusCapsuleTestAbstract {
                         .build())
                 .create();
 
-        // create consensus capsule
-        List<ConsensusCapsule> consensusCapsules = createConsensusCapsule("node0");
+        for (int i = 0; i < 3; ++i) {
+            {
+                List<ConsensusCapsule> consensusCapsules = kubernetesClient.resources(ConsensusCapsule.class).inNamespace(namespace).list().getItems();
+                List<NetworkInitialization> networkInitialization = kubernetesClient.resources(NetworkInitialization.class).inNamespace(namespace).list().getItems();
+                kubernetesClient
+                        .resources(NetworkInitialization.class)
+                        .inNamespace(namespace)
+                        .delete();
+                kubernetesClient
+                        .resources(ConsensusCapsule.class)
+                        .inNamespace(namespace)
+                        .delete();
 
-        kubernetesClient.secrets().inNamespace(namespace).withName("node0-keys").edit(secret -> secret.edit()
-                .withData(loadYaml(Secret.class, getClass(), "node0-keys.yaml").getData())
-                .build());
+                await().atMost(90, TimeUnit.SECONDS).untilAsserted(() -> {
+                    for (NetworkInitialization ni : networkInitialization) {
+                        assertThat(kubernetesClient.resource(ni).get()).isNull();
+                    }
+                    for (ConsensusCapsule cc : consensusCapsules) {
+                        assertThat(kubernetesClient.resource(cc).get()).isNull();
+                    }
+                });
 
-        // create network initialization
-        createNetworkInitialization(consensusCapsules);
+                Thread.sleep(1000);
+            }
 
-        // test with client
-        checkAddressBook(HederaSdkClientFactory::directContextCreator);
+            // create consensus capsule
+            List<ConsensusCapsule> consensusCapsules = createConsensusCapsule("node0");
+
+            kubernetesClient.secrets().inNamespace(namespace).withName("node0-keys").edit(secret -> secret.edit()
+                    .withData(loadYaml(Secret.class, getClass(), "node0-keys.yaml").getData())
+                    .build());
+
+            // create network initialization
+            createNetworkInitialization(consensusCapsules);
+
+            {
+                List<ConsensusCapsule> consensusCapsules1 = kubernetesClient.resources(ConsensusCapsule.class).inNamespace(namespace).list().getItems();
+                List<NetworkInitialization> networkInitialization1 = kubernetesClient.resources(NetworkInitialization.class).inNamespace(namespace).list().getItems();
+
+                await().atMost(90, TimeUnit.SECONDS).untilAsserted(() -> {
+                    for (NetworkInitialization ni : networkInitialization1) {
+                        assertThat(kubernetesClient.resource(ni).get()).isNotNull();
+                    }
+                    for (ConsensusCapsule cc : consensusCapsules1) {
+                        assertThat(kubernetesClient.resource(cc).get()).isNotNull();
+                    }
+                });
+            }
+
+            // test with client
+            checkAddressBook(HederaSdkClientFactory::directContextCreator);
+        }
     }
 
     @Test
@@ -219,28 +261,65 @@ public abstract class ConsensusCapsuleTestAbstract {
                         .build())
                 .create();
 
-        // create consensus capsule
-        List<ConsensusCapsule> nodes = createConsensusCapsule("node0", "node1", "node2");
+        for (int i = 0; i < 10; ++i) {
+            {
+                List<ConsensusCapsule> consensusCapsules = kubernetesClient.resources(ConsensusCapsule.class).inNamespace(namespace).list().getItems();
+                List<NetworkInitialization> networkInitialization = kubernetesClient.resources(NetworkInitialization.class).inNamespace(namespace).list().getItems();
+                kubernetesClient
+                        .resources(NetworkInitialization.class)
+                        .inNamespace(namespace)
+                        .delete();
+                kubernetesClient
+                        .resources(ConsensusCapsule.class)
+                        .inNamespace(namespace)
+                        .delete();
 
-        for (String node : List.of("node0", "node1", "node2")) {
-            kubernetesClient
-                    .secrets()
-                    .inNamespace(namespace)
-                    .withName(node + "-keys")
-                    .edit(secret -> secret.edit()
-                            .withData(loadYaml(Secret.class, getClass(), node + "-keys.yaml")
-                                    .getData())
-                            .build());
-        }
+                await().atMost(90, TimeUnit.SECONDS).untilAsserted(() -> {
+                    for (NetworkInitialization ni : networkInitialization) {
+                        assertThat(kubernetesClient.resource(ni).get()).isNull();
+                    }
+                    for (ConsensusCapsule cc : consensusCapsules) {
+                        assertThat(kubernetesClient.resource(cc).get()).isNull();
+                    }
+                });
 
-        // create network initialization
-        createNetworkInitialization(nodes);
+                Thread.sleep(1000);
+            }
 
-        // test with client
-        for (int i = 0; i < 1; ++i) {
+            // create consensus capsule
+            List<ConsensusCapsule> nodes = createConsensusCapsule("node0", "node1", "node2");
+
+            for (String node : List.of("node0", "node1", "node2")) {
+                kubernetesClient
+                        .secrets()
+                        .inNamespace(namespace)
+                        .withName(node + "-keys")
+                        .edit(secret -> secret.edit()
+                                .withData(loadYaml(Secret.class, getClass(), node + "-keys.yaml")
+                                        .getData())
+                                .build());
+            }
+
+            // create network initialization
+            createNetworkInitialization(nodes);
+
+            {
+                List<ConsensusCapsule> consensusCapsules1 = kubernetesClient.resources(ConsensusCapsule.class).inNamespace(namespace).list().getItems();
+                List<NetworkInitialization> networkInitialization1 = kubernetesClient.resources(NetworkInitialization.class).inNamespace(namespace).list().getItems();
+
+                await().atMost(90, TimeUnit.SECONDS).untilAsserted(() -> {
+                    for (NetworkInitialization ni : networkInitialization1) {
+                        assertThat(kubernetesClient.resource(ni).get()).isNotNull();
+                    }
+                    for (ConsensusCapsule cc : consensusCapsules1) {
+                        assertThat(kubernetesClient.resource(cc).get()).isNotNull();
+                    }
+                });
+            }
+
+            // test with client
             checkAddressBook(HederaSdkClientFactory::directContextCreator);
         }
-        //        fail();
     }
 
     Orbit createOrbit() {
@@ -363,10 +442,12 @@ public abstract class ConsensusCapsuleTestAbstract {
         R apply(T t, U u) throws Exception;
     }
 
+    Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
     void checkAddressBook(
             final ExceptionalBiFunction<HederaSdkClientFactory, String, HederaSdkClientFactory.ClientContext>
                     clientContext)
             throws AssertionError, Exception {
+        log.info("checkAddressBook");
         String[] consensusNodeNames = consensusNodeNames();
         HederaSdkClientFactory sdkClientFactory = new HederaSdkClientFactory(kubernetesClient, namespace);
         for (String nodeName : consensusNodeNames) {
