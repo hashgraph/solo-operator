@@ -114,7 +114,10 @@ spec:
               apt update
               apt install -y tcpdump
               tcpdump -l -n -i eth0 port 53 &> /opt/hgcapp/services-hedera/HapiApp2.0/tcpdump.log &
-              until getent ahosts $(hostname -f) | grep "^$(hostname -i)\s" &> /dev/null; do sleep 1; done
+              # wait here until pod ip matches dns entry, this is necessary, but not sufficient
+              # really we want to wait until this is true for all pods and their services.
+              # ultimately this will probably require some assistance.
+              until getent hosts $(hostname -f) | grep "^$(hostname -i)\s" &> /dev/null; do sleep 1; done
               /opt/hgcapp/services-hedera/HapiApp2.0/entrypoint.sh
               cat /opt/hgcapp/services-hedera/HapiApp2.0/tcpdump.log
               find . -type f -ls
