@@ -30,6 +30,7 @@ spec:
             - |
               # could add port to service just for the purpose of performing this sync
               # also would be better to only operate on addresses local to k8s cluster
+              # note: could speed things up if use prog to communicate success
               PORT=31337
               nc -lk -p ${PORT} -e true &
               addresses_ready() {
