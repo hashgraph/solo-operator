@@ -118,7 +118,6 @@ public abstract class ConsensusCapsuleTestAbstract {
                             "app=consensus-node",
                             "consensus-node",
                             "set -x; cat services-hedera/HapiApp2.0/tcpdump.log");
-
         }
         cleanup();
     }
