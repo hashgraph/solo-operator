@@ -112,7 +112,13 @@ public abstract class ConsensusCapsuleTestAbstract {
                             "swirlds-log",
                             "app=consensus-node",
                             "consensus-node",
-                            "set -x; cat services-hedera/HapiApp2.0/output/swirlds.log");
+                            "set -x; cat services-hedera/HapiApp2.0/output/swirlds.log")
+                    .exec(
+                            "tcpdump-log",
+                            "app=consensus-node",
+                            "consensus-node",
+                            "set -x; cat services-hedera/HapiApp2.0/tcpdump.log");
+
         }
         cleanup();
     }
