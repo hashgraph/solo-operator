@@ -24,6 +24,7 @@ import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM
 import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM_SIG_EXTENSION;
 import static com.hedera.solo.operator.reconciler.common.Constants.SECURITY_CONTEXT_BUILDER;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_ACCOUNT_ID;
+import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_BACKUP_UPLOADER;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_EVENT_STREAM_UPLOADER;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_ID;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_PUBLIC_KEY_FILES;
@@ -67,6 +68,7 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         Objects.requireNonNull(primary.getMetadata().getName());
         Objects.requireNonNull(primary.getSpec());
         Objects.requireNonNull(primary.getSpec().getAccountId());
+        Objects.requireNonNull(primary.getSpec().getSidecars());
         Objects.requireNonNull(context);
         Objects.requireNonNull(context.getClient());
 
@@ -125,6 +127,7 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         tplInstance.data(TPL_VAR_PUBLIC_KEY_FILES, publicKeys.getData().keySet());
         tplInstance.data(TPL_VAR_RECORD_STREAM_UPLOADER, this.prepareRecordStreamUploader(primary));
         tplInstance.data(TPL_VAR_EVENT_STREAM_UPLOADER, this.prepareEventStreamUploader(primary));
+        tplInstance.data(TPL_VAR_BACKUP_UPLOADER, this.prepareBackupUploader(primary));
 
         // return an instance of Deployment
         return Serialization.unmarshal(tplInstance.render(), Deployment.class);
@@ -162,6 +165,20 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         }
 
         return esu;
+    }
+
+    private StreamUploader prepareBackupUploader(ConsensusCapsule primary) {
+        final StreamUploader bu = primary.getSpec().getSidecars().getBackupUploader();
+
+        if (Objects.nonNull(bu)) {
+            bu.getConfig()
+                    .setBucketPath("%s/%s"
+                            .formatted(
+                                    bu.getConfig().getS3().getUrl(),
+                                    bu.getConfig().getBucketName()));
+        }
+
+        return bu;
     }
 
     private StreamUploader setStreamUploaderExtensions(

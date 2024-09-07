@@ -167,7 +167,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .create();
 
         // create other config-maps
-        for (String cmFile : List.of("public-keys.yaml")) {
+        for (String cmFile : List.of("backup-uploader-config.yaml", "public-keys.yaml")) {
             kubernetesClient
                     .resource(loadYaml(ConfigMap.class, getClass(), cmFile)
                             .edit()

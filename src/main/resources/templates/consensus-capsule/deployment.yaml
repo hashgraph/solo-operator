@@ -3,6 +3,7 @@
 {@io.fabric8.kubernetes.api.model.PodSecurityContext securityContext}
 {@com.hedera.solo.operator.model.commonspec.StreamUploader recordStreamUploader}
 {@com.hedera.solo.operator.model.commonspec.StreamUploader eventStreamUploader}
+{@com.hedera.solo.operator.model.commonspec.StreamUploader backupUploader}
 kind: Deployment
 apiVersion: apps/v1
 metadata:
@@ -72,6 +73,10 @@ spec:
               mountPath: /opt/hgcapp/eventsStreams
             - name: hgcapp-output
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/output
+            - name: hgcapp-data-saved
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/saved
+            - name: hgcapp-data-stats
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/stats
             - name: private-keys
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.crt
               subPath: hedera-{nodeId}.crt
@@ -91,9 +96,9 @@ spec:
             {/for}
         {#if recordStreamUploader && recordStreamUploader.enabled}
         # Sidecar: record-stream-uploader
-        - name: record-stream-uploader
-          image: gcr.io/hedera-registry/uploader-mirror:1.3.0
-          imagePullPolicy: IfNotPresent
+        - name: {recordStreamUploader.name}
+          image: {recordStreamUploader.image}
+          imagePullPolicy: {recordStreamUploader.imagePullPolicy}
           securityContext:
             runAsUser: {securityContext.runAsUser}
             runAsGroup: {securityContext.runAsGroup}
@@ -163,9 +168,9 @@ spec:
         {/if}
         {#if eventStreamUploader && eventStreamUploader.enabled}
         # Sidecar: event-stream-uploader
-        - name: event-stream-uploader
-          image: gcr.io/hedera-registry/uploader-mirror:1.3.0
-          imagePullPolicy: IfNotPresent
+        - name: {eventStreamUploader.name}
+          image: {eventStreamUploader.image}
+          imagePullPolicy: {eventStreamUploader.imagePullPolicy}
           securityContext:
             runAsUser: {securityContext.runAsUser}
             runAsGroup: {securityContext.runAsGroup}
@@ -228,10 +233,45 @@ spec:
             - secretRef:
                 name: {eventStreamUploader.config.envFromSecret}
         {/if}
+        {#if backupUploader && backupUploader.enabled}
+        # Sidecar: backup-uploader
+        - name: {backupUploader.name}
+          image: {backupUploader.image}
+          imagePullPolicy: {backupUploader.imagePullPolicy}
+          securityContext:
+            runAsUser: {securityContext.runAsUser}
+            runAsGroup: {securityContext.runAsGroup}
+          volumeMounts:
+            - name: hgcapp-data-saved
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/saved
+            - name: backup-uploader-config
+              mountPath: /home/hedera/.config/rclone/rclone.conf
+              subPath: rclone.conf
+          env:
+            - name: BACKUP_UPLOADER_BUCKET_1
+              value: {backupUploader.config.bucketName}
+              {#if backupUploader.config.s3.enabled}
+            - name: RCLONE_S3_ENDPOINT
+              value: {backupUploader.config.s3.url}
+            - name: RCLONE_S3_ACCESS_KEY_ID
+              value: {backupUploader.config.s3.accessKey}
+              {#else backupUploader.config.gcs.enabled}
+            - name: RCLONE_S3_ENDPOINT
+              value: {backupUploader.config.gcs.url}
+            - name: RCLONE_S3_ACCESS_KEY_ID
+              value: {backupUploader.config.gcs.accessKey}
+              {/if}
+          envFrom:
+            - secretRef:
+                name: {backupUploader.config.envFromSecret}
+        {/if}
       volumes:
         - name: cluster-config
           configMap:
             name: cluster-config
+        - name: backup-uploader-config
+          configMap:
+            name: backup-uploader-config
         - name: public-keys
           configMap:
             name: public-keys
@@ -244,5 +284,7 @@ spec:
           emptyDir: {}
         - name: hgcapp-output
           emptyDir: {}
-  strategy: {}
-status: {}
+        - name: hgcapp-data-saved
+          emptyDir: {}
+        - name: hgcapp-data-stats
+          emptyDir: {}

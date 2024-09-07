@@ -5,6 +5,7 @@ namespace: solo-orbit
 
 resources:
   - cluster-config.yaml
+  - backup-uploader-config.yaml
   - uploader-secrets.yaml
   - mirror-secrets.yaml
   - node0-keys.yaml
