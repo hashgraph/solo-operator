@@ -17,6 +17,8 @@
 package com.hedera.solo.operator.test.capsule;
 
 import static com.hedera.solo.operator.reconciler.common.Constants.CONSENSUS_NODE;
+import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GOSSIP;
+import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GRPC_TLS;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_APP;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -180,9 +182,10 @@ public abstract class ConsensusCapsuleTestAbstract {
     }
 
     private void setupSecrets(List<NodeInfo> nodes) {
-        final ArrayList<String> secretFiles = new ArrayList<>(List.of("uploader-secrets.yaml", "mirror-secrets.yaml"));
+        final ArrayList<String> secretFiles =
+                new ArrayList<>(List.of("secrets/uploader-secrets.yaml", "secrets/mirror-secrets.yaml"));
 
-        for (String sf : secretFiles) {
+        for (final String sf : secretFiles) {
             kubernetesClient
                     .resource(loadYaml(Secret.class, getClass(), sf)
                             .edit()
@@ -193,17 +196,20 @@ public abstract class ConsensusCapsuleTestAbstract {
                     .create();
         }
 
-        for (NodeInfo node : nodes) {
-            final String nodeKeyFile = String.format("%s-keys.yaml", node.name);
-            kubernetesClient
-                    .resource(loadYaml(Secret.class, getClass(), nodeKeyFile)
-                            .edit()
-                            .editMetadata()
-                            .withNamespace(namespace)
-                            .addToLabels("consensus-capsule", node.name)
-                            .endMetadata()
-                            .build())
-                    .create();
+        for (final NodeInfo node : nodes) {
+            for (final String keyType : List.of(KEY_TYPE_GOSSIP, KEY_TYPE_GRPC_TLS)) {
+                final String nodeKeyFile = String.format("secrets/%s-%s-keys.yaml", node.name, keyType);
+                kubernetesClient
+                        .resource(loadYaml(Secret.class, getClass(), nodeKeyFile)
+                                .edit()
+                                .editMetadata()
+                                .withNamespace(namespace)
+                                .addToLabels("consensus-capsule", node.name)
+                                .addToLabels("key-type", keyType)
+                                .endMetadata()
+                                .build())
+                        .create();
+            }
         }
     }
 
@@ -294,12 +300,16 @@ public abstract class ConsensusCapsuleTestAbstract {
                 ConsensusCapsule capsule =
                         kubernetesClient.resource(consensusCapsule).get();
                 assertThat(capsule).isNotNull();
-                Secret secret = kubernetesClient
-                        .secrets()
-                        .inNamespace(namespace)
-                        .withName(name + "-keys")
-                        .get();
-                assertThat(secret).isNotNull();
+
+                for (final String keyType : List.of(KEY_TYPE_GOSSIP, KEY_TYPE_GRPC_TLS)) {
+                    Secret secret = kubernetesClient
+                            .secrets()
+                            .inNamespace(namespace)
+                            .withName("%s-%s-keys".formatted(name, keyType))
+                            .get();
+                    assertThat(secret).isNotNull();
+                }
+
                 Service service = kubernetesClient
                         .services()
                         .inNamespace(namespace)

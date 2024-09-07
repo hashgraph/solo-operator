@@ -6,11 +6,14 @@ namespace: solo-orbit
 resources:
   - cluster-config.yaml
   - backup-uploader-config.yaml
-  - uploader-secrets.yaml
-  - mirror-secrets.yaml
-  - node0-keys.yaml
-  - node1-keys.yaml
-  - node2-keys.yaml
+  - secrets/mirror-secrets.yaml
+  - secrets/uploader-secrets.yaml
+  - secrets/node0-gossip-keys.yaml
+  - secrets/node0-grpc-tls-keys.yaml
+  - secrets/node1-gossip-keys.yaml
+  - secrets/node1-grpc-tls-keys.yaml
+  - secrets/node2-gossip-keys.yaml
+  - secrets/node2-grpc-tls-keys.yaml
   - public-keys.yaml
   - headless-service.yaml
   - consensus-capsule-node0.yaml

@@ -71,4 +71,8 @@ public final class Constants {
     // FIXME all label key should have a prefix
     public static final String LABEL_APP = "app";
     public static final String LABEL_ACCOUNT_ID = "account-id";
+
+    // key types
+    public static final String KEY_TYPE_GOSSIP = "gossip";
+    public static final String KEY_TYPE_GRPC_TLS = "grpc-tls";
 }
