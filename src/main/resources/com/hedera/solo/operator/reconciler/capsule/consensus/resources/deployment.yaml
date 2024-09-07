@@ -114,6 +114,7 @@ spec:
               apt update
               apt install -y tcpdump
               tcpdump -l -n -i eth0 port 53 &> /opt/hgcapp/services-hedera/HapiApp2.0/tcpdump.log &
+              until getent ahosts $(hostname -f) | grep "^$(hostname -i)\s" &> /dev/null; do sleep 1; done
               /opt/hgcapp/services-hedera/HapiApp2.0/entrypoint.sh
               cat /opt/hgcapp/services-hedera/HapiApp2.0/tcpdump.log
               find . -type f -ls
