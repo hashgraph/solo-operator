@@ -180,14 +180,13 @@ spec:
             - -c
             - |
               set -x
+              getent hosts $(hostname -f)
               sudo mkdir -p /var/cache/apt/archives/partial /var/log/apt
               #sudo apt update
-              sudo apt install -y netcat-openbsd # not netcat-traditional
+              sudo apt install -y netcat-openbsd tcpdump # not netcat-traditional
               PORT=31337
               FILE=$(mktemp)
               # nc -lk -p ${PORT} -e true &
-              nc -lkp ${PORT} >> ${FILE} &
-              NC_PID=${!}
               #              all_local_addr() {
               #                # todo: exclude non-local addresses
               #                awk -v cmd="${*}" -F, '/^address/{
@@ -210,9 +209,9 @@ spec:
               tcp_ping() {
                 for addr in ${local_addr}; do
                   notified && return 0
-                  nc -w 1 -z ${addr} 31337 && continue
+                  nc -z ${addr} 31337 && continue
                   notified && return 0
-                  nc -w 1 -z ${addr} 50111 && continue
+                  nc -z ${addr} 50111 && continue
                   notified && return 0
                   return 1
                 done
@@ -235,26 +234,28 @@ spec:
               #                ls -l ${FILE}
               #                sleep 1
               #              done
-              until tcp_ping; do
-                sleep 0.1
-              done
-              notified || notify_peers
-              kill ${NC_PID}
-              rm ${FILE}
+                    #              nc -lkp ${PORT} >> ${FILE} &
+                    #              NC_PID=${!}
+                    #              until tcp_ping; do
+                    #                sleep 0.1
+                    #              done
+                    #              notified || notify_peers
+                    #              kill ${NC_PID}
+                    #              rm ${FILE}
               #              ls -l ${FILE}
               #              addresses_ready "echo -n . | nc -w 1"
               #              true
               #              mkdir -p /var/cache/apt/archives/partial /var/log/apt
               #              apt update
               #              apt install -y tcpdump
-              #              tcpdump -l -n -i eth0 port 53 &> /opt/hgcapp/services-hedera/HapiApp2.0/tcpdump.log &
+              tcpdump -l -n -i eth0 port 53 &> /opt/hgcapp/services-hedera/HapiApp2.0/tcpdump.log &
               # wait here until pod ip matches dns entry, this is necessary, but not sufficient
               # really we want to wait until this is true for all pods and their services.
               # ultimately this will probably require some assistance.
               # could use netcat to listen and tcp ping known port.
               # until getent hosts $(hostname -f) | grep "^$(hostname -i)\s" &> /dev/null; do sleep 1; done
               /opt/hgcapp/services-hedera/HapiApp2.0/entrypoint.sh
-              #              cat /opt/hgcapp/services-hedera/HapiApp2.0/tcpdump.log
+              cat /opt/hgcapp/services-hedera/HapiApp2.0/tcpdump.log
               #              find . -type f -ls
               #              cat output/swirlds.log
               #              tail -f /dev/null
