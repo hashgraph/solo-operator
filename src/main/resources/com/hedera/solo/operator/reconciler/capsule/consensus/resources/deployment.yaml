@@ -18,6 +18,7 @@ spec:
         runAsUser: 0
         runAsGroup: 0
       subdomain: consensus
+      # note: initContainer seems to slow things down. Can also try startup probe.
       initContainers:
         # wait for all pods to come up before attempting to start consensus service
         # maybe we do need name resolution working, still seeing failure even after waiting for internal address ping
@@ -31,20 +32,30 @@ spec:
               # could add port to service just for the purpose of performing this sync
               # also would be better to only operate on addresses local to k8s cluster
               # note: could speed things up if use prog to communicate success
+              # maybe better to use command template, for example:
+              # run "nc -w 1 -z {host} 31337 || nc -w 1 -z {host} 50111 || exit 1"
+              # run "echo -n . | nc -w 1 {host} 31337"
+              # expand template for both internal and external addresses
               PORT=31337
-              nc -lk -p ${PORT} -e true &
+              FILE=.synced
+              # nc -lk -p ${PORT} -e true &
+              nc -lkp ${PORT} -e tee -a ${FILE} &
               addresses_ready() {
-                awk -v PORT="${PORT}" -F, '/^address/ {
-                  printf("(nc -z %s %s || nc -z %s %s) && (nc -z %s %s || nc -z %s %s) || exit 1\n",
-                    $6, PORT,
-                    $6, 50111,
-                    $8, PORT,
-                    $8, 50111);
+                awk -v CMD="${*}" -v PORT="${PORT}" -F, '/^address/ {
+                  printf("(%s %s %s || %s %s %s) && (%s %s %s || %s %s %s) || exit 1\n",
+                    CMD, $6, PORT,
+                    CMD, $6, 50111,
+                    CMD, $8, PORT,
+                    CMD, $8, 50111);
                 }' /opt/hgcapp/services-hedera/HapiApp2.0/config.txt | sh -x # &> /dev/null
               }
-              until addresses_ready; do
+              until addresses_ready nc -w 1 -z || test -s ${FILE}; do
+                ls -l ${FILE}
                 sleep 1
               done
+              ls -l ${FILE}
+              addresses_ready "echo -n . | nc -w 1"
+              true
           volumeMounts:
             - name: cluster-config
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/config.txt
