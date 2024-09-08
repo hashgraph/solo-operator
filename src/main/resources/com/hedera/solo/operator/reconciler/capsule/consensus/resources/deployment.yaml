@@ -19,6 +19,7 @@ spec:
 #        runAsGroup: 0
       subdomain: consensus
       # note: initContainer seems to slow things down. Can also try startup probe.
+      # with initContainer dns for headless service seems to be delayed by ~30 seconds.
 #      initContainers:
 #        # wait for all pods to come up before attempting to start consensus service
 #        # maybe we do need name resolution working, still seeing failure even after waiting for internal address ping
@@ -51,9 +52,21 @@ spec:
 #              }
 #              until addresses_ready nc -w 1 -z || test -s ${FILE}; do
 #                ls -l ${FILE}
+#                getent hosts node0.consensus
+#                getent hosts node1.consensus
+#                getent hosts node2.consensus
+#                getent hosts node0-svc
+#                getent hosts node1-svc
+#                getent hosts node2-svc
 #                sleep 1
 #              done
 #              ls -l ${FILE}
+#              getent hosts node0.consensus
+#              getent hosts node1.consensus
+#              getent hosts node2.consensus
+#              getent hosts node0-svc
+#              getent hosts node1-svc
+#              getent hosts node2-svc
 #              addresses_ready "echo -n . | nc -w 1"
 #              true
 #          volumeMounts:
@@ -65,6 +78,43 @@ spec:
 #          image: gcr.io/hedera-registry/consensus-node:0.53.5
           image: gcr.io/hedera-registry/consensus-node:0.52.0-alpha.6
           resources: {}
+          # startup probe runs concurrently with application, so cannot be used to deplay application startup
+#          startupProbe:
+#            timeoutSeconds: 9
+#            exec:
+#              command:
+#                - sh
+#                - -c
+#                - |
+#                  echo begin startup probe
+#                  true
+#                  #                  sudo mkdir -p /var/cache/apt/archives/partial /var/log/apt
+#                  #                  sudo apt update
+#                  #                  sudo apt install -y netcat-openbsd # not netcat-traditional
+#                  #                  PORT=31337
+#                  #                  FILE=$(mktemp)
+#                  #                  # nc -lk -p ${PORT} -e true &
+#                  #                  nc -lkp ${PORT} >> ${FILE} &
+#                  #                  addresses_ready() {
+#                  #                    awk -v CMD="${*}" -v PORT="${PORT}" -F, '/^address/ {
+#                  #                      printf("(%s %s %s || %s %s %s) && (%s %s %s || %s %s %s) || exit 1\n",
+#                  #                        CMD, $6, PORT,
+#                  #                        CMD, $6, 50111,
+#                  #                        CMD, $8, PORT,
+#                  #                        CMD, $8, 50111);
+#                  #                    }' /opt/hgcapp/services-hedera/HapiApp2.0/config.txt | sh -x # &> /dev/null
+#                  #                  }
+#                  #                  if addresses_ready nc -w 1 -z || test -s ${FILE}; then
+#                  #                    addresses_ready "echo -n . | nc -w 1"
+#                  #                    ls -l ${FILE}
+#                  #                    echo end startup probe
+#                  #                    exit 0
+#                  #                  done
+#                  #                  ls -l ${FILE}
+#                  #                  echo end startup probe
+#                  #                  exit 1
+#                  #                - ">>"
+#                  #                - /tmp/startup-probe.log
           env:
             - name: JAVA_OPTS
               value: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
@@ -131,42 +181,83 @@ spec:
             - |
               set -x
               sudo mkdir -p /var/cache/apt/archives/partial /var/log/apt
-              sudo apt update
+              #sudo apt update
               sudo apt install -y netcat-openbsd # not netcat-traditional
               PORT=31337
               FILE=$(mktemp)
               # nc -lk -p ${PORT} -e true &
               nc -lkp ${PORT} >> ${FILE} &
-              addresses_ready() {
-                awk -v CMD="${*}" -v PORT="${PORT}" -F, '/^address/ {
-                  printf("(%s %s %s || %s %s %s) && (%s %s %s || %s %s %s) || exit 1\n",
-                    CMD, $6, PORT,
-                    CMD, $6, 50111,
-                    CMD, $8, PORT,
-                    CMD, $8, 50111);
-                }' /opt/hgcapp/services-hedera/HapiApp2.0/config.txt | sh -x # &> /dev/null
+              NC_PID=${!}
+              #              all_local_addr() {
+              #                # todo: exclude non-local addresses
+              #                awk -v cmd="${*}" -F, '/^address/{
+              #                  a=cmd;
+              #                  b=cmd;
+              #                  gsub("{addr}", $6, a);
+              #                  gsub("{addr}", $8, b);
+              #                  print a; print b;
+              #                }' /opt/hgcapp/services-hedera/HapiApp2.0/config.txt | sh -x # &> /dev/null
+              #              }
+              # todo: exclude non-local addresses
+              local_addr=$(
+                awk -F, '/^address/{
+                  print $6; print $8;
+                }' /opt/hgcapp/services-hedera/HapiApp2.0/config.txt
+              )
+              notified() {
+                test -s ${FILE}
               }
-              until addresses_ready nc -w 1 -z || test -s ${FILE}; do
-                ls -l ${FILE}
-                sleep 1
+              tcp_ping() {
+                for addr in ${local_addr}; do
+                  notified && return 0
+                  nc -w 1 -z ${addr} 31337 && continue
+                  notified && return 0
+                  nc -w 1 -z ${addr} 50111 && continue
+                  notified && return 0
+                  return 1
+                done
+              }
+              notify_peers() {
+                for addr in ${local_addr}; do
+                  echo -n . | nc -w 1 ${addr} 31337
+                done
+              }
+              #              addresses_ready() {
+              #                awk -v CMD="${*}" -v PORT="${PORT}" -F, '/^address/ {
+              #                  printf("(%s %s %s || %s %s %s) && (%s %s %s || %s %s %s) || exit 1\n",
+              #                    CMD, $6, PORT,
+              #                    CMD, $6, 50111,
+              #                    CMD, $8, PORT,
+              #                    CMD, $8, 50111);
+              #                }' /opt/hgcapp/services-hedera/HapiApp2.0/config.txt | sh -x # &> /dev/null
+              #              }
+              #              until addresses_ready nc -w 1 -z || test -s ${FILE}; do
+              #                ls -l ${FILE}
+              #                sleep 1
+              #              done
+              until tcp_ping; do
+                sleep 0.1
               done
-              ls -l ${FILE}
-              addresses_ready "echo -n . | nc -w 1"
-              true
-              mkdir -p /var/cache/apt/archives/partial /var/log/apt
-              apt update
-              apt install -y tcpdump
-              tcpdump -l -n -i eth0 port 53 &> /opt/hgcapp/services-hedera/HapiApp2.0/tcpdump.log &
+              notified || notify_peers
+              kill ${NC_PID}
+              rm ${FILE}
+              #              ls -l ${FILE}
+              #              addresses_ready "echo -n . | nc -w 1"
+              #              true
+              #              mkdir -p /var/cache/apt/archives/partial /var/log/apt
+              #              apt update
+              #              apt install -y tcpdump
+              #              tcpdump -l -n -i eth0 port 53 &> /opt/hgcapp/services-hedera/HapiApp2.0/tcpdump.log &
               # wait here until pod ip matches dns entry, this is necessary, but not sufficient
               # really we want to wait until this is true for all pods and their services.
               # ultimately this will probably require some assistance.
               # could use netcat to listen and tcp ping known port.
               # until getent hosts $(hostname -f) | grep "^$(hostname -i)\s" &> /dev/null; do sleep 1; done
               /opt/hgcapp/services-hedera/HapiApp2.0/entrypoint.sh
-              cat /opt/hgcapp/services-hedera/HapiApp2.0/tcpdump.log
-              find . -type f -ls
-              cat output/swirlds.log
-              tail -f /dev/null
+              #              cat /opt/hgcapp/services-hedera/HapiApp2.0/tcpdump.log
+              #              find . -type f -ls
+              #              cat output/swirlds.log
+              #              tail -f /dev/null
           volumeMounts:
             - name: cluster-config
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/config.txt
