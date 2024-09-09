@@ -294,7 +294,7 @@ public class HederaSdkClientFactory {
             if (!exceptions.isEmpty()) {
                 Exception exception = exceptions.removeFirst();
                 exceptions.forEach(exception::addSuppressed);
-                throw exception;
+                throw exception; // <- this should not be fatal
             }
         }
     }
