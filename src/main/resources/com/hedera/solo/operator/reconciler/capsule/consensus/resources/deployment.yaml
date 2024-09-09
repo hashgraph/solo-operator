@@ -262,9 +262,9 @@ spec:
               tcp_ping() {
                 for addr in ${local_addr}; do
                   notified && return 0
-                  nc -z ${addr} 31337 && continue
+                  nc -w 1 -z ${addr} 31337 && continue
                   notified && return 0
-                  nc -z ${addr} 50111 && continue
+                  nc -w 1 -z ${addr} 50111 && continue
                   notified && return 0
                   return 1
                 done
