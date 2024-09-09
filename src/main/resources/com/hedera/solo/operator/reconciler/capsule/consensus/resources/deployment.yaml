@@ -18,6 +18,55 @@ spec:
 #        runAsUser: 0
 #        runAsGroup: 0
       subdomain: consensus
+#      initContainers:
+#        - name: init
+#          image: alpine:3.20.2
+#          command:
+#            - sh
+#            - -c
+#            - |
+#              set -x
+#              apk add tcpdump
+#              tcpdump -l -n -i eth0 port 53 &
+#              getent hosts node0.consensus
+#              getent hosts node1.consensus
+#              getent hosts node2.consensus
+#              getent hosts node0-svc
+#              getent hosts node1-svc
+#              getent hosts node2-svc
+#
+#              PORT=31337
+#              FILE=.synced
+#              # nc -lk -p ${PORT} -e true &
+#              nc -lkp ${PORT} -e tee -a ${FILE} &
+#              addresses_ready() {
+#                awk -v CMD="${*}" -v PORT="${PORT}" -F, '/^address/ {
+#                  printf("(%s %s %s || %s %s %s) && (%s %s %s || %s %s %s) || exit 1\n",
+#                    CMD, $6, PORT,
+#                    CMD, $6, 50111,
+#                    CMD, $8, PORT,
+#                    CMD, $8, 50111);
+#                }' /opt/hgcapp/services-hedera/HapiApp2.0/config.txt | sh -x # &> /dev/null
+#              }
+#
+#              for i in 1 2 3 4 5 6 7 8 9 0; do
+#                addresses_ready nc -w 1 -z || test -s ${FILE}
+#                getent hosts $(hostname -f) || echo getent hosts failed
+#                getent ahosts $(hostname -f) || echo getent ahosts failed
+#                hostname -i || echo hostname failed
+#                getent hosts node0.consensus
+#                getent hosts node1.consensus
+#                getent hosts node2.consensus
+#                getent hosts node0-svc
+#                getent hosts node1-svc
+#                getent hosts node2-svc
+#                sleep 5
+#              done
+#          volumeMounts:
+#            - name: cluster-config
+#              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/config.txt
+#              subPath: config.txt
+
       # note: initContainer seems to slow things down. Can also try startup probe.
       # with initContainer dns for headless service seems to be delayed by ~30 seconds.
 #      initContainers:
@@ -30,6 +79,9 @@ spec:
 #            - sh
 #            - -c
 #            - |
+#              apk add tcpdump
+#              tcpdump -l -n -i eth0 port 53 &
+#
 #              # could add port to service just for the purpose of performing this sync
 #              # also would be better to only operate on addresses local to k8s cluster
 #              # note: could speed things up if use prog to communicate success
