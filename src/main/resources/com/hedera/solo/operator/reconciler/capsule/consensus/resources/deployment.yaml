@@ -14,6 +14,7 @@ spec:
       labels:
         app: consensus-node
     spec:
+      # I may have just observed a dns flake out, attempt to verify, if true may require an alternate approach
 #      securityContext:
 #        runAsUser: 0
 #        runAsGroup: 0
@@ -235,7 +236,7 @@ spec:
               getent hosts $(hostname -f)
               sudo mkdir -p /var/cache/apt/archives/partial /var/log/apt
               #sudo apt update
-              sudo apt install -y netcat-openbsd tcpdump # not netcat-traditional
+              sudo apt install -y netcat-openbsd tcpdump dnsutils # not netcat-traditional
               PORT=31337
               FILE=$(mktemp)
               # nc -lk -p ${PORT} -e true &
@@ -286,27 +287,33 @@ spec:
               #                ls -l ${FILE}
               #                sleep 1
               #              done
-                    #              nc -lkp ${PORT} >> ${FILE} &
-                    #              NC_PID=${!}
-                    #              until tcp_ping; do
-                    #                sleep 0.1
-                    #              done
-                    #              notified || notify_peers
-                    #              kill ${NC_PID}
-                    #              rm ${FILE}
+              tcpdump -l -n -i eth0 port 53 &> /opt/hgcapp/services-hedera/HapiApp2.0/tcpdump.log &
+              nc -lkp ${PORT} >> ${FILE} &
+              NC_PID=${!}
+              until tcp_ping; do
+                sleep 0.1
+              done
+              notified || notify_peers
+              kill ${NC_PID}
+              rm ${FILE}
               #              ls -l ${FILE}
               #              addresses_ready "echo -n . | nc -w 1"
               #              true
               #              mkdir -p /var/cache/apt/archives/partial /var/log/apt
               #              apt update
               #              apt install -y tcpdump
-              tcpdump -l -n -i eth0 port 53 &> /opt/hgcapp/services-hedera/HapiApp2.0/tcpdump.log &
               # wait here until pod ip matches dns entry, this is necessary, but not sufficient
               # really we want to wait until this is true for all pods and their services.
               # ultimately this will probably require some assistance.
               # could use netcat to listen and tcp ping known port.
               # until getent hosts $(hostname -f) | grep "^$(hostname -i)\s" &> /dev/null; do sleep 1; done
               /opt/hgcapp/services-hedera/HapiApp2.0/entrypoint.sh
+              nslookup node0.consensus
+              nslookup node1.consensus
+              nslookup node2.consensus
+              nslookup node0-svc
+              nslookup node1-svc
+              nslookup node2-svc
               cat /opt/hgcapp/services-hedera/HapiApp2.0/tcpdump.log
               #              find . -type f -ls
               #              cat output/swirlds.log
