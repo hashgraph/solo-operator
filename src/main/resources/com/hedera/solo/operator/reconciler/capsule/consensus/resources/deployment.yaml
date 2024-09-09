@@ -287,7 +287,7 @@ spec:
               #                ls -l ${FILE}
               #                sleep 1
               #              done
-              tcpdump -l -n -i eth0 port 53 &> /opt/hgcapp/services-hedera/HapiApp2.0/tcpdump.log &
+              sudo tcpdump -l -n -i eth0 port 53 &> /opt/hgcapp/services-hedera/HapiApp2.0/tcpdump.log &
               nc -lkp ${PORT} >> ${FILE} &
               NC_PID=${!}
               until tcp_ping; do
