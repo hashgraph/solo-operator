@@ -91,6 +91,7 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
                 .endMetadata()
                 .editSpec()
                 .withHostname(metadata.getName())
+                .withServiceAccountName(metadata.getName() + "-sa")
                 .editMatchingVolume(v -> "private-keys".equals(v.getName()))
                 .editSecret()
                 .withSecretName(validName(metadata.getName(), "-keys"))
