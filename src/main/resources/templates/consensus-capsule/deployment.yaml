@@ -78,16 +78,16 @@ spec:
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/saved
             - name: hgcapp-data-stats
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/stats
-            - name: private-keys
+            - name: grpc-tls-keys
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.crt
               subPath: hedera-{nodeId}.crt
-            - name: private-keys
+            - name: grpc-tls-keys
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.key
               subPath: hedera-{nodeId}.key
-            - name: private-keys
+            - name: gossip-keys
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/a-private-{nodeId}.pem
               subPath: a-private-{nodeId}.pem
-            - name: private-keys
+            - name: gossip-keys
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/s-private-{nodeId}.pem
               subPath: s-private-{nodeId}.pem
             {#for publicKeyFile in publicKeyFiles}
@@ -346,9 +346,12 @@ spec:
         - name: public-keys
           configMap:
             name: public-keys
-        - name: private-keys
+        - name: gossip-keys
           secret:
-            secretName: {nodeId}-keys
+            secretName: {nodeId}-gossip-keys
+        - name: grpc-tls-keys
+          secret:
+            secretName: {nodeId}-grpc-tls-keys
         - name: hgcapp-record-streams
           emptyDir: {}
         - name: hgcapp-events-streams
