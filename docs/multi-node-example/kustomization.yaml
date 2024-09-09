@@ -4,6 +4,9 @@ kind: Kustomization
 namespace: solo-orbit
 
 resources:
+  - storage/node0-pvcs.yaml
+  - storage/node1-pvcs.yaml
+  - storage/node2-pvcs.yaml
   - cluster-config.yaml
   - backup-uploader-config.yaml
   - secrets/mirror-secrets.yaml

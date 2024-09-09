@@ -49,6 +49,7 @@ import com.hedera.solo.operator.test.HederaSdkClientFactory;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaim;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.Service;
@@ -68,7 +69,6 @@ import org.junit.jupiter.api.Test;
 
 public abstract class ConsensusCapsuleTestAbstract {
     protected final String namespace = getClass().getSimpleName().toLowerCase();
-    public static final String RECORD_STREAM_TEMPLATE = "sidecars/record-stream-uploader.yaml";
 
     @Inject
     @SuppressWarnings("CdiInjectionPointsInspection")
@@ -213,12 +213,32 @@ public abstract class ConsensusCapsuleTestAbstract {
         }
     }
 
+    private void setupPersistentVolumeClaims(List<NodeInfo> nodes) {
+        for (final String pvcDirName :
+                List.of("output", "data-saved", "data-stats", "data-upgrade", "events-streams", "record-streams")) {
+            for (NodeInfo node : nodes) {
+                final String pvcFile = String.format("storage/%s-pvc.yaml", pvcDirName);
+                kubernetesClient
+                        .resource(loadYaml(PersistentVolumeClaim.class, getClass(), pvcFile)
+                                .edit()
+                                .editMetadata()
+                                .withName("%s-%s".formatted(node.name, pvcDirName))
+                                .withNamespace(namespace)
+                                .addToLabels("consensus-capsule", node.name)
+                                .endMetadata()
+                                .build())
+                        .create();
+            }
+        }
+    }
+
     @Test
     void testSingleNodeDeployment() throws Exception {
         final List<String> nodeNames = List.of("node0");
         final List<NodeInfo> nodes = prepareNodes(nodeNames);
         this.setupConfigMaps(nodes);
         this.setupSecrets(nodes);
+        this.setupPersistentVolumeClaims(nodes);
 
         // create consensus capsule
         List<ConsensusCapsule> consensusCapsules = createConsensusCapsule(nodes);
@@ -236,6 +256,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         final List<NodeInfo> nodes = prepareNodes(nodeNames);
         this.setupConfigMaps(nodes);
         this.setupSecrets(nodes);
+        this.setupPersistentVolumeClaims(nodes);
 
         // create consensus capsule
         List<ConsensusCapsule> consensusCapsules = createConsensusCapsule(nodes);
@@ -337,7 +358,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .build();
         kubernetesClient.resource(networkInitialization).create();
 
-        await().atMost(90, TimeUnit.SECONDS).untilAsserted(() -> {
+        await().atMost(180, TimeUnit.SECONDS).untilAsserted(() -> {
             NetworkInitialization netInit =
                     kubernetesClient.resource(networkInitialization).get();
             assertThat(netInit).isNotNull();
@@ -355,6 +376,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                         .get();
                 assertThat(deployment).isNotNull();
                 assertThat(deployment.getStatus()).isNotNull();
+                assertThat(deployment.getStatus().getAvailableReplicas()).isNotNull();
                 assertThat(deployment.getStatus().getAvailableReplicas()).isEqualTo(1);
 
                 assertThat(capsule.getStatus().getPhase()).isEqualTo(ConsensusCapsuleStatus.Phase.Running);
@@ -380,6 +402,8 @@ public abstract class ConsensusCapsuleTestAbstract {
     void checkAddressBook(
             final BiFunction<HederaSdkClientFactory, String, HederaSdkClientFactory.ClientContext> clientContext)
             throws AssertionError, Exception {
+        Thread.sleep(15); // compensate for the delay we introduced to start the consensus pod to bound pvcs
+
         String[] consensusNodeNames = consensusNodeNames();
         HederaSdkClientFactory sdkClientFactory = new HederaSdkClientFactory(kubernetesClient, namespace);
         for (String nodeName : consensusNodeNames) {

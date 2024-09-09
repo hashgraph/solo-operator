@@ -31,8 +31,10 @@ spec:
               mountPath: /opt/hgcapp/recordStreams
             - name: hgcapp-events-streams
               mountPath: /opt/hgcapp/eventsStreams
+            - name: hgcapp-version
+              mountPath: /tmp/versionInfo
           command:
-            - "/bin/sh"
+            - "/bin/bash"
             - "-c"
             - |
               setupDirs() \{
@@ -40,6 +42,7 @@ spec:
                 chown -r hedera:hedera /opt/hgcapp/recordStreams
                 mkdir -p /opt/hgcapp/eventsStreams/events_{accountId}
                 chown -r hedera:hedera /opt/hgcapp/eventsStreams
+                touch /tmp/versionInfo/VERSION # FIXME change to copy when VERSION file is baked in the image
                 return 0
               \}
               setupDirs
@@ -49,6 +52,12 @@ spec:
           env:
             - name: JAVA_OPTS
               value: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
+          command:
+            # sleep is needed so that the projected volume can mount the keys correctly before the platform software tries
+            # to load the keys
+            - "/bin/bash"
+            - "-c"
+            - "sleep 15;/init /opt/hgcapp/services-hedera/HapiApp2.0/entrypoint.sh"
           volumeMounts:
             - name: cluster-config
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/config.txt
@@ -78,6 +87,8 @@ spec:
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/saved
             - name: hgcapp-data-stats
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/stats
+            - name: hgcapp-data-upgrade
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade
             - name: grpc-tls-keys
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.crt
               subPath: hedera-{nodeId}.crt
@@ -315,6 +326,9 @@ spec:
           volumeMounts:
             - name: hgcapp-data-saved
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/saved
+            - name: hgcapp-version
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/VERSION
+              subPath: VERSION
             - name: backup-uploader-config
               mountPath: /home/hedera/.config/rclone/rclone.conf
               subPath: rclone.conf
@@ -353,12 +367,23 @@ spec:
           secret:
             secretName: {nodeId}-grpc-tls-keys
         - name: hgcapp-record-streams
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: {nodeId}-record-streams
         - name: hgcapp-events-streams
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: {nodeId}-events-streams
         - name: hgcapp-output
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: {nodeId}-output
         - name: hgcapp-data-saved
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: {nodeId}-data-saved
         - name: hgcapp-data-stats
+          persistentVolumeClaim:
+            claimName: {nodeId}-data-stats
+        - name: hgcapp-data-upgrade
+          persistentVolumeClaim:
+            claimName: {nodeId}-data-upgrade
+        - name: hgcapp-version
           emptyDir: {}
+
