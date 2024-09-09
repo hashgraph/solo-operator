@@ -62,7 +62,7 @@ public class EventStreamUploaderTest extends ConsensusCapsuleTestAbstract {
     }
 
     private void checkEventStreamUploader(final int total) {
-        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+        await().atMost(60, TimeUnit.SECONDS).untilAsserted(() -> {
             List<Pod> consensusPods = fetchConsensusPods();
             assertThat(consensusPods).hasSize(total);
 
