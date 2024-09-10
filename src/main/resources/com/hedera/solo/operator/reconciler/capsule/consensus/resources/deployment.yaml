@@ -19,6 +19,8 @@ spec:
       # curl --cacert ${CACERT} --header "Authorization: Bearer ${TOKEN}" -X GET
       #   "${APISERVER}/api/v1/namespaces/${NAMESPACE}/pods?labelSelector=app%3Dconsensus-node"
       #    /api/v1/namespaces/${NAMESPACE}/services?labelSelector=app%3Dconsensus-node&limit=500
+      # alternative: init-container either creates file in emptyDir or waits for creation of configmap
+      # before starting app, append additional entries from generated file to hosts file and "schedule" its removal.
 #      securityContext:
 #        runAsUser: 0
 #        runAsGroup: 0
@@ -241,6 +243,7 @@ spec:
               sudo mkdir -p /var/cache/apt/archives/partial /var/log/apt
               #sudo apt update
               sudo apt install -y netcat-openbsd tcpdump dnsutils curl # not netcat-traditional
+              # this is similar to echo service (port 7), but not quite the same.
               PORT=31337
               FILE=$(mktemp)
               # nc -lk -p ${PORT} -e true &
