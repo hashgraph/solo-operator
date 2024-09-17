@@ -20,6 +20,7 @@ import static java.nio.file.attribute.PosixFilePermission.OWNER_READ;
 import static java.nio.file.attribute.PosixFilePermission.OWNER_WRITE;
 
 import com.hedera.fullstack.helm.client.HelmClient;
+import com.hedera.fullstack.helm.client.impl.DefaultHelmClient;
 import com.hedera.fullstack.helm.client.impl.DefaultHelmClientBuilder;
 import com.hedera.fullstack.helm.client.model.Chart;
 import com.hedera.fullstack.helm.client.model.Repository;
@@ -32,14 +33,17 @@ import io.quarkus.arc.Lock;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.io.File;
+import java.lang.reflect.Field;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 import org.jboss.logging.Logger;
 
 @Lock(time = 5, unit = TimeUnit.MINUTES) // this lock is needed when tests are run in parallel
@@ -217,17 +221,46 @@ public class MinioSetupManager {
         logger.info("MinIO tenant is ready");
     }
 
+    // workaround for https://github.com/hashgraph/full-stack-testing/issues/964
+    public void cleanup(final HelmClient helmClient) {
+        try {
+            if (helmClient instanceof DefaultHelmClient defaultHelmClient) {
+                Field helmExecutable = DefaultHelmClient.class.getDeclaredField("helmExecutable");
+                helmExecutable.setAccessible(true);
+                Object object = helmExecutable.get(defaultHelmClient);
+                if (object instanceof Path path) {
+                    try (Stream<Path> paths = Files.walk(path.getParent())) {
+                        paths.sorted(Comparator.reverseOrder())
+                                .map(Path::toFile)
+                                .forEach(File::delete);
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
     public void install() {
         if (minioInstalled) {
             return;
         }
 
-        HelmClient helmClient = this.getHelmClient(Constants.MINIO_OPERATOR_NAMESPACE);
-        this.addMinioRepository(helmClient);
-        this.installMinioOperator(helmClient);
+        HelmClient helmClient = null;
+        try {
+            helmClient = this.getHelmClient(Constants.MINIO_OPERATOR_NAMESPACE);
+            this.addMinioRepository(helmClient);
+            this.installMinioOperator(helmClient);
+        } finally {
+            cleanup(helmClient);
+        }
 
-        helmClient = this.getHelmClient(Constants.MINIO_TENANT_NAMESPACE);
-        this.installMinioTenant(helmClient);
+        helmClient = null;
+        try {
+            helmClient = this.getHelmClient(Constants.MINIO_TENANT_NAMESPACE);
+            this.installMinioTenant(helmClient);
+        } finally {
+            cleanup(helmClient);
+        }
 
         minioInstalled = true;
     }
@@ -237,14 +270,24 @@ public class MinioSetupManager {
             return;
         }
 
-        HelmClient helmClient = this.getHelmClient(Constants.MINIO_TENANT_NAMESPACE);
-        if (isChartInstalled(helmClient, Constants.MINIO_TENANT_RELEASE)) {
-            helmClient.uninstallChart(Constants.MINIO_TENANT_RELEASE);
+        HelmClient helmClient = null;
+        try {
+            helmClient = this.getHelmClient(Constants.MINIO_TENANT_NAMESPACE);
+            if (isChartInstalled(helmClient, Constants.MINIO_TENANT_RELEASE)) {
+                helmClient.uninstallChart(Constants.MINIO_TENANT_RELEASE);
+            }
+        } finally {
+            cleanup(helmClient);
         }
 
-        helmClient = this.getHelmClient(Constants.MINIO_OPERATOR_NAMESPACE);
-        if (isChartInstalled(helmClient, Constants.MINIO_OPERATOR_RELEASE)) {
-            helmClient.uninstallChart(Constants.MINIO_OPERATOR_RELEASE);
+        helmClient = null;
+        try {
+            helmClient = this.getHelmClient(Constants.MINIO_OPERATOR_NAMESPACE);
+            if (isChartInstalled(helmClient, Constants.MINIO_OPERATOR_RELEASE)) {
+                helmClient.uninstallChart(Constants.MINIO_OPERATOR_RELEASE);
+            }
+        } finally {
+            cleanup(helmClient);
         }
 
         minioInstalled = false;

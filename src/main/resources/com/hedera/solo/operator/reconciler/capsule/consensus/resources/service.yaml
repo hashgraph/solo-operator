@@ -5,6 +5,7 @@ metadata:
   labels:
     app: consensus-node
 spec:
+  publishNotReadyAddresses: true
   type: LoadBalancer
   selector:
     app: consensus-node

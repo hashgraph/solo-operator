@@ -42,7 +42,9 @@ java {
 }
 
 tasks.withType<Test>().configureEach {
-    environment("CI", "true")
+    if (System.getenv().containsKey("CI")) {
+        environment("SOLO_TEST_SNAPSHOT_ENABLED", "true")
+    }
     systemProperty("java.util.logging.manager", "org.jboss.logmanager.LogManager")
 }
 

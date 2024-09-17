@@ -16,6 +16,7 @@
 
 package com.hedera.solo.operator.test.orbit;
 
+import static com.hedera.solo.operator.test.fixtures.Environment.isGradleTest;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -23,8 +24,9 @@ import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitSpecBuilder;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.reconciler.orbit.resources.ConsensusConfigMap;
-import com.hedera.solo.operator.test.Environment;
 import com.hedera.solo.operator.test.fixtures.Resources;
+import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
+import com.hedera.solo.operator.test.fixtures.snapshot.SnapshotFailureContext;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.Namespace;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
@@ -45,6 +47,7 @@ import org.junit.jupiter.api.Test;
  * <p>NOTE: The tests defined in this suite are only intended for execution in Quarkus Dev Mode.
  */
 @QuarkusTest
+@SoloTest
 class OrbitTest {
 
     private static final String TEST_ORBIT_NAME = "test-orbit";
@@ -54,9 +57,6 @@ class OrbitTest {
     protected KubernetesClient client;
 
     @Inject
-    protected Environment environment;
-
-    @Inject
     protected Operator operator;
 
     @Inject
@@ -64,13 +64,21 @@ class OrbitTest {
 
     @BeforeEach
     void setup() {
-        if (!environment.isDevModeActive()) {
+        if (isGradleTest()) {
             operator.start();
         }
         cleanup();
     }
 
     @AfterEach
+    void afterEach(final SnapshotFailureContext snapshot) {
+        snapshot.client(client)
+                .nonNamespacedResources("operator.solo.hedera.com/v1alpha1")
+                .namespaces(TEST_ORBIT_NAME)
+                .namespacedResources();
+        cleanup();
+    }
+
     void cleanup() {
         Resources.removeByName(client, Orbit.class, TEST_ORBIT_NAME);
         await().atMost(Duration.ofSeconds(30))

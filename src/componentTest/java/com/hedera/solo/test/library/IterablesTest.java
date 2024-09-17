@@ -14,17 +14,18 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator.test;
+package com.hedera.solo.test.library;
 
-import jakarta.enterprise.context.ApplicationScoped;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
-@ApplicationScoped
-public class Environment {
-    public boolean isCI() {
-        return System.getenv("CI") != null;
-    }
+import com.hedera.solo.operator.library.generic.Iterables;
+import java.util.List;
+import org.junit.jupiter.api.Test;
 
-    public boolean isDevModeActive() {
-        return !isCI();
+public class IterablesTest {
+    @Test
+    public void test() {
+        List<Integer> list = Iterables.asList(List.of(1, 2, 3), List.of(4, 5, 6));
+        assertEquals(List.of(1, 2, 3, 4, 5, 6), list);
     }
 }

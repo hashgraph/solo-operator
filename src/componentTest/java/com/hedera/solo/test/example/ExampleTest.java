@@ -19,18 +19,29 @@ package com.hedera.solo.test.example;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
+import com.hedera.solo.operator.test.fixtures.snapshot.SnapshotFailureContext;
 import com.hedera.solo.operator.test.v1alpha1.Example;
 import com.hedera.solo.operator.test.v1alpha1.ExampleBuilder;
 import com.hedera.solo.test.framework.AbstractOperatorTest;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.javaoperatorsdk.operator.junit.LocallyRunOperatorExtension;
 import java.time.Duration;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+@SoloTest
 public class ExampleTest extends AbstractOperatorTest {
     @Override
     protected LocallyRunOperatorExtension.Builder configure(LocallyRunOperatorExtension.Builder builder) {
         return builder.withReconciler(new ExampleReconciler());
+    }
+
+    @AfterEach
+    void afterEach(final SnapshotFailureContext snapshot) {
+        snapshot.client(operator().getKubernetesClient())
+                .namespaces(operator().getNamespace())
+                .namespacedResources();
     }
 
     @Test
