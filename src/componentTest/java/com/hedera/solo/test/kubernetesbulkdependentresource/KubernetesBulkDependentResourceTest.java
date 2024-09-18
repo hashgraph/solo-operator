@@ -25,6 +25,7 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.hedera.solo.operator.test.v1alpha1.Example;
 import com.hedera.solo.test.framework.AbstractOperatorTest;
 import io.fabric8.kubernetes.api.model.ConfigMap;
+import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.junit.LocallyRunOperatorExtension;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResourceConfigBuilder;
 import java.time.Duration;
@@ -36,7 +37,7 @@ public class KubernetesBulkDependentResourceTest extends AbstractOperatorTest {
     private static final ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
 
     @Override
-    protected LocallyRunOperatorExtension.Builder configure(final LocallyRunOperatorExtension.Builder builder) {
+    protected LocallyRunOperatorExtension.Builder configure(final KubernetesClient client) {
         KubernetesBulkDependentResource crud = new KubernetesBulkDependentResourceUpdater(true, true);
         KubernetesBulkDependentResource readOnly = new KubernetesBulkDependentResource(false, false);
         KubernetesBulkDependentResource updateOnly = new KubernetesBulkDependentResourceUpdater(false, false);
@@ -49,7 +50,7 @@ public class KubernetesBulkDependentResourceTest extends AbstractOperatorTest {
         updateOnly.configureWith(new KubernetesDependentResourceConfigBuilder<ConfigMap>()
                 .withLabelSelector("primary=update-only")
                 .build());
-        return builder.withReconciler(
+        return builder(client).withReconciler(
                         new KubernetesBulkDependentResourceReconciler(crud),
                         cfg -> cfg.withLabelSelector("crud").withName("crud"))
                 .withReconciler(

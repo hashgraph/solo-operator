@@ -21,7 +21,6 @@ components:
   schemas:
     NetworkInitializationSpec:
       type: object
-      description: |
       properties:
         mode:
           description: The mode of the `NetworkInitialization`.

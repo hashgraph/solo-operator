@@ -16,71 +16,101 @@
 
 package com.hedera.solo.operator.reconciler.networkinitialization.resources;
 
+import com.hedera.solo.operator.library.josdk.resource.AbstractKubernetesBulkDependentResource;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitialization;
+import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.BulkDependentResource;
+import io.javaoperatorsdk.operator.processing.dependent.Updater;
+import io.javaoperatorsdk.operator.processing.dependent.kubernetes.BooleanWithUndefined;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResource;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
+import io.javaoperatorsdk.operator.processing.event.source.PrimaryToSecondaryMapper;
+import io.javaoperatorsdk.operator.processing.event.source.SecondaryToPrimaryMapper;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-@KubernetesDependent
+@KubernetesDependent(useSSA = BooleanWithUndefined.FALSE)
 public class NetworkInitializationConsensusCapsule
-        extends KubernetesDependentResource<ConsensusCapsule, NetworkInitialization>
+        extends AbstractKubernetesBulkDependentResource<ConsensusCapsule, NetworkInitialization>
         implements
+        PrimaryToSecondaryMapper<NetworkInitialization>, SecondaryToPrimaryMapper<ConsensusCapsule>,
+        Updater<ConsensusCapsule, NetworkInitialization>
         //        ResourceDiscriminator<ConsensusCapsule, NetworkInitialization>,
         //        SecondaryToPrimaryMapper<ConsensusCapsule>,
-        BulkDependentResource<ConsensusCapsule, NetworkInitialization> {
+//        BulkDependentResource<ConsensusCapsule, NetworkInitialization>
+{
     public NetworkInitializationConsensusCapsule() {
         super(ConsensusCapsule.class);
     }
 
     @Override
-    public Map<String, ConsensusCapsule> desiredResources(
-            NetworkInitialization primary, Context<NetworkInitialization> context) {
+    public Map<String, ConsensusCapsule> desiredResources(NetworkInitialization primary, Context<NetworkInitialization> context) {
         return getSecondaryResources(primary, context);
     }
 
     @Override
-    public Map<String, ConsensusCapsule> getSecondaryResources(
-            NetworkInitialization primary, Context<NetworkInitialization> context) {
-        return context
-                .getClient()
-                .resources(ConsensusCapsule.class)
-                .inNamespace(primary.getMetadata().getNamespace())
-                .list()
-                .getItems()
-                .stream()
-                .collect(Collectors.toMap(x -> x.getMetadata().getName(), Function.identity()));
+    public Set<ResourceID> toSecondaryResourceIDs(NetworkInitialization primary) {
+        return primary.getSpec().getConsensusCapsules().stream().map(name -> new ResourceID(name, primary.getMetadata().getNamespace())).collect(Collectors.toSet());
     }
 
     @Override
-    public void deleteTargetResource(
-            NetworkInitialization primary,
-            ConsensusCapsule resource,
-            String key,
-            Context<NetworkInitialization> context) {
-        // super.deleteTargetResource(primary, resource, key, context);
+    public Set<ResourceID> toPrimaryResourceIDs(ConsensusCapsule resource) {
+        // can perform mapping using primary event source.
+        return Set.of(); // <- fixme: maybe add label for last-active-network-init
     }
-    //    @Override
-    //    protected InformerConfiguration.InformerConfigurationBuilder<ConsensusCapsule> informerConfigurationBuilder()
-    // {
-    //        return super.informerConfigurationBuilder()
-    //                .withPrimaryToSecondaryMapper(p ->
-    // ((NetworkInitialization)p).getSpec().getConsensusCapsules().stream().map(name -> new ResourceID(name,
-    // p.getMetadata().getNamespace())).collect(Collectors.toSet()));
-    //    }
+//    public NetworkInitializationConsensusCapsule() {
+//        super(ConsensusCapsule.class);
+//    }
 
-    //    @Override
-    //    public Set<ResourceID> toPrimaryResourceIDs(ConsensusCapsule consensusCapsule) {
-    //        return Set.of();
-    //    }
-    //
-    //    @Override
-    //    public Optional<ConsensusCapsule> distinguish(Class<ConsensusCapsule> resource, NetworkInitialization primary,
-    // Context<NetworkInitialization> context) {
-    //        return context.getSecondaryResources();
-    //    }
+//    @Override
+//    public Map<String, ConsensusCapsule> desiredResources(
+//            NetworkInitialization primary, Context<NetworkInitialization> context) {
+//        return getSecondaryResources(primary, context);
+//    }
+//
+//    @Override
+//    public Map<String, ConsensusCapsule> getSecondaryResources(
+//            NetworkInitialization primary, Context<NetworkInitialization> context) {
+//        return context
+//                .getClient()
+//                .resources(ConsensusCapsule.class)
+//                .inNamespace(primary.getMetadata().getNamespace())
+//                .list()
+//                .getItems()
+//                .stream()
+//                .collect(Collectors.toMap(x -> x.getMetadata().getName(), Function.identity()));
+//    }
+//
+//    @Override
+//    public void deleteTargetResource(
+//            NetworkInitialization primary,
+//            ConsensusCapsule resource,
+//            String key,
+//            Context<NetworkInitialization> context) {
+//        // super.deleteTargetResource(primary, resource, key, context);
+//    }
+//    //    @Override
+//    //    protected InformerConfiguration.InformerConfigurationBuilder<ConsensusCapsule> informerConfigurationBuilder()
+//    // {
+//    //        return super.informerConfigurationBuilder()
+//    //                .withPrimaryToSecondaryMapper(p ->
+//    // ((NetworkInitialization)p).getSpec().getConsensusCapsules().stream().map(name -> new ResourceID(name,
+//    // p.getMetadata().getNamespace())).collect(Collectors.toSet()));
+//    //    }
+//
+//    //    @Override
+//    //    public Set<ResourceID> toPrimaryResourceIDs(ConsensusCapsule consensusCapsule) {
+//    //        return Set.of();
+//    //    }
+//    //
+//    //    @Override
+//    //    public Optional<ConsensusCapsule> distinguish(Class<ConsensusCapsule> resource, NetworkInitialization primary,
+//    // Context<NetworkInitialization> context) {
+//    //        return context.getSecondaryResources();
+//    //    }
 }

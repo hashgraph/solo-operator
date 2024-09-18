@@ -28,6 +28,9 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
+/*
+* BulkDependentResource implements Creator & Deleter in v4, but not in v5.
+* */
 public abstract class AbstractKubernetesBulkDependentResource<R extends HasMetadata, P extends HasMetadata>
         extends KubernetesDependentResource<R, P> implements BulkDependentResource<R, P> {
     public AbstractKubernetesBulkDependentResource(final Class<R> resourceType) {
@@ -49,7 +52,8 @@ public abstract class AbstractKubernetesBulkDependentResource<R extends HasMetad
 
     @Override
     public Map<String, R> getSecondaryResources(P primary, Context<P> context) {
-        return toMap(eventSource().orElseThrow().list().toList());
+//        context.getSecondaryResources(resourceType());
+        return toMap(eventSource().orElseThrow().list(primary.getMetadata().getNamespace()).toList());
     }
 
     @Override

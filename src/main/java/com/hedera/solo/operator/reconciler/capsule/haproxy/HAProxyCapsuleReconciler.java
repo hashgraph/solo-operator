@@ -52,6 +52,34 @@ public class HAProxyCapsuleReconciler implements Reconciler<HAProxyCapsule> {
         this.log = log;
     }
 
+//    @Inject
+//    Operator operator;
+//    EventSource eventSource(Class<?> primary, Class<?> secondary) throws Exception {
+//        Field field = ControllerHealthInfo.class.getDeclaredField("eventSourceManager");
+//        field.setAccessible(true);
+//        EventSourceManager<?> eventSourceManager = (EventSourceManager<?>) field.get(operator.getRegisteredControllers().stream()
+//                .filter(x -> x.getConfiguration().getResourceClass().isAssignableFrom(primary))
+//                .findAny().orElseThrow().getControllerHealthInfo());
+//        return eventSourceManager.allEventSources().values().stream()
+//                .filter(x -> x instanceof InformerEventSource<?,?>)
+//                .map(x -> (InformerEventSource<?,?>)x)
+//                .filter(x -> x.resourceType().isAssignableFrom(secondary))
+//                .findAny().orElseThrow();
+//    }
+//
+//    public Map<Class<?>, Map<String, EventSource>> allEventSources() throws Exception {
+//        Field field = ControllerHealthInfo.class.getDeclaredField("eventSourceManager");
+//        field.setAccessible(true);
+//        return operator.getRegisteredControllers().stream()
+//                .collect(Collectors.toMap(x -> x.getConfiguration().getResourceClass(), x -> {
+//                    try {
+//                        EventSourceManager<?> eventSourceManager = (EventSourceManager<?>) field.get(x.getControllerHealthInfo());
+//                        return eventSourceManager.allEventSources();
+//                    } catch (IllegalAccessException e) {
+//                        throw new RuntimeException(e);
+//                    }}));
+//    }
+
     @Override
     public UpdateControl<HAProxyCapsule> reconcile(HAProxyCapsule resource, Context<HAProxyCapsule> context)
             throws Exception {

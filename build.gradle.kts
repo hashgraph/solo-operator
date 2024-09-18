@@ -83,6 +83,8 @@ dependencies {
 
     testFixturesImplementation("io.fabric8:kubernetes-client")
     testFixturesImplementation("org.awaitility:awaitility")
+
+//    componentTestImplementation(sourceSets.main.get().output)
 }
 
 objectModelGenerator {

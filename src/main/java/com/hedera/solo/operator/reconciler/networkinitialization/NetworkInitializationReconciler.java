@@ -30,6 +30,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
 import jakarta.inject.Inject;
+import java.lang.invoke.MethodHandles;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
@@ -41,14 +42,13 @@ import org.jboss.logging.Logger;
         name = "network-initialization",
         dependents = {@Dependent(type = NetworkInitializationConsensusCapsule.class)})
 public class NetworkInitializationReconciler implements Reconciler<NetworkInitialization> {
-    private final Logger log;
+    private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
     private final KubernetesClient client;
     private static final Set<NetworkInitializationStatus.Phase> terminalPhases =
             Set.of(NetworkInitializationStatus.Phase.Failed, NetworkInitializationStatus.Phase.Succeeded);
 
     @Inject
-    public NetworkInitializationReconciler(final Logger log, final KubernetesClient client) {
-        this.log = log;
+    public NetworkInitializationReconciler(final KubernetesClient client) {
         this.client = client;
     }
 
@@ -109,7 +109,9 @@ public class NetworkInitializationReconciler implements Reconciler<NetworkInitia
     private static NetworkInitializationStatus.Phase getPhase(final List<ConsensusCapsule> consensusCapsules) {
         Set<ConsensusCapsuleStatus.Phase> phases = consensusCapsules.stream()
                 .map(CustomResource::getStatus)
+                .filter(Objects::nonNull)
                 .map(ConsensusCapsuleStatus::getPhase)
+                .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
         NetworkInitializationStatus.Phase phase;

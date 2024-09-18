@@ -38,7 +38,7 @@ import java.util.stream.Collectors;
 
 @KubernetesDependent
 public class KubernetesBulkDependentResource extends AbstractKubernetesBulkDependentResource<ConfigMap, Example>
-        implements SecondaryToPrimaryMapper<ConfigMap>, PrimaryToSecondaryMapper<Example> {
+        implements PrimaryToSecondaryMapper<Example>, SecondaryToPrimaryMapper<ConfigMap> {
 
     private static final ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
     private final boolean create;
