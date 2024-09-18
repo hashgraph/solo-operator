@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test;
 public class NetworkInitializationTest extends AbstractOperatorTest {
     @Override
     protected LocallyRunOperatorExtension.Builder configure(final KubernetesClient client) {
-        return builder(client).withReconciler(new NetworkInitializationReconciler(client));
+        return builder(client).withReconciler(new NetworkInitializationReconciler());
     }
 
     @BeforeEach

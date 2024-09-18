@@ -26,30 +26,44 @@ import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
+import io.javaoperatorsdk.operator.api.reconciler.EventSourceContext;
+import io.javaoperatorsdk.operator.api.reconciler.EventSourceInitializer;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
-import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
+import io.javaoperatorsdk.operator.processing.dependent.workflow.Workflow;
+import io.javaoperatorsdk.operator.processing.dependent.workflow.WorkflowBuilder;
+import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import jakarta.inject.Inject;
 import java.lang.invoke.MethodHandles;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.jboss.logging.Logger;
 
-@ControllerConfiguration(
-        name = "network-initialization",
-        dependents = {@Dependent(type = NetworkInitializationConsensusCapsule.class)})
-public class NetworkInitializationReconciler implements Reconciler<NetworkInitialization> {
+@ControllerConfiguration(name = "network-initialization")
+public class NetworkInitializationReconciler implements Reconciler<NetworkInitialization>, EventSourceInitializer<NetworkInitialization> {
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
-    private final KubernetesClient client;
+//    private final KubernetesClient client;
     private static final Set<NetworkInitializationStatus.Phase> terminalPhases =
             Set.of(NetworkInitializationStatus.Phase.Failed, NetworkInitializationStatus.Phase.Succeeded);
 
-    @Inject
-    public NetworkInitializationReconciler(final KubernetesClient client) {
-        this.client = client;
+    private EventSourceContext<NetworkInitialization> eventSourceContext;
+    private final NetworkInitializationConsensusCapsule consensusCapsule = new NetworkInitializationConsensusCapsule(this);
+    private final Workflow<NetworkInitialization> workflow = new WorkflowBuilder<NetworkInitialization>()
+            .addDependentResource(consensusCapsule)
+            .build();
+
+//    @Inject
+//    public NetworkInitializationReconciler(final KubernetesClient client) {
+////        this.client = client;
+//    }
+
+    public EventSourceContext<NetworkInitialization> eventSourceContext() {
+        return eventSourceContext;
     }
 
     @Override
@@ -66,6 +80,7 @@ public class NetworkInitializationReconciler implements Reconciler<NetworkInitia
             log.infof(
                     "Network Initialization - Starting Reconciliation [ name = '%s' ]",
                     resource.getMetadata().getName());
+            workflow.reconcile(resource, context);
 
             final boolean seen = resource.getStatus() != null
                     && resource.getStatus().getObservedGeneration() != null
@@ -77,24 +92,24 @@ public class NetworkInitializationReconciler implements Reconciler<NetworkInitia
                 return UpdateControl.noUpdate();
             }
 
-            final var consensusCapsuleClient = client.resources(ConsensusCapsule.class)
-                    .inNamespace(resource.getMetadata().getNamespace());
-
-            if (!seen) {
-                // process new generation by marking all consensus capsules eligible for deployment
-                consensusCapsuleClient
-                        .resources()
-                        .forEach(rc -> rc.edit(cc -> cc.edit()
-                                .editSpec()
-                                .withEligibleForDeployment(true)
-                                .endSpec()
-                                .build()));
-            }
+//            final var consensusCapsuleClient = client.resources(ConsensusCapsule.class)
+//                    .inNamespace(resource.getMetadata().getNamespace());
+//
+//            if (!seen) {
+//                // process new generation by marking all consensus capsules eligible for deployment
+//                consensusCapsuleClient
+//                        .resources()
+//                        .forEach(rc -> rc.edit(cc -> cc.edit()
+//                                .editSpec()
+//                                .withEligibleForDeployment(true)
+//                                .endSpec()
+//                                .build()));
+//            }
 
             return UpdateControl.patchStatus(resource.edit()
                             .editStatus()
                             .withObservedGeneration(resource.getMetadata().getGeneration())
-                            .withPhase(getPhase(consensusCapsuleClient.list().getItems()))
+                            .withPhase(getPhase(consensusCapsule.getSecondaryResources(resource, context).values()))
                             .endStatus()
                             .build())
                     .rescheduleAfter(Duration.ofSeconds(30));
@@ -106,7 +121,7 @@ public class NetworkInitializationReconciler implements Reconciler<NetworkInitia
     }
 
     // collect consensus capsule status in status until any fail or all succeed.
-    private static NetworkInitializationStatus.Phase getPhase(final List<ConsensusCapsule> consensusCapsules) {
+    private static NetworkInitializationStatus.Phase getPhase(final Collection<ConsensusCapsule> consensusCapsules) {
         Set<ConsensusCapsuleStatus.Phase> phases = consensusCapsules.stream()
                 .map(CustomResource::getStatus)
                 .filter(Objects::nonNull)
@@ -126,5 +141,11 @@ public class NetworkInitializationReconciler implements Reconciler<NetworkInitia
             phase = NetworkInitializationStatus.Phase.Unknown;
         }
         return phase;
+    }
+
+    @Override
+    public Map<String, EventSource> prepareEventSources(final EventSourceContext<NetworkInitialization> context) {
+        eventSourceContext = context;
+        return EventSourceInitializer.eventSourcesFromWorkflow(context, workflow);
     }
 }

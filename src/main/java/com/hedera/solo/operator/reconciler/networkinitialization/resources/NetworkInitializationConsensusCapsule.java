@@ -16,9 +16,12 @@
 
 package com.hedera.solo.operator.reconciler.networkinitialization.resources;
 
+import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
+
 import com.hedera.solo.operator.library.josdk.resource.AbstractKubernetesBulkDependentResource;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitialization;
+import com.hedera.solo.operator.reconciler.networkinitialization.NetworkInitializationReconciler;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.BulkDependentResource;
@@ -26,6 +29,7 @@ import io.javaoperatorsdk.operator.processing.dependent.Updater;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.BooleanWithUndefined;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResource;
+import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResourceConfigBuilder;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.javaoperatorsdk.operator.processing.event.source.PrimaryToSecondaryMapper;
 import io.javaoperatorsdk.operator.processing.event.source.SecondaryToPrimaryMapper;
@@ -34,7 +38,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-@KubernetesDependent(useSSA = BooleanWithUndefined.FALSE)
+@KubernetesDependent
 public class NetworkInitializationConsensusCapsule
         extends AbstractKubernetesBulkDependentResource<ConsensusCapsule, NetworkInitialization>
         implements
@@ -44,13 +48,25 @@ public class NetworkInitializationConsensusCapsule
         //        SecondaryToPrimaryMapper<ConsensusCapsule>,
 //        BulkDependentResource<ConsensusCapsule, NetworkInitialization>
 {
-    public NetworkInitializationConsensusCapsule() {
+    private final NetworkInitializationReconciler reconciler;
+
+    public NetworkInitializationConsensusCapsule(NetworkInitializationReconciler reconciler) {
         super(ConsensusCapsule.class);
+        this.reconciler = reconciler;
+        configureWith(new KubernetesDependentResourceConfigBuilder<ConsensusCapsule>()
+                .withUseSSA(Boolean.FALSE)
+                .build());
     }
 
     @Override
     public Map<String, ConsensusCapsule> desiredResources(NetworkInitialization primary, Context<NetworkInitialization> context) {
-        return getSecondaryResources(primary, context);
+        return getSecondaryResources(primary, context).entrySet().stream()
+                .map(e -> Map.entry(e.getKey(), edit(e.getValue())
+                        .with(builder -> builder
+                                .editSpec()
+                                .withEligibleForDeployment())
+                        .build()))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     @Override
@@ -60,8 +76,10 @@ public class NetworkInitializationConsensusCapsule
 
     @Override
     public Set<ResourceID> toPrimaryResourceIDs(ConsensusCapsule resource) {
-        // can perform mapping using primary event source.
-        return Set.of(); // <- fixme: maybe add label for last-active-network-init
+        return reconciler.eventSourceContext().getPrimaryCache().list(resource.getMetadata().getNamespace())
+                // which one?
+                .map(ResourceID::fromResource)
+                .collect(Collectors.toSet());
     }
 //    public NetworkInitializationConsensusCapsule() {
 //        super(ConsensusCapsule.class);
