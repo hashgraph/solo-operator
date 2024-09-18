@@ -1,0 +1,13 @@
+enabled: true
+name: "backup-uploader"
+image: "gcr.io/hedera-registry/hedera-backups:0.6.0"
+imagePullPolicy: IfNotPresent
+config:
+  bucketName: "solo-backups"
+  s3:
+    enabled: true
+    accessKey: solo-operator
+    url: "http://minio-tenant-hl.minio-tenant.svc.cluster.local:9000"
+  gcs:
+    enabled: false
+  envFromSecret: "uploader-secrets"

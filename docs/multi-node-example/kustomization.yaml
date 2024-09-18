@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: solo-orbit
+
+resources:
+  - cluster-config.yaml
+  - backup-uploader-config.yaml
+  - secrets/mirror-secrets.yaml
+  - secrets/uploader-secrets.yaml
+  - secrets/node0-gossip-keys.yaml
+  - secrets/node0-grpc-tls-keys.yaml
+  - secrets/node1-gossip-keys.yaml
+  - secrets/node1-grpc-tls-keys.yaml
+  - secrets/node2-gossip-keys.yaml
+  - secrets/node2-grpc-tls-keys.yaml
+  - public-keys.yaml
+  - headless-service.yaml
+  - consensus-capsule-node0.yaml
+  - consensus-capsule-node1.yaml
+  - consensus-capsule-node2.yaml
+  - network-init.yaml

@@ -1,0 +1,24 @@
+enabled: true
+name: "record-stream-sidecar-files-uploader"
+image: gcr.io/hedera-registry/uploader-mirror:1.3.0
+imagePullPolicy: IfNotPresent
+config:
+  debug: true
+  enableCompression: true
+  enableSidecarFiles: true
+  reaper:
+    enabled: true
+    minKeep: 1
+    interval: 1
+    defaultBackoff: 1
+  signature:
+    require: false
+    prioritize: false
+  bucketName: "solo-streams"
+  s3:
+    enabled: true
+    accessKey: solo-operator
+    url: "http://minio-tenant-hl.minio-tenant.svc.cluster.local:9000"
+  gcs:
+    enabled: false
+  envFromSecret: "uploader-secrets"

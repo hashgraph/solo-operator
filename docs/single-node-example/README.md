@@ -16,6 +16,9 @@ configmap/cluster-config created
 $ kubectl apply -f public-keys.yml
 configmap/public-keys created
 
+$ kubectl apply -f node0-keys.yml
+configmap/private-keys created
+
 $ kubectl apply -f consensus-capsule.yml
 consensuscapsule.operator.solo.hedera.com/node0 created
 

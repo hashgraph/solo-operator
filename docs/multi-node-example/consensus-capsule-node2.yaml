@@ -1,0 +1,80 @@
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: ConsensusCapsule
+metadata:
+  name: node2
+  namespace: solo-orbit
+spec:
+  accountId: "0.0.5"
+  eligibleForDeployment: false
+  sidecars:
+    recordStreamUploader:
+      enabled: true
+      name: "record-stream-uploader"
+      image: gcr.io/hedera-registry/uploader-mirror:1.3.0
+      imagePullPolicy: IfNotPresent
+      config:
+        debug: true
+        enableCompression: true
+        enableSidecarFiles: true
+        reaper:
+          enabled: true
+          minKeep: 1
+          interval: 1
+          defaultBackoff: 1
+        signature:
+          require: true
+          prioritize: true
+        streamFileExtension: "rcd"
+        streamSigExtension: "rcd_sig"
+        streamExtension: "rcd.gz"
+        sigExtension: "rcd_sig"
+        bucketName: "solo-streams"
+        bucketPath: "not-set"
+        s3:
+          enabled: true
+          accessKey: solo-operator
+          url: "http://minio-tenant-hl.minio-tenant.svc.cluster.local:9000"
+        gcs:
+          enabled: false
+        envFromSecret: "uploader-secrets"
+    eventStreamUploader:
+      enabled: true
+      name: "event-stream-uploader"
+      image: gcr.io/hedera-registry/uploader-mirror:1.3.0
+      imagePullPolicy: IfNotPresent
+      config:
+        debug: true
+        reaper:
+          enabled: true
+          minKeep: 1
+          interval: 1
+          defaultBackoff: 1
+        signature:
+          require: true
+          prioritize: true
+        streamFileExtension: "evts"
+        streamSigExtension: "evts_sig"
+        streamExtension: "evts"
+        sigExtension: "evts_sig"
+        bucketName: "solo-streams"
+        s3:
+          enabled: true
+          accessKey: solo-operator
+          url: "http://minio-tenant-hl.minio-tenant.svc.cluster.local:9000"
+        gcs:
+          enabled: false
+        envFromSecret: "uploader-secrets"
+    backupUploader:
+      enabled: true
+      name: "backup-uploader"
+      image: "gcr.io/hedera-registry/hedera-backups:0.6.0"
+      imagePullPolicy: IfNotPresent
+      config:
+        bucketName: "solo-backups"
+        s3:
+          enabled: true
+          accessKey: solo-operator
+          url: "http://minio-tenant-hl.minio-tenant.svc.cluster.local:9000"
+        gcs:
+          enabled: false
+        envFromSecret: "uploader-secrets"

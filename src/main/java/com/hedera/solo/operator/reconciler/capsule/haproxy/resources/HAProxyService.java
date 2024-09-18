@@ -16,6 +16,7 @@
 
 package com.hedera.solo.operator.reconciler.capsule.haproxy.resources;
 
+import static com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleConstants.LABEL_SELECTOR_HAPROXY;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
@@ -24,16 +25,13 @@ import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Service;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
-import io.javaoperatorsdk.operator.processing.dependent.kubernetes.BooleanWithUndefined;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
+import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResourceConfigBuilder;
 import java.util.Map;
 import java.util.Optional;
 
-@KubernetesDependent(
-        useSSA = BooleanWithUndefined.FALSE,
-        resourceDiscriminator = HAProxyService.class,
-        labelSelector = "app=haproxy")
+@KubernetesDependent
 public class HAProxyService extends CRUDKubernetesDependentResource<Service, HAProxyCapsule>
         implements ResourceDiscriminator<Service, HAProxyCapsule> {
     public static final String TEMPLATE = "service.yaml";
@@ -41,6 +39,11 @@ public class HAProxyService extends CRUDKubernetesDependentResource<Service, HAP
 
     public HAProxyService() {
         super(Service.class);
+        configureWith(new KubernetesDependentResourceConfigBuilder<Service>()
+                .withUseSSA(Boolean.FALSE)
+                .withResourceDiscriminator(this)
+                .withLabelSelector(LABEL_SELECTOR_HAPROXY)
+                .build());
     }
 
     @Override

@@ -16,6 +16,7 @@
 
 package com.hedera.solo.operator.reconciler.capsule.consensus.resources;
 
+import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_CONSENSUS_CAPSULE_NAME_KEY;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
@@ -26,7 +27,6 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.BooleanWithUndefined;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
-import java.util.stream.Collectors;
 
 @KubernetesDependent(useSSA = BooleanWithUndefined.FALSE, labelSelector = "app=consensus-node")
 public class CapsuleService extends CRUDKubernetesDependentResource<Service, ConsensusCapsule> {
@@ -46,13 +46,12 @@ public class CapsuleService extends CRUDKubernetesDependentResource<Service, Con
         return loadYaml(Service.class, getClass(), TEMPLATE)
                 .edit()
                 .editMetadata()
-                .addToLabels(primary.getSpec().getDependentResourceLabels().stream()
-                        .collect(Collectors.toMap(e -> e.getName(), e -> e.getValue())))
+                .addToLabels(LABEL_CONSENSUS_CAPSULE_NAME_KEY, metadata.getName())
                 .withName(validName)
                 .withNamespace(metadata.getNamespace())
                 .endMetadata()
                 .editSpec()
-                .addToSelector("name", metadata.getName())
+                .addToSelector(LABEL_CONSENSUS_CAPSULE_NAME_KEY, metadata.getName())
                 .endSpec()
                 .build();
     }

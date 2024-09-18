@@ -28,6 +28,7 @@ val assertjVersion: String by project
 val sundrVersion: String by project
 val fabric8Version: String by project
 val lombokVersion: String by project
+val hederaSdkVersion: String by project
 val javaoperatorsdkVersion: String by project
 
 dependencies {
@@ -53,6 +54,8 @@ dependencies {
     implementation("io.quarkus:quarkus-kubernetes-client")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk-bundle-generator")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk")
+    implementation("io.quarkus:quarkus-resteasy-qute:${quarkusPlatformVersion}")
+    implementation("com.hedera.hashgraph:sdk:${hederaSdkVersion}")
 
     compileOnly("io.sundr:builder-annotations:${sundrVersion}")
     compileOnly("org.projectlombok:lombok:${lombokVersion}")
@@ -61,8 +64,8 @@ dependencies {
     testImplementation("io.quarkus:quarkus-jacoco")
     testImplementation("org.awaitility:awaitility")
     testImplementation("org.assertj:assertj-core:${assertjVersion}")
-    testImplementation("com.hedera.hashgraph:sdk:2.35.1")
     testImplementation("io.grpc:grpc-netty")
+    testImplementation("com.hedera.fullstack:fullstack-helm-client:0.28.3")
     componentTestImplementation(
         "io.javaoperatorsdk:operator-framework-junit-5:${javaoperatorsdkVersion}"
     )

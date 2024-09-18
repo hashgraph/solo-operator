@@ -35,6 +35,7 @@ components:
             type:
               string
 
+
     NetworkInitializationStatus:
       type: object
       description: |

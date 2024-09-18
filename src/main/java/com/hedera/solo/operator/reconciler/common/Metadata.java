@@ -229,6 +229,16 @@ public final class Metadata {
         return finalName + suffix;
     }
 
+    /**
+     * Prepare label with correct prefix
+     *
+     * @param suffix label suffix
+     * @return A string representing a valid label with operator prefix
+     */
+    public static String prepareLabel(String suffix) {
+        return String.format("%s/%s", OPERATOR_PREFIX, suffix);
+    }
+
     private static void copyMap(
             @NotNull final HasMetadata src,
             @NotNull final HasMetadata dst,

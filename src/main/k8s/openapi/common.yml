@@ -29,6 +29,10 @@ components:
           $ref: "#/components/schemas/SoftwareVersion"
         AddressBookEntry:
           $ref: "#/components/schemas/AddressBookEntry"
+        streamUploader:
+          $ref: "#/components/schemas/StreamUploader"
+        openTelemetryCollector:
+          $ref: "#/components/schemas/OpenTelemetryCollector"
 
     Condition:
       type: object
@@ -96,3 +100,141 @@ components:
           description: |
             The public signing key for the node. This should be in PEM format.
           type: string
+
+    StreamUploader:
+      type: object
+      properties:
+        name:
+          type: string
+        image:
+          type: string
+        imagePullPolicy:
+          type: string
+          enum:
+            - Always
+            - Never
+            - IfNotPresent
+          default: IfNotPresent
+        resources:
+          type: object
+          x-java-type: io.fabric8.kubernetes.api.model.ResourceRequirements
+        enabled:
+          type: boolean
+          default: false
+        config:
+          type: object
+          properties:
+            debug:
+              type: boolean
+              default: true
+            enableCompression:
+              type: boolean
+              default: false
+            enableSidecarFiles:
+              type: boolean
+              default: false
+            reaper:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  default: true
+                minKeep:
+                  type: integer
+                  default: 1
+                interval:
+                  type: integer
+                  default: 1
+                defaultBackoff:
+                  type: integer
+                  default: 1
+            signature:
+              type: object
+              properties:
+                require:
+                  type: boolean
+                  default: true
+                prioritize:
+                  type: boolean
+                  default: true
+            streamFileExtension:
+              type: string
+              default: ""
+            streamSigExtension:
+              type: string
+              default: ""
+            streamExtension:
+              type: string
+              default: ""
+            sigExtension:
+              type: string
+              default: ""
+            bucketName:
+              type: string
+            bucketPath:
+              type: string
+            s3:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  default: false
+                accessKey:
+                  type: string
+                  default: "solo-operator"
+                url:
+                  type: string
+                  default: "" # http://minio-tenant-hl.minio-tenant.svc.cluster.local:9000
+            gcs:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  default: false
+                accessKey:
+                  type: string
+                  default: "solo-operator"
+                url:
+                  type: string
+            envFromSecret:
+              type: string
+
+    OpenTelemetryCollector:
+      type: object
+      properties:
+        resources:
+          type: object
+          x-java-type: io.fabric8.kubernetes.api.model.ResourceRequirements
+        softwareVersion:
+          type: object
+          x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+        receivers:
+          type: object
+          default: { }
+          properties:
+            prometheus:
+              type: object
+              properties:
+                scrapeTargets:
+                  description: |
+                    list of prometheus scrape targets
+                    target format: <IP or FQDN>:<Port>
+                    e.g. [ 0.0.0.0:9999 ]
+                  type: array
+                  items:
+                    type: string
+                scrapeInterval:
+                  type: string #5s
+        exporters:
+          type: object
+          default: { }
+          properties:
+            enabled:
+              type: boolean
+            endpoint:
+              type: string
+            tls:
+              type: object
+              properties:
+                insecure:
+                  type: boolean

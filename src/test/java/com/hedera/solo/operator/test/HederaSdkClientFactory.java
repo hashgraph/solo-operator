@@ -16,6 +16,10 @@
 
 package com.hedera.solo.operator.test;
 
+import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_CONSENSUS_CAPSULE_NAME_KEY;
+import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_SELECTOR_CONSENSUS_NODE;
+import static com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleConstants.LABEL_SELECTOR_HAPROXY;
+
 import com.google.protobuf.ByteString;
 import com.hedera.hashgraph.sdk.AccountId;
 import com.hedera.hashgraph.sdk.Client;
@@ -27,11 +31,12 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.LocalPortForward;
 import io.fabric8.kubernetes.client.dsl.PortForwardable;
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.cert.CertificateFactory;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collection;
@@ -40,13 +45,16 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class HederaSdkClientFactory {
+    public static final String DEFAULT_ACCOUNT_ID = "0.0.2";
+    public static final String DEFAULT_PRIVATE_KEY =
+            "302e020100300506032b65700422042091132178e72057a1d7528025956fe39b0b847f200ab59b2fdd367017f3087137";
     KubernetesClient kubernetesClient;
     String namespace;
     Workaround workaround = new Workaround();
@@ -60,16 +68,16 @@ public class HederaSdkClientFactory {
         List<LocalPortForward> create(final PortForwardable portForwardable);
     }
 
-    public Supplier<ClientContext> directContextCreator(final String consensusNode) {
+    public ClientContext directContextCreator(final String consensusNode) {
         return createClientContext(direct(), consensusNode);
     }
 
-    public Supplier<ClientContext> haproxyContextCreator(final String consensusNode) {
+    public ClientContext haproxyContextCreator(final String consensusNode) {
         return createClientContext(haproxy(), consensusNode);
     }
 
-    Supplier<ClientContext> createClientContext(final Map<String, String> nodeService, final String consensusNode) {
-        return () -> getClientContext(nodeService, consensusNode::equals, resource -> Stream.of(50211, 50212)
+    ClientContext createClientContext(final Map<String, String> nodeService, final String consensusNode) {
+        return getClientContext(nodeService, consensusNode::equals, resource -> Stream.of(50211, 50212)
                 .map(port -> resource.portForward(port, port))
                 .toList());
     }
@@ -104,19 +112,22 @@ public class HederaSdkClientFactory {
     NodeAddressBook nodeAddressBook(final Map<String, List<LocalPortForward>> services) throws Exception {
         Map<String, byte[]> certificates = certificates();
         Map<String, String> pubKeys = pubKeys();
+        final List<com.hedera.hashgraph.sdk.proto.NodeAddress> nodeAddresses = Arrays.stream(
+                        configText().split("\n"))
+                .filter(line -> line.startsWith("address"))
+                .map(line -> line.split("\s*,\s*"))
+                .map(cfg -> nodeAddress(
+                        cfg[1], cfg[9], services.get(cfg[2]), pubKeys.get(cfg[2]), certificates.get(cfg[2])))
+                .filter(Objects::nonNull)
+                .toList();
+
         return NodeAddressBook.fromBytes(com.hedera.hashgraph.sdk.proto.NodeAddressBook.newBuilder()
-                .addAllNodeAddress(Arrays.stream(configText().split("\n"))
-                        .filter(line -> line.startsWith("address"))
-                        .map(line -> line.split("\s*,\s*"))
-                        .map(cfg -> nodeAddress(
-                                cfg[1], cfg[9], services.get(cfg[2]), pubKeys.get(cfg[2]), certificates.get(cfg[2])))
-                        .filter(Objects::nonNull)
-                        .toList())
+                .addAllNodeAddress(nodeAddresses)
                 .build()
                 .toByteString());
     }
 
-    Map<String, String> services(final String labelSelector, final String selector) {
+    Map<String, String> services(final String labelSelector) {
         return kubernetesClient
                 .services()
                 .inNamespace(namespace)
@@ -125,16 +136,16 @@ public class HederaSdkClientFactory {
                 .getItems()
                 .stream()
                 .collect(Collectors.toMap(
-                        service -> service.getSpec().getSelector().get(selector),
+                        service -> service.getSpec().getSelector().get(LABEL_CONSENSUS_CAPSULE_NAME_KEY),
                         service -> service.getMetadata().getName()));
     }
 
     Map<String, String> direct() {
-        return services("app=consensus-node", "name");
+        return services(LABEL_SELECTOR_CONSENSUS_NODE);
     }
 
     Map<String, String> haproxy() {
-        return services("app=haproxy", "consensus-capsule");
+        return services(LABEL_SELECTOR_HAPROXY);
     }
 
     String configText() {
@@ -151,10 +162,16 @@ public class HederaSdkClientFactory {
         Base64.Decoder decoder = Base64.getDecoder();
         return kubernetesClient.secrets().inNamespace(namespace).list().getItems().stream()
                 .filter(secret -> secret.getMetadata().getLabels().containsKey("consensus-capsule"))
-                .filter(secret -> secret.getData().containsKey("hedera.crt"))
+                .filter(secret -> secret.getData()
+                        .containsKey(String.format(
+                                "hedera-%s.crt",
+                                secret.getMetadata().getLabels().get("consensus-capsule"))))
                 .collect(Collectors.toMap(
                         secret -> secret.getMetadata().getLabels().get("consensus-capsule"),
-                        secret -> decoder.decode(secret.getData().get("hedera.crt"))));
+                        secret -> decoder.decode(secret.getData()
+                                .get(String.format(
+                                        "hedera-%s.crt",
+                                        secret.getMetadata().getLabels().get("consensus-capsule"))))));
     }
 
     Map<String, String> pubKeys() {
@@ -222,9 +239,23 @@ public class HederaSdkClientFactory {
 
         @Override
         public void close() throws Exception {
-            client.close();
+            List<Exception> exceptions = new ArrayList<>();
+            try {
+                client.close();
+            } catch (TimeoutException e) {
+                exceptions.add(e);
+            }
             for (LocalPortForward portForward : portForwards) {
-                portForward.close();
+                try {
+                    portForward.close();
+                } catch (IOException e) {
+                    exceptions.add(e);
+                }
+            }
+            if (!exceptions.isEmpty()) {
+                Exception exception = exceptions.removeFirst();
+                exceptions.forEach(exception::addSuppressed);
+                throw exception;
             }
         }
     }
@@ -241,7 +272,6 @@ public class HederaSdkClientFactory {
         Field networkNodesField;
         Field nodeAccountIdField;
         Field nodeAddressBookEntry;
-        Method networkSetNetwork;
 
         Workaround() throws Exception {
             try (Client sdkClient = Client.forNetwork(Map.of("localhost:0", new AccountId(0)))) {
@@ -253,8 +283,6 @@ public class HederaSdkClientFactory {
                 networkAddressBookField.setAccessible(true);
                 networkNodesField = networkClass.getSuperclass().getDeclaredField("nodes");
                 networkNodesField.setAccessible(true);
-                networkSetNetwork = networkClass.getSuperclass().getDeclaredMethod("setNetwork", Map.class);
-                networkSetNetwork.setAccessible(true);
                 List<?> nodes = (List<?>) networkNodesField.get(network);
                 Class<?> nodeClass = nodes.getFirst().getClass();
                 nodeAccountIdField = nodeClass.getDeclaredField("accountId");
@@ -284,18 +312,8 @@ public class HederaSdkClientFactory {
             nodeAddressBookEntry.set(node, nodeAddress);
         }
 
-        void setNetwork(final Client client, final Map<String, AccountId> addressBook) throws Exception {
-            networkSetNetwork.invoke(clientNetworkField.get(client), addressBook);
-        }
-
         Client setNetworkFromAddressBook(final Client client, final NodeAddressBook nodeAddressBook) throws Exception {
-            setNetwork(
-                    client,
-                    nodeAddressBook.getNodeAddresses().stream()
-                            .flatMap(nodeAddress -> nodeAddress.getAddresses().stream()
-                                    .map(endpoint -> Map.entry(
-                                            endpoint.toString(), Objects.requireNonNull(nodeAddress.getAccountId()))))
-                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
+            client.setNetworkFromAddressBook(nodeAddressBook);
             Map<AccountId, NodeAddress> addressBook = nodeAddressBook.getNodeAddresses().stream()
                     .filter(nodeAddress -> Objects.nonNull(nodeAddress.getAccountId()))
                     .collect(Collectors.toMap(NodeAddress::getAccountId, Function.identity()));
