@@ -20,7 +20,10 @@ import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitialization;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationStatus;
+import com.hedera.solo.operator.model.v1alpha1.Orbit;
+import com.hedera.solo.operator.reconciler.networkinitialization.resources.NetworkInitializationClusterConfig;
 import com.hedera.solo.operator.reconciler.networkinitialization.resources.NetworkInitializationConsensusCapsule;
+import com.hedera.solo.operator.reconciler.networkinitialization.resources.NetworkInitializationOrbit;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -44,6 +47,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.jboss.logging.Logger;
 
+// can maybe handle secrets inside consensus capsule after eligible for deployment is set?
+
 @ControllerConfiguration(name = "network-initialization")
 public class NetworkInitializationReconciler implements Reconciler<NetworkInitialization>, EventSourceInitializer<NetworkInitialization> {
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
@@ -52,9 +57,13 @@ public class NetworkInitializationReconciler implements Reconciler<NetworkInitia
             Set.of(NetworkInitializationStatus.Phase.Failed, NetworkInitializationStatus.Phase.Succeeded);
 
     private EventSourceContext<NetworkInitialization> eventSourceContext;
+    private final NetworkInitializationClusterConfig clusterConfig = new NetworkInitializationClusterConfig();
     private final NetworkInitializationConsensusCapsule consensusCapsule = new NetworkInitializationConsensusCapsule(this);
+    private final NetworkInitializationOrbit orbit = new NetworkInitializationOrbit(this);
     private final Workflow<NetworkInitialization> workflow = new WorkflowBuilder<NetworkInitialization>()
             .addDependentResource(consensusCapsule)
+            .addDependentResource(orbit)
+            .addDependentResource(clusterConfig).dependsOn(consensusCapsule, orbit)
             .build();
 
 //    @Inject
@@ -77,6 +86,12 @@ public class NetworkInitializationReconciler implements Reconciler<NetworkInitia
                             .map(CustomResource::getMetadata)
                             .map(ObjectMeta::getName)
                             .toList());
+            log.info("NetworkInitializationReconciler orbit: " + context.getSecondaryResources(Orbit.class).size());
+            log.info("NetworkInitializationReconciler orbit: "
+                    + context.getSecondaryResourcesAsStream(Orbit.class)
+                    .map(CustomResource::getMetadata)
+                    .map(ObjectMeta::getName)
+                    .toList());
             log.infof(
                     "Network Initialization - Starting Reconciliation [ name = '%s' ]",
                     resource.getMetadata().getName());

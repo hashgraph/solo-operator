@@ -38,30 +38,30 @@ public class ClusterSetupManager {
     MinioSetupManager minioSetupManager;
 
     public void setup(@Observes @Priority(1) StartupEvent event) {
-        if (setupDone) {
-            return;
-        }
-
-        try {
-            minioSetupManager.install();
-        } catch (HelmExecutionException e) {
-            log.error(e.getStdErr());
-            throw e;
-        }
-        setupDone = true;
+//        if (setupDone) {
+//            return;
+//        }
+//
+//        try {
+//            minioSetupManager.install();
+//        } catch (HelmExecutionException e) {
+//            log.error(e.getStdErr());
+//            throw e;
+//        }
+//        setupDone = true;
     }
 
     public void cleanup(@Observes @Priority(1) ShutdownEvent event) {
-        if (!setupDone) {
-            return;
-        }
-
-        try {
-            minioSetupManager.uninstall();
-        } catch (HelmExecutionException e) {
-            log.error(e.getStdErr());
-            throw e;
-        }
-        setupDone = false;
+//        if (!setupDone) {
+//            return;
+//        }
+//
+//        try {
+//            minioSetupManager.uninstall();
+//        } catch (HelmExecutionException e) {
+//            log.error(e.getStdErr());
+//            throw e;
+//        }
+//        setupDone = false;
     }
 }

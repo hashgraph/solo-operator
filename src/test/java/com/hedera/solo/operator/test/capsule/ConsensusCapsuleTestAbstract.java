@@ -157,16 +157,16 @@ public abstract class ConsensusCapsuleTestAbstract {
 
     private void setupConfigMaps(List<NodeInfo> nodes) {
         // create cluster-config configmap
-        kubernetesClient
-                .resource(prepareClusterConfig(
-                        loadYaml(ConfigMap.class, getClass(), "cluster-config.yaml")
-                                .edit()
-                                .editMetadata()
-                                .withNamespace(namespace)
-                                .endMetadata()
-                                .build(),
-                        nodes))
-                .create();
+//        kubernetesClient
+//                .resource(prepareClusterConfig(
+//                        loadYaml(ConfigMap.class, getClass(), "cluster-config.yaml")
+//                                .edit()
+//                                .editMetadata()
+//                                .withNamespace(namespace)
+//                                .endMetadata()
+//                                .build(),
+//                        nodes))
+//                .create();
 
         // create other config-maps
         for (String cmFile : List.of("backup-uploader-config.yaml", "public-keys.yaml")) {
