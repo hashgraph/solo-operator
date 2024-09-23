@@ -7,7 +7,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
+import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleFluent;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitialization;
+import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.reconciler.networkinitialization.NetworkInitializationReconciler;
 import com.hedera.solo.test.framework.AbstractOperatorTest;
@@ -29,7 +31,10 @@ public class NetworkInitializationTest extends AbstractOperatorTest {
 
     @Override
     protected LocallyRunOperatorExtension.Builder configure(final KubernetesClient client) {
-        return builder(client).withReconciler(new NetworkInitializationReconciler(), ControllerConfigurationOverrider::watchingAllNamespaces);
+        // todo: add dummy reconcilers for orbits and consensus capsules just so that CRDs are published.
+        return builder(client)
+                .withReconciler(new NetworkInitializationReconciler(), ControllerConfigurationOverrider::watchingAllNamespaces)
+                .withReconciler(new ConsensusCapsuleTestReconciler());
     }
 
     @BeforeEach
@@ -49,21 +54,42 @@ public class NetworkInitializationTest extends AbstractOperatorTest {
 
         capsuleNames.forEach(this::createCapsule);
 
-        operator().create(edit(new NetworkInitialization())
-                .with(builder -> builder
-                        .editMetadata()
-                        .withName("init"))
-                .with(builder -> builder
-                        .editSpec()
-                        .withMode(FirstInitialization)
-                        .withConsensusCapsules(capsuleNames))
-                .build());
+        for (int i = 0; i < 3; ++i) {
+            int cnt = i;
+            operator().create(edit(new NetworkInitialization())
+                    .with(builder -> builder
+                            .editMetadata()
+                            .withName("init-" + cnt))
+                    .with(builder -> builder
+                            .editSpec()
+                            .withMode(FirstInitialization)
+                            /*.withConsensusCapsules(capsuleNames)*/)
+                    .build());
+        }
 
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(operator().get(ConfigMap.class, "cluster-config")).isNotNull();
+            ConfigMap cm = operator().get(ConfigMap.class, "cluster-config");
+            assertThat(cm).isNotNull();
+            String configTxt = cm.getData().get("config.txt");
+            assertThat(configTxt).isNotNull();
+            List<String> lines = configTxt.lines().filter(line -> line.startsWith("address")).toList();
+            assertThat(lines).size().isEqualTo(3);
+            int i = 1;
         });
 
-        ConfigMap clusterConfig = operator().get(ConfigMap.class, "cluster-config");
+//        List<NetworkInitialization> nis = operator().getKubernetesClient().resources(NetworkInitialization.class).inNamespace(operator().getNamespace())
+//                .list().getItems();
+//        NetworkInitialization ni = nis.stream()
+//                .filter(x -> null != x.getStatus() && NetworkInitializationStatus.Phase.Running.equals(x.getStatus().getPhase()))
+//                .findFirst().get();
+//        ni = ni.edit().editStatus().withPhase(NetworkInitializationStatus.Phase.Succeeded).endStatus().build();
+//        operator().replace(ni);
+
+        try {
+            Thread.sleep(19999);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
         int i = 1;
     }
 
@@ -87,6 +113,7 @@ public class NetworkInitializationTest extends AbstractOperatorTest {
                 .with(builder -> builder
                         .editMetadata()
                         .withName(name))
+                .with(ConsensusCapsuleFluent::editSpec)
                 .build());
     }
 }

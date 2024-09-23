@@ -28,17 +28,9 @@ components:
           enum:
               - FirstInitialization
               - NodeAddition
-        consensusCapsules:
-          description: Names of consensus-capsules to initialize
-          type: array
-          items:
-            type:
-              string
-
 
     NetworkInitializationStatus:
       type: object
-      description: |
       properties:
         phase:
           description: The current phase of the `ConsensusCapsule`.
@@ -56,4 +48,13 @@ components:
           type: array
         observedGeneration:
           description: The generation observed by the operator.
+          type: integer
+        consensusCapsules:
+          description: Names of consensus-capsules to initialize
+          type: array
+          items:
+            type:
+              string
+        sequenceNumber:
+          description: Used as secondary key to order reconciliation
           type: integer

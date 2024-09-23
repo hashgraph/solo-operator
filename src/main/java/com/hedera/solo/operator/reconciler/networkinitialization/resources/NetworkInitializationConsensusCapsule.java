@@ -60,18 +60,21 @@ public class NetworkInitializationConsensusCapsule
 
     @Override
     public Map<String, ConsensusCapsule> desiredResources(NetworkInitialization primary, Context<NetworkInitialization> context) {
-        return getSecondaryResources(primary, context).entrySet().stream()
-                .map(e -> Map.entry(e.getKey(), edit(e.getValue())
-                        .with(builder -> builder
-                                .editSpec()
-                                .withEligibleForDeployment())
-                        .build()))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+//        if (!active(primary)) {
+//            throw new UpdateInactiveException();
+//        }
+        Map<String, ConsensusCapsule> map = getSecondaryResources(primary, context);
+        map.replaceAll((k, v) -> edit(v)
+                .with(builder -> builder
+                        .editSpec()
+                        .withEligibleForDeployment())
+                .build());
+        return map;
     }
 
     @Override
     public Set<ResourceID> toSecondaryResourceIDs(NetworkInitialization primary) {
-        return primary.getSpec().getConsensusCapsules().stream().map(name -> new ResourceID(name, primary.getMetadata().getNamespace())).collect(Collectors.toSet());
+        return primary.getStatus().getConsensusCapsules().stream().map(name -> new ResourceID(name, primary.getMetadata().getNamespace())).collect(Collectors.toSet());
     }
 
     @Override

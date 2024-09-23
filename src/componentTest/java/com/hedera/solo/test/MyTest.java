@@ -1,7 +1,5 @@
 package com.hedera.solo.test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-
 import java.util.HexFormat;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;

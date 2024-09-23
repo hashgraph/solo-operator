@@ -3,6 +3,9 @@ apiVersion: v1
 metadata:
   name: cluster-config
   namespace: solo-orbit
+  labels:
+    app: consensus
+    type: config
 data:
 # address, nodeId, nickname, selfname, weight, internalHostname, internalPort, externalHostname, externalPort, memoToUse
 

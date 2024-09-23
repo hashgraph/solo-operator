@@ -17,6 +17,11 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/*
+* todo: have mappers here map to/from first "available" primary resource. Then reconciler can simply require the orbit
+*  which will effectively serve as exclude access
+* */
+
 @KubernetesDependent
 public class NetworkInitializationOrbit extends KubernetesDependentResource<Orbit, NetworkInitialization>
 implements PrimaryToSecondaryMapper<NetworkInitialization>, SecondaryToPrimaryMapper<Orbit> {

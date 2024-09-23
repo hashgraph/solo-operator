@@ -19,42 +19,19 @@ info:
 paths: { }
 components:
   schemas:
-    NetworkInitializationSpec:
+    NetworkInitializationSequenceSpec:
       type: object
       properties:
-        mode:
-          description: The mode of the `NetworkInitialization`.
-          type: string
-          enum:
-              - FirstInitialization
-              - NodeAddition
-
-    NetworkInitializationStatus:
-      type: object
-      properties:
-        phase:
-          description: The current phase of the `ConsensusCapsule`.
-          type: string
-          enum:
-            - Pending
-            - Running
-            - Succeeded
-            - Failed
-            - Unknown
-        conditions:
+        sequence:
+          description: The sequence of the `NetworkInitialization`.
+          type: array
           items:
             type: object
-            x-java-type: com.hedera.solo.operator.model.commonspec.Condition
-          type: array
+            x-java-type: io.fabric8.kubernetes.api.model.ObjectReference
+
+    NetworkInitializationSequenceStatus:
+      type: object
+      properties:
         observedGeneration:
           description: The generation observed by the operator.
-          type: integer
-        consensusCapsules:
-          description: Names of consensus-capsules to initialize
-          type: array
-          items:
-            type:
-              string
-        sequenceNumber:
-          description: Used as secondary key to order reconciliation
           type: integer

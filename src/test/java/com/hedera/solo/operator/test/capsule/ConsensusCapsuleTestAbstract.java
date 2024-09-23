@@ -112,33 +112,33 @@ public abstract class ConsensusCapsuleTestAbstract {
 
     record NodeInfo(String name, String accountId, int weight, String internal, String external) {}
 
-    ConfigMap prepareClusterConfig(ConfigMap configMap, List<NodeInfo> nodes) {
-        // should probably set the chainId in bootstrap.properties
-        final Optional<String> cid = configMap
-                .getData()
-                .get("bootstrap.properties")
-                .lines()
-                .filter(s -> s.startsWith("contracts.chainId="))
-                .findFirst();
-
-        if (cid.isEmpty()) {
-            throw new RuntimeException("contacts.chainid property not found");
-        }
-
-        String chainId = cid.get().substring(18);
-
-        int nodeId = 0;
-        StringBuilder sb = new StringBuilder();
-        sb.append("swirld, ").append(chainId).append("\n");
-        sb.append("app, HederaNode.jar\n");
-        for (NodeInfo node : nodes) {
-            sb.append("address, %d, %s, %s, 1, %s, 50111, %s, 50111, 0.0.%d\n"
-                    .formatted(nodeId, node.name, node.name, node.internal, node.external, nodeId + 3));
-            nodeId++;
-        }
-        sb.append("nextNodeId, ").append(nodeId);
-        return configMap.edit().addToData("config.txt", sb.toString()).build();
-    }
+//    ConfigMap prepareClusterConfig(ConfigMap configMap, List<NodeInfo> nodes) {
+//        // should probably set the chainId in bootstrap.properties
+//        final Optional<String> cid = configMap
+//                .getData()
+//                .get("bootstrap.properties")
+//                .lines()
+//                .filter(s -> s.startsWith("contracts.chainId="))
+//                .findFirst();
+//
+//        if (cid.isEmpty()) {
+//            throw new RuntimeException("contacts.chainid property not found");
+//        }
+//
+//        String chainId = cid.get().substring(18);
+//
+//        int nodeId = 0;
+//        StringBuilder sb = new StringBuilder();
+//        sb.append("swirld, ").append(chainId).append("\n");
+//        sb.append("app, HederaNode.jar\n");
+//        for (NodeInfo node : nodes) {
+//            sb.append("address, %d, %s, %s, 1, %s, 50111, %s, 50111, 0.0.%d\n"
+//                    .formatted(nodeId, node.name, node.name, node.internal, node.external, nodeId + 3));
+//            nodeId++;
+//        }
+//        sb.append("nextNodeId, ").append(nodeId);
+//        return configMap.edit().addToData("config.txt", sb.toString()).build();
+//    }
 
     private List<NodeInfo> prepareNodes(List<String> nodeNames) {
         List<NodeInfo> nodes = new ArrayList<>();
@@ -331,10 +331,10 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .endMetadata()
                 .withNewSpec()
                 .withMode(NetworkInitializationSpec.Mode.FirstInitialization)
-                .addAllToConsensusCapsules(consensusCapsules.stream()
-                        .map(CustomResource::getMetadata)
-                        .map(ObjectMeta::getName)
-                        .toList())
+//                .addAllToConsensusCapsules(consensusCapsules.stream()
+//                        .map(CustomResource::getMetadata)
+//                        .map(ObjectMeta::getName)
+//                        .toList())
                 .endSpec()
                 .withNewStatus()
                 .endStatus()
