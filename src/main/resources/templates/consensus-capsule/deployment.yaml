@@ -57,7 +57,7 @@ spec:
             # to load the keys
             - "/bin/bash"
             - "-c"
-            - "sleep 15;/init /opt/hgcapp/services-hedera/HapiApp2.0/entrypoint.sh"
+            - "sleep 15;exec /init /opt/hgcapp/services-hedera/HapiApp2.0/entrypoint.sh"
           volumeMounts:
             - name: cluster-config
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/config.txt
