@@ -18,8 +18,13 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.config.ControllerConfigurationOverrider;
 import io.javaoperatorsdk.operator.junit.LocallyRunOperatorExtension;
 import java.lang.invoke.MethodHandles;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,10 +36,10 @@ public class NetworkInitializationTest extends AbstractOperatorTest {
 
     @Override
     protected LocallyRunOperatorExtension.Builder configure(final KubernetesClient client) {
-        // todo: add dummy reconcilers for orbits and consensus capsules just so that CRDs are published.
         return builder(client)
                 .withReconciler(new NetworkInitializationReconciler(), ControllerConfigurationOverrider::watchingAllNamespaces)
-                .withReconciler(new ConsensusCapsuleTestReconciler());
+                .withReconciler(new ConsensusCapsuleTestReconciler())
+                .withReconciler(new NoOpOrbitReconciler());
     }
 
     @BeforeEach
@@ -74,23 +79,20 @@ public class NetworkInitializationTest extends AbstractOperatorTest {
             assertThat(configTxt).isNotNull();
             List<String> lines = configTxt.lines().filter(line -> line.startsWith("address")).toList();
             assertThat(lines).size().isEqualTo(3);
-            int i = 1;
+            Map<String, Integer> nodes = lines.stream().map(line -> line.split("\\s*,\\s*")).collect(Collectors.toMap(a -> a[2], a -> Integer.valueOf(a[1])));
+            assertThat(nodes.keySet()).isEqualTo(new HashSet<>(capsuleNames));
+            assertThat(new HashSet<>(nodes.values())).isEqualTo(Set.of(0, 1, 2));
         });
 
-//        List<NetworkInitialization> nis = operator().getKubernetesClient().resources(NetworkInitialization.class).inNamespace(operator().getNamespace())
-//                .list().getItems();
-//        NetworkInitialization ni = nis.stream()
-//                .filter(x -> null != x.getStatus() && NetworkInitializationStatus.Phase.Running.equals(x.getStatus().getPhase()))
-//                .findFirst().get();
-//        ni = ni.edit().editStatus().withPhase(NetworkInitializationStatus.Phase.Succeeded).endStatus().build();
-//        operator().replace(ni);
-
-        try {
-            Thread.sleep(19999);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-        int i = 1;
+        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+            for (int i = 0; i < 3; ++i) {
+                int cnt = i;
+                NetworkInitialization ni = operator().get(NetworkInitialization.class, "init-" + cnt);
+                assertThat(ni).isNotNull();
+                assertThat(ni.getStatus()).isNotNull();
+                assertThat(ni.getStatus().getPhase()).isEqualTo(NetworkInitializationStatus.Phase.Succeeded);
+            }
+        });
     }
 
     void createOrbit() {

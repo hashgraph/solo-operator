@@ -40,7 +40,7 @@ implements
     Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
     public static final String TEMPLATE = "cluster-config.yaml";
-    public static final String NAME = "cluster-config";
+    public static final String NAME = "cluster-config"; // todo: rename to consensus-capsule
 
     public NetworkInitializationClusterConfig() {
         super(ConfigMap.class);
