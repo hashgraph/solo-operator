@@ -33,32 +33,80 @@ spec:
               mountPath: /opt/hgcapp/eventsStreams
             - name: hgcapp-version
               mountPath: /tmp/versionInfo
+            - name: grpc-tls-keys
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.crt
+              subPath: hedera-{nodeId}.crt
+            - name: grpc-tls-keys
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.key
+              subPath: hedera-{nodeId}.key
+            - name: gossip-keys
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/a-private-{nodeId}.pem
+              subPath: a-private-{nodeId}.pem
+            - name: gossip-keys
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/s-private-{nodeId}.pem
+              subPath: s-private-{nodeId}.pem
+            {#for publicKeyFile in publicKeyFiles}
+            - name: public-keys
+              mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/{publicKeyFile}
+              subPath: {publicKeyFile}
+            {/for}
           command:
             - "/bin/bash"
             - "-c"
             - |
+              # first arg is the timeout in secs, second arg is the file path
+              waitFor() \{
+                timeout=$1
+                filePath="$2"
+
+                # wait until the file exists
+                t=0
+                until [ -f "$filePath" ] || (( t++ >= "$timeout" )); do
+                  echo "Not found $filePath"
+                  sleep 1
+                done
+
+                # check file with non-zero size exists, otherwise return error code 1
+                [ -f "$filePath" ] && [ -s "$filePath" ] && return 0 || echo "Timeout for $filePath" && return 1
+              \}
+
+              checkFiles() \{
+                sleep 15 # wait a bit for volumes to be bound before polling for files immediately
+                timeout=5
+                waitFor "$timeout" "/opt/hgcapp/services-hedera/HapiApp2.0/data/keys/s-private-{nodeId}.pem" || return 1
+                waitFor "$timeout" "/opt/hgcapp/services-hedera/HapiApp2.0/data/keys/a-private-{nodeId}.pem" || return 1
+                {#for publicKeyFile in publicKeyFiles}
+                  waitFor "$timeout" "/opt/hgcapp/services-hedera/HapiApp2.0/data/keys/{publicKeyFile}" || return 1
+                {/for}
+                waitFor "$timeout" "/opt/hgcapp/services-hedera/HapiApp2.0/hedera.key" || return 1
+                waitFor "$timeout" "/opt/hgcapp/services-hedera/HapiApp2.0/hedera.crt" || return 1
+                return 0
+              \}
+
               setupDirs() \{
                 mkdir -p /opt/hgcapp/recordStreams/record{accountId}/sidecar
-                chown -r hedera:hedera /opt/hgcapp/recordStreams
+                sudo chown -R hedera:hedera /opt/hgcapp/recordStreams
                 mkdir -p /opt/hgcapp/eventsStreams/events_{accountId}
-                chown -r hedera:hedera /opt/hgcapp/eventsStreams
+                sudo chown -R hedera:hedera /opt/hgcapp/eventsStreams
                 touch /tmp/versionInfo/VERSION # FIXME change to copy when VERSION file is baked in the image
                 return 0
               \}
-              setupDirs
+
+              runInit() \{
+                # wait for key files to be mounted before consensus-node starts
+                checkFiles || return 1
+                # setup directories before consensus-node starts
+                setupDirs || return 1
+                return 0
+              \}
+
+              runInit
       containers:
         - name: consensus-node
           image: gcr.io/hedera-registry/consensus-node:0.52.0-alpha.6
           env:
             - name: JAVA_OPTS
               value: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
-          command:
-            # Wait so that projected volume can mount the keys correctly before the platform software tries to load.
-            # Here we are waiting for a single key file instead of all required files to avoid waiting for too long.
-            - "/bin/bash"
-            - "-c"
-            - "until [ -f /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/s-private-{nodeId}.pem ]; do sleep 1; done;\
-              exec /init /opt/hgcapp/services-hedera/HapiApp2.0/entrypoint.sh"
           volumeMounts:
             - name: cluster-config
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/config.txt
