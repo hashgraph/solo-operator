@@ -146,6 +146,96 @@ components:
         softwareVersion:
           type: object
           x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+        persistentVolumes:
+          description: |
+            This allows consensus capsule reconciler to optionally create the PVCs. It assumes solo-provisioner has provisioned
+            the required PV that could satisfy the PVCs.
+          type: object
+          properties:
+            eventStreams:
+              description: |
+                Mounts to /opt/hgcapp/eventsStreams
+              type: object
+              properties:
+                create:
+                  type: boolean
+                  default: true
+                storageClass:
+                  type: string
+                  default: solo-provisioner
+                size:
+                  type: string
+                  default: 100Gi
+            recordStreams:
+              description: |
+                Mounts to /opt/hgcapp/recordStreams
+              type: object
+              properties:
+                create:
+                  type: boolean
+                  default: true
+                storageClass:
+                  type: string
+                  default: solo-provisioner
+                size:
+                  type: string
+                  default: 100Gi
+            dataSaved:
+              description: |
+                Mounts to /opt/hgcapp/services-hedera/HapApp2.0/data/saved
+              type: object
+              properties:
+                create:
+                  type: boolean
+                  default: true
+                storageClass:
+                  type: string
+                  default: solo-provisioner
+                size:
+                  type: string
+                  default: 500Gi
+            dataStats:
+              description: |
+                Mounts to /opt/hgcapp/services-hedera/HapApp2.0/data/stats
+              type: object
+              properties:
+                create:
+                  type: boolean
+                  default: true
+                storageClass:
+                  type: string
+                  default: solo-provisioner
+                size:
+                  type: string
+                  default: 50Gi
+            dataUpgrade:
+              description: |
+                Mounts to /opt/hgcapp/services-hedera/HapApp2.0/data/upgrade
+              type: object
+              properties:
+                create:
+                  type: boolean
+                  default: true
+                storageClass:
+                  type: string
+                  default: solo-provisioner
+                size:
+                  type: string
+                  default: 5Gi
+            output:
+              description: |
+                Mounts to /opt/hgcapp/services-hedera/HapApp2.0/output
+              type: object
+              properties:
+                create:
+                  type: boolean
+                  default: true
+                storageClass:
+                  type: string
+                  default: solo-provisioner
+                size:
+                  type: string
+                  default: 5Gi
         sidecars:
           type: object
           properties:
