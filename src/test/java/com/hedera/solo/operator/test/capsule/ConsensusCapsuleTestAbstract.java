@@ -56,7 +56,6 @@ import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.Service;
-import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
@@ -359,6 +358,21 @@ public abstract class ConsensusCapsuleTestAbstract {
     }
 
     void createNetworkInitialization(List<ConsensusCapsule> consensusCapsules) {
+        for (ConsensusCapsule consensusCapsule : consensusCapsules) {
+            String name = consensusCapsule.getMetadata().getName();
+            ConsensusCapsule capsule =
+                    kubernetesClient.resource(consensusCapsule).get();
+            assertThat(capsule).isNotNull();
+            assertThat(capsule.getSpec().getEligibleForDeployment()).isFalse();
+
+            Pod pod = kubernetesClient
+                    .resources(Pod.class)
+                    .inNamespace(namespace)
+                    .withName(name + "-pod")
+                    .get();
+            assertThat(pod).isNull();
+        }
+
         final NetworkInitialization networkInitialization = new NetworkInitializationBuilder()
                 .withNewMetadata()
                 .withName("network-initialization")
@@ -383,14 +397,14 @@ public abstract class ConsensusCapsuleTestAbstract {
                 assertThat(capsule).isNotNull();
                 assertThat(capsule.getSpec().getEligibleForDeployment()).isTrue();
 
-                Deployment deployment = kubernetesClient
-                        .resources(Deployment.class)
+                Pod pod = kubernetesClient
+                        .resources(Pod.class)
                         .inNamespace(namespace)
-                        .withName(name + "-deploy")
+                        .withName(name + "-pod")
                         .get();
-                assertThat(deployment).isNotNull();
-                assertThat(deployment.getStatus()).isNotNull();
-                assertThat(deployment.getStatus().getAvailableReplicas()).isEqualTo(1);
+                assertThat(pod).isNotNull();
+                assertThat(pod.getStatus()).isNotNull();
+                assertThat(pod.getStatus().getPhase()).isEqualTo("Running");
 
                 assertThat(capsule.getStatus().getPhase()).isEqualTo(ConsensusCapsuleStatus.Phase.Running);
                 assertThat(netInit.getStatus().getPhase()).isEqualTo(NetworkInitializationStatus.Phase.Succeeded);

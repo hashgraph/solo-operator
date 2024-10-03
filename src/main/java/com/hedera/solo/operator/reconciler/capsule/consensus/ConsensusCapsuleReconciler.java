@@ -23,7 +23,6 @@ import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCap
 import com.hedera.solo.operator.library.generic.Compare;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
-import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleDeployment;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsulePod;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleRoleBinding;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleService;
@@ -46,9 +45,8 @@ import org.jboss.logging.Logger;
         dependents = {
             @Dependent(name = "sa", type = CapsuleServiceAccount.class),
             @Dependent(type = CapsuleRoleBinding.class, dependsOn = "sa"),
-            @Dependent(type = CapsuleDeployment.class),
             @Dependent(type = CapsuleService.class),
-            @Dependent(type = CapsulePod.class)
+            @Dependent(type = CapsulePod.class, reconcilePrecondition = CapsulePod.Ready.class)
         })
 public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>, ErrorStatusHandler<ConsensusCapsule> {
 
