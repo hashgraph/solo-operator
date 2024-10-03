@@ -1,10 +1,10 @@
-{@String nodeId}
-{@String accountId}
-{@io.fabric8.kubernetes.api.model.PodSecurityContext securityContext}
-{@com.hedera.solo.operator.model.commonspec.StreamUploader recordStreamUploader}
-{@com.hedera.solo.operator.model.commonspec.StreamUploader recordStreamSidecarFilesUploader}
-{@com.hedera.solo.operator.model.commonspec.StreamUploader eventStreamUploader}
-{@com.hedera.solo.operator.model.commonspec.StreamUploader backupUploader}
+# {@String nodeId}
+# {@String accountId}
+# {@io.fabric8.kubernetes.api.model.PodSecurityContext securityContext}
+# {@com.hedera.solo.operator.model.commonspec.StreamUploader recordStreamUploader}
+# {@com.hedera.solo.operator.model.commonspec.StreamUploader recordStreamSidecarFilesUploader}
+# {@com.hedera.solo.operator.model.commonspec.StreamUploader eventStreamUploader}
+# {@com.hedera.solo.operator.model.commonspec.StreamUploader backupUploader}
 kind: Pod
 apiVersion: v1
 metadata:
@@ -13,9 +13,9 @@ metadata:
     app: consensus-node
 spec:
   restartPolicy: Never
-  hostname: {nodeId}
+  hostname: "{nodeId}"
   subdomain: consensus
-  serviceAccountName: {nodeId}-sa
+  serviceAccountName: "{nodeId}-sa"
   initContainers:
     - name: "consensus-init"
       image: gcr.io/hedera-registry/consensus-node:0.52.0-alpha.6
@@ -73,29 +73,29 @@ spec:
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/stats
         - name: grpc-tls-keys
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.crt
-          subPath: hedera-{nodeId}.crt
+          subPath: "hedera-{nodeId}.crt"
         - name: grpc-tls-keys
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.key
-          subPath: hedera-{nodeId}.key
+          subPath: "hedera-{nodeId}.key"
         - name: gossip-keys
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/a-private-{nodeId}.pem
-          subPath: a-private-{nodeId}.pem
+          mountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/data/keys/a-private-{nodeId}.pem"
+          subPath: "a-private-{nodeId}.pem"
         - name: gossip-keys
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/s-private-{nodeId}.pem
-          subPath: s-private-{nodeId}.pem
-        {#for publicKeyFile in publicKeyFiles}
+          mountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/data/keys/s-private-{nodeId}.pem"
+          subPath: "s-private-{nodeId}.pem"
+        # {#for publicKeyFile in publicKeyFiles}
         - name: public-keys
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/{publicKeyFile}
-          subPath: {publicKeyFile}
-        {/for}
-    {#if recordStreamUploader && recordStreamUploader.enabled}
+          mountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/data/keys/{publicKeyFile}"
+          subPath: "{publicKeyFile}"
+        # {/for}
+    # {#if recordStreamUploader && recordStreamUploader.enabled}
     # Sidecar: record-stream-uploader
-    - name: {recordStreamUploader.name}
-      image: {recordStreamUploader.image}
-      imagePullPolicy: {recordStreamUploader.imagePullPolicy}
+    - name: "{recordStreamUploader.name}"
+      image: "{recordStreamUploader.image}"
+      imagePullPolicy: "{recordStreamUploader.imagePullPolicy}"
       securityContext:
-        runAsUser: {securityContext.runAsUser}
-        runAsGroup: {securityContext.runAsGroup}
+        runAsUser: "{securityContext.runAsUser}"
+        runAsGroup: "{securityContext.runAsGroup}"
       command:
         - /usr/bin/env
         - python3.7
@@ -105,69 +105,69 @@ spec:
         - /opt/hgcapp/recordStreams
         - --csv-stats-directory
         - /opt/hgcapp/recordStreams/uploader-stats
-        {#if recordStreamUploader.config.s3.enabled}
+        # {#if recordStreamUploader.config.s3.enabled}
         - --s3-endpoint
-        - {recordStreamUploader.config.s3.url}
-        {/if}
-        {#if recordStreamUploader.config.gcs.enabled}
+        - "{recordStreamUploader.config.s3.url}"
+        # {/if}
+        # {#if recordStreamUploader.config.gcs.enabled}
         - --gcs-endpoint
-        - {recordStreamUploader.config.gcs.url}
-        {/if}
+        - "{recordStreamUploader.config.gcs.url}"
+        # {/if}
       volumeMounts:
         - name: hgcapp-record-streams
           mountPath: /opt/hgcapp/recordStreams
-          subPath: record{accountId}
+          subPath: "record{accountId}"
       env:
         - name: DEBUG
-          value: {recordStreamUploader.config.debug}
+          value: "{recordStreamUploader.config.debug}"
         - name: REAPER_ENABLE
-          value: {recordStreamUploader.config.reaper.enabled}
+          value: "{recordStreamUploader.config.reaper.enabled}"
         - name: REAPER_MIN_KEEP
-          value: {recordStreamUploader.config.reaper.minKeep}
+          value: "{recordStreamUploader.config.reaper.minKeep}"
         - name: REAPER_INTERVAL
-          value: {recordStreamUploader.config.reaper.interval}
+          value: "{recordStreamUploader.config.reaper.interval}"
         - name: REAPER_DEFAULT_BACKOFF
-          value: {recordStreamUploader.config.reaper.defaultBackoff}
+          value: "{recordStreamUploader.config.reaper.defaultBackoff}"
         - name: STREAM_FILE_EXTENSION
-          value: {recordStreamUploader.config.streamFileExtension}
+          value: "{recordStreamUploader.config.streamFileExtension}"
         - name: STREAM_SIG_EXTENSION
-          value: {recordStreamUploader.config.streamSigExtension}
+          value: "{recordStreamUploader.config.streamSigExtension}"
         - name: STREAM_EXTENSION
-          value: {recordStreamUploader.config.streamExtension}
+          value: "{recordStreamUploader.config.streamExtension}"
         - name: SIG_EXTENSION
-          value: {recordStreamUploader.config.sigExtension}
+          value: "{recordStreamUploader.config.sigExtension}"
         - name: RECORD_STREAM_COMPRESSION
-          value: {recordStreamUploader.config.enableCompression}
+          value: "{recordStreamUploader.config.enableCompression}"
         - name: RECORD_STREAM_SIDECAR
-          value: {recordStreamUploader.config.enableSidecarFiles}
+          value: "{recordStreamUploader.config.enableSidecarFiles}"
         - name: SIG_REQUIRE
-          value: {recordStreamUploader.config.signature.require}
+          value: "{recordStreamUploader.config.signature.require}"
         - name: SIG_PRIORITIZE
-          value: {recordStreamUploader.config.signature.prioritize}
+          value: "{recordStreamUploader.config.signature.prioritize}"
         - name: BUCKET_PATH
-          value: {recordStreamUploader.config.bucketPath}
+          value: "{recordStreamUploader.config.bucketPath}"
         - name: BUCKET_NAME
-          value: {recordStreamUploader.config.bucketName}
+          value: "{recordStreamUploader.config.bucketName}"
         - name: S3_ENABLE
-          value: {recordStreamUploader.config.s3.enabled}
+          value: "{recordStreamUploader.config.s3.enabled}"
         - name: S3_ACCESS_KEY
-          value: {recordStreamUploader.config.s3.accessKey}
+          value: "{recordStreamUploader.config.s3.accessKey}"
         - name: GCS_ENABLE
-          value: {recordStreamUploader.config.gcs.enabled}
+          value: "{recordStreamUploader.config.gcs.enabled}"
         - name: GCS_ACCESS_KEY
-          value: {recordStreamUploader.config.gcs.accessKey}
+          value: "{recordStreamUploader.config.gcs.accessKey}"
       envFrom:
         - secretRef:
-            name: {recordStreamUploader.config.envFromSecret}
-    {/if}
-    {#if recordStreamSidecarFilesUploader && recordStreamSidecarFilesUploader.enabled}
+            name: "{recordStreamUploader.config.envFromSecret}"
+    # {/if}
+    # {#if recordStreamSidecarFilesUploader && recordStreamSidecarFilesUploader.enabled}
     # Sidecar: record-stream-sidecar-files-uploader
-    - name: {recordStreamSidecarFilesUploader.name}
-      image: {recordStreamSidecarFilesUploader.image}
-      imagePullPolicy: {recordStreamSidecarFilesUploader.imagePullPolicy}
+    - name: "{recordStreamSidecarFilesUploader.name}"
+      image: "{recordStreamSidecarFilesUploader.image}"
+      imagePullPolicy: "{recordStreamSidecarFilesUploader.imagePullPolicy}"
       securityContext:
-        runAsUser: {securityContext.runAsUser}
-        runAsGroup: {securityContext.runAsGroup}
+        runAsUser: "{securityContext.runAsUser}"
+        runAsGroup: "{securityContext.runAsGroup}"
       command:
         - /usr/bin/env
         - python3.7
@@ -175,69 +175,69 @@ spec:
         - --linux
         - --watch-directory
         - /opt/hgcapp/recordStreams/sidecar
-        {#if recordStreamSidecarFilesUploader.config.s3.enabled}
+        # {#if recordStreamSidecarFilesUploader.config.s3.enabled}
         - --s3-endpoint
-        - {recordStreamSidecarFilesUploader.config.s3.url}
-        {/if}
-        {#if recordStreamSidecarFilesUploader.config.gcs.enabled}
+        - "{recordStreamSidecarFilesUploader.config.s3.url}"
+        # {/if}
+        # {#if recordStreamSidecarFilesUploader.config.gcs.enabled}
         - --gcs-endpoint
-        - {recordStreamSidecarFilesUploader.config.gcs.url}
-        {/if}
+        - "{recordStreamSidecarFilesUploader.config.gcs.url}"
+        # {/if}
       volumeMounts:
         - name: hgcapp-record-streams
           mountPath: /opt/hgcapp/recordStreams
-          subPath: record{accountId}
+          subPath: "record{accountId}"
       env:
         - name: DEBUG
-          value: {recordStreamSidecarFilesUploader.config.debug}
+          value: "{recordStreamSidecarFilesUploader.config.debug}"
         - name: REAPER_ENABLE
-          value: {recordStreamSidecarFilesUploader.config.reaper.enabled}
+          value: "{recordStreamSidecarFilesUploader.config.reaper.enabled}"
         - name: REAPER_MIN_KEEP
-          value: {recordStreamSidecarFilesUploader.config.reaper.minKeep}
+          value: "{recordStreamSidecarFilesUploader.config.reaper.minKeep}"
         - name: REAPER_INTERVAL
-          value: {recordStreamSidecarFilesUploader.config.reaper.interval}
+          value: "{recordStreamSidecarFilesUploader.config.reaper.interval}"
         - name: REAPER_DEFAULT_BACKOFF
-          value: {recordStreamSidecarFilesUploader.config.reaper.defaultBackoff}
+          value: "{recordStreamSidecarFilesUploader.config.reaper.defaultBackoff}"
         - name: STREAM_FILE_EXTENSION
-          value: {recordStreamSidecarFilesUploader.config.streamFileExtension}
+          value: "{recordStreamSidecarFilesUploader.config.streamFileExtension}"
         - name: STREAM_SIG_EXTENSION
-          value: {recordStreamSidecarFilesUploader.config.streamSigExtension}
+          value: "{recordStreamSidecarFilesUploader.config.streamSigExtension}"
         - name: STREAM_EXTENSION
-          value: {recordStreamSidecarFilesUploader.config.streamExtension}
+          value: "{recordStreamSidecarFilesUploader.config.streamExtension}"
         - name: SIG_EXTENSION
-          value: {recordStreamSidecarFilesUploader.config.sigExtension}
+          value: "{recordStreamSidecarFilesUploader.config.sigExtension}"
         - name: RECORD_STREAM_COMPRESSION
-          value: {recordStreamSidecarFilesUploader.config.enableCompression}
+          value: "{recordStreamSidecarFilesUploader.config.enableCompression}"
         - name: RECORD_STREAM_SIDECAR
-          value: {recordStreamSidecarFilesUploader.config.enableSidecarFiles}
+          value: "{recordStreamSidecarFilesUploader.config.enableSidecarFiles}"
         - name: SIG_REQUIRE
-          value: {recordStreamSidecarFilesUploader.config.signature.require}
+          value: "{recordStreamSidecarFilesUploader.config.signature.require}"
         - name: SIG_PRIORITIZE
-          value: {recordStreamSidecarFilesUploader.config.signature.prioritize}
+          value: "{recordStreamSidecarFilesUploader.config.signature.prioritize}"
         - name: BUCKET_PATH
-          value: {recordStreamSidecarFilesUploader.config.bucketPath}
+          value: "{recordStreamSidecarFilesUploader.config.bucketPath}"
         - name: BUCKET_NAME
-          value: {recordStreamSidecarFilesUploader.config.bucketName}
+          value: "{recordStreamSidecarFilesUploader.config.bucketName}"
         - name: S3_ENABLE
-          value: {recordStreamSidecarFilesUploader.config.s3.enabled}
+          value: "{recordStreamSidecarFilesUploader.config.s3.enabled}"
         - name: S3_ACCESS_KEY
-          value: {recordStreamSidecarFilesUploader.config.s3.accessKey}
+          value: "{recordStreamSidecarFilesUploader.config.s3.accessKey}"
         - name: GCS_ENABLE
-          value: {recordStreamSidecarFilesUploader.config.gcs.enabled}
+          value: "{recordStreamSidecarFilesUploader.config.gcs.enabled}"
         - name: GCS_ACCESS_KEY
-          value: {recordStreamSidecarFilesUploader.config.gcs.accessKey}
+          value: "{recordStreamSidecarFilesUploader.config.gcs.accessKey}"
       envFrom:
         - secretRef:
-            name: {recordStreamSidecarFilesUploader.config.envFromSecret}
-    {/if}
-    {#if eventStreamUploader && eventStreamUploader.enabled}
+            name: "{recordStreamSidecarFilesUploader.config.envFromSecret}"
+    # {/if}
+    # {#if eventStreamUploader && eventStreamUploader.enabled}
     # Sidecar: event-stream-uploader
-    - name: {eventStreamUploader.name}
-      image: {eventStreamUploader.image}
-      imagePullPolicy: {eventStreamUploader.imagePullPolicy}
+    - name: "{eventStreamUploader.name}"
+      image: "{eventStreamUploader.image}"
+      imagePullPolicy: "{eventStreamUploader.imagePullPolicy}"
       securityContext:
-        runAsUser: {securityContext.runAsUser}
-        runAsGroup: {securityContext.runAsGroup}
+        runAsUser: "{securityContext.runAsUser}"
+        runAsGroup: "{securityContext.runAsGroup}"
       command:
         - /usr/bin/env
         - python3.7
@@ -246,65 +246,65 @@ spec:
         - --watch-directory
         - /opt/hgcapp/eventsStreams
         - --debug
-        {#if eventStreamUploader.config.s3.enabled}
+        # {#if eventStreamUploader.config.s3.enabled}
         - --s3-endpoint
-        - {eventStreamUploader.config.s3.url}
-        {/if}
-        {#if eventStreamUploader.config.gcs.enabled}
+        - "{eventStreamUploader.config.s3.url}"
+        # {/if}
+        # {#if eventStreamUploader.config.gcs.enabled}
         - --gcs-endpoint
-        - {eventStreamUploader.config.gcs.url}
-        {/if}
+        - "{eventStreamUploader.config.gcs.url}"
+        # {/if}
       volumeMounts:
         - name: hgcapp-events-streams
           mountPath: /opt/hgcapp/eventsStreams
-          subPath: events_{accountId}
+          subPath: "events_{accountId}"
       env:
         - name: DEBUG
-          value: {eventStreamUploader.config.debug}
+          value: "{eventStreamUploader.config.debug}"
         - name: REAPER_ENABLE
-          value: {eventStreamUploader.config.reaper.enabled}
+          value: "{eventStreamUploader.config.reaper.enabled}"
         - name: REAPER_MIN_KEEP
-          value: {eventStreamUploader.config.reaper.minKeep}
+          value: "{eventStreamUploader.config.reaper.minKeep}"
         - name: REAPER_INTERVAL
-          value: {eventStreamUploader.config.reaper.interval}
+          value: "{eventStreamUploader.config.reaper.interval}"
         - name: REAPER_DEFAULT_BACKOFF
-          value: {eventStreamUploader.config.reaper.defaultBackoff}
+          value: "{eventStreamUploader.config.reaper.defaultBackoff}"
         - name: STREAM_FILE_EXTENSION
-          value: {eventStreamUploader.config.streamFileExtension}
+          value: "{eventStreamUploader.config.streamFileExtension}"
         - name: STREAM_SIG_EXTENSION
-          value: {eventStreamUploader.config.streamSigExtension}
+          value: "{eventStreamUploader.config.streamSigExtension}"
         - name: STREAM_EXTENSION
-          value: {eventStreamUploader.config.streamExtension}
+          value: "{eventStreamUploader.config.streamExtension}"
         - name: SIG_EXTENSION
-          value: {eventStreamUploader.config.sigExtension}
+          value: "{eventStreamUploader.config.sigExtension}"
         - name: SIG_REQUIRE
-          value: {eventStreamUploader.config.signature.require}
+          value: "{eventStreamUploader.config.signature.require}"
         - name: SIG_PRIORITIZE
-          value: {eventStreamUploader.config.signature.prioritize}
+          value: "{eventStreamUploader.config.signature.prioritize}"
         - name: BUCKET_PATH
-          value: {eventStreamUploader.config.bucketPath}
+          value: "{eventStreamUploader.config.bucketPath}"
         - name: BUCKET_NAME
-          value: {eventStreamUploader.config.bucketName}
+          value: "{eventStreamUploader.config.bucketName}"
         - name: S3_ENABLE
-          value: {eventStreamUploader.config.s3.enabled}
+          value: "{eventStreamUploader.config.s3.enabled}"
         - name: S3_ACCESS_KEY
-          value: {eventStreamUploader.config.s3.accessKey}
+          value: "{eventStreamUploader.config.s3.accessKey}"
         - name: GCS_ENABLE
-          value: {eventStreamUploader.config.gcs.enabled}
+          value: "{eventStreamUploader.config.gcs.enabled}"
         - name: GCS_ACCESS_KEY
-          value: {eventStreamUploader.config.gcs.accessKey}
+          value: "{eventStreamUploader.config.gcs.accessKey}"
       envFrom:
         - secretRef:
-            name: {eventStreamUploader.config.envFromSecret}
-    {/if}
-    {#if backupUploader && backupUploader.enabled}
+            name: "{eventStreamUploader.config.envFromSecret}"
+    # {/if}
+    # {#if backupUploader && backupUploader.enabled}
     # Sidecar: backup-uploader
-    - name: {backupUploader.name}
-      image: {backupUploader.image}
-      imagePullPolicy: {backupUploader.imagePullPolicy}
+    - name: "{backupUploader.name}"
+      image: "{backupUploader.image}"
+      imagePullPolicy: "{backupUploader.imagePullPolicy}"
       securityContext:
-        runAsUser: {securityContext.runAsUser}
-        runAsGroup: {securityContext.runAsGroup}
+        runAsUser: "{securityContext.runAsUser}"
+        runAsGroup: "{securityContext.runAsGroup}"
       volumeMounts:
         - name: hgcapp-data-saved
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/saved
@@ -313,22 +313,22 @@ spec:
           subPath: rclone.conf
       env:
         - name: BACKUP_UPLOADER_BUCKET_1
-          value: {backupUploader.config.bucketName}
-          {#if backupUploader.config.s3.enabled}
+          value: "{backupUploader.config.bucketName}"
+          # {#if backupUploader.config.s3.enabled}
         - name: RCLONE_S3_ENDPOINT
-          value: {backupUploader.config.s3.url}
+          value: "{backupUploader.config.s3.url}"
         - name: RCLONE_S3_ACCESS_KEY_ID
-          value: {backupUploader.config.s3.accessKey}
-          {#else backupUploader.config.gcs.enabled}
+          value: "{backupUploader.config.s3.accessKey}"
+          # {#else backupUploader.config.gcs.enabled}
         - name: RCLONE_S3_ENDPOINT
-          value: {backupUploader.config.gcs.url}
+          value: "{backupUploader.config.gcs.url}"
         - name: RCLONE_S3_ACCESS_KEY_ID
-          value: {backupUploader.config.gcs.accessKey}
-          {/if}
+          value: "{backupUploader.config.gcs.accessKey}"
+          # {/if}
       envFrom:
         - secretRef:
-            name: {backupUploader.config.envFromSecret}
-    {/if}
+            name: "{backupUploader.config.envFromSecret}"
+    # {/if}
   volumes:
     - name: cluster-config
       configMap:
@@ -341,10 +341,10 @@ spec:
         name: public-keys
     - name: gossip-keys
       secret:
-        secretName: {nodeId}-gossip-keys
+        secretName: "{nodeId}-gossip-keys"
     - name: grpc-tls-keys
       secret:
-        secretName: {nodeId}-grpc-tls-keys
+        secretName: "{nodeId}-grpc-tls-keys"
     - name: hgcapp-record-streams
       emptyDir: {}
     - name: hgcapp-events-streams
