@@ -70,6 +70,11 @@ public class NetworkInitializationTest extends AbstractOperatorTest {
                             .withMode(FirstInitialization)
                             /*.withConsensusCapsules(capsuleNames)*/)
                     .build());
+//            try {
+//                Thread.sleep(1500);
+//            } catch (InterruptedException e) {
+//                throw new RuntimeException(e);
+//            }
         }
 
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {

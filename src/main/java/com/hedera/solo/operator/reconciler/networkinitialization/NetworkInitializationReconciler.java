@@ -42,6 +42,7 @@ import io.javaoperatorsdk.operator.processing.dependent.workflow.WorkflowBuilder
 import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import java.lang.invoke.MethodHandles;
 import java.time.Duration;
+import java.time.ZonedDateTime;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
@@ -51,7 +52,10 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.jboss.logging.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -75,7 +79,7 @@ import org.slf4j.LoggerFactory;
  * another alternative is to use bulk DR, but this is likely not a great either.
  * */
 
-@ControllerConfiguration(name = "network-initialization")
+@ControllerConfiguration(name = "network-initialization"/*, labelSelector = "phase notin (Failed, Succeeded)"*/)
 public class NetworkInitializationReconciler implements
         ErrorStatusHandler<NetworkInitialization>,
         Reconciler<NetworkInitialization>, EventSourceInitializer<NetworkInitialization>
@@ -117,6 +121,14 @@ public class NetworkInitializationReconciler implements
 //        return (diff | half) == half ? 0 : diff < half ? 1 : -1;
 //    }
 
+    public Predicate<NetworkInitialization> active() {
+        return x -> null != x.getStatus() && Set.of(NetworkInitializationStatus.Phase.Pending, NetworkInitializationStatus.Phase.Running).contains(x.getStatus().getPhase());
+    }
+
+    public Comparator<NetworkInitialization> prioritize() {
+        return Comparator.<NetworkInitialization, ZonedDateTime>comparing(x -> ZonedDateTime.parse(x.getMetadata().getCreationTimestamp())).thenComparing(x -> x.getStatus().getSequenceNumber(), counter);
+    }
+
     @Override
     public UpdateControl<NetworkInitialization> reconcile(
             final NetworkInitialization resource, final Context<NetworkInitialization> context) throws Exception {
@@ -132,39 +144,46 @@ public class NetworkInitializationReconciler implements
                                         .editStatus()
 //                                        .withObservedGeneration(resource.getMetadata().getGeneration())
                                         .withPhase(NetworkInitializationStatus.Phase.Pending)
-                                        .withSequenceNumber(counter.rollover(sequenceNumber.getAndIncrement()))
+                                        .withSequenceNumber(counter.rollover(sequenceNumber.getAndIncrement())))
+//                                        .withConsensusCapsules(consensusCapsule.getSecondaryResources(resource, context).values().stream()
+//                                                .map(CustomResource::getMetadata)
+//                                                .map(ObjectMeta::getName)
+//                                                .sorted()
+//                                                .toList()))
+                                .build())
+                        .rescheduleAfter(0);
+            }
+            String name = resource.getMetadata().getName();
+            Function<Stream<NetworkInitialization>, List<String>> function = stream -> stream
+                    .filter(active())
+                    .sorted(prioritize())
+                    .map(CustomResource::getMetadata)
+                    .map(ObjectMeta::getName)
+                    .toList();
+            List<String> list = function.apply(context.getPrimaryCache().list(resource.getMetadata().getNamespace()));
+            if (!list.isEmpty() && name.equals(list.getFirst())) {
+                list = function.apply(context.getClient().resources(NetworkInitialization.class).inNamespace(resource.getMetadata().getNamespace()).list().getItems().stream());
+            }
+            if (list.isEmpty() || !name.equals(list.getFirst())) {
+                UpdateControl<NetworkInitialization> updateControl = UpdateControl.noUpdate();
+                long index = list.indexOf(name);
+                return -1 != index ? updateControl.rescheduleAfter(3 * (index + 1), TimeUnit.SECONDS) : updateControl;
+            }
+            if (resource.getStatus().getConsensusCapsules() == null) {
+                return UpdateControl.patchStatus(edit(resource)
+                                .with(builder -> builder
+                                        .editStatus()
+//                                        .withObservedGeneration(resource.getMetadata().getGeneration())
+//                                        .withPhase(NetworkInitializationStatus.Phase.Pending)
+//                                        .withSequenceNumber(counter.rollover(sequenceNumber.getAndIncrement()))
                                         .withConsensusCapsules(consensusCapsule.getSecondaryResources(resource, context).values().stream()
                                                 .map(CustomResource::getMetadata)
                                                 .map(ObjectMeta::getName)
                                                 .sorted()
                                                 .toList()))
                                 .build())
-                        // todo: add capsules later, don't need to sleep here if using client not cache later
-                        .rescheduleAfter(1, TimeUnit.SECONDS);
+                        .rescheduleAfter(0);
             }
-            List<String> queue = context.getPrimaryCache().list(resource.getMetadata().getNamespace()).toList().stream()
-                    .filter(x -> null != x.getStatus())
-                    .filter(x -> Set.of(NetworkInitializationStatus.Phase.Pending, NetworkInitializationStatus.Phase.Running).contains(x.getStatus().getPhase()))
-                    // todo: first compare by creation time (since this sequence number will reset if operator restarts)
-                    .sorted(Comparator.comparing(x -> x.getStatus().getSequenceNumber(), counter))
-                    .map(CustomResource::getMetadata)
-                    .map(ObjectMeta::getName)
-                    .toList();
-            String name = resource.getMetadata().getName();
-            if (queue.isEmpty() || !name.equals(queue.getFirst())) {
-                UpdateControl<NetworkInitialization> updateControl = UpdateControl.noUpdate();
-                int index = queue.indexOf(name);
-                log.info("not first, maybe reschedule {}", resource.getMetadata().getName());
-                // todo: use randomized "backoff" delay based on position in queue
-                // backoff = min(cap, base * 2 ** attempt)
-                // full_jitter = random_between(0, min(cap, base * 2 ** attempt))
-                // decor_jitter = min(cap, random_between(base, sleep * 3))
-                // todo: full_jitter looks like the best option
-                // todo: don't need delay here if can check queue and reschedule when first NI completes
-                return -1 != index ? updateControl.rescheduleAfter(index + 1, TimeUnit.SECONDS) : updateControl;
-            }
-            // todo: if capsules are not in status at this point add them (using client and reschedule)
-            // todo: perform final queue based check using client
             log.info("reconciling for {}", resource.getMetadata().getName());
             logger.info("NetworkInitializationReconciler capsules: "
                     + context.getSecondaryResources(ConsensusCapsule.class).size());
@@ -221,6 +240,16 @@ public class NetworkInitializationReconciler implements
 //                                .build()));
 //            }
 
+//            NetworkInitializationStatus.Phase phase = getPhase(resource, context);
+//            NetworkInitialization updated = edit(resource)
+//                    .with(builder -> builder
+//                            .editMetadata()
+//                            .addToLabels("phase", phase.name()))
+//                    .with(builder -> builder
+//                            .editStatus()
+//                            .withObservedGeneration(resource.getMetadata().getGeneration())
+//                            .withPhase(phase))
+//                    .build();
             return UpdateControl.patchStatus(resource.edit()
                             .editStatus()
                             .withObservedGeneration(resource.getMetadata().getGeneration())

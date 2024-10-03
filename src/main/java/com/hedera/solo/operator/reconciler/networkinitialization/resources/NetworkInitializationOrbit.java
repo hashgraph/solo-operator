@@ -12,15 +12,11 @@ import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.javaoperatorsdk.operator.processing.event.source.PrimaryToSecondaryMapper;
 import io.javaoperatorsdk.operator.processing.event.source.SecondaryToPrimaryMapper;
 import java.lang.invoke.MethodHandles;
+import java.util.Collections;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-/*
-* todo: have mappers here map to/from first "available" primary resource. Then reconciler can simply require the orbit
-*  which will effectively serve as exclude access
-* */
 
 @KubernetesDependent
 public class NetworkInitializationOrbit extends KubernetesDependentResource<Orbit, NetworkInitialization>
@@ -36,9 +32,11 @@ implements PrimaryToSecondaryMapper<NetworkInitialization>, SecondaryToPrimaryMa
     @Override
     public Set<ResourceID> toPrimaryResourceIDs(Orbit resource) {
         Set<ResourceID> set = reconciler.eventSourceContext().getPrimaryCache().list(resource.getMetadata().getName())
-                // which one?
+                .filter(reconciler.active())
+                .min(reconciler.prioritize())
                 .map(ResourceID::fromResource)
-                .collect(Collectors.toSet());
+                .map(Set::of)
+                .orElseGet(Collections::emptySet);
         log.info("NetworkInitializationOrbit::toPrimaryResourceIDs {} -> {}", resource.getMetadata().getName(), set);
         return set;
     }
@@ -51,9 +49,5 @@ implements PrimaryToSecondaryMapper<NetworkInitialization>, SecondaryToPrimaryMa
     @Override
     public Set<ResourceID> toSecondaryResourceIDs(NetworkInitialization primary) {
         return Set.of(new ResourceID(primary.getMetadata().getNamespace()));
-//        return eventSource().orElseThrow().list(primary.getMetadata().getNamespace())
-//                // which one?
-//                .map(ResourceID::fromResource)
-//                .collect(Collectors.toSet());
     }
 }

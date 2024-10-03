@@ -33,6 +33,7 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDep
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.javaoperatorsdk.operator.processing.event.source.PrimaryToSecondaryMapper;
 import io.javaoperatorsdk.operator.processing.event.source.SecondaryToPrimaryMapper;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -80,9 +81,11 @@ public class NetworkInitializationConsensusCapsule
     @Override
     public Set<ResourceID> toPrimaryResourceIDs(ConsensusCapsule resource) {
         return reconciler.eventSourceContext().getPrimaryCache().list(resource.getMetadata().getNamespace())
-                // which one?
+                .filter(reconciler.active())
+                .min(reconciler.prioritize())
                 .map(ResourceID::fromResource)
-                .collect(Collectors.toSet());
+                .map(Set::of)
+                .orElseGet(Collections::emptySet);
     }
 //    public NetworkInitializationConsensusCapsule() {
 //        super(ConsensusCapsule.class);
