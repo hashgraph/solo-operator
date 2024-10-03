@@ -23,6 +23,7 @@ spec:
     spec:
       hostname: {nodeId}
       subdomain: consensus
+      serviceAccountName: {nodeId}-sa
       initContainers:
         - name: "consensus-init"
           image: gcr.io/hedera-registry/consensus-node:0.52.0-alpha.6

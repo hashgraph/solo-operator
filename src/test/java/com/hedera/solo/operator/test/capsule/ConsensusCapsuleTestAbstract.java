@@ -20,6 +20,9 @@ import static com.hedera.solo.operator.reconciler.common.Constants.CONSENSUS_NOD
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GOSSIP;
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GRPC_TLS;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_APP;
+import static com.hedera.solo.operator.test.fixtures.Environment.isGradleTest;
+import static com.hedera.solo.operator.test.fixtures.Environment.isSnapshotEnabled;
+import static com.hedera.solo.operator.test.fixtures.snapshot.SetupSnapshot.enableCorednsLogs;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -44,9 +47,10 @@ import com.hedera.solo.operator.model.v1alpha1.OrbitBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Sidecars;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.SidecarsBuilder;
 import com.hedera.solo.operator.reconciler.common.Constants;
-import com.hedera.solo.operator.test.Environment;
-import com.hedera.solo.operator.test.HederaSdkClientFactory;
 import com.hedera.solo.operator.test.fixtures.Resources;
+import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
+import com.hedera.solo.operator.test.fixtures.snapshot.SnapshotFailureContext;
+import com.hedera.solo.operator.test.framework.HederaSdkClientFactory;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
@@ -58,14 +62,18 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
 import jakarta.inject.Inject;
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
-import java.util.function.BiFunction;
+import java.util.function.Function;
 import org.awaitility.core.ConditionTimeoutException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+@SoloTest
 public abstract class ConsensusCapsuleTestAbstract {
     protected final String namespace = getClass().getSimpleName().toLowerCase();
     public static final String RECORD_STREAM_TEMPLATE = "sidecars/record-stream-uploader.yaml";
@@ -75,14 +83,14 @@ public abstract class ConsensusCapsuleTestAbstract {
     KubernetesClient kubernetesClient;
 
     @Inject
-    Environment environment;
-
-    @Inject
     Operator operator;
 
     @BeforeEach
     void setup() {
-        if (!environment.isDevModeActive()) {
+        if (isSnapshotEnabled()) {
+            enableCorednsLogs(kubernetesClient);
+        }
+        if (isGradleTest()) {
             operator.start();
         }
 
@@ -93,6 +101,33 @@ public abstract class ConsensusCapsuleTestAbstract {
     }
 
     @AfterEach
+    void afterEach(final SnapshotFailureContext snapshot) {
+        snapshot.client(kubernetesClient)
+                .nonNamespacedResources("operator.solo.hedera.com/v1alpha1")
+                .namespaces(namespace)
+                .namespacedResources()
+                .logs()
+                .exec(
+                        "current-address-book",
+                        "app=consensus-node",
+                        "consensus-node",
+                        """
+                                        find services-hedera/HapiApp2.0/data -type f -name currentAddressBook.txt | \\
+                                            xargs -r ls -1t | head -n 1 | xargs -r cat
+                                        """)
+                .file(
+                        "app=consensus-node",
+                        "consensus-node",
+                        "services-hedera/HapiApp2.0/output/hgcaa.log",
+                        "services-hedera/HapiApp2.0/output/swirlds.log")
+                .namespaces("minio-operator", "minio-tenant")
+                .namespacedResources()
+                .logs()
+                .namespaces("kube-system")
+                .logs();
+        cleanup();
+    }
+
     void cleanup() {
         kubernetesClient
                 .resources(NetworkInitialization.class)
@@ -377,20 +412,27 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .toArray(String[]::new);
     }
 
-    void checkAddressBook(
-            final BiFunction<HederaSdkClientFactory, String, HederaSdkClientFactory.ClientContext> clientContext)
+    void checkAddressBook(final Function<HederaSdkClientFactory, HederaSdkClientFactory.ClientContext> clientContext)
             throws AssertionError, Exception {
         String[] consensusNodeNames = consensusNodeNames();
         HederaSdkClientFactory sdkClientFactory = new HederaSdkClientFactory(kubernetesClient, namespace);
-        for (String nodeName : consensusNodeNames) {
+        for (int idx = 0; idx < consensusNodeNames.length; idx++) {
+            int index = idx;
             AssertionError assertion = null;
             ConditionTimeoutException timeout = null;
             for (int attempt = 0; attempt < 10; attempt++) {
                 assertion = null;
                 timeout = null;
-                try (HederaSdkClientFactory.ClientContext context = clientContext.apply(sdkClientFactory, nodeName)) {
+                try (HederaSdkClientFactory.ClientContext context = clientContext.apply(sdkClientFactory)) {
                     await().atMost(15, TimeUnit.SECONDS).untilAsserted(() -> {
                         Client client = context.client;
+
+                        Map<String, AccountId> network = client.getNetwork();
+                        client.setNetwork(Map.ofEntries(network.entrySet().stream()
+                                .sorted(Map.Entry.comparingByValue())
+                                .toList()
+                                .get(index)));
+
                         client.setOperator(
                                 AccountId.fromString(HederaSdkClientFactory.DEFAULT_ACCOUNT_ID),
                                 PrivateKey.fromString(HederaSdkClientFactory.DEFAULT_PRIVATE_KEY));

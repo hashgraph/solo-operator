@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.operator.test;
+package com.hedera.solo.operator.test.framework;
 
 import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_CONSENSUS_CAPSULE_NAME_KEY;
 import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_SELECTOR_CONSENSUS_NODE;
@@ -33,10 +33,12 @@ import io.fabric8.kubernetes.client.dsl.PortForwardable;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.math.BigInteger;
+import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.security.cert.CertificateFactory;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collection;
@@ -46,8 +48,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -55,49 +57,56 @@ public class HederaSdkClientFactory {
     public static final String DEFAULT_ACCOUNT_ID = "0.0.2";
     public static final String DEFAULT_PRIVATE_KEY =
             "302e020100300506032b65700422042091132178e72057a1d7528025956fe39b0b847f200ab59b2fdd367017f3087137";
-    KubernetesClient kubernetesClient;
-    String namespace;
-    Workaround workaround = new Workaround();
+    private static final AtomicInteger hostId = new AtomicInteger();
+    private final KubernetesClient kubernetesClient;
+    private final String namespace;
+    private final Workaround workaround = new Workaround();
 
     public HederaSdkClientFactory(final KubernetesClient kubernetesClient, final String namespace) throws Exception {
         this.kubernetesClient = kubernetesClient;
         this.namespace = namespace;
     }
 
-    public interface PortForward {
-        List<LocalPortForward> create(final PortForwardable portForwardable);
+    public ClientContext directContextCreator() {
+        return getClientContext(direct());
     }
 
-    public ClientContext directContextCreator(final String consensusNode) {
-        return createClientContext(direct(), consensusNode);
+    public ClientContext haproxyContextCreator() {
+        return getClientContext(haproxy());
     }
 
-    public ClientContext haproxyContextCreator(final String consensusNode) {
-        return createClientContext(haproxy(), consensusNode);
-    }
-
-    ClientContext createClientContext(final Map<String, String> nodeService, final String consensusNode) {
-        return getClientContext(nodeService, consensusNode::equals, resource -> Stream.of(50211, 50212)
-                .map(port -> resource.portForward(port, port))
-                .toList());
-    }
-
-    ClientContext getClientContext(
-            final Map<String, String> nodeService, final Predicate<String> predicate, final PortForward portForward) {
+    /**
+     * Workaround client unsupported dynamic ports for TLS with dynamic addresses.
+     *
+     * @see <a href="https://github.com/hashgraph/hedera-sdk-java/pull/1930">PR #1930</a>
+     */
+    List<LocalPortForward> portForward(final PortForwardable resource) {
         try {
-            return getClient(getPortForwarding(nodeService, predicate, portForward));
+            long prefix = 127 << 24;
+            long host = (hostId.incrementAndGet() & 0x7fffff) + 1;
+            InetAddress inetAddress =
+                    InetAddress.getByAddress(BigInteger.valueOf(prefix | host).toByteArray());
+            return Stream.of(50211, 50212)
+                    .map(port -> resource.portForward(port, inetAddress, port))
+                    .toList();
+        } catch (final IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    ClientContext getClientContext(final Map<String, String> nodeService) {
+        try {
+            return getClient(getPortForwarding(nodeService));
         } catch (Exception exception) {
             throw new RuntimeException(exception);
         }
     }
 
-    Map<String, List<LocalPortForward>> getPortForwarding(
-            final Map<String, String> nodeService, final Predicate<String> select, final PortForward portForward) {
+    Map<String, List<LocalPortForward>> getPortForwarding(final Map<String, String> nodeService) {
         return nodeService.entrySet().stream()
-                .filter(e -> select.test(e.getKey()))
                 .collect(Collectors.toMap(
                         Map.Entry::getKey,
-                        e -> portForward.create(kubernetesClient
+                        e -> portForward(kubernetesClient
                                 .services()
                                 .inNamespace(namespace)
                                 .withName(e.getValue()))));
@@ -109,7 +118,7 @@ public class HederaSdkClientFactory {
                 services.values().stream().flatMap(Collection::stream).toList());
     }
 
-    NodeAddressBook nodeAddressBook(final Map<String, List<LocalPortForward>> services) throws Exception {
+    NodeAddressBook nodeAddressBook(final Map<String, List<LocalPortForward>> services) throws IOException {
         Map<String, byte[]> certificates = certificates();
         Map<String, String> pubKeys = pubKeys();
         final List<com.hedera.hashgraph.sdk.proto.NodeAddress> nodeAddresses = Arrays.stream(
@@ -118,7 +127,6 @@ public class HederaSdkClientFactory {
                 .map(line -> line.split("\s*,\s*"))
                 .map(cfg -> nodeAddress(
                         cfg[1], cfg[9], services.get(cfg[2]), pubKeys.get(cfg[2]), certificates.get(cfg[2])))
-                .filter(Objects::nonNull)
                 .toList();
 
         return NodeAddressBook.fromBytes(com.hedera.hashgraph.sdk.proto.NodeAddressBook.newBuilder()
@@ -210,17 +218,18 @@ public class HederaSdkClientFactory {
                             .setNodeId(Long.parseLong(nodeId));
             for (LocalPortForward portForward : portForwards) {
                 builder.addServiceEndpoint(ServiceEndpoint.newBuilder()
-                        .setIpAddressV4(ByteString.copyFrom(new byte[] {127, 0, 0, 1}))
+                        .setIpAddressV4(ByteString.copyFrom(
+                                portForward.getLocalAddress().getAddress()))
                         .setPort(portForward.getLocalPort())
                         .build());
             }
             return builder.build();
-        } catch (Exception e) {
-            return null;
+        } catch (GeneralSecurityException exception) {
+            throw new RuntimeException(exception);
         }
     }
 
-    String pubKey(final byte[] bytes) throws Exception {
+    String pubKey(final byte[] bytes) throws GeneralSecurityException {
         return HexFormat.of()
                 .formatHex(CertificateFactory.getInstance("X.509")
                         .generateCertificate(new ByteArrayInputStream(bytes))
@@ -238,24 +247,16 @@ public class HederaSdkClientFactory {
         }
 
         @Override
-        public void close() throws Exception {
-            List<Exception> exceptions = new ArrayList<>();
+        public void close() {
             try {
                 client.close();
-            } catch (TimeoutException e) {
-                exceptions.add(e);
+            } catch (TimeoutException ignored) {
             }
             for (LocalPortForward portForward : portForwards) {
                 try {
                     portForward.close();
-                } catch (IOException e) {
-                    exceptions.add(e);
+                } catch (IOException ignored) {
                 }
-            }
-            if (!exceptions.isEmpty()) {
-                Exception exception = exceptions.removeFirst();
-                exceptions.forEach(exception::addSuppressed);
-                throw exception;
             }
         }
     }
@@ -264,7 +265,6 @@ public class HederaSdkClientFactory {
      * Workaround to configure client to use TLS with custom network.
      *
      * @see <a href="https://github.com/hashgraph/hedera-sdk-java/pull/1901">PR #1901</a>
-     * @see <a href="https://github.com/hashgraph/hedera-sdk-java/pull/1930">PR #1930</a>
      */
     static class Workaround {
         Field clientNetworkField;
