@@ -50,7 +50,9 @@ public final class Constants {
     public static final String MINIO_TENANT_NAMESPACE = "minio-tenant";
 
     // template variables
+    public static final String TPL_VAR_NAMESPACE = "namespace";
     public static final String TPL_VAR_NODE_ID = "nodeId";
+    public static final String TPL_VAR_NODE_IDS = "nodeIds";
     public static final String TPL_VAR_ACCOUNT_ID = "accountId";
     public static final String TPL_VAR_SECURITY_CONTEXT = "securityContext";
     public static final String TPL_VAR_PUBLIC_KEY_FILES = "publicKeyFiles";

@@ -1,5 +1,8 @@
+# {@String namespace}
 # {@String nodeId}
 # {@String accountId}
+# {@java.util.List nodeIds}
+# {@java.util.Set publicKeyFiles}
 # {@io.fabric8.kubernetes.api.model.PodSecurityContext securityContext}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader recordStreamUploader}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader recordStreamSidecarFilesUploader}
@@ -17,25 +20,91 @@ spec:
   subdomain: consensus
   serviceAccountName: "{nodeId}-sa"
   initContainers:
-    - name: "consensus-init"
-      image: gcr.io/hedera-registry/consensus-node:0.52.0-alpha.6
+    - name: init-lookup-services
+      image: curlimages/curl:8.9.1
+      command:
+        - "/bin/sh"
+        - "-c"
+        - |
+          lookupSvc() \{
+            local svc="$1"
+            local attempt=1
+            local delay=5
+            local maxAttempt=100
+            local rc=0
+            # Check for services with a timeout
+            until [ $attempt -gt $maxAttempt ]; do
+              echo "-------------------------------------------------------------------"
+              #nslookup "$svc" > /dev/null 2>&1
+              nslookup "$svc"
+              rc=$?
+              if [ "$rc" -eq 0 ]; then
+                echo "OK: $svc"
+                echo "-------------------------------------------------------------------"
+                return $rc
+              fi
+              echo "Attempt $attempt failed. Retrying in $delay seconds..."
+              sleep "$delay"
+              attempt=$(( attempt + 1 ))
+            done
+            echo "ERROR: Timeout occurred; lookup failed for services: $svc."
+            return 1
+          \}
+
+          checkConsensusNodeSvc() \{
+            # {#for n in nodeIds }
+            lookupSvc "{n}.consensus.{namespace}.svc.cluster.local" || return $?
+            lookupSvc "{n}-svc.{namespace}.svc.cluster.local" || return $?
+            # {/for}
+            echo "Lookup succeeded for all services."
+            return 0
+          \}
+
+          runCheck() \{
+            checkConsensusNodeSvc || return 1
+            return 0
+          \}
+
+          runCheck
+    - name: "init-consensus-node"
+      image: gcr.io/hedera-registry/consensus-node:0.52.0-alpha.6 # FIXME check if we can use busybox here      image: gcr.io/hedera-registry/consensus-node:0.52.0-alpha.6
       volumeMounts:
         - name: hgcapp-record-streams
           mountPath: /opt/hgcapp/recordStreams
         - name: hgcapp-events-streams
           mountPath: /opt/hgcapp/eventsStreams
+        - name: hgcapp-version
+          mountPath: /tmp/versionInfo
+        - name: hgcapp-data-keys
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
+        - name: grpc-tls-keys
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.crt
+          subPath: hedera-{nodeId}.crt
+        - name: gossip-keys
+          mountPath: /tmp/gossip-keys
+        - name: public-keys
+          mountPath: /tmp/public-keys
       command:
-        - "/bin/sh"
+        - "/bin/bash"
         - "-c"
         - |
           setupDirs() \{
             mkdir -p /opt/hgcapp/recordStreams/record{accountId}/sidecar
-            chown -r hedera:hedera /opt/hgcapp/recordStreams
+            sudo chown -R hedera:hedera /opt/hgcapp/recordStreams
             mkdir -p /opt/hgcapp/eventsStreams/events_{accountId}
-            chown -r hedera:hedera /opt/hgcapp/eventsStreams
+            sudo chown -R hedera:hedera /opt/hgcapp/eventsStreams
+            touch /tmp/versionInfo/VERSION # FIXME change to copy when VERSION file is baked in the image
             return 0
           \}
-          setupDirs
+          runInit() \{
+            echo "Copying keys into /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/"
+            cp -rLfv /tmp/gossip-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/
+            cp -rLfv /tmp/public-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/
+            # setup directories before consensus-node starts
+            setupDirs || return 1
+            return 0
+          \}
+          runInit
   containers:
     - name: consensus-node
       image: gcr.io/hedera-registry/consensus-node:0.52.0-alpha.6
@@ -71,6 +140,10 @@ spec:
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/saved
         - name: hgcapp-data-stats
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/stats
+        - name: hgcapp-data-upgrade
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade
+        - name: hgcapp-data-keys
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
         - name: grpc-tls-keys
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.crt
           subPath: "hedera-{nodeId}.crt"
@@ -311,6 +384,9 @@ spec:
         - name: backup-uploader-config
           mountPath: /home/hedera/.config/rclone/rclone.conf
           subPath: rclone.conf
+        - name: hgcapp-version
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/VERSION
+          subPath: VERSION
       env:
         - name: BACKUP_UPLOADER_BUCKET_1
           value: "{backupUploader.config.bucketName}"
@@ -346,12 +422,25 @@ spec:
       secret:
         secretName: "{nodeId}-grpc-tls-keys"
     - name: hgcapp-record-streams
-      emptyDir: {}
+      persistentVolumeClaim:
+        claimName: "{nodeId}-record-streams"
     - name: hgcapp-events-streams
-      emptyDir: {}
+      persistentVolumeClaim:
+        claimName: "{nodeId}-events-streams"
     - name: hgcapp-output
-      emptyDir: {}
+      persistentVolumeClaim:
+        claimName: "{nodeId}-output"
+    - name: hgcapp-data-keys
+      persistentVolumeClaim:
+        claimName: "{nodeId}-data-keys"
     - name: hgcapp-data-saved
-      emptyDir: {}
+      persistentVolumeClaim:
+        claimName: "{nodeId}-data-saved"
     - name: hgcapp-data-stats
+      persistentVolumeClaim:
+        claimName: "{nodeId}-data-stats"
+    - name: hgcapp-data-upgrade
+      persistentVolumeClaim:
+        claimName: "{nodeId}-data-upgrade"
+    - name: hgcapp-version
       emptyDir: {}

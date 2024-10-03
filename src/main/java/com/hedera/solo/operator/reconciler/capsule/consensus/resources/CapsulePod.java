@@ -26,7 +26,9 @@ import static com.hedera.solo.operator.reconciler.common.Constants.SECURITY_CONT
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_ACCOUNT_ID;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_BACKUP_UPLOADER;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_EVENT_STREAM_UPLOADER;
+import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NAMESPACE;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_ID;
+import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_IDS;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_PUBLIC_KEY_FILES;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_RECORD_STREAM_UPLOADER;
@@ -49,6 +51,8 @@ import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
 import io.quarkus.runtime.util.StringUtil;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -109,9 +113,13 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
                 .inNamespace(primary.getMetadata().getNamespace())
                 .withName("public-keys")
                 .get();
+        final String namespace = primary.getMetadata().getNamespace();
+        final List<String> nodeIds = getNodeIds(context, namespace);
 
         // set template variables
+        tplInstance.data(TPL_VAR_NAMESPACE, primary.getMetadata().getNamespace());
         tplInstance.data(TPL_VAR_NODE_ID, nodeId);
+        tplInstance.data(TPL_VAR_NODE_IDS, nodeIds);
         tplInstance.data(TPL_VAR_ACCOUNT_ID, accountId);
         tplInstance.data(TPL_VAR_SECURITY_CONTEXT, SECURITY_CONTEXT_BUILDER.build());
         tplInstance.data(TPL_VAR_PUBLIC_KEY_FILES, publicKeys.getData().keySet());
@@ -219,6 +227,33 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         }
 
         return uploader;
+    }
+
+    private static List<String> getNodeIds(Context<ConsensusCapsule> context, String namespace) {
+        final List<String> nodeIds = new ArrayList<>();
+
+        final ConfigMap clusterConfig = context.getClient()
+                .resources(ConfigMap.class)
+                .inNamespace(namespace)
+                .withName("cluster-config")
+                .get();
+
+        // extract the node-ids from config.txt
+        final String configTxt = clusterConfig.getData().get("config.txt");
+        for (String line : configTxt.split("\n")) {
+            if (line.startsWith("address")) {
+                final String[] parts = line.split(",");
+                if (parts.length != 10) {
+                    throw new IllegalArgumentException("Invalid address line in config.txt: " + line);
+                }
+
+                // pick the node nickname/alias at index 2
+                // FIXME for DAB Phase-3, we may need to revisit this
+                nodeIds.add(parts[2].trim());
+            }
+        }
+
+        return nodeIds.stream().sorted().toList();
     }
 
     public static class Ready implements Condition<Pod, ConsensusCapsule> {
