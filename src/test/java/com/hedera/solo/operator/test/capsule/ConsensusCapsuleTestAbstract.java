@@ -41,6 +41,7 @@ import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitialization;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationBuilder;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationSpec;
+import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Sidecars;
@@ -414,31 +415,37 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .build();
         kubernetesClient.resource(networkInitialization).create();
 
-        await().atMost(90, TimeUnit.SECONDS).untilAsserted(() -> {
-            NetworkInitialization netInit =
-                    kubernetesClient.resource(networkInitialization).get();
-            assertThat(netInit).isNotNull();
-            for (ConsensusCapsule consensusCapsule : consensusCapsules) {
-                String name = consensusCapsule.getMetadata().getName();
-                ConsensusCapsule capsule =
-                        kubernetesClient.resource(consensusCapsule).get();
-                assertThat(capsule).isNotNull();
-                assertThat(capsule.getSpec().getEligibleForDeployment()).isTrue();
+        await().atMost(180, TimeUnit.SECONDS)
+                .failFast(() -> {
+                    NetworkInitialization netInit =
+                            kubernetesClient.resource(networkInitialization).get();
+                    assertThat(netInit).isNotNull();
+                    assertThat(netInit.getStatus().getPhase()).isNotEqualTo(NetworkInitializationStatus.Phase.Failed);
+                })
+                .untilAsserted(() -> {
+                    NetworkInitialization netInit =
+                            kubernetesClient.resource(networkInitialization).get();
+                    assertThat(netInit).isNotNull();
+                    assertThat(netInit.getStatus().getPhase()).isEqualTo(NetworkInitializationStatus.Phase.Succeeded);
+                    for (ConsensusCapsule consensusCapsule : consensusCapsules) {
+                        String name = consensusCapsule.getMetadata().getName();
+                        ConsensusCapsule capsule =
+                                kubernetesClient.resource(consensusCapsule).get();
+                        assertThat(capsule).isNotNull();
+                        assertThat(capsule.getSpec().getEligibleForDeployment()).isTrue();
 
-                Pod pod = kubernetesClient
-                        .resources(Pod.class)
-                        .inNamespace(namespace)
-                        .withName(name + "-pod")
-                        .get();
-                assertThat(pod).isNotNull();
-                assertThat(pod.getStatus()).isNotNull();
-                assertThat(pod.getStatus().getPhase()).isEqualTo("Running");
+                        Pod pod = kubernetesClient
+                                .resources(Pod.class)
+                                .inNamespace(namespace)
+                                .withName(name + "-pod")
+                                .get();
+                        assertThat(pod).isNotNull();
+                        assertThat(pod.getStatus()).isNotNull();
+                        assertThat(pod.getStatus().getPhase()).isEqualTo("Running");
 
-                assertThat(capsule.getStatus().getPhase()).isEqualTo(ConsensusCapsuleStatus.Phase.Running);
-                // FIXME  NetworkInit status check
-                // assertThat(netInit.getStatus().getPhase()).isEqualTo(NetworkInitializationStatus.Phase.Succeeded);
-            }
-        });
+                        assertThat(capsule.getStatus().getPhase()).isEqualTo(ConsensusCapsuleStatus.Phase.Running);
+                    }
+                });
     }
 
     List<NodeAddress> addresses(final Client client) throws Exception {

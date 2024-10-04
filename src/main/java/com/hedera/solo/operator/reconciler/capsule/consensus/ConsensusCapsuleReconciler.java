@@ -27,6 +27,8 @@ import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsulePo
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleRoleBinding;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleService;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleServiceAccount;
+import io.fabric8.kubernetes.api.model.ContainerState;
+import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -37,7 +39,9 @@ import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
 import jakarta.inject.Inject;
+import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 import org.jboss.logging.Logger;
 
 @ControllerConfiguration(
@@ -52,6 +56,7 @@ public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>,
 
     public static final Predicate<HasMetadata> HAS_LABEL_SELECTOR_CONSENSUS_NODE =
             hasLabel(LABEL_SELECTOR_CONSENSUS_NODE_KEY, LABEL_SELECTOR_CONSENSUS_NODE_VALUE);
+    public static final String CONSENSUS_CONTAINER_NAME = "consensus-node";
     private final Logger log;
 
     @Inject
@@ -67,11 +72,8 @@ public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>,
                     "Consensus Capsule - Starting Reconciliation [ name = '%s' ]",
                     capsule.getMetadata().getName());
 
-            ConsensusCapsuleStatus.Phase phase = ConsensusCapsuleStatus.Phase.Unknown;
-            Pod[] pods = context.getSecondaryResources(Pod.class).toArray(Pod[]::new);
-            if (1 == pods.length) {
-                phase = ConsensusCapsuleStatus.Phase.valueOf(pods[0].getStatus().getPhase());
-            }
+            ConsensusCapsuleStatus.Phase phase =
+                    phase(context.getSecondaryResources(Pod.class).toArray(Pod[]::new));
 
             ConsensusCapsule desired = capsule.edit()
                     .editStatus()
@@ -93,6 +95,29 @@ public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>,
                     "Consensus Capsule - Finished Reconciliation [ name = '%s' ]",
                     capsule.getMetadata().getName());
         }
+    }
+
+    public static ConsensusCapsuleStatus.Phase phase(final Pod... pods) {
+        ConsensusCapsuleStatus.Phase phase = ConsensusCapsuleStatus.Phase.Unknown;
+        if (1 == pods.length) {
+            ContainerStatus containerStatus = pods[0].getStatus().getContainerStatuses().stream()
+                    .collect(Collectors.toMap(ContainerStatus::getName, Function.identity()))
+                    .get(CONSENSUS_CONTAINER_NAME);
+            if (containerStatus != null) {
+                ContainerState state = containerStatus.getState();
+                if (state.getRunning() != null) {
+                    phase = containerStatus.getReady()
+                            ? ConsensusCapsuleStatus.Phase.Running
+                            : ConsensusCapsuleStatus.Phase.Pending;
+                }
+                if (state.getTerminated() != null) {
+                    phase = state.getTerminated().getExitCode() == 0
+                            ? ConsensusCapsuleStatus.Phase.Succeeded
+                            : ConsensusCapsuleStatus.Phase.Failed;
+                }
+            }
+        }
+        return phase;
     }
 
     @Override
