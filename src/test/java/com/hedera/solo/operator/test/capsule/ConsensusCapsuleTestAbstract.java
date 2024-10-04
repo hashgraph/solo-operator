@@ -76,7 +76,6 @@ import org.junit.jupiter.api.Test;
 @SoloTest
 public abstract class ConsensusCapsuleTestAbstract {
     protected final String namespace = getClass().getSimpleName().toLowerCase();
-    public static final String RECORD_STREAM_TEMPLATE = "sidecars/record-stream-uploader.yaml";
 
     @Inject
     @SuppressWarnings("CdiInjectionPointsInspection")
