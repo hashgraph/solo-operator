@@ -36,6 +36,9 @@ public final class Constants {
     public static final AccountId OPERATOR_ACCOUNT_ID = AccountId.fromString("0.0.2");
     public static final PrivateKey OPERATOR_PRIVATE_KEY = PrivateKey.fromString(
             "302e020100300506032b65700422042091132178e72057a1d7528025956fe39b0b847f200ab59b2fdd367017f3087137");
+    public static final int GOSSIP_PORT = 50111;
+    public static final int GRPC_PORT = 50211;
+    public static final int GRPC_TLS_PORT = 50212;
 
     // Helm chart related
     public static final String MINIO_CHART_REPO = "minio-operator";

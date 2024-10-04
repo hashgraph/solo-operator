@@ -90,9 +90,9 @@ spec:
         - |
           setupDirs() \{
             mkdir -p /opt/hgcapp/recordStreams/record{accountId}/sidecar
-            sudo chown -R hedera:hedera /opt/hgcapp/recordStreams
+            chown -R hedera:hedera /opt/hgcapp/recordStreams
             mkdir -p /opt/hgcapp/eventsStreams/events_{accountId}
-            sudo chown -R hedera:hedera /opt/hgcapp/eventsStreams
+            chown -R hedera:hedera /opt/hgcapp/eventsStreams
             touch /tmp/versionInfo/VERSION # FIXME change to copy when VERSION file is baked in the image
             return 0
           \}
@@ -101,6 +101,7 @@ spec:
             echo "Copying keys into /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/"
             cp -rLfv /tmp/gossip-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/
             cp -rLfv /tmp/public-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/
+
             # setup directories before consensus-node starts
             setupDirs || return 1
             return 0
