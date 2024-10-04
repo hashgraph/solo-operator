@@ -118,7 +118,8 @@ public abstract class ConsensusCapsuleTestAbstract {
                         "app=consensus-node",
                         "consensus-node",
                         "services-hedera/HapiApp2.0/output/hgcaa.log",
-                        "services-hedera/HapiApp2.0/output/swirlds.log")
+                        "services-hedera/HapiApp2.0/output/swirlds.log",
+                        "services-hedera/HapiApp2.0/config.txt")
                 .namespaces("minio-operator", "minio-tenant")
                 .namespacedResources()
                 .logs()
