@@ -33,8 +33,6 @@ import io.fabric8.kubernetes.client.dsl.PortForwardable;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.math.BigInteger;
-import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
@@ -48,8 +46,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -57,7 +55,6 @@ public class HederaSdkClientFactory {
     public static final String DEFAULT_ACCOUNT_ID = "0.0.2";
     public static final String DEFAULT_PRIVATE_KEY =
             "302e020100300506032b65700422042091132178e72057a1d7528025956fe39b0b847f200ab59b2fdd367017f3087137";
-    private static final AtomicInteger hostId = new AtomicInteger();
     private final KubernetesClient kubernetesClient;
     private final String namespace;
     private final Workaround workaround = new Workaround();
@@ -67,46 +64,40 @@ public class HederaSdkClientFactory {
         this.namespace = namespace;
     }
 
-    public ClientContext directContextCreator() {
-        return getClientContext(direct());
+    public interface PortForward {
+        List<LocalPortForward> create(final PortForwardable portForwardable);
     }
 
-    public ClientContext haproxyContextCreator() {
-        return getClientContext(haproxy());
+    public ClientContext directContextCreator(final String consensusNode) {
+        return createClientContext(direct(), consensusNode);
     }
 
-    /**
-     * Workaround client unsupported dynamic ports for TLS with dynamic addresses.
-     *
-     * @see <a href="https://github.com/hashgraph/hedera-sdk-java/pull/1930">PR #1930</a>
-     */
-    List<LocalPortForward> portForward(final PortForwardable resource) {
+    public ClientContext haproxyContextCreator(final String consensusNode) {
+        return createClientContext(haproxy(), consensusNode);
+    }
+
+    ClientContext createClientContext(final Map<String, String> nodeService, final String consensusNode) {
+        return getClientContext(nodeService, consensusNode::equals, resource -> Stream.of(50211, 50212)
+                .map(port -> resource.portForward(port, port))
+                .toList());
+    }
+
+    ClientContext getClientContext(
+            final Map<String, String> nodeService, final Predicate<String> predicate, final PortForward portForward) {
         try {
-            long prefix = 127 << 24;
-            long host = (hostId.incrementAndGet() & 0x7fffff) + 1;
-            InetAddress inetAddress =
-                    InetAddress.getByAddress(BigInteger.valueOf(prefix | host).toByteArray());
-            return Stream.of(50211, 50212)
-                    .map(port -> resource.portForward(port, inetAddress, port))
-                    .toList();
-        } catch (final IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    ClientContext getClientContext(final Map<String, String> nodeService) {
-        try {
-            return getClient(getPortForwarding(nodeService));
+            return getClient(getPortForwarding(nodeService, predicate, portForward));
         } catch (Exception exception) {
             throw new RuntimeException(exception);
         }
     }
 
-    Map<String, List<LocalPortForward>> getPortForwarding(final Map<String, String> nodeService) {
+    Map<String, List<LocalPortForward>> getPortForwarding(
+            final Map<String, String> nodeService, final Predicate<String> select, final PortForward portForward) {
         return nodeService.entrySet().stream()
+                .filter(e -> select.test(e.getKey()))
                 .collect(Collectors.toMap(
                         Map.Entry::getKey,
-                        e -> portForward(kubernetesClient
+                        e -> portForward.create(kubernetesClient
                                 .services()
                                 .inNamespace(namespace)
                                 .withName(e.getValue()))));
@@ -118,13 +109,14 @@ public class HederaSdkClientFactory {
                 services.values().stream().flatMap(Collection::stream).toList());
     }
 
-    NodeAddressBook nodeAddressBook(final Map<String, List<LocalPortForward>> services) throws IOException {
+    NodeAddressBook nodeAddressBook(final Map<String, List<LocalPortForward>> services) throws Exception {
         Map<String, byte[]> certificates = certificates();
         Map<String, String> pubKeys = pubKeys();
         final List<com.hedera.hashgraph.sdk.proto.NodeAddress> nodeAddresses = Arrays.stream(
                         configText().split("\n"))
                 .filter(line -> line.startsWith("address"))
                 .map(line -> line.split("\s*,\s*"))
+                .filter(cfg -> services.containsKey(cfg[2]))
                 .map(cfg -> nodeAddress(
                         cfg[1], cfg[9], services.get(cfg[2]), pubKeys.get(cfg[2]), certificates.get(cfg[2])))
                 .toList();
@@ -248,15 +240,15 @@ public class HederaSdkClientFactory {
 
         @Override
         public void close() {
-            try {
-                client.close();
-            } catch (TimeoutException ignored) {
-            }
             for (LocalPortForward portForward : portForwards) {
                 try {
                     portForward.close();
                 } catch (IOException ignored) {
                 }
+            }
+            try {
+                client.close();
+            } catch (TimeoutException ignored) {
             }
         }
     }

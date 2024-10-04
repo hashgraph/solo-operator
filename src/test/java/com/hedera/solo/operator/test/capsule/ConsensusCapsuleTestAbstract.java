@@ -66,7 +66,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
+import java.util.function.BiFunction;
 import org.awaitility.core.ConditionTimeoutException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -454,26 +454,20 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .toArray(String[]::new);
     }
 
-    void checkAddressBook(final Function<HederaSdkClientFactory, HederaSdkClientFactory.ClientContext> clientContext)
+    void checkAddressBook(
+            final BiFunction<HederaSdkClientFactory, String, HederaSdkClientFactory.ClientContext> clientContext)
             throws AssertionError, Exception {
         String[] consensusNodeNames = consensusNodeNames();
         HederaSdkClientFactory sdkClientFactory = new HederaSdkClientFactory(kubernetesClient, namespace);
-        for (int idx = 0; idx < consensusNodeNames.length; idx++) {
-            int index = idx;
+        for (String nodeName : consensusNodeNames) {
             AssertionError assertion = null;
             ConditionTimeoutException timeout = null;
             for (int attempt = 0; attempt < 10; attempt++) {
                 assertion = null;
                 timeout = null;
-                try (HederaSdkClientFactory.ClientContext context = clientContext.apply(sdkClientFactory)) {
+                try (HederaSdkClientFactory.ClientContext context = clientContext.apply(sdkClientFactory, nodeName)) {
                     await().atMost(15, TimeUnit.SECONDS).untilAsserted(() -> {
                         Client client = context.client;
-
-                        Map<String, AccountId> network = client.getNetwork();
-                        client.setNetwork(Map.ofEntries(network.entrySet().stream()
-                                .sorted(Map.Entry.comparingByValue())
-                                .toList()
-                                .get(index)));
 
                         client.setOperator(
                                 AccountId.fromString(HederaSdkClientFactory.DEFAULT_ACCOUNT_ID),
