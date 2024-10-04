@@ -94,22 +94,21 @@ public class NetworkInitializationReconciler implements Reconciler<NetworkInitia
     }
 
     // collect consensus capsule status in status until any fail or all succeed.
-    private static NetworkInitializationStatus.Phase getPhase(final List<ConsensusCapsule> consensusCapsules) {
+    private NetworkInitializationStatus.Phase getPhase(final List<ConsensusCapsule> consensusCapsules) {
         Set<ConsensusCapsuleStatus.Phase> phases = consensusCapsules.stream()
                 .map(CustomResource::getStatus)
                 .map(ConsensusCapsuleStatus::getPhase)
                 .collect(Collectors.toSet());
 
-        NetworkInitializationStatus.Phase phase;
-        if (phases.contains(ConsensusCapsuleStatus.Phase.Failed)) {
-            phase = NetworkInitializationStatus.Phase.Failed;
-        } else if (phases.contains(ConsensusCapsuleStatus.Phase.Pending)) {
-            phase = NetworkInitializationStatus.Phase.Pending;
-        } else if (phases.equals(Set.of(ConsensusCapsuleStatus.Phase.Running))
-                || phases.equals(Set.of(ConsensusCapsuleStatus.Phase.Succeeded))) {
+        NetworkInitializationStatus.Phase phase = NetworkInitializationStatus.Phase.Failed;
+        if (Set.of(ConsensusCapsuleStatus.Phase.Running).equals(phases)) {
             phase = NetworkInitializationStatus.Phase.Succeeded;
-        } else {
-            phase = NetworkInitializationStatus.Phase.Unknown;
+        } else if (Set.of(
+                        ConsensusCapsuleStatus.Phase.Pending,
+                        ConsensusCapsuleStatus.Phase.Running,
+                        ConsensusCapsuleStatus.Phase.Unknown)
+                .containsAll(phases)) {
+            phase = NetworkInitializationStatus.Phase.Running;
         }
         return phase;
     }
