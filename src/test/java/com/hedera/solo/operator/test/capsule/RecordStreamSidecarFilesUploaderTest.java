@@ -64,7 +64,7 @@ public class RecordStreamSidecarFilesUploaderTest extends ConsensusCapsuleTestAb
     }
 
     private void check(final int total) {
-        await().atMost(60, TimeUnit.SECONDS).untilAsserted(() -> {
+        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
             List<Pod> consensusPods = fetchConsensusPods();
             assertThat(consensusPods).hasSize(total);
 
