@@ -67,7 +67,7 @@ spec:
 
           runCheck
     - name: "init-consensus-node"
-      image: busybox:1.36.1
+      image: gcr.io/hedera-registry/consensus-node:0.52.0-alpha.6 # we are using it as we need the user hedera:hedera
       volumeMounts:
         - name: hgcapp-record-streams
           mountPath: /opt/hgcapp/recordStreams
@@ -75,6 +75,8 @@ spec:
           mountPath: /opt/hgcapp/eventsStreams
         - name: hgcapp-version
           mountPath: /tmp/versionInfo
+        - name: cluster-config
+          mountPath: /tmp/cluster-config
         - name: hgcapp-data-keys
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
         - name: grpc-tls-keys
@@ -85,22 +87,37 @@ spec:
         - name: public-keys
           mountPath: /tmp/public-keys
       command:
-        - "/bin/sh"
+        - "/bin/bash"
         - "-c"
         - |
           setupDirs() \{
+            # setup directories mounted into different containers
             mkdir -p /opt/hgcapp/recordStreams/record{accountId}/sidecar
-            chown -R hedera:hedera /opt/hgcapp/recordStreams
+            sudo chown -R hedera:hedera /opt/hgcapp/recordStreams
             mkdir -p /opt/hgcapp/eventsStreams/events_{accountId}
-            chown -R hedera:hedera /opt/hgcapp/eventsStreams
+            sudo chown -R hedera:hedera /opt/hgcapp/eventsStreams
+
+            # create empty VERSION file for backup-uploader
             touch /tmp/versionInfo/VERSION # FIXME change to copy when VERSION file is baked in the image
+
             return 0
           \}
 
           runInit() \{
             echo "Copying keys into /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/"
+            echo "--------------------------------------------------------------------------"
             cp -rLfv /tmp/gossip-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/
             cp -rLfv /tmp/public-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/
+
+            echo ""
+            echo "cluster-config directory"
+            echo "--------------------------------------------------------------------------"
+            ls -la /tmp/cluster-config
+
+            echo ""
+            echo "Check config.txt"
+            echo "--------------------------------------------------------------------------"
+            cat /tmp/cluster-config/config.txt
 
             # setup directories before consensus-node starts
             setupDirs || return 1
