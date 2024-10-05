@@ -179,9 +179,10 @@ public class DefaultSnapshot extends Snapshot {
     }
 
     private PodResource podResource(final Pod pod) {
-        return client.pods()
+        return (PodResource) client.pods()
                 .inNamespace(pod.getMetadata().getNamespace())
-                .withName(pod.getMetadata().getName());
+                .withName(pod.getMetadata().getName())
+                .usingListener(((code, reason) -> {}));
     }
 
     private String[] groupVersions() {
