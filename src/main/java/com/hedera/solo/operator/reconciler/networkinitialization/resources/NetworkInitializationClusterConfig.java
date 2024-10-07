@@ -14,6 +14,7 @@ import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.javaoperatorsdk.operator.api.config.informer.InformerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.processing.dependent.Creator;
 import io.javaoperatorsdk.operator.processing.dependent.Updater;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
@@ -35,7 +36,8 @@ public class NetworkInitializationClusterConfig extends KubernetesDependentResou
 implements
         Creator<ConfigMap, NetworkInitialization>,
         Updater<ConfigMap, NetworkInitialization>,
-        PrimaryToSecondaryMapper<NetworkInitialization>
+        PrimaryToSecondaryMapper<NetworkInitialization>,
+        ResourceDiscriminator<ConfigMap, NetworkInitialization>
 {
     Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
@@ -46,6 +48,7 @@ implements
         super(ConfigMap.class);
         configureWith(new KubernetesDependentResourceConfigBuilder<ConfigMap>()
                 .withLabelSelector("app=consensus,type=config")
+                .withResourceDiscriminator(this)
                 .build());
     }
 
@@ -58,7 +61,7 @@ implements
 //        if (!active(primary)) {
 //            throw new UpdateInactiveException();
 //        }
-        return edit(context.getSecondaryResource(ConfigMap.class).orElseGet(() -> loadYaml(ConfigMap.class, getClass(), TEMPLATE)))
+        return edit(context.getSecondaryResource(ConfigMap.class, this).orElseGet(() -> loadYaml(ConfigMap.class, getClass(), TEMPLATE)))
                 .with(builder -> builder
                         .editMetadata()
                         .withName(NAME)
@@ -75,6 +78,11 @@ implements
     @Override
     public Set<ResourceID> toSecondaryResourceIDs(NetworkInitialization primary) {
         return eventSource().orElseThrow().list(primary.getMetadata().getNamespace()).map(ResourceID::fromResource).collect(Collectors.toSet());
+    }
+
+    @Override
+    public Optional<ConfigMap> distinguish(Class<ConfigMap> resource, NetworkInitialization primary, Context<NetworkInitialization> context) {
+        return eventSource().orElseThrow().list(primary.getMetadata().getNamespace()).findAny();
     }
 
     record Node(String name, int weight, String internal, String external) {}

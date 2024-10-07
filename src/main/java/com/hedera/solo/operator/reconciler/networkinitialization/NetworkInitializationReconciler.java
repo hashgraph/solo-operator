@@ -27,10 +27,14 @@ import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.reconciler.networkinitialization.resources.NetworkInitializationClusterConfig;
 import com.hedera.solo.operator.reconciler.networkinitialization.resources.NetworkInitializationConsensusCapsule;
 import com.hedera.solo.operator.reconciler.networkinitialization.resources.NetworkInitializationOrbit;
+import com.hedera.solo.operator.reconciler.networkinitialization.resources.NetworkInitializationState;
+import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.CustomResource;
+import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
+import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusHandler;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.EventSourceContext;
@@ -50,6 +54,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
@@ -82,7 +87,8 @@ import org.slf4j.LoggerFactory;
 @ControllerConfiguration(name = "network-initialization"/*, labelSelector = "phase notin (Failed, Succeeded)"*/)
 public class NetworkInitializationReconciler implements
         ErrorStatusHandler<NetworkInitialization>,
-        Reconciler<NetworkInitialization>, EventSourceInitializer<NetworkInitialization>
+        Reconciler<NetworkInitialization>, EventSourceInitializer<NetworkInitialization>,
+        Cleaner<NetworkInitialization>
 {
     private final AtomicLong sequenceNumber = new AtomicLong();
     private final RolloverCounter counter = new RolloverCounter(63);
@@ -96,9 +102,11 @@ public class NetworkInitializationReconciler implements
     private final NetworkInitializationClusterConfig clusterConfig = new NetworkInitializationClusterConfig();
     private final NetworkInitializationConsensusCapsule consensusCapsule = new NetworkInitializationConsensusCapsule(this);
     private final NetworkInitializationOrbit orbit = new NetworkInitializationOrbit(this);
+    private final NetworkInitializationState state = new NetworkInitializationState(this);
     private final Workflow<NetworkInitialization> workflow = new WorkflowBuilder<NetworkInitialization>()
             .addDependentResource(consensusCapsule)
             .addDependentResource(orbit)
+            .addDependentResource(state)
             .addDependentResource(clusterConfig).dependsOn(consensusCapsule, orbit)
             .build();
 
@@ -153,6 +161,14 @@ public class NetworkInitializationReconciler implements
                                 .build())
                         .rescheduleAfter(0);
             }
+            if (Set.of(NetworkInitializationStatus.Phase.Failed, NetworkInitializationStatus.Phase.Succeeded).contains(resource.getStatus().getPhase())) {
+                log.info("NetworkInitializationReconciler update state {}", resource.getMetadata().getName());
+                context.getClient().configMaps().inNamespace(resource.getMetadata().getNamespace()).resource(edit(context.getSecondaryResource(ConfigMap.class, state).orElseThrow())
+                        .with(builder -> builder
+                                .addToData("count", String.valueOf(Math.max(0, Integer.parseInt(builder.getData().getOrDefault("count", "0")) + 1))))
+                        .build()).update();
+                return UpdateControl.noUpdate();
+            }
             String name = resource.getMetadata().getName();
             Function<Stream<NetworkInitialization>, List<String>> function = stream -> stream
                     .filter(active())
@@ -166,8 +182,9 @@ public class NetworkInitializationReconciler implements
             }
             if (list.isEmpty() || !name.equals(list.getFirst())) {
                 UpdateControl<NetworkInitialization> updateControl = UpdateControl.noUpdate();
-                long index = list.indexOf(name);
-                return -1 != index ? updateControl.rescheduleAfter(3 * (index + 1), TimeUnit.SECONDS) : updateControl;
+//                long index = list.indexOf(name);
+//                return -1 != index ? updateControl.rescheduleAfter(3 * (index + 1), TimeUnit.SECONDS) : updateControl;
+                return updateControl;
             }
             if (resource.getStatus().getConsensusCapsules() == null) {
                 return UpdateControl.patchStatus(edit(resource)
@@ -250,13 +267,18 @@ public class NetworkInitializationReconciler implements
 //                            .withObservedGeneration(resource.getMetadata().getGeneration())
 //                            .withPhase(phase))
 //                    .build();
-            return UpdateControl.patchStatus(resource.edit()
-                            .editStatus()
-                            .withObservedGeneration(resource.getMetadata().getGeneration())
-                            .withPhase(getPhase(resource, context))
-                            .endStatus()
-                            .build())
-                    .rescheduleAfter(Duration.ofSeconds(30));
+            NetworkInitializationStatus.Phase phase = getPhase(resource, context);
+            UpdateControl<NetworkInitialization> updateControl = UpdateControl.patchStatus(resource.edit()
+                    .editStatus()
+                    .withObservedGeneration(resource.getMetadata().getGeneration())
+                    .withPhase(phase)
+                    .endStatus()
+                    .build());
+            if (Set.of(NetworkInitializationStatus.Phase.Failed, NetworkInitializationStatus.Phase.Succeeded).contains(phase)) {
+                updateControl.rescheduleAfter(0);
+            }
+            return updateControl;
+//                    .rescheduleAfter(Duration.ofSeconds(30));
 //        } catch (UpdateInactiveException e) {
 //            logger.info("Network Initialization - caught UpdateInactiveException " + resource.getMetadata().getName());
 //            if (null == resource.getStatus()) {
@@ -323,5 +345,10 @@ public class NetworkInitializationReconciler implements
 //                    .build());
 //        }
         return ErrorStatusUpdateControl.<NetworkInitialization>noStatusUpdate().rescheduleAfter(new Random().nextInt() & 0x1fff, TimeUnit.MILLISECONDS);
+    }
+
+    @Override
+    public DeleteControl cleanup(NetworkInitialization resource, Context<NetworkInitialization> context) {
+        return DeleteControl.defaultDelete();
     }
 }
