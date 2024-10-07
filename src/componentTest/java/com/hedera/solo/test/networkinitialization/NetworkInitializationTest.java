@@ -27,6 +27,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,7 +38,7 @@ public class NetworkInitializationTest extends AbstractOperatorTest {
     @Override
     protected LocallyRunOperatorExtension.Builder configure(final KubernetesClient client) {
         return builder(client)
-                .withReconciler(new NetworkInitializationReconciler(), ControllerConfigurationOverrider::watchingAllNamespaces)
+                .withReconciler(new NetworkInitializationTestReconciler(), ControllerConfigurationOverrider::watchingAllNamespaces)
                 .withReconciler(new ConsensusCapsuleTestReconciler())
                 .withReconciler(new NoOpOrbitReconciler());
     }
@@ -49,17 +50,25 @@ public class NetworkInitializationTest extends AbstractOperatorTest {
 
     @AfterEach
     void teardown() {
+
+        for (int i = 0; i < 10; ++i) {
+            int cnt = i;
+            NetworkInitialization ni = operator().get(NetworkInitialization.class, "init-" + cnt);
+            log.info("test done {} {}", ni.getMetadata().getName(), ni.getStatus().getPhase());
+        }
+
+
         log.info("deleting orbit: {}", operator().getNamespace());
         operator().getKubernetesClient().resources(Orbit.class).withName(operator().getNamespace()).delete();
     }
 
-    @Test
+    @RepeatedTest(100)
     void test() {
         List<String> capsuleNames = List.of("alpha", "beta", "gamma");
 
         capsuleNames.forEach(this::createCapsule);
 
-        for (int i = 0; i < 3; ++i) {
+        for (int i = 0; i < 100; ++i) {
             int cnt = i;
             operator().create(edit(new NetworkInitialization())
                     .with(builder -> builder
@@ -89,8 +98,8 @@ public class NetworkInitializationTest extends AbstractOperatorTest {
             assertThat(new HashSet<>(nodes.values())).isEqualTo(Set.of(0, 1, 2));
         });
 
-        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-            for (int i = 0; i < 3; ++i) {
+        await().atMost(60, TimeUnit.SECONDS).untilAsserted(() -> {
+            for (int i = 0; i < 100; ++i) {
                 int cnt = i;
                 NetworkInitialization ni = operator().get(NetworkInitialization.class, "init-" + cnt);
                 assertThat(ni).isNotNull();

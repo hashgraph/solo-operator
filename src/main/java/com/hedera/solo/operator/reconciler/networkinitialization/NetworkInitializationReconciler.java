@@ -45,7 +45,6 @@ import io.javaoperatorsdk.operator.processing.dependent.workflow.Workflow;
 import io.javaoperatorsdk.operator.processing.dependent.workflow.WorkflowBuilder;
 import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import java.lang.invoke.MethodHandles;
-import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.util.Collection;
 import java.util.Comparator;
@@ -54,7 +53,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
@@ -137,6 +135,13 @@ public class NetworkInitializationReconciler implements
         return Comparator.<NetworkInitialization, ZonedDateTime>comparing(x -> ZonedDateTime.parse(x.getMetadata().getCreationTimestamp())).thenComparing(x -> x.getStatus().getSequenceNumber(), counter);
     }
 
+    void trigger(final NetworkInitialization resource, final Context<NetworkInitialization> context) {
+        context.getClient().configMaps().inNamespace(resource.getMetadata().getNamespace()).resource(edit(context.getSecondaryResource(ConfigMap.class, state).orElseThrow())
+                .with(builder -> builder
+                        .addToData("count", String.valueOf(Math.max(0, Integer.parseInt(builder.getData().getOrDefault("count", "0")) + 1))))
+                .build()).update();
+    }
+
     @Override
     public UpdateControl<NetworkInitialization> reconcile(
             final NetworkInitialization resource, final Context<NetworkInitialization> context) throws Exception {
@@ -161,13 +166,20 @@ public class NetworkInitializationReconciler implements
                                 .build())
                         .rescheduleAfter(0);
             }
+            log.info("NetworkInitializationReconciler phase {} {}", resource.getMetadata().getName(), resource.getStatus().getPhase());
             if (Set.of(NetworkInitializationStatus.Phase.Failed, NetworkInitializationStatus.Phase.Succeeded).contains(resource.getStatus().getPhase())) {
                 log.info("NetworkInitializationReconciler update state {}", resource.getMetadata().getName());
-                context.getClient().configMaps().inNamespace(resource.getMetadata().getNamespace()).resource(edit(context.getSecondaryResource(ConfigMap.class, state).orElseThrow())
-                        .with(builder -> builder
-                                .addToData("count", String.valueOf(Math.max(0, Integer.parseInt(builder.getData().getOrDefault("count", "0")) + 1))))
-                        .build()).update();
+                trigger(resource, context);
                 return UpdateControl.noUpdate();
+//                context.getClient().configMaps().inNamespace(resource.getMetadata().getNamespace()).resource(edit(context.getSecondaryResource(ConfigMap.class, state).orElseThrow())
+//                        .with(builder -> builder
+//                                .addToData("count", String.valueOf(Math.max(0, Integer.parseInt(builder.getData().getOrDefault("count", "0")) + 1))))
+//                        .build()).update();
+//                return UpdateControl.patchStatus(edit(resource)
+//                        .with(builder -> builder
+//                                .editStatus()
+//                                .withObservedGeneration(resource.getMetadata().getGeneration()))
+//                        .build());
             }
             String name = resource.getMetadata().getName();
             Function<Stream<NetworkInitialization>, List<String>> function = stream -> stream
@@ -179,11 +191,24 @@ public class NetworkInitializationReconciler implements
             List<String> list = function.apply(context.getPrimaryCache().list(resource.getMetadata().getNamespace()));
             if (!list.isEmpty() && name.equals(list.getFirst())) {
                 list = function.apply(context.getClient().resources(NetworkInitialization.class).inNamespace(resource.getMetadata().getNamespace()).list().getItems().stream());
+//                if (!list.contains(name)) {
+//                    // cache out of sync
+//                    return UpdateControl.<NetworkInitialization>noUpdate().rescheduleAfter(0);
+//                }
             }
             if (list.isEmpty() || !name.equals(list.getFirst())) {
                 UpdateControl<NetworkInitialization> updateControl = UpdateControl.noUpdate();
 //                long index = list.indexOf(name);
 //                return -1 != index ? updateControl.rescheduleAfter(3 * (index + 1), TimeUnit.SECONDS) : updateControl;
+//                log.info("reconciliation list {} {}", resource.getMetadata().getName(), list);
+//                log.info("reconciliation 1 done for {} active {} inlist {} phase {}", resource.getMetadata().getName(), active().test(resource), list.contains(name), resource.getStatus().getPhase());
+                if (active().test(resource) && !list.contains(name)) {
+                    // cache is out of sync
+                    log.info("cache is out of sync {}", resource.getMetadata().getName());
+                    trigger(resource, context);
+                    //updateControl.rescheduleAfter(1, TimeUnit.SECONDS);
+                }
+//                log.info("reconciliation 2 done for {} active {} inlist {} phase {}", resource.getMetadata().getName(), active().test(resource), list.contains(name), resource.getStatus().getPhase());
                 return updateControl;
             }
             if (resource.getStatus().getConsensusCapsules() == null) {
@@ -202,19 +227,19 @@ public class NetworkInitializationReconciler implements
                         .rescheduleAfter(0);
             }
             log.info("reconciling for {}", resource.getMetadata().getName());
-            logger.info("NetworkInitializationReconciler capsules: "
-                    + context.getSecondaryResources(ConsensusCapsule.class).size());
-            logger.info("NetworkInitializationReconciler capsules: "
-                    + context.getSecondaryResourcesAsStream(ConsensusCapsule.class)
-                    .map(CustomResource::getMetadata)
-                    .map(ObjectMeta::getName)
-                    .toList());
-            logger.info("NetworkInitializationReconciler orbit: " + context.getSecondaryResources(Orbit.class).size());
-            logger.info("NetworkInitializationReconciler orbit: "
-                    + context.getSecondaryResourcesAsStream(Orbit.class)
-                    .map(CustomResource::getMetadata)
-                    .map(ObjectMeta::getName)
-                    .toList());
+//            logger.info("NetworkInitializationReconciler capsules: "
+//                    + context.getSecondaryResources(ConsensusCapsule.class).size());
+//            logger.info("NetworkInitializationReconciler capsules: "
+//                    + context.getSecondaryResourcesAsStream(ConsensusCapsule.class)
+//                    .map(CustomResource::getMetadata)
+//                    .map(ObjectMeta::getName)
+//                    .toList());
+//            logger.info("NetworkInitializationReconciler orbit: " + context.getSecondaryResources(Orbit.class).size());
+//            logger.info("NetworkInitializationReconciler orbit: "
+//                    + context.getSecondaryResourcesAsStream(Orbit.class)
+//                    .map(CustomResource::getMetadata)
+//                    .map(ObjectMeta::getName)
+//                    .toList());
 
 //            List<String> running = context.getPrimaryCache().list(resource.getMetadata().getNamespace())
 //                    .filter(r -> null != r.getStatus() && NetworkInitializationStatus.Phase.Running.equals(r.getStatus().getPhase()))
@@ -239,7 +264,7 @@ public class NetworkInitializationReconciler implements
 //                return UpdateControl.noUpdate();
 //            }
 
-            logger.info("net-init perform reconciliation " + resource.getMetadata().getName());
+//            logger.info("net-init perform reconciliation " + resource.getMetadata().getName());
             workflow.reconcile(resource, context);
 
 
@@ -268,15 +293,16 @@ public class NetworkInitializationReconciler implements
 //                            .withPhase(phase))
 //                    .build();
             NetworkInitializationStatus.Phase phase = getPhase(resource, context);
+            trigger(resource, context);
             UpdateControl<NetworkInitialization> updateControl = UpdateControl.patchStatus(resource.edit()
                     .editStatus()
                     .withObservedGeneration(resource.getMetadata().getGeneration())
                     .withPhase(phase)
                     .endStatus()
                     .build());
-            if (Set.of(NetworkInitializationStatus.Phase.Failed, NetworkInitializationStatus.Phase.Succeeded).contains(phase)) {
-                updateControl.rescheduleAfter(0);
-            }
+//            if (Set.of(NetworkInitializationStatus.Phase.Failed, NetworkInitializationStatus.Phase.Succeeded).contains(phase)) {
+//                updateControl.rescheduleAfter(0);
+//            }
             return updateControl;
 //                    .rescheduleAfter(Duration.ofSeconds(30));
 //        } catch (UpdateInactiveException e) {
@@ -314,7 +340,10 @@ public class NetworkInitializationReconciler implements
                 .collect(Collectors.toSet());
 
         NetworkInitializationStatus.Phase phase = NetworkInitializationStatus.Phase.Failed;
-        if (Set.of(ConsensusCapsuleStatus.Phase.Pending, ConsensusCapsuleStatus.Phase.Unknown).containsAll(phases)) {
+        if (Set.of(ConsensusCapsuleStatus.Phase.Running, ConsensusCapsuleStatus.Phase.Succeeded).containsAll(phases)) {
+            phase = NetworkInitializationStatus.Phase.Succeeded;
+        }
+        else if (Set.of(ConsensusCapsuleStatus.Phase.Pending, ConsensusCapsuleStatus.Phase.Running, ConsensusCapsuleStatus.Phase.Unknown).containsAll(phases)) {
 //            List<String> running = context.getPrimaryCache().list(resource.getMetadata().getNamespace())
 //                    .filter(r -> null != r.getStatus() && NetworkInitializationStatus.Phase.Running.equals(r.getStatus().getPhase()))
 //                    .map(r -> r.getMetadata().getName())
@@ -322,10 +351,11 @@ public class NetworkInitializationReconciler implements
 //            if (running.isEmpty() || running.equals(List.of(resource.getMetadata().getName()))) {
             phase = NetworkInitializationStatus.Phase.Running;
 //            }
-        } else if (Set.of(ConsensusCapsuleStatus.Phase.Running, ConsensusCapsuleStatus.Phase.Succeeded).containsAll(phases)) {
-            phase = NetworkInitializationStatus.Phase.Succeeded;
         }
         logger.info("set to " + phase + " " + resource.getMetadata().getName());
+        if (NetworkInitializationStatus.Phase.Failed.equals(phase)) {
+            log.info("phases: {}", phases);
+        }
         return phase;
     }
 

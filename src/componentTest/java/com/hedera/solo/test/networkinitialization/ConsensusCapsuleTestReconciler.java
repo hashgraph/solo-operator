@@ -12,7 +12,7 @@ import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 @ControllerConfiguration
 public class ConsensusCapsuleTestReconciler implements Reconciler<ConsensusCapsule> {
     @Override
-    public UpdateControl<ConsensusCapsule> reconcile(ConsensusCapsule resource, Context<ConsensusCapsule> context) throws Exception {
+    public UpdateControl<ConsensusCapsule> reconcile(ConsensusCapsule resource, Context<ConsensusCapsule> context) {
         return UpdateControl.patchStatus(edit(resource)
                 .with(builder -> builder
                         .editStatus()
