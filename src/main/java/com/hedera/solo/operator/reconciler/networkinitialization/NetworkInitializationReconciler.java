@@ -330,7 +330,9 @@ public class NetworkInitializationReconciler implements
 //                            .withPhase(phase))
 //                    .build();
             NetworkInitializationStatus.Phase phase = getPhase(resource, context);
-            trigger(resource, context);
+            if (Set.of(NetworkInitializationStatus.Phase.Failed, NetworkInitializationStatus.Phase.Succeeded).contains(phase)) {
+                trigger(resource, context);
+            }
             UpdateControl<NetworkInitialization> updateControl = UpdateControl.patchStatus(resource.edit()
                     .editStatus()
                     .withObservedGeneration(resource.getMetadata().getGeneration())

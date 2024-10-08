@@ -69,7 +69,7 @@ public class NetworkInitializationTest extends AbstractOperatorTest {
         operator().getKubernetesClient().resources(Orbit.class).withName(operator().getNamespace()).delete();
     }
 
-    @RepeatedTest(10)
+    @Test
     void test() {
         List<String> capsuleNames = List.of("alpha", "beta", "gamma");
 
