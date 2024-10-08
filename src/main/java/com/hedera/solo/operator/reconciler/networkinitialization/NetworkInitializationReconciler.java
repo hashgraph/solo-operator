@@ -31,6 +31,9 @@ import com.hedera.solo.operator.reconciler.networkinitialization.resources.Netwo
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.CustomResource;
+import io.fabric8.kubernetes.client.KubernetesClientException;
+import io.fabric8.kubernetes.client.dsl.Updatable;
+import io.fabric8.openshift.api.model.config.v1.Update;
 import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
@@ -84,7 +87,7 @@ import org.slf4j.LoggerFactory;
 
 @ControllerConfiguration(name = "network-initialization"/*, labelSelector = "phase notin (Failed, Succeeded)"*/)
 public class NetworkInitializationReconciler implements
-        ErrorStatusHandler<NetworkInitialization>,
+//        ErrorStatusHandler<NetworkInitialization>,
         Reconciler<NetworkInitialization>, EventSourceInitializer<NetworkInitialization>,
         Cleaner<NetworkInitialization>
 {
@@ -136,10 +139,18 @@ public class NetworkInitializationReconciler implements
     }
 
     void trigger(final NetworkInitialization resource, final Context<NetworkInitialization> context) {
-        context.getClient().configMaps().inNamespace(resource.getMetadata().getNamespace()).resource(edit(context.getSecondaryResource(ConfigMap.class, state).orElseThrow())
+        try {
+            context.getClient().configMaps().inNamespace(resource.getMetadata().getNamespace()).withName(state.NAME).create();
+        } catch (KubernetesClientException ignored) {}
+        context.getClient().configMaps().inNamespace(resource.getMetadata().getNamespace()).withName(state.NAME).edit(x -> edit(x)
+//                .with(builder -> builder
+//                        .editMetadata()
+//                        .withName(state.NAME)
+//                        .withNamespace(resource.getMetadata().getNamespace()))
                 .with(builder -> builder
-                        .addToData("count", String.valueOf(Math.max(0, Integer.parseInt(builder.getData().getOrDefault("count", "0")) + 1))))
-                .build()).update();
+                        .addToData("count", String.valueOf(counter.rollover(sequenceNumber.getAndIncrement()))))
+                .build());
+//                .build()).createOr(Updatable::update);
     }
 
     @Override
@@ -152,6 +163,7 @@ public class NetworkInitializationReconciler implements
             if (null == resource.getStatus()) {
                 log.info("adding status for {}", resource.getMetadata().getName());
 //                context.getSecondaryResources(ConsensusCapsule.class);
+//                trigger(resource, context);
                 return UpdateControl.patchStatus(edit(resource)
                                 .with(builder -> builder
                                         .editStatus()
@@ -365,17 +377,17 @@ public class NetworkInitializationReconciler implements
         return EventSourceInitializer.eventSourcesFromWorkflow(context, workflow);
     }
 
-    @Override
-    public ErrorStatusUpdateControl<NetworkInitialization> updateErrorStatus(NetworkInitialization resource, Context<NetworkInitialization> context, Exception e) {
-//        if (null == resource.getStatus() && e instanceof UpdateInactiveException) {
-//            return ErrorStatusUpdateControl.updateStatus(edit(resource)
-//                    .with(builder -> builder
-//                            .editStatus()
-//                            .withPhase(NetworkInitializationStatus.Phase.Failed))
-//                    .build());
-//        }
-        return ErrorStatusUpdateControl.<NetworkInitialization>noStatusUpdate().rescheduleAfter(new Random().nextInt() & 0x1fff, TimeUnit.MILLISECONDS);
-    }
+//    @Override
+//    public ErrorStatusUpdateControl<NetworkInitialization> updateErrorStatus(NetworkInitialization resource, Context<NetworkInitialization> context, Exception e) {
+////        if (null == resource.getStatus() && e instanceof UpdateInactiveException) {
+////            return ErrorStatusUpdateControl.updateStatus(edit(resource)
+////                    .with(builder -> builder
+////                            .editStatus()
+////                            .withPhase(NetworkInitializationStatus.Phase.Failed))
+////                    .build());
+////        }
+//        return ErrorStatusUpdateControl.<NetworkInitialization>noStatusUpdate().rescheduleAfter(new Random().nextInt() & 0x1fff, TimeUnit.MILLISECONDS);
+//    }
 
     @Override
     public DeleteControl cleanup(NetworkInitialization resource, Context<NetworkInitialization> context) {
