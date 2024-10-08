@@ -10,6 +10,10 @@ import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 public class NetworkInitializationTestReconciler extends NetworkInitializationReconciler {
     @Override
     public UpdateControl<NetworkInitialization> reconcile(NetworkInitialization resource, Context<NetworkInitialization> context) throws Exception {
+        // todo: use label or annotation instead of name
+        if ("init-5".equals(resource.getMetadata().getName()) && null != resource.getStatus()) {
+            return UpdateControl.noUpdate();
+        }
         return super.reconcile(resource, context);
     }
 }

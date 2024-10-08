@@ -27,8 +27,8 @@ import org.slf4j.LoggerFactory;
 @KubernetesDependent
 public class NetworkInitializationState extends KubernetesDependentResource<ConfigMap, NetworkInitialization>
         implements
-        Creator<ConfigMap, NetworkInitialization>,
-        Updater<ConfigMap, NetworkInitialization>,
+//        Creator<ConfigMap, NetworkInitialization>,
+//        Updater<ConfigMap, NetworkInitialization>,
 //        PrimaryToSecondaryMapper<NetworkInitialization>,
         SecondaryToPrimaryMapper<ConfigMap>,
         ResourceDiscriminator<ConfigMap, NetworkInitialization>
@@ -51,18 +51,18 @@ public class NetworkInitializationState extends KubernetesDependentResource<Conf
 //        return super.informerConfigurationBuilder().withPrimaryToSecondaryMapper(this);
 //    }
 
-    @Override
-    protected ConfigMap desired(NetworkInitialization primary, Context<NetworkInitialization> context) {
-        log.info("NetworkInitializationState::desired {} {}", primary.getMetadata().getName(), context.getSecondaryResource(ConfigMap.class, this).isPresent());
-        return edit(context.getSecondaryResource(ConfigMap.class, this).orElseGet(ConfigMap::new))
-                .with(builder -> builder
-                        .editMetadata()
-                        .withNamespace(primary.getMetadata().getNamespace())
-                        .withName(NAME)
-                        .addToLabels("app", "consensus")
-                        .addToLabels("type", "state"))
-                .build();
-    }
+//    @Override
+//    protected ConfigMap desired(NetworkInitialization primary, Context<NetworkInitialization> context) {
+//        log.info("NetworkInitializationState::desired {} {}", primary.getMetadata().getName(), context.getSecondaryResource(ConfigMap.class, this).isPresent());
+//        return edit(context.getSecondaryResource(ConfigMap.class, this).orElseGet(ConfigMap::new))
+//                .with(builder -> builder
+//                        .editMetadata()
+//                        .withNamespace(primary.getMetadata().getNamespace())
+//                        .withName(NAME)
+//                        .addToLabels("app", "consensus")
+//                        .addToLabels("type", "state"))
+//                .build();
+//    }
 
 //    @Override
 //    public Set<ResourceID> toSecondaryResourceIDs(NetworkInitialization primary) {

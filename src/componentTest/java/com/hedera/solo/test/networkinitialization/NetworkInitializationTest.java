@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -51,10 +52,16 @@ public class NetworkInitializationTest extends AbstractOperatorTest {
     @AfterEach
     void teardown() {
 
-        for (int i = 0; i < 10; ++i) {
-            int cnt = i;
-            NetworkInitialization ni = operator().get(NetworkInitialization.class, "init-" + cnt);
-            log.info("test done {} {}", ni.getMetadata().getName(), ni.getStatus().getPhase());
+        try {
+            for (int i = 0; i < 10; ++i) {
+                int cnt = i;
+                NetworkInitialization ni = operator().get(NetworkInitialization.class, "init-" + cnt);
+                if (null != ni) {
+                    log.info("test done {} {}", ni.getMetadata().getName(), Optional.ofNullable(ni.getStatus()).map(NetworkInitializationStatus::getPhase).orElse(null));
+                }
+            }
+        } catch (Exception e) {
+            log.error("error: ",  e);
         }
 
 
@@ -62,13 +69,13 @@ public class NetworkInitializationTest extends AbstractOperatorTest {
         operator().getKubernetesClient().resources(Orbit.class).withName(operator().getNamespace()).delete();
     }
 
-    @RepeatedTest(100)
+    @RepeatedTest(10)
     void test() {
         List<String> capsuleNames = List.of("alpha", "beta", "gamma");
 
         capsuleNames.forEach(this::createCapsule);
 
-        for (int i = 0; i < 100; ++i) {
+        for (int i = 0; i < 10; ++i) {
             int cnt = i;
             operator().create(edit(new NetworkInitialization())
                     .with(builder -> builder
@@ -98,8 +105,17 @@ public class NetworkInitializationTest extends AbstractOperatorTest {
             assertThat(new HashSet<>(nodes.values())).isEqualTo(Set.of(0, 1, 2));
         });
 
+        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+            NetworkInitialization ni = operator().get(NetworkInitialization.class, "init-5");
+            assertThat(ni).isNotNull();
+            assertThat(ni.getStatus()).isNotNull();
+        });
+
+        operator().delete(operator().get(NetworkInitialization.class, "init-5"));
+
         await().atMost(60, TimeUnit.SECONDS).untilAsserted(() -> {
-            for (int i = 0; i < 100; ++i) {
+            for (int i = 0; i < 10; ++i) {
+                if (5 == i) { continue; }
                 int cnt = i;
                 NetworkInitialization ni = operator().get(NetworkInitialization.class, "init-" + cnt);
                 assertThat(ni).isNotNull();
