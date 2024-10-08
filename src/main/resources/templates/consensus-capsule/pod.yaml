@@ -135,21 +135,75 @@ spec:
         - "/bin/bash"
         - "-c"
         - |
-          # copy config files from cluster-config
-          # this avoids having root as the owner of the mounted files, and also avoids intermittent delays in mounting
-          CLUSTER_CONFIG_VOL="/tmp/volumes/cluster-config"
-          cp -rLfv "$CLUSTER_CONFIG_VOL/config.txt" /opt/hgcapp/services-hedera/HapiApp2.0/
-          cp -rLfv "$CLUSTER_CONFIG_VOL/settings.txt" /opt/hgcapp/services-hedera/HapiApp2.0/
-          cp -rLfv "$CLUSTER_CONFIG_VOL/log4j2.xml" /opt/hgcapp/services-hedera/HapiApp2.0/
-          cp -rLfv "$CLUSTER_CONFIG_VOL/api-permission.properties" /opt/hgcapp/services-hedera/HapiApp2.0/data/config/
-          cp -rLfv "$CLUSTER_CONFIG_VOL/application.properties" /opt/hgcapp/services-hedera/HapiApp2.0/data/config/
+          lookupSvc() \{
+            local svc="$1"
+            local attempt=1
+            local delay=1
+            local maxAttempt=100
+            local rc=0
+            # Check for services with a timeout
+            until [ $attempt -gt $maxAttempt ]; do
+              echo "-------------------------------------------------------------------"
+              #nslookup "$svc" > /dev/null 2>&1
+              nslookup "$svc"
+              rc=$?
+              if [ "$rc" -eq 0 ]; then
+                echo "OK: $svc"
+                echo "-------------------------------------------------------------------"
+                return $rc
+              fi
+              echo "Attempt $attempt failed. Retrying in $delay seconds..."
+              sleep "$delay"
+              attempt=$(( attempt + 1 ))
+            done
 
-          # copy entrypoint.sh if it exists in cluster-config (this helps with debugging, but ideally isn't needed)
-          if [[ -f "$CLUSTER_CONFIG_VOL/entrypoint.sh" ]]; then
-            cp -rLfv "$CLUSTER_CONFIG_VOL/entrypoint.sh" /opt/hgcapp/services-hedera/HapiApp2.0/
-          fi
+            echo "ERROR: Timeout occurred; lookup failed for services: $svc."
+            return 1
+          \}
 
-          # start
+          checkConsensusNodeSvc() \{
+            if ! type nslookup > /dev/null 2>&1; then
+              sudo mkdir -p /var/cache/apt/archives/partial /var/log/apt
+              sudo apt install -y dnsutils > /dev/null 2>&1
+            fi
+
+            # {#for n in nodeIds }
+            lookupSvc "{n}.consensus.{namespace}.svc.cluster.local" || return $?
+            lookupSvc "{n}-svc.{namespace}.svc.cluster.local" || return $?
+            # {/for}
+
+            echo "Lookup succeeded for all services."
+            return 0
+          \}
+
+          function copyFiles() \{
+            # copy config files from cluster-config
+            # this avoids having root as the owner of the mounted files, and also avoids intermittent delays in mounting
+            CLUSTER_CONFIG_VOL="/tmp/volumes/cluster-config"
+            cp -rLfv "$CLUSTER_CONFIG_VOL/config.txt" /opt/hgcapp/services-hedera/HapiApp2.0/
+            cp -rLfv "$CLUSTER_CONFIG_VOL/settings.txt" /opt/hgcapp/services-hedera/HapiApp2.0/
+            cp -rLfv "$CLUSTER_CONFIG_VOL/log4j2.xml" /opt/hgcapp/services-hedera/HapiApp2.0/
+            cp -rLfv "$CLUSTER_CONFIG_VOL/api-permission.properties" /opt/hgcapp/services-hedera/HapiApp2.0/data/config/
+            cp -rLfv "$CLUSTER_CONFIG_VOL/application.properties" /opt/hgcapp/services-hedera/HapiApp2.0/data/config/
+
+            # copy entrypoint.sh if it exists in cluster-config (this helps with debugging, but ideally isn't needed)
+            if [[ -f "$CLUSTER_CONFIG_VOL/entrypoint.sh" ]]; then
+              cp -rLfv "$CLUSTER_CONFIG_VOL/entrypoint.sh" /opt/hgcapp/services-hedera/HapiApp2.0/
+            fi
+
+            return 0
+          \}
+
+          function setup() \{
+            checkConsensusNodeSvc || return $?
+            copyFiles || return $?
+            return 0
+          \}
+
+          # setup
+          setup || exit $?
+
+          # start platform software
           exec /init /opt/hgcapp/services-hedera/HapiApp2.0/entrypoint.sh
       startupProbe:
         failureThreshold: 10
