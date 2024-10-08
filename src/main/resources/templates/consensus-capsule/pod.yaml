@@ -131,6 +131,26 @@ spec:
       env:
         - name: JAVA_OPTS
           value: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
+      command:
+        - "/bin/bash"
+        - "-c"
+        - |
+          # copy config files from cluster-config
+          # this avoids having root as the owner of the mounted files, and also avoids intermittent delays in mounting
+          CLUSTER_CONFIG_VOL="/tmp/volumes/cluster-config"
+          cp -rLfv "$CLUSTER_CONFIG_VOL/config.txt" /opt/hgcapp/services-hedera/HapiApp2.0/
+          cp -rLfv "$CLUSTER_CONFIG_VOL/settings.txt" /opt/hgcapp/services-hedera/HapiApp2.0/
+          cp -rLfv "$CLUSTER_CONFIG_VOL/log4j2.xml" /opt/hgcapp/services-hedera/HapiApp2.0/
+          cp -rLfv "$CLUSTER_CONFIG_VOL/api-permission.properties" /opt/hgcapp/services-hedera/HapiApp2.0/data/config/
+          cp -rLfv "$CLUSTER_CONFIG_VOL/application.properties" /opt/hgcapp/services-hedera/HapiApp2.0/data/config/
+
+          # copy entrypoint.sh if it exists in cluster-config (this helps with debugging, but ideally isn't needed)
+          if [[ -f "$CLUSTER_CONFIG_VOL/entrypoint.sh" ]]; then
+            cp -rLfv "$CLUSTER_CONFIG_VOL/entrypoint.sh" /opt/hgcapp/services-hedera/HapiApp2.0/
+          fi
+
+          # start
+          exec /init /opt/hgcapp/services-hedera/HapiApp2.0/entrypoint.sh
       startupProbe:
         failureThreshold: 10
         periodSeconds: 15
@@ -168,23 +188,7 @@ spec:
               test "$PLATFORM_STATUS" = "ACTIVE"
       volumeMounts:
         - name: cluster-config
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/config.txt
-          subPath: config.txt
-        - name: cluster-config
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/settings.txt
-          subPath: settings.txt
-        - name: cluster-config
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/log4j2.xml
-          subPath: log4j2.xml
-        - name: cluster-config
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/config/api-permission.properties
-          subPath: api-permission.properties
-        - name: cluster-config
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/config/application.properties
-          subPath: application.properties
-        - name: cluster-config
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/config/bootstrap.properties
-          subPath: bootstrap.properties
+          mountPath: /tmp/volumes/cluster-config # mount to a temp directory to be able to copy files as required
         - name: hgcapp-record-streams
           mountPath: /opt/hgcapp/recordStreams
         - name: hgcapp-events-streams
