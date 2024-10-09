@@ -2,6 +2,7 @@
 # {@String nodeId}
 # {@String accountId}
 # {@java.util.List nodeIds}
+# {@int defaultMode}
 # {@java.util.Set publicKeyFiles}
 # {@io.fabric8.kubernetes.api.model.PodSecurityContext securityContext}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader recordStreamUploader}
@@ -15,6 +16,9 @@ metadata:
   labels:
     app: consensus-node
 spec:
+  securityContext:
+    runAsUser: "{securityContext.runAsUser}"
+    runAsGroup: "{securityContext.runAsGroup}"
   restartPolicy: Never
   hostname: "{nodeId}"
   subdomain: consensus
@@ -129,6 +133,9 @@ spec:
   containers:
     - name: consensus-node
       image: gcr.io/hedera-registry/consensus-node:0.52.0-alpha.6
+      securityContext:
+        runAsUser: "{securityContext.runAsUser}"
+        runAsGroup: "{securityContext.runAsGroup}"
       env:
         - name: JAVA_OPTS
           value: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
@@ -255,12 +262,11 @@ spec:
               test "$PLATFORM_STATUS" = "ACTIVE"
       volumeMounts:
         - name: cluster-config
-          mountPath: /tmp/volumes/cluster-config # mount to a temp directory to be able to copy files with appropriate permission as required
+          mountPath: /tmp/volumes/cluster-config # mount to a temp directory to copy files with appropriate ownership
         - name: grpc-tls-keys
-          mountPath: /tmp/volumes/grpc-tls-keys
-        - name: grpc-tls-keys
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.key
-          subPath: "hedera-{nodeId}.key"
+          mountPath: /tmp/volumes/grpc-tls-keys # mount to a temp directory to copy files with appropriate ownership
+        - name: hgcapp-data-keys
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
         - name: hgcapp-record-streams
           mountPath: /opt/hgcapp/recordStreams
         - name: hgcapp-events-streams
@@ -273,19 +279,6 @@ spec:
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/stats
         - name: hgcapp-data-upgrade
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade
-        - name: hgcapp-data-keys
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
-        - name: gossip-keys
-          mountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/data/keys/a-private-{nodeId}.pem"
-          subPath: "a-private-{nodeId}.pem"
-        - name: gossip-keys
-          mountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/data/keys/s-private-{nodeId}.pem"
-          subPath: "s-private-{nodeId}.pem"
-        # {#for publicKeyFile in publicKeyFiles}
-        - name: public-keys
-          mountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/data/keys/{publicKeyFile}"
-          subPath: "{publicKeyFile}"
-        # {/for}
     # {#if recordStreamUploader && recordStreamUploader.enabled}
     # Sidecar: record-stream-uploader
     - name: "{recordStreamUploader.name}"
@@ -534,18 +527,23 @@ spec:
     - name: cluster-config
       configMap:
         name: cluster-config
+        defaultMode: "{defaultMode}"
     - name: backup-uploader-config
       configMap:
         name: backup-uploader-config
+        defaultMode: "{defaultMode}"
     - name: public-keys
       configMap:
         name: public-keys
+        defaultMode: "{defaultMode}"
     - name: gossip-keys
       secret:
         secretName: "{nodeId}-gossip-keys"
+        defaultMode: "{defaultMode}"
     - name: grpc-tls-keys
       secret:
         secretName: "{nodeId}-grpc-tls-keys"
+        defaultMode: "{defaultMode}"
     - name: hgcapp-record-streams
       persistentVolumeClaim:
         claimName: "{nodeId}-record-streams"

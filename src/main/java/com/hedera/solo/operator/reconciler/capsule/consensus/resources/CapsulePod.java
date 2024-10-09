@@ -16,6 +16,7 @@
 
 package com.hedera.solo.operator.reconciler.capsule.consensus.resources;
 
+import static com.hedera.solo.operator.reconciler.common.Constants.DEFAULT_FILE_MODE;
 import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_BUCKET_PATH_TEMPLATE;
 import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_EXTENSION;
 import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_SIG_EXTENSION;
@@ -25,6 +26,7 @@ import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM
 import static com.hedera.solo.operator.reconciler.common.Constants.SECURITY_CONTEXT_BUILDER;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_ACCOUNT_ID;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_BACKUP_UPLOADER;
+import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_DEFAULT_MODE;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_EVENT_STREAM_UPLOADER;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NAMESPACE;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_ID;
@@ -121,6 +123,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         tplInstance.data(TPL_VAR_NODE_ID, nodeId);
         tplInstance.data(TPL_VAR_NODE_IDS, nodeIds);
         tplInstance.data(TPL_VAR_ACCOUNT_ID, accountId);
+        tplInstance.data(TPL_VAR_DEFAULT_MODE, DEFAULT_FILE_MODE);
         tplInstance.data(TPL_VAR_SECURITY_CONTEXT, SECURITY_CONTEXT_BUILDER.build());
         tplInstance.data(TPL_VAR_PUBLIC_KEY_FILES, publicKeys.getData().keySet());
         tplInstance.data(TPL_VAR_RECORD_STREAM_UPLOADER, this.prepareRecordStreamUploader(primary));
