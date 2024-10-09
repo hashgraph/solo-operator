@@ -55,7 +55,7 @@ public final class Constants {
 
     // template variables
     public static final String TPL_VAR_NAMESPACE = "namespace";
-    public static final String TPL_VAR_DEFAULT_MODE= "defaultMode"; // e.g. 0755
+    public static final String TPL_VAR_DEFAULT_MODE = "defaultMode"; // e.g. 0755
     public static final String TPL_VAR_NODE_ID = "nodeId";
     public static final String TPL_VAR_NODE_IDS = "nodeIds";
     public static final String TPL_VAR_ACCOUNT_ID = "accountId";
