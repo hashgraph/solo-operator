@@ -11,7 +11,7 @@ public class NetworkInitializationTestReconciler extends NetworkInitializationRe
     @Override
     public UpdateControl<NetworkInitialization> reconcile(NetworkInitialization resource, Context<NetworkInitialization> context) throws Exception {
         // todo: use label or annotation instead of name
-        if ("init-5".equals(resource.getMetadata().getName()) && null != resource.getStatus()) {
+        if (null != resource.getStatus() && "true".equals(resource.getMetadata().getLabels().get("no-update"))) {
             return UpdateControl.noUpdate();
         }
         return super.reconcile(resource, context);

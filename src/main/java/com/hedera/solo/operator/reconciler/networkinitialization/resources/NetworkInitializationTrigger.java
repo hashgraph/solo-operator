@@ -46,7 +46,7 @@ public class NetworkInitializationTrigger extends KubernetesDependentResource<Co
                 .build());
     }
 
-    public void next(final NetworkInitialization resource, final Context<NetworkInitialization> context) {
+    public synchronized void next(final NetworkInitialization resource, final Context<NetworkInitialization> context) {
         context.getClient().resource(edit(new ConfigMap())
                 .with(builder -> builder
                         .editMetadata()

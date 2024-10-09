@@ -52,20 +52,20 @@ public class NetworkInitializationTest extends AbstractOperatorTest {
     @AfterEach
     void teardown() {
 
-        try {
-            for (int i = 0; i < 10; ++i) {
-                int cnt = i;
-                NetworkInitialization ni = operator().get(NetworkInitialization.class, "init-" + cnt);
-                if (null != ni) {
-                    log.info("test done {} {}", ni.getMetadata().getName(), Optional.ofNullable(ni.getStatus()).map(NetworkInitializationStatus::getPhase).orElse(null));
-                }
-            }
-        } catch (Exception e) {
-            log.error("error: ",  e);
-        }
+//        try {
+//            for (int i = 0; i < 10; ++i) {
+//                int cnt = i;
+//                NetworkInitialization ni = operator().get(NetworkInitialization.class, "init-" + cnt);
+//                if (null != ni) {
+//                    log.info("test done {} {}", ni.getMetadata().getName(), Optional.ofNullable(ni.getStatus()).map(NetworkInitializationStatus::getPhase).orElse(null));
+//                }
+//            }
+//        } catch (Exception e) {
+//            log.error("error: ",  e);
+//        }
 
 
-        log.info("deleting orbit: {}", operator().getNamespace());
+//        log.info("deleting orbit: {}", operator().getNamespace());
         operator().getKubernetesClient().resources(Orbit.class).withName(operator().getNamespace()).delete();
     }
 
@@ -75,12 +75,13 @@ public class NetworkInitializationTest extends AbstractOperatorTest {
 
         capsuleNames.forEach(this::createCapsule);
 
-        for (int i = 0; i < 10; ++i) {
+        for (int i = 0; i < 20; ++i) {
             int cnt = i;
             operator().create(edit(new NetworkInitialization())
                     .with(builder -> builder
                             .editMetadata()
-                            .withName("init-" + cnt))
+                            .withName("init-" + cnt)
+                            .addToLabels("no-update", String.valueOf(10 == cnt)))
                     .with(builder -> builder
                             .editSpec()
                             .withMode(FirstInitialization)
@@ -106,21 +107,28 @@ public class NetworkInitializationTest extends AbstractOperatorTest {
         });
 
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-            NetworkInitialization ni = operator().get(NetworkInitialization.class, "init-5");
+            NetworkInitialization ni = operator().get(NetworkInitialization.class, "init-10");
             assertThat(ni).isNotNull();
             assertThat(ni.getStatus()).isNotNull();
+            assertThat(ni.getStatus().getPhase()).isEqualTo(NetworkInitializationStatus.Phase.Pending);
         });
 
-        operator().delete(operator().get(NetworkInitialization.class, "init-5"));
+        sleep(1000);
+
+        assertThat(operator().get(NetworkInitialization.class, "init-10").getStatus().getPhase()).isEqualTo(NetworkInitializationStatus.Phase.Pending);
+        operator().delete(operator().get(NetworkInitialization.class, "init-10"));
 
         await().atMost(60, TimeUnit.SECONDS).untilAsserted(() -> {
-            for (int i = 0; i < 10; ++i) {
-                if (5 == i) { continue; }
+            for (int i = 0; i < 20; ++i) {
                 int cnt = i;
                 NetworkInitialization ni = operator().get(NetworkInitialization.class, "init-" + cnt);
-                assertThat(ni).isNotNull();
-                assertThat(ni.getStatus()).isNotNull();
-                assertThat(ni.getStatus().getPhase()).isEqualTo(NetworkInitializationStatus.Phase.Succeeded);
+                if (10 == cnt) {
+                    assertThat(ni).isNull();
+                } else {
+                    assertThat(ni).isNotNull();
+                    assertThat(ni.getStatus()).isNotNull();
+                    assertThat(ni.getStatus().getPhase()).isEqualTo(NetworkInitializationStatus.Phase.Succeeded);
+                }
             }
         });
     }
@@ -147,5 +155,13 @@ public class NetworkInitializationTest extends AbstractOperatorTest {
                         .withName(name))
                 .with(ConsensusCapsuleFluent::editSpec)
                 .build());
+    }
+
+    void sleep(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
     }
 }
