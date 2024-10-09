@@ -108,6 +108,7 @@ spec:
             echo "--------------------------------------------------------------------------"
             cp -rLfv /tmp/gossip-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/
             cp -rLfv /tmp/public-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/
+            sudo chown -R hedera:hedera /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/
 
             echo ""
             echo "cluster-config directory"
@@ -176,19 +177,31 @@ spec:
             return 0
           \}
 
-          function copyFiles() \{
-            # copy config files from cluster-config
-            # this avoids having root as the owner of the mounted files, and also avoids intermittent delays in mounting
-            CLUSTER_CONFIG_VOL="/tmp/volumes/cluster-config"
-            cp -rLfv "$CLUSTER_CONFIG_VOL/config.txt" /opt/hgcapp/services-hedera/HapiApp2.0/
-            cp -rLfv "$CLUSTER_CONFIG_VOL/settings.txt" /opt/hgcapp/services-hedera/HapiApp2.0/
-            cp -rLfv "$CLUSTER_CONFIG_VOL/log4j2.xml" /opt/hgcapp/services-hedera/HapiApp2.0/
-            cp -rLfv "$CLUSTER_CONFIG_VOL/api-permission.properties" /opt/hgcapp/services-hedera/HapiApp2.0/data/config/
-            cp -rLfv "$CLUSTER_CONFIG_VOL/application.properties" /opt/hgcapp/services-hedera/HapiApp2.0/data/config/
+          # copy file with appropriate ownership
+          function copyFile() \{
+            local src="$1"
+            local dst="$2"
+            cp -rLfv "$src" "$dst"
+            sudo chown hedera:hedera "$dst"
+          \}
 
-            # copy entrypoint.sh if it exists in cluster-config (this helps with debugging, but ideally isn't needed)
+          function copyFiles() \{
+            # copy config files from cluster-config with appropriate file ownership
+            CLUSTER_CONFIG_VOL="/tmp/volumes/cluster-config"
+            HAPI_APP="/opt/hgcapp/services-hedera/HapiApp2.0"
+            copyFile "$CLUSTER_CONFIG_VOL/config.txt" "$HAPI_APP/config.txt"
+            copyFile "$CLUSTER_CONFIG_VOL/settings.txt" "$HAPI_APP/settings.txt"
+            copyFile "$CLUSTER_CONFIG_VOL/log4j2.xml" "$HAPI_APP/log4j2.xml"
+            copyFile "$CLUSTER_CONFIG_VOL/api-permission.properties" "$HAPI_APP/data/config/api-permission.properties"
+            copyFile "$CLUSTER_CONFIG_VOL/application.properties" "$HAPI_APP/data/config/application.properties"
+
+            GRPC_TLS_VOL="/tmp/volumes/grpc-tls-keys"
+            copyFile "$GRPC_TLS_VOL/hedera-{nodeId}.key" "$HAPI_APP/hedera.key"
+            copyFile "$GRPC_TLS_VOL/hedera-{nodeId}.crt" "$HAPI_APP/hedera.crt"
+
+            # copy entrypoint.sh if it exists in cluster-config (this helps with debugging if needed)
             if [[ -f "$CLUSTER_CONFIG_VOL/entrypoint.sh" ]]; then
-              cp -rLfv "$CLUSTER_CONFIG_VOL/entrypoint.sh" /opt/hgcapp/services-hedera/HapiApp2.0/
+              copyFile "$CLUSTER_CONFIG_VOL/entrypoint.sh" "$HAPI_APP/entrypoint.sh"
             fi
 
             return 0
@@ -242,7 +255,12 @@ spec:
               test "$PLATFORM_STATUS" = "ACTIVE"
       volumeMounts:
         - name: cluster-config
-          mountPath: /tmp/volumes/cluster-config # mount to a temp directory to be able to copy files as required
+          mountPath: /tmp/volumes/cluster-config # mount to a temp directory to be able to copy files with appropriate permission as required
+        - name: grpc-tls-keys
+          mountPath: /tmp/volumes/grpc-tls-keys
+        - name: grpc-tls-keys
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.key
+          subPath: "hedera-{nodeId}.key"
         - name: hgcapp-record-streams
           mountPath: /opt/hgcapp/recordStreams
         - name: hgcapp-events-streams
@@ -257,12 +275,6 @@ spec:
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade
         - name: hgcapp-data-keys
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
-        - name: grpc-tls-keys
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.crt
-          subPath: "hedera-{nodeId}.crt"
-        - name: grpc-tls-keys
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.key
-          subPath: "hedera-{nodeId}.key"
         - name: gossip-keys
           mountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/data/keys/a-private-{nodeId}.pem"
           subPath: "a-private-{nodeId}.pem"
