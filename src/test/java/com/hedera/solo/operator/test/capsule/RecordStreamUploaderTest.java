@@ -35,6 +35,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
@@ -50,6 +51,7 @@ public class RecordStreamUploaderTest extends ConsensusCapsuleTestAbstract {
 
     @Override
     @Test
+    @Disabled("Disabled until platform software is resilient and bug #233 is fixed!")
     void testMultiNodeDeployment() throws Exception {
         super.testMultiNodeDeployment();
         this.checkRecordStreamUploader(3);

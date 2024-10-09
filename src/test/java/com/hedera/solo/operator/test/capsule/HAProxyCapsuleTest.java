@@ -37,6 +37,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
@@ -57,6 +58,7 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
 
     @Override
     @Test
+    @Disabled("Disabled until platform software is resilient and bug #233 is fixed!")
     void testMultiNodeDeployment() throws Exception {
         super.testMultiNodeDeployment();
         createHAProxyCapsule();
