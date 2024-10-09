@@ -53,8 +53,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.jboss.logging.Logger;
@@ -125,16 +123,23 @@ public class NetworkInitializationReconciler implements
 //        return (diff | half) == half ? 0 : diff < half ? 1 : -1;
 //    }
 
-    public Predicate<NetworkInitialization> active() {
-        return x ->
+    public boolean active(NetworkInitialization x) {
+        return
                 null == x.getMetadata().getDeletionTimestamp() &&
                 null != x.getStatus() && Set.of(NetworkInitializationStatus.Phase.Pending, NetworkInitializationStatus.Phase.Running).contains(x.getStatus().getPhase());
     }
 
-    public Comparator<NetworkInitialization> prioritize() {
-        return Comparator.<NetworkInitialization, ZonedDateTime>comparing(x -> ZonedDateTime.parse(x.getMetadata().getCreationTimestamp())).thenComparing(x -> x.getStatus().getSequenceNumber(), counter);
-    }
+    public final Comparator<NetworkInitialization> prioritize =
+        Comparator.<NetworkInitialization, ZonedDateTime>comparing(x -> ZonedDateTime.parse(x.getMetadata().getCreationTimestamp())).thenComparing(x -> x.getStatus().getSequenceNumber(), counter);
 
+    List<String> listNames(Stream<NetworkInitialization> stream) {
+        return stream
+                .filter(this::active)
+                .sorted(prioritize)
+                .map(CustomResource::getMetadata)
+                .map(ObjectMeta::getName)
+                .toList();
+    }
 //    void trigger(final NetworkInitialization resource, final Context<NetworkInitialization> context) {
 //        context.getClient().resource(edit(new ConfigMap())
 //                .with(builder -> builder
@@ -207,16 +212,16 @@ public class NetworkInitializationReconciler implements
 //                        .build());
             }
             String name = resource.getMetadata().getName();
-            Function<Stream<NetworkInitialization>, List<String>> function = stream -> stream
-                    .filter(active())
-                    .sorted(prioritize())
-                    .map(CustomResource::getMetadata)
-                    .map(ObjectMeta::getName)
-                    .toList();
-            List<String> list = function.apply(context.getPrimaryCache().list(resource.getMetadata().getNamespace()));
+//            Function<Stream<NetworkInitialization>, List<String>> function = stream -> stream
+//                    .filter(this::active)
+//                    .sorted(prioritize)
+//                    .map(CustomResource::getMetadata)
+//                    .map(ObjectMeta::getName)
+//                    .toList();
+            List<String> list = listNames(context.getPrimaryCache().list(resource.getMetadata().getNamespace()));
             log.info("from cache list {}", list);
             if (!list.isEmpty() && name.equals(list.getFirst())) {
-                list = function.apply(context.getClient().resources(NetworkInitialization.class).inNamespace(resource.getMetadata().getNamespace()).list().getItems().stream());
+                list = listNames(context.getClient().resources(NetworkInitialization.class).inNamespace(resource.getMetadata().getNamespace()).list().getItems().stream());
                 log.info("from client list {}", list);
 //                if (!list.contains(name)) {
 //                    // cache out of sync
@@ -229,7 +234,7 @@ public class NetworkInitializationReconciler implements
 //                return -1 != index ? updateControl.rescheduleAfter(3 * (index + 1), TimeUnit.SECONDS) : updateControl;
 //                log.info("reconciliation list {} {}", resource.getMetadata().getName(), list);
 //                log.info("reconciliation 1 done for {} active {} inlist {} phase {}", resource.getMetadata().getName(), active().test(resource), list.contains(name), resource.getStatus().getPhase());
-                if (active().test(resource) && !list.contains(name)) {
+                if (active(resource) && !list.contains(name)) {
                     // cache is out of sync
                     log.info("cache is out of sync {}", resource.getMetadata().getName());
                     trigger.next(resource, context);
@@ -422,8 +427,8 @@ public class NetworkInitializationReconciler implements
 
     public Set<ResourceID> toPrimaryResourceIDs(String namespace) {
         return eventSourceContext().getPrimaryCache().list(namespace)
-                .filter(active())
-                .min(prioritize())
+                .filter(this::active)
+                .min(prioritize)
                 .map(ResourceID::fromResource)
                 .map(Set::of)
                 .orElseGet(Collections::emptySet);
