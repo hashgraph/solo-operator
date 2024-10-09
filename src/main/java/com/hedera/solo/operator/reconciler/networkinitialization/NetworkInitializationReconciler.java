@@ -23,23 +23,17 @@ import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitialization;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationStatus;
-import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.reconciler.networkinitialization.resources.NetworkInitializationClusterConfig;
 import com.hedera.solo.operator.reconciler.networkinitialization.resources.NetworkInitializationConsensusCapsule;
 import com.hedera.solo.operator.reconciler.networkinitialization.resources.NetworkInitializationOrbit;
-import com.hedera.solo.operator.reconciler.networkinitialization.resources.NetworkInitializationState;
-import io.fabric8.kubernetes.api.model.ConfigMap;
+import com.hedera.solo.operator.reconciler.networkinitialization.resources.NetworkInitializationTrigger;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClientException;
-import io.fabric8.kubernetes.client.dsl.Updatable;
-import io.fabric8.openshift.api.model.config.v1.Update;
 import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
-import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusHandler;
-import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.EventSourceContext;
 import io.javaoperatorsdk.operator.api.reconciler.EventSourceInitializer;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
@@ -54,7 +48,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -103,11 +96,11 @@ public class NetworkInitializationReconciler implements
     private final NetworkInitializationClusterConfig clusterConfig = new NetworkInitializationClusterConfig();
     private final NetworkInitializationConsensusCapsule consensusCapsule = new NetworkInitializationConsensusCapsule(this);
     private final NetworkInitializationOrbit orbit = new NetworkInitializationOrbit(this);
-    private final NetworkInitializationState state = new NetworkInitializationState(this);
+    private final NetworkInitializationTrigger trigger = new NetworkInitializationTrigger(this);
     private final Workflow<NetworkInitialization> workflow = new WorkflowBuilder<NetworkInitialization>()
             .addDependentResource(consensusCapsule)
             .addDependentResource(orbit)
-            .addDependentResource(state)
+            .addDependentResource(trigger)
             .addDependentResource(clusterConfig).dependsOn(consensusCapsule, orbit)
             .build();
 
@@ -140,32 +133,32 @@ public class NetworkInitializationReconciler implements
         return Comparator.<NetworkInitialization, ZonedDateTime>comparing(x -> ZonedDateTime.parse(x.getMetadata().getCreationTimestamp())).thenComparing(x -> x.getStatus().getSequenceNumber(), counter);
     }
 
-    void trigger(final NetworkInitialization resource, final Context<NetworkInitialization> context) {
-        context.getClient().resource(edit(new ConfigMap())
-                .with(builder -> builder
-                        .editMetadata()
-                        .withName(state.NAME)
-                        .withNamespace(resource.getMetadata().getNamespace())
-                        .addToLabels("app", "consensus")
-                        .addToLabels("type", "state"))
-                .with(builder -> builder
-                        .addToData("count", String.valueOf(counter.rollover(sequenceNumber.getAndIncrement()))))
-                .build()).createOr(Updatable::update);
-//        try {
-//            context.getClient().configMaps().inNamespace(resource.getMetadata().getNamespace()).withName(state.NAME).create();
-//        } catch (KubernetesClientException ignored) {
-//            log.info("error", ignored);
-//        }
-//        context.getClient().configMaps().inNamespace(resource.getMetadata().getNamespace()).withName(state.NAME).edit(x -> edit(x)
-////                .with(builder -> builder
-////                        .editMetadata()
-////                        .withName(state.NAME)
-////                        .withNamespace(resource.getMetadata().getNamespace()))
+//    void trigger(final NetworkInitialization resource, final Context<NetworkInitialization> context) {
+//        context.getClient().resource(edit(new ConfigMap())
+//                .with(builder -> builder
+//                        .editMetadata()
+//                        .withName(trigger.NAME)
+//                        .withNamespace(resource.getMetadata().getNamespace())
+//                        .addToLabels("app", "consensus")
+//                        .addToLabels("type", "trigger"))
 //                .with(builder -> builder
 //                        .addToData("count", String.valueOf(counter.rollover(sequenceNumber.getAndIncrement()))))
-//                .build());
-////                .build()).createOr(Updatable::update);
-    }
+//                .build()).createOr(Updatable::update);
+////        try {
+////            context.getClient().configMaps().inNamespace(resource.getMetadata().getNamespace()).withName(state.NAME).create();
+////        } catch (KubernetesClientException ignored) {
+////            log.info("error", ignored);
+////        }
+////        context.getClient().configMaps().inNamespace(resource.getMetadata().getNamespace()).withName(state.NAME).edit(x -> edit(x)
+//////                .with(builder -> builder
+//////                        .editMetadata()
+//////                        .withName(state.NAME)
+//////                        .withNamespace(resource.getMetadata().getNamespace()))
+////                .with(builder -> builder
+////                        .addToData("count", String.valueOf(counter.rollover(sequenceNumber.getAndIncrement()))))
+////                .build());
+//////                .build()).createOr(Updatable::update);
+//    }
 
     @Override
     public UpdateControl<NetworkInitialization> reconcile(
@@ -199,7 +192,7 @@ public class NetworkInitializationReconciler implements
             log.info("NetworkInitializationReconciler phase {} {}", resource.getMetadata().getName(), resource.getStatus().getPhase());
             if (Set.of(NetworkInitializationStatus.Phase.Failed, NetworkInitializationStatus.Phase.Succeeded).contains(resource.getStatus().getPhase())) {
                 log.info("NetworkInitializationReconciler update state {}", resource.getMetadata().getName());
-                trigger(resource, context);
+                trigger.next(resource, context);
                 return UpdateControl.noUpdate();
 //                context.getClient().configMaps().inNamespace(resource.getMetadata().getNamespace()).resource(edit(context.getSecondaryResource(ConfigMap.class, state).orElseThrow())
 //                        .with(builder -> builder
@@ -237,7 +230,7 @@ public class NetworkInitializationReconciler implements
                 if (active().test(resource) && !list.contains(name)) {
                     // cache is out of sync
                     log.info("cache is out of sync {}", resource.getMetadata().getName());
-                    trigger(resource, context);
+                    trigger.next(resource, context);
                     //updateControl.rescheduleAfter(1, TimeUnit.SECONDS);
                 }
 //                log.info("reconciliation 2 done for {} active {} inlist {} phase {}", resource.getMetadata().getName(), active().test(resource), list.contains(name), resource.getStatus().getPhase());
@@ -331,7 +324,7 @@ public class NetworkInitializationReconciler implements
 //                    .build();
             NetworkInitializationStatus.Phase phase = getPhase(resource, context);
             if (Set.of(NetworkInitializationStatus.Phase.Failed, NetworkInitializationStatus.Phase.Succeeded).contains(phase)) {
-                trigger(resource, context);
+                trigger.next(resource, context);
             }
             UpdateControl<NetworkInitialization> updateControl = UpdateControl.patchStatus(resource.edit()
                     .editStatus()
@@ -420,7 +413,7 @@ public class NetworkInitializationReconciler implements
     public DeleteControl cleanup(NetworkInitialization resource, Context<NetworkInitialization> context) {
         log.info("cleanup: {}", resource.getMetadata().getName());
         try {
-            trigger(resource, context);
+            trigger.next(resource, context);
         } catch (KubernetesClientException ignored) {}
         return DeleteControl.defaultDelete();
     }
