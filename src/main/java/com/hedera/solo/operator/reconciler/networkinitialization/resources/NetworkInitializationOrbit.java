@@ -31,14 +31,7 @@ implements PrimaryToSecondaryMapper<NetworkInitialization>, SecondaryToPrimaryMa
 
     @Override
     public Set<ResourceID> toPrimaryResourceIDs(Orbit resource) {
-        Set<ResourceID> set = reconciler.eventSourceContext().getPrimaryCache().list(resource.getMetadata().getName())
-                .filter(reconciler.active())
-                .min(reconciler.prioritize())
-                .map(ResourceID::fromResource)
-                .map(Set::of)
-                .orElseGet(Collections::emptySet);
-        log.info("NetworkInitializationOrbit::toPrimaryResourceIDs {} -> {}", resource.getMetadata().getName(), set);
-        return set;
+        return reconciler.toPrimaryResourceIDs(resource.getMetadata().getName());
     }
 
     @Override

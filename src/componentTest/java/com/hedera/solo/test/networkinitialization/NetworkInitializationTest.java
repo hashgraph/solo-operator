@@ -153,7 +153,7 @@ public class NetworkInitializationTest extends AbstractOperatorTest {
                 .with(builder -> builder
                         .editMetadata()
                         .withName(name))
-                .with(ConsensusCapsuleFluent::editSpec)
+                .with(ConsensusCapsuleFluent::withNewSpec)
                 .build());
     }
 

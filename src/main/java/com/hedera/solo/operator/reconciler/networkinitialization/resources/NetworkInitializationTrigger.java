@@ -88,13 +88,6 @@ public class NetworkInitializationTrigger extends KubernetesDependentResource<Co
 
     @Override
     public Set<ResourceID> toPrimaryResourceIDs(ConfigMap resource) {
-        Set<ResourceID> set = reconciler.eventSourceContext().getPrimaryCache().list(resource.getMetadata().getNamespace())
-                .filter(reconciler.active())
-                .min(reconciler.prioritize())
-                .map(ResourceID::fromResource)
-                .map(Set::of)
-                .orElseGet(Collections::emptySet);
-        log.info("NetworkInitializationState::toPrimaryResourceIDs {}", set);
-        return set;
+        return reconciler.toPrimaryResourceIDs(resource.getMetadata().getNamespace());
     }
 }

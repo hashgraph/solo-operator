@@ -40,10 +40,12 @@ import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.processing.dependent.workflow.Workflow;
 import io.javaoperatorsdk.operator.processing.dependent.workflow.WorkflowBuilder;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import java.lang.invoke.MethodHandles;
 import java.time.ZonedDateTime;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -416,5 +418,14 @@ public class NetworkInitializationReconciler implements
             trigger.next(resource, context);
         } catch (KubernetesClientException ignored) {}
         return DeleteControl.defaultDelete();
+    }
+
+    public Set<ResourceID> toPrimaryResourceIDs(String namespace) {
+        return eventSourceContext().getPrimaryCache().list(namespace)
+                .filter(active())
+                .min(prioritize())
+                .map(ResourceID::fromResource)
+                .map(Set::of)
+                .orElseGet(Collections::emptySet);
     }
 }

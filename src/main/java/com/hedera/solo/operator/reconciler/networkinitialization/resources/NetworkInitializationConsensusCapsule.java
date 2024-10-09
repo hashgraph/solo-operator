@@ -80,12 +80,7 @@ public class NetworkInitializationConsensusCapsule
 
     @Override
     public Set<ResourceID> toPrimaryResourceIDs(ConsensusCapsule resource) {
-        return reconciler.eventSourceContext().getPrimaryCache().list(resource.getMetadata().getNamespace())
-                .filter(reconciler.active())
-                .min(reconciler.prioritize())
-                .map(ResourceID::fromResource)
-                .map(Set::of)
-                .orElseGet(Collections::emptySet);
+        return reconciler.toPrimaryResourceIDs(resource.getMetadata().getNamespace());
     }
 //    public NetworkInitializationConsensusCapsule() {
 //        super(ConsensusCapsule.class);
