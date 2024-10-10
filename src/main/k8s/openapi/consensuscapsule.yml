@@ -96,56 +96,59 @@ components:
             this should be set by the `NetworkInitialization` reconciliation loop. 
             
             This most likely will be removed in the future when DAB Phase 2/3 is available.
-        affinity:
+        pod:
           type: object
-          x-java-type: io.fabric8.kubernetes.api.model.Affinity
-        nodeSelector:
+          properties:
+            affinity:
+              type: object
+              x-java-type: io.fabric8.kubernetes.api.model.Affinity
+            nodeSelector:
+              type: object
+              additionalProperties:
+                type: string
+            tolerations:
+              type: array
+              items:
+                type: object
+                x-java-type: io.fabric8.kubernetes.api.model.Toleration
+            topologySpreadConstraints:
+              type: array
+              items:
+                type: object
+                x-java-type: io.fabric8.kubernetes.api.model.TopologySpreadConstraint
+            resources:
+              type: object
+              x-java-type: io.fabric8.kubernetes.api.model.ResourceRequirements
+            preemptionPolicy:
+              type: string
+              enum:
+                - Never
+                - PreemptLowerPriority
+            priority:
+              type: integer
+            priorityClassName:
+              type: string
+            serviceAccountName:
+              type: string
+            securityContext:
+              type: object
+              x-java-type: io.fabric8.kubernetes.api.model.PodSecurityContext
+            terminationGracePeriodSeconds:
+              type: integer
+        softwareVersion:
           type: object
-          additionalProperties:
-            type: string
-        tolerations:
-          type: array
-          items:
-            type: object
-            x-java-type: io.fabric8.kubernetes.api.model.Toleration
-        topologySpreadConstraints:
-          type: array
-          items:
-            type: object
-            x-java-type: io.fabric8.kubernetes.api.model.TopologySpreadConstraint
-        resources:
-          type: object
-          x-java-type: io.fabric8.kubernetes.api.model.ResourceRequirements
+          x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
         imagePullSecrets:
           type: array
           items:
             type: object
             x-java-type: io.fabric8.kubernetes.api.model.LocalObjectReference
-        preemptionPolicy:
-          type: string
-          enum:
-            - Never
-            - PreemptLowerPriority
-        priority:
-          type: integer
-        priorityClassName:
-          type: string
         imagePullPolicy:
           type: string
           enum:
             - Always
             - Never
             - IfNotPresent
-        serviceAccountName:
-          type: string
-        securityContext:
-          type: object
-          x-java-type: io.fabric8.kubernetes.api.model.PodSecurityContext
-        terminationGracePeriodSeconds:
-          type: integer
-        softwareVersion:
-          type: object
-          x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
         sidecars:
           type: object
           properties:
