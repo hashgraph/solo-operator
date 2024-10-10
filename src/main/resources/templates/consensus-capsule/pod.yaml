@@ -224,6 +224,7 @@ spec:
           setup || exit $?
 
           # start platform software
+          sleep 15 # seems we need it until the bug #233 is fixed
           exec /init /opt/hgcapp/services-hedera/HapiApp2.0/entrypoint.sh
       startupProbe:
         failureThreshold: 10

@@ -71,7 +71,6 @@ import java.util.function.BiFunction;
 import org.awaitility.core.ConditionTimeoutException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 @SoloTest
@@ -293,7 +292,6 @@ public abstract class ConsensusCapsuleTestAbstract {
     }
 
     @Test
-    @Disabled("Disabled until platform software is resilient and bug #233 is fixed!")
     void testMultiNodeDeployment() throws Exception {
         final List<String> nodeNames = List.of("node0", "node1", "node2");
         final List<NodeInfo> nodes = prepareNodes(nodeNames);
