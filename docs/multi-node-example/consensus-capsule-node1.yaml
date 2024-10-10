@@ -10,8 +10,11 @@ spec:
     recordStreamUploader:
       enabled: true
       name: "record-stream-uploader"
-      image: gcr.io/hedera-registry/uploader-mirror:1.3.0
-      imagePullPolicy: IfNotPresent
+      softwareVersion:
+        repository: "gcr.io/hedera-registry"
+        name: "uploader-mirror"
+        tag: "1.3.0"
+        imagePullPolicy: IfNotPresent
       config:
         debug: true
         enableCompression: true
@@ -40,8 +43,11 @@ spec:
     eventStreamUploader:
       enabled: true
       name: "event-stream-uploader"
-      image: gcr.io/hedera-registry/uploader-mirror:1.3.0
-      imagePullPolicy: IfNotPresent
+      softwareVersion:
+        repository: "gcr.io/hedera-registry"
+        name: "uploader-mirror"
+        tag: "1.3.0"
+        imagePullPolicy: IfNotPresent
       config:
         debug: true
         reaper:
@@ -67,8 +73,11 @@ spec:
     backupUploader:
       enabled: true
       name: "backup-uploader"
-      image: "gcr.io/hedera-registry/hedera-backups:0.6.0"
-      imagePullPolicy: IfNotPresent
+      softwareVersion:
+        repository: "gcr.io/hedera-registry"
+        name: "hedera-backups"
+        tag: "0.6.0"
+        imagePullPolicy: IfNotPresent
       config:
         bucketName: "solo-backups"
         s3:

@@ -5,10 +5,10 @@
 # {@int defaultMode}
 # {@java.util.Set publicKeyFiles}
 # {@io.fabric8.kubernetes.api.model.PodSecurityContext securityContext}
-# {@com.hedera.solo.operator.model.commonspec.StreamUploader recordStreamUploader}
-# {@com.hedera.solo.operator.model.commonspec.StreamUploader recordStreamSidecarFilesUploader}
-# {@com.hedera.solo.operator.model.commonspec.StreamUploader eventStreamUploader}
-# {@com.hedera.solo.operator.model.commonspec.StreamUploader backupUploader}
+# {@com.hedera.solo.operator.model.commonspec.StreamUploader rsu}
+# {@com.hedera.solo.operator.model.commonspec.StreamUploader rssu}
+# {@com.hedera.solo.operator.model.commonspec.StreamUploader esu}
+# {@com.hedera.solo.operator.model.commonspec.StreamUploader bu}
 kind: Pod
 apiVersion: v1
 metadata:
@@ -280,11 +280,11 @@ spec:
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/stats
         - name: hgcapp-data-upgrade
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade
-    # {#if recordStreamUploader && recordStreamUploader.enabled}
+    # {#if rsu && rsu.enabled}
     # Sidecar: record-stream-uploader
-    - name: "{recordStreamUploader.name}"
-      image: "{recordStreamUploader.image}"
-      imagePullPolicy: "{recordStreamUploader.imagePullPolicy}"
+    - name: "{rsu.name}"
+      image: "{rsu.softwareVersion.repository}/{rsu.softwareVersion.name}:{rsu.softwareVersion.tag}"
+      imagePullPolicy: "{rsu.softwareVersion.imagePullPolicy}"
       securityContext:
         runAsUser: "{securityContext.runAsUser}"
         runAsGroup: "{securityContext.runAsGroup}"
@@ -297,13 +297,13 @@ spec:
         - /opt/hgcapp/recordStreams
         - --csv-stats-directory
         - /opt/hgcapp/recordStreams/uploader-stats
-        # {#if recordStreamUploader.config.s3.enabled}
+        # {#if rsu.config.s3.enabled}
         - --s3-endpoint
-        - "{recordStreamUploader.config.s3.url}"
+        - "{rsu.config.s3.url}"
         # {/if}
-        # {#if recordStreamUploader.config.gcs.enabled}
+        # {#if rsu.config.gcs.enabled}
         - --gcs-endpoint
-        - "{recordStreamUploader.config.gcs.url}"
+        - "{rsu.config.gcs.url}"
         # {/if}
       volumeMounts:
         - name: hgcapp-record-streams
@@ -311,52 +311,52 @@ spec:
           subPath: "record{accountId}"
       env:
         - name: DEBUG
-          value: "{recordStreamUploader.config.debug}"
+          value: "{rsu.config.debug}"
         - name: REAPER_ENABLE
-          value: "{recordStreamUploader.config.reaper.enabled}"
+          value: "{rsu.config.reaper.enabled}"
         - name: REAPER_MIN_KEEP
-          value: "{recordStreamUploader.config.reaper.minKeep}"
+          value: "{rsu.config.reaper.minKeep}"
         - name: REAPER_INTERVAL
-          value: "{recordStreamUploader.config.reaper.interval}"
+          value: "{rsu.config.reaper.interval}"
         - name: REAPER_DEFAULT_BACKOFF
-          value: "{recordStreamUploader.config.reaper.defaultBackoff}"
+          value: "{rsu.config.reaper.defaultBackoff}"
         - name: STREAM_FILE_EXTENSION
-          value: "{recordStreamUploader.config.streamFileExtension}"
+          value: "{rsu.config.streamFileExtension}"
         - name: STREAM_SIG_EXTENSION
-          value: "{recordStreamUploader.config.streamSigExtension}"
+          value: "{rsu.config.streamSigExtension}"
         - name: STREAM_EXTENSION
-          value: "{recordStreamUploader.config.streamExtension}"
+          value: "{rsu.config.streamExtension}"
         - name: SIG_EXTENSION
-          value: "{recordStreamUploader.config.sigExtension}"
+          value: "{rsu.config.sigExtension}"
         - name: RECORD_STREAM_COMPRESSION
-          value: "{recordStreamUploader.config.enableCompression}"
+          value: "{rsu.config.enableCompression}"
         - name: RECORD_STREAM_SIDECAR
-          value: "{recordStreamUploader.config.enableSidecarFiles}"
+          value: "{rsu.config.enableSidecarFiles}"
         - name: SIG_REQUIRE
-          value: "{recordStreamUploader.config.signature.require}"
+          value: "{rsu.config.signature.require}"
         - name: SIG_PRIORITIZE
-          value: "{recordStreamUploader.config.signature.prioritize}"
+          value: "{rsu.config.signature.prioritize}"
         - name: BUCKET_PATH
-          value: "{recordStreamUploader.config.bucketPath}"
+          value: "{rsu.config.bucketPath}"
         - name: BUCKET_NAME
-          value: "{recordStreamUploader.config.bucketName}"
+          value: "{rsu.config.bucketName}"
         - name: S3_ENABLE
-          value: "{recordStreamUploader.config.s3.enabled}"
+          value: "{rsu.config.s3.enabled}"
         - name: S3_ACCESS_KEY
-          value: "{recordStreamUploader.config.s3.accessKey}"
+          value: "{rsu.config.s3.accessKey}"
         - name: GCS_ENABLE
-          value: "{recordStreamUploader.config.gcs.enabled}"
+          value: "{rsu.config.gcs.enabled}"
         - name: GCS_ACCESS_KEY
-          value: "{recordStreamUploader.config.gcs.accessKey}"
+          value: "{rsu.config.gcs.accessKey}"
       envFrom:
         - secretRef:
-            name: "{recordStreamUploader.config.envFromSecret}"
+            name: "{rsu.config.envFromSecret}"
     # {/if}
-    # {#if recordStreamSidecarFilesUploader && recordStreamSidecarFilesUploader.enabled}
+    # {#if rssu && rssu.enabled}
     # Sidecar: record-stream-sidecar-files-uploader
-    - name: "{recordStreamSidecarFilesUploader.name}"
-      image: "{recordStreamSidecarFilesUploader.image}"
-      imagePullPolicy: "{recordStreamSidecarFilesUploader.imagePullPolicy}"
+    - name: "{rssu.name}"
+      image: "{rssu.softwareVersion.repository}/{rssu.softwareVersion.name}:{rssu.softwareVersion.tag}"
+      imagePullPolicy: "{rssu.softwareVersion.imagePullPolicy}"
       securityContext:
         runAsUser: "{securityContext.runAsUser}"
         runAsGroup: "{securityContext.runAsGroup}"
@@ -367,13 +367,13 @@ spec:
         - --linux
         - --watch-directory
         - /opt/hgcapp/recordStreams/sidecar
-        # {#if recordStreamSidecarFilesUploader.config.s3.enabled}
+        # {#if rssu.config.s3.enabled}
         - --s3-endpoint
-        - "{recordStreamSidecarFilesUploader.config.s3.url}"
+        - "{rssu.config.s3.url}"
         # {/if}
-        # {#if recordStreamSidecarFilesUploader.config.gcs.enabled}
+        # {#if rssu.config.gcs.enabled}
         - --gcs-endpoint
-        - "{recordStreamSidecarFilesUploader.config.gcs.url}"
+        - "{rssu.config.gcs.url}"
         # {/if}
       volumeMounts:
         - name: hgcapp-record-streams
@@ -381,52 +381,52 @@ spec:
           subPath: "record{accountId}"
       env:
         - name: DEBUG
-          value: "{recordStreamSidecarFilesUploader.config.debug}"
+          value: "{rssu.config.debug}"
         - name: REAPER_ENABLE
-          value: "{recordStreamSidecarFilesUploader.config.reaper.enabled}"
+          value: "{rssu.config.reaper.enabled}"
         - name: REAPER_MIN_KEEP
-          value: "{recordStreamSidecarFilesUploader.config.reaper.minKeep}"
+          value: "{rssu.config.reaper.minKeep}"
         - name: REAPER_INTERVAL
-          value: "{recordStreamSidecarFilesUploader.config.reaper.interval}"
+          value: "{rssu.config.reaper.interval}"
         - name: REAPER_DEFAULT_BACKOFF
-          value: "{recordStreamSidecarFilesUploader.config.reaper.defaultBackoff}"
+          value: "{rssu.config.reaper.defaultBackoff}"
         - name: STREAM_FILE_EXTENSION
-          value: "{recordStreamSidecarFilesUploader.config.streamFileExtension}"
+          value: "{rssu.config.streamFileExtension}"
         - name: STREAM_SIG_EXTENSION
-          value: "{recordStreamSidecarFilesUploader.config.streamSigExtension}"
+          value: "{rssu.config.streamSigExtension}"
         - name: STREAM_EXTENSION
-          value: "{recordStreamSidecarFilesUploader.config.streamExtension}"
+          value: "{rssu.config.streamExtension}"
         - name: SIG_EXTENSION
-          value: "{recordStreamSidecarFilesUploader.config.sigExtension}"
+          value: "{rssu.config.sigExtension}"
         - name: RECORD_STREAM_COMPRESSION
-          value: "{recordStreamSidecarFilesUploader.config.enableCompression}"
+          value: "{rssu.config.enableCompression}"
         - name: RECORD_STREAM_SIDECAR
-          value: "{recordStreamSidecarFilesUploader.config.enableSidecarFiles}"
+          value: "{rssu.config.enableSidecarFiles}"
         - name: SIG_REQUIRE
-          value: "{recordStreamSidecarFilesUploader.config.signature.require}"
+          value: "{rssu.config.signature.require}"
         - name: SIG_PRIORITIZE
-          value: "{recordStreamSidecarFilesUploader.config.signature.prioritize}"
+          value: "{rssu.config.signature.prioritize}"
         - name: BUCKET_PATH
-          value: "{recordStreamSidecarFilesUploader.config.bucketPath}"
+          value: "{rssu.config.bucketPath}"
         - name: BUCKET_NAME
-          value: "{recordStreamSidecarFilesUploader.config.bucketName}"
+          value: "{rssu.config.bucketName}"
         - name: S3_ENABLE
-          value: "{recordStreamSidecarFilesUploader.config.s3.enabled}"
+          value: "{rssu.config.s3.enabled}"
         - name: S3_ACCESS_KEY
-          value: "{recordStreamSidecarFilesUploader.config.s3.accessKey}"
+          value: "{rssu.config.s3.accessKey}"
         - name: GCS_ENABLE
-          value: "{recordStreamSidecarFilesUploader.config.gcs.enabled}"
+          value: "{rssu.config.gcs.enabled}"
         - name: GCS_ACCESS_KEY
-          value: "{recordStreamSidecarFilesUploader.config.gcs.accessKey}"
+          value: "{rssu.config.gcs.accessKey}"
       envFrom:
         - secretRef:
-            name: "{recordStreamSidecarFilesUploader.config.envFromSecret}"
+            name: "{rssu.config.envFromSecret}"
     # {/if}
-    # {#if eventStreamUploader && eventStreamUploader.enabled}
+    # {#if esu && esu.enabled}
     # Sidecar: event-stream-uploader
-    - name: "{eventStreamUploader.name}"
-      image: "{eventStreamUploader.image}"
-      imagePullPolicy: "{eventStreamUploader.imagePullPolicy}"
+    - name: "{esu.name}"
+      image: "{esu.softwareVersion.repository}/{esu.softwareVersion.name}:{esu.softwareVersion.tag}"
+      imagePullPolicy: "{esu.softwareVersion.imagePullPolicy}"
       securityContext:
         runAsUser: "{securityContext.runAsUser}"
         runAsGroup: "{securityContext.runAsGroup}"
@@ -438,13 +438,13 @@ spec:
         - --watch-directory
         - /opt/hgcapp/eventsStreams
         - --debug
-        # {#if eventStreamUploader.config.s3.enabled}
+        # {#if esu.config.s3.enabled}
         - --s3-endpoint
-        - "{eventStreamUploader.config.s3.url}"
+        - "{esu.config.s3.url}"
         # {/if}
-        # {#if eventStreamUploader.config.gcs.enabled}
+        # {#if esu.config.gcs.enabled}
         - --gcs-endpoint
-        - "{eventStreamUploader.config.gcs.url}"
+        - "{esu.config.gcs.url}"
         # {/if}
       volumeMounts:
         - name: hgcapp-events-streams
@@ -452,48 +452,48 @@ spec:
           subPath: "events_{accountId}"
       env:
         - name: DEBUG
-          value: "{eventStreamUploader.config.debug}"
+          value: "{esu.config.debug}"
         - name: REAPER_ENABLE
-          value: "{eventStreamUploader.config.reaper.enabled}"
+          value: "{esu.config.reaper.enabled}"
         - name: REAPER_MIN_KEEP
-          value: "{eventStreamUploader.config.reaper.minKeep}"
+          value: "{esu.config.reaper.minKeep}"
         - name: REAPER_INTERVAL
-          value: "{eventStreamUploader.config.reaper.interval}"
+          value: "{esu.config.reaper.interval}"
         - name: REAPER_DEFAULT_BACKOFF
-          value: "{eventStreamUploader.config.reaper.defaultBackoff}"
+          value: "{esu.config.reaper.defaultBackoff}"
         - name: STREAM_FILE_EXTENSION
-          value: "{eventStreamUploader.config.streamFileExtension}"
+          value: "{esu.config.streamFileExtension}"
         - name: STREAM_SIG_EXTENSION
-          value: "{eventStreamUploader.config.streamSigExtension}"
+          value: "{esu.config.streamSigExtension}"
         - name: STREAM_EXTENSION
-          value: "{eventStreamUploader.config.streamExtension}"
+          value: "{esu.config.streamExtension}"
         - name: SIG_EXTENSION
-          value: "{eventStreamUploader.config.sigExtension}"
+          value: "{esu.config.sigExtension}"
         - name: SIG_REQUIRE
-          value: "{eventStreamUploader.config.signature.require}"
+          value: "{esu.config.signature.require}"
         - name: SIG_PRIORITIZE
-          value: "{eventStreamUploader.config.signature.prioritize}"
+          value: "{esu.config.signature.prioritize}"
         - name: BUCKET_PATH
-          value: "{eventStreamUploader.config.bucketPath}"
+          value: "{esu.config.bucketPath}"
         - name: BUCKET_NAME
-          value: "{eventStreamUploader.config.bucketName}"
+          value: "{esu.config.bucketName}"
         - name: S3_ENABLE
-          value: "{eventStreamUploader.config.s3.enabled}"
+          value: "{esu.config.s3.enabled}"
         - name: S3_ACCESS_KEY
-          value: "{eventStreamUploader.config.s3.accessKey}"
+          value: "{esu.config.s3.accessKey}"
         - name: GCS_ENABLE
-          value: "{eventStreamUploader.config.gcs.enabled}"
+          value: "{esu.config.gcs.enabled}"
         - name: GCS_ACCESS_KEY
-          value: "{eventStreamUploader.config.gcs.accessKey}"
+          value: "{esu.config.gcs.accessKey}"
       envFrom:
         - secretRef:
-            name: "{eventStreamUploader.config.envFromSecret}"
+            name: "{esu.config.envFromSecret}"
     # {/if}
-    # {#if backupUploader && backupUploader.enabled}
+    # {#if bu && bu.enabled}
     # Sidecar: backup-uploader
-    - name: "{backupUploader.name}"
-      image: "{backupUploader.image}"
-      imagePullPolicy: "{backupUploader.imagePullPolicy}"
+    - name: "{bu.name}"
+      image: "{bu.softwareVersion.repository}/{bu.softwareVersion.name}:{bu.softwareVersion.tag}"
+      imagePullPolicy: "{bu.softwareVersion.imagePullPolicy}"
       securityContext:
         runAsUser: "{securityContext.runAsUser}"
         runAsGroup: "{securityContext.runAsGroup}"
@@ -508,21 +508,21 @@ spec:
           subPath: VERSION
       env:
         - name: BACKUP_UPLOADER_BUCKET_1
-          value: "{backupUploader.config.bucketName}"
-          # {#if backupUploader.config.s3.enabled}
+          value: "{bu.config.bucketName}"
+          # {#if bu.config.s3.enabled}
         - name: RCLONE_S3_ENDPOINT
-          value: "{backupUploader.config.s3.url}"
+          value: "{bu.config.s3.url}"
         - name: RCLONE_S3_ACCESS_KEY_ID
-          value: "{backupUploader.config.s3.accessKey}"
-          # {#else backupUploader.config.gcs.enabled}
+          value: "{bu.config.s3.accessKey}"
+          # {#else bu.config.gcs.enabled}
         - name: RCLONE_S3_ENDPOINT
-          value: "{backupUploader.config.gcs.url}"
+          value: "{bu.config.gcs.url}"
         - name: RCLONE_S3_ACCESS_KEY_ID
-          value: "{backupUploader.config.gcs.accessKey}"
+          value: "{bu.config.gcs.accessKey}"
           # {/if}
       envFrom:
         - secretRef:
-            name: "{backupUploader.config.envFromSecret}"
+            name: "{bu.config.envFromSecret}"
     # {/if}
   volumes:
     - name: cluster-config
