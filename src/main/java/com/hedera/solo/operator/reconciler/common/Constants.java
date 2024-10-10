@@ -30,12 +30,16 @@ public final class Constants {
     public static final String CONSENSUS_NODE = "consensus-node";
     public static final SecurityContextBuilder SECURITY_CONTEXT_BUILDER =
             new SecurityContextBuilder().withRunAsUser(2000L).withRunAsGroup(2000L);
+    public static final int DEFAULT_FILE_MODE = 493; // 0755
 
     // HEDERA related
     public static final int HEDERA_ACCOUNT_START = 3;
     public static final AccountId OPERATOR_ACCOUNT_ID = AccountId.fromString("0.0.2");
     public static final PrivateKey OPERATOR_PRIVATE_KEY = PrivateKey.fromString(
             "302e020100300506032b65700422042091132178e72057a1d7528025956fe39b0b847f200ab59b2fdd367017f3087137");
+    public static final int GOSSIP_PORT = 50111;
+    public static final int GRPC_PORT = 50211;
+    public static final int GRPC_TLS_PORT = 50212;
 
     // Helm chart related
     public static final String MINIO_CHART_REPO = "minio-operator";
@@ -50,7 +54,10 @@ public final class Constants {
     public static final String MINIO_TENANT_NAMESPACE = "minio-tenant";
 
     // template variables
+    public static final String TPL_VAR_NAMESPACE = "namespace";
+    public static final String TPL_VAR_DEFAULT_MODE = "defaultMode"; // e.g. 0755
     public static final String TPL_VAR_NODE_ID = "nodeId";
+    public static final String TPL_VAR_NODE_IDS = "nodeIds";
     public static final String TPL_VAR_ACCOUNT_ID = "accountId";
     public static final String TPL_VAR_SECURITY_CONTEXT = "securityContext";
     public static final String TPL_VAR_PUBLIC_KEY_FILES = "publicKeyFiles";

@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: node0-record-streams
+  namespace: solo-orbit
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi # 1/10th of production size
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: node0-events-streams
+  namespace: solo-orbit
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi # 1/10th of production size
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: node0-data-saved
+  namespace: solo-orbit
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: node0-data-stats
+  namespace: solo-orbit
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi # 1/10th of production size
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: node0-data-upgrade
+  namespace: solo-orbit
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi  # 1/10th of production size
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: node0-output
+  namespace: solo-orbit
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi  # 1/10th of production size
