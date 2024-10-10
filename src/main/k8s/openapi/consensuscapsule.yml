@@ -138,18 +138,7 @@ components:
         softwareVersion:
           type: object
           x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
-        imagePullSecrets:
-          type: array
-          items:
-            type: object
-            x-java-type: io.fabric8.kubernetes.api.model.LocalObjectReference
-        imagePullPolicy:
-          type: string
-          enum:
-            - Always
-            - Never
-            - IfNotPresent
-        sidecars:
+        containers:
           type: object
           properties:
             recordStreamUploader:
@@ -158,13 +147,10 @@ components:
             recordStreamSidecarFilesUploader:
               type: object
               x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
-            eventStreamUploader:
+            eventsStreamUploader:
               type: object
               x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
             backupUploader:
-              type: object
-              x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
-            accountBalanceUploader:
               type: object
               x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
             otelCollector:

@@ -44,8 +44,8 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitBuilder;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Sidecars;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.SidecarsBuilder;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Containers;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.ContainersBuilder;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
@@ -325,8 +325,8 @@ public abstract class ConsensusCapsuleTestAbstract {
                         () -> assertThat(kubernetesClient.resource(orbit).get()).isNotNull());
     }
 
-    protected Sidecars prepareSideCars() {
-        return new SidecarsBuilder().build();
+    protected Containers prepareConsensusPodContainers() {
+        return new ContainersBuilder().build();
     }
 
     protected List<Pod> fetchConsensusPods() {
@@ -339,7 +339,7 @@ public abstract class ConsensusCapsuleTestAbstract {
     }
 
     List<ConsensusCapsule> createConsensusCapsule(List<NodeInfo> nodes) {
-        Sidecars sidecars = this.prepareSideCars();
+        Containers sidecars = this.prepareConsensusPodContainers();
 
         List<ConsensusCapsule> list = new ArrayList<>();
         for (NodeInfo node : nodes) {
@@ -350,7 +350,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                     .endMetadata()
                     .withNewSpec()
                     .withAccountId(node.accountId)
-                    .withSidecars(sidecars)
+                    .withContainers(sidecars)
                     .endSpec()
                     .build();
             list.add(kubernetesClient.resource(consensusCapsule).create());

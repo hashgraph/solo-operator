@@ -77,7 +77,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         Objects.requireNonNull(primary.getMetadata().getName());
         Objects.requireNonNull(primary.getSpec());
         Objects.requireNonNull(primary.getSpec().getAccountId());
-        Objects.requireNonNull(primary.getSpec().getSidecars());
+        Objects.requireNonNull(primary.getSpec().getContainers());
         Objects.requireNonNull(context);
         Objects.requireNonNull(context.getClient());
 
@@ -138,7 +138,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
 
     private StreamUploader prepareRecordStreamUploader(ConsensusCapsule primary) {
         final StreamUploader rsu = this.setStreamUploaderExtensions(
-                primary.getSpec().getSidecars().getRecordStreamUploader(),
+                primary.getSpec().getContainers().getRecordStreamUploader(),
                 RECORD_STREAM_EXTENSION,
                 RECORD_STREAM_SIG_EXTENSION);
 
@@ -157,7 +157,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
 
     private StreamUploader prepareRecordStreamSidecarFilesUploader(ConsensusCapsule primary) {
         final StreamUploader rssu = this.setStreamUploaderExtensions(
-                primary.getSpec().getSidecars().getRecordStreamSidecarFilesUploader(),
+                primary.getSpec().getContainers().getRecordStreamSidecarFilesUploader(),
                 RECORD_STREAM_EXTENSION,
                 RECORD_STREAM_SIG_EXTENSION);
 
@@ -176,7 +176,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
 
     private StreamUploader prepareEventStreamUploader(ConsensusCapsule primary) {
         final StreamUploader esu = this.setStreamUploaderExtensions(
-                primary.getSpec().getSidecars().getEventStreamUploader(),
+                primary.getSpec().getContainers().getEventsStreamUploader(),
                 EVENT_STREAM_EXTENSION,
                 EVENT_STREAM_SIG_EXTENSION);
 
@@ -190,7 +190,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
     }
 
     private StreamUploader prepareBackupUploader(ConsensusCapsule primary) {
-        final StreamUploader bu = primary.getSpec().getSidecars().getBackupUploader();
+        final StreamUploader bu = primary.getSpec().getContainers().getBackupUploader();
 
         if (Objects.nonNull(bu)) {
             bu.getConfig()

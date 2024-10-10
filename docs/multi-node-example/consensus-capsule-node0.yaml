@@ -6,7 +6,7 @@ metadata:
 spec:
   accountId: "0.0.3"
   eligibleForDeployment: false
-  sidecars:
+  containers:
     recordStreamUploader:
       enabled: true
       name: "record-stream-uploader"
@@ -39,9 +39,9 @@ spec:
         gcs:
           enabled: false
         envFromSecret: "uploader-secrets"
-    eventStreamUploader:
+    eventsStreamUploader:
       enabled: true
-      name: "event-stream-uploader"
+      name: "events-stream-uploader"
       softwareVersion:
         repository: "gcr.io/hedera-registry"
         name: "uploader-mirror"

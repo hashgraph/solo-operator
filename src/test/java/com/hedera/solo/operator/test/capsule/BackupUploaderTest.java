@@ -22,6 +22,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.hedera.solo.operator.model.commonspec.StreamUploader;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Containers;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.ContainersBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Sidecars;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.SidecarsBuilder;
 import io.fabric8.kubernetes.api.model.Container;
@@ -36,7 +38,7 @@ import org.junit.jupiter.api.Test;
 
 @QuarkusTest
 public class BackupUploaderTest extends ConsensusCapsuleTestAbstract {
-    public static final String TEMPLATE = "sidecars/backup-uploader.yaml";
+    public static final String TEMPLATE = "containers/backup-uploader.yaml";
 
     @Override
     @Test
@@ -53,9 +55,9 @@ public class BackupUploaderTest extends ConsensusCapsuleTestAbstract {
     }
 
     @Override
-    protected Sidecars prepareSideCars() {
+    protected Containers prepareConsensusPodContainers() {
         StreamUploader uploader = loadYaml(StreamUploader.class, getClass(), TEMPLATE);
-        return new SidecarsBuilder().withBackupUploader(uploader).build();
+        return new ContainersBuilder().withBackupUploader(uploader).build();
     }
 
     private void checkBackupUploader(final int total) {

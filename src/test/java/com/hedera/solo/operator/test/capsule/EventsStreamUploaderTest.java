@@ -25,8 +25,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.hedera.solo.operator.model.commonspec.StreamUploader;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Sidecars;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.SidecarsBuilder;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Containers;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.ContainersBuilder;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.EnvVar;
 import io.fabric8.kubernetes.api.model.Pod;
@@ -38,30 +38,30 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
-public class EventStreamUploaderTest extends ConsensusCapsuleTestAbstract {
-    public static final String EVENT_STREAM_TEMPLATE = "sidecars/event-stream-uploader.yaml";
+public class EventsStreamUploaderTest extends ConsensusCapsuleTestAbstract {
+    public static final String EVENT_STREAM_TEMPLATE = "containers/events-stream-uploader.yaml";
 
     @Override
     @Test
     void testSingleNodeDeployment() throws Exception {
         super.testSingleNodeDeployment();
-        this.checkEventStreamUploader(1);
+        this.checksEventStreamUploader(1);
     }
 
     @Override
     @Test
     void testMultiNodeDeployment() throws Exception {
         super.testMultiNodeDeployment();
-        this.checkEventStreamUploader(3);
+        this.checksEventStreamUploader(3);
     }
 
     @Override
-    protected Sidecars prepareSideCars() {
+    protected Containers prepareConsensusPodContainers() {
         StreamUploader uploader = loadYaml(StreamUploader.class, getClass(), EVENT_STREAM_TEMPLATE);
-        return new SidecarsBuilder().withEventStreamUploader(uploader).build();
+        return new ContainersBuilder().withEventsStreamUploader(uploader).build();
     }
 
-    private void checkEventStreamUploader(final int total) {
+    private void checksEventStreamUploader(final int total) {
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
             List<Pod> consensusPods = fetchConsensusPods();
             assertThat(consensusPods).hasSize(total);
@@ -71,7 +71,7 @@ public class EventStreamUploaderTest extends ConsensusCapsuleTestAbstract {
                 assertThat(accountId).isNotEmpty();
 
                 for (Container c : p.getSpec().getContainers()) {
-                    if (c.getName().equals("event-stream-uploader")) {
+                    if (c.getName().equals("events-stream-uploader")) {
                         Map<String, String> envMap = new HashMap<>();
                         for (EnvVar env : c.getEnv()) {
                             envMap.put(env.getName(), env.getValue());
