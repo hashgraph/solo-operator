@@ -1,7 +1,9 @@
 enabled: true
 name: "backup-uploader"
-image: "gcr.io/hedera-registry/hedera-backups:0.6.0"
-imagePullPolicy: IfNotPresent
+softwareVersion:
+  repository: "gcr.io/hedera-registry"
+  name: "hedera-backups"
+  tag: "0.6.0"
 config:
   bucketName: "solo-backups"
   s3:

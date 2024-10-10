@@ -71,6 +71,18 @@ components:
           type: array
           items:
             type: string
+        imagePullSecrets:
+          type: array
+          items:
+            type: object
+            x-java-type: io.fabric8.kubernetes.api.model.LocalObjectReference
+        imagePullPolicy:
+          type: string
+          enum:
+            - Always
+            - Never
+            - IfNotPresent
+          default: IfNotPresent
 
     AddressBookEntry:
       type: object
@@ -106,15 +118,9 @@ components:
       properties:
         name:
           type: string
-        image:
-          type: string
-        imagePullPolicy:
-          type: string
-          enum:
-            - Always
-            - Never
-            - IfNotPresent
-          default: IfNotPresent
+        softwareVersion:
+          type: object
+          x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
         resources:
           type: object
           x-java-type: io.fabric8.kubernetes.api.model.ResourceRequirements
@@ -202,12 +208,12 @@ components:
     OpenTelemetryCollector:
       type: object
       properties:
-        resources:
-          type: object
-          x-java-type: io.fabric8.kubernetes.api.model.ResourceRequirements
         softwareVersion:
           type: object
           x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+        resources:
+          type: object
+          x-java-type: io.fabric8.kubernetes.api.model.ResourceRequirements
         receivers:
           type: object
           default: { }
