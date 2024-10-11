@@ -490,13 +490,17 @@ spec:
             name: "{esu.config.envFromSecret}"
     # {/if}
     # {#if bu && bu.enabled}
+      # prepare s3 variables based on config
+        # {let s3Endpoint = {bu.config.s3.url}}
+        # {let s3AccessKey= {bu.config.s3.accessKey}}
+      # {#if bu.config.gcs.enabled}
+        # {s3Endpoint = {bu.config.gcs.url}}
+        # {s3AccessKey= {bu.config.gcs.accessKey}}
+      # {/if}
     # Sidecar: backup-uploader
     - name: "{bu.name}"
       image: "{bu.softwareVersion.repository}/{bu.softwareVersion.name}:{bu.softwareVersion.tag}"
       imagePullPolicy: "{bu.softwareVersion.imagePullPolicy}"
-      securityContext:
-        runAsUser: "{securityContext.runAsUser}"
-        runAsGroup: "{securityContext.runAsGroup}"
       volumeMounts:
         - name: hgcapp-data-saved
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/saved
@@ -509,17 +513,10 @@ spec:
       env:
         - name: BACKUP_UPLOADER_BUCKET_1
           value: "{bu.config.bucketName}"
-          # {#if bu.config.s3.enabled}
         - name: RCLONE_S3_ENDPOINT
-          value: "{bu.config.s3.url}"
+          value: "{s3Endpoint}"
         - name: RCLONE_S3_ACCESS_KEY_ID
-          value: "{bu.config.s3.accessKey}"
-          # {#else bu.config.gcs.enabled}
-        - name: RCLONE_S3_ENDPOINT
-          value: "{bu.config.gcs.url}"
-        - name: RCLONE_S3_ACCESS_KEY_ID
-          value: "{bu.config.gcs.accessKey}"
-          # {/if}
+          value: "{s3AccessKey}"
       envFrom:
         - secretRef:
             name: "{bu.config.envFromSecret}"

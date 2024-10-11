@@ -60,7 +60,7 @@ public class RecordStreamUploaderTest extends ConsensusCapsuleTestAbstract {
     @Override
     protected Containers prepareConsensusPodContainers() {
         StreamUploader uploader = loadYaml(StreamUploader.class, getClass(), RECORD_STREAM_TEMPLATE);
-        return new ContainersBuilder().withRecordStreamUploader(uploader).build();
+        return getContainersBuilder().withRecordStreamUploader(uploader).build();
     }
 
     private void checkRecordStreamUploader(final int total) {

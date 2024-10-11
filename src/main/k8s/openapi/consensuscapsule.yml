@@ -135,12 +135,18 @@ components:
               x-java-type: io.fabric8.kubernetes.api.model.PodSecurityContext
             terminationGracePeriodSeconds:
               type: integer
-        softwareVersion:
-          type: object
-          x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
         containers:
           type: object
           properties:
+            consensusNode:
+              type: object
+              properties:
+                name:
+                  type: string
+                  default: "consensus-node"
+                softwareVersion:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
             recordStreamUploader:
               type: object
               x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader

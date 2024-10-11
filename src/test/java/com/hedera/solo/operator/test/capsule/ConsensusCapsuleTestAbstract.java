@@ -35,6 +35,7 @@ import com.hedera.hashgraph.sdk.FileId;
 import com.hedera.hashgraph.sdk.NodeAddress;
 import com.hedera.hashgraph.sdk.NodeAddressBook;
 import com.hedera.hashgraph.sdk.PrivateKey;
+import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleBuilder;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
@@ -46,6 +47,8 @@ import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Containers;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.ContainersBuilder;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.containers.ConsensusNode;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.containers.ConsensusNodeBuilder;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
@@ -325,8 +328,14 @@ public abstract class ConsensusCapsuleTestAbstract {
                         () -> assertThat(kubernetesClient.resource(orbit).get()).isNotNull());
     }
 
+    protected ContainersBuilder getContainersBuilder() {
+        // return the builder with the consensus-node container
+        final ConsensusNode consensusNode = loadYaml(ConsensusNode.class, getClass(), "containers/consensus-node.yaml");
+        return new ContainersBuilder().withConsensusNode(consensusNode);
+    }
+
     protected Containers prepareConsensusPodContainers() {
-        return new ContainersBuilder().build();
+        return getContainersBuilder().build();
     }
 
     protected List<Pod> fetchConsensusPods() {
@@ -339,7 +348,7 @@ public abstract class ConsensusCapsuleTestAbstract {
     }
 
     List<ConsensusCapsule> createConsensusCapsule(List<NodeInfo> nodes) {
-        Containers sidecars = this.prepareConsensusPodContainers();
+        Containers containers = this.prepareConsensusPodContainers();
 
         List<ConsensusCapsule> list = new ArrayList<>();
         for (NodeInfo node : nodes) {
@@ -350,7 +359,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                     .endMetadata()
                     .withNewSpec()
                     .withAccountId(node.accountId)
-                    .withContainers(sidecars)
+                    .withContainers(containers)
                     .endSpec()
                     .build();
             list.add(kubernetesClient.resource(consensusCapsule).create());

@@ -60,7 +60,7 @@ public class RecordStreamSidecarFilesUploaderTest extends ConsensusCapsuleTestAb
     @Override
     protected Containers prepareConsensusPodContainers() {
         StreamUploader uploader = loadYaml(StreamUploader.class, getClass(), TEMPLATE);
-        return new ContainersBuilder().withRecordStreamSidecarFilesUploader(uploader).build();
+        return getContainersBuilder().withRecordStreamSidecarFilesUploader(uploader).build();
     }
 
     private void check(final int total) {

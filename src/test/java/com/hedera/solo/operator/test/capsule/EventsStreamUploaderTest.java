@@ -58,7 +58,7 @@ public class EventsStreamUploaderTest extends ConsensusCapsuleTestAbstract {
     @Override
     protected Containers prepareConsensusPodContainers() {
         StreamUploader uploader = loadYaml(StreamUploader.class, getClass(), EVENT_STREAM_TEMPLATE);
-        return new ContainersBuilder().withEventsStreamUploader(uploader).build();
+        return getContainersBuilder().withEventsStreamUploader(uploader).build();
     }
 
     private void checksEventStreamUploader(final int total) {

@@ -57,7 +57,7 @@ public class BackupUploaderTest extends ConsensusCapsuleTestAbstract {
     @Override
     protected Containers prepareConsensusPodContainers() {
         StreamUploader uploader = loadYaml(StreamUploader.class, getClass(), TEMPLATE);
-        return new ContainersBuilder().withBackupUploader(uploader).build();
+        return getContainersBuilder().withBackupUploader(uploader).build();
     }
 
     private void checkBackupUploader(final int total) {
