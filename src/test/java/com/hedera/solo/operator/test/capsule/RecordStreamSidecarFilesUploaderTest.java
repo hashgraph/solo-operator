@@ -25,10 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.hedera.solo.operator.model.commonspec.StreamUploader;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Containers;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.ContainersBuilder;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Sidecars;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.SidecarsBuilder;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.Containers;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.EnvVar;
 import io.fabric8.kubernetes.api.model.Pod;
@@ -60,7 +57,9 @@ public class RecordStreamSidecarFilesUploaderTest extends ConsensusCapsuleTestAb
     @Override
     protected Containers prepareConsensusPodContainers() {
         StreamUploader uploader = loadYaml(StreamUploader.class, getClass(), TEMPLATE);
-        return getContainersBuilder().withRecordStreamSidecarFilesUploader(uploader).build();
+        return getContainersBuilder()
+                .withRecordStreamSidecarFilesUploader(uploader)
+                .build();
     }
 
     private void check(final int total) {

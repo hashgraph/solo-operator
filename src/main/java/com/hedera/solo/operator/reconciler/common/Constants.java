@@ -28,8 +28,10 @@ public final class Constants {
     // defaults
     public static final String DEFAULT = "default";
     public static final String CONSENSUS_NODE = "consensus-node";
+    public static final Long HEDERA_USER = 2000L;
+    public static final Long HEDERA_GROUP = 2000L;
     public static final SecurityContextBuilder SECURITY_CONTEXT_BUILDER =
-            new SecurityContextBuilder().withRunAsUser(2000L).withRunAsGroup(2000L);
+            new SecurityContextBuilder().withRunAsUser(HEDERA_USER).withRunAsGroup(HEDERA_GROUP);
     public static final int DEFAULT_FILE_MODE = 493; // 0755
 
     // HEDERA related
