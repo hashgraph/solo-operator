@@ -8,7 +8,7 @@ spec:
   eligibleForDeployment: false
   pod:
     containers:
-      consensus-node:
+      consensusNode:
         name: "consensus-node"
         softwareVersion:
           repository: "gcr.io/hedera-registry"

@@ -35,7 +35,6 @@ import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_PUBLIC_KEY_FILES;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_RECORD_STREAM_UPLOADER;
-import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_SECURITY_CONTEXT;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 
 import com.hedera.solo.operator.model.commonspec.StreamUploader;
@@ -44,6 +43,7 @@ import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.containe
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.api.model.PodSecurityContext;
 import io.fabric8.kubernetes.client.utils.Serialization;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -99,27 +99,27 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
                 primary.getSpec().getAccountId());
 
         // return desired pod
-        return pod.edit()
+        PodBuilder podBuilder = pod.edit()
                 .editMetadata()
                 .withName(validName)
                 .withNamespace(metadata.getNamespace())
                 .addToLabels(labels)
-                .endMetadata()
-                .build();
+                .endMetadata();
+
+        podBuilder = this.setDesiredPodSpec(primary, podBuilder);
+
+        return podBuilder.build();
     }
 
-    private TemplateInstance addPodPropertiesTemplateVars(
-            com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Pod pod, TemplateInstance templateInstance) {
-
-        PodSecurityContext securityContext = pod.getSecurityContext();
+    private PodBuilder setDesiredPodSpec(ConsensusCapsule primary, PodBuilder podBuilder) {
+        PodSecurityContext securityContext = primary.getSpec().getPod().getSecurityContext();
         if (securityContext == null) {
             securityContext = SECURITY_CONTEXT_BUILDER.build();
         }
-        templateInstance.data(TPL_VAR_SECURITY_CONTEXT, securityContext);
 
-        // FIXME add all other pod properties as template variables
+        // TODO add other pod spec and associated test #263
 
-        return templateInstance;
+        return podBuilder.editSpec().withSecurityContext(securityContext).endSpec();
     }
 
     private TemplateInstance getTemplateWithDefaults(ConsensusCapsule primary, Context<ConsensusCapsule> context) {
@@ -137,7 +137,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         templateInstance.data(TPL_VAR_ACCOUNT_ID, accountId);
         templateInstance.data(TPL_VAR_DEFAULT_MODE, DEFAULT_FILE_MODE);
 
-        return this.addPodPropertiesTemplateVars(primary.getSpec().getPod(), templateInstance);
+        return templateInstance;
     }
 
     private Pod renderDeploymentTemplate(ConsensusCapsule primary, Context<ConsensusCapsule> context) {

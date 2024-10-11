@@ -4,7 +4,6 @@
 # {@java.util.List nodeIds}
 # {@int defaultMode}
 # {@java.util.Set publicKeyFiles}
-# {@io.fabric8.kubernetes.api.model.PodSecurityContext securityContext}
 # {@com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.containers.ConsensusNode cn}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader rsu}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader rsu}
@@ -18,9 +17,6 @@ metadata:
   labels:
     app: consensus-node
 spec:
-  securityContext:
-    runAsUser: "{securityContext.runAsUser}"
-    runAsGroup: "{securityContext.runAsGroup}"
   restartPolicy: Never
   hostname: "{nodeId}"
   subdomain: consensus
@@ -135,9 +131,6 @@ spec:
   containers:
     - name: "{cn.name}"
       image: "{cn.softwareVersion.repository}/{cn.softwareVersion.name}:{cn.softwareVersion.tag}"
-      securityContext:
-        runAsUser: "{securityContext.runAsUser}"
-        runAsGroup: "{securityContext.runAsGroup}"
       env:
         - name: JAVA_OPTS
           value: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
@@ -287,9 +280,6 @@ spec:
     - name: "{rsu.name}"
       image: "{rsu.softwareVersion.repository}/{rsu.softwareVersion.name}:{rsu.softwareVersion.tag}"
       imagePullPolicy: "{rsu.softwareVersion.imagePullPolicy}"
-      securityContext:
-        runAsUser: "{securityContext.runAsUser}"
-        runAsGroup: "{securityContext.runAsGroup}"
       command:
         - /usr/bin/env
         - python3.7
@@ -359,9 +349,6 @@ spec:
     - name: "{rssu.name}"
       image: "{rssu.softwareVersion.repository}/{rssu.softwareVersion.name}:{rssu.softwareVersion.tag}"
       imagePullPolicy: "{rssu.softwareVersion.imagePullPolicy}"
-      securityContext:
-        runAsUser: "{securityContext.runAsUser}"
-        runAsGroup: "{securityContext.runAsGroup}"
       command:
         - /usr/bin/env
         - python3.7
@@ -429,9 +416,6 @@ spec:
     - name: "{esu.name}"
       image: "{esu.softwareVersion.repository}/{esu.softwareVersion.name}:{esu.softwareVersion.tag}"
       imagePullPolicy: "{esu.softwareVersion.imagePullPolicy}"
-      securityContext:
-        runAsUser: "{securityContext.runAsUser}"
-        runAsGroup: "{securityContext.runAsGroup}"
       command:
         - /usr/bin/env
         - python3.7
