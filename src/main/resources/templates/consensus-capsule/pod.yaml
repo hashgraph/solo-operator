@@ -5,6 +5,8 @@
 # {@int defaultMode}
 # {@java.util.Set publicKeyFiles}
 # {@io.fabric8.kubernetes.api.model.PodSecurityContext securityContext}
+# {@com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.containers.ConsensusNode cn}
+# {@com.hedera.solo.operator.model.commonspec.StreamUploader rsu}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader rsu}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader rssu}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader esu}
@@ -131,8 +133,8 @@ spec:
 
           runInit
   containers:
-    - name: consensus-node
-      image: gcr.io/hedera-registry/consensus-node:0.52.0-alpha.6
+    - name: "{cn.name}"
+      image: "{cn.softwareVersion.repository}/{cn.softwareVersion.name}:{cn.softwareVersion.tag}"
       securityContext:
         runAsUser: "{securityContext.runAsUser}"
         runAsGroup: "{securityContext.runAsGroup}"

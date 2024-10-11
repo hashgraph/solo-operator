@@ -18,7 +18,7 @@ package com.hedera.solo.operator.reconciler.common;
 
 import com.hedera.hashgraph.sdk.AccountId;
 import com.hedera.hashgraph.sdk.PrivateKey;
-import io.fabric8.kubernetes.api.model.SecurityContextBuilder;
+import io.fabric8.kubernetes.api.model.PodSecurityContextBuilder;
 
 public final class Constants {
     private Constants() {
@@ -30,8 +30,8 @@ public final class Constants {
     public static final String CONSENSUS_NODE = "consensus-node";
     public static final Long HEDERA_USER = 2000L;
     public static final Long HEDERA_GROUP = 2000L;
-    public static final SecurityContextBuilder SECURITY_CONTEXT_BUILDER =
-            new SecurityContextBuilder().withRunAsUser(HEDERA_USER).withRunAsGroup(HEDERA_GROUP);
+    public static final PodSecurityContextBuilder SECURITY_CONTEXT_BUILDER =
+            new PodSecurityContextBuilder().withRunAsUser(HEDERA_USER).withRunAsGroup(HEDERA_GROUP);
     public static final int DEFAULT_FILE_MODE = 493; // 0755
 
     // HEDERA related
@@ -63,6 +63,7 @@ public final class Constants {
     public static final String TPL_VAR_ACCOUNT_ID = "accountId";
     public static final String TPL_VAR_SECURITY_CONTEXT = "securityContext";
     public static final String TPL_VAR_PUBLIC_KEY_FILES = "publicKeyFiles";
+    public static final String TPL_VAR_CONSENSUS_NODE = "cn";
     public static final String TPL_VAR_RECORD_STREAM_UPLOADER = "rsu";
     public static final String TPL_VAR_EVENT_STREAM_UPLOADER = "esu";
     public static final String TPL_VAR_BACKUP_UPLOADER = "bu";
