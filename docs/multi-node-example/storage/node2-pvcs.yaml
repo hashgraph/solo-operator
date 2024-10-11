@@ -69,3 +69,15 @@ spec:
   resources:
     requests:
       storage: 5Gi  # 1/10th of production size
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: node2-data-keys
+  namespace: solo-orbit
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 500Mi
