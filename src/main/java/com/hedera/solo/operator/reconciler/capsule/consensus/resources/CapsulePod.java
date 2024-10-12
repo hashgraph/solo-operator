@@ -26,6 +26,7 @@ import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM
 import static com.hedera.solo.operator.reconciler.common.Constants.SECURITY_CONTEXT_BUILDER;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_ACCOUNT_ID;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_BACKUP_UPLOADER;
+import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_CONSENSUS_NODE;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_DEFAULT_MODE;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_EVENT_STREAM_UPLOADER;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NAMESPACE;
@@ -34,14 +35,16 @@ import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_PUBLIC_KEY_FILES;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_RECORD_STREAM_UPLOADER;
-import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_SECURITY_CONTEXT;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 
 import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.containers.ConsensusNode;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodBuilder;
+import io.fabric8.kubernetes.api.model.PodSecurityContext;
 import io.fabric8.kubernetes.client.utils.Serialization;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.DependentResource;
@@ -77,15 +80,16 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         Objects.requireNonNull(primary.getMetadata().getName());
         Objects.requireNonNull(primary.getSpec());
         Objects.requireNonNull(primary.getSpec().getAccountId());
-        Objects.requireNonNull(primary.getSpec().getSidecars());
+        Objects.requireNonNull(primary.getSpec().getPod());
+        Objects.requireNonNull(primary.getSpec().getPod().getContainers());
+        Objects.requireNonNull(primary.getSpec().getPod().getContainers().getConsensusNode());
         Objects.requireNonNull(context);
         Objects.requireNonNull(context.getClient());
 
         final ObjectMeta metadata = primary.getMetadata();
         final String validName = validName(metadata.getName(), NAME_SUFFIX);
 
-        final Pod pod =
-                renderDeploymentTemplate(primary, context, primary.getSpec().getAccountId());
+        final Pod pod = renderDeploymentTemplate(primary, context);
 
         // FIXME standardize labels
         final Map<String, String> labels = Map.of(
@@ -95,19 +99,48 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
                 primary.getSpec().getAccountId());
 
         // return desired pod
-        return pod.edit()
+        PodBuilder podBuilder = pod.edit()
                 .editMetadata()
                 .withName(validName)
                 .withNamespace(metadata.getNamespace())
                 .addToLabels(labels)
-                .endMetadata()
-                .build();
+                .endMetadata();
+
+        podBuilder = this.setDesiredPodSpec(primary, podBuilder);
+
+        return podBuilder.build();
     }
 
-    private Pod renderDeploymentTemplate(
-            ConsensusCapsule primary, Context<ConsensusCapsule> context, String accountId) {
-        final TemplateInstance tplInstance = tpl.instance();
+    private PodBuilder setDesiredPodSpec(ConsensusCapsule primary, PodBuilder podBuilder) {
+        PodSecurityContext securityContext = primary.getSpec().getPod().getSecurityContext();
+        if (securityContext == null) {
+            securityContext = SECURITY_CONTEXT_BUILDER.build();
+        }
+
+        // TODO add other pod spec and associated test #263
+
+        return podBuilder.editSpec().withSecurityContext(securityContext).endSpec();
+    }
+
+    private TemplateInstance getTemplateWithDefaults(ConsensusCapsule primary, Context<ConsensusCapsule> context) {
         final String nodeId = primary.getMetadata().getName();
+        final String accountId = primary.getSpec().getAccountId();
+        final String namespace = primary.getMetadata().getNamespace();
+        final List<String> nodeIds = getNodeIds(context, namespace);
+
+        final TemplateInstance templateInstance = tpl.instance();
+
+        // set defaults
+        templateInstance.data(TPL_VAR_NAMESPACE, primary.getMetadata().getNamespace());
+        templateInstance.data(TPL_VAR_NODE_ID, nodeId);
+        templateInstance.data(TPL_VAR_NODE_IDS, nodeIds);
+        templateInstance.data(TPL_VAR_ACCOUNT_ID, accountId);
+        templateInstance.data(TPL_VAR_DEFAULT_MODE, DEFAULT_FILE_MODE);
+
+        return templateInstance;
+    }
+
+    private Pod renderDeploymentTemplate(ConsensusCapsule primary, Context<ConsensusCapsule> context) {
 
         // fetch public keys configmap
         final ConfigMap publicKeys = context.getClient()
@@ -115,22 +148,21 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
                 .inNamespace(primary.getMetadata().getNamespace())
                 .withName("public-keys")
                 .get();
-        final String namespace = primary.getMetadata().getNamespace();
-        final List<String> nodeIds = getNodeIds(context, namespace);
+
+        final ConsensusNode cn = primary.getSpec().getPod().getContainers().getConsensusNode();
+        final StreamUploader rsu = this.prepareRecordStreamUploader(primary);
+        final StreamUploader esu = this.prepareEventStreamUploader(primary);
+        final StreamUploader bu = this.prepareBackupUploader(primary);
+        final StreamUploader rssu = this.prepareRecordStreamSidecarFilesUploader(primary);
 
         // set template variables
-        tplInstance.data(TPL_VAR_NAMESPACE, primary.getMetadata().getNamespace());
-        tplInstance.data(TPL_VAR_NODE_ID, nodeId);
-        tplInstance.data(TPL_VAR_NODE_IDS, nodeIds);
-        tplInstance.data(TPL_VAR_ACCOUNT_ID, accountId);
-        tplInstance.data(TPL_VAR_DEFAULT_MODE, DEFAULT_FILE_MODE);
-        tplInstance.data(TPL_VAR_SECURITY_CONTEXT, SECURITY_CONTEXT_BUILDER.build());
+        TemplateInstance tplInstance = getTemplateWithDefaults(primary, context);
         tplInstance.data(TPL_VAR_PUBLIC_KEY_FILES, publicKeys.getData().keySet());
-        tplInstance.data(TPL_VAR_RECORD_STREAM_UPLOADER, this.prepareRecordStreamUploader(primary));
-        tplInstance.data(TPL_VAR_EVENT_STREAM_UPLOADER, this.prepareEventStreamUploader(primary));
-        tplInstance.data(TPL_VAR_BACKUP_UPLOADER, this.prepareBackupUploader(primary));
-        tplInstance.data(
-                TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER, this.prepareRecordStreamSidecarFilesUploader(primary));
+        tplInstance.data(TPL_VAR_CONSENSUS_NODE, cn);
+        tplInstance.data(TPL_VAR_RECORD_STREAM_UPLOADER, rsu);
+        tplInstance.data(TPL_VAR_EVENT_STREAM_UPLOADER, esu);
+        tplInstance.data(TPL_VAR_BACKUP_UPLOADER, bu);
+        tplInstance.data(TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER, rssu);
 
         // return an instance of Pod
         return Serialization.unmarshal(tplInstance.render(), Pod.class);
@@ -138,7 +170,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
 
     private StreamUploader prepareRecordStreamUploader(ConsensusCapsule primary) {
         final StreamUploader rsu = this.setStreamUploaderExtensions(
-                primary.getSpec().getSidecars().getRecordStreamUploader(),
+                primary.getSpec().getPod().getContainers().getRecordStreamUploader(),
                 RECORD_STREAM_EXTENSION,
                 RECORD_STREAM_SIG_EXTENSION);
 
@@ -157,7 +189,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
 
     private StreamUploader prepareRecordStreamSidecarFilesUploader(ConsensusCapsule primary) {
         final StreamUploader rssu = this.setStreamUploaderExtensions(
-                primary.getSpec().getSidecars().getRecordStreamSidecarFilesUploader(),
+                primary.getSpec().getPod().getContainers().getRecordStreamSidecarFilesUploader(),
                 RECORD_STREAM_EXTENSION,
                 RECORD_STREAM_SIG_EXTENSION);
 
@@ -176,7 +208,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
 
     private StreamUploader prepareEventStreamUploader(ConsensusCapsule primary) {
         final StreamUploader esu = this.setStreamUploaderExtensions(
-                primary.getSpec().getSidecars().getEventStreamUploader(),
+                primary.getSpec().getPod().getContainers().getEventsStreamUploader(),
                 EVENT_STREAM_EXTENSION,
                 EVENT_STREAM_SIG_EXTENSION);
 
@@ -190,7 +222,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
     }
 
     private StreamUploader prepareBackupUploader(ConsensusCapsule primary) {
-        final StreamUploader bu = primary.getSpec().getSidecars().getBackupUploader();
+        final StreamUploader bu = primary.getSpec().getPod().getContainers().getBackupUploader();
 
         if (Objects.nonNull(bu)) {
             bu.getConfig()

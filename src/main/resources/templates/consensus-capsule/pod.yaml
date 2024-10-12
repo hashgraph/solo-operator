@@ -4,7 +4,8 @@
 # {@java.util.List nodeIds}
 # {@int defaultMode}
 # {@java.util.Set publicKeyFiles}
-# {@io.fabric8.kubernetes.api.model.PodSecurityContext securityContext}
+# {@com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.containers.ConsensusNode cn}
+# {@com.hedera.solo.operator.model.commonspec.StreamUploader rsu}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader rsu}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader rssu}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader esu}
@@ -16,9 +17,6 @@ metadata:
   labels:
     app: consensus-node
 spec:
-  securityContext:
-    runAsUser: "{securityContext.runAsUser}"
-    runAsGroup: "{securityContext.runAsGroup}"
   restartPolicy: Never
   hostname: "{nodeId}"
   subdomain: consensus
@@ -131,11 +129,8 @@ spec:
 
           runInit
   containers:
-    - name: consensus-node
-      image: gcr.io/hedera-registry/consensus-node:0.52.0-alpha.6
-      securityContext:
-        runAsUser: "{securityContext.runAsUser}"
-        runAsGroup: "{securityContext.runAsGroup}"
+    - name: "{cn.name}"
+      image: "{cn.softwareVersion.repository}/{cn.softwareVersion.name}:{cn.softwareVersion.tag}"
       env:
         - name: JAVA_OPTS
           value: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
@@ -285,9 +280,6 @@ spec:
     - name: "{rsu.name}"
       image: "{rsu.softwareVersion.repository}/{rsu.softwareVersion.name}:{rsu.softwareVersion.tag}"
       imagePullPolicy: "{rsu.softwareVersion.imagePullPolicy}"
-      securityContext:
-        runAsUser: "{securityContext.runAsUser}"
-        runAsGroup: "{securityContext.runAsGroup}"
       command:
         - /usr/bin/env
         - python3.7
@@ -357,9 +349,6 @@ spec:
     - name: "{rssu.name}"
       image: "{rssu.softwareVersion.repository}/{rssu.softwareVersion.name}:{rssu.softwareVersion.tag}"
       imagePullPolicy: "{rssu.softwareVersion.imagePullPolicy}"
-      securityContext:
-        runAsUser: "{securityContext.runAsUser}"
-        runAsGroup: "{securityContext.runAsGroup}"
       command:
         - /usr/bin/env
         - python3.7
@@ -427,9 +416,6 @@ spec:
     - name: "{esu.name}"
       image: "{esu.softwareVersion.repository}/{esu.softwareVersion.name}:{esu.softwareVersion.tag}"
       imagePullPolicy: "{esu.softwareVersion.imagePullPolicy}"
-      securityContext:
-        runAsUser: "{securityContext.runAsUser}"
-        runAsGroup: "{securityContext.runAsGroup}"
       command:
         - /usr/bin/env
         - python3.7
@@ -494,9 +480,6 @@ spec:
     - name: "{bu.name}"
       image: "{bu.softwareVersion.repository}/{bu.softwareVersion.name}:{bu.softwareVersion.tag}"
       imagePullPolicy: "{bu.softwareVersion.imagePullPolicy}"
-      securityContext:
-        runAsUser: "{securityContext.runAsUser}"
-        runAsGroup: "{securityContext.runAsGroup}"
       volumeMounts:
         - name: hgcapp-data-saved
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/saved
@@ -509,17 +492,10 @@ spec:
       env:
         - name: BACKUP_UPLOADER_BUCKET_1
           value: "{bu.config.bucketName}"
-          # {#if bu.config.s3.enabled}
         - name: RCLONE_S3_ENDPOINT
-          value: "{bu.config.s3.url}"
+          value: "{#if bu.config.gcs.enabled}{bu.config.gcs.url}{#else}{bu.config.s3.url}{/if}"
         - name: RCLONE_S3_ACCESS_KEY_ID
-          value: "{bu.config.s3.accessKey}"
-          # {#else bu.config.gcs.enabled}
-        - name: RCLONE_S3_ENDPOINT
-          value: "{bu.config.gcs.url}"
-        - name: RCLONE_S3_ACCESS_KEY_ID
-          value: "{bu.config.gcs.accessKey}"
-          # {/if}
+          value: "{#if bu.config.gcs.enabled}{bu.config.gcs.accessKey}{#else}{bu.config.s3.accessKey}{/if}"
       envFrom:
         - secretRef:
             name: "{bu.config.envFromSecret}"

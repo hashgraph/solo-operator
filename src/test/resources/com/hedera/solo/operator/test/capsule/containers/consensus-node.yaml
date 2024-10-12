@@ -1,0 +1,5 @@
+name: "consensus-node"
+softwareVersion:
+  repository: "gcr.io/hedera-registry"
+  name: "consensus-node"
+  tag: "0.52.0-alpha.6"

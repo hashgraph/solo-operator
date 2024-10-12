@@ -135,41 +135,33 @@ components:
               x-java-type: io.fabric8.kubernetes.api.model.PodSecurityContext
             terminationGracePeriodSeconds:
               type: integer
-        softwareVersion:
-          type: object
-          x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
-        imagePullSecrets:
-          type: array
-          items:
-            type: object
-            x-java-type: io.fabric8.kubernetes.api.model.LocalObjectReference
-        imagePullPolicy:
-          type: string
-          enum:
-            - Always
-            - Never
-            - IfNotPresent
-        sidecars:
-          type: object
-          properties:
-            recordStreamUploader:
+            containers:
               type: object
-              x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
-            recordStreamSidecarFilesUploader:
-              type: object
-              x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
-            eventStreamUploader:
-              type: object
-              x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
-            backupUploader:
-              type: object
-              x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
-            accountBalanceUploader:
-              type: object
-              x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
-            otelCollector:
-              type: object
-              x-java-type: com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector
+              properties:
+                consensusNode:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                      default: "consensus-node"
+                    softwareVersion:
+                      type: object
+                      x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+                recordStreamUploader:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
+                recordStreamSidecarFilesUploader:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
+                eventsStreamUploader:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
+                backupUploader:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
+                otelCollector:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector
     ConsensusCapsuleStatus:
       description: The current status of a `ConsensusCapsule`.
       type: object

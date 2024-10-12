@@ -17,6 +17,8 @@
 package com.hedera.solo.operator.test.capsule;
 
 import static com.hedera.solo.operator.reconciler.common.Constants.CONSENSUS_NODE;
+import static com.hedera.solo.operator.reconciler.common.Constants.HEDERA_GROUP;
+import static com.hedera.solo.operator.reconciler.common.Constants.HEDERA_USER;
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GOSSIP;
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GRPC_TLS;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_APP;
@@ -44,8 +46,10 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitBuilder;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Sidecars;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.SidecarsBuilder;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PodBuilder;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.Containers;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.ContainersBuilder;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.containers.ConsensusNode;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
@@ -55,6 +59,7 @@ import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaim;
 import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodSecurityContextBuilder;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.client.CustomResource;
@@ -111,9 +116,9 @@ public abstract class ConsensusCapsuleTestAbstract {
                         "app=consensus-node",
                         "consensus-node",
                         """
-                                        find services-hedera/HapiApp2.0/data -type f -name currentAddressBook.txt | \\
-                                            xargs -r ls -1t | head -n 1 | xargs -r cat
-                                        """)
+                                find services-hedera/HapiApp2.0/data -type f -name currentAddressBook.txt | \\
+                                    xargs -r ls -1t | head -n 1 | xargs -r cat
+                                """)
                 .file(
                         "app=consensus-node",
                         "consensus-node",
@@ -325,8 +330,14 @@ public abstract class ConsensusCapsuleTestAbstract {
                         () -> assertThat(kubernetesClient.resource(orbit).get()).isNotNull());
     }
 
-    protected Sidecars prepareSideCars() {
-        return new SidecarsBuilder().build();
+    protected ContainersBuilder getContainersBuilder() {
+        // return the builder with the consensus-node container
+        final ConsensusNode consensusNode = loadYaml(ConsensusNode.class, getClass(), "containers/consensus-node.yaml");
+        return new ContainersBuilder().withConsensusNode(consensusNode);
+    }
+
+    protected Containers prepareConsensusPodContainers() {
+        return getContainersBuilder().build();
     }
 
     protected List<Pod> fetchConsensusPods() {
@@ -339,7 +350,14 @@ public abstract class ConsensusCapsuleTestAbstract {
     }
 
     List<ConsensusCapsule> createConsensusCapsule(List<NodeInfo> nodes) {
-        Sidecars sidecars = this.prepareSideCars();
+        Containers containers = this.prepareConsensusPodContainers();
+        final com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Pod consensusPod = new PodBuilder()
+                .withSecurityContext(new PodSecurityContextBuilder()
+                        .withRunAsUser(HEDERA_USER)
+                        .withRunAsGroup(HEDERA_GROUP)
+                        .build())
+                .withContainers(containers)
+                .build();
 
         List<ConsensusCapsule> list = new ArrayList<>();
         for (NodeInfo node : nodes) {
@@ -350,7 +368,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                     .endMetadata()
                     .withNewSpec()
                     .withAccountId(node.accountId)
-                    .withSidecars(sidecars)
+                    .withPod(consensusPod)
                     .endSpec()
                     .build();
             list.add(kubernetesClient.resource(consensusCapsule).create());

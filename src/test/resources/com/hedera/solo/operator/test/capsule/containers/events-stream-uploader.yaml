@@ -1,5 +1,5 @@
 enabled: true
-name: "event-stream-uploader"
+name: "events-stream-uploader"
 softwareVersion:
   repository: "gcr.io/hedera-registry"
   name: "uploader-mirror"
