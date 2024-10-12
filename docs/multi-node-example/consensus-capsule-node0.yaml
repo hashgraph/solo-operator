@@ -2,8 +2,8 @@ apiVersion: operator.solo.hedera.com/v1alpha1
 kind: ConsensusCapsule
 metadata:
   name: node0
-  namespace: solo-orbit
 spec:
+  orbit: solo-orbit
   accountId: "0.0.3"
   eligibleForDeployment: false
   pod:

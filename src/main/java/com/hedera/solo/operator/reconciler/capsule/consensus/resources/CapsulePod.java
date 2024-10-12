@@ -73,12 +73,21 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         super(Pod.class);
     }
 
-    @Override
-    protected Pod desired(final ConsensusCapsule primary, final Context<ConsensusCapsule> context) {
+    /**
+     * Validate the input
+     *
+     * @param primary ConsensusCapsule instance
+     * @param context An instance of context
+     * @throws NullPointerException if required inputs are missing
+     * @throws IllegalArgumentException if invalid input is specified
+     */
+    private void validateInput(final ConsensusCapsule primary, final Context<ConsensusCapsule> context) {
         Objects.requireNonNull(primary);
         Objects.requireNonNull(primary.getMetadata());
         Objects.requireNonNull(primary.getMetadata().getName());
+        Objects.requireNonNull(primary.getMetadata().getNamespace());
         Objects.requireNonNull(primary.getSpec());
+        Objects.requireNonNull(primary.getSpec().getOrbit());
         Objects.requireNonNull(primary.getSpec().getAccountId());
         Objects.requireNonNull(primary.getSpec().getPod());
         Objects.requireNonNull(primary.getSpec().getPod().getContainers());
@@ -86,8 +95,21 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         Objects.requireNonNull(context);
         Objects.requireNonNull(context.getClient());
 
+        // namespace must match with the orbit name
+        final String orbit = primary.getSpec().getOrbit();
+        if (!orbit.equals(primary.getMetadata().getNamespace())) {
+            throw new IllegalArgumentException("namespace must match with the orbit name '%s', found '%s'"
+                    .formatted(orbit, primary.getMetadata().getNamespace()));
+        }
+    }
+
+    @Override
+    protected Pod desired(final ConsensusCapsule primary, final Context<ConsensusCapsule> context) {
+        this.validateInput(primary, context);
+
         final ObjectMeta metadata = primary.getMetadata();
         final String validName = validName(metadata.getName(), NAME_SUFFIX);
+        final String namespace = primary.getMetadata().getNamespace();
 
         final Pod pod = renderDeploymentTemplate(primary, context);
 
@@ -102,7 +124,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         PodBuilder podBuilder = pod.edit()
                 .editMetadata()
                 .withName(validName)
-                .withNamespace(metadata.getNamespace())
+                .withNamespace(namespace)
                 .addToLabels(labels)
                 .endMetadata();
 
@@ -131,7 +153,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         final TemplateInstance templateInstance = tpl.instance();
 
         // set defaults
-        templateInstance.data(TPL_VAR_NAMESPACE, primary.getMetadata().getNamespace());
+        templateInstance.data(TPL_VAR_NAMESPACE, namespace);
         templateInstance.data(TPL_VAR_NODE_ID, nodeId);
         templateInstance.data(TPL_VAR_NODE_IDS, nodeIds);
         templateInstance.data(TPL_VAR_ACCOUNT_ID, accountId);
