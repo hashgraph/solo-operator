@@ -65,7 +65,7 @@ dependencies {
     testImplementation("org.awaitility:awaitility")
     testImplementation("org.assertj:assertj-core:${assertjVersion}")
     testImplementation("io.grpc:grpc-netty")
-    testImplementation("com.hedera.fullstack:fullstack-helm-client:0.28.3")
+    testImplementation("com.hedera.fullstack:fullstack-helm-client:0.32.0")
     componentTestImplementation(
         "io.javaoperatorsdk:operator-framework-junit-5:${javaoperatorsdkVersion}"
     )
