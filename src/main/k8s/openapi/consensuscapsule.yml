@@ -157,6 +157,64 @@ components:
                 otelCollector:
                   type: object
                   x-java-type: com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector
+            volumes:
+              type: object
+              properties:
+                logs:
+                  type: object
+                  x-java-type: io.fabric8.kubernetes.api.model.Volume
+                stats:
+                  type: object
+                  x-java-type: io.fabric8.kubernetes.api.model.Volume
+                states:
+                  type: object
+                  x-java-type: io.fabric8.kubernetes.api.model.Volume
+                upgrade:
+                  type: object
+                  x-java-type: io.fabric8.kubernetes.api.model.Volume
+                streams:
+                  type: object
+                  properties:
+                    record:
+                      type: object
+                      x-java-type: io.fabric8.kubernetes.api.model.Volume
+                    events:
+                      type: object
+                      x-java-type: io.fabric8.kubernetes.api.model.Volume
+                additionalVolumes:
+                  type: array
+                  items:
+                    type: object
+                    x-java-type: io.fabric8.kubernetes.api.model.Volume
+        persistentVolumeClaims:
+          type: object
+          properties:
+            logs:
+              type: object
+              x-java-type: io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec
+            stats:
+              type: object
+              x-java-type: io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec
+            states:
+              type: object
+              x-java-type: io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec
+            upgrade:
+              type: object
+              x-java-type: io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec
+            streams:
+              type: object
+              properties:
+                record:
+                  type: object
+                  x-java-type: io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec
+                events:
+                  type: object
+                  x-java-type: io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec
+            additionalVolumes:
+              type: array
+              items:
+                type: object
+                x-java-type: io.fabric8.kubernetes.api.model.PersistentVolumeClaim
     ConsensusCapsuleStatus:
       description: The current status of a `ConsensusCapsule`.
       type: object
