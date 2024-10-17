@@ -69,7 +69,6 @@ public class HAProxyCapsuleReconciler implements Reconciler<HAProxyCapsule>, Eve
             .dependsOn(haProxyConfigMap, haProxySecret)
             .withReconcilePrecondition(new HAProxyDeployment.Ready(this))
             .build();
-    ;
 
     public EventSourceContext<HAProxyCapsule> eventSourceContext() {
         return eventSourceContext;
