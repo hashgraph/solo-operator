@@ -13,6 +13,12 @@ import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsulePo
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleRoleBinding;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleService;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleServiceAccount;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsuleEventsStreamPvc;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsuleLogsPvc;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsuleRecordStreamPvc;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsuleStatesPvc;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsuleStatsPvc;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsuleUpgradePvc;
 import io.fabric8.kubernetes.api.model.ContainerState;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.HasMetadata;
@@ -36,6 +42,16 @@ import org.jboss.logging.Logger;
             @Dependent(name = "sa", type = CapsuleServiceAccount.class),
             @Dependent(type = CapsuleRoleBinding.class, dependsOn = "sa"),
             @Dependent(type = CapsuleService.class),
+            @Dependent(type = CapsuleLogsPvc.class, activationCondition = CapsuleLogsPvc.Activate.class),
+            @Dependent(type = CapsuleStatsPvc.class, activationCondition = CapsuleStatsPvc.Activate.class),
+            @Dependent(type = CapsuleStatesPvc.class, activationCondition = CapsuleStatesPvc.Activate.class),
+            @Dependent(type = CapsuleUpgradePvc.class, activationCondition = CapsuleUpgradePvc.Activate.class),
+            @Dependent(
+                    type = CapsuleRecordStreamPvc.class,
+                    activationCondition = CapsuleRecordStreamPvc.Activate.class),
+            @Dependent(
+                    type = CapsuleEventsStreamPvc.class,
+                    activationCondition = CapsuleEventsStreamPvc.Activate.class),
             @Dependent(type = CapsulePod.class, reconcilePrecondition = CapsulePod.Ready.class)
         })
 public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>, ErrorStatusHandler<ConsensusCapsule> {

@@ -21,16 +21,26 @@ import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_PUBLIC_KEY_FILES;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_RECORD_STREAM_UPLOADER;
+import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_EVENTS_STREAM_NAME_SUFFIX;
+import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_LOGS_NAME_SUFFIX;
+import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_MOUNT_NAMES;
+import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_RECORD_STREAM_NAME_SUFFIX;
+import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_STATES_NAME_SUFFIX;
+import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_STATS_NAME_SUFFIX;
+import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_UPGRADE_NAME_SUFFIX;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 
 import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.containers.ConsensusNode;
+import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.api.model.PodSecurityContext;
+import io.fabric8.kubernetes.api.model.Volume;
+import io.fabric8.kubernetes.api.model.VolumeBuilder;
 import io.fabric8.kubernetes.client.utils.Serialization;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.DependentResource;
@@ -51,6 +61,13 @@ import java.util.Objects;
 public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCapsule> {
     public static final String NAME_SUFFIX = "-pod";
     public static final String ACCOUNT_ID_LABEL = "account-id";
+
+    private static final String ERR_PERSISTENT_VOL_NOT_SPECIFIED =
+            "persistent volume claims not specified for volume: %s";
+    private static final String ERR_BOTH_HOSTPATH_PVC_NOT_ALLOWED =
+            "both HostPath and PersistentVolumeClaim is not allowed for the same volume: '%s'";
+    private static final String ERR_INVALID_VOL_TYPE =
+            "volume must be either a host path or a persistent volume claim or emptyDir for: %s";
 
     @Location("consensus-capsule/pod.yaml")
     Template tpl;
@@ -114,12 +131,13 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
                 .addToLabels(labels)
                 .endMetadata();
 
-        podBuilder = this.setDesiredPodSpec(primary, podBuilder);
+        this.setDesiredPodSpec(primary, podBuilder);
+        this.setPodVolumes(primary, podBuilder);
 
         return podBuilder.build();
     }
 
-    private PodBuilder setDesiredPodSpec(ConsensusCapsule primary, PodBuilder podBuilder) {
+    private void setDesiredPodSpec(ConsensusCapsule primary, PodBuilder podBuilder) {
         PodSecurityContext securityContext = primary.getSpec().getPod().getSecurityContext();
         if (securityContext == null) {
             securityContext = SECURITY_CONTEXT_BUILDER.build();
@@ -127,11 +145,11 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
 
         // TODO add other pod spec and associated test #263
 
-        return podBuilder.editSpec().withSecurityContext(securityContext).endSpec();
+        podBuilder.editSpec().withSecurityContext(securityContext).endSpec();
     }
 
     private TemplateInstance getTemplateWithDefaults(ConsensusCapsule primary, Context<ConsensusCapsule> context) {
-        final String nodeId = primary.getMetadata().getName();
+        final String nodeId = Metadata.extractNodeIdFromConsensusCapsule(primary);
         final String accountId = primary.getSpec().getAccountId();
         final String namespace = primary.getMetadata().getNamespace();
         final List<String> nodeIds = getNodeIds(context, namespace);
@@ -297,6 +315,138 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         }
 
         return nodeIds.stream().sorted().toList();
+    }
+
+    private void validatePvcIsSpecified(ConsensusCapsule primary, String volNameSuffix) {
+        final String volName = VOLUME_MOUNT_NAMES.get(volNameSuffix);
+        if (Objects.isNull(volName)) {
+            throw new IllegalArgumentException("invalid volName suffix in: " + volNameSuffix);
+        }
+
+        switch (volNameSuffix) {
+            case VOLUME_LOGS_NAME_SUFFIX:
+                if (primary.getSpec().getPersistentVolumeClaims() == null
+                        || primary.getSpec().getPersistentVolumeClaims().getLogs() == null) {
+                    throw new IllegalArgumentException(ERR_PERSISTENT_VOL_NOT_SPECIFIED.formatted(volName));
+                }
+                break;
+
+            case VOLUME_STATES_NAME_SUFFIX:
+                if (primary.getSpec().getPersistentVolumeClaims() == null
+                        || primary.getSpec().getPersistentVolumeClaims().getStates() == null) {
+                    throw new IllegalArgumentException(ERR_PERSISTENT_VOL_NOT_SPECIFIED.formatted(volName));
+                }
+                break;
+
+            case VOLUME_STATS_NAME_SUFFIX:
+                if (primary.getSpec().getPersistentVolumeClaims() == null
+                        || primary.getSpec().getPersistentVolumeClaims().getStats() == null) {
+                    throw new IllegalArgumentException(ERR_PERSISTENT_VOL_NOT_SPECIFIED.formatted(volName));
+                }
+                break;
+
+            case VOLUME_UPGRADE_NAME_SUFFIX:
+                if (primary.getSpec().getPersistentVolumeClaims() == null
+                        || primary.getSpec().getPersistentVolumeClaims().getUpgrade() == null) {
+                    throw new IllegalArgumentException(ERR_PERSISTENT_VOL_NOT_SPECIFIED.formatted(volName));
+                }
+                break;
+
+            case VOLUME_RECORD_STREAM_NAME_SUFFIX:
+                if (primary.getSpec().getPersistentVolumeClaims() == null
+                        || primary.getSpec().getPersistentVolumeClaims().getStreams() == null
+                        || primary.getSpec()
+                                        .getPersistentVolumeClaims()
+                                        .getStreams()
+                                        .getRecord()
+                                == null) {
+                    throw new IllegalArgumentException(ERR_PERSISTENT_VOL_NOT_SPECIFIED.formatted(volName));
+                }
+                break;
+
+            case VOLUME_EVENTS_STREAM_NAME_SUFFIX:
+                if (primary.getSpec().getPersistentVolumeClaims() == null
+                        || primary.getSpec().getPersistentVolumeClaims().getStreams() == null
+                        || primary.getSpec()
+                                        .getPersistentVolumeClaims()
+                                        .getStreams()
+                                        .getEvents()
+                                == null) {
+                    throw new IllegalArgumentException(ERR_PERSISTENT_VOL_NOT_SPECIFIED.formatted(volName));
+                }
+                break;
+            default:
+        }
+    }
+
+    private void addVolume(ConsensusCapsule primary, PodBuilder podBuilder, Volume inputVol, String volNameSuffix) {
+        final String volName = VOLUME_MOUNT_NAMES.get(volNameSuffix);
+        if (Objects.isNull(volName)) {
+            throw new IllegalArgumentException("invalid volName suffix in: " + volNameSuffix);
+        }
+
+        if (inputVol.getHostPath() == null && inputVol.getPersistentVolumeClaim() == null) {
+            throw new IllegalArgumentException("volume must be either a host path or a persistent volume claim");
+        }
+
+        if (inputVol.getHostPath() != null && inputVol.getPersistentVolumeClaim() != null) {
+            throw new IllegalArgumentException(ERR_BOTH_HOSTPATH_PVC_NOT_ALLOWED.formatted(volName));
+        }
+
+        VolumeBuilder builder = new VolumeBuilder().withName(volName);
+
+        if (inputVol.getHostPath() != null) {
+            builder.withHostPath(inputVol.getHostPath());
+        } else if (inputVol.getPersistentVolumeClaim() != null) {
+            validatePvcIsSpecified(primary, volNameSuffix);
+            builder.withPersistentVolumeClaim(inputVol.getPersistentVolumeClaim());
+        } else if (inputVol.getEmptyDir() != null) {
+            builder.withEmptyDir(inputVol.getEmptyDir());
+        } else {
+            throw new IllegalArgumentException(ERR_INVALID_VOL_TYPE.formatted(volName));
+        }
+
+        podBuilder
+                .editSpec()
+                .removeMatchingFromVolumes((s) -> Objects.equals(builder.getName(), s.getName()))
+                .addToVolumes(builder.build())
+                .endSpec();
+    }
+
+    private void setPodVolumes(ConsensusCapsule primary, PodBuilder podBuilder) {
+        if (primary.getSpec().getPod().getVolumes().getLogs() != null) {
+            final Volume inputVol = primary.getSpec().getPod().getVolumes().getLogs();
+            addVolume(primary, podBuilder, inputVol, VOLUME_LOGS_NAME_SUFFIX);
+        }
+
+        if (primary.getSpec().getPod().getVolumes().getStats() != null) {
+            final Volume inputVol = primary.getSpec().getPod().getVolumes().getStats();
+            addVolume(primary, podBuilder, inputVol, VOLUME_STATS_NAME_SUFFIX);
+        }
+
+        if (primary.getSpec().getPod().getVolumes().getStates() != null) {
+            final Volume inputVol = primary.getSpec().getPod().getVolumes().getStates();
+            addVolume(primary, podBuilder, inputVol, VOLUME_STATES_NAME_SUFFIX);
+        }
+
+        if (primary.getSpec().getPod().getVolumes().getUpgrade() != null) {
+            final Volume inputVol = primary.getSpec().getPod().getVolumes().getUpgrade();
+            addVolume(primary, podBuilder, inputVol, VOLUME_UPGRADE_NAME_SUFFIX);
+        }
+
+        if (primary.getSpec().getPod().getVolumes().getStreams() != null) {
+            if (primary.getSpec().getPod().getVolumes().getStreams().getRecord() != null) {
+                final Volume inputVol =
+                        primary.getSpec().getPod().getVolumes().getStreams().getRecord();
+                addVolume(primary, podBuilder, inputVol, VOLUME_RECORD_STREAM_NAME_SUFFIX);
+            }
+
+            if (primary.getSpec().getPod().getVolumes().getStreams().getEvents() != null) {
+                final Volume inputVol =
+                        primary.getSpec().getPod().getVolumes().getStreams().getEvents();
+                addVolume(primary, podBuilder, inputVol, VOLUME_EVENTS_STREAM_NAME_SUFFIX);
+            }
+        }
     }
 
     public static class Ready implements Condition<Pod, ConsensusCapsule> {

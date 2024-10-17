@@ -546,25 +546,18 @@ spec:
         secretName: "{nodeId}-grpc-tls-keys"
         defaultMode: "{defaultMode}"
     - name: hgcapp-record-streams
-      persistentVolumeClaim:
-        claimName: "{nodeId}-record-streams"
+      emptyDir: {}
     - name: hgcapp-events-streams
-      persistentVolumeClaim:
-        claimName: "{nodeId}-events-streams"
+      emptyDir: {}
     - name: hgcapp-output
-      persistentVolumeClaim:
-        claimName: "{nodeId}-output"
+      emptyDir: {}
     - name: hgcapp-data-keys
-      persistentVolumeClaim:
-        claimName: "{nodeId}-data-keys"
+      emptyDir: {}
     - name: hgcapp-data-saved
-      persistentVolumeClaim:
-        claimName: "{nodeId}-data-saved"
+      emptyDir: {}
     - name: hgcapp-data-stats
-      persistentVolumeClaim:
-        claimName: "{nodeId}-data-stats"
+      emptyDir: {}
     - name: hgcapp-data-upgrade
-      persistentVolumeClaim:
-        claimName: "{nodeId}-data-upgrade"
+      emptyDir: {}
     - name: hgcapp-init
       emptyDir: {}

@@ -5,6 +5,7 @@ package com.hedera.solo.operator.reconciler.common;
 import com.hedera.hashgraph.sdk.AccountId;
 import com.hedera.hashgraph.sdk.PrivateKey;
 import io.fabric8.kubernetes.api.model.PodSecurityContextBuilder;
+import java.util.Map;
 
 public final class Constants {
     private Constants() {
@@ -72,4 +73,19 @@ public final class Constants {
     // key types
     public static final String KEY_TYPE_GOSSIP = "gossip";
     public static final String KEY_TYPE_GRPC_TLS = "grpc-tls";
+
+    // volumes
+    public static final String VOLUME_LOGS_NAME_SUFFIX = "output";
+    public static final String VOLUME_STATS_NAME_SUFFIX = "data-stats";
+    public static final String VOLUME_STATES_NAME_SUFFIX = "data-states";
+    public static final String VOLUME_UPGRADE_NAME_SUFFIX = "data-upgrade";
+    public static final String VOLUME_RECORD_STREAM_NAME_SUFFIX = "record-streams";
+    public static final String VOLUME_EVENTS_STREAM_NAME_SUFFIX = "events-streams";
+    public static final Map<String, String> VOLUME_MOUNT_NAMES = Map.of(
+            VOLUME_LOGS_NAME_SUFFIX, "hgcapp-%s".formatted(VOLUME_LOGS_NAME_SUFFIX),
+            VOLUME_STATES_NAME_SUFFIX, "hgcapp-%s".formatted(VOLUME_STATES_NAME_SUFFIX),
+            VOLUME_STATS_NAME_SUFFIX, "hgcapp-%s".formatted(VOLUME_STATS_NAME_SUFFIX),
+            VOLUME_UPGRADE_NAME_SUFFIX, "hgcapp-%s".formatted(VOLUME_UPGRADE_NAME_SUFFIX),
+            VOLUME_RECORD_STREAM_NAME_SUFFIX, "hgcapp-%s".formatted(VOLUME_RECORD_STREAM_NAME_SUFFIX),
+            VOLUME_EVENTS_STREAM_NAME_SUFFIX, "hgcapp-%s".formatted(VOLUME_EVENTS_STREAM_NAME_SUFFIX));
 }

@@ -17,6 +17,13 @@
 package com.hedera.solo.operator.test.capsule;
 
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_ACCOUNT_ID;
+import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_EVENTS_STREAM_NAME_SUFFIX;
+import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_LOGS_NAME_SUFFIX;
+import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_MOUNT_NAMES;
+import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_RECORD_STREAM_NAME_SUFFIX;
+import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_STATES_NAME_SUFFIX;
+import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_STATS_NAME_SUFFIX;
+import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_UPGRADE_NAME_SUFFIX;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -27,6 +34,8 @@ import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.Volumes;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.VolumesBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.volumes.StreamsBuilder;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaim;
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec;
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSource;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSourceBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.Volume;
@@ -34,95 +43,67 @@ import io.fabric8.kubernetes.api.model.VolumeBuilder;
 import io.quarkus.test.junit.QuarkusTest;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
-public class PersistentVolumeTest extends HostpathVolumeTest {
-    protected Volume prepareVolume(NodeInfo node, String volumeName) {
-        return new VolumeBuilder()
-                .withPersistentVolumeClaim(new PersistentVolumeClaimVolumeSourceBuilder()
-                        .withClaimName("%s-%s".formatted(node.name(), volumeName))
-                        .build())
+public class PersistentVolumeTest extends ConsensusCapsuleTestAbstract {
+    protected Volume prepareNodeVolumeWithPvc(NodeInfo node, String volSuffix) {
+        final PersistentVolumeClaimVolumeSource ps = new PersistentVolumeClaimVolumeSourceBuilder()
+                .withClaimName(nodeVolumeName(node, volSuffix))
                 .build();
+
+        return new VolumeBuilder().withPersistentVolumeClaim(ps).build();
     }
 
-    protected Volumes prepareCapsulePodVolumes(NodeInfo node) {
+    @Override
+    protected Volumes prepareCapsuleVolumes(NodeInfo node) {
         return new VolumesBuilder()
-                .withLogs(prepareVolume(node, VOLUME_LOGS_NAME_SUFFIX))
-                .withStats(prepareVolume(node, VOLUME_STATS_NAME_SUFFIX))
-                .withStates(prepareVolume(node, VOLUME_STATES_NAME_SUFFIX))
-                .withUpgrade(prepareVolume(node, VOLUME_UPGRADE_NAME_SUFFIX))
+                .withLogs(prepareNodeVolumeWithPvc(node, VOLUME_LOGS_NAME_SUFFIX))
+                .withStats(prepareNodeVolumeWithPvc(node, VOLUME_STATS_NAME_SUFFIX))
+                .withStates(prepareNodeVolumeWithPvc(node, VOLUME_STATES_NAME_SUFFIX))
+                .withUpgrade(prepareNodeVolumeWithPvc(node, VOLUME_UPGRADE_NAME_SUFFIX))
                 .withStreams(new StreamsBuilder()
-                        .withRecord(prepareVolume(node, VOLUME_RECORD_STREAM_NAME_SUFFIX))
-                        .withEvents(prepareVolume(node, VOLUME_EVENTS_STREAM_NAME_SUFFIX))
+                        .withRecord(prepareNodeVolumeWithPvc(node, VOLUME_RECORD_STREAM_NAME_SUFFIX))
+                        .withEvents(prepareNodeVolumeWithPvc(node, VOLUME_EVENTS_STREAM_NAME_SUFFIX))
                         .build())
                 .build();
     }
 
-    protected PersistentVolumeClaim preparePersistentVolume(NodeInfo node, String volumeName) {
-        return loadYaml(PersistentVolumeClaim.class, getClass(), "pvc/%s-pvc.yaml".formatted(volumeName))
+    protected PersistentVolumeClaimSpec preparePvcSpec(NodeInfo node, String volSuffix) {
+        PersistentVolumeClaim pvc = loadYaml(
+                        PersistentVolumeClaim.class, getClass(), "pvc/%s-pvc.yaml".formatted(volSuffix))
                 .edit()
                 .editMetadata()
-                .withName("%s-%s".formatted(node.name(), volumeName))
+                .withName(nodeVolumeName(node, volSuffix))
                 .withNamespace(namespace)
                 .addToLabels("consensus-capsule", node.name())
                 .endMetadata()
                 .build();
+        return pvc.getSpec();
     }
 
+    @Override
     protected PersistentVolumeClaims prepareCapsulePVCs(NodeInfo node) {
         return new PersistentVolumeClaimsBuilder()
-                .withLogs(preparePersistentVolume(node, VOLUME_LOGS_NAME_SUFFIX).getSpec())
-                .withStats(
-                        preparePersistentVolume(node, VOLUME_STATS_NAME_SUFFIX).getSpec())
-                .withStates(
-                        preparePersistentVolume(node, VOLUME_STATES_NAME_SUFFIX).getSpec())
+                .withLogs(preparePvcSpec(node, VOLUME_LOGS_NAME_SUFFIX))
+                .withStats(preparePvcSpec(node, VOLUME_STATS_NAME_SUFFIX))
+                .withStates(preparePvcSpec(node, VOLUME_STATES_NAME_SUFFIX))
+                .withUpgrade(preparePvcSpec(node, VOLUME_UPGRADE_NAME_SUFFIX))
                 .withStreams(
                         new com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.persistentvolumeclaims
                                         .StreamsBuilder()
-                                .withRecord(preparePersistentVolume(node, VOLUME_RECORD_STREAM_NAME_SUFFIX)
-                                        .getSpec())
-                                .withEvents(preparePersistentVolume(node, VOLUME_EVENTS_STREAM_NAME_SUFFIX)
-                                        .getSpec())
+                                .withRecord(preparePvcSpec(node, VOLUME_RECORD_STREAM_NAME_SUFFIX))
+                                .withEvents(preparePvcSpec(node, VOLUME_EVENTS_STREAM_NAME_SUFFIX))
                                 .build())
                 .build();
     }
 
-    //    private void setupPersistentVolumeClaims(List<NodeInfo> nodes) {
-    //        for (final String pvcDirName : List.of(
-    //                "output",
-    //                "data-keys",
-    //                "data-saved",
-    //                "data-stats",
-    //                "data-upgrade",
-    //                "events-streams",
-    //                "record-streams")) {
-    //            for (NodeInfo node : nodes) {
-    //                final String pvcFile = String.format("pvc/%s-pvc.yaml", pvcDirName);
-    //                kubernetesClient
-    //                        .resource(loadYaml(PersistentVolumeClaim.class, getClass(), pvcFile)
-    //                                .edit()
-    //                                .editMetadata()
-    //                                .withName("%s-%s".formatted(node.name(), pvcDirName))
-    //                                .withNamespace(namespace)
-    //                                .addToLabels("consensus-capsule", node.name())
-    //                                .endMetadata()
-    //                                .build())
-    //                        .create();
-    //            }
-    //        }
-    //    }
-
     @Test
-    void testVolumesWithPVCs() throws Exception {
+    @DisplayName("volume with hostpath should succeed for a single-node network")
+    void testSingleNodeDeployment() throws Exception {
         super.testSingleNodeDeployment();
         this.check();
-    }
-
-    // failure case: both hostpath and PVCs are specified
-    @Test
-    void testVolumesWithPVCAndHostpath() throws Exception {
-        super.testSingleNodeDeployment();
     }
 
     private void check() {
@@ -133,9 +114,13 @@ public class PersistentVolumeTest extends HostpathVolumeTest {
             for (Pod p : consensusPods) {
                 String accountId = p.getMetadata().getLabels().get(LABEL_ACCOUNT_ID);
                 assertThat(accountId).isNotEmpty();
-                assertThat(p.getSpec().getVolumes().size()).isGreaterThanOrEqualTo(6);
+                assertThat(p.getSpec().getVolumes().size()).isGreaterThanOrEqualTo(VOLUME_MOUNT_NAMES.size());
 
-                // TODO check for specific volumes
+                for (Volume v : p.getSpec().getVolumes()) {
+                    if (VOLUME_MOUNT_NAMES.containsValue(v.getName())) {
+                        assertThat(v.getPersistentVolumeClaim()).isNotNull();
+                    }
+                }
             }
         });
     }
