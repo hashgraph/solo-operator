@@ -1,0 +1,55 @@
+/*
+ * Copyright (C) 2024 Hedera Hashgraph, LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.hedera.solo.operator.reconciler.networkinitialization.resources;
+
+import com.hedera.solo.operator.model.v1alpha1.NetworkInitialization;
+import com.hedera.solo.operator.model.v1alpha1.Orbit;
+import com.hedera.solo.operator.reconciler.networkinitialization.NetworkInitializationReconciler;
+import io.javaoperatorsdk.operator.api.config.informer.InformerConfiguration;
+import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
+import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResource;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
+import io.javaoperatorsdk.operator.processing.event.source.PrimaryToSecondaryMapper;
+import io.javaoperatorsdk.operator.processing.event.source.SecondaryToPrimaryMapper;
+import java.util.Set;
+
+@KubernetesDependent
+public class NetworkInitializationOrbit extends KubernetesDependentResource<Orbit, NetworkInitialization>
+        implements PrimaryToSecondaryMapper<NetworkInitialization>, SecondaryToPrimaryMapper<Orbit> {
+
+    private final NetworkInitializationReconciler reconciler;
+
+    public NetworkInitializationOrbit(final NetworkInitializationReconciler reconciler) {
+        super(Orbit.class);
+        this.reconciler = reconciler;
+    }
+
+    @Override
+    public Set<ResourceID> toPrimaryResourceIDs(final Orbit resource) {
+        return reconciler.toPrimaryResourceIDs(resource.getMetadata().getName());
+    }
+
+    @Override
+    protected InformerConfiguration.InformerConfigurationBuilder<Orbit> informerConfigurationBuilder() {
+        return super.informerConfigurationBuilder().withPrimaryToSecondaryMapper(this);
+    }
+
+    @Override
+    public Set<ResourceID> toSecondaryResourceIDs(final NetworkInitialization primary) {
+        return Set.of(new ResourceID(primary.getMetadata().getNamespace()));
+    }
+}
