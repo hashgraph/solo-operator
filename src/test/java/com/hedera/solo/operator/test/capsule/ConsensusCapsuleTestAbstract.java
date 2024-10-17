@@ -363,14 +363,16 @@ public abstract class ConsensusCapsuleTestAbstract {
         for (NodeInfo node : nodes) {
             final ConsensusCapsule consensusCapsule = new ConsensusCapsuleBuilder()
                     .withNewMetadata()
+                    .withNamespace(namespace) // namespace and orbit name must match
                     .withName(node.name)
-                    .withNamespace(namespace)
                     .endMetadata()
                     .withNewSpec()
+                    .withOrbit(namespace) // namespace and orbit name must match
                     .withAccountId(node.accountId)
                     .withPod(consensusPod)
                     .endSpec()
                     .build();
+
             list.add(kubernetesClient.resource(consensusCapsule).create());
         }
 

@@ -80,7 +80,13 @@ components:
               when using deterministic images we may need some way to delay the service from actually fully starting up, maybe
               through the address book or using an init container
 
+      required: # required properties. FIXME update with all the required properties
+        - orbit
       properties:
+        orbit:
+          description: |
+            Name of the orbit that this consensus capsule belongs to.
+          type: string
         accountId:
           type: string
         eligibleForDeployment:
