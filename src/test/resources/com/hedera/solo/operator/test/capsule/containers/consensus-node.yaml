@@ -1,5 +1,5 @@
 name: "consensus-node"
 softwareVersion:
-  repository: "gcr.io/hedera-registry"
+  repository: "swirldslabs.jfrog.io/consensus-node-docker-dev"
   name: "consensus-node"
-  tag: "0.52.0-alpha.6"
+  tag: "0.56.0-develop.x4b7c054"
