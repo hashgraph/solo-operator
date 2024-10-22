@@ -182,6 +182,7 @@ public abstract class ConsensusCapsuleTestAbstract {
     }
 
     private List<NodeInfo> prepareNodes(List<String> nodeNames) {
+        final String svcNameSuffix = ".%s.%s".formatted(namespace, "svc.cluster.local");
         List<NodeInfo> nodes = new ArrayList<>();
         int accStart = Constants.HEDERA_ACCOUNT_START;
         for (String nodeName : nodeNames) {
@@ -189,8 +190,8 @@ public abstract class ConsensusCapsuleTestAbstract {
                     nodeName,
                     String.format("0.0.%d", accStart++),
                     1,
-                    String.format("%s.consensus", nodeName),
-                    String.format("%s-svc", nodeName)));
+                    String.format("%s.consensus%s", nodeName, svcNameSuffix),
+                    String.format("%s-svc%s", nodeName, svcNameSuffix)));
         }
 
         return nodes;
