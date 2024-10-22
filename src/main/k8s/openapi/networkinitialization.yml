@@ -29,6 +29,82 @@ components:
           enum:
               - FirstInitialization
               - NodeAddition
+    NetworkUpgrade:
+      type: object
+      required:
+        - orbit
+        - softwareVersion
+        - marker
+      properties:
+        orbit:
+          type: string
+        softwareVersion:
+          type: object
+          x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+        marker:
+          description: |
+            Marker file status is handled as below:
+            # ExecuteImmediate (T = 0) 
+              1. validate image (ensure we can pull the image from specified registries and validate the layer hashes)
+                1a. store manifest hashes (including the registry details) in status field so that subsequent validation can validate against this list of layer hashes
+              2. potentially deploy firewall rule changes (TBD)
+            # FreezeScheduled (T + 2 days)
+              1. validate image (ensure we can pull the image and validate the layer hashes that are in the status field)
+            # FreezeAbort
+              1. rollback firewall rule changes (potentially)
+            # NowFrozen ( T + 3 days)
+              1. validate image (ensure we can pull the image and validate the layer hashes that are in the status field)
+                1a. check the list of registries in sequence and rollout the first valid one
+              2. rollout config file bundle 
+                  2a. consensus-node: settings.txt, application.properties, config.txt, api-permission.properties...
+                  2b. HAProxy
+                  2c. Mirror Uploader (e.g env variables)
+              3. update image definition in consensus-capsule CR
+              4. optional:
+                  4a. update version info in HAProxy
+                  4b. update version info in mirror-uploader
+              5. Ensure everything is up or emit error
+          type: string
+          enum:
+            - ExecuteImmediate
+            - FreezeScheduled
+            - FreezeAbort
+            - NowFrozen
+        configuration:
+          type: object
+          properties:
+            networkSettings:
+              description: |
+                The network settings for the `Orbit`. This is equivalent to the Platform SDK `settings.txt` file.
+              type: object
+              additionalProperties:
+                type: string
+            applicationProperties:
+              description: |
+                The application configuration for the `Orbit`. This is equivalent to the 
+                `data/config/application.properties` file.
+              type: object
+              additionalProperties:
+                type: string
+            apiPermissions:
+              description: |
+                The application configuration for the `Orbit`. This is equivalent to the 
+                `data/config/api-permissions.properties` file.
+              type: object
+              additionalProperties:
+                type: string
+            genesisProperties:
+              description: |
+                The application configuration for the `Orbit`. This is equivalent to the 
+                `data/config/genesis.properties` file.
+              type: object
+              additionalProperties:
+                type: string
+            logging:
+              description: |
+                The application configuration for the `Orbit`. This is equivalent to the 
+                `log4j2.xml` file.
+              type: string
 
 
     NetworkInitializationStatus:
