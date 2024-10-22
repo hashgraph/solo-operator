@@ -146,8 +146,8 @@ spec:
     - name: "{cn.name}"
       image: "{cn.softwareVersion.repository}/{cn.softwareVersion.name}:{cn.softwareVersion.tag}"
       env:
-        - name: JAVA_OPTS
-          value: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005 -Dnetworkaddress.cache.negative.ttl=0"
+        - name: JAVA_OPTS # https://stackoverflow.com/questions/1256556/how-to-make-java-honor-the-dns-caching-timeout
+          value: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005 -Dsun.net.inetaddr.ttl=0"
       command:
         - "/bin/bash"
         - "-c"
