@@ -16,7 +16,7 @@
 
 package com.hedera.solo.operator.test.framework;
 
-import static com.hedera.solo.operator.test.fixtures.Environment.isGradleTest;
+import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
 
 import io.javaoperatorsdk.operator.Operator;
 import io.quarkus.runtime.ShutdownEvent;
@@ -30,7 +30,7 @@ public class Shutdown {
     protected Operator operator;
 
     void onShutdown(@Observes ShutdownEvent event) {
-        if (isGradleTest()) {
+        if (isTestUsingGradleOrIntelliJ()) {
             operator.stop();
         }
     }
