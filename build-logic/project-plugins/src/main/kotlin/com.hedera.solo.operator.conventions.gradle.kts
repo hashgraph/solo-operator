@@ -46,6 +46,7 @@ tasks.withType<Test>().configureEach {
         environment("SOLO_TEST_SNAPSHOT_ENABLED", "true")
     }
     systemProperty("java.util.logging.manager", "org.jboss.logmanager.LogManager")
+    systemProperty("junit.jupiter.execution.parallel.enabled", "false")
 }
 
 tasks.withType<JavaCompile>().configureEach {
