@@ -130,7 +130,8 @@ spec:
           # to cache the unsuccessful lookup so that it can keep retrying.
           #
           # On the other hand, successful lookup is cached for infinity (-1), which is a problem since a pod may acquire
-          # new IP because of restart and we don't want it to use value from cache.
+          # new IP because of restart and we don't want it to use value from cache. However, we choose a 10s cache for
+          # successful lookup to improve performance.
           #
           # So essentially, we need to disable DNS caching.
           #
