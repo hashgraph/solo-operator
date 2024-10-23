@@ -325,9 +325,10 @@ public abstract class ConsensusCapsuleTestAbstract {
 
         kubernetesClient.resource(orbit).create();
 
-        await().atMost(30, TimeUnit.SECONDS)
-                .untilAsserted(
-                        () -> assertThat(kubernetesClient.resource(orbit).get()).isNotNull());
+        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+            assertThat(kubernetesClient.resource(orbit).get()).isNotNull();
+            assertThat(kubernetesClient.namespaces().withName(namespace).get()).isNotNull();
+        });
     }
 
     protected ContainersBuilder getContainersBuilder() {
@@ -439,6 +440,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                     NetworkInitialization netInit =
                             kubernetesClient.resource(networkInitialization).get();
                     assertThat(netInit).isNotNull();
+                    assertThat(netInit.getStatus()).isNotNull();
                     // FIXME need to decide if the default status should be failed or Unknown?
                     // assertThat(netInit.getStatus().getPhase()).isNotEqualTo(NetworkInitializationStatus.Phase.Failed);
                 })
@@ -446,6 +448,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                     NetworkInitialization netInit =
                             kubernetesClient.resource(networkInitialization).get();
                     assertThat(netInit).isNotNull();
+                    assertThat(netInit.getStatus()).isNotNull();
                     assertThat(netInit.getStatus().getPhase()).isEqualTo(NetworkInitializationStatus.Phase.Succeeded);
                     for (ConsensusCapsule consensusCapsule : consensusCapsules) {
                         String name = consensusCapsule.getMetadata().getName();
