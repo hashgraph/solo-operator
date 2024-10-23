@@ -11,6 +11,7 @@ rules:
       - persistentvolumes
       - configmaps
       - secrets
+      - pods
     verbs:
       - list
       - get
