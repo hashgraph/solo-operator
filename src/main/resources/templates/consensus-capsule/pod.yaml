@@ -113,7 +113,7 @@ spec:
             done;
 
             echo ""
-            echo "hosts file"
+            echo "hosts"
             echo "--------------------------------------------------------------------------"
             cat /tmp/volumes/init/hosts
 
@@ -152,7 +152,7 @@ spec:
             sed -e '/networkaddress.cache.negative.ttl/c networkaddress.cache.negative.ttl=0' -i "$tmpFile" || return $?
 
             echo ""
-            echo "DNS caching disabled"
+            echo "DNS cache settings"
             echo "---------------------------------------------------------------------------------------------------"
             cat "$tmpFile" | grep "ttl"
             echo "---------------------------------------------------------------------------------------------------"
