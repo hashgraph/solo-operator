@@ -22,8 +22,8 @@ import static com.hedera.solo.operator.reconciler.common.Constants.HEDERA_USER;
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GOSSIP;
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GRPC_TLS;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_APP;
-import static com.hedera.solo.operator.test.fixtures.Environment.isGradleTest;
 import static com.hedera.solo.operator.test.fixtures.Environment.isSnapshotEnabled;
+import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
 import static com.hedera.solo.operator.test.fixtures.snapshot.SetupSnapshot.enableCorednsLogs;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -94,7 +94,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         if (isSnapshotEnabled()) {
             enableCorednsLogs(kubernetesClient);
         }
-        if (isGradleTest()) {
+        if (isTestUsingGradleOrIntelliJ()) {
             operator.start();
         }
 
