@@ -83,7 +83,7 @@ public abstract class ConsensusCapsuleTestAbstract {
     protected final String namespace = getClass().getSimpleName().toLowerCase();
 
     // TODO a domain suffix like svc.cluster.local is optional so we are omitting it
-    protected final String svcNameSuffix = ""; //"".%s.%s".formatted(namespace, "svc.cluster.local");
+    protected final String svcNameSuffix = ""; // "".%s.%s".formatted(namespace, "svc.cluster.local");
 
     @Inject
     @SuppressWarnings("CdiInjectionPointsInspection")
@@ -128,7 +128,8 @@ public abstract class ConsensusCapsuleTestAbstract {
                         "services-hedera/HapiApp2.0/output/hgcaa.log",
                         "services-hedera/HapiApp2.0/output/swirlds.log",
                         "services-hedera/HapiApp2.0/config.txt",
-                        "/etc/hosts")
+                        "/tmp/volumes/init/hosts-lookup",
+                        "/tmp/volumes/init/java.security")
                 .namespaces("minio-operator", "minio-tenant")
                 .namespacedResources()
                 .logs()
