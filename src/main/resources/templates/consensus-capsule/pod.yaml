@@ -266,7 +266,7 @@ spec:
 
           function setup() \{
             copyFiles || return $?
-            copyHostsFile || return $?
+            # copyHostsFile || return $?
             copyJavaSecurityFile || return $?
             return 0
           \}
