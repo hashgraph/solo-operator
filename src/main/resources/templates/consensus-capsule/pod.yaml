@@ -248,9 +248,9 @@ spec:
               sudo cp "$PREP_DIR/java.security" "$javaSecurityFile"
 
               echo ""
-              echo "DNS caching settings"
+              echo "JVM DNS cache settings"
               echo "---------------------------------------------------------------------------------------------------"
-              cat "$javaSecurityFile" | grep "networkadddress.cache"
+              cat "$javaSecurityFile" | grep "ttl"
               echo "---------------------------------------------------------------------------------------------------"
             fi
 
