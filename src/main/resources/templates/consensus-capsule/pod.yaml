@@ -23,6 +23,8 @@ spec:
   serviceAccountName: "{nodeId}-sa"
   initContainers:
     - name: "init-consensus-node"
+      # Note: We must use consensus-node image so that we can chown using hedera user and also update java.security file
+      # from the consensus-node image
       image: "{cn.softwareVersion.repository}/{cn.softwareVersion.name}:{cn.softwareVersion.tag}"
       volumeMounts:
         - name: hgcapp-record-streams
@@ -63,6 +65,7 @@ spec:
             local delay=5
             local maxAttempt=100
             local rc=0
+            local svcAlias=$(echo $\{svc%%.*\}) # first substring before the dot e.g. node0 given node0.consensus
             # Check for services with a timeout
             until [ $attempt -gt $maxAttempt ]; do
               echo "-------------------------------------------------------------------"
@@ -72,10 +75,10 @@ spec:
               if [ "$rc" -eq 0 ]; then
                 echo "OK: $svc"
                 echo "-------------------------------------------------------------------"
-                echo "$result" >> /tmp/volumes/init/hosts
+                echo "$result" "$svcAlias" >> /tmp/volumes/init/hosts
                 return $rc
               fi
-              echo "Attempt $attempt failed. Retrying in $delay seconds..."
+              echo "Attempt $attempt failed for service $svc. Retrying in $delay seconds..."
               sleep "$delay"
               attempt=$(( attempt + 1 ))
             done
@@ -86,25 +89,31 @@ spec:
           checkConsensusNodeSvc() \{
             parsed_internal_svcs=$(cat /tmp/volumes/cluster-config/config.txt | awk '\{print $6\}' | xargs);
             parsed_external_svcs=$(cat /tmp/volumes/cluster-config/config.txt | awk '\{print $8\}' | xargs);
-            echo "Parsed Internal: $\{parsed_internal_svcs\}"
-            echo "Parsed External: $\{parsed_external_svcs\}"
+
             IFS=', ' read -r -a internal_svcs <<< "$parsed_internal_svcs";
             IFS=', ' read -r -a external_svcs <<< "$parsed_external_svcs";
+
+            echo ""
+            echo ""
+            echo "Looking up consensus node services...."
+            echo "Parsed Internal: $\{parsed_internal_svcs\}"
+            echo "Parsed External: $\{parsed_external_svcs\}"
             echo "Internal Services: $\{internal_svcs[@]\}"
             echo "External Services: $\{external_svcs[@]\}"
+            echo ""
 
             # prepare hosts file with service IPs
             touch /tmp/volumes/init/hosts
-            for s in "$\{internal_svcs[@]\}";do
-              lookupSvc "$s" || return $?
+            for svc in "$\{internal_svcs[@]\}";do
+              lookupSvc "$svc" || return $?
             done;
 
-            for s in "$\{external_svcs[@]\}";do
-              lookupSvc "$s" || return $?
+            for svc in "$\{external_svcs[@]\}";do
+              lookupSvc "$svc" || return $?
             done;
 
             echo ""
-            echo "hosts"
+            echo "hosts file"
             echo "--------------------------------------------------------------------------"
             cat /tmp/volumes/init/hosts
 
@@ -114,6 +123,41 @@ spec:
             return 0
           \}
 
+          # Prepare java.security file with Java DNS caching disabled
+          #
+          # Currently our retryLogic in the platform code has a default retry limit of 10s. However, by default JVM
+          # cache unsuccessful name lookup for 10s. So the default retry logic fails to lookup. Ideally we don't want it
+          # to cache the unsuccessful lookup so that it can keep retrying.
+          #
+          # On the other hand, successful lookup is cached for infinity (-1), which is a problem since a pod may acquire
+          # new IP because of restart and we don't want it to use value from cache.
+          #
+          # So essentially, we need to disable DNS caching.
+          #
+          # We are preparing the java.security file in the init-container just so that it can be reused if necessary and
+          # make it easier to debug without waiting for consensus pod to be running.
+          #
+          # References:
+          # 1. https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/net/doc-files/net-properties.html#address-cache-heading
+          # 2. https://stackoverflow.com/questions/1256556/how-to-make-java-honor-the-dns-caching-timeout
+          # 3. https://github.com/hashgraph/hedera-services/blob/develop/platform-sdk/swirlds-base/src/main/java/com/swirlds/base/utility/Retry.java#L37
+          function disableDNSCaching \{
+            local javaSecurityFile="/usr/local/java/conf/security/java.security"
+            local tmpFile="/tmp/volumes/init/java.security"
+
+            cp "$javaSecurityFile" "$tmpFile"
+            sed -e '/networkaddress.cache.ttl/c networkaddress.cache.ttl=10' -i "$tmpFile" || return $?
+            sed -e '/networkaddress.cache.stale.ttl/c networkaddress.cache.stale.ttl=0' -i "$tmpFile" || return $?
+            sed -e '/networkaddress.cache.negative.ttl/c networkaddress.cache.negative.ttl=0' -i "$tmpFile" || return $?
+
+            echo ""
+            echo "DNS caching disabled"
+            echo "---------------------------------------------------------------------------------------------------"
+            cat "$tmpFile" | grep "ttl"
+            echo "---------------------------------------------------------------------------------------------------"
+
+            return 0
+          \}
 
           runInit() \{
             echo "Copying keys into /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/"
@@ -138,6 +182,9 @@ spec:
             # lookup services
             checkConsensusNodeSvc || return 1
 
+            # prepare java.security file with DNS caching disabled
+            disableDNSCaching || return 1
+
             return 0
           \}
 
@@ -146,8 +193,8 @@ spec:
     - name: "{cn.name}"
       image: "{cn.softwareVersion.repository}/{cn.softwareVersion.name}:{cn.softwareVersion.tag}"
       env:
-        - name: JAVA_OPTS # https://stackoverflow.com/questions/1256556/how-to-make-java-honor-the-dns-caching-timeout
-          value: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005 -Dsun.net.inetaddr.ttl=0"
+        - name: JAVA_OPTS
+          value: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"
       command:
         - "/bin/bash"
         - "-c"
@@ -179,23 +226,48 @@ spec:
               copyFile "$CLUSTER_CONFIG_VOL/entrypoint.sh" "$HAPI_APP/entrypoint.sh"
             fi
 
-            # copy other prepared files
+            return 0
+          \}
+
+          function copyHostsFile \{
             PREP_DIR="/tmp/volumes/init"
             if [[ -f "$PREP_DIR/hosts" ]]; then
-              if [[ ! -f "$PREP_DIR/hosts.original" ]]; then
-                copyFile /etc/hosts "$PREP_DIR/hosts.original"
-              fi
+              copyFile /etc/hosts "$PREP_DIR/hosts.original"
               sudo cat "$PREP_DIR/hosts.original" > "$PREP_DIR/hosts_combined"
               sudo cat "$PREP_DIR/hosts" >> "$PREP_DIR/hosts_combined"
               sudo cp "$PREP_DIR/hosts_combined" /etc/hosts
+
+              echo ""
+              echo "hosts file"
+              echo "---------------------------------------------------------------------------------------------------"
               cat /etc/hosts
+              echo "---------------------------------------------------------------------------------------------------"
             fi
 
             return 0
           \}
 
+          function copyJavaSecurityFile \{
+            local javaSecurityFile="/usr/local/java/conf/security/java.security"
+            PREP_DIR="/tmp/volumes/init"
+            if [[ -f "$PREP_DIR/java.security" ]]; then
+              sudo cp "$PREP_DIR/java.security" "$javaSecurityFile"
+            fi
+
+            echo ""
+            echo "DNS caching settings"
+            echo "---------------------------------------------------------------------------------------------------"
+            cat "$javaSecurityFile" | grep "networkadddress.cache"
+            echo "---------------------------------------------------------------------------------------------------"
+
+            return 0
+          \}
+
+
           function setup() \{
             copyFiles || return $?
+            copyHostsFile || return $?
+            copyJavaSecurityFile || return $?
             return 0
           \}
 
