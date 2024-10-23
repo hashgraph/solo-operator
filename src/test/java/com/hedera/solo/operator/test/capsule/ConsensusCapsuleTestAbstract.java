@@ -82,6 +82,9 @@ import org.junit.jupiter.api.Test;
 public abstract class ConsensusCapsuleTestAbstract {
     protected final String namespace = getClass().getSimpleName().toLowerCase();
 
+    // TODO a domain suffix like svc.cluster.local is optional so we are omitting it
+    protected final String svcNameSuffix = ""; //"".%s.%s".formatted(namespace, "svc.cluster.local");
+
     @Inject
     @SuppressWarnings("CdiInjectionPointsInspection")
     KubernetesClient kubernetesClient;
@@ -182,7 +185,6 @@ public abstract class ConsensusCapsuleTestAbstract {
     }
 
     private List<NodeInfo> prepareNodes(List<String> nodeNames) {
-        final String svcNameSuffix = ".%s.%s".formatted(namespace, "svc.cluster.local");
         List<NodeInfo> nodes = new ArrayList<>();
         int accStart = Constants.HEDERA_ACCOUNT_START;
         for (String nodeName : nodeNames) {
