@@ -46,7 +46,7 @@ spec:
         - "-c"
         - |
           setupDirs() \{
-            # setup directories mounted into different containers
+            # setup directories required by stream-uploader sidecars
             mkdir -p /opt/hgcapp/recordStreams/record{accountId}/sidecar
             sudo chown -R hedera:hedera /opt/hgcapp/recordStreams
             mkdir -p /opt/hgcapp/eventsStreams/events_{accountId}
@@ -307,7 +307,7 @@ spec:
           mountPath: /tmp/volumes/cluster-config # mount to a temp directory to copy files with appropriate ownership
         - name: grpc-tls-keys
           mountPath: /tmp/volumes/grpc-tls-keys # mount to a temp directory to copy files with appropriate ownership
-        - name: hgcapp-init # mount the prepare files to copy to appropriate location
+        - name: hgcapp-init # mount the volume with prepared files to copy to appropriate locations
           mountPath: /tmp/volumes/init
         - name: hgcapp-data-keys
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
