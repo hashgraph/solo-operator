@@ -29,6 +29,55 @@ components:
           enum:
               - FirstInitialization
               - NodeAddition
+    StreamUploaderChangeset:
+      type: object
+      properties:
+        name:
+          type: string
+        softwareVersion:
+          type: object
+          x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+        resources:
+          type: object
+          x-java-type: io.fabric8.kubernetes.api.model.ResourceRequirements
+        enabled:
+          type: boolean
+        config:
+          type: object
+          properties:
+            debug:
+              type: boolean
+            enableCompression:
+              type: boolean
+            enableSidecarFiles:
+              type: boolean
+            reaper:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                minKeep:
+                  type: integer
+                interval:
+                  type: integer
+                defaultBackoff:
+                  type: integer
+            signature:
+              type: object
+              properties:
+                require:
+                  type: boolean
+                prioritize:
+                  type: boolean
+            streamFileExtension:
+              type: string
+            streamSigExtension:
+              type: string
+            streamExtension:
+              type: string
+            sigExtension:
+              type: string
+#    ConsensusChangeset:
     NetworkUpgrade:
       type: object
       required:
@@ -38,9 +87,49 @@ components:
       properties:
         orbit:
           type: string
-        softwareVersion:
+        containers:
           type: object
-          x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+          properties:
+            consensusNode:
+              type: object
+              properties:
+                version:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+            recordStreamUploader:
+              type: object
+              x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploaderChangeset
+            recordStreamSidecarFilesUploader:
+              type: object
+              x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+            eventsStreamUploader:
+              type: object
+              properties:
+                version:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+            backupUploader:
+              type: object
+              properties:
+                version:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+            otelCollector:
+              type: object
+              properties:
+                version:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+        versions:
+          type: object
+          properties:
+            consensusNode:
+              type: object
+              x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+            recordStreamUploader:
+              type: object
+              x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+            recordStreamSidecarFilesUploader:
         marker:
           description: |
             Marker file status is handled as below:
