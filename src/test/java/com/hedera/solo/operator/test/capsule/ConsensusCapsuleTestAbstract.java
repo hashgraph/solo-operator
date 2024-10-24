@@ -62,8 +62,10 @@ import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodSecurityContextBuilder;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.Service;
+import io.fabric8.kubernetes.api.model.discovery.v1.EndpointSlice;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.utils.Serialization;
 import io.javaoperatorsdk.operator.Operator;
 import jakarta.inject.Inject;
 import java.time.Duration;
@@ -434,6 +436,61 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .endStatus()
                 .build();
         kubernetesClient.resource(networkInitialization).create();
+
+        // wait for podIPs
+        await().atMost(180, TimeUnit.SECONDS).untilAsserted(() -> {
+            for (ConsensusCapsule consensusCapsule : consensusCapsules) {
+                String name = consensusCapsule.getMetadata().getName();
+                ConsensusCapsule capsule =
+                        kubernetesClient.resource(consensusCapsule).get();
+                assertThat(capsule).isNotNull();
+                assertThat(capsule.getSpec().getEligibleForDeployment()).isTrue();
+
+                Pod pod = kubernetesClient
+                        .resources(Pod.class)
+                        .inNamespace(namespace)
+                        .withName(name + "-pod")
+                        .get();
+                assertThat(pod).isNotNull();
+                assertThat(pod.getStatus().getPodIP()).isNotNull();
+            }
+        });
+
+        // add endpoint slice
+        String es =
+                """
+                apiVersion: discovery.k8s.io/v1
+                kind: EndpointSlice
+                metadata:
+                  name: consensus-eps
+                  labels:
+                    kubernetes.io/service-name: consensus
+                addressType: IPv4
+                """;
+        var builder = Serialization.unmarshal(es, EndpointSlice.class)
+                .edit()
+                .editMetadata()
+                .withNamespace(namespace)
+                .endMetadata();
+
+        for (ConsensusCapsule consensusCapsule : consensusCapsules) {
+            String name = consensusCapsule.getMetadata().getName();
+            Pod pod = kubernetesClient
+                    .resources(Pod.class)
+                    .inNamespace(namespace)
+                    .withName(name + "-pod")
+                    .get();
+            builder.addNewEndpoint()
+                    .withAddresses(pod.getStatus().getPodIP())
+                    .withNewConditions()
+                    .withReady()
+                    .endConditions()
+                    .withHostname(pod.getSpec().getHostname())
+                    .withNodeName(pod.getSpec().getNodeName())
+                    .endEndpoint();
+        }
+        EndpointSlice endpointSlice = builder.build();
+        kubernetesClient.resource(endpointSlice).create();
 
         await().atMost(180, TimeUnit.SECONDS)
                 .failFast(() -> {

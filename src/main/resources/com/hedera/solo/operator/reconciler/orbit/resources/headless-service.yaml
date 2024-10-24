@@ -6,8 +6,3 @@ metadata:
     app: consensus-node
 spec:
   clusterIP: None
-  clusterIPs:
-    - None
-  selector:
-    app: consensus-node
-  publishNotReadyAddresses: true
