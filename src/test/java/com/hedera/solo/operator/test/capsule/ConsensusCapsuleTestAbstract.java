@@ -82,8 +82,7 @@ import org.junit.jupiter.api.Test;
 public abstract class ConsensusCapsuleTestAbstract {
     protected final String namespace = getClass().getSimpleName().toLowerCase();
 
-    // a domain suffix like svc.cluster.local is optional, so we are omitting it
-    protected final String svcNameSuffix = ""; // "".%s.%s".formatted(namespace, "svc.cluster.local");
+    protected final String svcNameSuffix = ".%s.%s".formatted(namespace, "svc.cluster.local");
 
     @Inject
     @SuppressWarnings("CdiInjectionPointsInspection")
