@@ -86,6 +86,7 @@ dependencies {
 
     testFixturesImplementation("io.fabric8:kubernetes-client")
     testFixturesImplementation("org.awaitility:awaitility")
+    testFixturesImplementation("org.assertj:assertj-core:${assertjVersion}")
     testFixturesImplementation("org.junit.jupiter:junit-jupiter-api")
     testFixturesImplementation("org.eclipse.microprofile.config:microprofile-config-api")
 }

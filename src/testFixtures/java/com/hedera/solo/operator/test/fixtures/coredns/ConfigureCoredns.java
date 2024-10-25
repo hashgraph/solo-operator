@@ -1,0 +1,90 @@
+/*
+ * Copyright (C) 2024 Hedera Hashgraph, LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.hedera.solo.operator.test.fixtures.coredns;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+
+import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import java.util.HexFormat;
+import java.util.List;
+
+public class ConfigureCoredns {
+    public static void configureCoredns(final KubernetesClient client) {
+        try {
+            // update corefile
+            String[] file = new String[1];
+            client.configMaps().inNamespace("kube-system").withName("coredns").edit(c -> c.edit()
+                    .addToData(
+                            "Corefile", file[0] = configureCoredns(c.getData().get("Corefile")))
+                    .build());
+            // add annotation to coredns pods with digest of corefile for faster reload
+            String digest = HexFormat.of()
+                    .formatHex(MessageDigest.getInstance("SHA-384").digest(file[0].getBytes()));
+            Deployment deployment = client.resources(Deployment.class)
+                    .inNamespace("kube-system")
+                    .withName("coredns")
+                    .edit(d -> d.edit()
+                            .editSpec()
+                            .editTemplate()
+                            .editMetadata()
+                            .addToAnnotations("corefile-digest", digest)
+                            .endMetadata()
+                            .endTemplate()
+                            .endSpec()
+                            .build());
+            // wait for all pods running with annotation
+            await().atMost(Duration.ofSeconds(90)).untilAsserted(() -> {
+                List<Pod> pods = client.pods()
+                        .inNamespace("kube-system")
+                        .withLabel("k8s-app", "kube-dns")
+                        .list()
+                        .getItems();
+                long count = pods.stream()
+                        .filter(p ->
+                                digest.equals(p.getMetadata().getAnnotations().get("corefile-digest")))
+                        .filter(p -> "Running".equals(p.getStatus().getPhase()))
+                        .count();
+                assertThat(count).isEqualTo((long) deployment.getSpec().getReplicas());
+            });
+        } catch (KubernetesClientException | NoSuchAlgorithmException ignored) {
+        }
+    }
+
+    private static String configureCoredns(final String corefile) {
+        String file = corefile;
+        List<String> lines = file.lines().toList();
+        // https://coredns.io/plugins/log/
+        if (lines.stream().noneMatch((line -> line.strip().equals("log")))) {
+            file = file.replaceFirst(
+                    "(?<openBrace>\\{)(?<space>\\s*)(?<nonSpace>\\S)", "${openBrace}${space}log${space}${nonSpace}");
+        }
+        // https://coredns.io/plugins/cache/
+        if (lines.stream().noneMatch((line -> line.strip().equals("disable success")))) {
+            file = file.replaceFirst(
+                    "(?<left>\\s*)cache [0-9]+(?<right>\\s*)",
+                    "${left}cache {${left}   disable success${left}   disable denial${left}}${right}");
+        }
+        return file;
+    }
+}

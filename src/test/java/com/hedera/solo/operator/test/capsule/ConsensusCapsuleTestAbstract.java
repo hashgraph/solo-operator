@@ -22,9 +22,8 @@ import static com.hedera.solo.operator.reconciler.common.Constants.HEDERA_USER;
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GOSSIP;
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GRPC_TLS;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_APP;
-import static com.hedera.solo.operator.test.fixtures.Environment.isSnapshotEnabled;
 import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
-import static com.hedera.solo.operator.test.fixtures.snapshot.SetupSnapshot.enableCorednsLogs;
+import static com.hedera.solo.operator.test.fixtures.coredns.ConfigureCoredns.configureCoredns;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -93,9 +92,7 @@ public abstract class ConsensusCapsuleTestAbstract {
 
     @BeforeEach
     void setup() {
-        if (isSnapshotEnabled()) {
-            enableCorednsLogs(kubernetesClient);
-        }
+        configureCoredns(kubernetesClient);
         if (isTestUsingGradleOrIntelliJ()) {
             operator.start();
         }
@@ -133,6 +130,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .namespacedResources()
                 .logs()
                 .namespaces("kube-system")
+                .namespacedResources()
                 .logs();
         cleanup();
     }
@@ -444,9 +442,10 @@ public abstract class ConsensusCapsuleTestAbstract {
                     NetworkInitialization netInit =
                             kubernetesClient.resource(networkInitialization).get();
                     assertThat(netInit).isNotNull();
-                    assertThat(netInit.getStatus()).isNotNull();
-                    // FIXME need to decide if the default status should be failed or Unknown?
-                    // assertThat(netInit.getStatus().getPhase()).isNotEqualTo(NetworkInitializationStatus.Phase.Failed);
+                    if (netInit.getStatus() != null) {
+                        assertThat(netInit.getStatus().getPhase())
+                                .isNotEqualTo(NetworkInitializationStatus.Phase.Failed);
+                    }
                 })
                 .untilAsserted(() -> {
                     NetworkInitialization netInit =
