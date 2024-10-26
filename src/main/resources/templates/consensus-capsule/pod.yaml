@@ -22,14 +22,46 @@ spec:
   subdomain: consensus
   serviceAccountName: "{nodeId}-sa"
   initContainers:
-    - name: init-lookup-services
-      image: curlimages/curl:8.9.1
+    - name: "init-consensus-node"
+      # Note: We must use consensus-node image so that we can chown using hedera user and
+      # also update java.security file from the consensus-node image
+      image: "{cn.softwareVersion.repository}/{cn.softwareVersion.name}:{cn.softwareVersion.tag}"
+      volumeMounts:
+        - name: hgcapp-record-streams
+          mountPath: /opt/hgcapp/recordStreams
+        - name: hgcapp-events-streams
+          mountPath: /opt/hgcapp/eventsStreams
+        - name: hgcapp-data-keys
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
+        - name: gossip-keys
+          mountPath: /tmp/volumes/gossip-keys
+        - name: public-keys
+          mountPath: /tmp/volumes/public-keys
+        - name: cluster-config
+          mountPath: /tmp/volumes/cluster-config
+        - name: hgcapp-init
+          mountPath: /tmp/volumes/init
       command:
-        - "/bin/sh"
+        - "/bin/bash"
         - "-c"
         - |
+          setupDirs() \{
+            # setup directories required by stream-uploader sidecars
+            mkdir -p /opt/hgcapp/recordStreams/record{accountId}/sidecar
+            sudo chown -R hedera:hedera /opt/hgcapp/recordStreams
+            mkdir -p /opt/hgcapp/eventsStreams/events_{accountId}
+            sudo chown -R hedera:hedera /opt/hgcapp/eventsStreams
+
+            # create empty VERSION file for backup-uploader
+            touch /tmp/volumes/init/VERSION # FIXME change to copy when VERSION file is baked in the image
+
+            return 0
+          \}
+
+          # lookup services
           lookupSvc() \{
             local svc="$1"
+            local destFile="$2"
             local attempt=1
             local delay=5
             local maxAttempt=100
@@ -37,93 +69,129 @@ spec:
             # Check for services with a timeout
             until [ $attempt -gt $maxAttempt ]; do
               echo "-------------------------------------------------------------------"
-              #nslookup "$svc" > /dev/null 2>&1
-              nslookup "$svc"
+              result=$(getent hosts "$svc")
               rc=$?
+              echo "$result"
               if [ "$rc" -eq 0 ]; then
                 echo "OK: $svc"
                 echo "-------------------------------------------------------------------"
+                echo "$result" >> "$destFile"
                 return $rc
               fi
-              echo "Attempt $attempt failed. Retrying in $delay seconds..."
+              echo "Attempt $attempt failed for service $svc. Retrying in $delay seconds..."
               sleep "$delay"
               attempt=$(( attempt + 1 ))
             done
+
             echo "ERROR: Timeout occurred; lookup failed for services: $svc."
             return 1
           \}
 
+          # Parse address lines in config.txt and lookup services using internal and external FQDN/IP addresses.
           checkConsensusNodeSvc() \{
-            # {#for n in nodeIds }
-            lookupSvc "{n}.consensus.{namespace}.svc.cluster.local" || return $?
-            lookupSvc "{n}-svc.{namespace}.svc.cluster.local" || return $?
-            # {/for}
-            echo "Lookup succeeded for all services."
+            # 6th item is internal address and 8th item is external address
+            parsed_internal_svcs=$(cat /tmp/volumes/cluster-config/config.txt | awk '\{print $6\}' | xargs);
+            parsed_external_svcs=$(cat /tmp/volumes/cluster-config/config.txt | awk '\{print $8\}' | xargs);
+
+            IFS=', ' read -r -a internal_svcs <<< "$parsed_internal_svcs";
+            IFS=', ' read -r -a external_svcs <<< "$parsed_external_svcs";
+
+            echo ""
+            echo ""
+            echo "Looking up consensus node services...."
+            echo "Parsed Internal Addresses: $\{parsed_internal_svcs\}"
+            echo "Parsed External Addresses: $\{parsed_external_svcs\}"
+            echo "Internal Services Array: $\{internal_svcs[@]\}"
+            echo "External Services Array: $\{external_svcs[@]\}"
+            echo ""
+
+            # capture service IPs in a file for debugging (if needed)
+            local lookupFile="/tmp/volumes/init/hosts-lookup"
+            touch "$lookupFile"
+            for svc in "$\{internal_svcs[@]\}";do
+              lookupSvc "$svc" "$lookupFile" || return $?
+            done;
+
+            for svc in "$\{external_svcs[@]\}";do
+              lookupSvc "$svc" "$lookupFile" || return $?
+            done;
+
+            echo ""
+            echo "hosts"
+            echo "--------------------------------------------------------------------------"
+            cat "$lookupFile"
+
+            echo ""
+            echo "*** Lookup succeeded for all services ***"
+
             return 0
           \}
 
-          runCheck() \{
-            checkConsensusNodeSvc || return 1
+          # Prepare java.security file with Java DNS caching disabled
+          #
+          # Currently our retryLogic in the platform code has a default retry limit of 10s. However, by default JVM
+          # cache unsuccessful name lookup for 10s. So the default retry logic fails to lookup. Ideally we don't want it
+          # to cache the unsuccessful lookup so that it can keep retrying.
+          #
+          # On the other hand, successful lookup is cached for infinity (-1), which is a problem since a pod may acquire
+          # new IP because of restart and we don't want it to use value from cache. However, we choose a 10s cache for
+          # successful lookup to improve performance.
+          #
+          # So essentially, we need to disable DNS caching.
+          #
+          # We are preparing the java.security file in the init-container just so that it can be reused if necessary and
+          # make it easier to debug without waiting for consensus pod to be running.
+          #
+          # References:
+          # 1. https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/net/doc-files/net-properties.html#address-cache-heading
+          # 2. https://stackoverflow.com/questions/1256556/how-to-make-java-honor-the-dns-caching-timeout
+          # 3. https://github.com/hashgraph/hedera-services/blob/develop/platform-sdk/swirlds-base/src/main/java/com/swirlds/base/utility/Retry.java#L37
+          function disableDNSCaching \{
+            local javaSecurityFile="/usr/local/java/conf/security/java.security"
+            local tmpFile="/tmp/volumes/init/java.security"
+
+            cp "$javaSecurityFile" "$tmpFile"
+            sed -e '/networkaddress.cache.ttl/c networkaddress.cache.ttl=10' -i "$tmpFile" || return $?
+            sed -e '/networkaddress.cache.stale.ttl/c networkaddress.cache.stale.ttl=0' -i "$tmpFile" || return $?
+            sed -e '/networkaddress.cache.negative.ttl/c networkaddress.cache.negative.ttl=0' -i "$tmpFile" || return $?
+
+            echo ""
+            echo "DNS cache settings"
+            echo "---------------------------------------------------------------------------------------------------"
+            cat "$tmpFile" | grep "ttl"
+            echo "---------------------------------------------------------------------------------------------------"
+
             return 0
           \}
 
-          runCheck
-    - name: "init-consensus-node"
-      image: gcr.io/hedera-registry/consensus-node:0.52.0-alpha.6 # we are using it as we need the user hedera:hedera
-      volumeMounts:
-        - name: hgcapp-record-streams
-          mountPath: /opt/hgcapp/recordStreams
-        - name: hgcapp-events-streams
-          mountPath: /opt/hgcapp/eventsStreams
-        - name: hgcapp-version
-          mountPath: /tmp/versionInfo
-        - name: cluster-config
-          mountPath: /tmp/cluster-config
-        - name: hgcapp-data-keys
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
-        - name: grpc-tls-keys
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.crt
-          subPath: hedera-{nodeId}.crt
-        - name: gossip-keys
-          mountPath: /tmp/gossip-keys
-        - name: public-keys
-          mountPath: /tmp/public-keys
-      command:
-        - "/bin/bash"
-        - "-c"
-        - |
-          setupDirs() \{
-            # setup directories mounted into different containers
-            mkdir -p /opt/hgcapp/recordStreams/record{accountId}/sidecar
-            sudo chown -R hedera:hedera /opt/hgcapp/recordStreams
-            mkdir -p /opt/hgcapp/eventsStreams/events_{accountId}
-            sudo chown -R hedera:hedera /opt/hgcapp/eventsStreams
+          function copyKeys \{
+            echo "Copying keys into /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/"
+            echo "--------------------------------------------------------------------------"
+            cp -rLfv /tmp/volumes/gossip-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/
+            cp -rLfv /tmp/volumes/public-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/
+            sudo chown -R hedera:hedera /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/
 
-            # create empty VERSION file for backup-uploader
-            touch /tmp/versionInfo/VERSION # FIXME change to copy when VERSION file is baked in the image
+            echo ""
+            echo "keys directory"
+            echo "--------------------------------------------------------------------------"
+            ls -la  /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
 
             return 0
           \}
 
           runInit() \{
-            echo "Copying keys into /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/"
-            echo "--------------------------------------------------------------------------"
-            cp -rLfv /tmp/gossip-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/
-            cp -rLfv /tmp/public-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/
-            sudo chown -R hedera:hedera /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/
-
-            echo ""
-            echo "cluster-config directory"
-            echo "--------------------------------------------------------------------------"
-            ls -la /tmp/cluster-config
-
-            echo ""
-            echo "Check config.txt"
-            echo "--------------------------------------------------------------------------"
-            cat /tmp/cluster-config/config.txt
-
             # setup directories before consensus-node starts
-            setupDirs || return 1
+            setupDirs || return $?
+
+            # copy keys
+            copyKeys || return $?
+
+            # lookup services
+            checkConsensusNodeSvc || return $?
+
+            # prepare java.security file with DNS caching disabled
+            disableDNSCaching || return $?
+
             return 0
           \}
 
@@ -133,52 +201,11 @@ spec:
       image: "{cn.softwareVersion.repository}/{cn.softwareVersion.name}:{cn.softwareVersion.tag}"
       env:
         - name: JAVA_OPTS
-          value: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
+          value: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"
       command:
         - "/bin/bash"
         - "-c"
         - |
-          lookupSvc() \{
-            local svc="$1"
-            local attempt=1
-            local delay=1
-            local maxAttempt=100
-            local rc=0
-            # Check for services with a timeout
-            until [ $attempt -gt $maxAttempt ]; do
-              echo "-------------------------------------------------------------------"
-              #nslookup "$svc" > /dev/null 2>&1
-              nslookup "$svc"
-              rc=$?
-              if [ "$rc" -eq 0 ]; then
-                echo "OK: $svc"
-                echo "-------------------------------------------------------------------"
-                return $rc
-              fi
-              echo "Attempt $attempt failed. Retrying in $delay seconds..."
-              sleep "$delay"
-              attempt=$(( attempt + 1 ))
-            done
-
-            echo "ERROR: Timeout occurred; lookup failed for services: $svc."
-            return 1
-          \}
-
-          checkConsensusNodeSvc() \{
-            if ! type nslookup > /dev/null 2>&1; then
-              sudo mkdir -p /var/cache/apt/archives/partial /var/log/apt
-              sudo apt install -y dnsutils > /dev/null 2>&1
-            fi
-
-            # {#for n in nodeIds }
-            lookupSvc "{n}.consensus.{namespace}.svc.cluster.local" || return $?
-            lookupSvc "{n}-svc.{namespace}.svc.cluster.local" || return $?
-            # {/for}
-
-            echo "Lookup succeeded for all services."
-            return 0
-          \}
-
           # copy file with appropriate ownership
           function copyFile() \{
             local src="$1"
@@ -188,29 +215,49 @@ spec:
           \}
 
           function copyFiles() \{
-            # copy config files from cluster-config with appropriate file ownership
             CLUSTER_CONFIG_VOL="/tmp/volumes/cluster-config"
             HAPI_APP="/opt/hgcapp/services-hedera/HapiApp2.0"
+
+            # copy config.txt
             copyFile "$CLUSTER_CONFIG_VOL/config.txt" "$HAPI_APP/config.txt"
+            echo ""
+            echo "config.txt"
+            echo "--------------------------------------------------------------------------"
+            cat /tmp/volumes/cluster-config/config.txt
+
+            # copy other config files from cluster-config with appropriate file ownership
             copyFile "$CLUSTER_CONFIG_VOL/settings.txt" "$HAPI_APP/settings.txt"
             copyFile "$CLUSTER_CONFIG_VOL/log4j2.xml" "$HAPI_APP/log4j2.xml"
             copyFile "$CLUSTER_CONFIG_VOL/api-permission.properties" "$HAPI_APP/data/config/api-permission.properties"
             copyFile "$CLUSTER_CONFIG_VOL/application.properties" "$HAPI_APP/data/config/application.properties"
 
+            # copy grpc-tls-keys with appropriate permissions
             GRPC_TLS_VOL="/tmp/volumes/grpc-tls-keys"
             copyFile "$GRPC_TLS_VOL/hedera-{nodeId}.key" "$HAPI_APP/hedera.key"
             copyFile "$GRPC_TLS_VOL/hedera-{nodeId}.crt" "$HAPI_APP/hedera.crt"
 
-            # copy entrypoint.sh if it exists in cluster-config (this helps with debugging if needed)
+            # copy entrypoint.sh (if it exists)
             if [[ -f "$CLUSTER_CONFIG_VOL/entrypoint.sh" ]]; then
               copyFile "$CLUSTER_CONFIG_VOL/entrypoint.sh" "$HAPI_APP/entrypoint.sh"
+            fi
+
+            // copy java.security file if it exists
+            local javaSecurityFile="/usr/local/java/conf/security/java.security"
+            PREP_DIR="/tmp/volumes/init"
+            if [[ -f "$PREP_DIR/java.security" ]]; then
+              sudo cp "$PREP_DIR/java.security" "$javaSecurityFile"
+
+              echo ""
+              echo "JVM DNS cache settings"
+              echo "---------------------------------------------------------------------------------------------------"
+              cat "$javaSecurityFile" | grep "ttl"
+              echo "---------------------------------------------------------------------------------------------------"
             fi
 
             return 0
           \}
 
           function setup() \{
-            checkConsensusNodeSvc || return $?
             copyFiles || return $?
             return 0
           \}
@@ -219,7 +266,6 @@ spec:
           setup || exit $?
 
           # start platform software
-          sleep 15 # seems we need it until the bug #233 is fixed
           exec /init /opt/hgcapp/services-hedera/HapiApp2.0/entrypoint.sh
       startupProbe:
         failureThreshold: 10
@@ -261,6 +307,8 @@ spec:
           mountPath: /tmp/volumes/cluster-config # mount to a temp directory to copy files with appropriate ownership
         - name: grpc-tls-keys
           mountPath: /tmp/volumes/grpc-tls-keys # mount to a temp directory to copy files with appropriate ownership
+        - name: hgcapp-init # mount the volume with prepared files to copy to appropriate locations
+          mountPath: /tmp/volumes/init
         - name: hgcapp-data-keys
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
         - name: hgcapp-record-streams
@@ -486,7 +534,7 @@ spec:
         - name: backup-uploader-config
           mountPath: /home/hedera/.config/rclone/rclone.conf
           subPath: rclone.conf
-        - name: hgcapp-version
+        - name: hgcapp-init
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/VERSION
           subPath: VERSION
       env:
@@ -542,5 +590,5 @@ spec:
     - name: hgcapp-data-upgrade
       persistentVolumeClaim:
         claimName: "{nodeId}-data-upgrade"
-    - name: hgcapp-version
+    - name: hgcapp-init
       emptyDir: {}
