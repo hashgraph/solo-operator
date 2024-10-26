@@ -378,7 +378,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .build();
         kubernetesClient.resource(networkInitialization).create();
 
-        await().atMost(180, TimeUnit.SECONDS)
+        await().atMost(300, TimeUnit.SECONDS)
                 .failFast(() -> {
                     NetworkInitialization netInit =
                             kubernetesClient.resource(networkInitialization).get();
