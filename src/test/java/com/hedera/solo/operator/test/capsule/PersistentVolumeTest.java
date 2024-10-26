@@ -100,16 +100,23 @@ public class PersistentVolumeTest extends ConsensusCapsuleTestAbstract {
     }
 
     @Test
-    @DisplayName("volume with hostpath should succeed for a single-node network")
+    @DisplayName("volume with PVC should succeed for a single-node network")
     void testSingleNodeDeployment() throws Exception {
         super.testSingleNodeDeployment();
-        this.check();
+        this.check(1);
     }
 
-    private void check() {
+    @Test
+    @DisplayName("volume with PVC should succeed for a multi-node network")
+    void testMultiNodeDeployment() throws Exception {
+        super.testMultiNodeDeployment();
+        this.check(3);
+    }
+
+    private void check(int count) {
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
             List<Pod> consensusPods = fetchConsensusPods();
-            assertThat(consensusPods).hasSize(1);
+            assertThat(consensusPods).hasSize(count);
 
             for (Pod p : consensusPods) {
                 String accountId = p.getMetadata().getLabels().get(LABEL_ACCOUNT_ID);
