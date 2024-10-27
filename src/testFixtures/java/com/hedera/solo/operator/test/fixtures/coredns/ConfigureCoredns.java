@@ -80,10 +80,12 @@ public class ConfigureCoredns {
                     "(?<openBrace>\\{)(?<space>\\s*)(?<nonSpace>\\S)", "${openBrace}${space}log${space}${nonSpace}");
         }
         // https://coredns.io/plugins/cache/
-        if (lines.stream().noneMatch((line -> line.strip().equals("disable success")))) {
+        if (lines.stream().noneMatch((line -> line.strip().contains("disable success")))) {
+            String zone = "cluster.local";
             file = file.replaceFirst(
                     "(?<left>\\s*)cache [0-9]+(?<right>\\s*)",
-                    "${left}cache {${left}   disable success${left}   disable denial${left}}${right}");
+                    "${left}cache 30 {${left}   disable success ${zone}${left}   disable denial ${zone}${left}}${right}"
+                            .replace("${zone}", zone));
         }
         return file;
     }
