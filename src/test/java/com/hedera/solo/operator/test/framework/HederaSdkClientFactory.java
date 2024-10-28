@@ -21,9 +21,7 @@ import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCap
 import static com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleConstants.LABEL_SELECTOR_HAPROXY;
 
 import com.google.protobuf.ByteString;
-import com.hedera.hashgraph.sdk.AccountId;
 import com.hedera.hashgraph.sdk.Client;
-import com.hedera.hashgraph.sdk.NodeAddress;
 import com.hedera.hashgraph.sdk.NodeAddressBook;
 import com.hedera.hashgraph.sdk.proto.AccountID;
 import com.hedera.hashgraph.sdk.proto.ServiceEndpoint;
@@ -32,7 +30,6 @@ import io.fabric8.kubernetes.client.LocalPortForward;
 import io.fabric8.kubernetes.client.dsl.PortForwardable;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
@@ -44,9 +41,7 @@ import java.util.Collections;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.TimeoutException;
-import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -57,7 +52,6 @@ public class HederaSdkClientFactory {
             "302e020100300506032b65700422042091132178e72057a1d7528025956fe39b0b847f200ab59b2fdd367017f3087137";
     private final KubernetesClient kubernetesClient;
     private final String namespace;
-    private final Workaround workaround = new Workaround();
 
     public HederaSdkClientFactory(final KubernetesClient kubernetesClient, final String namespace) throws Exception {
         this.kubernetesClient = kubernetesClient;
@@ -68,18 +62,20 @@ public class HederaSdkClientFactory {
         List<LocalPortForward> create(final PortForwardable portForwardable);
     }
 
-    public ClientContext directContextCreator(final String consensusNode) {
-        return createClientContext(direct(), consensusNode);
+    public ClientContext directContextCreator(final String consensusNode, boolean secure) {
+        return createClientContext(direct(), consensusNode, secure);
     }
 
-    public ClientContext haproxyContextCreator(final String consensusNode) {
-        return createClientContext(haproxy(), consensusNode);
+    public ClientContext haproxyContextCreator(final String consensusNode, boolean secure) {
+        return createClientContext(haproxy(), consensusNode, secure);
     }
 
-    ClientContext createClientContext(final Map<String, String> nodeService, final String consensusNode) {
-        return getClientContext(nodeService, consensusNode::equals, resource -> Stream.of(50211, 50212)
-                .map(port -> resource.portForward(port, port))
-                .toList());
+    ClientContext createClientContext(
+            final Map<String, String> nodeService, final String consensusNode, boolean secure) {
+        return getClientContext(
+                nodeService, consensusNode::equals, resource -> (secure ? Stream.of(50212) : Stream.of(50211))
+                        .map(resource::portForward)
+                        .toList());
     }
 
     ClientContext getClientContext(
@@ -103,9 +99,13 @@ public class HederaSdkClientFactory {
                                 .withName(e.getValue()))));
     }
 
+    Client getClient(NodeAddressBook nodeAddressBook) throws Exception {
+        return Client.forNetwork(Collections.emptyMap()).setNetworkFromAddressBook(nodeAddressBook, true);
+    }
+
     ClientContext getClient(final Map<String, List<LocalPortForward>> services) throws Exception {
         return new ClientContext(
-                workaround.getClient(nodeAddressBook(services)),
+                getClient(nodeAddressBook(services)),
                 services.values().stream().flatMap(Collection::stream).toList());
     }
 
@@ -250,70 +250,6 @@ public class HederaSdkClientFactory {
                 client.close();
             } catch (TimeoutException ignored) {
             }
-        }
-    }
-
-    /**
-     * Workaround to configure client to use TLS with custom network.
-     *
-     * @see <a href="https://github.com/hashgraph/hedera-sdk-java/pull/1901">PR #1901</a>
-     */
-    static class Workaround {
-        Field clientNetworkField;
-        Field networkAddressBookField;
-        Field networkNodesField;
-        Field nodeAccountIdField;
-        Field nodeAddressBookEntry;
-
-        Workaround() throws Exception {
-            try (Client sdkClient = Client.forNetwork(Map.of("localhost:0", new AccountId(0)))) {
-                clientNetworkField = Client.class.getDeclaredField("network");
-                clientNetworkField.setAccessible(true);
-                Object network = clientNetworkField.get(sdkClient);
-                Class<?> networkClass = network.getClass();
-                networkAddressBookField = networkClass.getDeclaredField("addressBook");
-                networkAddressBookField.setAccessible(true);
-                networkNodesField = networkClass.getSuperclass().getDeclaredField("nodes");
-                networkNodesField.setAccessible(true);
-                List<?> nodes = (List<?>) networkNodesField.get(network);
-                Class<?> nodeClass = nodes.getFirst().getClass();
-                nodeAccountIdField = nodeClass.getDeclaredField("accountId");
-                nodeAccountIdField.setAccessible(true);
-                nodeAddressBookEntry = nodeClass.getDeclaredField("addressBookEntry");
-                nodeAddressBookEntry.setAccessible(true);
-            }
-        }
-
-        Client getClient(final NodeAddressBook nodeAddressBook) throws Exception {
-            return setNetworkFromAddressBook(Client.forNetwork(Collections.emptyMap()), nodeAddressBook);
-        }
-
-        void setAddressBook(final Client client, final Map<AccountId, NodeAddress> addressBook) throws Exception {
-            networkAddressBookField.set(clientNetworkField.get(client), addressBook);
-        }
-
-        List<?> nodes(final Client client) throws Exception {
-            return (List<?>) networkNodesField.get(clientNetworkField.get(client));
-        }
-
-        AccountId getAccountId(final Object node) throws Exception {
-            return (AccountId) nodeAccountIdField.get(node);
-        }
-
-        void setAddressBookEntry(final Object node, final NodeAddress nodeAddress) throws Exception {
-            nodeAddressBookEntry.set(node, nodeAddress);
-        }
-
-        Client setNetworkFromAddressBook(final Client client, final NodeAddressBook nodeAddressBook) throws Exception {
-            client.setNetworkFromAddressBook(nodeAddressBook);
-            Map<AccountId, NodeAddress> addressBook = nodeAddressBook.getNodeAddresses().stream()
-                    .filter(nodeAddress -> Objects.nonNull(nodeAddress.getAccountId()))
-                    .collect(Collectors.toMap(NodeAddress::getAccountId, Function.identity()));
-            setAddressBook(client, addressBook);
-            for (var node : nodes(client)) {
-                setAddressBookEntry(node, addressBook.get(getAccountId(node)));
-            }
-            return client;
         }
     }
 }

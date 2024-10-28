@@ -71,7 +71,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
-import java.util.function.BiFunction;
 import org.awaitility.core.ConditionTimeoutException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -488,9 +487,37 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .toArray(String[]::new);
     }
 
+    interface ClientContextFactory {
+        HederaSdkClientFactory.ClientContext create(HederaSdkClientFactory factory, String nodeName, boolean secure);
+    }
+
     void checkAddressBook(
-            final BiFunction<HederaSdkClientFactory, String, HederaSdkClientFactory.ClientContext> clientContext)
-            throws AssertionError, Exception {
+            HederaSdkClientFactory sdkClientFactory,
+            ClientContextFactory clientContextFactory,
+            String nodeName,
+            int expectedAddresses,
+            boolean secure) {
+        try (HederaSdkClientFactory.ClientContext context =
+                clientContextFactory.create(sdkClientFactory, nodeName, secure)) {
+            await().atMost(15, TimeUnit.SECONDS).untilAsserted(() -> {
+                Client client = context.client;
+
+                client.setOperator(
+                        AccountId.fromString(HederaSdkClientFactory.DEFAULT_ACCOUNT_ID),
+                        PrivateKey.fromString(HederaSdkClientFactory.DEFAULT_PRIVATE_KEY));
+
+                if (secure) {
+                    client.setTransportSecurity(true).setVerifyCertificates(true);
+                    assertThat(addresses(client).size()).isEqualTo(expectedAddresses);
+                } else {
+                    client.setTransportSecurity(false);
+                    assertThat(addresses(client).size()).isEqualTo(expectedAddresses);
+                }
+            });
+        }
+    }
+
+    void checkAddressBook(final ClientContextFactory clientContextFactory) throws AssertionError, Exception {
         String[] consensusNodeNames = consensusNodeNames();
         HederaSdkClientFactory sdkClientFactory = new HederaSdkClientFactory(kubernetesClient, namespace);
         for (String nodeName : consensusNodeNames) {
@@ -499,20 +526,10 @@ public abstract class ConsensusCapsuleTestAbstract {
             for (int attempt = 0; attempt < 10; attempt++) {
                 assertion = null;
                 timeout = null;
-                try (HederaSdkClientFactory.ClientContext context = clientContext.apply(sdkClientFactory, nodeName)) {
-                    await().atMost(15, TimeUnit.SECONDS).untilAsserted(() -> {
-                        Client client = context.client;
-
-                        client.setOperator(
-                                AccountId.fromString(HederaSdkClientFactory.DEFAULT_ACCOUNT_ID),
-                                PrivateKey.fromString(HederaSdkClientFactory.DEFAULT_PRIVATE_KEY));
-
-                        client.setTransportSecurity(false);
-                        assertThat(addresses(client).size()).isEqualTo(consensusNodeNames.length);
-
-                        client.setTransportSecurity(true).setVerifyCertificates(true);
-                        assertThat(addresses(client).size()).isEqualTo(consensusNodeNames.length);
-                    });
+                try {
+                    checkAddressBook(
+                            sdkClientFactory, clientContextFactory, nodeName, consensusNodeNames.length, false);
+                    checkAddressBook(sdkClientFactory, clientContextFactory, nodeName, consensusNodeNames.length, true);
                 } catch (AssertionError e) {
                     assertion = e;
                 } catch (ConditionTimeoutException e) {
