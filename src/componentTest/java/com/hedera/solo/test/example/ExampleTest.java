@@ -25,6 +25,7 @@ import com.hedera.solo.operator.test.v1alpha1.Example;
 import com.hedera.solo.operator.test.v1alpha1.ExampleBuilder;
 import com.hedera.solo.test.framework.AbstractOperatorTest;
 import io.fabric8.kubernetes.api.model.ConfigMap;
+import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.junit.LocallyRunOperatorExtension;
 import java.time.Duration;
 import org.junit.jupiter.api.AfterEach;
@@ -33,8 +34,8 @@ import org.junit.jupiter.api.Test;
 @SoloTest
 public class ExampleTest extends AbstractOperatorTest {
     @Override
-    protected LocallyRunOperatorExtension.Builder configure(LocallyRunOperatorExtension.Builder builder) {
-        return builder.withReconciler(new ExampleReconciler());
+    protected LocallyRunOperatorExtension.Builder configure(final KubernetesClient client) {
+        return builder(client).withReconciler(new ExampleReconciler());
     }
 
     @AfterEach

@@ -14,18 +14,18 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.test.library;
+package com.hedera.solo.operator.library.builder;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import io.fabric8.kubernetes.api.builder.Builder;
 
-import com.hedera.solo.operator.library.generic.Iterables;
-import java.util.List;
-import org.junit.jupiter.api.Test;
+public interface BuilderFunction<B extends Builder<?>> {
+    Object applyChecked(final B builder) throws Exception;
 
-public class IterablesTest {
-    @Test
-    public void test() {
-        List<Integer> list = Iterables.asList(List.of(1, 2, 3), List.of(4, 5, 6));
-        assertEquals(List.of(1, 2, 3, 4, 5, 6), list);
+    default Object apply(final B builder) {
+        try {
+            return applyChecked(builder);
+        } catch (Exception e) {
+            throw e instanceof RuntimeException r ? r : new RuntimeException(e);
+        }
     }
 }
