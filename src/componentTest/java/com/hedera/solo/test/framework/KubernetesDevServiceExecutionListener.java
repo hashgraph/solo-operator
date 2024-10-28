@@ -27,6 +27,7 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientBuilder;
 import io.javaoperatorsdk.operator.junit.LocallyRunOperatorExtension;
 import java.util.Collections;
+import java.util.function.Function;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.junit.platform.launcher.TestExecutionListener;
 import org.junit.platform.launcher.TestPlan;
@@ -34,8 +35,9 @@ import org.junit.platform.launcher.TestPlan;
 public class KubernetesDevServiceExecutionListener implements TestExecutionListener {
     private static final KubernetesContainer<?> container = container();
 
-    public static LocallyRunOperatorExtension.Builder operatorExtensionBuilder() {
-        return LocallyRunOperatorExtension.builder().withKubernetesClient(kubernetesClient());
+    public static LocallyRunOperatorExtension initialize(
+            final Function<KubernetesClient, LocallyRunOperatorExtension.Builder> configure) {
+        return configure.apply(kubernetesClient()).build();
     }
 
     @Override
