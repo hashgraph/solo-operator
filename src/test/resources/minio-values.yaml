@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+
+---
 ###
 # WARNING: '.secrets' is deprecated since v6.0.1 and will be removed in next minor release (i.e. v5.1.0).
 # WARNING: Please use '.tenant.configSecret' instead.

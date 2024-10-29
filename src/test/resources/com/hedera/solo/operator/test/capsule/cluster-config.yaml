@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+
+---
 kind: ConfigMap
 apiVersion: v1
 metadata:
@@ -241,11 +244,11 @@ data:
           </AppenderRef>
 
           <!--
-    	  Due to known log4j2 issues with how Markers and LogLevels are evaluated there must be a top level <Filter> element
-    	  to ensure that the root logger does not execute all the lambda arguments erroneously. Potential work around in the
-    	  future is to use a top-level <Filter> and <Logger> specific filters in combination to achieve the desired
-    	  multi-logger setup for diagnostic logging.
-    	  -->
+          Due to known log4j2 issues with how Markers and LogLevels are evaluated there must be a top level <Filter> element
+          to ensure that the root logger does not execute all the lambda arguments erroneously. Potential work around in the
+          future is to use a top-level <Filter> and <Logger> specific filters in combination to achieve the desired
+          multi-logger setup for diagnostic logging.
+          -->
           <Filters>
             <!-- Filter out levels above INFO (ex: DEBUG & TRACE) -->
             <!-- Intentionally left disabled by default -->
@@ -384,7 +387,7 @@ data:
           <!-- <AppenderRef ref="Console"/> -->
           <AppenderRef ref="RollingFile"/>
         </Logger>
-    	<Logger name="com.hedera.services.legacy.config" level="info" additivity="false">
+        <Logger name="com.hedera.services.legacy.config" level="info" additivity="false">
           <AppenderRef ref="RollingFile"/>
           <AppenderRef ref="Console"/>
         </Logger>

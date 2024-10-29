@@ -1,18 +1,4 @@
-/*
- * Copyright (C) 2024 Hedera Hashgraph, LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-License-Identifier: Apache-2.0
 
 plugins { id("com.diffplug.spotless") }
 
@@ -34,7 +20,7 @@ spotless {
     }
 
     format("actionYaml") {
-        target(".github/workflows/*.yaml")
+        target(".github/workflows/*.yaml", "src/**/*.yaml", "src/**/*.yml")
         /*
          * Prettier requires NodeJS and NPM installed; however, the NodeJS Gradle plugin and Spotless do not yet
          * integrate with each other. Currently there is an open issue report against spotless.
@@ -49,27 +35,6 @@ spotless {
         indentWithSpaces()
         endWithNewline()
 
-        licenseHeader(
-                """
-            ##
-            # Copyright (C) ${'$'}YEAR Hedera Hashgraph, LLC
-            #
-            # Licensed under the Apache License, Version 2.0 (the "License");
-            # you may not use this file except in compliance with the License.
-            # You may obtain a copy of the License at
-            #
-            #      http://www.apache.org/licenses/LICENSE-2.0
-            #
-            # Unless required by applicable law or agreed to in writing, software
-            # distributed under the License is distributed on an "AS IS" BASIS,
-            # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-            # See the License for the specific language governing permissions and
-            # limitations under the License.
-            ##${"\n\n"}
-        """
-                    .trimIndent(),
-                "(name)"
-            )
-            .updateYearWithLatest(true)
+        licenseHeader("# SPDX-License-Identifier: Apache-2.0\n\n", "(---)")
     }
 }
