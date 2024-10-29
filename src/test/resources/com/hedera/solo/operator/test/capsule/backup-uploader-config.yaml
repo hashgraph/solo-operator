@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+
+---
 kind: ConfigMap
 apiVersion: v1
 metadata:
@@ -13,4 +16,4 @@ data:
     [backups]
     type = s3
     provider = Minio
-    env_auth = true 
+    env_auth = true

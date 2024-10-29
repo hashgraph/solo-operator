@@ -20,7 +20,7 @@ spotless {
     }
 
     format("actionYaml") {
-        target(".github/workflows/*.yaml")
+        target(".github/workflows/*.yaml", "src/**/*.yaml", "src/**/*.yml")
         /*
          * Prettier requires NodeJS and NPM installed; however, the NodeJS Gradle plugin and Spotless do not yet
          * integrate with each other. Currently there is an open issue report against spotless.
