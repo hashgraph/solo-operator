@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.hedera.solo.test.library;
+package com.hedera.solo.test.library.generic;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
