@@ -30,12 +30,6 @@ spec:
       # also update java.security file from the consensus-node image
       image: "{cn.softwareVersion.repository}/{cn.softwareVersion.name}:{cn.softwareVersion.tag}"
       volumeMounts:
-        - name: hgcapp-record-streams
-          mountPath: /opt/hgcapp/recordStreams
-        - name: hgcapp-events-streams
-          mountPath: /opt/hgcapp/eventsStreams
-        - name: hgcapp-data-keys
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
         - name: gossip-keys
           mountPath: /tmp/volumes/gossip-keys
         - name: public-keys
@@ -44,16 +38,46 @@ spec:
           mountPath: /tmp/volumes/cluster-config
         - name: hgcapp-init
           mountPath: /tmp/volumes/init
+        - name: hgcapp-record-streams
+          mountPath: /opt/hgcapp/recordStreams
+        - name: hgcapp-events-streams
+          mountPath: /opt/hgcapp/eventsStreams
+        - name: hgcapp-output
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/output
+        - name: hgcapp-data-saved
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/saved
+        - name: hgcapp-data-stats
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/stats
+        - name: hgcapp-data-upgrade
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade
+        - name: hgcapp-data-keys
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
       command:
         - "/bin/bash"
         - "-c"
         - |
+          setPermissions() \{
+            dir="$1"
+            sudo chown -R hedera:hedera "$dir"
+            echo ""
+            echo "Directory: $dir"
+            echo "--------------------------------------------------------------------------"
+            ls -la "$dir"
+          \}
+
           setupDirs() \{
             # setup directories required by stream-uploader sidecars
             mkdir -p /opt/hgcapp/recordStreams/record{accountId}/sidecar
-            sudo chown -R hedera:hedera /opt/hgcapp/recordStreams
             mkdir -p /opt/hgcapp/eventsStreams/events_{accountId}
-            sudo chown -R hedera:hedera /opt/hgcapp/eventsStreams
+
+            setPermissions /opt/hgcapp/recordStreams
+            setPermissions /opt/hgcapp/eventsStreams
+            setPermissions /opt/hgcapp/services-hedera/HapiApp2.0
+            setPermissions /opt/hgcapp/services-hedera/HapiApp2.0/output
+            setPermissions /opt/hgcapp/services-hedera/HapiApp2.0/data/saved
+            setPermissions /opt/hgcapp/services-hedera/HapiApp2.0/data/stats
+            setPermissions /opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade
+            setPermissions /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
 
             # create empty VERSION file for backup-uploader
             touch /tmp/volumes/init/VERSION # FIXME change to copy when VERSION file is baked in the image
@@ -168,16 +192,12 @@ spec:
           \}
 
           function copyKeys \{
+            echo ""
             echo "Copying keys into /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/"
             echo "--------------------------------------------------------------------------"
             cp -rLfv /tmp/volumes/gossip-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/
             cp -rLfv /tmp/volumes/public-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/
             sudo chown -R hedera:hedera /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/
-
-            echo ""
-            echo "keys directory"
-            echo "--------------------------------------------------------------------------"
-            ls -la  /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
 
             return 0
           \}
@@ -262,16 +282,15 @@ spec:
 
           function setup() \{
             copyFiles || return $?
-
-            # check directory access
-            ls -la /opt/hgcapp/services-hedera/HapiApp2.0/
-            ls -la /opt/hgcapp/services-hedera/HapiApp2.0/data
-            ls -la /opt/hgcapp
             return 0
           \}
 
           # setup
           setup || exit $?
+
+          ls -la /opt/hgcapp
+          ls -la /opt/hgcapp/services-hedera/HapiApp2.0
+          ls -la /opt/hgcapp/services-hedera/HapiApp2.0/data
 
           # start platform software
           exec /init /opt/hgcapp/services-hedera/HapiApp2.0/entrypoint.sh
