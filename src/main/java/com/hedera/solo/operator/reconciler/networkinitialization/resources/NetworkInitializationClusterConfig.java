@@ -1,18 +1,4 @@
-/*
- * Copyright (C) 2024 Hedera Hashgraph, LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-License-Identifier: Apache-2.0
 
 package com.hedera.solo.operator.reconciler.networkinitialization.resources;
 
@@ -20,6 +6,7 @@ import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitialization;
+import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -56,7 +43,7 @@ public class NetworkInitializationClusterConfig extends KubernetesDependentResou
                 .with(metadata -> metadata.editMetadata()
                         .withName(NAME)
                         .withNamespace(primary.getMetadata().getNamespace()))
-                .with(builder -> config(builder, primary))
+                .with(builder -> config(builder, primary, context))
                 .build();
     }
 
@@ -79,18 +66,21 @@ public class NetworkInitializationClusterConfig extends KubernetesDependentResou
                 .toList();
     }
 
-    ConfigMapBuilder config(final ConfigMapBuilder builder, final NetworkInitialization primary) {
+    ConfigMapBuilder config(
+            final ConfigMapBuilder builder,
+            final NetworkInitialization primary,
+            final Context<NetworkInitialization> context) {
         // should include external address entries from orbit
-        String chainId = builder.getData()
-                .get("bootstrap.properties")
-                .lines()
-                .filter(s -> s.startsWith("contracts.chainId="))
-                .findFirst()
-                .orElseThrow()
-                .substring(18);
+        Orbit orbit = context.getSecondaryResource(Orbit.class).orElseThrow();
         int nodeId = 0;
         StringBuilder sb = new StringBuilder();
-        sb.append("swirld, ").append(chainId).append("\n");
+        sb.append("swirld, ")
+                .append(orbit.getSpec()
+                        .getConsensus()
+                        .getGenesis()
+                        .getAddressBook()
+                        .getLedgerId())
+                .append("\n");
         sb.append("app, HederaNode.jar\n");
         for (Node node : localNodes(primary)) {
             sb.append("address, %d, %s, %s, 1, %s, 50111, %s, 50111, 0.0.%d\n"
