@@ -1,17 +1,6 @@
-# Copyright (C) 2024 Hedera Hashgraph, LLC
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# SPDX-License-Identifier: Apache-2.0
 
+---
 openapi: 3.0.3
 info:
   title: OpenAPI Schema
@@ -25,19 +14,19 @@ components:
     OrbitSpec:
       description: |
         The desired state of an `Orbit`.
-        
+
         Bootstrapping Multi-Cluster environments:
           * Solo must provision one k8s cluster initially and then add more clusters as needed.
           * Subsequent clusters must be added in such a way that their nodes do not meet the minimum quorum requirements
-            or must ensure the consensus nodes are in a down state until the initial cluster and/or other already 
+            or must ensure the consensus nodes are in a down state until the initial cluster and/or other already
             provisioned clusters have been updated to include the new nodes.
           * Solo must issue a freeze and reboot existing nodes via some method such as direct access or operator provided
             CRs. The `externalAddresses` in the Orbit `addressBook` must be updated to include the new nodes.
-          * Multi-cluster environments may require additional network freezes and reboots across all K8S clusters when 
+          * Multi-cluster environments may require additional network freezes and reboots across all K8S clusters when
             adding a node to any of the clusters.
-          * These complexities will be minimized and may require a change in Solo or the Operator behavior once 
+          * These complexities will be minimized and may require a change in Solo or the Operator behavior once
             DAB Phase 2 and/or Phase 3 are complete.
-          * Preferably the operator should potentially expose a `Freeze` and `Reboot` CRDs to allow for easier 
+          * Preferably the operator should potentially expose a `Freeze` and `Reboot` CRDs to allow for easier
             management of these operations.
           * Many of these concerns also apply to single K8S cluster modes of operation when adding new consensus nodes.
       type: object
@@ -111,7 +100,7 @@ components:
                 type: string
             applicationConfiguration:
               description: |
-                The application configuration for the `Orbit`. This is equivalent to the 
+                The application configuration for the `Orbit`. This is equivalent to the
                 `data/config/application.properties` file.
               type: object
               additionalProperties:
@@ -125,9 +114,9 @@ components:
               properties:
                 addressBook:
                   description: |
-                    The address book for the `Orbit`. This is a list of all nodes across all clusters that are 
-                    part of the `Orbit`. This is equivalent to the `address` line entries in the Platform SDK 
-                    `config.txt` file format. Prior to DAB Phase 2, this will be used by all nodes for both 
+                    The address book for the `Orbit`. This is a list of all nodes across all clusters that are
+                    part of the `Orbit`. This is equivalent to the `address` line entries in the Platform SDK
+                    `config.txt` file format. Prior to DAB Phase 2, this will be used by all nodes for both
                     genesis initialization and non-genesis initialization. After DAB Phase 2, this will only be
                     used by the genesis initialization process.
                   type: object
@@ -139,16 +128,16 @@ components:
                         specified.
                       type: string
                     nextNodeId:
-                      description: | 
+                      description: |
                         The next node ID to use. Equivalent to the `nextNodeId` entry in the Platform SDK `config.txt`
                         file format. May be removed in the DAB Phase 2/3 refactors. The next node ID should never change
                         once specified.
                       type: string
                     externalAddresses:
                       description: |
-                        The list of external `OrbitCapsules` and physical consensus nodes not managed by this 
+                        The list of external `OrbitCapsules` and physical consensus nodes not managed by this
                         operator deployment aka `Orbit`.
-                      
+
                         The operator should update the configmap deployed when this field changes.
                       type: array
                       items:
