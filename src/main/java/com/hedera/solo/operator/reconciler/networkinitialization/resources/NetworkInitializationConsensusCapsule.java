@@ -14,6 +14,7 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDep
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResourceConfigBuilder;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.javaoperatorsdk.operator.processing.event.source.SecondaryToPrimaryMapper;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -43,5 +44,21 @@ public class NetworkInitializationConsensusCapsule
     @Override
     public Set<ResourceID> toPrimaryResourceIDs(final ConsensusCapsule resource) {
         return reconciler.toPrimaryResourceIDs(resource.getMetadata().getNamespace());
+    }
+
+    @Override
+    public Map<String, ConsensusCapsule> getSecondaryResources(
+            final NetworkInitialization primary, final Context<NetworkInitialization> context) {
+        return getSecondaryResources(primary, new HashMap<>(super.getSecondaryResources(primary, context)));
+    }
+
+    public static Map<String, ConsensusCapsule> getSecondaryResources(
+            final NetworkInitialization primary, final Map<String, ConsensusCapsule> secondaryResources) {
+        if (null != primary.getStatus() && null != primary.getStatus().getConsensusCapsules()) {
+            secondaryResources.values().removeIf(r -> !primary.getStatus()
+                    .getConsensusCapsules()
+                    .contains(r.getMetadata().getName()));
+        }
+        return secondaryResources;
     }
 }
