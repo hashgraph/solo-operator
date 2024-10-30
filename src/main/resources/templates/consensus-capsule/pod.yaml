@@ -273,7 +273,7 @@ spec:
       startupProbe:
         failureThreshold: 10
         periodSeconds: 15
-        timeoutSeconds: 60
+        timeoutSeconds: 180
         exec:
           command:
             - sh
