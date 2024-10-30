@@ -244,7 +244,7 @@ spec:
               copyFile "$CLUSTER_CONFIG_VOL/entrypoint.sh" "$HAPI_APP/entrypoint.sh"
             fi
 
-            // copy java.security file if it exists
+            # copy java.security file if it exists
             local javaSecurityFile="/usr/local/java/conf/security/java.security"
             PREP_DIR="/tmp/volumes/init"
             if [[ -f "$PREP_DIR/java.security" ]]; then
@@ -262,6 +262,11 @@ spec:
 
           function setup() \{
             copyFiles || return $?
+
+            # check directory access
+            ls -la /opt/hgcapp/services-hedera/HapiApp2.0/
+            ls -la /opt/hgcapp/services-hedera/HapiApp2.0/data
+            ls -la /opt/hgcapp
             return 0
           \}
 
