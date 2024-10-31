@@ -273,16 +273,18 @@ spec:
       startupProbe:
         failureThreshold: 10
         periodSeconds: 15
-        timeoutSeconds: 180
+        timeoutSeconds: 60
         exec:
           command:
-            - sh
+            - bash
             - -c
             - |
-              if ! type curl gawk > /dev/null 2>&1; then
-                sudo mkdir -p /var/cache/apt/archives/partial /var/log/apt
-                sudo apt install -y curl gawk > /dev/null 2>&1
-              fi
+              install_if_needed() \{
+                if ! type curl gawk > /dev/null 2>&1; then
+                  sudo mkdir -p /var/cache/apt/archives/partial /var/log/apt
+                  sudo apt install -y curl gawk #> /dev/null 2>&1
+                fi
+              \}
 
               platform_status() \{
                 curl -s http://localhost:9999 | \
@@ -302,9 +304,16 @@ spec:
                     \}'
               \}
 
-              PLATFORM_STATUS=$(platform_status)
-              echo PlatformStatus=$PLATFORM_STATUS
-              test "$PLATFORM_STATUS" = "ACTIVE"
+              main() \{
+                install_if_needed
+                PLATFORM_STATUS=$(platform_status)
+                echo PlatformStatus=$PLATFORM_STATUS
+                test "$PLATFORM_STATUS" = "ACTIVE"
+              \}
+
+              set -x
+              main |& sed -u 's,^,[startup-probe] ,' > /proc/1/fd/1
+              exit $\{PIPESTATUS[0]\}
       volumeMounts:
         - name: cluster-config
           mountPath: /tmp/volumes/cluster-config # mount to a temp directory to copy files with appropriate ownership
