@@ -265,7 +265,14 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .withNewMetadata()
                 .withName(namespace)
                 .endMetadata()
-                .withNewSpec()
+                .editSpec()
+                .editOrbitspecConsensus()
+                .editGenesis()
+                .editAddressBook()
+                .withLedgerId("298")
+                .endAddressBook()
+                .endGenesis()
+                .endOrbitspecConsensus()
                 .endSpec()
                 .build();
 
