@@ -39,7 +39,7 @@ public class HostpathVolumeTest extends ConsensusCapsuleTestAbstract {
             VOLUME_RECORD_STREAM_NAME_SUFFIX, "/tmp/%s/volumes/recordStream",
             VOLUME_EVENTS_STREAM_NAME_SUFFIX, "/tmp/%s/volumes/eventsStreams");
 
-    protected Volume prepareNodeVolumeWithHostpath(NodeInfo node, String volSuffix) {
+    protected Volume prepareVolumeWithHostpathSource(NodeInfo node, String volSuffix) {
         final HostPathVolumeSource hs = new HostPathVolumeSourceBuilder()
                 .withPath(hostPaths.get(volSuffix).formatted(node.name()))
                 .withType("DirectoryOrCreate")
@@ -51,13 +51,13 @@ public class HostpathVolumeTest extends ConsensusCapsuleTestAbstract {
     @Override
     protected Volumes prepareCapsulePodVolumes(NodeInfo node) {
         return new VolumesBuilder()
-                .withLogs(prepareNodeVolumeWithHostpath(node, VOLUME_LOGS_NAME_SUFFIX))
-                .withStats(prepareNodeVolumeWithHostpath(node, VOLUME_STATS_NAME_SUFFIX))
-                .withStates(prepareNodeVolumeWithHostpath(node, VOLUME_STATES_NAME_SUFFIX))
-                .withUpgrade(prepareNodeVolumeWithHostpath(node, VOLUME_UPGRADE_NAME_SUFFIX))
+                .withLogs(prepareVolumeWithHostpathSource(node, VOLUME_LOGS_NAME_SUFFIX))
+                .withStats(prepareVolumeWithHostpathSource(node, VOLUME_STATS_NAME_SUFFIX))
+                .withStates(prepareVolumeWithHostpathSource(node, VOLUME_STATES_NAME_SUFFIX))
+                .withUpgrade(prepareVolumeWithHostpathSource(node, VOLUME_UPGRADE_NAME_SUFFIX))
                 .withStreams(new StreamsBuilder()
-                        .withRecord(prepareNodeVolumeWithHostpath(node, VOLUME_RECORD_STREAM_NAME_SUFFIX))
-                        .withEvents(prepareNodeVolumeWithHostpath(node, VOLUME_EVENTS_STREAM_NAME_SUFFIX))
+                        .withRecord(prepareVolumeWithHostpathSource(node, VOLUME_RECORD_STREAM_NAME_SUFFIX))
+                        .withEvents(prepareVolumeWithHostpathSource(node, VOLUME_EVENTS_STREAM_NAME_SUFFIX))
                         .build())
                 .build();
     }
