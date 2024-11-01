@@ -2,14 +2,15 @@
 
 package com.hedera.solo.operator.reconciler.orbit;
 
-import com.hedera.solo.operator.model.commonspec.Condition;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitStatus;
 import com.hedera.solo.operator.model.v1alpha1.OrbitStatusBuilder;
+import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.orbit.resources.ConsensusCapsuleRole;
 import com.hedera.solo.operator.reconciler.orbit.resources.ConsensusConfigMap;
 import com.hedera.solo.operator.reconciler.orbit.resources.ConsensusHeadlessService;
 import com.hedera.solo.operator.reconciler.orbit.resources.OrbitNamespace;
+import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusHandler;
@@ -79,11 +80,11 @@ public class OrbitReconciler implements Reconciler<Orbit>, ErrorStatusHandler<Or
             builder.withExpirationTime(DateTimeFormatter.ISO_INSTANT.format(dur.addTo(now)));
         }
 
-        builder.addNewCondition()
+        builder.addToConditions(new ConditionBuilder()
                 .withType("Ready")
-                .withStatus(Condition.Status.True)
+                .withStatus(ConditionStatus.True)
                 .withLastTransitionTime(DateTimeFormatter.ISO_INSTANT.format(now))
-                .endCondition();
+                .build());
 
         builder.withObservedGeneration(orbit.getMetadata().getGeneration());
 

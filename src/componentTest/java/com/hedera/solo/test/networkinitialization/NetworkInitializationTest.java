@@ -5,6 +5,7 @@ package com.hedera.solo.test.networkinitialization;
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.model.v1alpha1.NetworkInitializationSpec.Mode.FirstInitialization;
 import static com.hedera.solo.operator.reconciler.common.Metadata.OPERATOR_PREFIX;
+import static java.util.Collections.emptyMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -12,9 +13,11 @@ import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitialization;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
+import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
 import com.hedera.solo.operator.test.fixtures.snapshot.SnapshotFailureContext;
 import com.hedera.solo.test.framework.AbstractOperatorTest;
+import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.config.ControllerConfigurationOverrider;
@@ -99,6 +102,25 @@ public class NetworkInitializationTest extends AbstractOperatorTest {
         verifyClusterConfig(capsuleNames);
     }
 
+    @Test
+    void FailNetworkInitialization() {
+        List<String> capsuleNames = List.of("alpha", "beta", "gamma");
+
+        capsuleNames.forEach(name -> createCapsule(name, Map.of("fail", "true")));
+
+        createNetworkInitialization("init", false);
+        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+            NetworkInitialization ni = operator().get(NetworkInitialization.class, "init");
+            assertThat(ni).isNotNull();
+            assertThat(ni.getStatus()).isNotNull();
+            assertThat(ni.getStatus().getPhase()).isEqualTo(NetworkInitializationStatus.Phase.Failed);
+            assertThat(ni.getStatus().getConditions().size()).isEqualTo(1);
+            Condition condition = ni.getStatus().getConditions().get(0);
+            assertThat(condition.getStatus()).isEqualTo(ConditionStatus.False);
+            assertThat(condition.getMessage()).isEqualTo("Capsule phases: {alpha=Failed, beta=Failed, gamma=Failed}");
+        });
+    }
+
     void createNetworkInitialization(final String name, final boolean noUpdate) {
         operator()
                 .create(edit(new NetworkInitialization())
@@ -147,6 +169,9 @@ public class NetworkInitializationTest extends AbstractOperatorTest {
             assertThat(ni).isNotNull();
             assertThat(ni.getStatus()).isNotNull();
             assertThat(ni.getStatus().getPhase()).isEqualTo(NetworkInitializationStatus.Phase.Succeeded);
+            assertThat(ni.getStatus().getConditions().size()).isEqualTo(1);
+            Condition condition = ni.getStatus().getConditions().get(0);
+            assertThat(condition.getStatus()).isEqualTo(ConditionStatus.True);
         }
     }
 
@@ -177,9 +202,13 @@ public class NetworkInitializationTest extends AbstractOperatorTest {
     }
 
     void createCapsule(final String name) {
+        createCapsule(name, emptyMap());
+    }
+
+    void createCapsule(final String name, final Map<String, String> labels) {
         operator()
                 .create(edit(new ConsensusCapsule())
-                        .with(metadata -> metadata.editMetadata().withName(name))
+                        .with(metadata -> metadata.editMetadata().withName(name).addToLabels(labels))
                         .with(spec -> spec.editSpec().withOrbit(operator().getNamespace()))
                         .build());
     }
