@@ -6,6 +6,8 @@ import static com.hedera.solo.operator.reconciler.common.Constants.DEFAULT_FILE_
 import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_BUCKET_PATH_TEMPLATE;
 import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_EXTENSION;
 import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_SIG_EXTENSION;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_ACCOUNT_ID;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_NODE_ID;
 import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM_BUCKET_PATH_TEMPLATE;
 import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM_EXTENSION;
 import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM_SIG_EXTENSION;
@@ -17,7 +19,8 @@ import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_DEFAU
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_EVENT_STREAM_UPLOADER;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NAMESPACE;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_ID;
-import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_IDS;
+import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_NAME;
+import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_NAMES;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_PUBLIC_KEY_FILES;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_RECORD_STREAM_UPLOADER;
@@ -61,7 +64,6 @@ import java.util.Optional;
 @KubernetesDependent(useSSA = BooleanWithUndefined.FALSE, labelSelector = "app=consensus-node")
 public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCapsule> {
     public static final String NAME_SUFFIX = "-pod";
-    public static final String ACCOUNT_ID_LABEL = "account-id";
 
     public static final String ERR_PERSISTENT_VOL_NOT_SPECIFIED =
             "persistent volume claims not specified for volume: %s";
@@ -124,8 +126,10 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         final Map<String, String> labels = Map.of(
                 "consensus-capsule",
                 metadata.getName(),
-                ACCOUNT_ID_LABEL,
-                primary.getSpec().getAccountId());
+                LABEL_ACCOUNT_ID,
+                primary.getSpec().getAccountId(),
+                LABEL_NODE_ID,
+                primary.getSpec().getNodeId().toString());
 
         // return desired pod
         PodBuilder podBuilder = pod.edit()
@@ -163,17 +167,19 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
     }
 
     private TemplateInstance getTemplateWithDefaults(ConsensusCapsule primary, Context<ConsensusCapsule> context) {
-        final String nodeId = Metadata.extractNodeIdFromConsensusCapsule(primary);
+        final Long nodeId = primary.getSpec().getNodeId();
+        final String nodeName = Metadata.prepareNodeName(primary);
         final String accountId = primary.getSpec().getAccountId();
         final String namespace = primary.getMetadata().getNamespace();
-        final List<String> nodeIds = getNodeIds(context, namespace);
+        final List<String> nodeNames = getNodeNames(context, namespace);
 
         final TemplateInstance templateInstance = tpl.instance();
 
         // set defaults
         templateInstance.data(TPL_VAR_NAMESPACE, namespace);
         templateInstance.data(TPL_VAR_NODE_ID, nodeId);
-        templateInstance.data(TPL_VAR_NODE_IDS, nodeIds);
+        templateInstance.data(TPL_VAR_NODE_NAME, nodeName);
+        templateInstance.data(TPL_VAR_NODE_NAMES, nodeNames);
         templateInstance.data(TPL_VAR_ACCOUNT_ID, accountId);
         templateInstance.data(TPL_VAR_DEFAULT_MODE, DEFAULT_FILE_MODE);
 
@@ -306,7 +312,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         return uploader;
     }
 
-    private static List<String> getNodeIds(Context<ConsensusCapsule> context, String namespace) {
+    private static List<String> getNodeNames(Context<ConsensusCapsule> context, String namespace) {
         final List<String> nodeIds = new ArrayList<>();
 
         final ConfigMap clusterConfig = context.getClient()

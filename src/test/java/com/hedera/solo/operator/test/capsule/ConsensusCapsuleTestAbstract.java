@@ -144,13 +144,15 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .until(() -> kubernetesClient.namespaces().withName(namespace).get() == null);
     }
 
-    protected record NodeInfo(String name, String accountId, int weight, String internal, String external) {}
+    protected record NodeInfo(Long id, String name, String accountId, int weight, String internal, String external) {}
 
-    private List<NodeInfo> prepareNodes(List<String> nodeNames) {
+    private List<NodeInfo> prepareNodes(List<Long> nodeIds) {
         List<NodeInfo> nodes = new ArrayList<>();
         int accStart = Constants.HEDERA_ACCOUNT_START;
-        for (String nodeName : nodeNames) {
+        for (Long nodeId : nodeIds) {
+            String nodeName = Constants.NODE_NAME_FORMAT.formatted(nodeId);
             nodes.add(new NodeInfo(
+                    nodeId,
                     nodeName,
                     String.format("0.0.%d", accStart++),
                     1,
@@ -211,10 +213,20 @@ public abstract class ConsensusCapsuleTestAbstract {
         return new VolumesBuilder().build(); // default with no volume spec will use empty volumes
     }
 
+    protected List<Long> prepareNodeIds(int count) {
+        long nodeId = 0L;
+        List<Long> nodeIds = new ArrayList<>();
+        while (count-- > 0) {
+            nodeIds.add(nodeId++);
+        }
+
+        return nodeIds;
+    }
+
     @Test
     void testSingleNodeDeployment() throws Exception {
-        final List<String> nodeNames = List.of("node0");
-        final List<NodeInfo> nodes = prepareNodes(nodeNames);
+        final List<Long> nodeIds = prepareNodeIds(1);
+        final List<NodeInfo> nodes = prepareNodes(nodeIds);
         this.setupConfigMaps();
         this.setupSecrets(nodes);
 
@@ -230,8 +242,8 @@ public abstract class ConsensusCapsuleTestAbstract {
 
     @Test
     void testMultiNodeDeployment() throws Exception {
-        final List<String> nodeNames = List.of("node0", "node1", "node2");
-        final List<NodeInfo> nodes = prepareNodes(nodeNames);
+        final List<Long> nodeIds = prepareNodeIds(3);
+        final List<NodeInfo> nodes = prepareNodes(nodeIds);
         this.setupConfigMaps();
         this.setupSecrets(nodes);
 
@@ -299,10 +311,10 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .withNamespace(namespace)
                 .endMetadata()
                 .withNewSpec()
-                .withAccountId(node.accountId)
                 .withPodProperties(consensusPod)
-                .withOrbit(namespace) // for now, namespace and orbit must match (in the future this constraint may be
-                // lifted)
+                .withOrbit(namespace) // for now, namespace and orbit must match
+                .withAccountId(node.accountId)
+                .withNodeId(node.id)
                 .withPersistentVolumeClaims(prepareCapsulePVCs(node))
                 .endSpec();
     }
