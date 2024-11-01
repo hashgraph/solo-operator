@@ -44,6 +44,7 @@ import com.hedera.solo.operator.test.fixtures.Resources;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
 import com.hedera.solo.operator.test.fixtures.snapshot.SnapshotFailureContext;
 import com.hedera.solo.operator.test.framework.HederaSdkClientFactory;
+import com.hedera.solo.operator.test.setup.ClusterSetupManager;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
@@ -67,7 +68,6 @@ import org.junit.jupiter.api.Test;
 @SoloTest
 public abstract class ConsensusCapsuleTestAbstract {
     protected final String namespace = getClass().getSimpleName().toLowerCase();
-
     protected final String svcNameSuffix = ".%s.%s".formatted(namespace, "svc.cluster.local");
 
     @Inject
@@ -75,10 +75,14 @@ public abstract class ConsensusCapsuleTestAbstract {
     KubernetesClient kubernetesClient;
 
     @Inject
+    ClusterSetupManager clusterSetupManager;
+
+    @Inject
     Operator operator;
 
     @BeforeEach
     void setup() {
+        clusterSetupManager.check();
         configureCoredns(kubernetesClient);
         if (isTestUsingGradleOrIntelliJ()) {
             operator.start();
