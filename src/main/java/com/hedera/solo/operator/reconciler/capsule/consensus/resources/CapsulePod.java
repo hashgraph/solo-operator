@@ -56,18 +56,21 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 @KubernetesDependent(useSSA = BooleanWithUndefined.FALSE, labelSelector = "app=consensus-node")
 public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCapsule> {
     public static final String NAME_SUFFIX = "-pod";
     public static final String ACCOUNT_ID_LABEL = "account-id";
 
-    private static final String ERR_PERSISTENT_VOL_NOT_SPECIFIED =
+    public static final String ERR_PERSISTENT_VOL_NOT_SPECIFIED =
             "persistent volume claims not specified for volume: %s";
-    private static final String ERR_BOTH_HOSTPATH_PVC_NOT_ALLOWED =
+    public static final String ERR_BOTH_HOSTPATH_PVC_NOT_ALLOWED =
             "both HostPath and PersistentVolumeClaim is not allowed for the same volume: '%s'";
-    private static final String ERR_INVALID_VOL_TYPE =
+    public static final String ERR_INVALID_VOL_TYPE =
             "volume must be either a host path or a persistent volume claim or emptyDir for: %s";
+    public static final String ERR_UNSUPPORTED_VOLUME_TYPES =
+            "supported volumes are emptyDir, hostPath, and PersistentVolumeClaim, none provided.";
 
     @Location("consensus-capsule/pod.yaml")
     Template tpl;
@@ -132,7 +135,16 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
                 .endMetadata();
 
         this.setDesiredPodSpec(primary, podBuilder);
-        this.setPodVolumes(primary, podBuilder);
+
+        // set volumes
+        final List<Volume> desiredVolumes = getDesiredPodVolumes(primary);
+        for (final Volume v : desiredVolumes) {
+            podBuilder
+                    .editSpec()
+                    .removeMatchingFromVolumes((s) -> Objects.equals(v.getName(), s.getName()))
+                    .addToVolumes(v)
+                    .endSpec();
+        }
 
         return podBuilder.build();
     }
@@ -317,7 +329,8 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         return nodeIds.stream().sorted().toList();
     }
 
-    private void validatePvcIsSpecified(ConsensusCapsule primary, String volNameSuffix) {
+    protected void validatePvcIsSpecified(ConsensusCapsule primary, String volNameSuffix)
+            throws IllegalArgumentException {
         final String volName = VOLUME_MOUNT_NAMES.get(volNameSuffix);
         if (Objects.isNull(volName)) {
             throw new IllegalArgumentException("invalid volName suffix in: " + volNameSuffix);
@@ -379,14 +392,15 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         }
     }
 
-    private void addVolume(ConsensusCapsule primary, PodBuilder podBuilder, Volume inputVol, String volNameSuffix) {
+    protected Optional<VolumeBuilder> getVolumeBuilder(
+            ConsensusCapsule primary, Volume inputVol, String volNameSuffix) {
+        Objects.requireNonNull(primary);
+        Objects.requireNonNull(inputVol);
+        Objects.requireNonNull(volNameSuffix);
+
         final String volName = VOLUME_MOUNT_NAMES.get(volNameSuffix);
         if (Objects.isNull(volName)) {
-            throw new IllegalArgumentException("invalid volName suffix in: " + volNameSuffix);
-        }
-
-        if (inputVol.getHostPath() == null && inputVol.getPersistentVolumeClaim() == null) {
-            throw new IllegalArgumentException("volume must be either a host path or a persistent volume claim");
+            throw new IllegalArgumentException("invalid volName suffix: " + volNameSuffix);
         }
 
         if (inputVol.getHostPath() != null && inputVol.getPersistentVolumeClaim() != null) {
@@ -394,7 +408,6 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         }
 
         VolumeBuilder builder = new VolumeBuilder().withName(volName);
-
         if (inputVol.getHostPath() != null) {
             builder.withHostPath(inputVol.getHostPath());
         } else if (inputVol.getPersistentVolumeClaim() != null) {
@@ -403,50 +416,57 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         } else if (inputVol.getEmptyDir() != null) {
             builder.withEmptyDir(inputVol.getEmptyDir());
         } else {
-            throw new IllegalArgumentException(ERR_INVALID_VOL_TYPE.formatted(volName));
+            return Optional.empty(); // for unsupported types, we return null;
         }
 
-        podBuilder
-                .editSpec()
-                .removeMatchingFromVolumes((s) -> Objects.equals(builder.getName(), s.getName()))
-                .addToVolumes(builder.build())
-                .endSpec();
+        return Optional.of(builder);
     }
 
-    private void setPodVolumes(ConsensusCapsule primary, PodBuilder podBuilder) {
+    protected List<Volume> getDesiredPodVolumes(ConsensusCapsule primary) {
+        final List<Volume> volumes = new ArrayList<>();
         if (primary.getSpec().getPod().getVolumes().getLogs() != null) {
             final Volume inputVol = primary.getSpec().getPod().getVolumes().getLogs();
-            addVolume(primary, podBuilder, inputVol, VOLUME_LOGS_NAME_SUFFIX);
+            final Optional<VolumeBuilder> vb = getVolumeBuilder(primary, inputVol, VOLUME_LOGS_NAME_SUFFIX);
+            vb.ifPresent(volumeBuilder -> volumes.add(volumeBuilder.build()));
         }
 
         if (primary.getSpec().getPod().getVolumes().getStats() != null) {
             final Volume inputVol = primary.getSpec().getPod().getVolumes().getStats();
-            addVolume(primary, podBuilder, inputVol, VOLUME_STATS_NAME_SUFFIX);
+            final Optional<VolumeBuilder> vb = getVolumeBuilder(primary, inputVol, VOLUME_STATS_NAME_SUFFIX);
+            vb.ifPresent(volumeBuilder -> volumes.add(volumeBuilder.build()));
         }
 
         if (primary.getSpec().getPod().getVolumes().getStates() != null) {
             final Volume inputVol = primary.getSpec().getPod().getVolumes().getStates();
-            addVolume(primary, podBuilder, inputVol, VOLUME_STATES_NAME_SUFFIX);
+            final Optional<VolumeBuilder> vb = getVolumeBuilder(primary, inputVol, VOLUME_STATES_NAME_SUFFIX);
+            vb.ifPresent(volumeBuilder -> volumes.add(volumeBuilder.build()));
         }
 
         if (primary.getSpec().getPod().getVolumes().getUpgrade() != null) {
             final Volume inputVol = primary.getSpec().getPod().getVolumes().getUpgrade();
-            addVolume(primary, podBuilder, inputVol, VOLUME_UPGRADE_NAME_SUFFIX);
+            final Optional<VolumeBuilder> vb = getVolumeBuilder(primary, inputVol, VOLUME_UPGRADE_NAME_SUFFIX);
+            vb.ifPresent(volumeBuilder -> volumes.add(volumeBuilder.build()));
         }
 
         if (primary.getSpec().getPod().getVolumes().getStreams() != null) {
             if (primary.getSpec().getPod().getVolumes().getStreams().getRecord() != null) {
                 final Volume inputVol =
                         primary.getSpec().getPod().getVolumes().getStreams().getRecord();
-                addVolume(primary, podBuilder, inputVol, VOLUME_RECORD_STREAM_NAME_SUFFIX);
+                final Optional<VolumeBuilder> vb =
+                        getVolumeBuilder(primary, inputVol, VOLUME_RECORD_STREAM_NAME_SUFFIX);
+                vb.ifPresent(volumeBuilder -> volumes.add(volumeBuilder.build()));
             }
 
             if (primary.getSpec().getPod().getVolumes().getStreams().getEvents() != null) {
                 final Volume inputVol =
                         primary.getSpec().getPod().getVolumes().getStreams().getEvents();
-                addVolume(primary, podBuilder, inputVol, VOLUME_EVENTS_STREAM_NAME_SUFFIX);
+                final Optional<VolumeBuilder> vb =
+                        getVolumeBuilder(primary, inputVol, VOLUME_EVENTS_STREAM_NAME_SUFFIX);
+                vb.ifPresent(volumeBuilder -> volumes.add(volumeBuilder.build()));
             }
         }
+
+        return volumes;
     }
 
     public static class Ready implements Condition<Pod, ConsensusCapsule> {
