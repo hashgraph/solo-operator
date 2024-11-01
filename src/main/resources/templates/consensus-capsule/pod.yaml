@@ -273,38 +273,11 @@ spec:
       startupProbe:
         failureThreshold: 10
         periodSeconds: 15
-        timeoutSeconds: 180
+        timeoutSeconds: 60
         exec:
           command:
-            - sh
-            - -c
-            - |
-              if ! type curl gawk > /dev/null 2>&1; then
-                sudo mkdir -p /var/cache/apt/archives/partial /var/log/apt
-                sudo apt install -y curl gawk > /dev/null 2>&1
-              fi
-
-              platform_status() \{
-                curl -s http://localhost:9999 | \
-                  awk '
-                    # HELP platform_PlatformStatus 0=NO_VALUE 1=STARTING_UP 2=ACTIVE ...
-                    /^# HELP platform_PlatformStatus / \{
-                      help=$0
-                    \}
-
-                    # platform_PlatformStatus\{node="1",\} 2.0
-                    /^platform_PlatformStatus\{.*\} [0-9]+/ \{
-                      status=int($NF)
-                    \}
-
-                    END \{
-                      print gensub(".*\\s" status "=(\\S*)\\s.*", "\\1", 1, help)
-                    \}'
-              \}
-
-              PLATFORM_STATUS=$(platform_status)
-              echo PlatformStatus=$PLATFORM_STATUS
-              test "$PLATFORM_STATUS" = "ACTIVE"
+            - jshell
+            - /tmp/volumes/cluster-config/startup-probe
       volumeMounts:
         - name: cluster-config
           mountPath: /tmp/volumes/cluster-config # mount to a temp directory to copy files with appropriate ownership
