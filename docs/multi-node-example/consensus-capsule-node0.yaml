@@ -6,7 +6,7 @@ spec:
   orbit: solo-orbit
   accountId: "0.0.3"
   eligibleForDeployment: false
-  pod:
+  podProperties:
     containers:
       consensusNode:
         name: "consensus-node"

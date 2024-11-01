@@ -7,7 +7,7 @@
 # {@java.util.List nodeIds}
 # {@int defaultMode}
 # {@java.util.Set publicKeyFiles}
-# {@com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.containers.ConsensusNode cn}
+# {@com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.ConsensusNode cn}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader rsu}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader rsu}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader rssu}

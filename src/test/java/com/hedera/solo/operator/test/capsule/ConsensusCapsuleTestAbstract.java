@@ -33,12 +33,13 @@ import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PersistentVolumeClaims;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PersistentVolumeClaimsBuilder;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PodBuilder;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.Containers;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.ContainersBuilder;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.Volumes;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.VolumesBuilder;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.containers.ConsensusNode;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PodProperties;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PodPropertiesBuilder;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Containers;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.ContainersBuilder;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Volumes;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.VolumesBuilder;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.ConsensusNode;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
@@ -283,7 +284,7 @@ public abstract class ConsensusCapsuleTestAbstract {
     }
 
     protected ConsensusCapsuleBuilder prepareConsensusCapsuleBuilder(NodeInfo node) {
-        final com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Pod consensusPod = new PodBuilder()
+        final PodProperties consensusPod = new PodPropertiesBuilder()
                 .withSecurityContext(new PodSecurityContextBuilder()
                         .withRunAsUser(HEDERA_USER)
                         .withRunAsGroup(HEDERA_GROUP)
@@ -299,7 +300,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .endMetadata()
                 .withNewSpec()
                 .withAccountId(node.accountId)
-                .withPod(consensusPod)
+                .withPodProperties(consensusPod)
                 .withOrbit(namespace) // for now, namespace and orbit must match (in the future this constraint may be
                 // lifted)
                 .withPersistentVolumeClaims(prepareCapsulePVCs(node))

@@ -16,9 +16,9 @@ import static org.awaitility.Awaitility.await;
 
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PersistentVolumeClaims;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PersistentVolumeClaimsBuilder;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.Volumes;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.VolumesBuilder;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.volumes.StreamsBuilder;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Volumes;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.VolumesBuilder;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.volumes.StreamsBuilder;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaim;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSource;
