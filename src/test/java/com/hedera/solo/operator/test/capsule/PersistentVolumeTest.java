@@ -1,18 +1,4 @@
-/*
- * Copyright (C) 2024 Hedera Hashgraph, LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-License-Identifier: Apache-2.0
 
 package com.hedera.solo.operator.test.capsule;
 
@@ -30,16 +16,10 @@ import static org.awaitility.Awaitility.await;
 
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PersistentVolumeClaims;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PersistentVolumeClaimsBuilder;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.Volumes;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.VolumesBuilder;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.volumes.StreamsBuilder;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaim;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec;
-import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSource;
-import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSourceBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.Volume;
-import io.fabric8.kubernetes.api.model.VolumeBuilder;
 import io.quarkus.test.junit.QuarkusTest;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -48,26 +28,8 @@ import org.junit.jupiter.api.Test;
 
 @QuarkusTest
 public class PersistentVolumeTest extends ConsensusCapsuleTestAbstract {
-    protected Volume prepareNodeVolumeWithPvc(NodeInfo node, String volSuffix) {
-        final PersistentVolumeClaimVolumeSource ps = new PersistentVolumeClaimVolumeSourceBuilder()
-                .withClaimName(nodeVolumeName(node, volSuffix))
-                .build();
-
-        return new VolumeBuilder().withPersistentVolumeClaim(ps).build();
-    }
-
-    @Override
-    protected Volumes prepareCapsuleVolumes(NodeInfo node) {
-        return new VolumesBuilder()
-                .withLogs(prepareNodeVolumeWithPvc(node, VOLUME_LOGS_NAME_SUFFIX))
-                .withStats(prepareNodeVolumeWithPvc(node, VOLUME_STATS_NAME_SUFFIX))
-                .withStates(prepareNodeVolumeWithPvc(node, VOLUME_STATES_NAME_SUFFIX))
-                .withUpgrade(prepareNodeVolumeWithPvc(node, VOLUME_UPGRADE_NAME_SUFFIX))
-                .withStreams(new StreamsBuilder()
-                        .withRecord(prepareNodeVolumeWithPvc(node, VOLUME_RECORD_STREAM_NAME_SUFFIX))
-                        .withEvents(prepareNodeVolumeWithPvc(node, VOLUME_EVENTS_STREAM_NAME_SUFFIX))
-                        .build())
-                .build();
+    private String nodeVolumeName(NodeInfo node, String volSuffix) {
+        return "%s-%s".formatted(node.name(), volSuffix);
     }
 
     protected PersistentVolumeClaimSpec preparePvcSpec(NodeInfo node, String volSuffix) {

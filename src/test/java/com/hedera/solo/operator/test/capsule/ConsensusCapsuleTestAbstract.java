@@ -300,7 +300,8 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .withNewSpec()
                 .withAccountId(node.accountId)
                 .withPod(consensusPod)
-                .withOrbit(namespace) // for now, namespace and orbit must match (in the future this constraint may be lifted)
+                .withOrbit(namespace) // for now, namespace and orbit must match (in the future this constraint may be
+                // lifted)
                 .withPersistentVolumeClaims(prepareCapsulePVCs(node))
                 .endSpec();
     }
