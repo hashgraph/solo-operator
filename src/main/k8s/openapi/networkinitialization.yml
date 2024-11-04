@@ -33,7 +33,7 @@ components:
         conditions:
           items:
             type: object
-            x-java-type: com.hedera.solo.operator.model.commonspec.Condition
+            x-java-type: io.fabric8.kubernetes.api.model.Condition
           type: array
         observedGeneration:
           description: The generation observed by the operator.

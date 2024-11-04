@@ -3,16 +3,22 @@
 package com.hedera.solo.operator.reconciler.networkinitialization;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
+import static java.util.Objects.nonNull;
 
+import com.hedera.solo.operator.library.builder.BuilderFunction;
 import com.hedera.solo.operator.library.numeric.RolloverComparator;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitialization;
+import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationBuilder;
 import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationStatus;
+import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.networkinitialization.resources.NetworkInitializationClusterConfig;
 import com.hedera.solo.operator.reconciler.networkinitialization.resources.NetworkInitializationConsensusCapsule;
 import com.hedera.solo.operator.reconciler.networkinitialization.resources.NetworkInitializationOrbit;
 import com.hedera.solo.operator.reconciler.networkinitialization.resources.NetworkInitializationTrigger;
+import io.fabric8.kubernetes.api.model.Condition;
+import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClientException;
@@ -30,12 +36,17 @@ import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import java.lang.invoke.MethodHandles;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
@@ -54,6 +65,12 @@ public class NetworkInitializationReconciler
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
     private static final Set<NetworkInitializationStatus.Phase> DONE =
             Set.of(NetworkInitializationStatus.Phase.Failed, NetworkInitializationStatus.Phase.Succeeded);
+    private static final Set<ConsensusCapsuleStatus.Phase> RECOGNIZED_CAPSULE_PHASES = Set.of(
+            ConsensusCapsuleStatus.Phase.Failed,
+            ConsensusCapsuleStatus.Phase.Pending,
+            ConsensusCapsuleStatus.Phase.Running,
+            ConsensusCapsuleStatus.Phase.Succeeded,
+            ConsensusCapsuleStatus.Phase.Unknown);
     private static final Duration DELAY = Duration.of(100, ChronoUnit.MILLIS);
     private EventSourceContext<NetworkInitialization> eventSourceContext;
     private final AtomicLong sequenceNumber = new AtomicLong();
@@ -152,15 +169,15 @@ public class NetworkInitializationReconciler
             workflow.reconcile(resource, context);
 
             // determine phase
-            NetworkInitializationStatus.Phase phase = getPhase(resource, context);
-            if (DONE.contains(phase)) {
+            NetworkInitialization patchStatus = edit(resource)
+                    .with(status -> status.editStatus()
+                            .withObservedGeneration(resource.getMetadata().getGeneration()))
+                    .with(determinePhase(resource, context))
+                    .build();
+            if (DONE.contains(patchStatus.getStatus().getPhase())) {
                 trigger.next(resource, context);
             }
-            return UpdateControl.patchStatus(edit(resource)
-                    .with(status -> status.editStatus()
-                            .withObservedGeneration(resource.getMetadata().getGeneration())
-                            .withPhase(phase))
-                    .build());
+            return UpdateControl.patchStatus(patchStatus);
         } finally {
             log.infof(
                     "Network Initialization - Finished Reconciliation [ name = '%s' ]",
@@ -169,28 +186,55 @@ public class NetworkInitializationReconciler
     }
 
     // collect consensus capsule status in status until any fail or all are running.
-    private NetworkInitializationStatus.Phase getPhase(
+    private BuilderFunction<NetworkInitializationBuilder> determinePhase(
             final NetworkInitialization resource, final Context<NetworkInitialization> context) {
         Collection<ConsensusCapsule> consensusCapsules =
                 consensusCapsule.getSecondaryResources(resource, context).values();
-        Set<ConsensusCapsuleStatus.Phase> phases = consensusCapsules.stream()
+        List<ConsensusCapsuleStatus.Phase> phaseList = consensusCapsules.stream()
                 .map(CustomResource::getStatus)
                 .filter(Objects::nonNull)
                 .map(ConsensusCapsuleStatus::getPhase)
                 .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-
-        NetworkInitializationStatus.Phase phase = NetworkInitializationStatus.Phase.Failed;
-        if (Set.of(ConsensusCapsuleStatus.Phase.Running).equals(phases)) {
+                .toList();
+        Set<ConsensusCapsuleStatus.Phase> phases = new HashSet<>(phaseList);
+        NetworkInitializationStatus.Phase phase;
+        List<Condition> conditions = new ArrayList<>();
+        if (Set.of(ConsensusCapsuleStatus.Phase.Running).equals(phases)
+                && consensusCapsules.size() == phaseList.size()) {
             phase = NetworkInitializationStatus.Phase.Succeeded;
+            conditions.add(new ConditionBuilder()
+                    .withType("Ready")
+                    .withStatus(ConditionStatus.True)
+                    .withLastTransitionTime(Instant.now().toString())
+                    .build());
         } else if (Set.of(
                         ConsensusCapsuleStatus.Phase.Pending,
                         ConsensusCapsuleStatus.Phase.Running,
                         ConsensusCapsuleStatus.Phase.Unknown)
                 .containsAll(phases)) {
             phase = NetworkInitializationStatus.Phase.Running;
+        } else {
+            phase = NetworkInitializationStatus.Phase.Failed;
+            Map<String, ConsensusCapsuleStatus.Phase> map = consensusCapsules.stream()
+                    .filter(c -> nonNull(c.getStatus()) && nonNull(c.getStatus().getPhase()))
+                    .sorted(Comparator.comparing(c -> c.getMetadata().getName()))
+                    .collect(
+                            LinkedHashMap::new,
+                            (m, c) -> m.put(
+                                    c.getMetadata().getName(), c.getStatus().getPhase()),
+                            Map::putAll);
+            conditions.add(new ConditionBuilder()
+                    .withType("Ready")
+                    .withStatus(ConditionStatus.False)
+                    .withReason("CapsulePhase")
+                    .withMessage("Capsule phases: " + map)
+                    .withLastTransitionTime(Instant.now().toString())
+                    .build());
+            log.warnf(
+                    "Network Initialization - Failed [ name = '%s', capsules = '%s' ]",
+                    resource.getMetadata().getName(), map);
         }
-        return phase;
+        return builder -> builder.editStatus().withPhase(phase).addAllToConditions(conditions);
     }
 
     @Override

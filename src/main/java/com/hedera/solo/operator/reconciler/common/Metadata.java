@@ -2,6 +2,7 @@
 
 package com.hedera.solo.operator.reconciler.common;
 
+import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
@@ -260,5 +261,9 @@ public final class Metadata {
         }
 
         return dst;
+    }
+
+    public static String extractNodeIdFromConsensusCapsule(ConsensusCapsule cc) {
+        return cc.getMetadata().getName();
     }
 }
