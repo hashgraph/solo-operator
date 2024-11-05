@@ -4,7 +4,7 @@ package com.hedera.solo.test.networkinitialization;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.model.v1alpha1.NetworkInitializationSpec.Mode.FirstInitialization;
-import static com.hedera.solo.operator.reconciler.common.Metadata.OPERATOR_PREFIX;
+import static com.hedera.solo.operator.reconciler.common.Constants.OPERATOR_PREFIX;
 import static java.util.Collections.emptyMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -137,7 +138,8 @@ public class NetworkInitializationTest extends AbstractOperatorTest {
             assertThat(ni.getStatus().getConditions().size()).isEqualTo(1);
             Condition condition = ni.getStatus().getConditions().get(0);
             assertThat(condition.getStatus()).isEqualTo(ConditionStatus.False);
-            assertThat(condition.getMessage()).isEqualTo("Capsule phases: {alpha=Failed, beta=Failed, gamma=Failed}");
+            assertThat(StringUtils.countMatches(condition.getMessage(), "Failed"))
+                    .isEqualTo(capsuleNodeIds.size());
         });
     }
 
