@@ -73,6 +73,14 @@ jobs:
         if: ${{ inputs.enable-spotless-check && !cancelled() && !failure() }}
         run: ./gradlew spotlessCheck --scan
 
+      - name: Setup Kind
+        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
+        uses: helm/kind-action@0025e74a8c7512023d06dc019c617aa3cf561fde # v1.10.0
+        with:
+          verbosity: 3
+          cluster_name: solo-operator-ci
+          wait: 120s
+
       - name: Unit Tests
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
         run: ./gradlew check --scan
