@@ -42,16 +42,12 @@ import org.jboss.logging.Logger;
             @Dependent(name = "sa", type = CapsuleServiceAccount.class),
             @Dependent(type = CapsuleRoleBinding.class, dependsOn = "sa"),
             @Dependent(type = CapsuleService.class),
-            @Dependent(type = CapsuleLogsPvc.class, activationCondition = CapsuleLogsPvc.Activate.class),
-            @Dependent(type = CapsuleStatsPvc.class, activationCondition = CapsuleStatsPvc.Activate.class),
-            @Dependent(type = CapsuleStatesPvc.class, activationCondition = CapsuleStatesPvc.Activate.class),
-            @Dependent(type = CapsuleUpgradePvc.class, activationCondition = CapsuleUpgradePvc.Activate.class),
-            @Dependent(
-                    type = CapsuleRecordStreamPvc.class,
-                    activationCondition = CapsuleRecordStreamPvc.Activate.class),
-            @Dependent(
-                    type = CapsuleEventsStreamPvc.class,
-                    activationCondition = CapsuleEventsStreamPvc.Activate.class),
+            @Dependent(type = CapsuleLogsPvc.class, reconcilePrecondition = CapsuleLogsPvc.Ready.class),
+            @Dependent(type = CapsuleStatsPvc.class, reconcilePrecondition = CapsuleStatsPvc.Ready.class),
+            @Dependent(type = CapsuleStatesPvc.class, reconcilePrecondition = CapsuleStatesPvc.Ready.class),
+            @Dependent(type = CapsuleUpgradePvc.class, reconcilePrecondition = CapsuleUpgradePvc.Ready.class),
+            @Dependent(type = CapsuleRecordStreamPvc.class, reconcilePrecondition = CapsuleRecordStreamPvc.Ready.class),
+            @Dependent(type = CapsuleEventsStreamPvc.class, reconcilePrecondition = CapsuleEventsStreamPvc.Ready.class),
             @Dependent(type = CapsulePod.class, reconcilePrecondition = CapsulePod.Ready.class)
         })
 public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>, ErrorStatusHandler<ConsensusCapsule> {
