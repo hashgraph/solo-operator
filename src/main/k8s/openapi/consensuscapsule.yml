@@ -91,7 +91,7 @@ components:
             this should be set by the `NetworkInitialization` reconciliation loop.
 
             This most likely will be removed in the future when DAB Phase 2/3 is available.
-        pod:
+        podProperties:
           type: object
           properties:
             affinity:

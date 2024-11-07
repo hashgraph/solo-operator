@@ -32,7 +32,7 @@ import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 
 import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.containers.ConsensusNode;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.ConsensusNode;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
@@ -95,9 +95,10 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         Objects.requireNonNull(primary.getSpec());
         Objects.requireNonNull(primary.getSpec().getOrbit());
         Objects.requireNonNull(primary.getSpec().getAccountId());
-        Objects.requireNonNull(primary.getSpec().getPod());
-        Objects.requireNonNull(primary.getSpec().getPod().getContainers());
-        Objects.requireNonNull(primary.getSpec().getPod().getContainers().getConsensusNode());
+        Objects.requireNonNull(primary.getSpec().getPodProperties());
+        Objects.requireNonNull(primary.getSpec().getPodProperties().getContainers());
+        Objects.requireNonNull(
+                primary.getSpec().getPodProperties().getContainers().getConsensusNode());
         Objects.requireNonNull(context);
         Objects.requireNonNull(context.getClient());
 
@@ -150,7 +151,8 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
     }
 
     private void setDesiredPodSpec(ConsensusCapsule primary, PodBuilder podBuilder) {
-        PodSecurityContext securityContext = primary.getSpec().getPod().getSecurityContext();
+        PodSecurityContext securityContext =
+                primary.getSpec().getPodProperties().getSecurityContext();
         if (securityContext == null) {
             securityContext = SECURITY_CONTEXT_BUILDER.build();
         }
@@ -187,7 +189,8 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
                 .withName("public-keys")
                 .get();
 
-        final ConsensusNode cn = primary.getSpec().getPod().getContainers().getConsensusNode();
+        final ConsensusNode cn =
+                primary.getSpec().getPodProperties().getContainers().getConsensusNode();
         final StreamUploader rsu = this.prepareRecordStreamUploader(primary);
         final StreamUploader esu = this.prepareEventStreamUploader(primary);
         final StreamUploader bu = this.prepareBackupUploader(primary);
@@ -208,7 +211,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
 
     private StreamUploader prepareRecordStreamUploader(ConsensusCapsule primary) {
         final StreamUploader rsu = this.setStreamUploaderExtensions(
-                primary.getSpec().getPod().getContainers().getRecordStreamUploader(),
+                primary.getSpec().getPodProperties().getContainers().getRecordStreamUploader(),
                 RECORD_STREAM_EXTENSION,
                 RECORD_STREAM_SIG_EXTENSION);
 
@@ -227,7 +230,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
 
     private StreamUploader prepareRecordStreamSidecarFilesUploader(ConsensusCapsule primary) {
         final StreamUploader rssu = this.setStreamUploaderExtensions(
-                primary.getSpec().getPod().getContainers().getRecordStreamSidecarFilesUploader(),
+                primary.getSpec().getPodProperties().getContainers().getRecordStreamSidecarFilesUploader(),
                 RECORD_STREAM_EXTENSION,
                 RECORD_STREAM_SIG_EXTENSION);
 
@@ -246,7 +249,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
 
     private StreamUploader prepareEventStreamUploader(ConsensusCapsule primary) {
         final StreamUploader esu = this.setStreamUploaderExtensions(
-                primary.getSpec().getPod().getContainers().getEventsStreamUploader(),
+                primary.getSpec().getPodProperties().getContainers().getEventsStreamUploader(),
                 EVENT_STREAM_EXTENSION,
                 EVENT_STREAM_SIG_EXTENSION);
 
@@ -260,7 +263,8 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
     }
 
     private StreamUploader prepareBackupUploader(ConsensusCapsule primary) {
-        final StreamUploader bu = primary.getSpec().getPod().getContainers().getBackupUploader();
+        final StreamUploader bu =
+                primary.getSpec().getPodProperties().getContainers().getBackupUploader();
 
         if (Objects.nonNull(bu)) {
             bu.getConfig()
@@ -424,42 +428,52 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
 
     protected List<Volume> getDesiredPodVolumes(ConsensusCapsule primary) {
         final List<Volume> volumes = new ArrayList<>();
-        if (primary.getSpec().getPod().getVolumes().getLogs() != null) {
-            final Volume inputVol = primary.getSpec().getPod().getVolumes().getLogs();
+        if (primary.getSpec().getPodProperties().getVolumes().getLogs() != null) {
+            final Volume inputVol =
+                    primary.getSpec().getPodProperties().getVolumes().getLogs();
             final Optional<VolumeBuilder> vb = getVolumeBuilder(primary, inputVol, VOLUME_LOGS_NAME_SUFFIX);
             vb.ifPresent(volumeBuilder -> volumes.add(volumeBuilder.build()));
         }
 
-        if (primary.getSpec().getPod().getVolumes().getStats() != null) {
-            final Volume inputVol = primary.getSpec().getPod().getVolumes().getStats();
+        if (primary.getSpec().getPodProperties().getVolumes().getStats() != null) {
+            final Volume inputVol =
+                    primary.getSpec().getPodProperties().getVolumes().getStats();
             final Optional<VolumeBuilder> vb = getVolumeBuilder(primary, inputVol, VOLUME_STATS_NAME_SUFFIX);
             vb.ifPresent(volumeBuilder -> volumes.add(volumeBuilder.build()));
         }
 
-        if (primary.getSpec().getPod().getVolumes().getStates() != null) {
-            final Volume inputVol = primary.getSpec().getPod().getVolumes().getStates();
+        if (primary.getSpec().getPodProperties().getVolumes().getStates() != null) {
+            final Volume inputVol =
+                    primary.getSpec().getPodProperties().getVolumes().getStates();
             final Optional<VolumeBuilder> vb = getVolumeBuilder(primary, inputVol, VOLUME_STATES_NAME_SUFFIX);
             vb.ifPresent(volumeBuilder -> volumes.add(volumeBuilder.build()));
         }
 
-        if (primary.getSpec().getPod().getVolumes().getUpgrade() != null) {
-            final Volume inputVol = primary.getSpec().getPod().getVolumes().getUpgrade();
+        if (primary.getSpec().getPodProperties().getVolumes().getUpgrade() != null) {
+            final Volume inputVol =
+                    primary.getSpec().getPodProperties().getVolumes().getUpgrade();
             final Optional<VolumeBuilder> vb = getVolumeBuilder(primary, inputVol, VOLUME_UPGRADE_NAME_SUFFIX);
             vb.ifPresent(volumeBuilder -> volumes.add(volumeBuilder.build()));
         }
 
-        if (primary.getSpec().getPod().getVolumes().getStreams() != null) {
-            if (primary.getSpec().getPod().getVolumes().getStreams().getRecord() != null) {
-                final Volume inputVol =
-                        primary.getSpec().getPod().getVolumes().getStreams().getRecord();
+        if (primary.getSpec().getPodProperties().getVolumes().getStreams() != null) {
+            if (primary.getSpec().getPodProperties().getVolumes().getStreams().getRecord() != null) {
+                final Volume inputVol = primary.getSpec()
+                        .getPodProperties()
+                        .getVolumes()
+                        .getStreams()
+                        .getRecord();
                 final Optional<VolumeBuilder> vb =
                         getVolumeBuilder(primary, inputVol, VOLUME_RECORD_STREAM_NAME_SUFFIX);
                 vb.ifPresent(volumeBuilder -> volumes.add(volumeBuilder.build()));
             }
 
-            if (primary.getSpec().getPod().getVolumes().getStreams().getEvents() != null) {
-                final Volume inputVol =
-                        primary.getSpec().getPod().getVolumes().getStreams().getEvents();
+            if (primary.getSpec().getPodProperties().getVolumes().getStreams().getEvents() != null) {
+                final Volume inputVol = primary.getSpec()
+                        .getPodProperties()
+                        .getVolumes()
+                        .getStreams()
+                        .getEvents();
                 final Optional<VolumeBuilder> vb =
                         getVolumeBuilder(primary, inputVol, VOLUME_EVENTS_STREAM_NAME_SUFFIX);
                 vb.ifPresent(volumeBuilder -> volumes.add(volumeBuilder.build()));

@@ -5,10 +5,10 @@ package com.hedera.solo.operator.reconciler.capsule.consensus.resources;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleSpec;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PersistentVolumeClaims;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Pod;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PodProperties;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.persistentvolumeclaims.Streams;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.Volumes;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.volumes.StreamsBuilder;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Volumes;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.volumes.StreamsBuilder;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import io.fabric8.kubernetes.api.model.EmptyDirVolumeSource;
 import io.fabric8.kubernetes.api.model.HostPathVolumeSource;
@@ -187,10 +187,10 @@ public class CapsulePodTest {
     @Test
     @Description("test that a list of desired list of pod volumes are returned")
     void testGetDesiredPodVolumes() {
-        Pod pod = Mockito.mock(Pod.class);
+        PodProperties pod = Mockito.mock(PodProperties.class);
         Volumes volumes = Mockito.mock(Volumes.class);
-        Mockito.when(consensusCapsule.getSpec().getPod()).thenReturn(pod);
-        Mockito.when(consensusCapsule.getSpec().getPod().getVolumes()).thenReturn(volumes);
+        Mockito.when(consensusCapsule.getSpec().getPodProperties()).thenReturn(pod);
+        Mockito.when(consensusCapsule.getSpec().getPodProperties().getVolumes()).thenReturn(volumes);
 
         // empty volumes
         Assertions.assertEquals(
