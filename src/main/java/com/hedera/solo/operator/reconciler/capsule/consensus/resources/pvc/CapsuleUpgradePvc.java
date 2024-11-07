@@ -37,7 +37,7 @@ public class CapsuleUpgradePvc extends CRUDKubernetesDependentResource<Persisten
         return CapsulePvcUtil.prepareDesired(primary, getInputPvcSpec(primary), VOLUME_UPGRADE_NAME_SUFFIX);
     }
 
-    public static class Activate implements Condition<PersistentVolumeClaim, ConsensusCapsule> {
+    public static class Ready implements Condition<PersistentVolumeClaim, ConsensusCapsule> {
         @Override
         public boolean isMet(
                 DependentResource<PersistentVolumeClaim, ConsensusCapsule> dependentResource,

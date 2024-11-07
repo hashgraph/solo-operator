@@ -39,7 +39,7 @@ public class CapsuleEventsStreamPvc extends CRUDKubernetesDependentResource<Pers
         return CapsulePvcUtil.prepareDesired(primary, getInputPvcSpec(primary), VOLUME_EVENTS_STREAM_NAME_SUFFIX);
     }
 
-    public static class Activate implements Condition<PersistentVolumeClaim, ConsensusCapsule> {
+    public static class Ready implements Condition<PersistentVolumeClaim, ConsensusCapsule> {
         @Override
         public boolean isMet(
                 DependentResource<PersistentVolumeClaim, ConsensusCapsule> dependentResource,
