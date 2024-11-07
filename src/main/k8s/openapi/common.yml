@@ -167,6 +167,11 @@ components:
                   type: string
             envFromSecret:
               type: string
+        additionalVolumeMounts:
+          type: array
+          items:
+            type: object
+            x-java-type: io.fabric8.kubernetes.api.model.VolumeMount
 
     OpenTelemetryCollector:
       type: object
