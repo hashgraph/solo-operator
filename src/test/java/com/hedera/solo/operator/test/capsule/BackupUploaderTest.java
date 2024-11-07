@@ -3,12 +3,12 @@
 package com.hedera.solo.operator.test.capsule;
 
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_ACCOUNT_ID;
-import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Containers;
+import com.hedera.solo.operator.test.utils.TemplateLoader;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.EnvVar;
 import io.fabric8.kubernetes.api.model.Pod;
@@ -21,8 +21,6 @@ import org.junit.jupiter.api.Test;
 
 @QuarkusTest
 public class BackupUploaderTest extends ConsensusCapsuleTestAbstract {
-    public static final String TEMPLATE = "containers/backup-uploader.yaml";
-
     @Override
     @Test
     void testSingleNodeDeployment() throws Exception {
@@ -39,7 +37,7 @@ public class BackupUploaderTest extends ConsensusCapsuleTestAbstract {
 
     @Override
     protected Containers prepareConsensusPodContainers() {
-        StreamUploader uploader = loadYaml(StreamUploader.class, getClass(), TEMPLATE);
+        StreamUploader uploader = TemplateLoader.load(StreamUploader.class, TemplateLoader.TEMPLATE_BACKUP_UPLOADER);
         return getContainersBuilder().withBackupUploader(uploader).build();
     }
 
