@@ -2,11 +2,16 @@
 
 package com.hedera.solo.operator.reconciler.capsule.consensus.resources;
 
+import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
+
+import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleSpec;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PersistentVolumeClaims;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PodProperties;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.persistentvolumeclaims.Streams;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Containers;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.ContainersBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Volumes;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.volumes.StreamsBuilder;
 import com.hedera.solo.operator.reconciler.common.Constants;
@@ -37,6 +42,7 @@ public class CapsulePodTest {
     private final ConsensusCapsuleSpec consensusCapsuleSpec = Mockito.mock(ConsensusCapsuleSpec.class);
     private final PersistentVolumeClaims persistentVolumeClaims = Mockito.mock(PersistentVolumeClaims.class);
     private final Streams streams = Mockito.mock(Streams.class);
+    private final PodProperties podProperties = Mockito.mock(PodProperties.class);
 
     @BeforeEach
     void beforeEach() {
@@ -47,6 +53,7 @@ public class CapsulePodTest {
         Mockito.when(consensusCapsule.getSpec()).thenReturn(consensusCapsuleSpec);
         Mockito.when(persistentVolumeClaims.getStreams()).thenReturn(streams);
         Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims()).thenReturn(persistentVolumeClaims);
+        Mockito.when(consensusCapsule.getSpec().getPodProperties()).thenReturn(podProperties);
     }
 
     @Test
@@ -224,5 +231,122 @@ public class CapsulePodTest {
                         .build());
         Assertions.assertEquals(
                 6, capsulePod.getDesiredPodVolumes(consensusCapsule).size());
+    }
+
+    @Test
+    @Description("test that are stream uploader containers are prepared correctly")
+    void testPrepareStreamUploaderContainers() {
+        // no stream uploaders
+        Mockito.when(consensusCapsule.getSpec().getPodProperties().getContainers())
+                .thenReturn(new ContainersBuilder().build());
+        Map<String, StreamUploader> uploaderMap = capsulePod.prepareStreamUploaderContainers(consensusCapsule);
+        Assertions.assertNull(uploaderMap.get(Constants.TPL_VAR_RECORD_STREAM_UPLOADER));
+        Assertions.assertNull(uploaderMap.get(Constants.TPL_VAR_EVENT_STREAM_UPLOADER));
+        Assertions.assertNull(uploaderMap.get(Constants.TPL_VAR_BACKUP_UPLOADER));
+        Assertions.assertNull(uploaderMap.get(Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER));
+
+        // with valid stream uploaders settings it should return all stream uploaders
+        StreamUploader rsu = loadYaml(StreamUploader.class, getClass(), "containers/record-stream-uploader.yaml");
+        StreamUploader esu = loadYaml(StreamUploader.class, getClass(), "containers/event-stream-uploader.yaml");
+        StreamUploader bu = loadYaml(StreamUploader.class, getClass(), "containers/backup-uploader.yaml");
+        StreamUploader rssu =
+                loadYaml(StreamUploader.class, getClass(), "containers/record-stream-sidecar-files-uploader.yaml");
+        rsu.setEnabled(true);
+        esu.setEnabled(true);
+        bu.setEnabled(true);
+        rssu.setEnabled(true);
+        Containers containers = new ContainersBuilder()
+                .withRecordStreamUploader(rsu)
+                .withRecordStreamSidecarFilesUploader(rssu)
+                .withEventsStreamUploader(esu)
+                .withBackupUploader(bu)
+                .build();
+        Mockito.when(consensusCapsule.getSpec().getPodProperties().getContainers())
+                .thenReturn(containers);
+        uploaderMap = capsulePod.prepareStreamUploaderContainers(consensusCapsule);
+        Assertions.assertNotNull(uploaderMap.get(Constants.TPL_VAR_RECORD_STREAM_UPLOADER));
+        Assertions.assertNotNull(uploaderMap.get(Constants.TPL_VAR_EVENT_STREAM_UPLOADER));
+        Assertions.assertNotNull(uploaderMap.get(Constants.TPL_VAR_BACKUP_UPLOADER));
+        Assertions.assertNotNull(uploaderMap.get(Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER));
+
+        // disable rsu
+        rsu.setEnabled(false);
+        esu.setEnabled(true);
+        bu.setEnabled(true);
+        rssu.setEnabled(true);
+        containers = new ContainersBuilder()
+                .withRecordStreamUploader(rsu)
+                .withRecordStreamSidecarFilesUploader(rssu)
+                .withEventsStreamUploader(esu)
+                .withBackupUploader(bu)
+                .build();
+        Mockito.reset(consensusCapsule.getSpec().getPodProperties().getContainers());
+        Mockito.when(consensusCapsule.getSpec().getPodProperties().getContainers())
+                .thenReturn(containers);
+        uploaderMap = capsulePod.prepareStreamUploaderContainers(consensusCapsule);
+        Assertions.assertNull(uploaderMap.get(Constants.TPL_VAR_RECORD_STREAM_UPLOADER));
+        Assertions.assertNotNull(uploaderMap.get(Constants.TPL_VAR_EVENT_STREAM_UPLOADER));
+        Assertions.assertNotNull(uploaderMap.get(Constants.TPL_VAR_BACKUP_UPLOADER));
+        Assertions.assertNotNull(uploaderMap.get(Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER));
+
+        // disable esu
+        rsu.setEnabled(true);
+        esu.setEnabled(false);
+        bu.setEnabled(true);
+        rssu.setEnabled(true);
+        containers = new ContainersBuilder()
+                .withRecordStreamUploader(rsu)
+                .withRecordStreamSidecarFilesUploader(rssu)
+                .withEventsStreamUploader(esu)
+                .withBackupUploader(bu)
+                .build();
+        Mockito.reset(consensusCapsule.getSpec().getPodProperties().getContainers());
+        Mockito.when(consensusCapsule.getSpec().getPodProperties().getContainers())
+                .thenReturn(containers);
+        uploaderMap = capsulePod.prepareStreamUploaderContainers(consensusCapsule);
+        Assertions.assertNotNull(uploaderMap.get(Constants.TPL_VAR_RECORD_STREAM_UPLOADER));
+        Assertions.assertNull(uploaderMap.get(Constants.TPL_VAR_EVENT_STREAM_UPLOADER));
+        Assertions.assertNotNull(uploaderMap.get(Constants.TPL_VAR_BACKUP_UPLOADER));
+        Assertions.assertNotNull(uploaderMap.get(Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER));
+
+        // disable bu
+        rsu.setEnabled(true);
+        esu.setEnabled(true);
+        bu.setEnabled(false);
+        rssu.setEnabled(true);
+        containers = new ContainersBuilder()
+                .withRecordStreamUploader(rsu)
+                .withRecordStreamSidecarFilesUploader(rssu)
+                .withEventsStreamUploader(esu)
+                .withBackupUploader(bu)
+                .build();
+        Mockito.reset(consensusCapsule.getSpec().getPodProperties().getContainers());
+        Mockito.when(consensusCapsule.getSpec().getPodProperties().getContainers())
+                .thenReturn(containers);
+        uploaderMap = capsulePod.prepareStreamUploaderContainers(consensusCapsule);
+        Assertions.assertNotNull(uploaderMap.get(Constants.TPL_VAR_RECORD_STREAM_UPLOADER));
+        Assertions.assertNotNull(uploaderMap.get(Constants.TPL_VAR_EVENT_STREAM_UPLOADER));
+        Assertions.assertNull(uploaderMap.get(Constants.TPL_VAR_BACKUP_UPLOADER));
+        Assertions.assertNotNull(uploaderMap.get(Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER));
+
+        // disable rssu
+        rsu.setEnabled(true);
+        esu.setEnabled(true);
+        bu.setEnabled(true);
+        rssu.setEnabled(false);
+        containers = new ContainersBuilder()
+                .withRecordStreamUploader(rsu)
+                .withRecordStreamSidecarFilesUploader(rssu)
+                .withEventsStreamUploader(esu)
+                .withBackupUploader(bu)
+                .build();
+        Mockito.reset(consensusCapsule.getSpec().getPodProperties().getContainers());
+        Mockito.when(consensusCapsule.getSpec().getPodProperties().getContainers())
+                .thenReturn(containers);
+        uploaderMap = capsulePod.prepareStreamUploaderContainers(consensusCapsule);
+        Assertions.assertNotNull(uploaderMap.get(Constants.TPL_VAR_RECORD_STREAM_UPLOADER));
+        Assertions.assertNotNull(uploaderMap.get(Constants.TPL_VAR_EVENT_STREAM_UPLOADER));
+        Assertions.assertNotNull(uploaderMap.get(Constants.TPL_VAR_BACKUP_UPLOADER));
+        Assertions.assertNull(uploaderMap.get(Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER));
     }
 }

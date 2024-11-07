@@ -180,7 +180,20 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         return templateInstance;
     }
 
-    private Pod renderDeploymentTemplate(ConsensusCapsule primary, Context<ConsensusCapsule> context) {
+    protected Map<String, StreamUploader> prepareStreamUploaderContainers(ConsensusCapsule primary) {
+        final StreamUploader rsu = this.prepareRecordStreamUploader(primary);
+        final StreamUploader esu = this.prepareEventStreamUploader(primary);
+        final StreamUploader bu = this.prepareBackupUploader(primary);
+        final StreamUploader rssu = this.prepareRecordStreamSidecarFilesUploader(primary);
+
+        return Map.of(
+                TPL_VAR_RECORD_STREAM_UPLOADER, rsu,
+                TPL_VAR_EVENT_STREAM_UPLOADER, esu,
+                TPL_VAR_BACKUP_UPLOADER, bu,
+                TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER, rssu);
+    }
+
+    protected Pod renderDeploymentTemplate(ConsensusCapsule primary, Context<ConsensusCapsule> context) {
 
         // fetch public keys configmap
         final ConfigMap publicKeys = context.getClient()
@@ -191,19 +204,18 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
 
         final ConsensusNode cn =
                 primary.getSpec().getPodProperties().getContainers().getConsensusNode();
-        final StreamUploader rsu = this.prepareRecordStreamUploader(primary);
-        final StreamUploader esu = this.prepareEventStreamUploader(primary);
-        final StreamUploader bu = this.prepareBackupUploader(primary);
-        final StreamUploader rssu = this.prepareRecordStreamSidecarFilesUploader(primary);
+        final Map<String, StreamUploader> uploaders = this.prepareStreamUploaderContainers(primary);
 
         // set template variables
         TemplateInstance tplInstance = getTemplateWithDefaults(primary, context);
         tplInstance.data(TPL_VAR_PUBLIC_KEY_FILES, publicKeys.getData().keySet());
         tplInstance.data(TPL_VAR_CONSENSUS_NODE, cn);
-        tplInstance.data(TPL_VAR_RECORD_STREAM_UPLOADER, rsu);
-        tplInstance.data(TPL_VAR_EVENT_STREAM_UPLOADER, esu);
-        tplInstance.data(TPL_VAR_BACKUP_UPLOADER, bu);
-        tplInstance.data(TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER, rssu);
+        tplInstance.data(TPL_VAR_RECORD_STREAM_UPLOADER, uploaders.get(TPL_VAR_RECORD_STREAM_UPLOADER));
+        tplInstance.data(TPL_VAR_EVENT_STREAM_UPLOADER, uploaders.get(TPL_VAR_EVENT_STREAM_UPLOADER));
+        tplInstance.data(TPL_VAR_BACKUP_UPLOADER, uploaders.get(TPL_VAR_BACKUP_UPLOADER));
+        tplInstance.data(
+                TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER,
+                uploaders.get(TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER));
 
         // return an instance of Pod
         return Serialization.unmarshal(tplInstance.render(), Pod.class);
