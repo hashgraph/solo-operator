@@ -6,12 +6,12 @@ import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_ACCOUNT
 import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM_BUCKET_PATH_TEMPLATE;
 import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM_EXTENSION;
 import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM_SIG_EXTENSION;
-import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Containers;
+import com.hedera.solo.operator.test.utils.TemplateLoader;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.EnvVar;
 import io.fabric8.kubernetes.api.model.Pod;
@@ -24,8 +24,6 @@ import org.junit.jupiter.api.Test;
 
 @QuarkusTest
 public class RecordStreamUploaderTest extends ConsensusCapsuleTestAbstract {
-    public static final String RECORD_STREAM_TEMPLATE = "containers/record-stream-uploader.yaml";
-
     @Override
     @Test
     void testSingleNodeDeployment() throws Exception {
@@ -42,7 +40,8 @@ public class RecordStreamUploaderTest extends ConsensusCapsuleTestAbstract {
 
     @Override
     protected Containers prepareConsensusPodContainers() {
-        StreamUploader uploader = loadYaml(StreamUploader.class, getClass(), RECORD_STREAM_TEMPLATE);
+        StreamUploader uploader =
+                TemplateLoader.load(StreamUploader.class, TemplateLoader.TEMPLATE_RECORD_STREAM_UPLOADER);
         return getContainersBuilder().withRecordStreamUploader(uploader).build();
     }
 

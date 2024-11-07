@@ -16,7 +16,7 @@ config:
     minKeep: 1
     interval: 1
     defaultBackoff: 1
-  signature:
+  signature: # need to be false for sidecar files uploader
     require: false
     prioritize: false
   bucketName: "solo-streams"
