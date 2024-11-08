@@ -13,7 +13,6 @@ import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podpropertie
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Volumes;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.volumes.StreamsBuilder;
 import com.hedera.solo.operator.reconciler.common.Constants;
-import com.hedera.solo.operator.test.setup.Profiles;
 import com.hedera.solo.operator.test.utils.TemplateLoader;
 import io.fabric8.kubernetes.api.model.EmptyDirVolumeSource;
 import io.fabric8.kubernetes.api.model.HostPathVolumeSource;
@@ -27,8 +26,6 @@ import io.fabric8.kubernetes.api.model.VolumeBuilder;
 import io.fabric8.kubernetes.api.model.VolumeMount;
 import io.fabric8.kubernetes.api.model.VolumeMountBuilder;
 import io.fabric8.kubernetes.api.model.VolumeResourceRequirementsBuilder;
-import io.quarkus.test.junit.QuarkusTest;
-import io.quarkus.test.junit.TestProfile;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -38,8 +35,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
-@QuarkusTest
-@TestProfile(Profiles.NoCluster.class)
 public class CapsulePodTest {
     private final CapsulePod capsulePod = new CapsulePod();
 
@@ -62,7 +57,7 @@ public class CapsulePodTest {
     }
 
     @Test
-    @Description("test validation logic for PVC spec existence")
+    @Description("test validation logic for PVC spec existence works")
     void testValidatePvcIsSpecified() {
         Assertions.assertThrows(
                 IllegalArgumentException.class, () -> capsulePod.validatePvcIsSpecified(consensusCapsule, "INVALID"));
@@ -239,7 +234,7 @@ public class CapsulePodTest {
     }
 
     @Test
-    @Description("test that are stream uploader containers are prepared correctly")
+    @Description("test that stream uploader containers are prepared correctly")
     void testPrepareStreamUploaderContainers() {
         // no stream uploaders
         Mockito.when(consensusCapsule.getSpec().getPodProperties().getContainers())
@@ -308,7 +303,7 @@ public class CapsulePodTest {
     }
 
     @Test
-    @Description("test that are stream uploader containers are skipped when disabled")
+    @Description("test that stream uploader containers are skipped when disabled")
     void testPrepareStreamUploaderContainersWhenDisabled() {
         StreamUploader rsu = TemplateLoader.load(StreamUploader.class, TemplateLoader.TEMPLATE_RECORD_STREAM_UPLOADER);
         StreamUploader esu = TemplateLoader.load(StreamUploader.class, TemplateLoader.TEMPLATE_EVENTS_STREAM_UPLOADER);
