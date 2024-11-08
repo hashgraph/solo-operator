@@ -20,6 +20,7 @@ public final class Constants {
     public static final PodSecurityContextBuilder SECURITY_CONTEXT_BUILDER =
             new PodSecurityContextBuilder().withRunAsUser(HEDERA_USER).withRunAsGroup(HEDERA_GROUP);
     public static final int DEFAULT_FILE_MODE = 493; // 0755
+    public static final String NODE_NAME_FORMAT = "node%d";
 
     // HEDERA related
     public static final int HEDERA_ACCOUNT_START = 3;
@@ -47,6 +48,8 @@ public final class Constants {
     public static final String TPL_VAR_DEFAULT_MODE = "defaultMode"; // e.g. 0755
     public static final String TPL_VAR_NODE_ID = "nodeId";
     public static final String TPL_VAR_NODE_IDS = "nodeIds";
+    public static final String TPL_VAR_NODE_NAME = "nodeName";
+    public static final String TPL_VAR_NODE_NAMES = "nodeNames";
     public static final String TPL_VAR_ACCOUNT_ID = "accountId";
     public static final String TPL_VAR_SECURITY_CONTEXT = "securityContext";
     public static final String TPL_VAR_PUBLIC_KEY_FILES = "publicKeyFiles";
@@ -67,8 +70,10 @@ public final class Constants {
 
     // labels
     // FIXME all label key should have a prefix
+    public static final String OPERATOR_PREFIX = "operator.solo.hedera.com/";
     public static final String LABEL_APP = "app";
-    public static final String LABEL_ACCOUNT_ID = "account-id";
+    public static final String LABEL_ACCOUNT_ID = OPERATOR_PREFIX + "account-id";
+    public static final String LABEL_NODE_ID = OPERATOR_PREFIX + "node-id";
 
     // key types
     public static final String KEY_TYPE_GOSSIP = "gossip";

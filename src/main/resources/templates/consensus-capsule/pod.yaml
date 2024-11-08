@@ -2,9 +2,10 @@
 
 ---
 # {@String namespace}
-# {@String nodeId}
+# {@Long nodeId}
+# {@String nodeName}
+# {@java.util.List nodeNames}
 # {@String accountId}
-# {@java.util.List nodeIds}
 # {@int defaultMode}
 # {@java.util.Set publicKeyFiles}
 # {@com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.ConsensusNode cn}
@@ -21,9 +22,9 @@ metadata:
     app: consensus-node
 spec:
   restartPolicy: Never
-  hostname: "{nodeId}"
+  hostname: "{nodeName}"
   subdomain: consensus
-  serviceAccountName: "{nodeId}-sa"
+  serviceAccountName: "{nodeName}-sa"
   initContainers:
     - name: "init-consensus-node"
       # Note: We must use consensus-node image so that we can chown using hedera user and
@@ -256,8 +257,8 @@ spec:
 
             # copy grpc-tls-keys with appropriate permissions
             GRPC_TLS_VOL="/tmp/volumes/grpc-tls-keys"
-            copyFile "$GRPC_TLS_VOL/hedera-{nodeId}.key" "$HAPI_APP/hedera.key"
-            copyFile "$GRPC_TLS_VOL/hedera-{nodeId}.crt" "$HAPI_APP/hedera.crt"
+            copyFile "$GRPC_TLS_VOL/hedera-{nodeName}.key" "$HAPI_APP/hedera.key"
+            copyFile "$GRPC_TLS_VOL/hedera-{nodeName}.crt" "$HAPI_APP/hedera.crt"
 
             # copy entrypoint.sh (if it exists)
             if [[ -f "$CLUSTER_CONFIG_VOL/entrypoint.sh" ]]; then
@@ -563,11 +564,11 @@ spec:
         defaultMode: "{defaultMode}"
     - name: gossip-keys
       secret:
-        secretName: "{nodeId}-gossip-keys"
+        secretName: "{nodeName}-gossip-keys"
         defaultMode: "{defaultMode}"
     - name: grpc-tls-keys
       secret:
-        secretName: "{nodeId}-grpc-tls-keys"
+        secretName: "{nodeName}-grpc-tls-keys"
         defaultMode: "{defaultMode}"
     - name: hgcapp-record-streams
       emptyDir: {}

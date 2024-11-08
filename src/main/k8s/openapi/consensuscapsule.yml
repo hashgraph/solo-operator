@@ -71,6 +71,8 @@ components:
 
       required: # required properties. FIXME update with all the required properties
         - orbit
+        - nodeId
+        - accountId
       properties:
         orbit:
           description: |
@@ -78,6 +80,9 @@ components:
           type: string
         accountId:
           type: string
+        nodeId:
+          type: integer
+          format: int64
         eligibleForDeployment:
           type: boolean
           default: false

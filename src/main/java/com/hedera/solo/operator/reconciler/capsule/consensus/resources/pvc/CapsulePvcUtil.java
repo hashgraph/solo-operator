@@ -13,7 +13,7 @@ import java.util.Objects;
 
 class CapsulePvcUtil {
     public static String validPvcName(ConsensusCapsule cc, String volSuffix) {
-        final String nodeId = Metadata.extractNodeIdFromConsensusCapsule(cc);
+        final String nodeId = Metadata.prepareNodeName(cc);
         return "%s-%s".formatted(nodeId, volSuffix);
     }
 
