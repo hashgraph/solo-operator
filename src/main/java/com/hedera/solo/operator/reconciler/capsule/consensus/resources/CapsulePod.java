@@ -216,16 +216,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         TemplateInstance tplInstance = getTemplateWithDefaults(primary, context);
         tplInstance.data(TPL_VAR_PUBLIC_KEY_FILES, publicKeys.getData().keySet());
         tplInstance.data(TPL_VAR_CONSENSUS_NODE, cn);
-        for (String k : List.of(
-                TPL_VAR_RECORD_STREAM_UPLOADER,
-                TPL_VAR_EVENT_STREAM_UPLOADER,
-                TPL_VAR_BACKUP_UPLOADER,
-                TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER)) {
-            tplInstance.data(k, null);
-            uploaderMap.get(k).ifPresent(uploader -> {
-                tplInstance.data(k, uploader);
-            });
-        }
+        uploaderMap.forEach((k, v) -> tplInstance.data(k, v.orElse(null)));
 
         // return an instance of Pod
         return Serialization.unmarshal(tplInstance.render(), Pod.class);
