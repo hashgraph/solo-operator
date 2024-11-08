@@ -68,6 +68,7 @@ public class StreamUploadersTest extends ConsensusCapsuleTestAbstract {
             for (Pod p : consensusPods) {
                 String accountId = p.getMetadata().getLabels().get(LABEL_ACCOUNT_ID);
                 assertThat(accountId).isNotEmpty();
+                assertThat(p.getSpec().getContainers()).hasSize(4);
 
                 for (Container c : p.getSpec().getContainers()) {
                     Map<String, String> envMap = new HashMap<>();

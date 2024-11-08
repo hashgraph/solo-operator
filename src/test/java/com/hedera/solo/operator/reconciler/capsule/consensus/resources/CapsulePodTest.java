@@ -62,7 +62,7 @@ public class CapsulePodTest {
     }
 
     @Test
-    @Description("test validation logic for PVC spec existence")
+    @Description("test validation logic for PVC spec existence works")
     void testValidatePvcIsSpecified() {
         Assertions.assertThrows(
                 IllegalArgumentException.class, () -> capsulePod.validatePvcIsSpecified(consensusCapsule, "INVALID"));
@@ -239,7 +239,7 @@ public class CapsulePodTest {
     }
 
     @Test
-    @Description("test that are stream uploader containers are prepared correctly")
+    @Description("test that stream uploader containers are prepared correctly")
     void testPrepareStreamUploaderContainers() {
         // no stream uploaders
         Mockito.when(consensusCapsule.getSpec().getPodProperties().getContainers())
@@ -308,7 +308,7 @@ public class CapsulePodTest {
     }
 
     @Test
-    @Description("test that are stream uploader containers are skipped when disabled")
+    @Description("test that stream uploader containers are skipped when disabled")
     void testPrepareStreamUploaderContainersWhenDisabled() {
         StreamUploader rsu = TemplateLoader.load(StreamUploader.class, TemplateLoader.TEMPLATE_RECORD_STREAM_UPLOADER);
         StreamUploader esu = TemplateLoader.load(StreamUploader.class, TemplateLoader.TEMPLATE_EVENTS_STREAM_UPLOADER);
