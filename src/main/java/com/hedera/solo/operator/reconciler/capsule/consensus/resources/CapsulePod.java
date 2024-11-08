@@ -223,7 +223,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
     }
 
     private Optional<StreamUploader> prepareRecordStreamUploader(ConsensusCapsule primary) {
-        final Optional<StreamUploader> rsu = this.setStreamUploaderExtensions(
+        final Optional<StreamUploader> rsu = this.setStreamFileExtensions(
                 primary.getSpec().getPodProperties().getContainers().getRecordStreamUploader(),
                 RECORD_STREAM_EXTENSION,
                 RECORD_STREAM_SIG_EXTENSION);
@@ -242,7 +242,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
     }
 
     private Optional<StreamUploader> prepareRecordStreamSidecarFilesUploader(ConsensusCapsule primary) {
-        final Optional<StreamUploader> rssu = this.setStreamUploaderExtensions(
+        final Optional<StreamUploader> rssu = this.setStreamFileExtensions(
                 primary.getSpec().getPodProperties().getContainers().getRecordStreamSidecarFilesUploader(),
                 RECORD_STREAM_EXTENSION,
                 RECORD_STREAM_SIG_EXTENSION);
@@ -265,7 +265,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
     }
 
     private Optional<StreamUploader> prepareEventStreamUploader(ConsensusCapsule primary) {
-        final Optional<StreamUploader> esu = this.setStreamUploaderExtensions(
+        final Optional<StreamUploader> esu = this.setStreamFileExtensions(
                 primary.getSpec().getPodProperties().getContainers().getEventsStreamUploader(),
                 EVENT_STREAM_EXTENSION,
                 EVENT_STREAM_SIG_EXTENSION);
@@ -293,7 +293,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         return Optional.of(bu);
     }
 
-    private Optional<StreamUploader> setStreamUploaderExtensions(
+    protected Optional<StreamUploader> setStreamFileExtensions(
             final StreamUploader uploader, final String streamExtension, String streamSigExtension) {
 
         if (Objects.isNull(uploader) || !uploader.getEnabled()) {
@@ -303,18 +303,18 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         Objects.requireNonNull(streamExtension);
         Objects.requireNonNull(streamSigExtension);
 
+        // set file extensions
         if (StringUtil.isNullOrEmpty(uploader.getConfig().getStreamFileExtension())) {
             uploader.getConfig().setStreamFileExtension(streamExtension);
         }
-
-        if (StringUtil.isNullOrEmpty(uploader.getConfig().getStreamSigExtension())) {
-            uploader.getConfig().setStreamSigExtension(streamSigExtension);
-        }
-
         if (StringUtil.isNullOrEmpty(uploader.getConfig().getStreamExtension())) {
             uploader.getConfig().setStreamExtension(streamExtension);
         }
 
+        // set sig extensions
+        if (StringUtil.isNullOrEmpty(uploader.getConfig().getStreamSigExtension())) {
+            uploader.getConfig().setStreamSigExtension(streamSigExtension);
+        }
         if (StringUtil.isNullOrEmpty(uploader.getConfig().getSigExtension())) {
             uploader.getConfig().setSigExtension(streamSigExtension);
         }

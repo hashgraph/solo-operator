@@ -261,6 +261,13 @@ public class CapsulePodTest {
         esu.setEnabled(true);
         bu.setEnabled(true);
         rssu.setEnabled(true);
+
+        // unset stream file extensions to ensure it is set properly
+        rsu.getConfig().setStreamExtension(null);
+        rsu.getConfig().setStreamSigExtension(null);
+        rsu.getConfig().setStreamExtension(null);
+        rsu.getConfig().setStreamSigExtension(null);
+
         Containers containers = new ContainersBuilder()
                 .withRecordStreamUploader(rsu)
                 .withRecordStreamSidecarFilesUploader(rssu)
@@ -293,13 +300,32 @@ public class CapsulePodTest {
                 .getSignature()
                 .getRequire());
 
-        // check if file extension set properly when compression is enabled
-        rsu = uploaderMap.get(Constants.TPL_VAR_RECORD_STREAM_UPLOADER).get();
-        if (rsu.getConfig().getEnableCompression()) {
-            Assertions.assertTrue(rsu.getConfig().getStreamExtension().endsWith(".gz"));
+        // check stream file extensions are set properly for record stream uploader
+        StreamUploader rsu_returned =
+                uploaderMap.get(Constants.TPL_VAR_RECORD_STREAM_UPLOADER).get();
+        if (rsu_returned.getConfig().getEnableCompression()) {
+            Assertions.assertTrue(rsu_returned.getConfig().getStreamExtension().endsWith(".gz"));
         } else {
-            Assertions.assertFalse(rsu.getConfig().getStreamExtension().endsWith(".gz"));
+            Assertions.assertFalse(rsu_returned.getConfig().getStreamExtension().endsWith(".gz"));
         }
+        Assertions.assertEquals(
+                Constants.RECORD_STREAM_EXTENSION, rsu_returned.getConfig().getStreamFileExtension());
+        Assertions.assertEquals(
+                Constants.RECORD_STREAM_SIG_EXTENSION, rsu_returned.getConfig().getStreamSigExtension());
+        Assertions.assertEquals(
+                Constants.RECORD_STREAM_SIG_EXTENSION, rsu_returned.getConfig().getSigExtension());
+
+        // check stream file extensions are set properly for event stream uploaders
+        StreamUploader esu_returned =
+                uploaderMap.get(Constants.TPL_VAR_EVENT_STREAM_UPLOADER).get();
+        Assertions.assertEquals(
+                Constants.EVENT_STREAM_EXTENSION, esu_returned.getConfig().getStreamFileExtension());
+        Assertions.assertEquals(
+                Constants.EVENT_STREAM_EXTENSION, esu_returned.getConfig().getStreamFileExtension());
+        Assertions.assertEquals(
+                Constants.EVENT_STREAM_SIG_EXTENSION, esu_returned.getConfig().getStreamSigExtension());
+        Assertions.assertEquals(
+                Constants.EVENT_STREAM_SIG_EXTENSION, esu_returned.getConfig().getSigExtension());
     }
 
     @Test
