@@ -30,6 +30,7 @@ java {
 tasks.withType<Test>().configureEach {
     if (System.getenv().containsKey("CI")) {
         environment("SOLO_TEST_SNAPSHOT_ENABLED", "true")
+        jvmArgs("-XX:+HeapDumpOnOutOfMemoryError")
     }
     systemProperty("java.util.logging.manager", "org.jboss.logmanager.LogManager")
     systemProperty("junit.jupiter.execution.parallel.enabled", "false")
