@@ -186,7 +186,20 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         return templateInstance;
     }
 
-    private Pod renderDeploymentTemplate(ConsensusCapsule primary, Context<ConsensusCapsule> context) {
+    protected Map<String, Optional<StreamUploader>> prepareStreamUploaderContainers(ConsensusCapsule primary) {
+        final Optional<StreamUploader> rsu = this.prepareRecordStreamUploader(primary);
+        final Optional<StreamUploader> esu = this.prepareEventStreamUploader(primary);
+        final Optional<StreamUploader> bu = this.prepareBackupUploader(primary);
+        final Optional<StreamUploader> rssu = this.prepareRecordStreamSidecarFilesUploader(primary);
+
+        return Map.of(
+                TPL_VAR_RECORD_STREAM_UPLOADER, rsu,
+                TPL_VAR_EVENT_STREAM_UPLOADER, esu,
+                TPL_VAR_BACKUP_UPLOADER, bu,
+                TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER, rssu);
+    }
+
+    protected Pod renderDeploymentTemplate(ConsensusCapsule primary, Context<ConsensusCapsule> context) {
 
         // fetch public keys configmap
         final ConfigMap publicKeys = context.getClient()
@@ -197,119 +210,116 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
 
         final ConsensusNode cn =
                 primary.getSpec().getPodProperties().getContainers().getConsensusNode();
-        final StreamUploader rsu = this.prepareRecordStreamUploader(primary);
-        final StreamUploader esu = this.prepareEventStreamUploader(primary);
-        final StreamUploader bu = this.prepareBackupUploader(primary);
-        final StreamUploader rssu = this.prepareRecordStreamSidecarFilesUploader(primary);
+        final Map<String, Optional<StreamUploader>> uploaderMap = this.prepareStreamUploaderContainers(primary);
 
         // set template variables
         TemplateInstance tplInstance = getTemplateWithDefaults(primary, context);
         tplInstance.data(TPL_VAR_PUBLIC_KEY_FILES, publicKeys.getData().keySet());
         tplInstance.data(TPL_VAR_CONSENSUS_NODE, cn);
-        tplInstance.data(TPL_VAR_RECORD_STREAM_UPLOADER, rsu);
-        tplInstance.data(TPL_VAR_EVENT_STREAM_UPLOADER, esu);
-        tplInstance.data(TPL_VAR_BACKUP_UPLOADER, bu);
-        tplInstance.data(TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER, rssu);
+        uploaderMap.forEach((k, v) -> tplInstance.data(k, v.orElse(null)));
 
         // return an instance of Pod
         return Serialization.unmarshal(tplInstance.render(), Pod.class);
     }
 
-    private StreamUploader prepareRecordStreamUploader(ConsensusCapsule primary) {
-        final StreamUploader rsu = this.setStreamUploaderExtensions(
+    private Optional<StreamUploader> prepareRecordStreamUploader(ConsensusCapsule primary) {
+        final Optional<StreamUploader> rsu = this.setStreamFileExtensions(
                 primary.getSpec().getPodProperties().getContainers().getRecordStreamUploader(),
                 RECORD_STREAM_EXTENSION,
                 RECORD_STREAM_SIG_EXTENSION);
 
-        if (Objects.nonNull(rsu) && rsu.getConfig().getEnableCompression()) {
-            rsu.getConfig().setStreamExtension("%s.gz".formatted(RECORD_STREAM_EXTENSION));
-        }
+        rsu.ifPresent(uploader -> {
+            if (uploader.getConfig().getEnableCompression()) {
+                uploader.getConfig().setStreamExtension("%s.gz".formatted(RECORD_STREAM_EXTENSION));
+            }
 
-        if (Objects.nonNull(rsu)) {
-            rsu.getConfig()
+            uploader.getConfig()
                     .setBucketPath(RECORD_STREAM_BUCKET_PATH_TEMPLATE.formatted(
                             primary.getSpec().getAccountId()));
-        }
+        });
 
         return rsu;
     }
 
-    private StreamUploader prepareRecordStreamSidecarFilesUploader(ConsensusCapsule primary) {
-        final StreamUploader rssu = this.setStreamUploaderExtensions(
+    private Optional<StreamUploader> prepareRecordStreamSidecarFilesUploader(ConsensusCapsule primary) {
+        final Optional<StreamUploader> rssu = this.setStreamFileExtensions(
                 primary.getSpec().getPodProperties().getContainers().getRecordStreamSidecarFilesUploader(),
                 RECORD_STREAM_EXTENSION,
                 RECORD_STREAM_SIG_EXTENSION);
 
-        if (Objects.nonNull(rssu) && rssu.getConfig().getEnableCompression()) {
-            rssu.getConfig().setStreamExtension("%s.gz".formatted(RECORD_STREAM_EXTENSION));
-        }
+        rssu.ifPresent(uploader -> {
+            if (uploader.getConfig().getEnableCompression()) {
+                uploader.getConfig().setStreamExtension("%s.gz".formatted(RECORD_STREAM_EXTENSION));
+            }
 
-        if (Objects.nonNull(rssu)) {
-            rssu.getConfig()
+            uploader.getConfig()
                     .setBucketPath(RECORD_STREAM_BUCKET_PATH_TEMPLATE.formatted(
                             primary.getSpec().getAccountId()));
-        }
+
+            // force it to be false as we don't need signature for sidecar files
+            uploader.getConfig().getSignature().setPrioritize(false);
+            uploader.getConfig().getSignature().setRequire(false);
+        });
 
         return rssu;
     }
 
-    private StreamUploader prepareEventStreamUploader(ConsensusCapsule primary) {
-        final StreamUploader esu = this.setStreamUploaderExtensions(
+    private Optional<StreamUploader> prepareEventStreamUploader(ConsensusCapsule primary) {
+        final Optional<StreamUploader> esu = this.setStreamFileExtensions(
                 primary.getSpec().getPodProperties().getContainers().getEventsStreamUploader(),
                 EVENT_STREAM_EXTENSION,
                 EVENT_STREAM_SIG_EXTENSION);
 
-        if (Objects.nonNull(esu)) {
-            esu.getConfig()
-                    .setBucketPath(EVENT_STREAM_BUCKET_PATH_TEMPLATE.formatted(
-                            primary.getSpec().getAccountId()));
-        }
+        esu.ifPresent(uploader -> uploader.getConfig()
+                .setBucketPath(EVENT_STREAM_BUCKET_PATH_TEMPLATE.formatted(
+                        primary.getSpec().getAccountId())));
 
         return esu;
     }
 
-    private StreamUploader prepareBackupUploader(ConsensusCapsule primary) {
+    private Optional<StreamUploader> prepareBackupUploader(ConsensusCapsule primary) {
         final StreamUploader bu =
                 primary.getSpec().getPodProperties().getContainers().getBackupUploader();
 
-        if (Objects.nonNull(bu)) {
-            bu.getConfig()
-                    .setBucketPath("%s/%s"
-                            .formatted(
-                                    bu.getConfig().getS3().getUrl(),
-                                    bu.getConfig().getBucketName()));
+        if (Objects.isNull(bu) || !bu.getEnabled()) {
+            return Optional.empty();
         }
 
-        return bu;
+        bu.getConfig()
+                .setBucketPath("%s/%s"
+                        .formatted(
+                                bu.getConfig().getS3().getUrl(), bu.getConfig().getBucketName()));
+
+        return Optional.of(bu);
     }
 
-    private StreamUploader setStreamUploaderExtensions(
+    protected Optional<StreamUploader> setStreamFileExtensions(
             final StreamUploader uploader, final String streamExtension, String streamSigExtension) {
 
-        if (Objects.isNull(uploader)) {
-            return null;
+        if (Objects.isNull(uploader) || !uploader.getEnabled()) {
+            return Optional.empty();
         }
 
         Objects.requireNonNull(streamExtension);
         Objects.requireNonNull(streamSigExtension);
 
+        // set file extensions
         if (StringUtil.isNullOrEmpty(uploader.getConfig().getStreamFileExtension())) {
             uploader.getConfig().setStreamFileExtension(streamExtension);
         }
-
-        if (StringUtil.isNullOrEmpty(uploader.getConfig().getStreamSigExtension())) {
-            uploader.getConfig().setStreamSigExtension(streamSigExtension);
-        }
-
         if (StringUtil.isNullOrEmpty(uploader.getConfig().getStreamExtension())) {
             uploader.getConfig().setStreamExtension(streamExtension);
         }
 
+        // set sig extensions
+        if (StringUtil.isNullOrEmpty(uploader.getConfig().getStreamSigExtension())) {
+            uploader.getConfig().setStreamSigExtension(streamSigExtension);
+        }
         if (StringUtil.isNullOrEmpty(uploader.getConfig().getSigExtension())) {
             uploader.getConfig().setSigExtension(streamSigExtension);
         }
 
-        return uploader;
+        return Optional.of(uploader);
     }
 
     private static List<String> getNodeNames(Context<ConsensusCapsule> context, String namespace) {
