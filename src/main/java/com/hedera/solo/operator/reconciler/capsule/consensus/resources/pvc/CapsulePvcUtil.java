@@ -23,33 +23,31 @@ class CapsulePvcUtil {
         Objects.requireNonNull(primary.getSpec());
     }
 
-    public static PersistentVolumeClaimSpec desiredPvcSpec(PersistentVolumeClaimSpec input, String volSuffix) {
-        Objects.requireNonNull(input);
-        Objects.requireNonNull(input.getAccessModes());
-        Objects.requireNonNull(input.getResources());
+    public static PersistentVolumeClaim prepareDesired(
+            ConsensusCapsule primary, PersistentVolumeClaim input, String volSuffix) {
 
-        if (input.getResources().getRequests() == null
-                || Objects.equals(input.getResources().getRequests().get("storage"), Quantity.parse("0"))) {
+        Objects.requireNonNull(input);
+        Objects.requireNonNull(input.getSpec());
+        Objects.requireNonNull(input.getSpec().getAccessModes());
+        Objects.requireNonNull(input.getSpec().getResources());
+
+        if (input.getSpec().getResources().getRequests() == null
+                || Objects.equals(input.getSpec().getResources().getRequests().get("storage"), Quantity.parse("0"))) {
             throw new IllegalArgumentException("capacity cannot be empty for PVC '%s'".formatted(volSuffix));
         }
 
-        if (input.getAccessModes().isEmpty()) {
+        if (input.getSpec().getAccessModes().isEmpty()) {
             throw new IllegalArgumentException("access-mode cannot be empty for PVC '%s'".formatted(volSuffix));
         }
 
-        return new PersistentVolumeClaimSpecBuilder()
-                .withAccessModes(input.getAccessModes())
-                .withResources(input.getResources())
+        PersistentVolumeClaimSpec ps = new PersistentVolumeClaimSpecBuilder()
+                .withAccessModes(input.getSpec().getAccessModes())
+                .withResources(input.getSpec().getResources())
                 .build();
-    }
-
-    public static PersistentVolumeClaim prepareDesired(
-            ConsensusCapsule primary, PersistentVolumeClaimSpec pvcSpec, String volSuffix) {
-        final PersistentVolumeClaimSpec ps = CapsulePvcUtil.desiredPvcSpec(pvcSpec, volSuffix);
 
         PersistentVolumeClaimBuilder builder = new PersistentVolumeClaimBuilder();
         return builder.editMetadata()
-                .withName(CapsulePvcUtil.validPvcName(primary, volSuffix))
+                .withName(input.getMetadata().getName())
                 .withNamespace(primary.getMetadata().getNamespace())
                 .endMetadata()
                 .withSpec(ps)

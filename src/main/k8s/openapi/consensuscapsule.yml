@@ -177,15 +177,12 @@ components:
                 upgrade:
                   type: object
                   x-java-type: io.fabric8.kubernetes.api.model.Volume
-                streams:
+                records:
                   type: object
-                  properties:
-                    record:
-                      type: object
-                      x-java-type: io.fabric8.kubernetes.api.model.Volume
-                    events:
-                      type: object
-                      x-java-type: io.fabric8.kubernetes.api.model.Volume
+                  x-java-type: io.fabric8.kubernetes.api.model.Volume
+                events:
+                  type: object
+                  x-java-type: io.fabric8.kubernetes.api.model.Volume
                 additionalVolumes:
                   type: array
                   items:
@@ -196,25 +193,22 @@ components:
           properties:
             logs:
               type: object
-              x-java-type: io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec
+              x-java-type: io.fabric8.kubernetes.api.model.PersistentVolumeClaim
             stats:
               type: object
-              x-java-type: io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec
+              x-java-type: io.fabric8.kubernetes.api.model.PersistentVolumeClaim
             states:
               type: object
-              x-java-type: io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec
+              x-java-type: io.fabric8.kubernetes.api.model.PersistentVolumeClaim
             upgrade:
               type: object
-              x-java-type: io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec
-            streams:
+              x-java-type: io.fabric8.kubernetes.api.model.PersistentVolumeClaim
+            records:
               type: object
-              properties:
-                record:
-                  type: object
-                  x-java-type: io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec
-                events:
-                  type: object
-                  x-java-type: io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec
+              x-java-type: io.fabric8.kubernetes.api.model.PersistentVolumeClaim
+            events:
+              type: object
+              x-java-type: io.fabric8.kubernetes.api.model.PersistentVolumeClaim
             additionalVolumes:
               type: array
               items:
@@ -243,7 +237,7 @@ components:
           type: integer
         addressBookEntry:
           description: |
-              The address book entry for the `ConsensusCapsule`. This is the entry that will be used by the `Orbit` to
-              communicate with the `ConsensusCapsule`.
+            The address book entry for the `ConsensusCapsule`. This is the entry that will be used by the `Orbit` to
+            communicate with the `ConsensusCapsule`.
           type: object
           x-java-type: com.hedera.solo.operator.model.commonspec.AddressBookEntry

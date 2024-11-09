@@ -387,24 +387,16 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
 
             case VOLUME_RECORD_STREAM_NAME_SUFFIX:
                 if (primary.getSpec().getPersistentVolumeClaims() == null
-                        || primary.getSpec().getPersistentVolumeClaims().getStreams() == null
-                        || primary.getSpec()
-                                        .getPersistentVolumeClaims()
-                                        .getStreams()
-                                        .getRecord()
-                                == null) {
+                        || primary.getSpec().getPersistentVolumeClaims() == null
+                        || primary.getSpec().getPersistentVolumeClaims().getRecords() == null) {
                     throw new IllegalArgumentException(ERR_PERSISTENT_VOL_NOT_SPECIFIED.formatted(volName));
                 }
                 break;
 
             case VOLUME_EVENTS_STREAM_NAME_SUFFIX:
                 if (primary.getSpec().getPersistentVolumeClaims() == null
-                        || primary.getSpec().getPersistentVolumeClaims().getStreams() == null
-                        || primary.getSpec()
-                                        .getPersistentVolumeClaims()
-                                        .getStreams()
-                                        .getEvents()
-                                == null) {
+                        || primary.getSpec().getPersistentVolumeClaims() == null
+                        || primary.getSpec().getPersistentVolumeClaims().getEvents() == null) {
                     throw new IllegalArgumentException(ERR_PERSISTENT_VOL_NOT_SPECIFIED.formatted(volName));
                 }
                 break;
@@ -472,24 +464,18 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
             vb.ifPresent(volumeBuilder -> volumes.add(volumeBuilder.build()));
         }
 
-        if (primary.getSpec().getPodProperties().getVolumes().getStreams() != null) {
-            if (primary.getSpec().getPodProperties().getVolumes().getStreams().getRecord() != null) {
-                final Volume inputVol = primary.getSpec()
-                        .getPodProperties()
-                        .getVolumes()
-                        .getStreams()
-                        .getRecord();
+        if (primary.getSpec().getPodProperties().getVolumes() != null) {
+            if (primary.getSpec().getPodProperties().getVolumes().getRecords() != null) {
+                final Volume inputVol =
+                        primary.getSpec().getPodProperties().getVolumes().getRecords();
                 final Optional<VolumeBuilder> vb =
                         getVolumeBuilder(primary, inputVol, VOLUME_RECORD_STREAM_NAME_SUFFIX);
                 vb.ifPresent(volumeBuilder -> volumes.add(volumeBuilder.build()));
             }
 
-            if (primary.getSpec().getPodProperties().getVolumes().getStreams().getEvents() != null) {
-                final Volume inputVol = primary.getSpec()
-                        .getPodProperties()
-                        .getVolumes()
-                        .getStreams()
-                        .getEvents();
+            if (primary.getSpec().getPodProperties().getVolumes().getEvents() != null) {
+                final Volume inputVol =
+                        primary.getSpec().getPodProperties().getVolumes().getEvents();
                 final Optional<VolumeBuilder> vb =
                         getVolumeBuilder(primary, inputVol, VOLUME_EVENTS_STREAM_NAME_SUFFIX);
                 vb.ifPresent(volumeBuilder -> volumes.add(volumeBuilder.build()));

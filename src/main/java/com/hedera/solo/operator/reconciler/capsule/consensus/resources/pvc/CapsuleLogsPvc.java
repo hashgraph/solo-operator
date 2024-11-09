@@ -6,7 +6,6 @@ import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_LOGS_N
 
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaim;
-import io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.DependentResource;
@@ -23,7 +22,7 @@ public class CapsuleLogsPvc extends CRUDKubernetesDependentResource<PersistentVo
         super(PersistentVolumeClaim.class);
     }
 
-    private static PersistentVolumeClaimSpec getInputPvcSpec(final ConsensusCapsule primary) {
+    private static PersistentVolumeClaim getInputPvc(final ConsensusCapsule primary) {
         if (primary.getSpec().getPersistentVolumeClaims() == null) {
             return null;
         }
@@ -34,7 +33,7 @@ public class CapsuleLogsPvc extends CRUDKubernetesDependentResource<PersistentVo
     @Override
     protected PersistentVolumeClaim desired(final ConsensusCapsule primary, final Context<ConsensusCapsule> context) {
         CapsulePvcUtil.validate(primary);
-        return CapsulePvcUtil.prepareDesired(primary, getInputPvcSpec(primary), VOLUME_LOGS_NAME_SUFFIX);
+        return CapsulePvcUtil.prepareDesired(primary, getInputPvc(primary), VOLUME_LOGS_NAME_SUFFIX);
     }
 
     public static class Ready implements Condition<PersistentVolumeClaim, ConsensusCapsule> {
@@ -43,7 +42,7 @@ public class CapsuleLogsPvc extends CRUDKubernetesDependentResource<PersistentVo
                 DependentResource<PersistentVolumeClaim, ConsensusCapsule> dependentResource,
                 ConsensusCapsule primary,
                 Context<ConsensusCapsule> context) {
-            return getInputPvcSpec(primary) != null;
+            return getInputPvc(primary) != null;
         }
     }
 

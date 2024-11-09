@@ -7,16 +7,17 @@ import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleSpec;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PersistentVolumeClaims;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PodProperties;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.persistentvolumeclaims.Streams;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Containers;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.ContainersBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Volumes;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.volumes.StreamsBuilder;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.test.utils.TemplateLoader;
 import io.fabric8.kubernetes.api.model.EmptyDirVolumeSource;
 import io.fabric8.kubernetes.api.model.HostPathVolumeSource;
 import io.fabric8.kubernetes.api.model.HostPathVolumeSourceBuilder;
+import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaim;
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaimBuilder;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpecBuilder;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSource;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSourceBuilder;
@@ -41,7 +42,6 @@ public class CapsulePodTest {
     private final ConsensusCapsule consensusCapsule = Mockito.mock(ConsensusCapsule.class);
     private final ConsensusCapsuleSpec consensusCapsuleSpec = Mockito.mock(ConsensusCapsuleSpec.class);
     private final PersistentVolumeClaims persistentVolumeClaims = Mockito.mock(PersistentVolumeClaims.class);
-    private final Streams streams = Mockito.mock(Streams.class);
     private final PodProperties podProperties = Mockito.mock(PodProperties.class);
 
     @BeforeEach
@@ -49,9 +49,7 @@ public class CapsulePodTest {
         Mockito.reset(consensusCapsule);
         Mockito.reset(consensusCapsuleSpec);
         Mockito.reset(persistentVolumeClaims);
-        Mockito.reset(streams);
         Mockito.when(consensusCapsule.getSpec()).thenReturn(consensusCapsuleSpec);
-        Mockito.when(persistentVolumeClaims.getStreams()).thenReturn(streams);
         Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims()).thenReturn(persistentVolumeClaims);
         Mockito.when(consensusCapsule.getSpec().getPodProperties()).thenReturn(podProperties);
     }
@@ -71,17 +69,9 @@ public class CapsulePodTest {
                 .thenReturn(null);
         Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getStats())
                 .thenReturn(null);
-        Mockito.when(consensusCapsule
-                        .getSpec()
-                        .getPersistentVolumeClaims()
-                        .getStreams()
-                        .getRecord())
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getRecords())
                 .thenReturn(null);
-        Mockito.when(consensusCapsule
-                        .getSpec()
-                        .getPersistentVolumeClaims()
-                        .getStreams()
-                        .getEvents())
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getEvents())
                 .thenReturn(null);
         Assertions.assertThrows(
                 IllegalArgumentException.class,
@@ -175,15 +165,19 @@ public class CapsulePodTest {
         // check PVC builder
         Mockito.when(inputVol.getHostPath()).thenReturn(null);
         Mockito.when(inputVol.getPersistentVolumeClaim()).thenReturn(pvcs);
-        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getLogs())
-                .thenReturn(new PersistentVolumeClaimSpecBuilder()
+        PersistentVolumeClaim pvc = new PersistentVolumeClaimBuilder()
+                .withMetadata(new ObjectMetaBuilder().withName("node0-output").build())
+                .withSpec(new PersistentVolumeClaimSpecBuilder()
                         .withAccessModes("ReadWriteOnce")
                         .withResources(new VolumeResourceRequirementsBuilder()
                                 .withRequests(Map.of(
                                         "storage",
-                                        new QuantityBuilder().withAmount("50Mi").build()))
+                                        new QuantityBuilder().withAmount("1Gi").build()))
                                 .build())
-                        .build());
+                        .build())
+                .build();
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getLogs())
+                .thenReturn(pvc);
         vb = capsulePod.getVolumeBuilder(consensusCapsule, inputVol, Constants.VOLUME_LOGS_NAME_SUFFIX);
         Assertions.assertTrue(vb.isPresent());
         Volume pv = vb.get().build();
@@ -220,14 +214,13 @@ public class CapsulePodTest {
                 .thenReturn(new VolumeBuilder()
                         .withEmptyDir(new EmptyDirVolumeSource())
                         .build());
-        Mockito.when(volumes.getStreams())
-                .thenReturn(new StreamsBuilder()
-                        .withRecord(new VolumeBuilder()
-                                .withEmptyDir(new EmptyDirVolumeSource())
-                                .build())
-                        .withEvents(new VolumeBuilder()
-                                .withEmptyDir(new EmptyDirVolumeSource())
-                                .build())
+        Mockito.when(volumes.getRecords())
+                .thenReturn(new VolumeBuilder()
+                        .withEmptyDir(new EmptyDirVolumeSource())
+                        .build());
+        Mockito.when(volumes.getEvents())
+                .thenReturn(new VolumeBuilder()
+                        .withEmptyDir(new EmptyDirVolumeSource())
                         .build());
         Assertions.assertEquals(
                 6, capsulePod.getDesiredPodVolumes(consensusCapsule).size());

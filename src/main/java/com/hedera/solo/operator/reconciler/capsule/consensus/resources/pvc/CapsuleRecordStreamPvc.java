@@ -6,7 +6,6 @@ import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_RECORD
 
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaim;
-import io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.DependentResource;
@@ -23,19 +22,19 @@ public class CapsuleRecordStreamPvc extends CRUDKubernetesDependentResource<Pers
         super(PersistentVolumeClaim.class);
     }
 
-    private static PersistentVolumeClaimSpec getInputPvcSpec(final ConsensusCapsule primary) {
+    private static PersistentVolumeClaim getInputPvc(final ConsensusCapsule primary) {
         if (primary.getSpec().getPersistentVolumeClaims() == null
-                || primary.getSpec().getPersistentVolumeClaims().getStreams() == null) {
+                || primary.getSpec().getPersistentVolumeClaims().getRecords() == null) {
             return null;
         }
 
-        return primary.getSpec().getPersistentVolumeClaims().getStreams().getRecord();
+        return primary.getSpec().getPersistentVolumeClaims().getRecords();
     }
 
     @Override
     protected PersistentVolumeClaim desired(final ConsensusCapsule primary, final Context<ConsensusCapsule> context) {
         CapsulePvcUtil.validate(primary);
-        return CapsulePvcUtil.prepareDesired(primary, getInputPvcSpec(primary), VOLUME_RECORD_STREAM_NAME_SUFFIX);
+        return CapsulePvcUtil.prepareDesired(primary, getInputPvc(primary), VOLUME_RECORD_STREAM_NAME_SUFFIX);
     }
 
     public static class Ready implements Condition<PersistentVolumeClaim, ConsensusCapsule> {
@@ -44,7 +43,7 @@ public class CapsuleRecordStreamPvc extends CRUDKubernetesDependentResource<Pers
                 DependentResource<PersistentVolumeClaim, ConsensusCapsule> dependentResource,
                 ConsensusCapsule primary,
                 Context<ConsensusCapsule> context) {
-            return getInputPvcSpec(primary) != null;
+            return getInputPvc(primary) != null;
         }
     }
 

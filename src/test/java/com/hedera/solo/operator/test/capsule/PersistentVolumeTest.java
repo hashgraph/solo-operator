@@ -18,9 +18,7 @@ import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PersistentVo
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PersistentVolumeClaimsBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Volumes;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.VolumesBuilder;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.volumes.StreamsBuilder;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaim;
-import io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSource;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSourceBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
@@ -53,14 +51,12 @@ public class PersistentVolumeTest extends ConsensusCapsuleTestAbstract {
                 .withStats(prepareVolumeWithClaimSource(node, VOLUME_STATS_NAME_SUFFIX))
                 .withStates(prepareVolumeWithClaimSource(node, VOLUME_STATES_NAME_SUFFIX))
                 .withUpgrade(prepareVolumeWithClaimSource(node, VOLUME_UPGRADE_NAME_SUFFIX))
-                .withStreams(new StreamsBuilder()
-                        .withRecord(prepareVolumeWithClaimSource(node, VOLUME_RECORD_STREAM_NAME_SUFFIX))
-                        .withEvents(prepareVolumeWithClaimSource(node, VOLUME_EVENTS_STREAM_NAME_SUFFIX))
-                        .build())
+                .withRecords(prepareVolumeWithClaimSource(node, VOLUME_RECORD_STREAM_NAME_SUFFIX))
+                .withEvents(prepareVolumeWithClaimSource(node, VOLUME_EVENTS_STREAM_NAME_SUFFIX))
                 .build();
     }
 
-    protected PersistentVolumeClaimSpec preparePvcSpec(NodeInfo node, String volSuffix) {
+    protected PersistentVolumeClaim prepareInputPvc(NodeInfo node, String volSuffix) {
         PersistentVolumeClaim pvc = loadYaml(
                         PersistentVolumeClaim.class, getClass(), "pvc/%s-pvc.yaml".formatted(volSuffix))
                 .edit()
@@ -70,22 +66,18 @@ public class PersistentVolumeTest extends ConsensusCapsuleTestAbstract {
                 .addToLabels("consensus-capsule", node.name())
                 .endMetadata()
                 .build();
-        return pvc.getSpec();
+        return pvc;
     }
 
     @Override
     protected PersistentVolumeClaims prepareCapsulePVCs(NodeInfo node) {
         return new PersistentVolumeClaimsBuilder()
-                .withLogs(preparePvcSpec(node, VOLUME_LOGS_NAME_SUFFIX))
-                .withStats(preparePvcSpec(node, VOLUME_STATS_NAME_SUFFIX))
-                .withStates(preparePvcSpec(node, VOLUME_STATES_NAME_SUFFIX))
-                .withUpgrade(preparePvcSpec(node, VOLUME_UPGRADE_NAME_SUFFIX))
-                .withStreams(
-                        new com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.persistentvolumeclaims
-                                        .StreamsBuilder()
-                                .withRecord(preparePvcSpec(node, VOLUME_RECORD_STREAM_NAME_SUFFIX))
-                                .withEvents(preparePvcSpec(node, VOLUME_EVENTS_STREAM_NAME_SUFFIX))
-                                .build())
+                .withLogs(prepareInputPvc(node, VOLUME_LOGS_NAME_SUFFIX))
+                .withStats(prepareInputPvc(node, VOLUME_STATS_NAME_SUFFIX))
+                .withStates(prepareInputPvc(node, VOLUME_STATES_NAME_SUFFIX))
+                .withUpgrade(prepareInputPvc(node, VOLUME_UPGRADE_NAME_SUFFIX))
+                .withRecords(prepareInputPvc(node, VOLUME_RECORD_STREAM_NAME_SUFFIX))
+                .withEvents(prepareInputPvc(node, VOLUME_EVENTS_STREAM_NAME_SUFFIX))
                 .build();
     }
 

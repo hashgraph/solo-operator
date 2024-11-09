@@ -15,7 +15,6 @@ import static org.awaitility.Awaitility.await;
 
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Volumes;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.VolumesBuilder;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.volumes.StreamsBuilder;
 import io.fabric8.kubernetes.api.model.HostPathVolumeSource;
 import io.fabric8.kubernetes.api.model.HostPathVolumeSourceBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
@@ -55,10 +54,8 @@ public class HostpathVolumeTest extends ConsensusCapsuleTestAbstract {
                 .withStats(prepareVolumeWithHostpathSource(node, VOLUME_STATS_NAME_SUFFIX))
                 .withStates(prepareVolumeWithHostpathSource(node, VOLUME_STATES_NAME_SUFFIX))
                 .withUpgrade(prepareVolumeWithHostpathSource(node, VOLUME_UPGRADE_NAME_SUFFIX))
-                .withStreams(new StreamsBuilder()
-                        .withRecord(prepareVolumeWithHostpathSource(node, VOLUME_RECORD_STREAM_NAME_SUFFIX))
-                        .withEvents(prepareVolumeWithHostpathSource(node, VOLUME_EVENTS_STREAM_NAME_SUFFIX))
-                        .build())
+                .withRecords(prepareVolumeWithHostpathSource(node, VOLUME_RECORD_STREAM_NAME_SUFFIX))
+                .withEvents(prepareVolumeWithHostpathSource(node, VOLUME_EVENTS_STREAM_NAME_SUFFIX))
                 .build();
     }
 
