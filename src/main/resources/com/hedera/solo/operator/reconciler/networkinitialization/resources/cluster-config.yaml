@@ -12,8 +12,8 @@ metadata:
 data:
 # address, nodeId, nickname, selfname, weight, internalHostname, internalPort, externalHostname, externalPort, memoToUse
 
-# should be overridden from orbit (require, not from bootstrap.properties):
-# swirld (bootstrap.properties#contracts.chainId)
+# should be overridden from orbit (require, not from application.properties):
+# swirld (application.properties#contracts.chainId)
 
 # provided:
 # memoToUse
@@ -156,16 +156,6 @@ data:
     balances.compressOnCreation=true
     contracts.maxNumWithHapiSigsAccess=0
     balances.exportEnabled=true
-  bootstrap.properties: |
-    ledger.id=0x01
-    netty.mode=DEV
-    contracts.chainId=298
-    hedera.recordStream.logPeriod=1
-    balances.exportPeriodSecs=400
-    files.maxSizeKb=2048
-    hedera.recordStream.compressFilesOnCreation=true
-    balances.compressOnCreation=true
-    contracts.maxNumWithHapiSigsAccess=0
 # log can be provided in consensusCapsule
   log4j2.xml: |-
     <?xml version="1.0" encoding="UTF-8"?>
