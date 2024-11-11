@@ -45,13 +45,13 @@ spec:
           mountPath: /opt/hgcapp/eventsStreams
         - name: hgcapp-output
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/output
-        - name: hgcapp-data-saved
+        - name: hgcapp-states
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/saved
-        - name: hgcapp-data-stats
+        - name: hgcapp-stats
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/stats
-        - name: hgcapp-data-upgrade
+        - name: hgcapp-upgrade
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade
-        - name: hgcapp-data-keys
+        - name: hgcapp-keys
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
       command:
         - "/bin/bash"
@@ -310,7 +310,7 @@ spec:
           mountPath: /tmp/volumes/grpc-tls-keys # mount to a temp directory to copy files with appropriate ownership
         - name: hgcapp-init # mount the volume with prepared files to copy to appropriate locations
           mountPath: /tmp/volumes/init
-        - name: hgcapp-data-keys
+        - name: hgcapp-keys
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
         - name: hgcapp-record-streams
           mountPath: /opt/hgcapp/recordStreams
@@ -318,11 +318,11 @@ spec:
           mountPath: /opt/hgcapp/eventsStreams
         - name: hgcapp-output
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/output
-        - name: hgcapp-data-saved
+        - name: hgcapp-states
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/saved
-        - name: hgcapp-data-stats
+        - name: hgcapp-stats
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/stats
-        - name: hgcapp-data-upgrade
+        - name: hgcapp-upgrade
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade
     # {#if rsu && rsu.enabled}
     # Sidecar: record-stream-uploader
@@ -530,7 +530,7 @@ spec:
       image: "{bu.softwareVersion.repository}/{bu.softwareVersion.name}:{bu.softwareVersion.tag}"
       imagePullPolicy: "{bu.softwareVersion.imagePullPolicy}"
       volumeMounts:
-        - name: hgcapp-data-saved
+        - name: hgcapp-states
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/saved
         - name: backup-uploader-config
           mountPath: /home/hedera/.config/rclone/rclone.conf
@@ -576,13 +576,13 @@ spec:
       emptyDir: {}
     - name: hgcapp-output
       emptyDir: {}
-    - name: hgcapp-data-keys
+    - name: hgcapp-keys
       emptyDir: {}
-    - name: hgcapp-data-saved
+    - name: hgcapp-states
       emptyDir: {}
-    - name: hgcapp-data-stats
+    - name: hgcapp-stats
       emptyDir: {}
-    - name: hgcapp-data-upgrade
+    - name: hgcapp-upgrade
       emptyDir: {}
     - name: hgcapp-init
       emptyDir: {}

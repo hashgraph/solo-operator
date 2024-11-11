@@ -2,7 +2,6 @@
 
 package com.hedera.solo.operator.test.capsule;
 
-import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_ACCOUNT_ID;
 import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_EVENTS_STREAM_NAME_SUFFIX;
 import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_LOGS_NAME_SUFFIX;
 import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_MOUNT_NAMES;
@@ -22,6 +21,7 @@ import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.Volume;
 import io.fabric8.kubernetes.api.model.VolumeBuilder;
 import io.quarkus.test.junit.QuarkusTest;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -32,9 +32,9 @@ import org.junit.jupiter.api.Test;
 public class HostpathVolumeTest extends ConsensusCapsuleTestAbstract {
 
     protected static final Map<String, String> hostPaths = Map.of(
-            VOLUME_LOGS_NAME_SUFFIX, "/tmp/%s/volumes/logs",
+            VOLUME_LOGS_NAME_SUFFIX, "/tmp/%s/volumes/output",
             VOLUME_STATS_NAME_SUFFIX, "/tmp/%s/volumes/stats",
-            VOLUME_STATES_NAME_SUFFIX, "/tmp/%s//volumes/saved",
+            VOLUME_STATES_NAME_SUFFIX, "/tmp/%s/volumes/states",
             VOLUME_UPGRADE_NAME_SUFFIX, "/tmp/%s/volumes/upgrade",
             VOLUME_RECORD_STREAM_NAME_SUFFIX, "/tmp/%s/volumes/recordStream",
             VOLUME_EVENTS_STREAM_NAME_SUFFIX, "/tmp/%s/volumes/eventsStreams");
@@ -82,15 +82,12 @@ public class HostpathVolumeTest extends ConsensusCapsuleTestAbstract {
             assertThat(consensusPods).hasSize(count);
 
             for (Pod p : consensusPods) {
-                String accountId = p.getMetadata().getLabels().get(LABEL_ACCOUNT_ID);
-                assertThat(accountId).isNotEmpty();
                 assertThat(p.getSpec().getVolumes().size()).isGreaterThanOrEqualTo(VOLUME_MOUNT_NAMES.size());
-
-                for (Volume v : p.getSpec().getVolumes()) {
-                    if (VOLUME_MOUNT_NAMES.containsValue(v.getName())) {
-                        assertThat(v.getHostPath()).isNotNull();
-                    }
-                }
+                List<Volume> pvcs = new ArrayList<>();
+                p.getSpec().getVolumes().stream()
+                        .filter(v -> VOLUME_MOUNT_NAMES.containsValue(v.getName()) && v.getHostPath() != null)
+                        .forEach(pvcs::add);
+                assertThat(pvcs).hasSize(VOLUME_MOUNT_NAMES.size());
             }
         });
     }

@@ -81,9 +81,9 @@ public final class Constants {
 
     // volumes
     public static final String VOLUME_LOGS_NAME_SUFFIX = "output";
-    public static final String VOLUME_STATS_NAME_SUFFIX = "data-stats";
-    public static final String VOLUME_STATES_NAME_SUFFIX = "data-states";
-    public static final String VOLUME_UPGRADE_NAME_SUFFIX = "data-upgrade";
+    public static final String VOLUME_STATS_NAME_SUFFIX = "stats";
+    public static final String VOLUME_STATES_NAME_SUFFIX = "states";
+    public static final String VOLUME_UPGRADE_NAME_SUFFIX = "upgrade";
     public static final String VOLUME_RECORD_STREAM_NAME_SUFFIX = "record-streams";
     public static final String VOLUME_EVENTS_STREAM_NAME_SUFFIX = "events-streams";
     public static final Map<String, String> VOLUME_MOUNT_NAMES = Map.of(
