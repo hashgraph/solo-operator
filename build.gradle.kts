@@ -16,6 +16,7 @@ val fabric8Version: String by project
 val lombokVersion: String by project
 val hederaSdkVersion: String by project
 val javaoperatorsdkVersion: String by project
+val spotbugsVersion: String by project
 
 dependencies {
     annotationProcessor("io.sundr:builder-annotations:${sundrVersion}")
@@ -45,6 +46,7 @@ dependencies {
 
     compileOnly("io.sundr:builder-annotations:${sundrVersion}")
     compileOnly("org.projectlombok:lombok:${lombokVersion}")
+    compileOnly("com.github.spotbugs:spotbugs-annotations:${spotbugsVersion}")
 
     testImplementation("io.quarkus:quarkus-junit5")
     testImplementation("io.quarkus:quarkus-junit5-mockito")

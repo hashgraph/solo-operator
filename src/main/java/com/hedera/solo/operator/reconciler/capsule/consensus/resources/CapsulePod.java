@@ -33,18 +33,24 @@ import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_STATS_
 import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_UPGRADE_NAME_SUFFIX;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 
+import com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector;
 import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PodProperties;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Containers;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.ConsensusNode;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsulePvcUtil;
 import com.hedera.solo.operator.reconciler.common.Metadata;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSourceBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodBuilder;
+import io.fabric8.kubernetes.api.model.PodFluent;
 import io.fabric8.kubernetes.api.model.PodSecurityContext;
+import io.fabric8.kubernetes.api.model.ResourceRequirements;
 import io.fabric8.kubernetes.api.model.Volume;
 import io.fabric8.kubernetes.api.model.VolumeBuilder;
 import io.fabric8.kubernetes.client.utils.Serialization;
@@ -63,6 +69,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 @KubernetesDependent(useSSA = BooleanWithUndefined.FALSE, labelSelector = "app=consensus-node")
 public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCapsule> {
@@ -72,6 +81,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
             "a volume cannot have both HostPath and PersistentVolumeClaim specification: '%s'";
     public static final String ERR_DUPLICATE_VOLUME_SPECIFICATION =
             "volume specification is duplicated in persistentVolumeClaims and volumes sections for: %s";
+    public static final String OTEL_COLLECTOR = "otel-collector";
 
     @Location("consensus-capsule/pod.yaml")
     Template tpl;
@@ -160,9 +170,52 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
             securityContext = SECURITY_CONTEXT_BUILDER.build();
         }
 
-        // TODO add other pod spec and associated test #263
+        copyPodProperties(primary.getSpec().getPodProperties(), podBuilder);
 
         podBuilder.editSpec().withSecurityContext(securityContext).endSpec();
+    }
+
+    PodBuilder copyPodProperties(@NonNull final PodProperties props, final PodBuilder builder) {
+        Objects.requireNonNull(props);
+        PodFluent<PodBuilder>.SpecNested<PodBuilder> spec = builder.editSpec();
+        spec.withAffinity(props.getAffinity());
+        spec.withNodeSelector(props.getNodeSelector());
+        PodProperties.PreemptionPolicy preemptionPolicy = props.getPreemptionPolicy();
+        if (null != preemptionPolicy) {
+            spec.withPreemptionPolicy(preemptionPolicy.getValue());
+        }
+        spec.withPriority(props.getPriority());
+        spec.withPriorityClassName(props.getPriorityClassName());
+        spec.withResourceClaims(props.getResourceClaims());
+        spec.withSecurityContext(props.getSecurityContext());
+        spec.withServiceAccountName(props.getServiceAccountName());
+        spec.withTerminationGracePeriodSeconds(props.getTerminationGracePeriodSeconds());
+        spec.withTolerations(props.getTolerations());
+        spec.withTopologySpreadConstraints(props.getTopologySpreadConstraints());
+        Predicate<String> match = name -> spec.hasMatchingContainer(c -> Objects.equals(name, c.getName()));
+        BiConsumer<String, ResourceRequirements> resources =
+                (name, rc) -> spec.editMatchingContainer(c -> Objects.equals(name, c.getName()))
+                        .withResources(rc)
+                        .endContainer();
+        List<Function<Containers, ?>> list = List.of(
+                Containers::getBackupUploader,
+                Containers::getConsensusNode,
+                Containers::getEventsStreamUploader,
+                Containers::getOtelCollector,
+                Containers::getRecordStreamSidecarFilesUploader,
+                Containers::getRecordStreamUploader);
+        for (Function<Containers, ?> getContainer : list) {
+            Containers containers = props.getContainers();
+            Object obj = null == containers ? null : getContainer.apply(containers);
+            if (obj instanceof ConsensusNode container && match.test(container.getName())) {
+                resources.accept(container.getName(), container.getResources());
+            } else if (obj instanceof StreamUploader container && match.test(container.getName())) {
+                resources.accept(container.getName(), container.getResources());
+            } else if (obj instanceof OpenTelemetryCollector container && match.test(OTEL_COLLECTOR)) {
+                resources.accept(OTEL_COLLECTOR, container.getResources());
+            }
+        }
+        return spec.endSpec();
     }
 
     private TemplateInstance getTemplateWithDefaults(ConsensusCapsule primary, Context<ConsensusCapsule> context) {
