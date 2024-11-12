@@ -25,10 +25,10 @@ import com.hedera.hashgraph.sdk.PrivateKey;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleBuilder;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
-import com.hedera.solo.operator.model.v1alpha1.NetworkInitialization;
-import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationBuilder;
-import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationSpec;
-import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationStatus;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperationBuilder;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PersistentVolumeClaims;
@@ -129,7 +129,7 @@ public abstract class ConsensusCapsuleTestAbstract {
 
     void cleanup() {
         kubernetesClient
-                .resources(NetworkInitialization.class)
+                .resources(NetworkOperation.class)
                 .inNamespace(namespace)
                 .delete();
 
@@ -234,7 +234,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         List<ConsensusCapsule> consensusCapsules = createConsensusCapsule(nodes);
 
         // create network initialization
-        createNetworkInitialization(consensusCapsules);
+        createNetworkOperation(consensusCapsules);
 
         // test with client
         checkAddressBook(HederaSdkClientFactory::directContextCreator);
@@ -251,7 +251,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         List<ConsensusCapsule> consensusCapsules = createConsensusCapsule(nodes);
 
         // create network initialization
-        createNetworkInitialization(consensusCapsules);
+        createNetworkOperation(consensusCapsules);
 
         // test with client
         checkAddressBook(HederaSdkClientFactory::directContextCreator);
@@ -367,7 +367,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         return list;
     }
 
-    void createNetworkInitialization(List<ConsensusCapsule> consensusCapsules) {
+    void createNetworkOperation(List<ConsensusCapsule> consensusCapsules) {
         for (ConsensusCapsule consensusCapsule : consensusCapsules) {
             String name = consensusCapsule.getMetadata().getName();
             ConsensusCapsule capsule =
@@ -383,35 +383,34 @@ public abstract class ConsensusCapsuleTestAbstract {
             assertThat(pod).isNull();
         }
 
-        final NetworkInitialization networkInitialization = new NetworkInitializationBuilder()
+        final NetworkOperation networkOperation = new NetworkOperationBuilder()
                 .withNewMetadata()
-                .withName("network-initialization")
+                .withName("network-operation")
                 .withNamespace(namespace)
                 .endMetadata()
                 .withNewSpec()
-                .withMode(NetworkInitializationSpec.Mode.FirstInitialization)
+                .withMode(NetworkOperationSpec.Mode.FirstInitialization)
                 .endSpec()
                 .withNewStatus()
                 .endStatus()
                 .build();
-        kubernetesClient.resource(networkInitialization).create();
+        kubernetesClient.resource(networkOperation).create();
 
         await().atMost(300, TimeUnit.SECONDS)
                 .failFast(() -> {
-                    NetworkInitialization netInit =
-                            kubernetesClient.resource(networkInitialization).get();
-                    assertThat(netInit).isNotNull();
-                    if (netInit.getStatus() != null) {
-                        assertThat(netInit.getStatus().getPhase())
-                                .isNotEqualTo(NetworkInitializationStatus.Phase.Failed);
+                    NetworkOperation netOp =
+                            kubernetesClient.resource(networkOperation).get();
+                    assertThat(netOp).isNotNull();
+                    if (netOp.getStatus() != null) {
+                        assertThat(netOp.getStatus().getPhase()).isNotEqualTo(NetworkOperationStatus.Phase.Failed);
                     }
                 })
                 .untilAsserted(() -> {
-                    NetworkInitialization netInit =
-                            kubernetesClient.resource(networkInitialization).get();
+                    NetworkOperation netInit =
+                            kubernetesClient.resource(networkOperation).get();
                     assertThat(netInit).isNotNull();
                     assertThat(netInit.getStatus()).isNotNull();
-                    assertThat(netInit.getStatus().getPhase()).isEqualTo(NetworkInitializationStatus.Phase.Succeeded);
+                    assertThat(netInit.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Succeeded);
                     for (ConsensusCapsule consensusCapsule : consensusCapsules) {
                         String name = consensusCapsule.getMetadata().getName();
                         ConsensusCapsule capsule =

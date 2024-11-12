@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package com.hedera.solo.operator.reconciler.networkinitialization.resources;
+package com.hedera.solo.operator.reconciler.networkoperation.resources;
 
-import com.hedera.solo.operator.model.v1alpha1.NetworkInitialization;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
-import com.hedera.solo.operator.reconciler.networkinitialization.NetworkInitializationReconciler;
+import com.hedera.solo.operator.reconciler.networkoperation.NetworkOperationReconciler;
 import io.javaoperatorsdk.operator.api.config.informer.InformerConfiguration;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResource;
@@ -14,12 +14,12 @@ import io.javaoperatorsdk.operator.processing.event.source.SecondaryToPrimaryMap
 import java.util.Set;
 
 @KubernetesDependent
-public class NetworkInitializationOrbit extends KubernetesDependentResource<Orbit, NetworkInitialization>
-        implements PrimaryToSecondaryMapper<NetworkInitialization>, SecondaryToPrimaryMapper<Orbit> {
+public class NetworkOperationOrbit extends KubernetesDependentResource<Orbit, NetworkOperation>
+        implements PrimaryToSecondaryMapper<NetworkOperation>, SecondaryToPrimaryMapper<Orbit> {
 
-    private final NetworkInitializationReconciler reconciler;
+    private final NetworkOperationReconciler reconciler;
 
-    public NetworkInitializationOrbit(final NetworkInitializationReconciler reconciler) {
+    public NetworkOperationOrbit(final NetworkOperationReconciler reconciler) {
         super(Orbit.class);
         this.reconciler = reconciler;
     }
@@ -35,7 +35,7 @@ public class NetworkInitializationOrbit extends KubernetesDependentResource<Orbi
     }
 
     @Override
-    public Set<ResourceID> toSecondaryResourceIDs(final NetworkInitialization primary) {
+    public Set<ResourceID> toSecondaryResourceIDs(final NetworkOperation primary) {
         return Set.of(new ResourceID(primary.getMetadata().getNamespace()));
     }
 }
