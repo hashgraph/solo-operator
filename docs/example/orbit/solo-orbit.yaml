@@ -1,0 +1,10 @@
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: Orbit
+metadata:
+  name: solo-orbit
+spec:
+  consensus: # FIXME use valid consensus block
+    genesis:
+      addressBook: # FIXME use valid address book
+        ledgerId: "298"
+        externalAddresses: []

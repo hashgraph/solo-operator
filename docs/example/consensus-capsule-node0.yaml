@@ -4,9 +4,10 @@ metadata:
   name: node0
 spec:
   orbit: solo-orbit
+  nodeId: 0
   accountId: "0.0.3"
   eligibleForDeployment: false
-  podProperties:
+  podProperties: # FIXME use other pod properties
     containers:
       consensusNode:
         name: "consensus-node"
@@ -94,3 +95,41 @@ spec:
           gcs:
             enabled: false
           envFromSecret: "uploader-secrets"
+  persistentVolumeClaims:
+    logs:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 5Gi # 1/10th of production size
+    stats:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 5Gi # 1/10th of production size
+    states:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 50Gi # 1/10th of production size
+    upgrade:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 200Mi
+    streams:
+      record:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi # 1/10th of production size
+      events:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi # 1/10th of production size
