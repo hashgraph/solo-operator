@@ -17,15 +17,13 @@ import com.hedera.solo.operator.test.utils.TemplateLoader;
 import io.fabric8.kubernetes.api.model.EmptyDirVolumeSource;
 import io.fabric8.kubernetes.api.model.HostPathVolumeSource;
 import io.fabric8.kubernetes.api.model.HostPathVolumeSourceBuilder;
-import io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpecBuilder;
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSource;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSourceBuilder;
-import io.fabric8.kubernetes.api.model.QuantityBuilder;
 import io.fabric8.kubernetes.api.model.Volume;
 import io.fabric8.kubernetes.api.model.VolumeBuilder;
 import io.fabric8.kubernetes.api.model.VolumeMount;
 import io.fabric8.kubernetes.api.model.VolumeMountBuilder;
-import io.fabric8.kubernetes.api.model.VolumeResourceRequirementsBuilder;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -57,12 +55,34 @@ public class CapsulePodTest {
     }
 
     @Test
-    @Description("test validation logic for PVC spec existence works")
-    void testValidatePvcIsSpecified() {
+    @Description("it should return persistent volume claim spec input based on volume name suffix")
+    void testGetInputPvc() {
         Assertions.assertThrows(
-                IllegalArgumentException.class, () -> capsulePod.validatePvcIsSpecified(consensusCapsule, "INVALID"));
+                IllegalArgumentException.class, () -> capsulePod.getInputPvc(consensusCapsule, "INVALID"));
 
-        // it would throw exception if desired PVC spec is not set
+        // it would return empty if PVC is not specified in CapsuleSpec
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims()).thenReturn(null);
+        Assertions.assertFalse(capsulePod
+                .getInputPvc(consensusCapsule, Constants.VOLUME_LOGS_NAME_SUFFIX)
+                .isPresent());
+        Assertions.assertFalse(capsulePod
+                .getInputPvc(consensusCapsule, Constants.VOLUME_STATES_NAME_SUFFIX)
+                .isPresent());
+        Assertions.assertFalse(capsulePod
+                .getInputPvc(consensusCapsule, Constants.VOLUME_STATS_NAME_SUFFIX)
+                .isPresent());
+        Assertions.assertFalse(capsulePod
+                .getInputPvc(consensusCapsule, Constants.VOLUME_UPGRADE_NAME_SUFFIX)
+                .isPresent());
+        Assertions.assertFalse(capsulePod
+                .getInputPvc(consensusCapsule, Constants.VOLUME_RECORD_STREAM_NAME_SUFFIX)
+                .isPresent());
+        Assertions.assertFalse(capsulePod
+                .getInputPvc(consensusCapsule, Constants.VOLUME_EVENTS_STREAM_NAME_SUFFIX)
+                .isPresent());
+
+        // it would return empty if desired PVC spec is not set
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims()).thenReturn(persistentVolumeClaims);
         Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getLogs())
                 .thenReturn(null);
         Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getStates())
@@ -83,66 +103,78 @@ public class CapsulePodTest {
                         .getStreams()
                         .getEvents())
                 .thenReturn(null);
-        Assertions.assertThrows(
-                IllegalArgumentException.class,
-                () -> capsulePod.validatePvcIsSpecified(consensusCapsule, Constants.VOLUME_LOGS_NAME_SUFFIX));
-        Assertions.assertThrows(
-                IllegalArgumentException.class,
-                () -> capsulePod.validatePvcIsSpecified(consensusCapsule, Constants.VOLUME_STATES_NAME_SUFFIX));
-        Assertions.assertThrows(
-                IllegalArgumentException.class,
-                () -> capsulePod.validatePvcIsSpecified(consensusCapsule, Constants.VOLUME_STATS_NAME_SUFFIX));
-        Assertions.assertThrows(
-                IllegalArgumentException.class,
-                () -> capsulePod.validatePvcIsSpecified(consensusCapsule, Constants.VOLUME_UPGRADE_NAME_SUFFIX));
-        Assertions.assertThrows(
-                IllegalArgumentException.class,
-                () -> capsulePod.validatePvcIsSpecified(consensusCapsule, Constants.VOLUME_RECORD_STREAM_NAME_SUFFIX));
-        Assertions.assertThrows(
-                IllegalArgumentException.class,
-                () -> capsulePod.validatePvcIsSpecified(consensusCapsule, Constants.VOLUME_EVENTS_STREAM_NAME_SUFFIX));
+        Assertions.assertFalse(capsulePod
+                .getInputPvc(consensusCapsule, Constants.VOLUME_LOGS_NAME_SUFFIX)
+                .isPresent());
+        Assertions.assertFalse(capsulePod
+                .getInputPvc(consensusCapsule, Constants.VOLUME_STATES_NAME_SUFFIX)
+                .isPresent());
+        Assertions.assertFalse(capsulePod
+                .getInputPvc(consensusCapsule, Constants.VOLUME_STATS_NAME_SUFFIX)
+                .isPresent());
+        Assertions.assertFalse(capsulePod
+                .getInputPvc(consensusCapsule, Constants.VOLUME_UPGRADE_NAME_SUFFIX)
+                .isPresent());
+        Assertions.assertFalse(capsulePod
+                .getInputPvc(consensusCapsule, Constants.VOLUME_RECORD_STREAM_NAME_SUFFIX)
+                .isPresent());
+        Assertions.assertFalse(capsulePod
+                .getInputPvc(consensusCapsule, Constants.VOLUME_EVENTS_STREAM_NAME_SUFFIX)
+                .isPresent());
 
-        // it would throw exception if PVC is null in the CapsuleSpec
-        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims()).thenReturn(null);
-        Assertions.assertThrows(
-                IllegalArgumentException.class,
-                () -> capsulePod.validatePvcIsSpecified(consensusCapsule, Constants.VOLUME_LOGS_NAME_SUFFIX));
-        Assertions.assertThrows(
-                IllegalArgumentException.class,
-                () -> capsulePod.validatePvcIsSpecified(consensusCapsule, Constants.VOLUME_STATES_NAME_SUFFIX));
-        Assertions.assertThrows(
-                IllegalArgumentException.class,
-                () -> capsulePod.validatePvcIsSpecified(consensusCapsule, Constants.VOLUME_STATS_NAME_SUFFIX));
-        Assertions.assertThrows(
-                IllegalArgumentException.class,
-                () -> capsulePod.validatePvcIsSpecified(consensusCapsule, Constants.VOLUME_UPGRADE_NAME_SUFFIX));
-        Assertions.assertThrows(
-                IllegalArgumentException.class,
-                () -> capsulePod.validatePvcIsSpecified(consensusCapsule, Constants.VOLUME_RECORD_STREAM_NAME_SUFFIX));
-        Assertions.assertThrows(
-                IllegalArgumentException.class,
-                () -> capsulePod.validatePvcIsSpecified(consensusCapsule, Constants.VOLUME_EVENTS_STREAM_NAME_SUFFIX));
+        // it would return the input if desired PVC spec is set
+        PersistentVolumeClaimSpec mockPvcSpec = Mockito.mock(PersistentVolumeClaimSpec.class);
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getLogs())
+                .thenReturn(mockPvcSpec);
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getStates())
+                .thenReturn(mockPvcSpec);
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getUpgrade())
+                .thenReturn(mockPvcSpec);
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getStats())
+                .thenReturn(mockPvcSpec);
+        Mockito.when(consensusCapsule
+                        .getSpec()
+                        .getPersistentVolumeClaims()
+                        .getStreams()
+                        .getRecord())
+                .thenReturn(mockPvcSpec);
+        Mockito.when(consensusCapsule
+                        .getSpec()
+                        .getPersistentVolumeClaims()
+                        .getStreams()
+                        .getEvents())
+                .thenReturn(mockPvcSpec);
+
+        Assertions.assertTrue(capsulePod
+                .getInputPvc(consensusCapsule, Constants.VOLUME_LOGS_NAME_SUFFIX)
+                .isPresent());
+        Assertions.assertTrue(capsulePod
+                .getInputPvc(consensusCapsule, Constants.VOLUME_STATES_NAME_SUFFIX)
+                .isPresent());
+        Assertions.assertTrue(capsulePod
+                .getInputPvc(consensusCapsule, Constants.VOLUME_STATS_NAME_SUFFIX)
+                .isPresent());
+        Assertions.assertTrue(capsulePod
+                .getInputPvc(consensusCapsule, Constants.VOLUME_UPGRADE_NAME_SUFFIX)
+                .isPresent());
+        Assertions.assertTrue(capsulePod
+                .getInputPvc(consensusCapsule, Constants.VOLUME_RECORD_STREAM_NAME_SUFFIX)
+                .isPresent());
+        Assertions.assertTrue(capsulePod
+                .getInputPvc(consensusCapsule, Constants.VOLUME_EVENTS_STREAM_NAME_SUFFIX)
+                .isPresent());
     }
 
     @Test
-    @Description("test that desired volume builder is returned for valid inputs")
+    @Description("it should return volume builder for valid inputs")
     void testGetVolumeBuilder() {
         Volume inputVol = Mockito.mock(Volume.class);
-
         Assertions.assertThrows(
                 NullPointerException.class,
                 () -> capsulePod.getVolumeBuilder(null, inputVol, Constants.VOLUME_LOGS_NAME_SUFFIX));
-        Assertions.assertThrows(
-                NullPointerException.class,
-                () -> capsulePod.getVolumeBuilder(consensusCapsule, null, Constants.VOLUME_LOGS_NAME_SUFFIX));
-        Assertions.assertThrows(
-                NullPointerException.class, () -> capsulePod.getVolumeBuilder(consensusCapsule, inputVol, null));
-        Assertions.assertThrows(
-                IllegalArgumentException.class,
-                () -> capsulePod.getVolumeBuilder(consensusCapsule, inputVol, "INVALID"));
 
-        Optional<VolumeBuilder> vb =
-                capsulePod.getVolumeBuilder(consensusCapsule, inputVol, Constants.VOLUME_LOGS_NAME_SUFFIX);
+        String volName = Constants.VOLUME_MOUNT_NAMES.get(Constants.VOLUME_LOGS_NAME_SUFFIX);
+        Optional<VolumeBuilder> vb = capsulePod.getVolumeBuilder(consensusCapsule, inputVol, volName);
         Assertions.assertTrue(vb.isEmpty());
 
         HostPathVolumeSource hpvs = new HostPathVolumeSourceBuilder()
@@ -150,60 +182,87 @@ public class CapsulePodTest {
                 .withType("DirectoryOrCreate")
                 .build();
         PersistentVolumeClaimVolumeSource pvcs = new PersistentVolumeClaimVolumeSourceBuilder()
-                .withClaimName("node0-output")
+                .withClaimName("test-pvc")
                 .build();
 
         // both hostpath and pvcs are not supported
         Mockito.when(inputVol.getHostPath()).thenReturn(hpvs);
-        Mockito.when(inputVol.getPersistentVolumeClaim()).thenReturn(pvcs);
+        Mockito.when(inputVol.getPersistentVolumeClaim()).thenReturn(new PersistentVolumeClaimVolumeSource());
         Assertions.assertThrows(
-                        IllegalArgumentException.class,
-                        () -> capsulePod.getVolumeBuilder(
-                                consensusCapsule, inputVol, Constants.VOLUME_LOGS_NAME_SUFFIX))
-                .getMessage()
-                .equals(CapsulePod.ERR_BOTH_HOSTPATH_PVC_NOT_ALLOWED);
+                IllegalArgumentException.class, () -> capsulePod.getVolumeBuilder(consensusCapsule, inputVol, volName));
 
-        // check HostPath volume builder
+        // check HostPath volume
         Mockito.when(inputVol.getHostPath()).thenReturn(hpvs);
         Mockito.when(inputVol.getPersistentVolumeClaim()).thenReturn(null);
-        vb = capsulePod.getVolumeBuilder(consensusCapsule, inputVol, Constants.VOLUME_LOGS_NAME_SUFFIX);
+        vb = capsulePod.getVolumeBuilder(consensusCapsule, inputVol, volName);
         Assertions.assertTrue(vb.isPresent());
         Volume hv = vb.get().build();
         Assertions.assertEquals(hpvs.getPath(), hv.getHostPath().getPath());
         Assertions.assertEquals(hpvs.getType(), hv.getHostPath().getType());
 
-        // check PVC builder
+        // check PVC volume
         Mockito.when(inputVol.getHostPath()).thenReturn(null);
         Mockito.when(inputVol.getPersistentVolumeClaim()).thenReturn(pvcs);
-        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getLogs())
-                .thenReturn(new PersistentVolumeClaimSpecBuilder()
-                        .withAccessModes("ReadWriteOnce")
-                        .withResources(new VolumeResourceRequirementsBuilder()
-                                .withRequests(Map.of(
-                                        "storage",
-                                        new QuantityBuilder().withAmount("50Mi").build()))
-                                .build())
-                        .build());
-        vb = capsulePod.getVolumeBuilder(consensusCapsule, inputVol, Constants.VOLUME_LOGS_NAME_SUFFIX);
+        vb = capsulePod.getVolumeBuilder(consensusCapsule, inputVol, volName);
         Assertions.assertTrue(vb.isPresent());
-        Volume pv = vb.get().build();
+        Volume pv2 = vb.get().build();
         Assertions.assertEquals(
-                pvcs.getClaimName(), pv.getPersistentVolumeClaim().getClaimName());
+                pvcs.getClaimName(), pv2.getPersistentVolumeClaim().getClaimName());
+
+        // check empty volume
+        Mockito.when(inputVol.getEmptyDir()).thenReturn(new EmptyDirVolumeSource());
+        Mockito.when(inputVol.getHostPath()).thenReturn(null);
+        Mockito.when(inputVol.getPersistentVolumeClaim()).thenReturn(null);
+        vb = capsulePod.getVolumeBuilder(consensusCapsule, inputVol, volName);
+        Assertions.assertTrue(vb.isPresent());
+        Assertions.assertNotNull(vb.get().build());
     }
 
     @Test
-    @Description("test that a list of desired list of pod volumes are returned")
+    @Description("it should create volume based on specified PVC")
+    void testGetPvcVolumeBuilder() {
+        Volume inputVol = Mockito.mock(Volume.class);
+
+        // if PVC or volumes are not specified, it should return empty
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getLogs())
+                .thenReturn(null);
+        Mockito.when(consensusCapsule.getSpec().getPodProperties().getVolumes()).thenReturn(null);
+        Assertions.assertEquals(
+                0, capsulePod.getDesiredPodVolumes(consensusCapsule).size());
+
+        // return volume when PVC is specified
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getLogs())
+                .thenReturn(new PersistentVolumeClaimSpec());
+        Assertions.assertEquals(
+                1, capsulePod.getDesiredPodVolumes(consensusCapsule).size());
+    }
+
+    @Test
+    @Description("it should return a list of pod volumes")
     void testGetDesiredPodVolumes() {
         PodProperties pod = Mockito.mock(PodProperties.class);
         Volumes volumes = Mockito.mock(Volumes.class);
         Mockito.when(consensusCapsule.getSpec().getPodProperties()).thenReturn(pod);
         Mockito.when(consensusCapsule.getSpec().getPodProperties().getVolumes()).thenReturn(volumes);
 
-        // empty volumes
+        // if a volume is duplicated in persistentVolumeClaims as well as volumes, it would throw error
+        Mockito.when(volumes.getLogs())
+                .thenReturn(new VolumeBuilder()
+                        .withEmptyDir(new EmptyDirVolumeSource())
+                        .build());
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getLogs())
+                .thenReturn(new PersistentVolumeClaimSpec());
+        Assertions.assertThrows(
+                IllegalArgumentException.class, () -> capsulePod.getDesiredPodVolumes(consensusCapsule));
+
+        // reset and set empty volumes, it should return 0 volumes
+        Mockito.when(volumes.getLogs()).thenReturn(null);
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getLogs())
+                .thenReturn(null);
         Assertions.assertEquals(
                 0, capsulePod.getDesiredPodVolumes(consensusCapsule).size());
 
-        // with logs
+        // with volumes specified, it should return 6 volumes
         Mockito.when(volumes.getLogs())
                 .thenReturn(new VolumeBuilder()
                         .withEmptyDir(new EmptyDirVolumeSource())
@@ -234,7 +293,30 @@ public class CapsulePodTest {
     }
 
     @Test
-    @Description("test that stream uploader containers are prepared correctly")
+    @Description("it should return a list of persistent pod volumes")
+    void testGetDesiredPvcVolumes() {
+        // we just return mock PersistentVolumeClaimSpec since getDesiredPodVolumes does not use it
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getLogs())
+                .thenReturn(new PersistentVolumeClaimSpec());
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getStats())
+                .thenReturn(new PersistentVolumeClaimSpec());
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getStates())
+                .thenReturn(new PersistentVolumeClaimSpec());
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getUpgrade())
+                .thenReturn(new PersistentVolumeClaimSpec());
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getStreams())
+                .thenReturn(
+                        new com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.persistentvolumeclaims
+                                        .StreamsBuilder()
+                                .withRecord(new PersistentVolumeClaimSpec())
+                                .withEvents(new PersistentVolumeClaimSpec())
+                                .build());
+        Assertions.assertEquals(
+                6, capsulePod.getDesiredPodVolumes(consensusCapsule).size());
+    }
+
+    @Test
+    @Description("it should return stream uploader containers")
     void testPrepareStreamUploaderContainers() {
         // no stream uploaders
         Mockito.when(consensusCapsule.getSpec().getPodProperties().getContainers())
@@ -329,7 +411,7 @@ public class CapsulePodTest {
     }
 
     @Test
-    @Description("test that stream uploader containers are skipped when disabled")
+    @Description("it should not return stream uploader container when disabled")
     void testPrepareStreamUploaderContainersWhenDisabled() {
         StreamUploader rsu = TemplateLoader.load(StreamUploader.class, TemplateLoader.TEMPLATE_RECORD_STREAM_UPLOADER);
         StreamUploader esu = TemplateLoader.load(StreamUploader.class, TemplateLoader.TEMPLATE_EVENTS_STREAM_UPLOADER);
@@ -433,7 +515,7 @@ public class CapsulePodTest {
     }
 
     @Test
-    @Description("test additional volume mounts for stream uploader containers is set correctly")
+    @Description("it should set additional volume mounts for stream uploader containers")
     void testPrepareStreamUploaderContainersWithAdditionalVolumeMounts() {
         final VolumeMount tvm1 = new VolumeMountBuilder()
                 .withName("test")

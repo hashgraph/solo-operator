@@ -36,9 +36,12 @@ import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.ConsensusNode;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsulePvcUtil;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec;
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSourceBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.api.model.PodSecurityContext;
@@ -65,14 +68,10 @@ import java.util.Optional;
 public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCapsule> {
     public static final String NAME_SUFFIX = "-pod";
 
-    public static final String ERR_PERSISTENT_VOL_NOT_SPECIFIED =
-            "persistent volume claims not specified for volume: %s";
     public static final String ERR_BOTH_HOSTPATH_PVC_NOT_ALLOWED =
-            "both HostPath and PersistentVolumeClaim is not allowed for the same volume: '%s'";
-    public static final String ERR_INVALID_VOL_TYPE =
-            "volume must be either a host path or a persistent volume claim or emptyDir for: %s";
-    public static final String ERR_UNSUPPORTED_VOLUME_TYPES =
-            "supported volumes are emptyDir, hostPath, and PersistentVolumeClaim, none provided.";
+            "a volume cannot have both HostPath and PersistentVolumeClaim specification: '%s'";
+    public static final String ERR_DUPLICATE_VOLUME_SPECIFICATION =
+            "volume specification is duplicated in persistentVolumeClaims and volumes sections for: %s";
 
     @Location("consensus-capsule/pod.yaml")
     Template tpl;
@@ -349,89 +348,125 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         return nodeIds.stream().sorted().toList();
     }
 
-    protected void validatePvcIsSpecified(ConsensusCapsule primary, String volNameSuffix)
-            throws IllegalArgumentException {
-        final String volName = VOLUME_MOUNT_NAMES.get(volNameSuffix);
-        if (Objects.isNull(volName)) {
+    protected Optional<PersistentVolumeClaimSpec> getInputPvc(ConsensusCapsule primary, String volNameSuffix) {
+        if (!VOLUME_MOUNT_NAMES.containsKey(volNameSuffix)) {
             throw new IllegalArgumentException("invalid volName suffix in: " + volNameSuffix);
         }
 
+        if (primary.getSpec().getPersistentVolumeClaims() == null) {
+            return Optional.empty();
+        }
+
+        PersistentVolumeClaimSpec inputPvc = null;
         switch (volNameSuffix) {
             case VOLUME_LOGS_NAME_SUFFIX:
-                if (primary.getSpec().getPersistentVolumeClaims() == null
-                        || primary.getSpec().getPersistentVolumeClaims().getLogs() == null) {
-                    throw new IllegalArgumentException(ERR_PERSISTENT_VOL_NOT_SPECIFIED.formatted(volName));
-                }
+                inputPvc = primary.getSpec().getPersistentVolumeClaims().getLogs();
                 break;
 
             case VOLUME_STATES_NAME_SUFFIX:
-                if (primary.getSpec().getPersistentVolumeClaims() == null
-                        || primary.getSpec().getPersistentVolumeClaims().getStates() == null) {
-                    throw new IllegalArgumentException(ERR_PERSISTENT_VOL_NOT_SPECIFIED.formatted(volName));
-                }
+                inputPvc = primary.getSpec().getPersistentVolumeClaims().getStates();
                 break;
 
             case VOLUME_STATS_NAME_SUFFIX:
-                if (primary.getSpec().getPersistentVolumeClaims() == null
-                        || primary.getSpec().getPersistentVolumeClaims().getStats() == null) {
-                    throw new IllegalArgumentException(ERR_PERSISTENT_VOL_NOT_SPECIFIED.formatted(volName));
-                }
+                inputPvc = primary.getSpec().getPersistentVolumeClaims().getStats();
                 break;
 
             case VOLUME_UPGRADE_NAME_SUFFIX:
-                if (primary.getSpec().getPersistentVolumeClaims() == null
-                        || primary.getSpec().getPersistentVolumeClaims().getUpgrade() == null) {
-                    throw new IllegalArgumentException(ERR_PERSISTENT_VOL_NOT_SPECIFIED.formatted(volName));
-                }
+                inputPvc = primary.getSpec().getPersistentVolumeClaims().getUpgrade();
                 break;
 
             case VOLUME_RECORD_STREAM_NAME_SUFFIX:
-                if (primary.getSpec().getPersistentVolumeClaims() == null
-                        || primary.getSpec().getPersistentVolumeClaims().getStreams() == null
-                        || primary.getSpec()
-                                        .getPersistentVolumeClaims()
-                                        .getStreams()
-                                        .getRecord()
-                                == null) {
-                    throw new IllegalArgumentException(ERR_PERSISTENT_VOL_NOT_SPECIFIED.formatted(volName));
+                if (primary.getSpec().getPersistentVolumeClaims().getStreams() != null) {
+                    inputPvc = primary.getSpec()
+                            .getPersistentVolumeClaims()
+                            .getStreams()
+                            .getRecord();
                 }
                 break;
 
             case VOLUME_EVENTS_STREAM_NAME_SUFFIX:
-                if (primary.getSpec().getPersistentVolumeClaims() == null
-                        || primary.getSpec().getPersistentVolumeClaims().getStreams() == null
-                        || primary.getSpec()
-                                        .getPersistentVolumeClaims()
-                                        .getStreams()
-                                        .getEvents()
-                                == null) {
-                    throw new IllegalArgumentException(ERR_PERSISTENT_VOL_NOT_SPECIFIED.formatted(volName));
+                if (primary.getSpec().getPersistentVolumeClaims().getStreams() != null) {
+                    inputPvc = primary.getSpec()
+                            .getPersistentVolumeClaims()
+                            .getStreams()
+                            .getEvents();
                 }
                 break;
             default:
         }
+
+        return Optional.ofNullable(inputPvc);
     }
 
-    protected Optional<VolumeBuilder> getVolumeBuilder(
-            ConsensusCapsule primary, Volume inputVol, String volNameSuffix) {
-        Objects.requireNonNull(primary);
-        Objects.requireNonNull(inputVol);
-        Objects.requireNonNull(volNameSuffix);
-
-        final String volName = VOLUME_MOUNT_NAMES.get(volNameSuffix);
-        if (Objects.isNull(volName)) {
-            throw new IllegalArgumentException("invalid volName suffix: " + volNameSuffix);
+    protected Optional<Volume> getInputVol(ConsensusCapsule primary, String volNameSuffix) {
+        if (!VOLUME_MOUNT_NAMES.containsKey(volNameSuffix)) {
+            throw new IllegalArgumentException("invalid volName suffix in: " + volNameSuffix);
         }
 
+        if (primary.getSpec().getPodProperties().getVolumes() == null) {
+            return Optional.empty();
+        }
+
+        Volume inputVol = null;
+        switch (volNameSuffix) {
+            case VOLUME_LOGS_NAME_SUFFIX:
+                inputVol = primary.getSpec().getPodProperties().getVolumes().getLogs();
+                break;
+
+            case VOLUME_STATES_NAME_SUFFIX:
+                inputVol = primary.getSpec().getPodProperties().getVolumes().getStates();
+                break;
+
+            case VOLUME_STATS_NAME_SUFFIX:
+                inputVol = primary.getSpec().getPodProperties().getVolumes().getStats();
+                break;
+
+            case VOLUME_UPGRADE_NAME_SUFFIX:
+                inputVol = primary.getSpec().getPodProperties().getVolumes().getUpgrade();
+                break;
+
+            case VOLUME_RECORD_STREAM_NAME_SUFFIX:
+                if (primary.getSpec().getPodProperties().getVolumes().getStreams() != null) {
+                    inputVol = primary.getSpec()
+                            .getPodProperties()
+                            .getVolumes()
+                            .getStreams()
+                            .getRecord();
+                }
+                break;
+
+            case VOLUME_EVENTS_STREAM_NAME_SUFFIX:
+                if (primary.getSpec().getPodProperties().getVolumes().getStreams() != null) {
+                    inputVol = primary.getSpec()
+                            .getPodProperties()
+                            .getVolumes()
+                            .getStreams()
+                            .getEvents();
+                }
+                break;
+            default:
+        }
+
+        return Optional.ofNullable(inputVol);
+    }
+
+    protected Optional<VolumeBuilder> getVolumeBuilder(ConsensusCapsule primary, Volume inputVol, String volName) {
+        Objects.requireNonNull(primary);
+        VolumeBuilder builder = new VolumeBuilder().withName(volName);
+
+        if (inputVol == null) {
+            return Optional.empty();
+        }
+
+        // a volume cannot be both hostpath and PVC
         if (inputVol.getHostPath() != null && inputVol.getPersistentVolumeClaim() != null) {
             throw new IllegalArgumentException(ERR_BOTH_HOSTPATH_PVC_NOT_ALLOWED.formatted(volName));
         }
 
-        VolumeBuilder builder = new VolumeBuilder().withName(volName);
+        // return the volume builder based on the input volume
         if (inputVol.getHostPath() != null) {
             builder.withHostPath(inputVol.getHostPath());
         } else if (inputVol.getPersistentVolumeClaim() != null) {
-            validatePvcIsSpecified(primary, volNameSuffix);
             builder.withPersistentVolumeClaim(inputVol.getPersistentVolumeClaim());
         } else if (inputVol.getEmptyDir() != null) {
             builder.withEmptyDir(inputVol.getEmptyDir());
@@ -444,57 +479,29 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
 
     protected List<Volume> getDesiredPodVolumes(ConsensusCapsule primary) {
         final List<Volume> volumes = new ArrayList<>();
-        if (primary.getSpec().getPodProperties().getVolumes().getLogs() != null) {
-            final Volume inputVol =
-                    primary.getSpec().getPodProperties().getVolumes().getLogs();
-            final Optional<VolumeBuilder> vb = getVolumeBuilder(primary, inputVol, VOLUME_LOGS_NAME_SUFFIX);
-            vb.ifPresent(volumeBuilder -> volumes.add(volumeBuilder.build()));
-        }
+        VOLUME_MOUNT_NAMES.forEach((volNameSuffix, volName) -> {
+            final Optional<PersistentVolumeClaimSpec> inputPvc = getInputPvc(primary, volNameSuffix);
+            final Optional<Volume> inputVol = getInputVol(primary, volNameSuffix);
 
-        if (primary.getSpec().getPodProperties().getVolumes().getStats() != null) {
-            final Volume inputVol =
-                    primary.getSpec().getPodProperties().getVolumes().getStats();
-            final Optional<VolumeBuilder> vb = getVolumeBuilder(primary, inputVol, VOLUME_STATS_NAME_SUFFIX);
-            vb.ifPresent(volumeBuilder -> volumes.add(volumeBuilder.build()));
-        }
-
-        if (primary.getSpec().getPodProperties().getVolumes().getStates() != null) {
-            final Volume inputVol =
-                    primary.getSpec().getPodProperties().getVolumes().getStates();
-            final Optional<VolumeBuilder> vb = getVolumeBuilder(primary, inputVol, VOLUME_STATES_NAME_SUFFIX);
-            vb.ifPresent(volumeBuilder -> volumes.add(volumeBuilder.build()));
-        }
-
-        if (primary.getSpec().getPodProperties().getVolumes().getUpgrade() != null) {
-            final Volume inputVol =
-                    primary.getSpec().getPodProperties().getVolumes().getUpgrade();
-            final Optional<VolumeBuilder> vb = getVolumeBuilder(primary, inputVol, VOLUME_UPGRADE_NAME_SUFFIX);
-            vb.ifPresent(volumeBuilder -> volumes.add(volumeBuilder.build()));
-        }
-
-        if (primary.getSpec().getPodProperties().getVolumes().getStreams() != null) {
-            if (primary.getSpec().getPodProperties().getVolumes().getStreams().getRecord() != null) {
-                final Volume inputVol = primary.getSpec()
-                        .getPodProperties()
-                        .getVolumes()
-                        .getStreams()
-                        .getRecord();
-                final Optional<VolumeBuilder> vb =
-                        getVolumeBuilder(primary, inputVol, VOLUME_RECORD_STREAM_NAME_SUFFIX);
-                vb.ifPresent(volumeBuilder -> volumes.add(volumeBuilder.build()));
+            if (inputPvc.isPresent() && inputVol.isPresent()) {
+                throw new IllegalArgumentException(ERR_DUPLICATE_VOLUME_SPECIFICATION.formatted(volNameSuffix));
             }
 
-            if (primary.getSpec().getPodProperties().getVolumes().getStreams().getEvents() != null) {
-                final Volume inputVol = primary.getSpec()
-                        .getPodProperties()
-                        .getVolumes()
-                        .getStreams()
-                        .getEvents();
-                final Optional<VolumeBuilder> vb =
-                        getVolumeBuilder(primary, inputVol, VOLUME_EVENTS_STREAM_NAME_SUFFIX);
-                vb.ifPresent(volumeBuilder -> volumes.add(volumeBuilder.build()));
+            // if PVC is present, it takes priority over the volumes settings for a volume.
+            if (inputPvc.isPresent()) {
+                VolumeBuilder builder = new VolumeBuilder()
+                        .withName(volName)
+                        .withPersistentVolumeClaim(new PersistentVolumeClaimVolumeSourceBuilder()
+                                .withClaimName(CapsulePvcUtil.validPvcName(primary, volNameSuffix))
+                                .build());
+                volumes.add(builder.build());
+            } else {
+                if (inputVol.isPresent()) {
+                    final Optional<VolumeBuilder> vb = getVolumeBuilder(primary, inputVol.get(), volName);
+                    vb.ifPresent(volumeBuilder -> volumes.add(volumeBuilder.build()));
+                }
             }
-        }
+        });
 
         return volumes;
     }

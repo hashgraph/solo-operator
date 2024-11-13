@@ -2,7 +2,6 @@
 
 package com.hedera.solo.operator.test.capsule;
 
-import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_ACCOUNT_ID;
 import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_EVENTS_STREAM_NAME_SUFFIX;
 import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_LOGS_NAME_SUFFIX;
 import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_MOUNT_NAMES;
@@ -16,17 +15,12 @@ import static org.awaitility.Awaitility.await;
 
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PersistentVolumeClaims;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PersistentVolumeClaimsBuilder;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Volumes;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.VolumesBuilder;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.volumes.StreamsBuilder;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaim;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec;
-import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSource;
-import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSourceBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.Volume;
-import io.fabric8.kubernetes.api.model.VolumeBuilder;
 import io.quarkus.test.junit.QuarkusTest;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
@@ -34,42 +28,9 @@ import org.junit.jupiter.api.Test;
 
 @QuarkusTest
 public class PersistentVolumeTest extends ConsensusCapsuleTestAbstract {
-    private String pvcClaimName(NodeInfo node, String volSuffix) {
-        return "%s-%s".formatted(node.name(), volSuffix);
-    }
-
-    protected Volume prepareVolumeWithClaimSource(NodeInfo node, String volSuffix) {
-        final PersistentVolumeClaimVolumeSource pvc = new PersistentVolumeClaimVolumeSourceBuilder()
-                .withClaimName(pvcClaimName(node, volSuffix))
-                .build();
-
-        return new VolumeBuilder().withPersistentVolumeClaim(pvc).build();
-    }
-
-    @Override
-    protected Volumes prepareCapsulePodVolumes(NodeInfo node) {
-        return new VolumesBuilder()
-                .withLogs(prepareVolumeWithClaimSource(node, VOLUME_LOGS_NAME_SUFFIX))
-                .withStats(prepareVolumeWithClaimSource(node, VOLUME_STATS_NAME_SUFFIX))
-                .withStates(prepareVolumeWithClaimSource(node, VOLUME_STATES_NAME_SUFFIX))
-                .withUpgrade(prepareVolumeWithClaimSource(node, VOLUME_UPGRADE_NAME_SUFFIX))
-                .withStreams(new StreamsBuilder()
-                        .withRecord(prepareVolumeWithClaimSource(node, VOLUME_RECORD_STREAM_NAME_SUFFIX))
-                        .withEvents(prepareVolumeWithClaimSource(node, VOLUME_EVENTS_STREAM_NAME_SUFFIX))
-                        .build())
-                .build();
-    }
-
     protected PersistentVolumeClaimSpec preparePvcSpec(NodeInfo node, String volSuffix) {
-        PersistentVolumeClaim pvc = loadYaml(
-                        PersistentVolumeClaim.class, getClass(), "pvc/%s-pvc.yaml".formatted(volSuffix))
-                .edit()
-                .editMetadata()
-                .withName(pvcClaimName(node, volSuffix))
-                .withNamespace(namespace)
-                .addToLabels("consensus-capsule", node.name())
-                .endMetadata()
-                .build();
+        PersistentVolumeClaim pvc =
+                loadYaml(PersistentVolumeClaim.class, getClass(), "pvc/%s-pvc.yaml".formatted(volSuffix));
         return pvc.getSpec();
     }
 
@@ -109,15 +70,13 @@ public class PersistentVolumeTest extends ConsensusCapsuleTestAbstract {
             assertThat(consensusPods).hasSize(count);
 
             for (Pod p : consensusPods) {
-                String accountId = p.getMetadata().getLabels().get(LABEL_ACCOUNT_ID);
-                assertThat(accountId).isNotEmpty();
                 assertThat(p.getSpec().getVolumes().size()).isGreaterThanOrEqualTo(VOLUME_MOUNT_NAMES.size());
-
-                for (Volume v : p.getSpec().getVolumes()) {
-                    if (VOLUME_MOUNT_NAMES.containsValue(v.getName())) {
-                        assertThat(v.getPersistentVolumeClaim()).isNotNull();
-                    }
-                }
+                List<Volume> pvcs = new ArrayList<>();
+                p.getSpec().getVolumes().stream()
+                        .filter(v ->
+                                VOLUME_MOUNT_NAMES.containsValue(v.getName()) && v.getPersistentVolumeClaim() != null)
+                        .forEach(pvcs::add);
+                assertThat(pvcs).hasSize(VOLUME_MOUNT_NAMES.size());
             }
         });
     }

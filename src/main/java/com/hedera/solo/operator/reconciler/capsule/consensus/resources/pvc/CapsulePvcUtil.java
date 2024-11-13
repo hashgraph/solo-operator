@@ -11,7 +11,7 @@ import io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpecBuilder;
 import io.fabric8.kubernetes.api.model.Quantity;
 import java.util.Objects;
 
-class CapsulePvcUtil {
+public class CapsulePvcUtil {
     public static String validPvcName(ConsensusCapsule cc, String volSuffix) {
         final String nodeId = Metadata.prepareNodeName(cc);
         return "%s-%s".formatted(nodeId, volSuffix);
