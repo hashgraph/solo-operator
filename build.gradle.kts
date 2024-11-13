@@ -42,6 +42,9 @@ dependencies {
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk")
     implementation("io.quarkus:quarkus-resteasy-qute:${quarkusPlatformVersion}")
     implementation("com.hedera.hashgraph:sdk:${hederaSdkVersion}")
+    implementation("com.swirlds:swirlds-platform-core:0.55.1")
+    implementation("org.bouncycastle:bcpkix-jdk18on")
+    runtimeOnly("org.hyperledger.besu:secp256k1:0.8.2")
 
     compileOnly("io.sundr:builder-annotations:${sundrVersion}")
     compileOnly("org.projectlombok:lombok:${lombokVersion}")

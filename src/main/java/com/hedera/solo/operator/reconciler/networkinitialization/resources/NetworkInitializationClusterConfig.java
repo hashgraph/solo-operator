@@ -83,7 +83,7 @@ public class NetworkInitializationClusterConfig extends KubernetesDependentResou
                 .append("\n");
         sb.append("app, HederaNode.jar\n");
         for (Node node : localNodes(primary)) {
-            sb.append("address, %d, %s, %s, 1, %s, 50111, %s, 50111, 0.0.%d\n"
+            sb.append("address, %d, %s, %s, 1, %s, 50111, %s, 50111, 0.0.%d\n" // <- fixme: use account id from capsule
                     .formatted(nodeId, node.name, node.name, node.internal, node.external, nodeId + 3));
             nodeId++;
         }

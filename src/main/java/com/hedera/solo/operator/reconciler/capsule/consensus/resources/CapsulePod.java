@@ -18,7 +18,6 @@ import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_EVENT
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NAMESPACE;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_ID;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_IDS;
-import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_PUBLIC_KEY_FILES;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_RECORD_STREAM_UPLOADER;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
@@ -149,14 +148,6 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
     }
 
     private Pod renderDeploymentTemplate(ConsensusCapsule primary, Context<ConsensusCapsule> context) {
-
-        // fetch public keys configmap
-        final ConfigMap publicKeys = context.getClient()
-                .resources(ConfigMap.class)
-                .inNamespace(primary.getMetadata().getNamespace())
-                .withName("public-keys")
-                .get();
-
         final ConsensusNode cn = primary.getSpec().getPod().getContainers().getConsensusNode();
         final StreamUploader rsu = this.prepareRecordStreamUploader(primary);
         final StreamUploader esu = this.prepareEventStreamUploader(primary);
@@ -165,7 +156,6 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
 
         // set template variables
         TemplateInstance tplInstance = getTemplateWithDefaults(primary, context);
-        tplInstance.data(TPL_VAR_PUBLIC_KEY_FILES, publicKeys.getData().keySet());
         tplInstance.data(TPL_VAR_CONSENSUS_NODE, cn);
         tplInstance.data(TPL_VAR_RECORD_STREAM_UPLOADER, rsu);
         tplInstance.data(TPL_VAR_EVENT_STREAM_UPLOADER, esu);

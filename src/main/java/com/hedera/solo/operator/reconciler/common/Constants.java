@@ -48,7 +48,6 @@ public final class Constants {
     public static final String TPL_VAR_NODE_IDS = "nodeIds";
     public static final String TPL_VAR_ACCOUNT_ID = "accountId";
     public static final String TPL_VAR_SECURITY_CONTEXT = "securityContext";
-    public static final String TPL_VAR_PUBLIC_KEY_FILES = "publicKeyFiles";
     public static final String TPL_VAR_CONSENSUS_NODE = "cn";
     public static final String TPL_VAR_RECORD_STREAM_UPLOADER = "rsu";
     public static final String TPL_VAR_EVENT_STREAM_UPLOADER = "esu";
