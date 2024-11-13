@@ -7,6 +7,7 @@ plugins {
     id("com.hedera.solo.operator.spotless-conventions")
     id("com.hedera.solo.operator.spotless-java-conventions")
     id("com.hedera.solo.operator.spotless-kotlin-conventions")
+    jacoco
     if (!System.getenv().containsKey("CI")) {
         idea
     }
@@ -75,6 +76,17 @@ tasks.withType<Jar>().configureEach {
 
 // Ensure the check task also runs the JaCoCo coverage report
 // tasks.named("check").configure { dependsOn(tasks.named<JacocoReport>("jacocoTestReport")) }
+
+tasks {
+    test {
+        finalizedBy(jacocoTestReport)
+        configure<JacocoTaskExtension> {
+            excludes = listOf("*QuarkusClassLoader")
+            setDestinationFile(layout.buildDirectory.file("jacoco-quarkus.exec").get().asFile)
+        }
+    }
+    jacocoTestReport { enabled = false }
+}
 
 tasks.named("assemble").configure { dependsOn(tasks.named("testClasses")) }
 
