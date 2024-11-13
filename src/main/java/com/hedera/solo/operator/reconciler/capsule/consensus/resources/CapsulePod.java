@@ -148,7 +148,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
     }
 
     private Pod renderDeploymentTemplate(ConsensusCapsule primary, Context<ConsensusCapsule> context) {
-        final ConsensusNode cn = primary.getSpec().getPod().getContainers().getConsensusNode();
+        final ConsensusNode cn = primary.getSpec().getPod().getContainers().getConsensusNode(); // fixme!
         final StreamUploader rsu = this.prepareRecordStreamUploader(primary);
         final StreamUploader esu = this.prepareEventStreamUploader(primary);
         final StreamUploader bu = this.prepareBackupUploader(primary);

@@ -103,3 +103,9 @@ objectModelGenerator {
     }
     register(sourceSets.componentTest)
 }
+
+buildscript {
+    configurations.classpath {
+        resolutionStrategy { force("org.eclipse.jgit:org.eclipse.jgit:7.0.0.202409031743-r") }
+    }
+}

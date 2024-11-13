@@ -90,6 +90,11 @@ public class MultipleOrbitTest {
         Stream.of("alpha", "beta", "gamma")
                 .map(name -> MethodHandles.lookup().lookupClass().getSimpleName().toLowerCase() + "-" + name)
                 .map(this::createOrbit).forEach(orbits::add);
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            for (Orbit orbit : orbits) {
+                assertThat(operator.getKubernetesClient().namespaces().withName(orbit.getMetadata().getName()).get()).isNotNull();
+            }
+        });
     }
 
     @AfterEach
@@ -141,7 +146,8 @@ public class MultipleOrbitTest {
                         .withNamespace(orbit.getMetadata().getName()))
                 .with(spec -> spec.editSpec().withOrbit(orbit.getMetadata().getName())
                         .withAccountId("0.0." + accountId)
-                        .editPod().editContainers().editConsensusNode()) // todo: <- why is this required at runtime?
+//                        .editPod().editContainers().editConsensusNode() // todo: <- why is this required at runtime?
+                )
                 .build();
         return operator.getKubernetesClient().resource(capsule).create();
     }
