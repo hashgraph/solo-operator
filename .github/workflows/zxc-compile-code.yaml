@@ -44,13 +44,18 @@ jobs:
     name: ${{ inputs.custom-job-label || 'Compiles' }}
     runs-on: solo-linux-medium
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@91182cccc01eb5e619899d80e4e971d6181294a7 # v2.10.1
+        with:
+          egress-policy: audit
+
       - name: Checkout Code
-        uses: actions/checkout@eef61447b9ff4aafe5dcd4e0bbf5d482be7e7871 # v4.2.1
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: ${{ inputs.enable-spotless-check && '0' || '' }}
 
       - name: Setup Java
-        uses: actions/setup-java@b36c23c0d998641eff861008f374ee103c25ac73 # v4.4.0
+        uses: actions/setup-java@8df1039502a15bceb9433410b1a100fbe190c53b # v4.5.0
         with:
           distribution: temurin
           java-version: 21
@@ -104,4 +109,12 @@ jobs:
         with:
           name: Test Snapshots
           path: build/snapshots.zip
+          if-no-files-found: ignore
+
+      - name: Publish Heap Dumps
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: ${{ inputs.enable-unit-tests && !cancelled() }}
+        with:
+          name: Test Heap Dumps
+          path: "java_*.hprof"
           if-no-files-found: ignore

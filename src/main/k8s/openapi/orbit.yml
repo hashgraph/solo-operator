@@ -159,7 +159,7 @@ components:
         conditions:
           items:
             type: object
-            x-java-type: com.hedera.solo.operator.model.commonspec.Condition
+            x-java-type: io.fabric8.kubernetes.api.model.Condition
           type: array
         startTime:
           description: The time at which the `Orbit` was started.

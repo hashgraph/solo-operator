@@ -50,6 +50,7 @@ dependencies {
     compileOnly("org.projectlombok:lombok:${lombokVersion}")
 
     testImplementation("io.quarkus:quarkus-junit5")
+    testImplementation("io.quarkus:quarkus-junit5-mockito")
     testImplementation("io.quarkus:quarkus-jacoco")
     testImplementation("org.awaitility:awaitility")
     testImplementation("org.assertj:assertj-core:${assertjVersion}")

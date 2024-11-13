@@ -2,6 +2,9 @@
 
 package com.hedera.solo.operator.reconciler.common;
 
+import static com.hedera.solo.operator.reconciler.common.Constants.OPERATOR_PREFIX;
+
+import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
@@ -22,9 +25,6 @@ public final class Metadata {
     private Metadata() {
         throw new UnsupportedOperationException("Utility class");
     }
-
-    /** The prefix for all operator labels. */
-    public static final String OPERATOR_PREFIX = "operator.solo.hedera.com/";
 
     /** The default filter that accepts all labels. */
     public static final BiPredicate<String, String> DEFAULT_FILTER = (key, value) -> true;
@@ -260,5 +260,14 @@ public final class Metadata {
         }
 
         return dst;
+    }
+
+    public static String prepareNodeName(ConsensusCapsule cc) {
+        // we are deriving the node name from node-id instead of using the name of the ConsensusCapsule
+        return prepareNodeName(cc.getSpec().getNodeId());
+    }
+
+    public static String prepareNodeName(Long nodeId) {
+        return Constants.NODE_NAME_FORMAT.formatted(nodeId);
     }
 }

@@ -1,18 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package com.hedera.solo.operator.reconciler.networkinitialization;
+package com.hedera.solo.operator.reconciler.networkoperation;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
+import static java.util.Objects.nonNull;
 
+import com.hedera.solo.operator.library.builder.BuilderFunction;
 import com.hedera.solo.operator.library.numeric.RolloverComparator;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
-import com.hedera.solo.operator.model.v1alpha1.NetworkInitialization;
-import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationStatus;
-import com.hedera.solo.operator.reconciler.networkinitialization.resources.NetworkInitializationClusterConfig;
-import com.hedera.solo.operator.reconciler.networkinitialization.resources.NetworkInitializationConsensusCapsule;
-import com.hedera.solo.operator.reconciler.networkinitialization.resources.NetworkInitializationOrbit;
-import com.hedera.solo.operator.reconciler.networkinitialization.resources.NetworkInitializationTrigger;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperationBuilder;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
+import com.hedera.solo.operator.reconciler.common.ConditionStatus;
+import com.hedera.solo.operator.reconciler.networkoperation.resources.NetworkOperationClusterConfig;
+import com.hedera.solo.operator.reconciler.networkoperation.resources.NetworkOperationConsensusCapsule;
+import com.hedera.solo.operator.reconciler.networkoperation.resources.NetworkOperationOrbit;
+import com.hedera.solo.operator.reconciler.networkoperation.resources.NetworkOperationTrigger;
+import io.fabric8.kubernetes.api.model.Condition;
+import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClientException;
@@ -30,12 +36,17 @@ import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import java.lang.invoke.MethodHandles;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
@@ -45,39 +56,41 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.jboss.logging.Logger;
 
-/** {@code NetworkInitializationReconciler} operates on a single CR per namespace at any given time. */
-@ControllerConfiguration(name = "network-initialization")
-public class NetworkInitializationReconciler
-        implements Cleaner<NetworkInitialization>,
-                EventSourceInitializer<NetworkInitialization>,
-                Reconciler<NetworkInitialization> {
+/** {@code NetworkOperationReconciler} operates on a single CR per namespace at any given time. */
+@ControllerConfiguration(name = "network-operation")
+public class NetworkOperationReconciler
+        implements Cleaner<NetworkOperation>, EventSourceInitializer<NetworkOperation>, Reconciler<NetworkOperation> {
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
-    private static final Set<NetworkInitializationStatus.Phase> DONE =
-            Set.of(NetworkInitializationStatus.Phase.Failed, NetworkInitializationStatus.Phase.Succeeded);
+    private static final Set<NetworkOperationStatus.Phase> DONE =
+            Set.of(NetworkOperationStatus.Phase.Failed, NetworkOperationStatus.Phase.Succeeded);
+    private static final Set<ConsensusCapsuleStatus.Phase> RECOGNIZED_CAPSULE_PHASES = Set.of(
+            ConsensusCapsuleStatus.Phase.Failed,
+            ConsensusCapsuleStatus.Phase.Pending,
+            ConsensusCapsuleStatus.Phase.Running,
+            ConsensusCapsuleStatus.Phase.Succeeded,
+            ConsensusCapsuleStatus.Phase.Unknown);
     private static final Duration DELAY = Duration.of(100, ChronoUnit.MILLIS);
-    private EventSourceContext<NetworkInitialization> eventSourceContext;
+    private EventSourceContext<NetworkOperation> eventSourceContext;
     private final AtomicLong sequenceNumber = new AtomicLong();
     private final RolloverComparator rolloverComparator = new RolloverComparator(63);
-    private final NetworkInitializationClusterConfig clusterConfig = new NetworkInitializationClusterConfig();
-    private final NetworkInitializationConsensusCapsule consensusCapsule =
-            new NetworkInitializationConsensusCapsule(this);
-    private final NetworkInitializationOrbit orbit = new NetworkInitializationOrbit(this);
-    private final NetworkInitializationTrigger trigger = new NetworkInitializationTrigger(this);
-    private final Workflow<NetworkInitialization> workflow = new WorkflowBuilder<NetworkInitialization>()
+    private final NetworkOperationClusterConfig clusterConfig = new NetworkOperationClusterConfig();
+    private final NetworkOperationConsensusCapsule consensusCapsule = new NetworkOperationConsensusCapsule(this);
+    private final NetworkOperationOrbit orbit = new NetworkOperationOrbit(this);
+    private final NetworkOperationTrigger trigger = new NetworkOperationTrigger(this);
+    private final Workflow<NetworkOperation> workflow = new WorkflowBuilder<NetworkOperation>()
             .addDependentResource(clusterConfig)
             .addDependentResource(consensusCapsule)
             .dependsOn(clusterConfig)
             .addDependentResource(orbit)
             .addDependentResource(trigger)
             .build();
-    public final Comparator<NetworkInitialization> prioritize =
-            Comparator.<NetworkInitialization, ZonedDateTime>comparing(resource ->
-                            ZonedDateTime.parse(resource.getMetadata().getCreationTimestamp()))
-                    .thenComparing(resource -> resource.getStatus().getSequenceNumber(), rolloverComparator);
+    public final Comparator<NetworkOperation> prioritize = Comparator.<NetworkOperation, ZonedDateTime>comparing(
+                    resource -> ZonedDateTime.parse(resource.getMetadata().getCreationTimestamp()))
+            .thenComparing(resource -> resource.getStatus().getSequenceNumber(), rolloverComparator);
 
     @Override
-    public UpdateControl<NetworkInitialization> reconcile(
-            final NetworkInitialization resource, final Context<NetworkInitialization> context) throws Exception {
+    public UpdateControl<NetworkOperation> reconcile(
+            final NetworkOperation resource, final Context<NetworkOperation> context) throws Exception {
         try {
             log.infof(
                     "Network Initialization - Starting Reconciliation [ name = '%s' ]",
@@ -86,12 +99,12 @@ public class NetworkInitializationReconciler
             if (null == resource.getStatus()) {
                 if (null != context.getClient().resource(resource).get().getStatus()) {
                     // cache is old
-                    return UpdateControl.<NetworkInitialization>noUpdate().rescheduleAfter(DELAY);
+                    return UpdateControl.<NetworkOperation>noUpdate().rescheduleAfter(DELAY);
                 }
                 // initialize resource status
                 return UpdateControl.patchStatus(edit(resource)
                                 .with(status -> status.editStatus()
-                                        .withPhase(NetworkInitializationStatus.Phase.Pending)
+                                        .withPhase(NetworkOperationStatus.Phase.Pending)
                                         .withSequenceNumber(
                                                 rolloverComparator.rollover(sequenceNumber.getAndIncrement())))
                                 .build())
@@ -110,7 +123,7 @@ public class NetworkInitializationReconciler
                 // it appears to be first based on the cache, so verify with client
                 queue = queue(context
                         .getClient()
-                        .resources(NetworkInitialization.class)
+                        .resources(NetworkOperation.class)
                         .inNamespace(resource.getMetadata().getNamespace())
                         .list()
                         .getItems()
@@ -126,11 +139,11 @@ public class NetworkInitializationReconciler
             }
             // have the capsules been selected?
             if (resource.getStatus().getConsensusCapsules() == null) {
-                NetworkInitialization current =
+                NetworkOperation current =
                         context.getClient().resource(resource).get();
                 if (null != current.getStatus().getConsensusCapsules()) {
                     // cache is old
-                    return UpdateControl.<NetworkInitialization>noUpdate().rescheduleAfter(DELAY);
+                    return UpdateControl.<NetworkOperation>noUpdate().rescheduleAfter(DELAY);
                 }
                 // select capsules
                 return UpdateControl.patchStatus(edit(resource)
@@ -152,15 +165,15 @@ public class NetworkInitializationReconciler
             workflow.reconcile(resource, context);
 
             // determine phase
-            NetworkInitializationStatus.Phase phase = getPhase(resource, context);
-            if (DONE.contains(phase)) {
+            NetworkOperation patchStatus = edit(resource)
+                    .with(status -> status.editStatus()
+                            .withObservedGeneration(resource.getMetadata().getGeneration()))
+                    .with(determinePhase(resource, context))
+                    .build();
+            if (DONE.contains(patchStatus.getStatus().getPhase())) {
                 trigger.next(resource, context);
             }
-            return UpdateControl.patchStatus(edit(resource)
-                    .with(status -> status.editStatus()
-                            .withObservedGeneration(resource.getMetadata().getGeneration())
-                            .withPhase(phase))
-                    .build());
+            return UpdateControl.patchStatus(patchStatus);
         } finally {
             log.infof(
                     "Network Initialization - Finished Reconciliation [ name = '%s' ]",
@@ -169,48 +182,75 @@ public class NetworkInitializationReconciler
     }
 
     // collect consensus capsule status in status until any fail or all are running.
-    private NetworkInitializationStatus.Phase getPhase(
-            final NetworkInitialization resource, final Context<NetworkInitialization> context) {
+    private BuilderFunction<NetworkOperationBuilder> determinePhase(
+            final NetworkOperation resource, final Context<NetworkOperation> context) {
         Collection<ConsensusCapsule> consensusCapsules =
                 consensusCapsule.getSecondaryResources(resource, context).values();
-        Set<ConsensusCapsuleStatus.Phase> phases = consensusCapsules.stream()
+        List<ConsensusCapsuleStatus.Phase> phaseList = consensusCapsules.stream()
                 .map(CustomResource::getStatus)
                 .filter(Objects::nonNull)
                 .map(ConsensusCapsuleStatus::getPhase)
                 .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-
-        NetworkInitializationStatus.Phase phase = NetworkInitializationStatus.Phase.Failed;
-        if (Set.of(ConsensusCapsuleStatus.Phase.Running).equals(phases)) {
-            phase = NetworkInitializationStatus.Phase.Succeeded;
+                .toList();
+        Set<ConsensusCapsuleStatus.Phase> phases = new HashSet<>(phaseList);
+        NetworkOperationStatus.Phase phase;
+        List<Condition> conditions = new ArrayList<>();
+        if (Set.of(ConsensusCapsuleStatus.Phase.Running).equals(phases)
+                && consensusCapsules.size() == phaseList.size()) {
+            phase = NetworkOperationStatus.Phase.Succeeded;
+            conditions.add(new ConditionBuilder()
+                    .withType("Ready")
+                    .withStatus(ConditionStatus.True)
+                    .withLastTransitionTime(Instant.now().toString())
+                    .build());
         } else if (Set.of(
                         ConsensusCapsuleStatus.Phase.Pending,
                         ConsensusCapsuleStatus.Phase.Running,
                         ConsensusCapsuleStatus.Phase.Unknown)
                 .containsAll(phases)) {
-            phase = NetworkInitializationStatus.Phase.Running;
+            phase = NetworkOperationStatus.Phase.Running;
+        } else {
+            phase = NetworkOperationStatus.Phase.Failed;
+            Map<String, ConsensusCapsuleStatus.Phase> map = consensusCapsules.stream()
+                    .filter(c -> nonNull(c.getStatus()) && nonNull(c.getStatus().getPhase()))
+                    .sorted(Comparator.comparing(c -> c.getMetadata().getName()))
+                    .collect(
+                            LinkedHashMap::new,
+                            (m, c) -> m.put(
+                                    c.getMetadata().getName(), c.getStatus().getPhase()),
+                            Map::putAll);
+            conditions.add(new ConditionBuilder()
+                    .withType("Ready")
+                    .withStatus(ConditionStatus.False)
+                    .withReason("CapsulePhase")
+                    .withMessage("Capsule phases: " + map)
+                    .withLastTransitionTime(Instant.now().toString())
+                    .build());
+            log.warnf(
+                    "Network Initialization - Failed [ name = '%s', capsules = '%s' ]",
+                    resource.getMetadata().getName(), map);
         }
-        return phase;
+        return builder -> builder.editStatus().withPhase(phase).addAllToConditions(conditions);
     }
 
     @Override
-    public Map<String, EventSource> prepareEventSources(final EventSourceContext<NetworkInitialization> context) {
+    public Map<String, EventSource> prepareEventSources(final EventSourceContext<NetworkOperation> context) {
         eventSourceContext = context;
         return EventSourceInitializer.eventSourcesFromWorkflow(context, workflow);
     }
 
-    public EventSourceContext<NetworkInitialization> eventSourceContext() {
+    public EventSourceContext<NetworkOperation> eventSourceContext() {
         return eventSourceContext;
     }
 
-    public boolean candidate(final NetworkInitialization resource) {
+    public boolean candidate(final NetworkOperation resource) {
         return null == resource.getMetadata().getDeletionTimestamp()
                 && null != resource.getStatus()
-                && Set.of(NetworkInitializationStatus.Phase.Pending, NetworkInitializationStatus.Phase.Running)
+                && Set.of(NetworkOperationStatus.Phase.Pending, NetworkOperationStatus.Phase.Running)
                         .contains(resource.getStatus().getPhase());
     }
 
-    Queue<String> queue(final Stream<NetworkInitialization> stream) {
+    Queue<String> queue(final Stream<NetworkOperation> stream) {
         return stream.filter(this::candidate)
                 .sorted(prioritize)
                 .map(CustomResource::getMetadata)
@@ -219,7 +259,7 @@ public class NetworkInitializationReconciler
     }
 
     @Override
-    public DeleteControl cleanup(final NetworkInitialization resource, final Context<NetworkInitialization> context) {
+    public DeleteControl cleanup(final NetworkOperation resource, final Context<NetworkOperation> context) {
         try {
             trigger.next(resource, context);
         } catch (KubernetesClientException ignored) {

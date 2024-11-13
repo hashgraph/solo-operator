@@ -26,24 +26,29 @@ import com.hedera.hashgraph.sdk.PrivateKey;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleBuilder;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
-import com.hedera.solo.operator.model.v1alpha1.NetworkInitialization;
-import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationBuilder;
-import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationSpec;
-import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationStatus;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperationBuilder;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitBuilder;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PodBuilder;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.Containers;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.ContainersBuilder;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.containers.ConsensusNode;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PersistentVolumeClaims;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PersistentVolumeClaimsBuilder;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PodProperties;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PodPropertiesBuilder;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Containers;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.ContainersBuilder;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Volumes;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.VolumesBuilder;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.ConsensusNode;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
 import com.hedera.solo.operator.test.fixtures.snapshot.SnapshotFailureContext;
 import com.hedera.solo.operator.test.framework.HederaSdkClientFactory;
+import com.hedera.solo.operator.test.setup.ClusterSetupManager;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
-import io.fabric8.kubernetes.api.model.PersistentVolumeClaim;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodSecurityContextBuilder;
 import io.fabric8.kubernetes.api.model.Secret;
@@ -65,7 +70,6 @@ import org.junit.jupiter.api.Test;
 @SoloTest
 public abstract class ConsensusCapsuleTestAbstract {
     protected final String namespace = getClass().getSimpleName().toLowerCase();
-
     protected final String svcNameSuffix = ".%s.%s".formatted(namespace, "svc.cluster.local");
 
     @Inject
@@ -73,10 +77,14 @@ public abstract class ConsensusCapsuleTestAbstract {
     KubernetesClient kubernetesClient;
 
     @Inject
+    ClusterSetupManager clusterSetupManager;
+
+    @Inject
     Operator operator;
 
     @BeforeEach
     void setup() {
+        clusterSetupManager.check();
         configureCoredns(kubernetesClient);
         if (isTestUsingGradleOrIntelliJ()) {
             operator.start();
@@ -122,7 +130,7 @@ public abstract class ConsensusCapsuleTestAbstract {
 
     void cleanup() {
         kubernetesClient
-                .resources(NetworkInitialization.class)
+                .resources(NetworkOperation.class)
                 .inNamespace(namespace)
                 .delete();
 
@@ -137,13 +145,15 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .until(() -> kubernetesClient.namespaces().withName(namespace).get() == null);
     }
 
-    record NodeInfo(String name, String accountId, int weight, String internal, String external) {}
+    protected record NodeInfo(Long id, String name, String accountId, int weight, String internal, String external) {}
 
-    private List<NodeInfo> prepareNodes(List<String> nodeNames) {
+    private List<NodeInfo> prepareNodes(List<Long> nodeIds) {
         List<NodeInfo> nodes = new ArrayList<>();
         int accStart = Constants.HEDERA_ACCOUNT_START;
-        for (String nodeName : nodeNames) {
+        for (Long nodeId : nodeIds) {
+            String nodeName = Constants.NODE_NAME_FORMAT.formatted(nodeId);
             nodes.add(new NodeInfo(
+                    nodeId,
                     nodeName,
                     String.format("0.0.%d", accStart++),
                     1,
@@ -200,44 +210,32 @@ public abstract class ConsensusCapsuleTestAbstract {
         }
     }
 
-    private void setupPersistentVolumeClaims(List<NodeInfo> nodes) {
-        for (final String pvcDirName : List.of(
-                "output",
-                "data-keys",
-                "data-saved",
-                "data-stats",
-                "data-upgrade",
-                "events-streams",
-                "record-streams")) {
-            for (NodeInfo node : nodes) {
-                final String pvcFile = String.format("storage/%s-pvc.yaml", pvcDirName);
-                kubernetesClient
-                        .resource(loadYaml(PersistentVolumeClaim.class, getClass(), pvcFile)
-                                .edit()
-                                .editMetadata()
-                                .withName("%s-%s".formatted(node.name, pvcDirName))
-                                .withNamespace(namespace)
-                                .addToLabels("consensus-capsule", node.name)
-                                .endMetadata()
-                                .build())
-                        .create();
-            }
+    protected Volumes prepareCapsulePodVolumes(NodeInfo node) {
+        return new VolumesBuilder().build(); // default with no volume spec will use empty volumes
+    }
+
+    protected List<Long> prepareNodeIds(int count) {
+        long nodeId = 0L;
+        List<Long> nodeIds = new ArrayList<>();
+        while (count-- > 0) {
+            nodeIds.add(nodeId++);
         }
+
+        return nodeIds;
     }
 
     @Test
     void testSingleNodeDeployment() throws Exception {
-        final List<String> nodeNames = List.of("node0");
-        final List<NodeInfo> nodes = prepareNodes(nodeNames);
+        final List<Long> nodeIds = prepareNodeIds(1);
+        final List<NodeInfo> nodes = prepareNodes(nodeIds);
         this.setupConfigMaps();
         this.setupSecrets(nodes);
-        this.setupPersistentVolumeClaims(nodes);
 
         // create consensus capsule
         List<ConsensusCapsule> consensusCapsules = createConsensusCapsule(nodes);
 
         // create network initialization
-        createNetworkInitialization(consensusCapsules);
+        createNetworkOperation(consensusCapsules);
 
         // test with client
         checkAddressBook(HederaSdkClientFactory::directContextCreator);
@@ -245,17 +243,16 @@ public abstract class ConsensusCapsuleTestAbstract {
 
     @Test
     void testMultiNodeDeployment() throws Exception {
-        final List<String> nodeNames = List.of("node0", "node1", "node2");
-        final List<NodeInfo> nodes = prepareNodes(nodeNames);
+        final List<Long> nodeIds = prepareNodeIds(3);
+        final List<NodeInfo> nodes = prepareNodes(nodeIds);
         this.setupConfigMaps();
         this.setupSecrets(nodes);
-        this.setupPersistentVolumeClaims(nodes);
 
         // create consensus capsule
         List<ConsensusCapsule> consensusCapsules = createConsensusCapsule(nodes);
 
         // create network initialization
-        createNetworkInitialization(consensusCapsules);
+        createNetworkOperation(consensusCapsules);
 
         // test with client
         checkAddressBook(HederaSdkClientFactory::directContextCreator);
@@ -295,6 +292,34 @@ public abstract class ConsensusCapsuleTestAbstract {
         return getContainersBuilder().build();
     }
 
+    protected PersistentVolumeClaims prepareCapsulePVCs(NodeInfo node) {
+        return new PersistentVolumeClaimsBuilder().build();
+    }
+
+    protected ConsensusCapsuleBuilder prepareConsensusCapsuleBuilder(NodeInfo node) {
+        final PodProperties consensusPod = new PodPropertiesBuilder()
+                .withSecurityContext(new PodSecurityContextBuilder()
+                        .withRunAsUser(HEDERA_USER)
+                        .withRunAsGroup(HEDERA_GROUP)
+                        .build())
+                .withContainers(this.prepareConsensusPodContainers())
+                .withVolumes(this.prepareCapsulePodVolumes(node))
+                .build();
+
+        return new ConsensusCapsuleBuilder()
+                .withNewMetadata()
+                .withName(node.name)
+                .withNamespace(namespace)
+                .endMetadata()
+                .withNewSpec()
+                .withPodProperties(consensusPod)
+                .withOrbit(namespace) // for now, namespace and orbit must match
+                .withAccountId(node.accountId)
+                .withNodeId(node.id)
+                .withPersistentVolumeClaims(prepareCapsulePVCs(node))
+                .endSpec();
+    }
+
     protected List<Pod> fetchConsensusPods() {
         return kubernetesClient
                 .resources(Pod.class)
@@ -305,32 +330,15 @@ public abstract class ConsensusCapsuleTestAbstract {
     }
 
     List<ConsensusCapsule> createConsensusCapsule(List<NodeInfo> nodes) {
-        Containers containers = this.prepareConsensusPodContainers();
-        final com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Pod consensusPod = new PodBuilder()
-                .withSecurityContext(new PodSecurityContextBuilder()
-                        .withRunAsUser(HEDERA_USER)
-                        .withRunAsGroup(HEDERA_GROUP)
-                        .build())
-                .withContainers(containers)
-                .build();
-
+        // prepare a list of consensus-capsule for each node
         List<ConsensusCapsule> list = new ArrayList<>();
         for (NodeInfo node : nodes) {
-            final ConsensusCapsule consensusCapsule = new ConsensusCapsuleBuilder()
-                    .withNewMetadata()
-                    .withNamespace(namespace) // namespace and orbit name must match
-                    .withName(node.name)
-                    .endMetadata()
-                    .withNewSpec()
-                    .withOrbit(namespace) // namespace and orbit name must match
-                    .withAccountId(node.accountId)
-                    .withPod(consensusPod)
-                    .endSpec()
-                    .build();
-
-            list.add(kubernetesClient.resource(consensusCapsule).create());
+            list.add(kubernetesClient
+                    .resource(prepareConsensusCapsuleBuilder(node).build())
+                    .create());
         }
 
+        // setup secrets and services for each consensus-capsule
         for (ConsensusCapsule consensusCapsule : list) {
             String name = consensusCapsule.getMetadata().getName();
             await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
@@ -360,7 +368,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         return list;
     }
 
-    void createNetworkInitialization(List<ConsensusCapsule> consensusCapsules) {
+    void createNetworkOperation(List<ConsensusCapsule> consensusCapsules) {
         for (ConsensusCapsule consensusCapsule : consensusCapsules) {
             String name = consensusCapsule.getMetadata().getName();
             ConsensusCapsule capsule =
@@ -376,35 +384,34 @@ public abstract class ConsensusCapsuleTestAbstract {
             assertThat(pod).isNull();
         }
 
-        final NetworkInitialization networkInitialization = new NetworkInitializationBuilder()
+        final NetworkOperation networkOperation = new NetworkOperationBuilder()
                 .withNewMetadata()
-                .withName("network-initialization")
+                .withName("network-operation")
                 .withNamespace(namespace)
                 .endMetadata()
                 .withNewSpec()
-                .withMode(NetworkInitializationSpec.Mode.FirstInitialization)
+                .withMode(NetworkOperationSpec.Mode.FirstInitialization)
                 .endSpec()
                 .withNewStatus()
                 .endStatus()
                 .build();
-        kubernetesClient.resource(networkInitialization).create();
+        kubernetesClient.resource(networkOperation).create();
 
-        await().atMost(180, TimeUnit.SECONDS)
+        await().atMost(300, TimeUnit.SECONDS)
                 .failFast(() -> {
-                    NetworkInitialization netInit =
-                            kubernetesClient.resource(networkInitialization).get();
-                    assertThat(netInit).isNotNull();
-                    if (netInit.getStatus() != null) {
-                        assertThat(netInit.getStatus().getPhase())
-                                .isNotEqualTo(NetworkInitializationStatus.Phase.Failed);
+                    NetworkOperation netOp =
+                            kubernetesClient.resource(networkOperation).get();
+                    assertThat(netOp).isNotNull();
+                    if (netOp.getStatus() != null) {
+                        assertThat(netOp.getStatus().getPhase()).isNotEqualTo(NetworkOperationStatus.Phase.Failed);
                     }
                 })
                 .untilAsserted(() -> {
-                    NetworkInitialization netInit =
-                            kubernetesClient.resource(networkInitialization).get();
+                    NetworkOperation netInit =
+                            kubernetesClient.resource(networkOperation).get();
                     assertThat(netInit).isNotNull();
                     assertThat(netInit.getStatus()).isNotNull();
-                    assertThat(netInit.getStatus().getPhase()).isEqualTo(NetworkInitializationStatus.Phase.Succeeded);
+                    assertThat(netInit.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Succeeded);
                     for (ConsensusCapsule consensusCapsule : consensusCapsules) {
                         String name = consensusCapsule.getMetadata().getName();
                         ConsensusCapsule capsule =

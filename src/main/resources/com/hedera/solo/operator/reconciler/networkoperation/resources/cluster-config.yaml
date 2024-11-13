@@ -12,8 +12,8 @@ metadata:
 data:
 # address, nodeId, nickname, selfname, weight, internalHostname, internalPort, externalHostname, externalPort, memoToUse
 
-# should be overridden from orbit (require, not from bootstrap.properties):
-# swirld (bootstrap.properties#contracts.chainId)
+# should be overridden from orbit (require, not from application.properties):
+# swirld (application.properties#contracts.chainId)
 
 # provided:
 # memoToUse
@@ -156,16 +156,6 @@ data:
     balances.compressOnCreation=true
     contracts.maxNumWithHapiSigsAccess=0
     balances.exportEnabled=true
-  bootstrap.properties: |
-    ledger.id=0x01
-    netty.mode=DEV
-    contracts.chainId=298
-    hedera.recordStream.logPeriod=1
-    balances.exportPeriodSecs=400
-    files.maxSizeKb=2048
-    hedera.recordStream.compressFilesOnCreation=true
-    balances.compressOnCreation=true
-    contracts.maxNumWithHapiSigsAccess=0
 # log can be provided in consensusCapsule
   log4j2.xml: |-
     <?xml version="1.0" encoding="UTF-8"?>
@@ -662,3 +652,30 @@ data:
 
     printf "\n\n#### Hedera Services Node Software Stopped ####\n\n"
     /usr/bin/sleep infinity
+  startup-probe: |
+    import java.net.http.*;
+    int rc = 1;
+    URI uri = URI.create("http://localhost:9999");
+    HttpRequest request = HttpRequest.newBuilder().uri(uri).GET().build();
+    HttpClient client = HttpClient.newHttpClient();
+    HttpResponse response = client.send(request, HttpResponse.BodyHandlers.ofString());
+    if (200 == response.statusCode()) {
+      String body = response.body().toString();
+      String help = "";
+      int status = -1;
+      for (String line : body.lines().toList()) {
+        // # HELP platform_PlatformStatus 0=NO_VALUE 1=STARTING_UP 2=ACTIVE ...
+        if (line.startsWith("# HELP platform_PlatformStatus ")) {
+          help = line;
+        }
+        // platform_PlatformStatus{node="0",} 2.0
+        if (line.startsWith("platform_PlatformStatus{")) {
+          String[] fields = line.split("\\s+");
+          status = Double.valueOf(fields[fields.length - 1]).intValue();
+        }
+      }
+      if ("ACTIVE".equals(help.replaceFirst(".*\\s+" + status + "=(\\S+)\\s+.*", "$1"))) {
+        rc = 0;
+      }
+    }
+    /exit rc

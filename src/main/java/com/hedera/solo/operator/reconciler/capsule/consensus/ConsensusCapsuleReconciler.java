@@ -13,6 +13,12 @@ import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsulePo
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleRoleBinding;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleService;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleServiceAccount;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsuleEventsStreamPvc;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsuleLogsPvc;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsuleRecordStreamPvc;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsuleStatesPvc;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsuleStatsPvc;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsuleUpgradePvc;
 import io.fabric8.kubernetes.api.model.ContainerState;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.HasMetadata;
@@ -36,6 +42,12 @@ import org.jboss.logging.Logger;
             @Dependent(name = "sa", type = CapsuleServiceAccount.class),
             @Dependent(type = CapsuleRoleBinding.class, dependsOn = "sa"),
             @Dependent(type = CapsuleService.class),
+            @Dependent(type = CapsuleLogsPvc.class, reconcilePrecondition = CapsuleLogsPvc.Ready.class),
+            @Dependent(type = CapsuleStatsPvc.class, reconcilePrecondition = CapsuleStatsPvc.Ready.class),
+            @Dependent(type = CapsuleStatesPvc.class, reconcilePrecondition = CapsuleStatesPvc.Ready.class),
+            @Dependent(type = CapsuleUpgradePvc.class, reconcilePrecondition = CapsuleUpgradePvc.Ready.class),
+            @Dependent(type = CapsuleRecordStreamPvc.class, reconcilePrecondition = CapsuleRecordStreamPvc.Ready.class),
+            @Dependent(type = CapsuleEventsStreamPvc.class, reconcilePrecondition = CapsuleEventsStreamPvc.Ready.class),
             @Dependent(type = CapsulePod.class, reconcilePrecondition = CapsulePod.Ready.class)
         })
 public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>, ErrorStatusHandler<ConsensusCapsule> {

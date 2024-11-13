@@ -12,8 +12,6 @@ components:
       description: Reusable components within generated object model
       type: object
       properties:
-        condition:
-          $ref: "#/components/schemas/Condition"
         softwareVersion:
           $ref: "#/components/schemas/SoftwareVersion"
         AddressBookEntry:
@@ -22,30 +20,6 @@ components:
           $ref: "#/components/schemas/StreamUploader"
         openTelemetryCollector:
           $ref: "#/components/schemas/OpenTelemetryCollector"
-
-    Condition:
-      type: object
-      properties:
-        lastTransitionTime:
-          description: The time at which the condition last transitioned from one status to another.
-          type: string
-        #              format: date-time
-        message:
-          description: A human-readable message indicating details about the transition.
-          type: string
-        reason:
-          description: The reason for the condition's last transition.
-          type: string
-        status:
-          description: The status of the condition. Must be one of True, False, Unknown.
-          type: string
-          enum:
-            - "True"
-            - "False"
-            - "Unknown"
-        type:
-          description: The type of the condition.
-          type: string
 
     SoftwareVersion:
       type: object
@@ -193,6 +167,11 @@ components:
                   type: string
             envFromSecret:
               type: string
+        additionalVolumeMounts:
+          type: array
+          items:
+            type: object
+            x-java-type: io.fabric8.kubernetes.api.model.VolumeMount
 
     OpenTelemetryCollector:
       type: object

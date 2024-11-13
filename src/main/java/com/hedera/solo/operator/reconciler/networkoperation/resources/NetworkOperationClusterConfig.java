@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package com.hedera.solo.operator.reconciler.networkinitialization.resources;
+package com.hedera.solo.operator.reconciler.networkoperation.resources;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
-import com.hedera.solo.operator.model.v1alpha1.NetworkInitialization;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
@@ -20,15 +20,15 @@ import java.util.List;
 import java.util.Optional;
 
 @KubernetesDependent
-public class NetworkInitializationClusterConfig extends KubernetesDependentResource<ConfigMap, NetworkInitialization>
-        implements Creator<ConfigMap, NetworkInitialization>,
-                ResourceDiscriminator<ConfigMap, NetworkInitialization>,
-                Updater<ConfigMap, NetworkInitialization> {
+public class NetworkOperationClusterConfig extends KubernetesDependentResource<ConfigMap, NetworkOperation>
+        implements Creator<ConfigMap, NetworkOperation>,
+                ResourceDiscriminator<ConfigMap, NetworkOperation>,
+                Updater<ConfigMap, NetworkOperation> {
 
     public static final String TEMPLATE = "cluster-config.yaml";
     public static final String NAME = "cluster-config";
 
-    public NetworkInitializationClusterConfig() {
+    public NetworkOperationClusterConfig() {
         super(ConfigMap.class);
         configureWith(new KubernetesDependentResourceConfigBuilder<ConfigMap>()
                 .withLabelSelector("app=consensus,type=config")
@@ -37,7 +37,7 @@ public class NetworkInitializationClusterConfig extends KubernetesDependentResou
     }
 
     @Override
-    protected ConfigMap desired(final NetworkInitialization primary, final Context<NetworkInitialization> context) {
+    protected ConfigMap desired(final NetworkOperation primary, final Context<NetworkOperation> context) {
         return edit(context.getSecondaryResource(ConfigMap.class, this)
                         .orElseGet(() -> loadYaml(ConfigMap.class, getClass(), TEMPLATE)))
                 .with(metadata -> metadata.editMetadata()
@@ -49,9 +49,7 @@ public class NetworkInitializationClusterConfig extends KubernetesDependentResou
 
     @Override
     public Optional<ConfigMap> distinguish(
-            final Class<ConfigMap> resource,
-            final NetworkInitialization primary,
-            final Context<NetworkInitialization> context) {
+            final Class<ConfigMap> resource, final NetworkOperation primary, final Context<NetworkOperation> context) {
         return eventSource()
                 .orElseThrow()
                 .list(primary.getMetadata().getNamespace())
@@ -60,16 +58,14 @@ public class NetworkInitializationClusterConfig extends KubernetesDependentResou
 
     record Node(String name, int weight, String internal, String external) {}
 
-    List<Node> localNodes(final NetworkInitialization primary) {
+    List<Node> localNodes(final NetworkOperation primary) {
         return primary.getStatus().getConsensusCapsules().stream()
                 .map(name -> new Node(name, 1, name + ".consensus", name + "-svc"))
                 .toList();
     }
 
     ConfigMapBuilder config(
-            final ConfigMapBuilder builder,
-            final NetworkInitialization primary,
-            final Context<NetworkInitialization> context) {
+            final ConfigMapBuilder builder, final NetworkOperation primary, final Context<NetworkOperation> context) {
         // should include external address entries from orbit
         Orbit orbit = context.getSecondaryResource(Orbit.class).orElseThrow();
         int nodeId = 0;

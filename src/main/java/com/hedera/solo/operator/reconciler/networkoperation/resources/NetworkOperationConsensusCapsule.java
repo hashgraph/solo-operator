@@ -1,29 +1,30 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package com.hedera.solo.operator.reconciler.networkinitialization.resources;
+package com.hedera.solo.operator.reconciler.networkoperation.resources;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 
 import com.hedera.solo.operator.library.josdk.resource.AbstractKubernetesBulkDependentResource;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
-import com.hedera.solo.operator.model.v1alpha1.NetworkInitialization;
-import com.hedera.solo.operator.reconciler.networkinitialization.NetworkInitializationReconciler;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
+import com.hedera.solo.operator.reconciler.networkoperation.NetworkOperationReconciler;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.Updater;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResourceConfigBuilder;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.javaoperatorsdk.operator.processing.event.source.SecondaryToPrimaryMapper;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
 @KubernetesDependent
-public class NetworkInitializationConsensusCapsule
-        extends AbstractKubernetesBulkDependentResource<ConsensusCapsule, NetworkInitialization>
-        implements SecondaryToPrimaryMapper<ConsensusCapsule>, Updater<ConsensusCapsule, NetworkInitialization> {
-    private final NetworkInitializationReconciler reconciler;
+public class NetworkOperationConsensusCapsule
+        extends AbstractKubernetesBulkDependentResource<ConsensusCapsule, NetworkOperation>
+        implements SecondaryToPrimaryMapper<ConsensusCapsule>, Updater<ConsensusCapsule, NetworkOperation> {
+    private final NetworkOperationReconciler reconciler;
 
-    public NetworkInitializationConsensusCapsule(final NetworkInitializationReconciler reconciler) {
+    public NetworkOperationConsensusCapsule(final NetworkOperationReconciler reconciler) {
         super(ConsensusCapsule.class);
         this.reconciler = reconciler;
         configureWith(new KubernetesDependentResourceConfigBuilder<ConsensusCapsule>()
@@ -33,7 +34,7 @@ public class NetworkInitializationConsensusCapsule
 
     @Override
     public Map<String, ConsensusCapsule> desiredResources(
-            final NetworkInitialization primary, final Context<NetworkInitialization> context) {
+            final NetworkOperation primary, final Context<NetworkOperation> context) {
         Map<String, ConsensusCapsule> map = getSecondaryResources(primary, context);
         map.replaceAll((k, v) -> edit(v).with(spec -> spec.editSpec().withEligibleForDeployment())
                 .build());
@@ -43,5 +44,21 @@ public class NetworkInitializationConsensusCapsule
     @Override
     public Set<ResourceID> toPrimaryResourceIDs(final ConsensusCapsule resource) {
         return reconciler.toPrimaryResourceIDs(resource.getMetadata().getNamespace());
+    }
+
+    @Override
+    public Map<String, ConsensusCapsule> getSecondaryResources(
+            final NetworkOperation primary, final Context<NetworkOperation> context) {
+        return getSecondaryResources(primary, new HashMap<>(super.getSecondaryResources(primary, context)));
+    }
+
+    public static Map<String, ConsensusCapsule> getSecondaryResources(
+            final NetworkOperation primary, final Map<String, ConsensusCapsule> secondaryResources) {
+        if (null != primary.getStatus() && null != primary.getStatus().getConsensusCapsules()) {
+            secondaryResources.values().removeIf(r -> !primary.getStatus()
+                    .getConsensusCapsules()
+                    .contains(r.getMetadata().getName()));
+        }
+        return secondaryResources;
     }
 }

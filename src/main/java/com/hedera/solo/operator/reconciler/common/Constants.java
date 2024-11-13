@@ -5,6 +5,7 @@ package com.hedera.solo.operator.reconciler.common;
 import com.hedera.hashgraph.sdk.AccountId;
 import com.hedera.hashgraph.sdk.PrivateKey;
 import io.fabric8.kubernetes.api.model.PodSecurityContextBuilder;
+import java.util.Map;
 
 public final class Constants {
     private Constants() {
@@ -19,6 +20,7 @@ public final class Constants {
     public static final PodSecurityContextBuilder SECURITY_CONTEXT_BUILDER =
             new PodSecurityContextBuilder().withRunAsUser(HEDERA_USER).withRunAsGroup(HEDERA_GROUP);
     public static final int DEFAULT_FILE_MODE = 493; // 0755
+    public static final String NODE_NAME_FORMAT = "node%d";
 
     // HEDERA related
     public static final int HEDERA_ACCOUNT_START = 3;
@@ -46,6 +48,8 @@ public final class Constants {
     public static final String TPL_VAR_DEFAULT_MODE = "defaultMode"; // e.g. 0755
     public static final String TPL_VAR_NODE_ID = "nodeId";
     public static final String TPL_VAR_NODE_IDS = "nodeIds";
+    public static final String TPL_VAR_NODE_NAME = "nodeName";
+    public static final String TPL_VAR_NODE_NAMES = "nodeNames";
     public static final String TPL_VAR_ACCOUNT_ID = "accountId";
     public static final String TPL_VAR_SECURITY_CONTEXT = "securityContext";
     public static final String TPL_VAR_CONSENSUS_NODE = "cn";
@@ -65,10 +69,27 @@ public final class Constants {
 
     // labels
     // FIXME all label key should have a prefix
+    public static final String OPERATOR_PREFIX = "operator.solo.hedera.com/";
     public static final String LABEL_APP = "app";
-    public static final String LABEL_ACCOUNT_ID = "account-id";
+    public static final String LABEL_ACCOUNT_ID = OPERATOR_PREFIX + "account-id";
+    public static final String LABEL_NODE_ID = OPERATOR_PREFIX + "node-id";
 
     // key types
     public static final String KEY_TYPE_GOSSIP = "gossip";
     public static final String KEY_TYPE_GRPC_TLS = "grpc-tls";
+
+    // volumes
+    public static final String VOLUME_LOGS_NAME_SUFFIX = "output";
+    public static final String VOLUME_STATS_NAME_SUFFIX = "stats";
+    public static final String VOLUME_STATES_NAME_SUFFIX = "states";
+    public static final String VOLUME_UPGRADE_NAME_SUFFIX = "upgrade";
+    public static final String VOLUME_RECORD_STREAM_NAME_SUFFIX = "record-streams";
+    public static final String VOLUME_EVENTS_STREAM_NAME_SUFFIX = "events-streams";
+    public static final Map<String, String> VOLUME_MOUNT_NAMES = Map.of(
+            VOLUME_LOGS_NAME_SUFFIX, "hgcapp-%s".formatted(VOLUME_LOGS_NAME_SUFFIX),
+            VOLUME_STATES_NAME_SUFFIX, "hgcapp-%s".formatted(VOLUME_STATES_NAME_SUFFIX),
+            VOLUME_STATS_NAME_SUFFIX, "hgcapp-%s".formatted(VOLUME_STATS_NAME_SUFFIX),
+            VOLUME_UPGRADE_NAME_SUFFIX, "hgcapp-%s".formatted(VOLUME_UPGRADE_NAME_SUFFIX),
+            VOLUME_RECORD_STREAM_NAME_SUFFIX, "hgcapp-%s".formatted(VOLUME_RECORD_STREAM_NAME_SUFFIX),
+            VOLUME_EVENTS_STREAM_NAME_SUFFIX, "hgcapp-%s".formatted(VOLUME_EVENTS_STREAM_NAME_SUFFIX));
 }

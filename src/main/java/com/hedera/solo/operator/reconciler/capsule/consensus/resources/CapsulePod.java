@@ -6,6 +6,8 @@ import static com.hedera.solo.operator.reconciler.common.Constants.DEFAULT_FILE_
 import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_BUCKET_PATH_TEMPLATE;
 import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_EXTENSION;
 import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_SIG_EXTENSION;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_ACCOUNT_ID;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_NODE_ID;
 import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM_BUCKET_PATH_TEMPLATE;
 import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM_EXTENSION;
 import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM_SIG_EXTENSION;
@@ -17,19 +19,33 @@ import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_DEFAU
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_EVENT_STREAM_UPLOADER;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NAMESPACE;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_ID;
-import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_IDS;
+import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_NAME;
+import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_NAMES;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_RECORD_STREAM_UPLOADER;
+import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_EVENTS_STREAM_NAME_SUFFIX;
+import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_LOGS_NAME_SUFFIX;
+import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_MOUNT_NAMES;
+import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_RECORD_STREAM_NAME_SUFFIX;
+import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_STATES_NAME_SUFFIX;
+import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_STATS_NAME_SUFFIX;
+import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_UPGRADE_NAME_SUFFIX;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 
 import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.pod.containers.ConsensusNode;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.ConsensusNode;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsulePvcUtil;
+import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec;
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSourceBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.api.model.PodSecurityContext;
+import io.fabric8.kubernetes.api.model.Volume;
+import io.fabric8.kubernetes.api.model.VolumeBuilder;
 import io.fabric8.kubernetes.client.utils.Serialization;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.DependentResource;
@@ -45,11 +61,16 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 @KubernetesDependent(useSSA = BooleanWithUndefined.FALSE, labelSelector = "app=consensus-node")
 public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCapsule> {
     public static final String NAME_SUFFIX = "-pod";
-    public static final String ACCOUNT_ID_LABEL = "account-id";
+
+    public static final String ERR_BOTH_HOSTPATH_PVC_NOT_ALLOWED =
+            "a volume cannot have both HostPath and PersistentVolumeClaim specification: '%s'";
+    public static final String ERR_DUPLICATE_VOLUME_SPECIFICATION =
+            "volume specification is duplicated in persistentVolumeClaims and volumes sections for: %s";
 
     @Location("consensus-capsule/pod.yaml")
     Template tpl;
@@ -74,9 +95,10 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         Objects.requireNonNull(primary.getSpec());
         Objects.requireNonNull(primary.getSpec().getOrbit());
         Objects.requireNonNull(primary.getSpec().getAccountId());
-        Objects.requireNonNull(primary.getSpec().getPod());
-        Objects.requireNonNull(primary.getSpec().getPod().getContainers());
-        Objects.requireNonNull(primary.getSpec().getPod().getContainers().getConsensusNode());
+        Objects.requireNonNull(primary.getSpec().getPodProperties());
+        Objects.requireNonNull(primary.getSpec().getPodProperties().getContainers());
+        Objects.requireNonNull(
+                primary.getSpec().getPodProperties().getContainers().getConsensusNode());
         Objects.requireNonNull(context);
         Objects.requireNonNull(context.getClient());
 
@@ -102,8 +124,10 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         final Map<String, String> labels = Map.of(
                 "consensus-capsule",
                 metadata.getName(),
-                ACCOUNT_ID_LABEL,
-                primary.getSpec().getAccountId());
+                LABEL_ACCOUNT_ID,
+                primary.getSpec().getAccountId(),
+                LABEL_NODE_ID,
+                primary.getSpec().getNodeId().toString());
 
         // return desired pod
         PodBuilder podBuilder = pod.edit()
@@ -113,156 +137,181 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
                 .addToLabels(labels)
                 .endMetadata();
 
-        podBuilder = this.setDesiredPodSpec(primary, podBuilder);
+        this.setDesiredPodSpec(primary, podBuilder);
+
+        // set volumes
+        final List<Volume> desiredVolumes = getDesiredPodVolumes(primary);
+        for (final Volume v : desiredVolumes) {
+            podBuilder
+                    .editSpec()
+                    .removeMatchingFromVolumes((s) -> Objects.equals(v.getName(), s.getName()))
+                    .addToVolumes(v)
+                    .endSpec();
+        }
 
         return podBuilder.build();
     }
 
-    private PodBuilder setDesiredPodSpec(ConsensusCapsule primary, PodBuilder podBuilder) {
-        PodSecurityContext securityContext = primary.getSpec().getPod().getSecurityContext();
+    private void setDesiredPodSpec(ConsensusCapsule primary, PodBuilder podBuilder) {
+        PodSecurityContext securityContext =
+                primary.getSpec().getPodProperties().getSecurityContext();
         if (securityContext == null) {
             securityContext = SECURITY_CONTEXT_BUILDER.build();
         }
 
         // TODO add other pod spec and associated test #263
 
-        return podBuilder.editSpec().withSecurityContext(securityContext).endSpec();
+        podBuilder.editSpec().withSecurityContext(securityContext).endSpec();
     }
 
     private TemplateInstance getTemplateWithDefaults(ConsensusCapsule primary, Context<ConsensusCapsule> context) {
-        final String nodeId = primary.getMetadata().getName();
+        final Long nodeId = primary.getSpec().getNodeId();
+        final String nodeName = Metadata.prepareNodeName(primary);
         final String accountId = primary.getSpec().getAccountId();
         final String namespace = primary.getMetadata().getNamespace();
-        final List<String> nodeIds = getNodeIds(context, namespace);
+        final List<String> nodeNames = getNodeNames(context, namespace);
 
         final TemplateInstance templateInstance = tpl.instance();
 
         // set defaults
         templateInstance.data(TPL_VAR_NAMESPACE, namespace);
         templateInstance.data(TPL_VAR_NODE_ID, nodeId);
-        templateInstance.data(TPL_VAR_NODE_IDS, nodeIds);
+        templateInstance.data(TPL_VAR_NODE_NAME, nodeName);
+        templateInstance.data(TPL_VAR_NODE_NAMES, nodeNames);
         templateInstance.data(TPL_VAR_ACCOUNT_ID, accountId);
         templateInstance.data(TPL_VAR_DEFAULT_MODE, DEFAULT_FILE_MODE);
 
         return templateInstance;
     }
 
-    private Pod renderDeploymentTemplate(ConsensusCapsule primary, Context<ConsensusCapsule> context) {
-        final ConsensusNode cn = primary.getSpec().getPod().getContainers().getConsensusNode(); // fixme!
-        final StreamUploader rsu = this.prepareRecordStreamUploader(primary);
-        final StreamUploader esu = this.prepareEventStreamUploader(primary);
-        final StreamUploader bu = this.prepareBackupUploader(primary);
-        final StreamUploader rssu = this.prepareRecordStreamSidecarFilesUploader(primary);
+    protected Map<String, Optional<StreamUploader>> prepareStreamUploaderContainers(ConsensusCapsule primary) {
+        final Optional<StreamUploader> rsu = this.prepareRecordStreamUploader(primary);
+        final Optional<StreamUploader> esu = this.prepareEventStreamUploader(primary);
+        final Optional<StreamUploader> bu = this.prepareBackupUploader(primary);
+        final Optional<StreamUploader> rssu = this.prepareRecordStreamSidecarFilesUploader(primary);
+
+        return Map.of(
+                TPL_VAR_RECORD_STREAM_UPLOADER, rsu,
+                TPL_VAR_EVENT_STREAM_UPLOADER, esu,
+                TPL_VAR_BACKUP_UPLOADER, bu,
+                TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER, rssu);
+    }
+
+    protected Pod renderDeploymentTemplate(ConsensusCapsule primary, Context<ConsensusCapsule> context) {
+        final ConsensusNode cn =
+                primary.getSpec().getPodProperties().getContainers().getConsensusNode();
+        final Map<String, Optional<StreamUploader>> uploaderMap = this.prepareStreamUploaderContainers(primary);
 
         // set template variables
         TemplateInstance tplInstance = getTemplateWithDefaults(primary, context);
         tplInstance.data(TPL_VAR_CONSENSUS_NODE, cn);
-        tplInstance.data(TPL_VAR_RECORD_STREAM_UPLOADER, rsu);
-        tplInstance.data(TPL_VAR_EVENT_STREAM_UPLOADER, esu);
-        tplInstance.data(TPL_VAR_BACKUP_UPLOADER, bu);
-        tplInstance.data(TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER, rssu);
+        uploaderMap.forEach((k, v) -> tplInstance.data(k, v.orElse(null)));
 
         // return an instance of Pod
         return Serialization.unmarshal(tplInstance.render(), Pod.class);
     }
 
-    private StreamUploader prepareRecordStreamUploader(ConsensusCapsule primary) {
-        final StreamUploader rsu = this.setStreamUploaderExtensions(
-                primary.getSpec().getPod().getContainers().getRecordStreamUploader(),
+    private Optional<StreamUploader> prepareRecordStreamUploader(ConsensusCapsule primary) {
+        final Optional<StreamUploader> rsu = this.setStreamFileExtensions(
+                primary.getSpec().getPodProperties().getContainers().getRecordStreamUploader(),
                 RECORD_STREAM_EXTENSION,
                 RECORD_STREAM_SIG_EXTENSION);
 
-        if (Objects.nonNull(rsu) && rsu.getConfig().getEnableCompression()) {
-            rsu.getConfig().setStreamExtension("%s.gz".formatted(RECORD_STREAM_EXTENSION));
-        }
+        rsu.ifPresent(uploader -> {
+            if (uploader.getConfig().getEnableCompression()) {
+                uploader.getConfig().setStreamExtension("%s.gz".formatted(RECORD_STREAM_EXTENSION));
+            }
 
-        if (Objects.nonNull(rsu)) {
-            rsu.getConfig()
+            uploader.getConfig()
                     .setBucketPath(RECORD_STREAM_BUCKET_PATH_TEMPLATE.formatted(
                             primary.getSpec().getAccountId()));
-        }
+        });
 
         return rsu;
     }
 
-    private StreamUploader prepareRecordStreamSidecarFilesUploader(ConsensusCapsule primary) {
-        final StreamUploader rssu = this.setStreamUploaderExtensions(
-                primary.getSpec().getPod().getContainers().getRecordStreamSidecarFilesUploader(),
+    private Optional<StreamUploader> prepareRecordStreamSidecarFilesUploader(ConsensusCapsule primary) {
+        final Optional<StreamUploader> rssu = this.setStreamFileExtensions(
+                primary.getSpec().getPodProperties().getContainers().getRecordStreamSidecarFilesUploader(),
                 RECORD_STREAM_EXTENSION,
                 RECORD_STREAM_SIG_EXTENSION);
 
-        if (Objects.nonNull(rssu) && rssu.getConfig().getEnableCompression()) {
-            rssu.getConfig().setStreamExtension("%s.gz".formatted(RECORD_STREAM_EXTENSION));
-        }
+        rssu.ifPresent(uploader -> {
+            if (uploader.getConfig().getEnableCompression()) {
+                uploader.getConfig().setStreamExtension("%s.gz".formatted(RECORD_STREAM_EXTENSION));
+            }
 
-        if (Objects.nonNull(rssu)) {
-            rssu.getConfig()
+            uploader.getConfig()
                     .setBucketPath(RECORD_STREAM_BUCKET_PATH_TEMPLATE.formatted(
                             primary.getSpec().getAccountId()));
-        }
+
+            // force it to be false as we don't need signature for sidecar files
+            uploader.getConfig().getSignature().setPrioritize(false);
+            uploader.getConfig().getSignature().setRequire(false);
+        });
 
         return rssu;
     }
 
-    private StreamUploader prepareEventStreamUploader(ConsensusCapsule primary) {
-        final StreamUploader esu = this.setStreamUploaderExtensions(
-                primary.getSpec().getPod().getContainers().getEventsStreamUploader(),
+    private Optional<StreamUploader> prepareEventStreamUploader(ConsensusCapsule primary) {
+        final Optional<StreamUploader> esu = this.setStreamFileExtensions(
+                primary.getSpec().getPodProperties().getContainers().getEventsStreamUploader(),
                 EVENT_STREAM_EXTENSION,
                 EVENT_STREAM_SIG_EXTENSION);
 
-        if (Objects.nonNull(esu)) {
-            esu.getConfig()
-                    .setBucketPath(EVENT_STREAM_BUCKET_PATH_TEMPLATE.formatted(
-                            primary.getSpec().getAccountId()));
-        }
+        esu.ifPresent(uploader -> uploader.getConfig()
+                .setBucketPath(EVENT_STREAM_BUCKET_PATH_TEMPLATE.formatted(
+                        primary.getSpec().getAccountId())));
 
         return esu;
     }
 
-    private StreamUploader prepareBackupUploader(ConsensusCapsule primary) {
-        final StreamUploader bu = primary.getSpec().getPod().getContainers().getBackupUploader();
+    private Optional<StreamUploader> prepareBackupUploader(ConsensusCapsule primary) {
+        final StreamUploader bu =
+                primary.getSpec().getPodProperties().getContainers().getBackupUploader();
 
-        if (Objects.nonNull(bu)) {
-            bu.getConfig()
-                    .setBucketPath("%s/%s"
-                            .formatted(
-                                    bu.getConfig().getS3().getUrl(),
-                                    bu.getConfig().getBucketName()));
+        if (Objects.isNull(bu) || !bu.getEnabled()) {
+            return Optional.empty();
         }
 
-        return bu;
+        bu.getConfig()
+                .setBucketPath("%s/%s"
+                        .formatted(
+                                bu.getConfig().getS3().getUrl(), bu.getConfig().getBucketName()));
+
+        return Optional.of(bu);
     }
 
-    private StreamUploader setStreamUploaderExtensions(
+    protected Optional<StreamUploader> setStreamFileExtensions(
             final StreamUploader uploader, final String streamExtension, String streamSigExtension) {
 
-        if (Objects.isNull(uploader)) {
-            return null;
+        if (Objects.isNull(uploader) || !uploader.getEnabled()) {
+            return Optional.empty();
         }
 
         Objects.requireNonNull(streamExtension);
         Objects.requireNonNull(streamSigExtension);
 
+        // set file extensions
         if (StringUtil.isNullOrEmpty(uploader.getConfig().getStreamFileExtension())) {
             uploader.getConfig().setStreamFileExtension(streamExtension);
         }
-
-        if (StringUtil.isNullOrEmpty(uploader.getConfig().getStreamSigExtension())) {
-            uploader.getConfig().setStreamSigExtension(streamSigExtension);
-        }
-
         if (StringUtil.isNullOrEmpty(uploader.getConfig().getStreamExtension())) {
             uploader.getConfig().setStreamExtension(streamExtension);
         }
 
+        // set sig extensions
+        if (StringUtil.isNullOrEmpty(uploader.getConfig().getStreamSigExtension())) {
+            uploader.getConfig().setStreamSigExtension(streamSigExtension);
+        }
         if (StringUtil.isNullOrEmpty(uploader.getConfig().getSigExtension())) {
             uploader.getConfig().setSigExtension(streamSigExtension);
         }
 
-        return uploader;
+        return Optional.of(uploader);
     }
 
-    private static List<String> getNodeIds(Context<ConsensusCapsule> context, String namespace) {
+    private static List<String> getNodeNames(Context<ConsensusCapsule> context, String namespace) {
         final List<String> nodeIds = new ArrayList<>();
 
         final ConfigMap clusterConfig = context.getClient()
@@ -287,6 +336,164 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         }
 
         return nodeIds.stream().sorted().toList();
+    }
+
+    protected Optional<PersistentVolumeClaimSpec> getInputPvc(ConsensusCapsule primary, String volNameSuffix) {
+        if (!VOLUME_MOUNT_NAMES.containsKey(volNameSuffix)) {
+            throw new IllegalArgumentException("invalid volName suffix in: " + volNameSuffix);
+        }
+
+        if (primary.getSpec().getPersistentVolumeClaims() == null) {
+            return Optional.empty();
+        }
+
+        PersistentVolumeClaimSpec inputPvc = null;
+        switch (volNameSuffix) {
+            case VOLUME_LOGS_NAME_SUFFIX:
+                inputPvc = primary.getSpec().getPersistentVolumeClaims().getLogs();
+                break;
+
+            case VOLUME_STATES_NAME_SUFFIX:
+                inputPvc = primary.getSpec().getPersistentVolumeClaims().getStates();
+                break;
+
+            case VOLUME_STATS_NAME_SUFFIX:
+                inputPvc = primary.getSpec().getPersistentVolumeClaims().getStats();
+                break;
+
+            case VOLUME_UPGRADE_NAME_SUFFIX:
+                inputPvc = primary.getSpec().getPersistentVolumeClaims().getUpgrade();
+                break;
+
+            case VOLUME_RECORD_STREAM_NAME_SUFFIX:
+                if (primary.getSpec().getPersistentVolumeClaims().getStreams() != null) {
+                    inputPvc = primary.getSpec()
+                            .getPersistentVolumeClaims()
+                            .getStreams()
+                            .getRecord();
+                }
+                break;
+
+            case VOLUME_EVENTS_STREAM_NAME_SUFFIX:
+                if (primary.getSpec().getPersistentVolumeClaims().getStreams() != null) {
+                    inputPvc = primary.getSpec()
+                            .getPersistentVolumeClaims()
+                            .getStreams()
+                            .getEvents();
+                }
+                break;
+            default:
+        }
+
+        return Optional.ofNullable(inputPvc);
+    }
+
+    protected Optional<Volume> getInputVol(ConsensusCapsule primary, String volNameSuffix) {
+        if (!VOLUME_MOUNT_NAMES.containsKey(volNameSuffix)) {
+            throw new IllegalArgumentException("invalid volName suffix in: " + volNameSuffix);
+        }
+
+        if (primary.getSpec().getPodProperties().getVolumes() == null) {
+            return Optional.empty();
+        }
+
+        Volume inputVol = null;
+        switch (volNameSuffix) {
+            case VOLUME_LOGS_NAME_SUFFIX:
+                inputVol = primary.getSpec().getPodProperties().getVolumes().getLogs();
+                break;
+
+            case VOLUME_STATES_NAME_SUFFIX:
+                inputVol = primary.getSpec().getPodProperties().getVolumes().getStates();
+                break;
+
+            case VOLUME_STATS_NAME_SUFFIX:
+                inputVol = primary.getSpec().getPodProperties().getVolumes().getStats();
+                break;
+
+            case VOLUME_UPGRADE_NAME_SUFFIX:
+                inputVol = primary.getSpec().getPodProperties().getVolumes().getUpgrade();
+                break;
+
+            case VOLUME_RECORD_STREAM_NAME_SUFFIX:
+                if (primary.getSpec().getPodProperties().getVolumes().getStreams() != null) {
+                    inputVol = primary.getSpec()
+                            .getPodProperties()
+                            .getVolumes()
+                            .getStreams()
+                            .getRecord();
+                }
+                break;
+
+            case VOLUME_EVENTS_STREAM_NAME_SUFFIX:
+                if (primary.getSpec().getPodProperties().getVolumes().getStreams() != null) {
+                    inputVol = primary.getSpec()
+                            .getPodProperties()
+                            .getVolumes()
+                            .getStreams()
+                            .getEvents();
+                }
+                break;
+            default:
+        }
+
+        return Optional.ofNullable(inputVol);
+    }
+
+    protected Optional<VolumeBuilder> getVolumeBuilder(ConsensusCapsule primary, Volume inputVol, String volName) {
+        Objects.requireNonNull(primary);
+        VolumeBuilder builder = new VolumeBuilder().withName(volName);
+
+        if (inputVol == null) {
+            return Optional.empty();
+        }
+
+        // a volume cannot be both hostpath and PVC
+        if (inputVol.getHostPath() != null && inputVol.getPersistentVolumeClaim() != null) {
+            throw new IllegalArgumentException(ERR_BOTH_HOSTPATH_PVC_NOT_ALLOWED.formatted(volName));
+        }
+
+        // return the volume builder based on the input volume
+        if (inputVol.getHostPath() != null) {
+            builder.withHostPath(inputVol.getHostPath());
+        } else if (inputVol.getPersistentVolumeClaim() != null) {
+            builder.withPersistentVolumeClaim(inputVol.getPersistentVolumeClaim());
+        } else if (inputVol.getEmptyDir() != null) {
+            builder.withEmptyDir(inputVol.getEmptyDir());
+        } else {
+            return Optional.empty(); // for unsupported types, we return null;
+        }
+
+        return Optional.of(builder);
+    }
+
+    protected List<Volume> getDesiredPodVolumes(ConsensusCapsule primary) {
+        final List<Volume> volumes = new ArrayList<>();
+        VOLUME_MOUNT_NAMES.forEach((volNameSuffix, volName) -> {
+            final Optional<PersistentVolumeClaimSpec> inputPvc = getInputPvc(primary, volNameSuffix);
+            final Optional<Volume> inputVol = getInputVol(primary, volNameSuffix);
+
+            if (inputPvc.isPresent() && inputVol.isPresent()) {
+                throw new IllegalArgumentException(ERR_DUPLICATE_VOLUME_SPECIFICATION.formatted(volNameSuffix));
+            }
+
+            // if PVC is present, it takes priority over the volumes settings for a volume.
+            if (inputPvc.isPresent()) {
+                VolumeBuilder builder = new VolumeBuilder()
+                        .withName(volName)
+                        .withPersistentVolumeClaim(new PersistentVolumeClaimVolumeSourceBuilder()
+                                .withClaimName(CapsulePvcUtil.validPvcName(primary, volNameSuffix))
+                                .build());
+                volumes.add(builder.build());
+            } else {
+                if (inputVol.isPresent()) {
+                    final Optional<VolumeBuilder> vb = getVolumeBuilder(primary, inputVol.get(), volName);
+                    vb.ifPresent(volumeBuilder -> volumes.add(volumeBuilder.build()));
+                }
+            }
+        });
+
+        return volumes;
     }
 
     public static class Ready implements Condition<Pod, ConsensusCapsule> {
