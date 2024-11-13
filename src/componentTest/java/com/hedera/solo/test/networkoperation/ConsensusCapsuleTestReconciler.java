@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package com.hedera.solo.test.networkinitialization;
+package com.hedera.solo.test.networkoperation;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 

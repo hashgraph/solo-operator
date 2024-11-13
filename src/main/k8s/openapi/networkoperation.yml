@@ -8,17 +8,17 @@ info:
 paths: { }
 components:
   schemas:
-    NetworkInitializationSpec:
+    NetworkOperationSpec:
       type: object
       properties:
         mode:
-          description: The mode of the `NetworkInitialization`.
+          description: The mode of the `NetworkOperation`.
           type: string
           enum:
               - FirstInitialization
               - NodeAddition
 
-    NetworkInitializationStatus:
+    NetworkOperationStatus:
       type: object
       properties:
         phase:

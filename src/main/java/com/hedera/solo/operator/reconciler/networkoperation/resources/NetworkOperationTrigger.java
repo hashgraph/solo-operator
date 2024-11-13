@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package com.hedera.solo.operator.reconciler.networkinitialization.resources;
+package com.hedera.solo.operator.reconciler.networkoperation.resources;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 
 import com.hedera.solo.operator.library.numeric.RolloverComparator;
-import com.hedera.solo.operator.model.v1alpha1.NetworkInitialization;
-import com.hedera.solo.operator.reconciler.networkinitialization.NetworkInitializationReconciler;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
+import com.hedera.solo.operator.reconciler.networkoperation.NetworkOperationReconciler;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.dsl.Updatable;
@@ -22,14 +22,14 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 @KubernetesDependent
-public class NetworkInitializationTrigger extends KubernetesDependentResource<ConfigMap, NetworkInitialization>
-        implements ResourceDiscriminator<ConfigMap, NetworkInitialization>, SecondaryToPrimaryMapper<ConfigMap> {
+public class NetworkOperationTrigger extends KubernetesDependentResource<ConfigMap, NetworkOperation>
+        implements ResourceDiscriminator<ConfigMap, NetworkOperation>, SecondaryToPrimaryMapper<ConfigMap> {
     private final AtomicLong sequenceNumber = new AtomicLong();
     private final RolloverComparator rolloverComparator = new RolloverComparator(63);
-    private static final String NAME = "network-initialization-trigger";
-    private final NetworkInitializationReconciler reconciler;
+    private static final String NAME = "network-operation-trigger";
+    private final NetworkOperationReconciler reconciler;
 
-    public NetworkInitializationTrigger(final NetworkInitializationReconciler reconciler) {
+    public NetworkOperationTrigger(final NetworkOperationReconciler reconciler) {
         super(ConfigMap.class);
         this.reconciler = reconciler;
         configureWith(new KubernetesDependentResourceConfigBuilder<ConfigMap>()
@@ -38,7 +38,7 @@ public class NetworkInitializationTrigger extends KubernetesDependentResource<Co
                 .build());
     }
 
-    public synchronized void next(final NetworkInitialization resource, final Context<NetworkInitialization> context) {
+    public synchronized void next(final NetworkOperation resource, final Context<NetworkOperation> context) {
         try {
             context.getClient()
                     .resource(edit(new ConfigMap())
@@ -58,9 +58,7 @@ public class NetworkInitializationTrigger extends KubernetesDependentResource<Co
 
     @Override
     public Optional<ConfigMap> distinguish(
-            final Class<ConfigMap> resource,
-            final NetworkInitialization primary,
-            final Context<NetworkInitialization> context) {
+            final Class<ConfigMap> resource, final NetworkOperation primary, final Context<NetworkOperation> context) {
         return eventSource()
                 .orElseThrow()
                 .list(primary.getMetadata().getNamespace())

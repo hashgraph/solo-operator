@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package com.hedera.solo.test.networkinitialization;
+package com.hedera.solo.test.networkoperation;
 
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
