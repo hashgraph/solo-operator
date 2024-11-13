@@ -5,6 +5,7 @@ package com.hedera.solo.operator.reconciler.capsule.consensus.resources;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
+import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.ServiceAccount;
 import io.fabric8.kubernetes.api.model.ServiceAccountBuilder;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -25,7 +26,7 @@ public class CapsuleServiceAccount extends CRUDKubernetesDependentResource<Servi
         final ServiceAccountBuilder sa =
                 loadYaml(ServiceAccount.class, getClass(), TEMPLATE).edit();
 
-        String name = primary.getMetadata().getName();
+        String name = Metadata.prepareNodeName(primary);
         name = name.length() > (63 - NAME_SUFFIX.length()) ? name.substring(0, 63 - NAME_SUFFIX.length()) : name;
 
         return sa.editMetadata()

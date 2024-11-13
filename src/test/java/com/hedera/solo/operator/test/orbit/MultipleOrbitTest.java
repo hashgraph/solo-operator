@@ -6,9 +6,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
-import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleFluent;
-import com.hedera.solo.operator.model.v1alpha1.NetworkInitialization;
-import com.hedera.solo.operator.model.v1alpha1.NetworkInitializationStatus;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
 import com.hedera.solo.operator.test.fixtures.snapshot.SnapshotFailureContext;
@@ -70,7 +69,13 @@ src/main/resources/templates/consensus-capsule/pod.yaml:            copyFile "$G
 A       src/test/java/com/hedera/solo/operator/KeyTest.java
 A       src/test/java/com/hedera/solo/operator/test/CertDownloadTest.java
 
-* */
+---
+
+  Warning  FailedMount  9s (x7 over 40s)  kubelet            MountVolume.SetUp failed for volume "public-keys" : configmap "public-keys" not found
+  Warning  FailedMount  9s (x7 over 40s)  kubelet            MountVolume.SetUp failed for volume "grpc-tls-keys" : secret "node0-grpc-tls-keys" not found
+  Warning  FailedMount  9s (x7 over 40s)  kubelet            MountVolume.SetUp failed for volume "gossip-keys" : secret "node0-gossip-keys" not found
+
+*/
 
 @QuarkusTest
 @SoloTest
@@ -118,16 +123,16 @@ public class MultipleOrbitTest {
 
     @Test
     void test() {
-        int[] id = new int[]{3};
+        int[] id = new int[]{0};
         List<ConsensusCapsule> capsules = orbits.stream().map(o -> createCapsule(o, "node", id[0]++)).toList();
-        List<NetworkInitialization> networkInitializations = orbits.stream().map(this::createNetworkInitializations).toList();
+        List<NetworkOperation> networkInitializations = orbits.stream().map(this::createNetworkOperation).toList();
 
         await().atMost(Duration.ofSeconds(90)).untilAsserted(() -> {
-            for (NetworkInitialization ni : networkInitializations) {
-                ni = operator.getKubernetesClient().resource(ni).get();
-                assertThat(ni.getStatus()).isNotNull();
-                assertThat(ni.getStatus().getPhase()).isNotNull();
-                assertThat(ni.getStatus().getPhase()).isEqualTo(NetworkInitializationStatus.Phase.Succeeded);
+            for (NetworkOperation no : networkInitializations) {
+                no = operator.getKubernetesClient().resource(no).get();
+                assertThat(no.getStatus()).isNotNull();
+                assertThat(no.getStatus().getPhase()).isNotNull();
+                assertThat(no.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Succeeded);
             }
         });
     }
@@ -140,23 +145,22 @@ public class MultipleOrbitTest {
         return operator.getKubernetesClient().resource(orbit).create();
     }
 
-    ConsensusCapsule createCapsule(Orbit orbit, String name, int accountId) {
+    ConsensusCapsule createCapsule(Orbit orbit, String name, long id) {
         ConsensusCapsule capsule = edit(new ConsensusCapsule())
                 .with(metadata -> metadata.editMetadata().withName(name)
                         .withNamespace(orbit.getMetadata().getName()))
                 .with(spec -> spec.editSpec().withOrbit(orbit.getMetadata().getName())
-                        .withAccountId("0.0." + accountId)
-//                        .editPod().editContainers().editConsensusNode() // todo: <- why is this required at runtime?
-                )
+                        .withAccountId("0.0." + id + 3)
+                        .withNodeId(id)
+                        .editPodProperties().editContainers().editConsensusNode().editSoftwareVersion().withRepository("")) // todo: <- why is this required at runtime?
                 .build();
         return operator.getKubernetesClient().resource(capsule).create();
     }
 
-    NetworkInitialization createNetworkInitializations(Orbit orbit) {
-        NetworkInitialization networkInitialization = edit(new NetworkInitialization())
+    NetworkOperation createNetworkOperation(Orbit orbit) {
+        return operator.getKubernetesClient().resource(edit(new NetworkOperation())
                 .with(metadata -> metadata.editMetadata().withName("init")
                         .withNamespace(orbit.getMetadata().getName()))
-                .build();
-        return operator.getKubernetesClient().resource(networkInitialization).create();
+                .build()).create();
     }
 }

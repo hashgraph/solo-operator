@@ -98,7 +98,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         Objects.requireNonNull(primary.getSpec().getPodProperties());
         Objects.requireNonNull(primary.getSpec().getPodProperties().getContainers());
         Objects.requireNonNull(
-                primary.getSpec().getPodProperties().getContainers().getConsensusNode());
+                primary.getSpec().getPodProperties().getContainers().getConsensusNode()); // fixme!
         Objects.requireNonNull(context);
         Objects.requireNonNull(context.getClient());
 
