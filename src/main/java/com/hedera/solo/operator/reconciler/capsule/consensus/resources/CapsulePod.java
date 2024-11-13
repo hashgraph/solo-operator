@@ -69,7 +69,9 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
     public static final String NAME_SUFFIX = "-pod";
 
     public static final String ERR_BOTH_HOSTPATH_PVC_NOT_ALLOWED =
-            "both HostPath and PersistentVolumeClaim is not allowed for the same volume: '%s'";
+            "a volume cannot have both HostPath and PersistentVolumeClaim specification: '%s'";
+    public static final String ERR_DUPLICATE_VOLUME_SPECIFICATION =
+            "volume specification is duplicated in persistentVolumeClaims and volumes sections for: %s";
 
     @Location("consensus-capsule/pod.yaml")
     Template tpl;
@@ -393,11 +395,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
             default:
         }
 
-        if (Objects.isNull(inputPvc)) {
-            return Optional.empty();
-        }
-
-        return Optional.of(inputPvc);
+        return Optional.ofNullable(inputPvc);
     }
 
     protected Optional<Volume> getInputVol(ConsensusCapsule primary, String volNameSuffix) {
@@ -449,11 +447,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
             default:
         }
 
-        if (Objects.isNull(inputVol)) {
-            return Optional.empty();
-        }
-
-        return Optional.of(inputVol);
+        return Optional.ofNullable(inputVol);
     }
 
     protected Optional<VolumeBuilder> getVolumeBuilder(ConsensusCapsule primary, Volume inputVol, String volName) {
@@ -486,9 +480,14 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
     protected List<Volume> getDesiredPodVolumes(ConsensusCapsule primary) {
         final List<Volume> volumes = new ArrayList<>();
         VOLUME_MOUNT_NAMES.forEach((volNameSuffix, volName) -> {
-            Optional<PersistentVolumeClaimSpec> inputPvc = getInputPvc(primary, volNameSuffix);
+            final Optional<PersistentVolumeClaimSpec> inputPvc = getInputPvc(primary, volNameSuffix);
+            final Optional<Volume> inputVol = getInputVol(primary, volNameSuffix);
 
-            // if PVC is specified, it takes priority over the volumes settings for a volume.
+            if (inputPvc.isPresent() && inputVol.isPresent()) {
+                throw new IllegalArgumentException(ERR_DUPLICATE_VOLUME_SPECIFICATION.formatted(volNameSuffix));
+            }
+
+            // if PVC is present, it takes priority over the volumes settings for a volume.
             if (inputPvc.isPresent()) {
                 VolumeBuilder builder = new VolumeBuilder()
                         .withName(volName)
@@ -497,7 +496,6 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
                                 .build());
                 volumes.add(builder.build());
             } else {
-                final Optional<Volume> inputVol = getInputVol(primary, volNameSuffix);
                 if (inputVol.isPresent()) {
                     final Optional<VolumeBuilder> vb = getVolumeBuilder(primary, inputVol.get(), volName);
                     vb.ifPresent(volumeBuilder -> volumes.add(volumeBuilder.build()));

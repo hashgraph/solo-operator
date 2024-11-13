@@ -245,11 +245,24 @@ public class CapsulePodTest {
         Mockito.when(consensusCapsule.getSpec().getPodProperties()).thenReturn(pod);
         Mockito.when(consensusCapsule.getSpec().getPodProperties().getVolumes()).thenReturn(volumes);
 
-        // empty volumes
+        // if a volume is duplicated in persistentVolumeClaims as well as volumes, it would throw error
+        Mockito.when(volumes.getLogs())
+                .thenReturn(new VolumeBuilder()
+                        .withEmptyDir(new EmptyDirVolumeSource())
+                        .build());
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getLogs())
+                .thenReturn(new PersistentVolumeClaimSpec());
+        Assertions.assertThrows(
+                IllegalArgumentException.class, () -> capsulePod.getDesiredPodVolumes(consensusCapsule));
+
+        // reset and set empty volumes, it should return 0 volumes
+        Mockito.when(volumes.getLogs()).thenReturn(null);
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getLogs())
+                .thenReturn(null);
         Assertions.assertEquals(
                 0, capsulePod.getDesiredPodVolumes(consensusCapsule).size());
 
-        // with volumes specified
+        // with volumes specified, it should return 6 volumes
         Mockito.when(volumes.getLogs())
                 .thenReturn(new VolumeBuilder()
                         .withEmptyDir(new EmptyDirVolumeSource())
@@ -275,6 +288,29 @@ public class CapsulePodTest {
                                 .withEmptyDir(new EmptyDirVolumeSource())
                                 .build())
                         .build());
+        Assertions.assertEquals(
+                6, capsulePod.getDesiredPodVolumes(consensusCapsule).size());
+    }
+
+    @Test
+    @Description("it should return a list of persistent pod volumes")
+    void testGetDesiredPvcVolumes() {
+        // we just return mock PersistentVolumeClaimSpec since getDesiredPodVolumes does not use it
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getLogs())
+                .thenReturn(new PersistentVolumeClaimSpec());
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getStats())
+                .thenReturn(new PersistentVolumeClaimSpec());
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getStates())
+                .thenReturn(new PersistentVolumeClaimSpec());
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getUpgrade())
+                .thenReturn(new PersistentVolumeClaimSpec());
+        Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getStreams())
+                .thenReturn(
+                        new com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.persistentvolumeclaims
+                                        .StreamsBuilder()
+                                .withRecord(new PersistentVolumeClaimSpec())
+                                .withEvents(new PersistentVolumeClaimSpec())
+                                .build());
         Assertions.assertEquals(
                 6, capsulePod.getDesiredPodVolumes(consensusCapsule).size());
     }
