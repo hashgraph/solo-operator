@@ -1,12 +1,13 @@
 apiVersion: operator.solo.hedera.com/v1alpha1
 kind: ConsensusCapsule
 metadata:
-  name: node1
+  name: node2
 spec:
   orbit: solo-orbit
-  accountId: "0.0.4"
+  nodeId: 2
+  accountId: "0.0.5"
   eligibleForDeployment: false
-  podProperties:
+  podProperties: # FIXME use other pod properties
     containers:
       consensusNode:
         name: "consensus-node"
@@ -95,3 +96,14 @@ spec:
           gcs:
             enabled: false
           envFromSecret: "uploader-secrets"
+    volumes: # mix-n-match volumes: except logs and stats, rest are provisioned as empty dir
+      logs:
+        persistentVolumeClaim:
+          claimName: node2-output-pvc-manual # use a PVC provisioned manually
+  persistentVolumeClaims: # mix-n-match volumes: only one PVC is provisioned by operator
+    stats:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 5Gi # 1/10th of production size

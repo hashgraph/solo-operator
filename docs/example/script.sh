@@ -11,7 +11,7 @@ function setup() {
         --values minio-tenant/values.yaml \
         minio-tenant minio-operator/tenant
 
-    kubectl apply -f ./orbit/orbit-cr.yaml
+    kubectl apply -f ./orbit/solo-orbit.yaml
 }
 
 function deploy() {
@@ -23,7 +23,7 @@ function destroy() {
 }
 
 function cleanup() {
-    kubectl delete -f ./orbit/orbit-cr.yaml
+    kubectl delete -f ./orbit/solo-orbit.yaml
     helm uninstall minio-operator -n minio-operator
     helm uninstall minio-tenant -n minio-tenant
     kubectl delete namespace minio-tenant
