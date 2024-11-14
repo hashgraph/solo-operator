@@ -55,6 +55,8 @@ import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.dsl.EditReplacePatchable;
+import io.fabric8.kubernetes.client.dsl.Updatable;
 import io.javaoperatorsdk.operator.Operator;
 import jakarta.inject.Inject;
 import java.time.Duration;
@@ -165,17 +167,21 @@ public abstract class ConsensusCapsuleTestAbstract {
     }
 
     private void setupConfigMaps() {
-        // create config-maps
-        for (String cmFile : List.of("backup-uploader-config.yaml", "public-keys.yaml")) {
-            kubernetesClient
-                    .resource(loadYaml(ConfigMap.class, getClass(), cmFile)
-                            .edit()
-                            .editMetadata()
-                            .withNamespace(namespace)
-                            .endMetadata()
-                            .build())
-                    .create();
-        }
+        // create/update config-maps
+        kubernetesClient
+                .resource(loadYaml(ConfigMap.class, getClass(), "backup-uploader-config.yaml")
+                        .edit()
+                        .editMetadata()
+                        .withNamespace(namespace)
+                        .endMetadata()
+                        .build())
+                .create();
+        kubernetesClient
+                .resource(kubernetesClient.configMaps().inNamespace(namespace).withName("public-keys").get()
+                        .edit()
+                        .withData(loadYaml(ConfigMap.class, getClass(), "public-keys.yaml").getData())
+                        .build())
+                .update();
     }
 
     private void setupSecrets(List<NodeInfo> nodes) {
