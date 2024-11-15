@@ -13,7 +13,8 @@ public final class Constants {
     }
 
     // defaults
-    public static final String DEFAULT = "default";
+    public static final String SOLO_OPERATOR = "solo-operator";
+    public static final String SOLO_OPERATOR_VERSION = "0.0.1"; // FIXME load from pom
     public static final String CONSENSUS_NODE = "consensus-node";
     public static final Long HEDERA_USER = 2000L;
     public static final Long HEDERA_GROUP = 2000L;
@@ -69,11 +70,19 @@ public final class Constants {
     public static final String EVENT_STREAM_SIG_EXTENSION = "evts_sig";
 
     // labels
-    // FIXME all label key should have a prefix
     public static final String OPERATOR_PREFIX = "operator.solo.hedera.com/";
-    public static final String LABEL_APP = "app";
-    public static final String LABEL_ACCOUNT_ID = OPERATOR_PREFIX + "account-id";
-    public static final String LABEL_NODE_ID = OPERATOR_PREFIX + "node-id";
+    public static final String LABEL_APP = "app"; // FIXME: add prefix and use in all places
+    public static final String LABEL_ACCOUNT_ID = OPERATOR_PREFIX + "account-id"; // e.g. 0.0.3
+    public static final String LABEL_NODE_ID = OPERATOR_PREFIX + "node-id"; // e.g. 0, 1, 3 etc.
+    public static final String LABEL_NODE_NAME = OPERATOR_PREFIX + "node-name"; // e.g. node0
+    public static final String LABEL_ORBIT = OPERATOR_PREFIX + "orbit-name";
+    public static final String LABEL_NAMESPACE = OPERATOR_PREFIX + "orbit-namespace";
+    public static final String LABEL_K8S_NAME = "app.kubernetes.io/name";
+    public static final String LABEL_K8S_INSTANCE = "app.kubernetes.io/instance";
+    public static final String LABEL_K8S_VERSION = "app.kubernetes.io/version";
+    public static final String LABEL_K8S_COMPONENT = "app.kubernetes.io/component";
+    public static final String LABEL_K8S_PART_OF = "app.kubernetes.io/part-of";
+    public static final String LABEL_K8S_MANAGED_BY = "app.kubernetes.io/managed-by";
 
     // key types
     public static final String KEY_TYPE_GOSSIP = "gossip";
@@ -93,4 +102,17 @@ public final class Constants {
             VOLUME_UPGRADE_NAME_SUFFIX, "hgcapp-%s".formatted(VOLUME_UPGRADE_NAME_SUFFIX),
             VOLUME_RECORD_STREAM_NAME_SUFFIX, "hgcapp-%s".formatted(VOLUME_RECORD_STREAM_NAME_SUFFIX),
             VOLUME_EVENTS_STREAM_NAME_SUFFIX, "hgcapp-%s".formatted(VOLUME_EVENTS_STREAM_NAME_SUFFIX));
+
+    // components
+    public static final String COMPONENT_ORBIT = "orbit";
+    public static final String COMPONENT_CONSENSUS = "consensus";
+    public static final String COMPONENT_HAPROXY = "haproxy";
+    public static final String COMPONENT_NET_OP = "net-op";
+    public static final String COMPONENT_CONFIG_MAP = "cm";
+    public static final String COMPONENT_SECRET = "secret";
+    public static final String COMPONENT_SERVICE = "svc";
+    public static final String COMPONENT_POD = "pod";
+    public static final String COMPONENT_DEPLOYMENT = "deployment";
+    public static final String COMPONENT_ROLE_BINDING = "role-binding";
+    public static final String COMPONENT_SERVICE_ACCOUNT = "sa";
 }
