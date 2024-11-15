@@ -61,10 +61,10 @@ public class ConfigureCoredns {
         String file = corefile;
         List<String> lines = file.lines().toList();
         // https://coredns.io/plugins/log/
-        if (lines.stream().noneMatch((line -> line.strip().equals("log")))) {
-            file = file.replaceFirst(
-                    "(?<openBrace>\\{)(?<space>\\s*)(?<nonSpace>\\S)", "${openBrace}${space}log${space}${nonSpace}");
-        }
+        //        if (lines.stream().noneMatch((line -> line.strip().equals("log")))) {
+        //            file = file.replaceFirst(
+        //                    "(?<openBrace>\\{)(?<space>\\s*)(?<nonSpace>\\S)", "${openBrace}${space}log${space}${nonSpace}");
+        //        }
         // https://coredns.io/plugins/cache/
         if (lines.stream().noneMatch((line -> line.strip().equals("disable success cluster.local")))) {
             // Hack to change the corefile installed by kind and used in testing without properly parsing the corefile.
