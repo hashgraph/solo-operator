@@ -1,12 +1,13 @@
 apiVersion: operator.solo.hedera.com/v1alpha1
 kind: ConsensusCapsule
 metadata:
-  name: node2
+  name: node1
 spec:
   orbit: solo-orbit
-  accountId: "0.0.5"
+  nodeId: 1
+  accountId: "0.0.4"
   eligibleForDeployment: false
-  podProperties:
+  podProperties: # FIXME use other pod properties
     containers:
       consensusNode:
         name: "consensus-node"
@@ -95,3 +96,22 @@ spec:
           gcs:
             enabled: false
           envFromSecret: "uploader-secrets"
+    volumes:
+      logs:
+        hostPath:
+          path: /tmp/node1/hgcapp/output
+      stats:
+        hostPath:
+          path: /tmp/node1/hgcapp/stats
+      states:
+        emptyDir: {} # use empty dir so that it does not try to load old states during demo
+      upgrade:
+        hostPath:
+          path: /tmp/node1/hgcapp/upgrade
+      streams:
+        record:
+          hostPath:
+            path: /tmp/node1/hgcapp/recordStream
+        events:
+          hostPath:
+            path: /tmp/node1/hgcapp/eventsStream

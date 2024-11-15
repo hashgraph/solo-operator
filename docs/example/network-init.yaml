@@ -1,8 +1,8 @@
 apiVersion: operator.solo.hedera.com/v1alpha1
-kind: NetworkInitialization
+kind: NetworkOperation
 metadata:
-  name: network-initialization
-  namespace: consensuscapsuletest
+  name: network-init
+  namespace: solo-orbit
 spec:
   mode: FirstInitialization
 status: {}
