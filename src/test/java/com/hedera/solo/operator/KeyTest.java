@@ -48,6 +48,12 @@ public class KeyTest {
                 address, 2, node2, node2, 1, 0.0.0.0, 50111, 0.0.0.0, 50111, 0.0.5
                 nextNodeId, 3
                 """;
+        // using 0.0.0.0 to parse config
+        // sets issuer and subject to [Distinguished Name] [as]-selfname, where selfname is column 4 (address, nodeId, nickname, selfname, ...)
+        // more importantly it stores and loads them by selfname.
+        // existing code is for test only, it uses multiple threads but mutates shared state explicitly and relies on a public store which not thread safe.
+        // not actually sure if the issuer or subject are used, but the file name much be [as]-selfname
+        // confirmed, only filename seems to matter, not issuer & subject.
         Map<NodeId, KeysAndCerts> map = CryptoStatic.generateKeysAndCerts(AddressBookUtils.parseAddressBookText(config));
         StringWriter writer = new StringWriter();
         PrivateKeyInfo.getInstance(map.get(new NodeId(0)).sigKeyPair().getPrivate().getEncoded());
