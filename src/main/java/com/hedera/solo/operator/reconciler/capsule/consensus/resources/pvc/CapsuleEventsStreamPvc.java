@@ -5,6 +5,7 @@ package com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc;
 import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_EVENTS_STREAM_NAME_SUFFIX;
 
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
+import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaim;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -12,16 +13,20 @@ import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.DependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
+import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResourceConfigBuilder;
 import io.javaoperatorsdk.operator.processing.dependent.workflow.Condition;
 import java.util.Objects;
 import java.util.Optional;
 
-@KubernetesDependent(resourceDiscriminator = CapsuleEventsStreamPvc.class)
+@KubernetesDependent
 public class CapsuleEventsStreamPvc extends CRUDKubernetesDependentResource<PersistentVolumeClaim, ConsensusCapsule>
         implements ResourceDiscriminator<PersistentVolumeClaim, ConsensusCapsule> {
 
     public CapsuleEventsStreamPvc() {
         super(PersistentVolumeClaim.class);
+        configureWith(new KubernetesDependentResourceConfigBuilder<PersistentVolumeClaim>()
+                .withResourceDiscriminator(this)
+                .build());
     }
 
     private static PersistentVolumeClaimSpec getInputPvcSpec(final ConsensusCapsule primary) {

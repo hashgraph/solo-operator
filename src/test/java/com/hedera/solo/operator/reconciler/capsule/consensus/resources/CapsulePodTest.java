@@ -34,7 +34,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 public class CapsulePodTest {
-    private final CapsulePod capsulePod = new CapsulePod();
+    private final CapsulePod capsulePod = new CapsulePod(null);
 
     private final ConsensusCapsule consensusCapsule = Mockito.mock(ConsensusCapsule.class);
     private final ConsensusCapsuleSpec consensusCapsuleSpec = Mockito.mock(ConsensusCapsuleSpec.class);

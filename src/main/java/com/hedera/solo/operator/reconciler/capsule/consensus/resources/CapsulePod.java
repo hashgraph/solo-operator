@@ -48,11 +48,10 @@ import io.fabric8.kubernetes.api.model.Volume;
 import io.fabric8.kubernetes.api.model.VolumeBuilder;
 import io.fabric8.kubernetes.client.utils.Serialization;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.api.reconciler.dependent.DependentResource;
-import io.javaoperatorsdk.operator.processing.dependent.kubernetes.BooleanWithUndefined;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
-import io.javaoperatorsdk.operator.processing.dependent.workflow.Condition;
+import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResourceConfigBuilder;
+import io.quarkus.qute.Engine;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
@@ -63,7 +62,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-@KubernetesDependent(useSSA = BooleanWithUndefined.FALSE, labelSelector = "app=consensus-node")
+@KubernetesDependent
 public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCapsule> {
     public static final String NAME_SUFFIX = "-pod";
 
@@ -71,12 +70,19 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
             "a volume cannot have both HostPath and PersistentVolumeClaim specification: '%s'";
     public static final String ERR_DUPLICATE_VOLUME_SPECIFICATION =
             "volume specification is duplicated in persistentVolumeClaims and volumes sections for: %s";
+    public static final String TEMPLATE_LOCATION = "consensus-capsule/pod.yaml";
 
-    @Location("consensus-capsule/pod.yaml")
     Template tpl;
 
-    public CapsulePod() {
+    public CapsulePod(Engine engine) {
         super(Pod.class);
+        configureWith(new KubernetesDependentResourceConfigBuilder<Pod>()
+                .withUseSSA(Boolean.FALSE)
+                .withLabelSelector("app=consensus-node")
+                .build());
+        if (engine != null) {
+            tpl = engine.getTemplate(TEMPLATE_LOCATION);
+        }
     }
 
     /**
@@ -494,15 +500,5 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         });
 
         return volumes;
-    }
-
-    public static class Ready implements Condition<Pod, ConsensusCapsule> {
-        @Override
-        public boolean isMet(
-                DependentResource<Pod, ConsensusCapsule> dependentResource,
-                ConsensusCapsule primary,
-                Context<ConsensusCapsule> context) {
-            return primary.getSpec().getEligibleForDeployment();
-        }
     }
 }

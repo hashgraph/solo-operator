@@ -100,7 +100,7 @@ public abstract class ConsensusCapsuleTestAbstract {
 
     @AfterEach
     void afterEach(final SnapshotFailureContext snapshot) {
-        snapshot(kubernetesClient)
+        snapshot.client(kubernetesClient)
                 .nonNamespacedResources("operator.solo.hedera.com/v1alpha1")
                 .namespaces(namespace)
                 .namespacedResources()

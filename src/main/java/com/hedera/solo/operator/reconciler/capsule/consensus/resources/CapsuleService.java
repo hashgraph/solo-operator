@@ -9,12 +9,14 @@ import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Service;
+import io.fabric8.kubernetes.api.model.rbac.RoleBinding;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.BooleanWithUndefined;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
+import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResourceConfigBuilder;
 
-@KubernetesDependent(useSSA = BooleanWithUndefined.FALSE, labelSelector = "app=consensus-node")
+@KubernetesDependent
 public class CapsuleService extends CRUDKubernetesDependentResource<Service, ConsensusCapsule> {
 
     public static final String TEMPLATE = "service.yaml";
@@ -22,6 +24,10 @@ public class CapsuleService extends CRUDKubernetesDependentResource<Service, Con
 
     public CapsuleService() {
         super(Service.class);
+        configureWith(new KubernetesDependentResourceConfigBuilder<Service>()
+                .withUseSSA(Boolean.FALSE)
+                .withLabelSelector("app=consensus-node")
+                .build());
     }
 
     @Override

@@ -5,9 +5,11 @@ package com.hedera.solo.operator.reconciler.networkoperation.resources;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.reconciler.networkoperation.NetworkOperationReconciler;
+import io.fabric8.kubernetes.api.model.ServiceAccount;
 import io.javaoperatorsdk.operator.api.config.informer.InformerConfiguration;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResource;
+import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResourceConfigBuilder;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.javaoperatorsdk.operator.processing.event.source.PrimaryToSecondaryMapper;
 import io.javaoperatorsdk.operator.processing.event.source.SecondaryToPrimaryMapper;
@@ -22,6 +24,8 @@ public class NetworkOperationOrbit extends KubernetesDependentResource<Orbit, Ne
     public NetworkOperationOrbit(final NetworkOperationReconciler reconciler) {
         super(Orbit.class);
         this.reconciler = reconciler;
+        configureWith(new KubernetesDependentResourceConfigBuilder<Orbit>()
+                .build());
     }
 
     @Override

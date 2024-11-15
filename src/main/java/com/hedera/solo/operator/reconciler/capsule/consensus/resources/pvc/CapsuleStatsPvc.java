@@ -12,15 +12,19 @@ import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.DependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
+import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResourceConfigBuilder;
 import io.javaoperatorsdk.operator.processing.dependent.workflow.Condition;
 import java.util.Objects;
 import java.util.Optional;
 
-@KubernetesDependent(resourceDiscriminator = CapsuleStatsPvc.class)
+@KubernetesDependent
 public class CapsuleStatsPvc extends CRUDKubernetesDependentResource<PersistentVolumeClaim, ConsensusCapsule>
         implements ResourceDiscriminator<PersistentVolumeClaim, ConsensusCapsule> {
     public CapsuleStatsPvc() {
         super(PersistentVolumeClaim.class);
+        configureWith(new KubernetesDependentResourceConfigBuilder<PersistentVolumeClaim>()
+                .withResourceDiscriminator(this)
+                .build());
     }
 
     private static PersistentVolumeClaimSpec getInputPvcSpec(final ConsensusCapsule primary) {

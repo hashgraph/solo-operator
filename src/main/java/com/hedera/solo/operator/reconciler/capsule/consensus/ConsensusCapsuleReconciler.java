@@ -9,10 +9,13 @@ import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCap
 import com.hedera.solo.operator.library.generic.Compare;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsulePod;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleRoleBinding;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleService;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleServiceAccount;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.ConsensusCapsuleGossipKeys;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.ConsensusCapsuleGrpcTlsKeys;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsuleEventsStreamPvc;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsuleLogsPvc;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsuleRecordStreamPvc;
@@ -27,39 +30,62 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusHandler;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
+import io.javaoperatorsdk.operator.api.reconciler.EventSourceContext;
+import io.javaoperatorsdk.operator.api.reconciler.EventSourceInitializer;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
+import io.javaoperatorsdk.operator.api.reconciler.dependent.DependentResource;
+import io.javaoperatorsdk.operator.processing.dependent.workflow.Workflow;
+import io.javaoperatorsdk.operator.processing.dependent.workflow.WorkflowBuilder;
+import io.javaoperatorsdk.operator.processing.event.source.EventSource;
+import io.quarkus.qute.Engine;
 import jakarta.inject.Inject;
+import java.util.Map;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.jboss.logging.Logger;
 
-@ControllerConfiguration(
-        name = "consensus-capsule",
-        dependents = {
-            @Dependent(name = "sa", type = CapsuleServiceAccount.class),
-            @Dependent(type = CapsuleRoleBinding.class, dependsOn = "sa"),
-            @Dependent(type = CapsuleService.class),
-            @Dependent(type = CapsuleLogsPvc.class, reconcilePrecondition = CapsuleLogsPvc.Ready.class),
-            @Dependent(type = CapsuleStatsPvc.class, reconcilePrecondition = CapsuleStatsPvc.Ready.class),
-            @Dependent(type = CapsuleStatesPvc.class, reconcilePrecondition = CapsuleStatesPvc.Ready.class),
-            @Dependent(type = CapsuleUpgradePvc.class, reconcilePrecondition = CapsuleUpgradePvc.Ready.class),
-            @Dependent(type = CapsuleRecordStreamPvc.class, reconcilePrecondition = CapsuleRecordStreamPvc.Ready.class),
-            @Dependent(type = CapsuleEventsStreamPvc.class, reconcilePrecondition = CapsuleEventsStreamPvc.Ready.class),
-            @Dependent(type = CapsulePod.class, reconcilePrecondition = CapsulePod.Ready.class)
-        })
-public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>, ErrorStatusHandler<ConsensusCapsule> {
+@ControllerConfiguration(name = "consensus-capsule")
+public class ConsensusCapsuleReconciler implements EventSourceInitializer<ConsensusCapsule>, Reconciler<ConsensusCapsule>, ErrorStatusHandler<ConsensusCapsule> {
 
     public static final Predicate<HasMetadata> HAS_LABEL_SELECTOR_CONSENSUS_NODE =
             hasLabel(LABEL_SELECTOR_CONSENSUS_NODE_KEY, LABEL_SELECTOR_CONSENSUS_NODE_VALUE);
     public static final String CONSENSUS_CONTAINER_NAME = "consensus-node";
     private final Logger log;
+    final CapsuleServiceAccount capsuleServiceAccount = new CapsuleServiceAccount();
+    final CapsuleRoleBinding capsuleRoleBinding = new CapsuleRoleBinding();
+    final CapsuleService capsuleService = new CapsuleService();
+    final CapsuleLogsPvc capsuleLogsPvc = new CapsuleLogsPvc();
+    final CapsuleStatsPvc capsuleStatsPvc = new CapsuleStatsPvc();
+    final CapsuleStatesPvc capsuleStatesPvc = new CapsuleStatesPvc();
+    final CapsuleUpgradePvc capsuleUpgradePvc = new CapsuleUpgradePvc();
+    final CapsuleRecordStreamPvc capsuleRecordStreamPvc = new CapsuleRecordStreamPvc();
+    final CapsuleEventsStreamPvc capsuleEventsStreamPvc = new CapsuleEventsStreamPvc();
+    final CapsulePod capsulePod;
+    final ConsensusCapsuleGossipKeys consensusCapsuleGossipKeys = new ConsensusCapsuleGossipKeys();
+    final ConsensusCapsuleGrpcTlsKeys consensusCapsuleGrpcTlsKeys = new ConsensusCapsuleGrpcTlsKeys();
+    private final Workflow<ConsensusCapsule> workflow;
 
     @Inject
-    public ConsensusCapsuleReconciler(final Logger log) {
+    public ConsensusCapsuleReconciler(final Logger log, final Engine engine) {
         this.log = log;
+        this.capsulePod = new CapsulePod(engine);
+        workflow = new WorkflowBuilder<ConsensusCapsule>()
+                .addDependentResource(capsuleServiceAccount)
+                .addDependentResource(capsuleRoleBinding)
+                .addDependentResource(capsuleService)
+                .addDependentResource(capsuleLogsPvc).withReconcilePrecondition(new CapsuleLogsPvc.Ready())
+                .addDependentResource(capsuleStatsPvc).withReconcilePrecondition(new CapsuleStatsPvc.Ready())
+                .addDependentResource(capsuleStatesPvc).withReconcilePrecondition(new CapsuleStatesPvc.Ready())
+                .addDependentResource(capsuleUpgradePvc).withReconcilePrecondition(new CapsuleUpgradePvc.Ready())
+                .addDependentResource(capsuleRecordStreamPvc).withReconcilePrecondition(new CapsuleRecordStreamPvc.Ready())
+                .addDependentResource(capsuleEventsStreamPvc).withReconcilePrecondition(new CapsuleEventsStreamPvc.Ready())
+                .addDependentResource(capsulePod).withReconcilePrecondition(ConsensusCapsuleReconciler::isEligibleForDeployment)
+                .addDependentResource(consensusCapsuleGossipKeys).withReconcilePrecondition(ConsensusCapsuleReconciler::isEligibleForDeployment)
+                .addDependentResource(consensusCapsuleGrpcTlsKeys).withReconcilePrecondition(ConsensusCapsuleReconciler::isEligibleForDeployment)
+                .build();
     }
 
     @Override
@@ -69,6 +95,8 @@ public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>,
             log.infof(
                     "Consensus Capsule - Starting Reconciliation [ name = '%s' ]",
                     capsule.getMetadata().getName());
+
+            workflow.reconcile(capsule, context);
 
             ConsensusCapsuleStatus.Phase phase =
                     phase(context.getSecondaryResources(Pod.class).toArray(Pod[]::new));
@@ -122,5 +150,14 @@ public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>,
     public ErrorStatusUpdateControl<ConsensusCapsule> updateErrorStatus(
             final ConsensusCapsule capsule, final Context<ConsensusCapsule> context, final Exception e) {
         return ErrorStatusUpdateControl.noStatusUpdate();
+    }
+
+    private static boolean isEligibleForDeployment(DependentResource<?, ?> resource, HasMetadata primary, Context<?> context) {
+        return primary instanceof ConsensusCapsule consensusCapsule && consensusCapsule.getSpec().getEligibleForDeployment();
+    }
+
+    @Override
+    public Map<String, EventSource> prepareEventSources(EventSourceContext<ConsensusCapsule> context) {
+        return EventSourceInitializer.eventSourcesFromWorkflow(context, workflow);
     }
 }
