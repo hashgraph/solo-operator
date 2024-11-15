@@ -130,6 +130,8 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         final Map<String, String> labels = Map.of(
                 "consensus-capsule",
                 metadata.getName(),
+                "consensus-node",
+                Metadata.prepareNodeName(primary),
                 LABEL_ACCOUNT_ID,
                 primary.getSpec().getAccountId(),
                 LABEL_NODE_ID,

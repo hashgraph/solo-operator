@@ -149,10 +149,14 @@ public class MultipleOrbitTest {
         ConsensusCapsule capsule = edit(new ConsensusCapsule())
                 .with(metadata -> metadata.editMetadata().withName(name)
                         .withNamespace(orbit.getMetadata().getName()))
-                .with(spec -> spec.editSpec().withOrbit(orbit.getMetadata().getName())
+                .with(spec -> spec.editSpec()
+                        .withOrbit(orbit.getMetadata().getName())
                         .withAccountId("0.0." + id + 3)
-                        .withNodeId(id)
-                        .editPodProperties().editContainers().editConsensusNode().editSoftwareVersion().withRepository("")) // todo: <- why is this required at runtime?
+                        .withNodeId(id))
+                .with(consensus -> consensus.editSpec().editPodProperties().editContainers().editConsensusNode().editSoftwareVersion()
+                        .withRepository("swirldslabs.jfrog.io/consensus-node-docker-dev")
+                        .withName("consensus-node")
+                        .withTag("0.56.0-develop.x4b7c054"))
                 .build();
         return operator.getKubernetesClient().resource(capsule).create();
     }

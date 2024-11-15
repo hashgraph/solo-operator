@@ -122,7 +122,7 @@ public class HederaSdkClientFactory {
                 .getItems()
                 .stream()
                 .collect(Collectors.toMap(
-                        service -> service.getSpec().getSelector().get(LABEL_CONSENSUS_CAPSULE_NAME_KEY),
+                        service -> service.getSpec().getSelector().get("consensus-node"),
                         service -> service.getMetadata().getName()));
     }
 

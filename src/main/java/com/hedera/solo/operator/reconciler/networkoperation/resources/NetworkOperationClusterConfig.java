@@ -5,8 +5,11 @@ package com.hedera.solo.operator.reconciler.networkoperation.resources;
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
+import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
+import com.hedera.solo.operator.reconciler.common.Metadata;
+import com.hedera.solo.operator.reconciler.networkoperation.NetworkOperationReconciler;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -24,12 +27,14 @@ public class NetworkOperationClusterConfig extends KubernetesDependentResource<C
         implements Creator<ConfigMap, NetworkOperation>,
                 ResourceDiscriminator<ConfigMap, NetworkOperation>,
                 Updater<ConfigMap, NetworkOperation> {
+    private final NetworkOperationReconciler reconciler;
 
     public static final String TEMPLATE = "cluster-config.yaml";
     public static final String NAME = "cluster-config";
 
-    public NetworkOperationClusterConfig() {
+    public NetworkOperationClusterConfig(NetworkOperationReconciler reconciler) {
         super(ConfigMap.class);
+        this.reconciler = reconciler;
         configureWith(new KubernetesDependentResourceConfigBuilder<ConfigMap>()
                 .withLabelSelector("app=consensus,type=config")
                 .withResourceDiscriminator(this)
@@ -58,8 +63,8 @@ public class NetworkOperationClusterConfig extends KubernetesDependentResource<C
 
     record Node(String name, int weight, String internal, String external) {}
 
-    List<Node> localNodes(final NetworkOperation primary) {
-        return primary.getStatus().getConsensusCapsules().stream()
+    List<Node> localNodes(final NetworkOperation primary, final Context<NetworkOperation> context) {
+        return reconciler.consensusCapsules(primary, context).values().stream().map(Metadata::prepareNodeName)
                 .map(name -> new Node(name, 1, name + ".consensus", name + "-svc"))
                 .toList();
     }
@@ -78,7 +83,7 @@ public class NetworkOperationClusterConfig extends KubernetesDependentResource<C
                         .getLedgerId())
                 .append("\n");
         sb.append("app, HederaNode.jar\n");
-        for (Node node : localNodes(primary)) {
+        for (Node node : localNodes(primary, context)) {
             sb.append("address, %d, %s, %s, 1, %s, 50111, %s, 50111, 0.0.%d\n" // <- fixme: use account id from capsule
                     .formatted(nodeId, node.name, node.name, node.internal, node.external, nodeId + 3));
             nodeId++;

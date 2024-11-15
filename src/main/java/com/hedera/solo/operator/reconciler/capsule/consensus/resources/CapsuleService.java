@@ -7,6 +7,7 @@ import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
+import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.api.model.rbac.RoleBinding;
@@ -33,7 +34,7 @@ public class CapsuleService extends CRUDKubernetesDependentResource<Service, Con
     @Override
     protected Service desired(final ConsensusCapsule primary, final Context<ConsensusCapsule> context) {
         final ObjectMeta metadata = primary.getMetadata();
-        final String validName = validName(metadata.getName(), NAME_SUFFIX);
+        final String validName = validName(Metadata.prepareNodeName(primary), NAME_SUFFIX);
 
         return loadYaml(Service.class, getClass(), TEMPLATE)
                 .edit()
@@ -43,7 +44,7 @@ public class CapsuleService extends CRUDKubernetesDependentResource<Service, Con
                 .withNamespace(metadata.getNamespace())
                 .endMetadata()
                 .editSpec()
-                .addToSelector(LABEL_CONSENSUS_CAPSULE_NAME_KEY, metadata.getName())
+                .addToSelector("consensus-node", Metadata.prepareNodeName(primary))
                 .endSpec()
                 .build();
     }
