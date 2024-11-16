@@ -9,6 +9,8 @@ import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsule;
 import com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleReconciler;
+import com.hedera.solo.operator.reconciler.common.Constants;
+import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -18,6 +20,7 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDep
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResourceConfigBuilder;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.BiFunction;
 
@@ -43,6 +46,7 @@ public class HAProxySecret extends CRUDKubernetesDependentResource<Secret, HAPro
         final ObjectMeta metadata = primary.getMetadata();
         final String nodeName = metadata.getName();
         final String validName = validName(metadata.getName(), NAME_SUFFIX);
+        final String namespace = metadata.getNamespace();
         final Base64.Decoder decoder = Base64.getDecoder();
         final Base64.Encoder encoder = Base64.getEncoder();
         BiFunction<Secret, String, String> get =
@@ -56,11 +60,16 @@ public class HAProxySecret extends CRUDKubernetesDependentResource<Secret, HAPro
                 .map(s -> encoder.encodeToString(s.getBytes(StandardCharsets.UTF_8)))
                 .orElseThrow();
 
-        return loadYaml(Secret.class, getClass(), TEMPLATE)
-                .edit()
-                .editMetadata()
+        final Secret secret = loadYaml(Secret.class, getClass(), TEMPLATE);
+        return Metadata.applyStandardLabels(
+                        secret.edit().editMetadata(),
+                        validName,
+                        namespace,
+                        Constants.COMPONENT_HAPROXY,
+                        Constants.COMPONENT_SECRET,
+                        Map.of(Constants.LABEL_NODE_NAME, nodeName))
                 .withName(validName)
-                .withNamespace(metadata.getNamespace())
+                .withNamespace(namespace)
                 .endMetadata()
                 .addToData("hedera.pem", pem)
                 .build();

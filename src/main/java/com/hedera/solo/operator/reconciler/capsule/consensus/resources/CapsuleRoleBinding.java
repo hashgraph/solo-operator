@@ -5,6 +5,8 @@ package com.hedera.solo.operator.reconciler.capsule.consensus.resources;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
+import com.hedera.solo.operator.reconciler.common.Constants;
+import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.rbac.RoleBinding;
 import io.fabric8.kubernetes.api.model.rbac.RoleBindingBuilder;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -23,10 +25,8 @@ public class CapsuleRoleBinding extends CRUDKubernetesDependentResource<RoleBind
 
     @Override
     protected RoleBinding desired(final ConsensusCapsule primary, final Context<ConsensusCapsule> context) {
-        final RoleBindingBuilder rb =
-                loadYaml(RoleBinding.class, getClass(), TEMPLATE).edit();
-
         String rbName = primary.getMetadata().getName();
+        final String namespace = primary.getMetadata().getNamespace();
         rbName =
                 rbName.length() > (63 - NAME_SUFFIX.length()) ? rbName.substring(0, 63 - NAME_SUFFIX.length()) : rbName;
 
@@ -35,20 +35,26 @@ public class CapsuleRoleBinding extends CRUDKubernetesDependentResource<RoleBind
                 ? saName.substring(0, 63 - CapsuleServiceAccount.NAME_SUFFIX.length())
                 : saName;
 
-        rb.editMetadata()
-                .withName(String.format("%s%s", rbName, NAME_SUFFIX))
-                .withNamespace(primary.getMetadata().getNamespace())
+        final String roleName = String.format("%s%s", rbName, NAME_SUFFIX);
+        final String subjectName = String.format("%s%s", saName, CapsuleServiceAccount.NAME_SUFFIX);
+
+        final RoleBinding rb = loadYaml(RoleBinding.class, getClass(), TEMPLATE);
+        RoleBindingBuilder rbb = Metadata.applyStandardLabels(
+                        rb.edit().editMetadata(),
+                        rbName,
+                        namespace,
+                        Constants.COMPONENT_CONSENSUS,
+                        Constants.COMPONENT_ROLE_BINDING,
+                        null)
+                .withName(roleName)
+                .withNamespace(namespace)
                 .endMetadata();
 
-        //        var sb = rb.addNewSubject();
-        //        if (rb.hasSubjects()) {
-        var sb = rb.editSubject(0);
-        //        }
-
-        sb.withName(String.format("%s%s", saName, CapsuleServiceAccount.NAME_SUFFIX))
+        var sb = rbb.editSubject(0);
+        sb.withName(subjectName)
                 .withNamespace(primary.getMetadata().getNamespace())
                 .endSubject();
 
-        return rb.build();
+        return rbb.build();
     }
 }

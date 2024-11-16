@@ -37,6 +37,7 @@ import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.ConsensusNode;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsulePvcUtil;
+import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
@@ -131,11 +132,15 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
                 primary.getSpec().getNodeId().toString());
 
         // return desired pod
-        PodBuilder podBuilder = pod.edit()
-                .editMetadata()
+        PodBuilder podBuilder = Metadata.applyStandardLabels(
+                        pod.edit().editMetadata(),
+                        validName,
+                        namespace,
+                        Constants.COMPONENT_CONSENSUS,
+                        Constants.COMPONENT_POD,
+                        labels)
                 .withName(validName)
                 .withNamespace(namespace)
-                .addToLabels(labels)
                 .endMetadata();
 
         this.setDesiredPodSpec(primary, podBuilder);

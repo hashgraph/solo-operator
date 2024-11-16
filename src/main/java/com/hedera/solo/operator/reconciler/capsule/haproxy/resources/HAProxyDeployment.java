@@ -9,6 +9,8 @@ import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import com.hedera.solo.operator.library.data.Digest;
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsule;
 import com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleReconciler;
+import com.hedera.solo.operator.reconciler.common.Constants;
+import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.EnvVar;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Service;
@@ -19,6 +21,7 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernete
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResourceConfigBuilder;
 import io.javaoperatorsdk.operator.processing.dependent.workflow.Condition;
+import java.util.Map;
 
 @KubernetesDependent
 public class HAProxyDeployment extends CRUDKubernetesDependentResource<Deployment, HAProxyCapsule> {
@@ -39,27 +42,31 @@ public class HAProxyDeployment extends CRUDKubernetesDependentResource<Deploymen
     protected Deployment desired(HAProxyCapsule primary, Context<HAProxyCapsule> context) {
         final ObjectMeta metadata = primary.getMetadata();
         final String validName = validName(metadata.getName(), NAME_SUFFIX);
+        final String namespace = metadata.getNamespace();
 
-        return loadYaml(Deployment.class, getClass(), TEMPLATE)
-                .edit()
-                .editMetadata()
-                .withName(validName)
-                .withNamespace(metadata.getNamespace())
-                .addToLabels(
-                        "consensus-capsule", primary.getSpec().getConsensus().getNode())
-                .addToLabels("haproxy", metadata.getName())
-                .endMetadata()
-                .editSpec()
-                .editSelector()
-                .addToMatchLabels(
-                        "consensus-capsule", primary.getSpec().getConsensus().getNode())
-                .addToMatchLabels("haproxy", metadata.getName())
-                .endSelector()
-                .editTemplate()
-                .editMetadata()
-                .addToLabels(
-                        "consensus-capsule", primary.getSpec().getConsensus().getNode())
-                .addToLabels("haproxy", metadata.getName())
+        final Map<String, String> labels = Map.of(
+                "consensus-capsule", primary.getSpec().getConsensus().getNode(),
+                "haproxy", metadata.getName());
+        final Deployment deployment = loadYaml(Deployment.class, getClass(), TEMPLATE);
+        return Metadata.applyStandardLabels(
+                        deployment
+                                .edit()
+                                .editMetadata()
+                                .withName(validName)
+                                .withNamespace(namespace)
+                                .endMetadata()
+                                .editSpec()
+                                .editSelector()
+                                .addToMatchLabels(labels)
+                                .endSelector()
+                                .editTemplate()
+                                .editMetadata(),
+                        validName,
+                        namespace,
+                        Constants.COMPONENT_HAPROXY,
+                        Constants.COMPONENT_DEPLOYMENT,
+                        labels)
+                .addToLabels(labels)
                 .addToAnnotations(
                         "checksum/secret",
                         Digest.of(reconciler

@@ -12,6 +12,7 @@ import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.api.model.ObjectMetaFluent;
 import io.smallrye.common.constraint.NotNull;
 import io.smallrye.common.constraint.Nullable;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiPredicate;
@@ -215,16 +216,6 @@ public final class Metadata {
         return finalName + suffix;
     }
 
-    /**
-     * Prepare label with correct prefix
-     *
-     * @param suffix label suffix
-     * @return A string representing a valid label with operator prefix
-     */
-    public static String prepareLabel(String suffix) {
-        return String.format("%s/%s", OPERATOR_PREFIX, suffix);
-    }
-
     private static void copyMap(
             @NotNull final HasMetadata src,
             @NotNull final HasMetadata dst,
@@ -251,14 +242,20 @@ public final class Metadata {
         Objects.requireNonNull(setter, "setter must not be null");
 
         final Map<String, String> srcLabels = Objects.requireNonNullElseGet(getter.apply(src.getMetadata()), Map::of);
-        final BiPredicate<String, String> actualFilter = Objects.requireNonNullElse(filter, DEFAULT_FILTER);
+        return setLabels(dst, srcLabels, setter, filter);
+    }
 
-        for (final Map.Entry<String, String> entry : srcLabels.entrySet()) {
+    private static <A extends ObjectMetaFluent<A>> A setLabels(
+            @NotNull A dst,
+            @NotNull Map<String, String> labels,
+            @NotNull final TriConsumer<A, String, String> setter,
+            @Nullable final BiPredicate<String, String> filter) {
+        final BiPredicate<String, String> actualFilter = Objects.requireNonNullElse(filter, DEFAULT_FILTER);
+        for (final Map.Entry<String, String> entry : labels.entrySet()) {
             if (actualFilter.test(entry.getKey(), entry.getValue())) {
                 setter.accept(dst, entry.getKey(), entry.getValue());
             }
         }
-
         return dst;
     }
 
@@ -269,5 +266,69 @@ public final class Metadata {
 
     public static String prepareNodeName(Long nodeId) {
         return Constants.NODE_NAME_FORMAT.formatted(nodeId);
+    }
+
+    /**
+     * Apply standard labels to the given metadata.
+     *
+     * @param dst the metadata to which the labels should be applied.
+     * @param name the instance name.
+     * @param namespace the namespace.
+     * @param parentComponent the parent component name.
+     * @param componentType the component name.
+     * @param customLabels the labels to apply.
+     * @param <A> the type of the metadata fluent builder.
+     * @return the metadata with the labels applied.
+     */
+    @NotNull
+    public static <A extends ObjectMetaFluent<A>> A applyStandardLabels(
+            @NotNull A dst,
+            @NotNull String name,
+            @NotNull String namespace,
+            @NotNull String parentComponent,
+            @NotNull String componentType,
+            @Nullable Map<String, String> customLabels) {
+        Objects.requireNonNull(dst, "dst must not be null");
+        Objects.requireNonNull(name, "instanceName must not be null");
+        Objects.requireNonNull(namespace, "namespace must not be null");
+        Objects.requireNonNull(parentComponent, "parentComponent must not be null");
+        Objects.requireNonNull(componentType, "componentType must not be null");
+
+        Map<String, String> standardLabels =
+                prepareStandardLabels(name, namespace, parentComponent, componentType, customLabels);
+        return setLabels(dst, standardLabels, ObjectMetaFluent::addToLabels, DEFAULT_FILTER);
+    }
+
+    /**
+     * Prepare standard labels for the given component.
+     *
+     * @param customLabels the labels to which the standard labels should be added.
+     * @param name the name.
+     * @param namespace the namespace.
+     * @param parentComponent the parent component name.
+     * @param componentType the component name.
+     * @return the labels with the standard labels added.
+     */
+    private static Map<String, String> prepareStandardLabels(
+            String name,
+            String namespace,
+            String parentComponent,
+            String componentType,
+            Map<String, String> customLabels) {
+        Map<String, String> standardLabels = new HashMap<>();
+        if (customLabels != null) {
+            standardLabels.putAll(customLabels); // add first so that standard labels are overwritten if those exist
+        }
+
+        final String component = "%s-%s".formatted(parentComponent, componentType);
+        standardLabels.put(Constants.LABEL_NAMESPACE, namespace);
+        standardLabels.put(Constants.LABEL_K8S_NAME, name);
+        standardLabels.put(Constants.LABEL_K8S_INSTANCE, name); // FIXME is this correct?
+        standardLabels.put(Constants.LABEL_K8S_VERSION, Constants.SOLO_OPERATOR_VERSION);
+        standardLabels.put(Constants.LABEL_K8S_COMPONENT, component);
+        standardLabels.put(Constants.LABEL_K8S_PART_OF, parentComponent);
+        standardLabels.put(Constants.LABEL_K8S_MANAGED_BY, Constants.SOLO_OPERATOR);
+
+        return standardLabels;
     }
 }
