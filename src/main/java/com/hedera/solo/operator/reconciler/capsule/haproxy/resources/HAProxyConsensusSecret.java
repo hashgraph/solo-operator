@@ -4,14 +4,12 @@ package com.hedera.solo.operator.reconciler.capsule.haproxy.resources;
 
 import static com.hedera.solo.operator.library.model.Labels.hasLabel;
 import static com.hedera.solo.operator.library.model.Labels.hasLabels;
-import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_CONSENSUS_CAPSULE_KEY_TYPE;
-import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_CONSENSUS_CAPSULE_NAME_KEY;
-import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_SELECTOR_CONSENSUS_NODE;
 import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleReconciler.HAS_LABEL_SELECTOR_CONSENSUS_NODE;
 
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsule;
 import com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleReconciler;
 import com.hedera.solo.operator.reconciler.common.Constants;
+import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.javaoperatorsdk.operator.api.config.informer.InformerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -39,7 +37,7 @@ public class HAProxyConsensusSecret extends KubernetesDependentResource<Secret, 
         super(Secret.class);
         this.reconciler = reconciler;
         configureWith(new KubernetesDependentResourceConfigBuilder<Secret>()
-                .withLabelSelector(LABEL_SELECTOR_CONSENSUS_NODE)
+                .withLabelSelector(Constants.LABEL_SELECTOR_CONSENSUS_NODE)
                 .withResourceDiscriminator(this)
                 .build());
     }
@@ -65,9 +63,9 @@ public class HAProxyConsensusSecret extends KubernetesDependentResource<Secret, 
                 .list(resource.getMetadata().getNamespace())
                 .filter(p -> hasLabel(
                         resource,
-                        LABEL_CONSENSUS_CAPSULE_NAME_KEY,
-                        p.getSpec().getConsensus().getNode()))
-                .filter(p -> hasLabel(resource, LABEL_CONSENSUS_CAPSULE_KEY_TYPE, Constants.KEY_TYPE_GRPC_TLS))
+                        Constants.LABEL_NODE_NAME,
+                        Metadata.prepareNodeName(p.getSpec().getNodeId())))
+                .filter(p -> hasLabel(resource, Constants.LABEL_KEY_TYPE, Constants.KEY_TYPE_GRPC_TLS))
                 .findAny()
                 .map(ResourceID::fromResource)
                 .map(Set::of)
@@ -76,14 +74,12 @@ public class HAProxyConsensusSecret extends KubernetesDependentResource<Secret, 
 
     @Override
     public Set<ResourceID> toSecondaryResourceIDs(final HAProxyCapsule primary) {
+        final String nodeName = Metadata.prepareNodeName(primary.getSpec().getNodeId());
         return eventSource()
-                .map(es -> es.list(primary.getMetadata().getNamespace()))
+                .map(es -> es.list(primary.getSpec().getOrbit()))
                 .orElse(Stream.empty())
                 .filter(hasLabels(Map.of(
-                        LABEL_CONSENSUS_CAPSULE_NAME_KEY,
-                        primary.getSpec().getConsensus().getNode(),
-                        LABEL_CONSENSUS_CAPSULE_KEY_TYPE,
-                        Constants.KEY_TYPE_GRPC_TLS)))
+                        Constants.LABEL_NODE_NAME, nodeName, Constants.LABEL_KEY_TYPE, Constants.KEY_TYPE_GRPC_TLS)))
                 .findAny()
                 .map(ResourceID::fromResource)
                 .map(Set::of)

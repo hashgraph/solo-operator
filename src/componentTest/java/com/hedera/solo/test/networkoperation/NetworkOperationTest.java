@@ -203,7 +203,7 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                         .with(metadata ->
                                 metadata.editMetadata().withName(operator().getNamespace()))
                         .with(spec -> spec.editSpec()
-                                .editOrbitspecConsensus()
+                                .editConsensus()
                                 .editGenesis()
                                 .editAddressBook()
                                 .withLedgerId("298"))

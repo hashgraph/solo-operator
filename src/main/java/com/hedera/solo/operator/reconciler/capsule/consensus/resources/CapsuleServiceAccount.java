@@ -27,13 +27,15 @@ public class CapsuleServiceAccount extends CRUDKubernetesDependentResource<Servi
         name = name.length() > (63 - NAME_SUFFIX.length()) ? name.substring(0, 63 - NAME_SUFFIX.length()) : name;
 
         final String namespace = primary.getMetadata().getNamespace();
+        final String orbit = primary.getSpec().getOrbit();
+
         final String saName = String.format("%s%s", name, NAME_SUFFIX);
 
         final ServiceAccount sa = loadYaml(ServiceAccount.class, getClass(), TEMPLATE);
         return Metadata.applyStandardLabels(
                         sa.edit().editMetadata(),
                         saName,
-                        namespace,
+                        orbit,
                         Constants.COMPONENT_CONSENSUS,
                         Constants.COMPONENT_SERVICE_ACCOUNT,
                         null)

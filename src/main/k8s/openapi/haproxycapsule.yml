@@ -10,13 +10,17 @@ components:
   schemas:
     HAProxyCapsuleSpec:
       type: object
+      required: # required properties.
+        - orbit
+        - consensus
       properties:
-        consensus:
-          type: object
-          properties:
-            node:
-              description: Name of consensus node
-              type: string
+        orbit:
+          description: |
+            Name of the orbit where the consensus capsule is deployed and this haproxy is part of.
+          type: string
+        nodeId:
+          type: integer
+          format: int64
         haproxy:
           type: object
           default: {}

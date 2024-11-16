@@ -7,18 +7,15 @@ metadata:
   name: haproxy
   labels:
     app: haproxy
-    consensus-capsule: node0
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: haproxy
-      consensus-capsule: node0
   template:
     metadata:
       labels:
         app: haproxy
-        consensus-capsule: node0
     spec:
       containers:
         - name: haproxy

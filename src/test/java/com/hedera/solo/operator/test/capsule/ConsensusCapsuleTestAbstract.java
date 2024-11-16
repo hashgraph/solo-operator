@@ -2,18 +2,9 @@
 
 package com.hedera.solo.operator.test.capsule;
 
-import static com.hedera.solo.operator.reconciler.common.Constants.CONSENSUS_NODE;
-import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GOSSIP;
-import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GRPC_TLS;
-import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_APP;
-import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
-import static com.hedera.solo.operator.test.fixtures.coredns.ConfigureCoredns.configureCoredns;
-import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
-
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleBuilder;
+import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleSpec;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationBuilder;
@@ -31,6 +22,7 @@ import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podpropertie
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.VolumesBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.ConsensusNode;
 import com.hedera.solo.operator.reconciler.common.Constants;
+import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
 import com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkCheckAddressBook;
@@ -39,7 +31,6 @@ import com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkClientFactor
 import com.hedera.solo.operator.test.fixtures.snapshot.SnapshotFailureContext;
 import com.hedera.solo.operator.test.setup.ClusterSetupManager;
 import io.fabric8.kubernetes.api.model.ConfigMap;
-import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.Service;
@@ -47,18 +38,30 @@ import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
 import jakarta.inject.Inject;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+
+import static com.hedera.solo.operator.reconciler.common.Constants.CONSENSUS_NODE;
+import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GOSSIP;
+import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GRPC_TLS;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_APP;
+import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
+import static com.hedera.solo.operator.test.fixtures.coredns.ConfigureCoredns.configureCoredns;
+import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 @SoloTest
 public abstract class ConsensusCapsuleTestAbstract {
     protected final String namespace = getClass().getSimpleName().toLowerCase();
+    protected final String orbit = namespace; // for now orbit and namespace are the same
     protected final String svcNameSuffix = ".%s.%s".formatted(namespace, "svc.cluster.local");
 
     @Inject
@@ -133,7 +136,8 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .until(() -> kubernetesClient.namespaces().withName(namespace).get() == null);
     }
 
-    protected record NodeInfo(Long id, String name, String accountId, int weight, String internal, String external) {}
+    protected record NodeInfo(Long id, String name, String accountId, int weight, String internal, String external) {
+    }
 
     private List<NodeInfo> prepareNodes(List<Long> nodeIds) {
         List<NodeInfo> nodes = new ArrayList<>();
@@ -184,13 +188,18 @@ public abstract class ConsensusCapsuleTestAbstract {
         for (final NodeInfo node : nodes) {
             for (final String keyType : List.of(KEY_TYPE_GOSSIP, KEY_TYPE_GRPC_TLS)) {
                 final String nodeKeyFile = String.format("secrets/%s-%s-keys.yaml", node.name, keyType);
+
+                final Map<String, String> labels = Metadata.prepareConsensusNodeLabels(node.id, node.accountId);
+                labels.put(Constants.LABEL_KEY_TYPE, keyType);
+                final Map<String, String> standardLabels = Metadata.prepareStandardLabels(
+                        node.name, orbit, Constants.COMPONENT_CONSENSUS, Constants.COMPONENT_SECRET, labels);
+
                 kubernetesClient
                         .resource(loadYaml(Secret.class, getClass(), nodeKeyFile)
                                 .edit()
                                 .editMetadata()
                                 .withNamespace(namespace)
-                                .addToLabels("consensus-capsule", node.name)
-                                .addToLabels("key-type", keyType)
+                                .addToLabels(standardLabels)
                                 .endMetadata()
                                 .build())
                         .create();
@@ -252,13 +261,13 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .withName(namespace)
                 .endMetadata()
                 .editSpec()
-                .editOrbitspecConsensus()
+                .editConsensus()
                 .editGenesis()
                 .editAddressBook()
                 .withLedgerId("298")
                 .endAddressBook()
                 .endGenesis()
-                .endOrbitspecConsensus()
+                .endConsensus()
                 .endSpec()
                 .build();
 
@@ -297,7 +306,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .endMetadata()
                 .withNewSpec()
                 .withPodProperties(consensusPod)
-                .withOrbit(namespace) // for now, namespace and orbit must match
+                .withOrbit(orbit)
                 .withAccountId(node.accountId)
                 .withNodeId(node.id)
                 .withPersistentVolumeClaims(prepareCapsulePVCs(node))
@@ -417,21 +426,31 @@ public abstract class ConsensusCapsuleTestAbstract {
                 });
     }
 
-    String[] consensusNodeNames() {
+    Long[] consensusNodeIds() {
         return kubernetesClient.resources(ConsensusCapsule.class).inNamespace(namespace).list().getItems().stream()
-                .map(CustomResource::getMetadata)
-                .map(ObjectMeta::getName)
-                .toArray(String[]::new);
+                .map(CustomResource::getSpec)
+                .map(ConsensusCapsuleSpec::getNodeId)
+                .toArray(Long[]::new);
+    }
+
+    List<String> consensusNodeNames() {
+        final Long[] nodeIds = consensusNodeIds();
+        final List<String> nodeNames = new ArrayList<>();
+        for (Long nodeId : nodeIds) {
+            nodeNames.add(Metadata.prepareNodeName(nodeId));
+        }
+
+        return nodeNames;
     }
 
     protected void checkAddressBook(final HederaSdkClientContextFactory hederaSdkClientContextFactory)
             throws AssertionError, Exception {
-        String[] consensusNodeNames = consensusNodeNames();
+        List<String> consensusNodeNames = consensusNodeNames();
         HederaSdkCheckAddressBook.checkAddressBook(
                 hederaSdkClientContextFactory,
                 kubernetesClient,
                 namespace,
-                consensusNodeNames.length,
-                consensusNodeNames);
+                consensusNodeNames.size(),
+                consensusNodeNames.toArray(String[]::new));
     }
 }

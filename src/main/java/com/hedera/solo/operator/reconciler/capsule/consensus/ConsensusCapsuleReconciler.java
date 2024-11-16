@@ -3,8 +3,6 @@
 package com.hedera.solo.operator.reconciler.capsule.consensus;
 
 import static com.hedera.solo.operator.library.model.Labels.hasLabel;
-import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_SELECTOR_CONSENSUS_NODE_KEY;
-import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_SELECTOR_CONSENSUS_NODE_VALUE;
 
 import com.hedera.solo.operator.library.generic.Compare;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
@@ -19,6 +17,7 @@ import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.Capsu
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsuleStatesPvc;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsuleStatsPvc;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsuleUpgradePvc;
+import com.hedera.solo.operator.reconciler.common.Constants;
 import io.fabric8.kubernetes.api.model.ContainerState;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.HasMetadata;
@@ -53,7 +52,7 @@ import org.jboss.logging.Logger;
 public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>, ErrorStatusHandler<ConsensusCapsule> {
 
     public static final Predicate<HasMetadata> HAS_LABEL_SELECTOR_CONSENSUS_NODE =
-            hasLabel(LABEL_SELECTOR_CONSENSUS_NODE_KEY, LABEL_SELECTOR_CONSENSUS_NODE_VALUE);
+            hasLabel(Constants.LABEL_APP, Constants.CONSENSUS_NODE);
     public static final String CONSENSUS_CONTAINER_NAME = "consensus-node";
     private final Logger log;
 
