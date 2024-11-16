@@ -3,6 +3,7 @@
 package com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc;
 
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
+import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaim;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaimBuilder;
@@ -46,11 +47,20 @@ public class CapsulePvcUtil {
     public static PersistentVolumeClaim prepareDesired(
             ConsensusCapsule primary, PersistentVolumeClaimSpec pvcSpec, String volSuffix) {
         final PersistentVolumeClaimSpec ps = CapsulePvcUtil.desiredPvcSpec(pvcSpec, volSuffix);
+        final String validName = CapsulePvcUtil.validPvcName(primary, volSuffix);
+        final String namespace = primary.getMetadata().getNamespace();
+        final String orbit = primary.getSpec().getOrbit();
 
         PersistentVolumeClaimBuilder builder = new PersistentVolumeClaimBuilder();
-        return builder.editMetadata()
-                .withName(CapsulePvcUtil.validPvcName(primary, volSuffix))
-                .withNamespace(primary.getMetadata().getNamespace())
+        return Metadata.applyStandardLabels(
+                        builder.editMetadata(),
+                        validName,
+                        orbit,
+                        Constants.COMPONENT_CONSENSUS,
+                        Constants.COMPONENT_PVC,
+                        null)
+                .withName(validName)
+                .withNamespace(namespace)
                 .endMetadata()
                 .withSpec(ps)
                 .build();

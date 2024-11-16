@@ -2,16 +2,17 @@
 
 package com.hedera.solo.operator.test.capsule;
 
-import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_SELECTOR_CONSENSUS_NODE;
-import static com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleConstants.LABEL_SELECTOR_HAPROXY;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_CONSENSUS_NODE;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_HAPROXY;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsule;
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsuleBuilder;
+import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsuleSpec;
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsuleStatus;
 import com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkClientFactory;
-import io.fabric8.kubernetes.api.model.ObjectMeta;
+import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.CustomResource;
@@ -50,17 +51,16 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
     }
 
     void createHAProxyCapsule() throws Exception {
-        String[] consensusNodeNames = consensusNodeNames();
-        for (String name : consensusNodeNames) {
+        Long[] consensusNodeIds = consensusNodeIds();
+        for (Long nodeId : consensusNodeIds) {
             HAProxyCapsule haProxyCapsule = new HAProxyCapsuleBuilder()
                     .editMetadata()
                     .withNamespace(namespace)
-                    .withName(name)
+                    .withName(Metadata.prepareNodeName(nodeId))
                     .endMetadata()
                     .editSpec()
-                    .editConsensus()
-                    .withNode(name)
-                    .endConsensus()
+                    .withOrbit(orbit)
+                    .withNodeId(nodeId)
                     .endSpec()
                     .build();
             kubernetesClient.resource(haProxyCapsule).create();
@@ -71,12 +71,12 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
                     .inNamespace(namespace)
                     .list()
                     .getItems();
-            assertThat(proxies).hasSize(consensusNodeNames.length);
+            assertThat(proxies).hasSize(consensusNodeIds.length);
             assertThat(proxies.stream()
-                            .map(CustomResource::getMetadata)
-                            .map(ObjectMeta::getName)
+                            .map(CustomResource::getSpec)
+                            .map(HAProxyCapsuleSpec::getNodeId)
                             .collect(Collectors.toSet()))
-                    .isEqualTo(Set.of(consensusNodeNames));
+                    .isEqualTo(Set.of(consensusNodeIds));
             assertThat(proxies.stream()).map(CustomResource::getStatus).allMatch(Objects::nonNull);
             assertThat(proxies.stream())
                     .map(CustomResource::getStatus)

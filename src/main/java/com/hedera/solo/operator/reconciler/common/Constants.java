@@ -74,18 +74,20 @@ public final class Constants {
 
     // labels
     public static final String OPERATOR_PREFIX = "operator.solo.hedera.com/";
-    public static final String LABEL_APP = "app"; // FIXME: add prefix and use in all places
+    public static final String LABEL_APP = "app";
     public static final String LABEL_ACCOUNT_ID = OPERATOR_PREFIX + "account-id"; // e.g. 0.0.3
     public static final String LABEL_NODE_ID = OPERATOR_PREFIX + "node-id"; // e.g. 0, 1, 3 etc.
     public static final String LABEL_NODE_NAME = OPERATOR_PREFIX + "node-name"; // e.g. node0
     public static final String LABEL_ORBIT = OPERATOR_PREFIX + "orbit-name";
-    public static final String LABEL_NAMESPACE = OPERATOR_PREFIX + "orbit-namespace";
+    public static final String LABEL_KEY_TYPE = OPERATOR_PREFIX + "key-type";
     public static final String LABEL_K8S_NAME = "app.kubernetes.io/name";
     public static final String LABEL_K8S_INSTANCE = "app.kubernetes.io/instance";
     public static final String LABEL_K8S_VERSION = "app.kubernetes.io/version";
     public static final String LABEL_K8S_COMPONENT = "app.kubernetes.io/component";
     public static final String LABEL_K8S_PART_OF = "app.kubernetes.io/part-of";
     public static final String LABEL_K8S_MANAGED_BY = "app.kubernetes.io/managed-by";
+    public static final String LABEL_SELECTOR_CONSENSUS_NODE = Constants.LABEL_APP + "=" + Constants.CONSENSUS_NODE;
+    public static final String LABEL_SELECTOR_HAPROXY = Constants.LABEL_APP + "=" + Constants.COMPONENT_HAPROXY;
 
     // key types
     public static final String KEY_TYPE_GOSSIP = "gossip";
@@ -115,6 +117,7 @@ public final class Constants {
     public static final String COMPONENT_SECRET = "secret";
     public static final String COMPONENT_SERVICE = "svc";
     public static final String COMPONENT_POD = "pod";
+    public static final String COMPONENT_PVC = "pvc";
     public static final String COMPONENT_DEPLOYMENT = "deployment";
     public static final String COMPONENT_ROLE_BINDING = "role-binding";
     public static final String COMPONENT_SERVICE_ACCOUNT = "sa";

@@ -2,10 +2,10 @@
 
 package com.hedera.solo.operator.reconciler.orbit.resources;
 
-import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_SELECTOR_CONSENSUS_NODE;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
+import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.Service;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -15,7 +15,7 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDep
 import java.util.Optional;
 
 @KubernetesDependent(
-        labelSelector = LABEL_SELECTOR_CONSENSUS_NODE,
+        labelSelector = Constants.LABEL_SELECTOR_CONSENSUS_NODE,
         resourceDiscriminator = ConsensusHeadlessService.class)
 public class ConsensusHeadlessService extends CRUDNoGCKubernetesDependentResource<Service, Orbit>
         implements ResourceDiscriminator<Service, Orbit> {

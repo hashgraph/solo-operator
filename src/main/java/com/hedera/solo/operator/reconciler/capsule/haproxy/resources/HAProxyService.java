@@ -2,7 +2,7 @@
 
 package com.hedera.solo.operator.reconciler.capsule.haproxy.resources;
 
-import static com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleConstants.LABEL_SELECTOR_HAPROXY;
+import static com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleReconciler.HAS_LABEL_SELECTOR_HAPROXY;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
@@ -30,7 +30,7 @@ public class HAProxyService extends CRUDKubernetesDependentResource<Service, HAP
         configureWith(new KubernetesDependentResourceConfigBuilder<Service>()
                 .withUseSSA(Boolean.FALSE)
                 .withResourceDiscriminator(this)
-                .withLabelSelector(LABEL_SELECTOR_HAPROXY)
+                .withLabelSelector(Constants.LABEL_SELECTOR_HAPROXY)
                 .build());
     }
 
@@ -39,15 +39,17 @@ public class HAProxyService extends CRUDKubernetesDependentResource<Service, HAP
         final ObjectMeta metadata = primary.getMetadata();
         final String validName = validName(metadata.getName(), NAME_SUFFIX);
         final String namespace = metadata.getNamespace();
+        final String orbit = primary.getSpec().getOrbit();
+        final Map<String, String> labels = HAProxyDeployment.prepareHAProxyLabels(primary);
 
         final Service service = loadYaml(Service.class, getClass(), TEMPLATE);
         return Metadata.applyStandardLabels(
                         service.edit().editMetadata(),
                         validName,
-                        namespace,
+                        orbit,
                         Constants.COMPONENT_HAPROXY,
                         Constants.COMPONENT_SERVICE,
-                        null)
+                        labels)
                 .withName(validName)
                 .withNamespace(namespace)
                 .endMetadata()
@@ -55,8 +57,8 @@ public class HAProxyService extends CRUDKubernetesDependentResource<Service, HAP
                 .withSelector(Map.of(
                         "app",
                         "haproxy",
-                        "consensus-capsule",
-                        primary.getSpec().getConsensus().getNode()))
+                        Constants.LABEL_NODE_NAME,
+                        Metadata.prepareNodeName(primary.getSpec().getNodeId())))
                 .endSpec()
                 .build();
     }
@@ -65,7 +67,7 @@ public class HAProxyService extends CRUDKubernetesDependentResource<Service, HAP
     public Optional<Service> distinguish(
             Class<Service> resource, HAProxyCapsule primary, Context<HAProxyCapsule> context) {
         return context.getSecondaryResources(Service.class).stream()
-                .filter(svc -> "haproxy".equals(svc.getMetadata().getLabels().get("app")))
+                .filter(HAS_LABEL_SELECTOR_HAPROXY)
                 .findAny();
     }
 }

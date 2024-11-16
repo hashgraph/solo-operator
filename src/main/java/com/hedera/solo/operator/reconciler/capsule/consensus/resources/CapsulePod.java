@@ -7,8 +7,6 @@ import static com.hedera.solo.operator.reconciler.common.Constants.DEFAULT_FILE_
 import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_BUCKET_PATH_TEMPLATE;
 import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_EXTENSION;
 import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_SIG_EXTENSION;
-import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_ACCOUNT_ID;
-import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_NODE_ID;
 import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM_BUCKET_PATH_TEMPLATE;
 import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM_EXTENSION;
 import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM_SIG_EXTENSION;
@@ -126,6 +124,11 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         }
     }
 
+    static Map<String, String> prepareLabels(ConsensusCapsule primary) {
+        return Metadata.prepareConsensusNodeLabels(
+                primary.getSpec().getNodeId(), primary.getSpec().getAccountId());
+    }
+
     @Override
     protected Pod desired(final ConsensusCapsule primary, final Context<ConsensusCapsule> context) {
         this.validateInput(primary, context);
@@ -133,23 +136,16 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         final ObjectMeta metadata = primary.getMetadata();
         final String validName = validName(metadata.getName(), NAME_SUFFIX);
         final String namespace = primary.getMetadata().getNamespace();
+        final String orbit = primary.getSpec().getOrbit();
 
         final Pod pod = renderDeploymentTemplate(primary, context);
-
-        // FIXME standardize labels
-        final Map<String, String> labels = Map.of(
-                "consensus-capsule",
-                metadata.getName(),
-                LABEL_ACCOUNT_ID,
-                primary.getSpec().getAccountId(),
-                LABEL_NODE_ID,
-                primary.getSpec().getNodeId().toString());
+        final Map<String, String> labels = prepareLabels(primary);
 
         // return desired pod
         PodBuilder podBuilder = Metadata.applyStandardLabels(
                         pod.edit().editMetadata(),
                         validName,
-                        namespace,
+                        orbit,
                         Constants.COMPONENT_CONSENSUS,
                         Constants.COMPONENT_POD,
                         labels)
