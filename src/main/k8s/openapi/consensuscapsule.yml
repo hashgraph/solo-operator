@@ -116,9 +116,11 @@ components:
               items:
                 type: object
                 x-java-type: io.fabric8.kubernetes.api.model.TopologySpreadConstraint
-            resources:
-              type: object
-              x-java-type: io.fabric8.kubernetes.api.model.ResourceRequirements
+            resourceClaims:
+              type: array
+              items:
+                type: object
+                x-java-type: io.fabric8.kubernetes.api.model.PodResourceClaim
             preemptionPolicy:
               type: string
               enum:
@@ -126,6 +128,7 @@ components:
                 - PreemptLowerPriority
             priority:
               type: integer
+              format: int32
             priorityClassName:
               type: string
             serviceAccountName:
@@ -144,6 +147,9 @@ components:
                     name:
                       type: string
                       default: "consensus-node"
+                    resources:
+                      type: object
+                      x-java-type: io.fabric8.kubernetes.api.model.ResourceRequirements
                     softwareVersion:
                       type: object
                       x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
