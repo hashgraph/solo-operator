@@ -323,11 +323,10 @@ public final class Metadata {
         standardLabels.put(Constants.LABEL_ORBIT, orbit);
 
         // k8s standard labels
-        final String component = "%s-%s".formatted(parentComponent, componentType);
         standardLabels.put(Constants.LABEL_K8S_NAME, name);
         standardLabels.put(Constants.LABEL_K8S_INSTANCE, name); // FIXME is this correct?
         standardLabels.put(Constants.LABEL_K8S_VERSION, Constants.SOLO_OPERATOR_VERSION);
-        standardLabels.put(Constants.LABEL_K8S_COMPONENT, component);
+        standardLabels.put(Constants.LABEL_K8S_COMPONENT, componentType);
         standardLabels.put(Constants.LABEL_K8S_PART_OF, parentComponent);
         standardLabels.put(Constants.LABEL_K8S_MANAGED_BY, Constants.SOLO_OPERATOR);
 

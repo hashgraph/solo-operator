@@ -2,8 +2,8 @@
 
 package com.hedera.solo.operator.test.capsule;
 
-import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_APP_CONSENSUS_NODE;
-import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_APP_HAPROXY;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_CONSENSUS_NODE_APP;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_HAPROXY_APP;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -92,7 +92,7 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
         Supplier<Map<String, Long>> currentGenerations = () -> kubernetesClient
                 .resources(Deployment.class)
                 .inNamespace(namespace)
-                .withLabel(LABEL_SELECTOR_APP_HAPROXY)
+                .withLabel(LABEL_SELECTOR_HAPROXY_APP)
                 .list()
                 .getItems()
                 .stream()
@@ -107,7 +107,7 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
         for (Secret secret : kubernetesClient
                 .secrets()
                 .inNamespace(namespace)
-                .withLabel(LABEL_SELECTOR_APP_CONSENSUS_NODE)
+                .withLabel(LABEL_SELECTOR_CONSENSUS_NODE_APP)
                 .list()
                 .getItems()) {
             String fieldName = secret.getData().keySet().stream()
@@ -130,7 +130,7 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
         for (Secret secret : kubernetesClient
                 .secrets()
                 .inNamespace(namespace)
-                .withLabel(LABEL_SELECTOR_APP_CONSENSUS_NODE)
+                .withLabel(LABEL_SELECTOR_CONSENSUS_NODE_APP)
                 .list()
                 .getItems()) {
             String fieldName = secret.getData().keySet().stream()
