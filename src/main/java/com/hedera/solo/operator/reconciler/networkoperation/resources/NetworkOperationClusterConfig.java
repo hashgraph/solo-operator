@@ -36,7 +36,6 @@ public class NetworkOperationClusterConfig extends KubernetesDependentResource<C
     private final NetworkOperationReconciler reconciler;
 
     public static final String TEMPLATE = "cluster-config.yaml";
-    public static final String NAME = "cluster-config";
 
     public NetworkOperationClusterConfig(final NetworkOperationReconciler reconciler) {
         super(ConfigMap.class);
@@ -55,12 +54,12 @@ public class NetworkOperationClusterConfig extends KubernetesDependentResource<C
                 .with(builder -> config(builder, primary, context))
                 .with(builder -> Metadata.applyStandardLabels(
                                 builder.editMetadata(),
-                                NAME,
+                                Constants.CLUSTER_CONFIG_NAME,
                                 orbitName,
                                 Constants.COMPONENT_CONSENSUS_NODE,
                                 Constants.COMPONENT_CONFIG_MAP,
                                 null)
-                        .withName(NAME)
+                        .withName(Constants.CLUSTER_CONFIG_NAME)
                         .withNamespace(primary.getMetadata().getNamespace()))
                 .build();
     }

@@ -16,7 +16,7 @@ components:
       properties:
         orbit:
           description: |
-            Name of the orbit this network operation should take effect.
+            Name of the orbit where this network operation should take effect.
           type: string
         mode:
           description: The mode of the `NetworkOperation`.

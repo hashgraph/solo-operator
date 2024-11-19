@@ -25,6 +25,9 @@ public final class Constants {
     public static final int DEFAULT_FILE_MODE = 493; // 0755
     public static final String NODE_NAME_FORMAT = "node%d";
 
+    // names
+    public static final String CLUSTER_CONFIG_NAME = "cluster-config";
+
     // HEDERA related
     public static final int HEDERA_ACCOUNT_START = 3;
     public static final AccountId OPERATOR_ACCOUNT_ID = AccountId.fromString("0.0.2");
@@ -88,12 +91,14 @@ public final class Constants {
     public static final String LABEL_SELECTOR_CONSENSUS_NODE_APP =
             Constants.LABEL_APP + "=" + Constants.COMPONENT_CONSENSUS_NODE;
     public static final String LABEL_SELECTOR_HAPROXY_APP = Constants.LABEL_APP + "=" + Constants.COMPONENT_HAPROXY;
-    public static final String LABEL_SELECTOR_CONSENSUS_CONFIG = "%s=%s,%s=%s"
+    public static final String LABEL_SELECTOR_CONSENSUS_CONFIG = "%s=%s,%s=%s,%s=%s"
             .formatted(
                     Constants.LABEL_K8S_PART_OF,
                     Constants.COMPONENT_CONSENSUS_NODE,
                     Constants.LABEL_K8S_COMPONENT,
-                    Constants.COMPONENT_CONFIG_MAP);
+                    Constants.COMPONENT_CONFIG_MAP,
+                    Constants.LABEL_K8S_NAME,
+                    Constants.CLUSTER_CONFIG_NAME);
     public static final String LABEL_SELECTOR_NET_OP_TRIGGER = "%s=%s,%s=%s"
             .formatted(
                     Constants.LABEL_K8S_PART_OF,
