@@ -97,7 +97,7 @@ jobs:
           name: Unit Test Coverage Reports
 
       - name: Publish To Codecov
-        uses: codecov/codecov-action@3b1354a6c45db9f1008891f4eafc1a7e94ce1d18 # v5.0.1
+        uses: codecov/codecov-action@5c47607acb93fed5485fdbf7232e8a31425f672a # v5.0.2
         if: ${{ inputs.enable-codecov-analysis && !cancelled() && !failure() }}
         with:
           files: ./build/jacoco-report/jacoco.xml,./build/jacoco/jacoco-component-test.xml
