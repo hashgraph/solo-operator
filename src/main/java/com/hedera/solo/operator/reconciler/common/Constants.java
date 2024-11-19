@@ -86,8 +86,8 @@ public final class Constants {
     public static final String LABEL_K8S_COMPONENT = "app.kubernetes.io/component";
     public static final String LABEL_K8S_PART_OF = "app.kubernetes.io/part-of";
     public static final String LABEL_K8S_MANAGED_BY = "app.kubernetes.io/managed-by";
-    public static final String LABEL_SELECTOR_CONSENSUS_NODE = Constants.LABEL_APP + "=" + Constants.CONSENSUS_NODE;
-    public static final String LABEL_SELECTOR_HAPROXY = Constants.LABEL_APP + "=" + Constants.COMPONENT_HAPROXY;
+    public static final String LABEL_SELECTOR_APP_CONSENSUS_NODE = Constants.LABEL_APP + "=" + Constants.CONSENSUS_NODE;
+    public static final String LABEL_SELECTOR_APP_HAPROXY = Constants.LABEL_APP + "=" + Constants.COMPONENT_HAPROXY;
 
     // key types
     public static final String KEY_TYPE_GOSSIP = "gossip";

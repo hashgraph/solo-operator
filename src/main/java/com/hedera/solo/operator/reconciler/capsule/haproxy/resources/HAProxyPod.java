@@ -24,7 +24,7 @@ public class HAProxyPod extends KubernetesDependentResource<Pod, HAProxyCapsule>
     public HAProxyPod() {
         super(Pod.class);
         configureWith(new KubernetesDependentResourceConfigBuilder<Pod>()
-                .withLabelSelector(Constants.LABEL_SELECTOR_HAPROXY)
+                .withLabelSelector(Constants.LABEL_SELECTOR_APP_HAPROXY)
                 .withResourceDiscriminator(this)
                 .build());
     }

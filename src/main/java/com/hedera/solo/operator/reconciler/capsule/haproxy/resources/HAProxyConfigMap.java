@@ -24,7 +24,7 @@ public class HAProxyConfigMap extends CRUDKubernetesDependentResource<ConfigMap,
     public HAProxyConfigMap() {
         super(ConfigMap.class);
         configureWith(new KubernetesDependentResourceConfigBuilder<ConfigMap>()
-                .withLabelSelector(Constants.LABEL_SELECTOR_HAPROXY)
+                .withLabelSelector(Constants.LABEL_SELECTOR_APP_HAPROXY)
                 .build());
     }
 

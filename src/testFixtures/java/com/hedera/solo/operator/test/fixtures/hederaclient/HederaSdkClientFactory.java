@@ -2,8 +2,8 @@
 
 package com.hedera.solo.operator.test.fixtures.hederaclient;
 
-import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_CONSENSUS_NODE;
-import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_HAPROXY;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_APP_CONSENSUS_NODE;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_APP_HAPROXY;
 
 import com.google.protobuf.ByteString;
 import com.hedera.hashgraph.sdk.Client;
@@ -128,11 +128,11 @@ public class HederaSdkClientFactory {
     }
 
     Map<String, String> direct() {
-        return services(LABEL_SELECTOR_CONSENSUS_NODE);
+        return services(LABEL_SELECTOR_APP_CONSENSUS_NODE);
     }
 
     Map<String, String> haproxy() {
-        return services(LABEL_SELECTOR_HAPROXY);
+        return services(LABEL_SELECTOR_APP_HAPROXY);
     }
 
     String configText() {

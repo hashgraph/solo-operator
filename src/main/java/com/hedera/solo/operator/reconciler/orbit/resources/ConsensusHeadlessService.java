@@ -16,7 +16,7 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDep
 import java.util.Optional;
 
 @KubernetesDependent(
-        labelSelector = Constants.LABEL_SELECTOR_CONSENSUS_NODE,
+        labelSelector = Constants.LABEL_SELECTOR_APP_CONSENSUS_NODE,
         resourceDiscriminator = ConsensusHeadlessService.class)
 public class ConsensusHeadlessService extends CRUDNoGCKubernetesDependentResource<Service, Orbit>
         implements ResourceDiscriminator<Service, Orbit> {
