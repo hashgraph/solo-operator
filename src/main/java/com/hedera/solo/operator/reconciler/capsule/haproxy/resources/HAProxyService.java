@@ -30,7 +30,7 @@ public class HAProxyService extends CRUDKubernetesDependentResource<Service, HAP
         configureWith(new KubernetesDependentResourceConfigBuilder<Service>()
                 .withUseSSA(Boolean.FALSE)
                 .withResourceDiscriminator(this)
-                .withLabelSelector(Constants.LABEL_SELECTOR_HAPROXY)
+                .withLabelSelector(Constants.LABEL_SELECTOR_APP_HAPROXY)
                 .build());
     }
 

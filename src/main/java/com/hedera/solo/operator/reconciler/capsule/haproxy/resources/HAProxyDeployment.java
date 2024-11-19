@@ -34,7 +34,7 @@ public class HAProxyDeployment extends CRUDKubernetesDependentResource<Deploymen
         this.reconciler = reconciler;
         configureWith(new KubernetesDependentResourceConfigBuilder<Deployment>()
                 .withUseSSA(Boolean.FALSE)
-                .withLabelSelector(Constants.LABEL_SELECTOR_HAPROXY)
+                .withLabelSelector(Constants.LABEL_SELECTOR_APP_HAPROXY)
                 .build());
     }
 

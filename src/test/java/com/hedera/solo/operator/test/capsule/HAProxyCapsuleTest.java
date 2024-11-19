@@ -2,8 +2,8 @@
 
 package com.hedera.solo.operator.test.capsule;
 
-import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_CONSENSUS_NODE;
-import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_HAPROXY;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_APP_CONSENSUS_NODE;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_APP_HAPROXY;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -89,17 +89,16 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
     }
 
     void simulateCertificateUpdate() throws Exception {
-        Supplier<Map<String, Long>> currentGenerations =
-                () -> kubernetesClient
-                        .resources(Deployment.class)
-                        .inNamespace(namespace)
-                        .withLabel(LABEL_SELECTOR_HAPROXY)
-                        .list()
-                        .getItems()
-                        .stream()
-                        .collect(Collectors.toMap(
-                                deployment -> deployment.getMetadata().getName(),
-                                deployment -> deployment.getStatus().getObservedGeneration()));
+        Supplier<Map<String, Long>> currentGenerations = () -> kubernetesClient
+                .resources(Deployment.class)
+                .inNamespace(namespace)
+                .withLabel(LABEL_SELECTOR_APP_HAPROXY)
+                .list()
+                .getItems()
+                .stream()
+                .collect(Collectors.toMap(
+                        deployment -> deployment.getMetadata().getName(),
+                        deployment -> deployment.getStatus().getObservedGeneration()));
 
         // initial observed generations
         Map<String, Long> initialGenerations = currentGenerations.get();
@@ -108,7 +107,7 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
         for (Secret secret : kubernetesClient
                 .secrets()
                 .inNamespace(namespace)
-                .withLabel(LABEL_SELECTOR_CONSENSUS_NODE)
+                .withLabel(LABEL_SELECTOR_APP_CONSENSUS_NODE)
                 .list()
                 .getItems()) {
             String fieldName = secret.getData().keySet().stream()
@@ -131,7 +130,7 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
         for (Secret secret : kubernetesClient
                 .secrets()
                 .inNamespace(namespace)
-                .withLabel(LABEL_SELECTOR_CONSENSUS_NODE)
+                .withLabel(LABEL_SELECTOR_APP_CONSENSUS_NODE)
                 .list()
                 .getItems()) {
             String fieldName = secret.getData().keySet().stream()
