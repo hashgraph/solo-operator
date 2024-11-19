@@ -8,6 +8,7 @@ import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.Service;
+import io.fabric8.kubernetes.api.model.ServiceBuilder;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDNoGCKubernetesDependentResource;
@@ -20,6 +21,7 @@ import java.util.Optional;
 public class ConsensusHeadlessService extends CRUDNoGCKubernetesDependentResource<Service, Orbit>
         implements ResourceDiscriminator<Service, Orbit> {
     public static final String TEMPLATE = "headless-service.yaml";
+    public static final String NAME = "consensus";
 
     public ConsensusHeadlessService() {
         super(Service.class);
@@ -27,9 +29,17 @@ public class ConsensusHeadlessService extends CRUDNoGCKubernetesDependentResourc
 
     @Override
     protected Service desired(Orbit primary, Context<Orbit> context) {
-        return Metadata.applyOrbitMetaTo(
-                        primary,
-                        loadYaml(Service.class, getClass(), TEMPLATE).edit().editMetadata())
+        final String orbitName = primary.getMetadata().getName();
+        final Service svc = loadYaml(Service.class, getClass(), TEMPLATE);
+        final ServiceBuilder sb =
+                Metadata.applyOrbitMetaTo(primary, svc.edit().editMetadata()).endMetadata();
+        return Metadata.applyStandardLabels(
+                        sb.editMetadata(),
+                        NAME,
+                        orbitName,
+                        Constants.COMPONENT_ORBIT,
+                        Constants.COMPONENT_SERVICE,
+                        null)
                 .withNamespace(primary.getMetadata().getName())
                 .endMetadata()
                 .build();

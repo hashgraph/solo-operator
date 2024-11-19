@@ -5,6 +5,7 @@ package com.hedera.solo.operator.reconciler.orbit.resources;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
+import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
@@ -26,10 +27,17 @@ public class ConsensusConfigMap extends CRUDNoGCKubernetesDependentResource<Conf
 
     @Override
     protected ConfigMap desired(final Orbit primary, final Context<Orbit> context) {
-        final ConfigMapBuilder cm =
-                loadYaml(ConfigMap.class, getClass(), TEMPLATE).edit();
-
-        return Metadata.applyOrbitMetaTo(primary, cm.editMetadata())
+        final String orbitName = primary.getMetadata().getName();
+        final ConfigMap cm = loadYaml(ConfigMap.class, getClass(), TEMPLATE);
+        final ConfigMapBuilder cmb =
+                Metadata.applyOrbitMetaTo(primary, cm.edit().editMetadata()).endMetadata();
+        return Metadata.applyStandardLabels(
+                        cmb.editMetadata(),
+                        NAME,
+                        orbitName,
+                        Constants.COMPONENT_ORBIT,
+                        Constants.COMPONENT_CONFIG_MAP,
+                        null)
                 .withNamespace(primary.getMetadata().getName())
                 .endMetadata()
                 .build();
