@@ -121,4 +121,6 @@ public final class Constants {
     public static final String COMPONENT_DEPLOYMENT = "deployment";
     public static final String COMPONENT_ROLE_BINDING = "role-binding";
     public static final String COMPONENT_SERVICE_ACCOUNT = "sa";
+    public static final String COMPONENT_ROLE = "role";
+    public static final String COMPONENT_NAMESPACE = "ns";
 }

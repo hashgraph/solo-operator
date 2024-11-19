@@ -319,9 +319,12 @@ public final class Metadata {
             standardLabels.putAll(customLabels); // add first so that standard labels are overwritten if those exist
         }
 
+        // solo-orbit specific labels
+        standardLabels.put(Constants.LABEL_ORBIT, orbit);
+
+        // k8s standard labels
         final String component = "%s-%s".formatted(parentComponent, componentType);
         standardLabels.put(Constants.LABEL_K8S_NAME, name);
-        standardLabels.put(Constants.LABEL_ORBIT, orbit);
         standardLabels.put(Constants.LABEL_K8S_INSTANCE, name); // FIXME is this correct?
         standardLabels.put(Constants.LABEL_K8S_VERSION, Constants.SOLO_OPERATOR_VERSION);
         standardLabels.put(Constants.LABEL_K8S_COMPONENT, component);

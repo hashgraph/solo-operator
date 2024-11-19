@@ -5,6 +5,7 @@ package com.hedera.solo.operator.reconciler.orbit.resources;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
+import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.rbac.Role;
 import io.fabric8.kubernetes.api.model.rbac.RoleBuilder;
@@ -25,9 +26,12 @@ public class ConsensusCapsuleRole extends CRUDNoGCKubernetesDependentResource<Ro
 
     @Override
     protected Role desired(final Orbit primary, final Context<Orbit> context) {
-        final RoleBuilder role = loadYaml(Role.class, getClass(), TEMPLATE).edit();
-
-        return Metadata.applyOrbitMetaTo(primary, role.editMetadata())
+        final String orbitName = primary.getMetadata().getName();
+        final Role role = loadYaml(Role.class, getClass(), TEMPLATE);
+        final RoleBuilder rb =
+                Metadata.applyOrbitMetaTo(primary, role.edit().editMetadata()).endMetadata();
+        return Metadata.applyStandardLabels(
+                        rb.editMetadata(), NAME, orbitName, Constants.COMPONENT_ORBIT, Constants.COMPONENT_ROLE, null)
                 .withNamespace(primary.getMetadata().getName())
                 .endMetadata()
                 .build();
