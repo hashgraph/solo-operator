@@ -2,6 +2,16 @@
 
 package com.hedera.solo.operator.test.capsule;
 
+import static com.hedera.solo.operator.reconciler.common.Constants.CONSENSUS_NODE;
+import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GOSSIP;
+import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GRPC_TLS;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_APP;
+import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
+import static com.hedera.solo.operator.test.fixtures.coredns.ConfigureCoredns.configureCoredns;
+import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleBuilder;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleSpec;
@@ -38,25 +48,14 @@ import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
 import jakarta.inject.Inject;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-
-import static com.hedera.solo.operator.reconciler.common.Constants.CONSENSUS_NODE;
-import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GOSSIP;
-import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GRPC_TLS;
-import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_APP;
-import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
-import static com.hedera.solo.operator.test.fixtures.coredns.ConfigureCoredns.configureCoredns;
-import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 @SoloTest
 public abstract class ConsensusCapsuleTestAbstract {
@@ -136,8 +135,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .until(() -> kubernetesClient.namespaces().withName(namespace).get() == null);
     }
 
-    protected record NodeInfo(Long id, String name, String accountId, int weight, String internal, String external) {
-    }
+    protected record NodeInfo(Long id, String name, String accountId, int weight, String internal, String external) {}
 
     private List<NodeInfo> prepareNodes(List<Long> nodeIds) {
         List<NodeInfo> nodes = new ArrayList<>();
@@ -383,6 +381,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .withNamespace(namespace)
                 .endMetadata()
                 .withNewSpec()
+                .withOrbit(orbit)
                 .withMode(NetworkOperationSpec.Mode.FirstInitialization)
                 .endSpec()
                 .withNewStatus()

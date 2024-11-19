@@ -11,6 +11,7 @@ import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.orbitspec.consensus.genesis.AddressBook;
+import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.reconciler.networkoperation.NetworkOperationReconciler;
 import io.fabric8.kubernetes.api.model.ConfigMap;
@@ -41,19 +42,26 @@ public class NetworkOperationClusterConfig extends KubernetesDependentResource<C
         super(ConfigMap.class);
         this.reconciler = reconciler;
         configureWith(new KubernetesDependentResourceConfigBuilder<ConfigMap>()
-                .withLabelSelector("app=consensus,type=config")
+                .withLabelSelector(Constants.LABEL_SELECTOR_CONSENSUS_CONFIG)
                 .withResourceDiscriminator(this)
                 .build());
     }
 
     @Override
     protected ConfigMap desired(final NetworkOperation primary, final Context<NetworkOperation> context) {
+        final String orbitName = primary.getSpec().getOrbit();
         return edit(context.getSecondaryResource(ConfigMap.class, this)
                         .orElseGet(() -> loadYaml(ConfigMap.class, getClass(), TEMPLATE)))
-                .with(metadata -> metadata.editMetadata()
+                .with(builder -> config(builder, primary, context))
+                .with(builder -> Metadata.applyStandardLabels(
+                                builder.editMetadata(),
+                                NAME,
+                                orbitName,
+                                Constants.COMPONENT_CONSENSUS,
+                                Constants.COMPONENT_CONFIG_MAP,
+                                null)
                         .withName(NAME)
                         .withNamespace(primary.getMetadata().getNamespace()))
-                .with(builder -> config(builder, primary, context))
                 .build();
     }
 

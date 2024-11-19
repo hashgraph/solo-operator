@@ -6,6 +6,8 @@ import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 
 import com.hedera.solo.operator.library.numeric.RolloverComparator;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
+import com.hedera.solo.operator.reconciler.common.Constants;
+import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.reconciler.networkoperation.NetworkOperationReconciler;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.client.KubernetesClientException;
@@ -33,20 +35,25 @@ public class NetworkOperationTrigger extends KubernetesDependentResource<ConfigM
         super(ConfigMap.class);
         this.reconciler = reconciler;
         configureWith(new KubernetesDependentResourceConfigBuilder<ConfigMap>()
-                .withLabelSelector("app=consensus,type=trigger")
+                .withLabelSelector(Constants.LABEL_SELECTOR_NET_OP_TRIGGER)
                 .withResourceDiscriminator(this)
                 .build());
     }
 
     public synchronized void next(final NetworkOperation resource, final Context<NetworkOperation> context) {
         try {
+            final String orbitName = resource.getSpec().getOrbit();
             context.getClient()
                     .resource(edit(new ConfigMap())
-                            .with(metadata -> metadata.editMetadata()
+                            .with(builder -> Metadata.applyStandardLabels(
+                                            builder.editMetadata(),
+                                            NAME,
+                                            orbitName,
+                                            Constants.COMPONENT_NET_OP,
+                                            Constants.COMPONENT_TRIGGER,
+                                            null)
                                     .withName(NAME)
-                                    .withNamespace(resource.getMetadata().getNamespace())
-                                    .addToLabels("app", "consensus")
-                                    .addToLabels("type", "trigger"))
+                                    .withNamespace(resource.getMetadata().getNamespace()))
                             .with(data -> data.addToData(
                                     "count",
                                     String.valueOf(rolloverComparator.rollover(sequenceNumber.getAndIncrement()))))
