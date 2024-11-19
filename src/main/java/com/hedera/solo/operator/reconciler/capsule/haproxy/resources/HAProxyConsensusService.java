@@ -5,7 +5,7 @@ package com.hedera.solo.operator.reconciler.capsule.haproxy.resources;
 import static com.hedera.solo.operator.library.model.Labels.hasLabel;
 import static com.hedera.solo.operator.library.model.Labels.hasLabels;
 import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleReconciler.HAS_LABEL_SELECTOR_CONSENSUS_NODE;
-import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_APP_CONSENSUS_NODE;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_CONSENSUS_NODE_APP;
 
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsule;
 import com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleReconciler;
@@ -38,7 +38,7 @@ public class HAProxyConsensusService extends KubernetesDependentResource<Service
         super(Service.class);
         this.reconciler = reconciler;
         configureWith(new KubernetesDependentResourceConfigBuilder<Service>()
-                .withLabelSelector(LABEL_SELECTOR_APP_CONSENSUS_NODE)
+                .withLabelSelector(LABEL_SELECTOR_CONSENSUS_NODE_APP)
                 .withResourceDiscriminator(this)
                 .build());
     }

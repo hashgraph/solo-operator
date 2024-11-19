@@ -86,17 +86,17 @@ public final class Constants {
     public static final String LABEL_K8S_COMPONENT = "app.kubernetes.io/component";
     public static final String LABEL_K8S_PART_OF = "app.kubernetes.io/part-of";
     public static final String LABEL_K8S_MANAGED_BY = "app.kubernetes.io/managed-by";
-    public static final String LABEL_SELECTOR_APP_CONSENSUS_NODE = Constants.LABEL_APP + "=" + Constants.CONSENSUS_NODE;
-    public static final String LABEL_SELECTOR_APP_HAPROXY = Constants.LABEL_APP + "=" + Constants.COMPONENT_HAPROXY;
+    public static final String LABEL_SELECTOR_CONSENSUS_NODE_APP = Constants.LABEL_APP + "=" + Constants.CONSENSUS_NODE;
+    public static final String LABEL_SELECTOR_HAPROXY_APP = Constants.LABEL_APP + "=" + Constants.COMPONENT_HAPROXY;
     public static final String LABEL_SELECTOR_CONSENSUS_CONFIG = "%s=%s,%s=%s"
             .formatted(
-                    Constants.LABEL_APP,
+                    Constants.LABEL_K8S_PART_OF,
                     Constants.COMPONENT_CONSENSUS,
                     Constants.LABEL_K8S_COMPONENT,
                     Constants.COMPONENT_CONFIG_MAP);
     public static final String LABEL_SELECTOR_NET_OP_TRIGGER = "%s=%s,%s=%s"
             .formatted(
-                    Constants.LABEL_APP,
+                    Constants.LABEL_K8S_PART_OF,
                     Constants.COMPONENT_NET_OP,
                     Constants.LABEL_K8S_COMPONENT,
                     Constants.COMPONENT_TRIGGER);

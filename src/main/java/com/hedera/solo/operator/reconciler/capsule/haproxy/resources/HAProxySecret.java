@@ -35,7 +35,7 @@ public class HAProxySecret extends CRUDKubernetesDependentResource<Secret, HAPro
         super(Secret.class);
         this.reconciler = reconciler;
         configureWith(new KubernetesDependentResourceConfigBuilder<Secret>()
-                .withLabelSelector(Constants.LABEL_SELECTOR_APP_HAPROXY)
+                .withLabelSelector(Constants.LABEL_SELECTOR_HAPROXY_APP)
                 .withResourceDiscriminator(this)
                 .build());
     }

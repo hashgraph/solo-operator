@@ -37,7 +37,7 @@ public class HAProxyConsensusSecret extends KubernetesDependentResource<Secret, 
         super(Secret.class);
         this.reconciler = reconciler;
         configureWith(new KubernetesDependentResourceConfigBuilder<Secret>()
-                .withLabelSelector(Constants.LABEL_SELECTOR_APP_CONSENSUS_NODE)
+                .withLabelSelector(Constants.LABEL_SELECTOR_CONSENSUS_NODE_APP)
                 .withResourceDiscriminator(this)
                 .build());
     }
