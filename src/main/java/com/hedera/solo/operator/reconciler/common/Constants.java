@@ -15,7 +15,6 @@ public final class Constants {
     // defaults
     public static final String SOLO_OPERATOR = "solo-operator";
     public static final String SOLO_OPERATOR_VERSION = "0.0.1"; // FIXME load from pom
-    public static final String CONSENSUS_NODE = "consensus-node";
     public static final Long HEDERA_USER = 2000L;
     public static final Long HEDERA_GROUP = 2000L;
     public static final PodSecurityContextBuilder SECURITY_CONTEXT_BUILDER = new PodSecurityContextBuilder()
@@ -86,12 +85,13 @@ public final class Constants {
     public static final String LABEL_K8S_COMPONENT = "app.kubernetes.io/component";
     public static final String LABEL_K8S_PART_OF = "app.kubernetes.io/part-of";
     public static final String LABEL_K8S_MANAGED_BY = "app.kubernetes.io/managed-by";
-    public static final String LABEL_SELECTOR_CONSENSUS_NODE_APP = Constants.LABEL_APP + "=" + Constants.CONSENSUS_NODE;
+    public static final String LABEL_SELECTOR_CONSENSUS_NODE_APP =
+            Constants.LABEL_APP + "=" + Constants.COMPONENT_CONSENSUS_NODE;
     public static final String LABEL_SELECTOR_HAPROXY_APP = Constants.LABEL_APP + "=" + Constants.COMPONENT_HAPROXY;
     public static final String LABEL_SELECTOR_CONSENSUS_CONFIG = "%s=%s,%s=%s"
             .formatted(
                     Constants.LABEL_K8S_PART_OF,
-                    Constants.COMPONENT_CONSENSUS,
+                    Constants.COMPONENT_CONSENSUS_NODE,
                     Constants.LABEL_K8S_COMPONENT,
                     Constants.COMPONENT_CONFIG_MAP);
     public static final String LABEL_SELECTOR_NET_OP_TRIGGER = "%s=%s,%s=%s"
@@ -120,9 +120,9 @@ public final class Constants {
             VOLUME_RECORD_STREAM_NAME_SUFFIX, "hgcapp-%s".formatted(VOLUME_RECORD_STREAM_NAME_SUFFIX),
             VOLUME_EVENTS_STREAM_NAME_SUFFIX, "hgcapp-%s".formatted(VOLUME_EVENTS_STREAM_NAME_SUFFIX));
 
-    // components
+    // component types
     public static final String COMPONENT_ORBIT = "orbit";
-    public static final String COMPONENT_CONSENSUS = "consensus";
+    public static final String COMPONENT_CONSENSUS_NODE = "consensus-node";
     public static final String COMPONENT_HAPROXY = "haproxy";
     public static final String COMPONENT_NET_OP = "net-op";
     public static final String COMPONENT_CONFIG_MAP = "cm";

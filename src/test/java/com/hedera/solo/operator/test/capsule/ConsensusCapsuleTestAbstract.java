@@ -2,7 +2,7 @@
 
 package com.hedera.solo.operator.test.capsule;
 
-import static com.hedera.solo.operator.reconciler.common.Constants.CONSENSUS_NODE;
+import static com.hedera.solo.operator.reconciler.common.Constants.COMPONENT_CONSENSUS_NODE;
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GOSSIP;
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GRPC_TLS;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_APP;
@@ -190,7 +190,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                 final Map<String, String> labels = Metadata.prepareConsensusNodeLabels(node.id, node.accountId);
                 labels.put(Constants.LABEL_KEY_TYPE, keyType);
                 final Map<String, String> standardLabels = Metadata.prepareStandardLabels(
-                        node.name, orbit, Constants.COMPONENT_CONSENSUS, Constants.COMPONENT_SECRET, labels);
+                        node.name, orbit, Constants.COMPONENT_CONSENSUS_NODE, Constants.COMPONENT_SECRET, labels);
 
                 kubernetesClient
                         .resource(loadYaml(Secret.class, getClass(), nodeKeyFile)
@@ -315,7 +315,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         return kubernetesClient
                 .resources(Pod.class)
                 .inNamespace(namespace)
-                .withLabels(Map.of(LABEL_APP, CONSENSUS_NODE))
+                .withLabels(Map.of(LABEL_APP, COMPONENT_CONSENSUS_NODE))
                 .list()
                 .getItems();
     }

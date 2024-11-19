@@ -45,7 +45,7 @@ public class CapsuleRoleBinding extends CRUDKubernetesDependentResource<RoleBind
                         rb.edit().editMetadata(),
                         rbName,
                         orbit,
-                        Constants.COMPONENT_CONSENSUS,
+                        Constants.COMPONENT_CONSENSUS_NODE,
                         Constants.COMPONENT_ROLE_BINDING,
                         null)
                 .withName(roleName)

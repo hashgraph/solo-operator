@@ -52,7 +52,7 @@ import org.jboss.logging.Logger;
 public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>, ErrorStatusHandler<ConsensusCapsule> {
 
     public static final Predicate<HasMetadata> HAS_LABEL_SELECTOR_CONSENSUS_NODE =
-            hasLabel(Constants.LABEL_APP, Constants.CONSENSUS_NODE);
+            hasLabel(Constants.LABEL_APP, Constants.COMPONENT_CONSENSUS_NODE);
     public static final String CONSENSUS_CONTAINER_NAME = "consensus-node";
     private final Logger log;
 

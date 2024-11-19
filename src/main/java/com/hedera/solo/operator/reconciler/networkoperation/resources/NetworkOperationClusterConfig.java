@@ -57,7 +57,7 @@ public class NetworkOperationClusterConfig extends KubernetesDependentResource<C
                                 builder.editMetadata(),
                                 NAME,
                                 orbitName,
-                                Constants.COMPONENT_CONSENSUS,
+                                Constants.COMPONENT_CONSENSUS_NODE,
                                 Constants.COMPONENT_CONFIG_MAP,
                                 null)
                         .withName(NAME)

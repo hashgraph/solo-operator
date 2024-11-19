@@ -40,7 +40,7 @@ public class CapsuleService extends CRUDKubernetesDependentResource<Service, Con
                         service.edit().editMetadata(),
                         validName,
                         orbit,
-                        Constants.COMPONENT_CONSENSUS,
+                        Constants.COMPONENT_CONSENSUS_NODE,
                         Constants.COMPONENT_SERVICE,
                         labels)
                 .withName(validName)
