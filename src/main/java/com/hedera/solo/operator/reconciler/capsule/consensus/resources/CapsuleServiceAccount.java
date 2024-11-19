@@ -36,7 +36,7 @@ public class CapsuleServiceAccount extends CRUDKubernetesDependentResource<Servi
                         sa.edit().editMetadata(),
                         saName,
                         orbit,
-                        Constants.COMPONENT_CONSENSUS,
+                        Constants.COMPONENT_CONSENSUS_NODE,
                         Constants.COMPONENT_SERVICE_ACCOUNT,
                         null)
                 .withName(saName)

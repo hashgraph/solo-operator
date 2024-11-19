@@ -146,7 +146,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
                         pod.edit().editMetadata(),
                         validName,
                         orbit,
-                        Constants.COMPONENT_CONSENSUS,
+                        Constants.COMPONENT_CONSENSUS_NODE,
                         Constants.COMPONENT_POD,
                         labels)
                 .withName(validName)

@@ -56,7 +56,7 @@ public class CapsulePvcUtil {
                         builder.editMetadata(),
                         validName,
                         orbit,
-                        Constants.COMPONENT_CONSENSUS,
+                        Constants.COMPONENT_CONSENSUS_NODE,
                         Constants.COMPONENT_PVC,
                         null)
                 .withName(validName)

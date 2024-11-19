@@ -335,7 +335,7 @@ public final class Metadata {
 
     public static Map<String, String> prepareConsensusNodeLabels(Long nodeId, String accountId) {
         final Map<String, String> labels = new HashMap<>(); // return a mutable hashmap
-        labels.put(Constants.LABEL_APP, Constants.CONSENSUS_NODE);
+        labels.put(Constants.LABEL_APP, Constants.COMPONENT_CONSENSUS_NODE);
         labels.put(LABEL_NODE_NAME, prepareNodeName(nodeId));
         labels.put(LABEL_ACCOUNT_ID, accountId);
         labels.put(LABEL_NODE_ID, nodeId.toString());
