@@ -88,6 +88,18 @@ public final class Constants {
     public static final String LABEL_K8S_MANAGED_BY = "app.kubernetes.io/managed-by";
     public static final String LABEL_SELECTOR_APP_CONSENSUS_NODE = Constants.LABEL_APP + "=" + Constants.CONSENSUS_NODE;
     public static final String LABEL_SELECTOR_APP_HAPROXY = Constants.LABEL_APP + "=" + Constants.COMPONENT_HAPROXY;
+    public static final String LABEL_SELECTOR_CONSENSUS_CONFIG = "%s=%s,%s=%s"
+            .formatted(
+                    Constants.LABEL_APP,
+                    Constants.COMPONENT_CONSENSUS,
+                    Constants.LABEL_K8S_COMPONENT,
+                    Constants.COMPONENT_CONFIG_MAP);
+    public static final String LABEL_SELECTOR_NET_OP_TRIGGER = "%s=%s,%s=%s"
+            .formatted(
+                    Constants.LABEL_APP,
+                    Constants.COMPONENT_NET_OP,
+                    Constants.LABEL_K8S_COMPONENT,
+                    Constants.COMPONENT_TRIGGER);
 
     // key types
     public static final String KEY_TYPE_GOSSIP = "gossip";
@@ -123,4 +135,5 @@ public final class Constants {
     public static final String COMPONENT_SERVICE_ACCOUNT = "sa";
     public static final String COMPONENT_ROLE = "role";
     public static final String COMPONENT_NAMESPACE = "ns";
+    public static final String COMPONENT_TRIGGER = "trigger";
 }

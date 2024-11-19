@@ -10,13 +10,20 @@ components:
   schemas:
     NetworkOperationSpec:
       type: object
+      required: # required properties.
+        - orbit
+        - name
       properties:
+        orbit:
+          description: |
+            Name of the orbit this network operation should take effect.
+          type: string
         mode:
           description: The mode of the `NetworkOperation`.
           type: string
           enum:
-              - FirstInitialization
-              - NodeAddition
+            - FirstInitialization
+            - NodeAddition
 
     NetworkOperationStatus:
       type: object
