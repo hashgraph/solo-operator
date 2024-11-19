@@ -143,12 +143,14 @@ public class NetworkOperationTest extends AbstractOperatorTest {
     }
 
     void createNetworkOperation(final String name, final boolean noUpdate) {
+        final String orbitName = operator().getNamespace(); // for now namespace and orbit name are the same
         operator()
                 .create(edit(new NetworkOperation())
                         .with(metadata -> metadata.editMetadata()
                                 .withName(name)
                                 .addToLabels("no-update", String.valueOf(noUpdate)))
-                        .with(spec -> spec.editSpec().withMode(FirstInitialization))
+                        .with(spec ->
+                                spec.editSpec().withMode(FirstInitialization).withOrbit(orbitName))
                         .build());
     }
 
