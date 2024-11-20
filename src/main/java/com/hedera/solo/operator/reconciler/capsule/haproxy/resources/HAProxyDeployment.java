@@ -56,9 +56,7 @@ public class HAProxyDeployment extends CRUDKubernetesDependentResource<Deploymen
         final String orbit = primary.getSpec().getOrbit();
 
         final Map<String, String> labels = prepareHAProxyLabels(primary);
-        labels.put(
-                Constants.COMPONENT_HAPROXY,
-                Metadata.prepareNodeName(primary.getSpec().getNodeId()));
+        labels.put(Constants.COMPONENT_HAPROXY, metadata.getName()); // need it for HAProxyPod to find the primary
 
         final Deployment deployment = loadYaml(Deployment.class, getClass(), TEMPLATE);
         return Metadata.applyStandardLabels(
