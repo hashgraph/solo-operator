@@ -12,7 +12,6 @@ components:
       type: object
       required: # required properties.
         - orbit
-        - name
       properties:
         orbit:
           description: |

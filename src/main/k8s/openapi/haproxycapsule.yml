@@ -12,7 +12,7 @@ components:
       type: object
       required: # required properties.
         - orbit
-        - consensus
+        - nodeId
       properties:
         orbit:
           description: |
