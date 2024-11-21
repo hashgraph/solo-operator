@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-
 package com.hedera.solo.operator.reconciler.capsule.consensus;
 
 import static com.hedera.solo.operator.library.model.Labels.hasLabel;
@@ -58,9 +56,7 @@ public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>,
     private final Logger log;
 
     @Inject
-    public ConsensusCapsuleReconciler(final Logger log) {
-        this.log = log;
-    }
+    public ConsensusCapsuleReconciler(final Logger log){this.log = log;}
 
     @Override
     public UpdateControl<ConsensusCapsule> reconcile(
