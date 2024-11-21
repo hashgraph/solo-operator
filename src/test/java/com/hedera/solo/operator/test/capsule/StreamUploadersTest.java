@@ -23,11 +23,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
-@Disabled
 public class StreamUploadersTest extends ConsensusCapsuleTestAbstract {
     @Override
     @Test
@@ -68,7 +66,7 @@ public class StreamUploadersTest extends ConsensusCapsuleTestAbstract {
             for (Pod p : consensusPods) {
                 String accountId = p.getMetadata().getLabels().get(LABEL_ACCOUNT_ID);
                 assertThat(accountId).isNotEmpty();
-                assertThat(p.getSpec().getContainers()).hasSize(4);
+                assertThat(p.getSpec().getContainers()).hasSize(5);
 
                 for (Container c : p.getSpec().getContainers()) {
                     Map<String, String> envMap = new HashMap<>();
