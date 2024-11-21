@@ -75,8 +75,9 @@ public class HAProxyConsensusService extends KubernetesDependentResource<Service
     @Override
     public Set<ResourceID> toSecondaryResourceIDs(final HAProxyCapsule primary) {
         final String nodeName = Metadata.prepareNodeName(primary.getSpec().getNodeId());
+        final String namespace = primary.getMetadata().getNamespace();
         return eventSource()
-                .map(es -> es.list(primary.getSpec().getOrbit()))
+                .map(es -> es.list(namespace))
                 .orElse(Stream.empty())
                 .filter(hasLabels(Map.of(Constants.LABEL_NODE_NAME, nodeName)))
                 .findAny()
