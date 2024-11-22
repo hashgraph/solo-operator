@@ -175,6 +175,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
                 .endSpec(); // always override security context
     }
 
+    // FIXME: check property is set before using it
     PodBuilder copyPodProperties(@NonNull final PodProperties props, final PodBuilder builder) {
         Objects.requireNonNull(props);
         PodFluent<PodBuilder>.SpecNested<PodBuilder> spec = builder.editSpec();

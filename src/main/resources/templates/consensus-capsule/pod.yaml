@@ -27,7 +27,7 @@ spec:
   initContainers:
     - name: "init-consensus-node"
       image: "ubuntu:mantic-20240216" # using same image that is used for consensus-node deterministic image
-      securityContext: # run as root to create hedera user and group
+      securityContext: # run as root to be able to set owner and create subdirectories in the mounted volumes (e.g. hostpath)
         runAsUser: 0
         runAsGroup: 0
       volumeMounts:
@@ -57,25 +57,66 @@ spec:
         - "/bin/bash"
         - "-c"
         - |
+          setOwnerPermissions() \{
+            path="$1"
+
+            current_owner=$(stat -c "%U" "$path") || return $?
+            if [[ "$current_owner" != "hedera" ]]; then
+              echo ""
+              echo "Changing current owner: $current_owner, path: $path"
+              chown -R hedera:hedera "$path" || return $?
+              chmod -R 755 "$path" || return $?
+            fi
+
+            echo "Path: $path"
+            echo "--------------------------------------------------------------------------"
+            ls -la "$path"
+          \}
+
           setupDirs() \{
             # setup directories required by stream-uploader sidecars as otherwise those wont' be able to start
-            mkdir -p /opt/hgcapp/recordStreams/record{accountId}/sidecar || return $?
-            mkdir -p /opt/hgcapp/eventsStreams/events_{accountId} || return $?
+            if [[ ! -d "/opt/hgcapp/recordStreams/record{accountId}" ]]; then
+              mkdir -p "/opt/hgcapp/recordStreams/record{accountId}" || return $?
+              setOwnerPermissions "/opt/hgcapp/recordStreams/record{accountId}" || return $?
+            fi
+
+            if [[ ! -d "/opt/hgcapp/recordStreams/record{accountId}/sidecar" ]]; then
+              mkdir -p "/opt/hgcapp/recordStreams/record{accountId}/sidecar" || return $?
+              setOwnerPermissions "/opt/hgcapp/recordStreams/record{accountId}/sidecar" || return $?
+            fi
+
+            if [[ ! -d "/opt/hgcapp/eventsStreams/events_{accountId}" ]]; then
+              mkdir -p "/opt/hgcapp/eventsStreams/events_{accountId}" || return $?
+              setOwnerPermissions "/opt/hgcapp/eventsStreams/events_{accountId}" || return $?
+            fi
 
             # create empty VERSION file for backup-uploader
-            touch /tmp/volumes/init/VERSION || return $? # FIXME change to copy when VERSION file is baked in the image
+            if [[ ! -f "/tmp/volumes/init/VERSION" ]]; then
+              touch "/tmp/volumes/init/VERSION" || return $? # FIXME change to copy when VERSION file is baked in the image
+              setOwnerPermissions "/tmp/volumes/init/VERSION" || return $?
+            fi
+
+            # set owners to the directories (if not already set)
+            setOwnerPermissions "/opt/hgcapp/services-hedera/HapiApp2.0/output" || return $?
+            setOwnerPermissions "/opt/hgcapp/services-hedera/HapiApp2.0/data/stats" || return $?
+            setOwnerPermissions "/opt/hgcapp/services-hedera/HapiApp2.0/data/saved" || return $?
+            setOwnerPermissions "/opt/hgcapp/services-hedera/HapiApp2.0/data/keys" || return $?
+            setOwnerPermissions "/opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade" || return $?
+            setOwnerPermissions "/opt/hgcapp/recordStreams" || return $?
+            setOwnerPermissions "/opt/hgcapp/eventsStreams" || return $?
 
             return 0
           \}
 
           # combine node keys into a single directory
-          function copyKeys \{
+          function prepareKeysDirectory \{
             echo ""
             echo "Copying keys into /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/"
             echo "--------------------------------------------------------------------------"
             cp -rLfv /tmp/volumes/gossip-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/ || return $?
             cp -rLfv /tmp/volumes/public-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/ || return $?
-            chown -R hedera:hedera /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/ || return $?
+
+            setOwnerPermissions "/opt/hgcapp/services-hedera/HapiApp2.0/data/keys" || return $?
 
             return 0
           \}
@@ -150,16 +191,24 @@ spec:
           \}
 
           runInit() \{
-            id
+            id # check which user is running the script
+
             # create hedera user and group
-            groupadd --gid 2000 hedera && \
-              useradd --no-user-group --create-home --uid 2000 --gid 2000 --shell /bin/bash hedera
+            if ! getent passwd hedera > /dev/null; then
+              groupadd --gid 2000 hedera && \
+                useradd --no-user-group --create-home --uid 2000 --gid 2000 --shell /bin/bash hedera
+              echo "User hedera created successfully!"
+            else
+              echo "User hedera already exists!"
+            fi
+
+            id # check again which user is running the script
 
             # setup directories before consensus-node and other sidecar containers start
             setupDirs || return $?
 
             # combine node keys into a single directory so that it is easy to mount
-            copyKeys || return $?
+            prepareKeysDirectory || return $?
 
             # lookup services
             checkConsensusNodeSvc || return $?

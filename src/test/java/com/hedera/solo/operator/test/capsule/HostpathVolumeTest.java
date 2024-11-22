@@ -34,7 +34,7 @@ public class HostpathVolumeTest extends ConsensusCapsuleTestAbstract {
             VOLUME_LOGS_NAME_SUFFIX, "/tmp/%s/volumes/output",
             VOLUME_STATS_NAME_SUFFIX, "/tmp/%s/volumes/stats",
             VOLUME_UPGRADE_NAME_SUFFIX, "/tmp/%s/volumes/upgrade",
-            VOLUME_RECORD_STREAM_NAME_SUFFIX, "/tmp/%s/volumes/recordStream",
+            VOLUME_RECORD_STREAM_NAME_SUFFIX, "/tmp/%s/volumes/recordStreams",
             VOLUME_EVENTS_STREAM_NAME_SUFFIX, "/tmp/%s/volumes/eventsStreams");
 
     protected Volume prepareVolumeWithHostpathSource(NodeInfo node, String volSuffix) {
