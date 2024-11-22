@@ -75,7 +75,7 @@ components:
                      using condition and phase
 
           * deterministic image
-              options 1 and 2 don't apply or are more complex then necessary, option 3 is the best fit for deterministic images              
+              options 1 and 2 don't apply or are more complex then necessary, option 3 is the best fit for deterministic images
             implementation notes:
               when using deterministic images we may need some way to delay the service from actually fully starting up, maybe
               through the address book or using an init container
@@ -99,7 +99,7 @@ components:
             from being deployed until all required resources and configuration values are available.
             
             This field is set to `true` by the operator when the `ConsensusCapsule` is ready for deployment. Typically
-            this should be set by the `NetworkInitialization` reconciliation loop. 
+            this should be set by the `NetworkInitialization` reconciliation loop.
             
             This most likely will be removed in the future when DAB Phase 2/3 is available.
         pod:
@@ -158,19 +158,16 @@ components:
                             string
                 recordStreamUploader:
                   type: object
-                  x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
+                  x-java-type: com.hedera.solo.operator.model.consensuscapsule.StreamUploaderSpec
                 recordStreamSidecarFilesUploader:
                   type: object
-                  x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
+                  x-java-type: com.hedera.solo.operator.model.consensuscapsule.StreamUploaderSpec
                 eventsStreamUploader:
                   type: object
-                  x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
+                  x-java-type: com.hedera.solo.operator.model.consensuscapsule.StreamUploaderSpec
                 backupUploader:
                   type: object
-                  x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
-                otelCollector:
-                  type: object
-                  x-java-type: com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector
+                  x-java-type: com.hedera.solo.operator.model.consensuscapsule.StreamUploaderSpec
     ConsensusCapsuleStatus:
       description: The current status of a `ConsensusCapsule`.
       type: object
@@ -198,133 +195,3 @@ components:
               communicate with the `ConsensusCapsule`.
           type: object
           x-java-type: com.hedera.solo.operator.model.commonspec.AddressBookEntry
-    StreamUploaderSpec: # FIXME change to StreamUploaderSpec and move to consensuscapsule.yaml
-      type: object
-      properties:
-        name:
-          type: string
-        softwareVersion:
-          type: object
-          x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
-        resources:
-          type: object
-          x-java-type: io.fabric8.kubernetes.api.model.ResourceRequirements
-        enabled:
-          type: boolean
-          default: false
-        config:
-          type: object
-          properties:
-            debug:
-              type: boolean
-              default: true
-            enableCompression:
-              type: boolean
-              default: false
-            enableSidecarFiles:
-              type: boolean
-              default: false
-            reaper:
-              type: object
-              properties:
-                enabled:
-                  type: boolean
-                  default: true
-                minKeep:
-                  type: integer
-                  default: 1
-                interval:
-                  type: integer
-                  default: 1
-                defaultBackoff:
-                  type: integer
-                  default: 1
-            signature:
-              type: object
-              properties:
-                require:
-                  type: boolean
-                  default: true
-                prioritize:
-                  type: boolean
-                  default: true
-            streamFileExtension:
-              type: string
-              default: ""
-            streamSigExtension:
-              type: string
-              default: ""
-            streamExtension:
-              type: string
-              default: ""
-            sigExtension:
-              type: string
-              default: ""
-            bucketName:
-              type: string
-            bucketPath:
-              type: string
-            s3:
-              type: object
-              properties:
-                enabled:
-                  type: boolean
-                  default: false
-                accessKey:
-                  type: string
-                  default: "solo-operator"
-                url:
-                  type: string
-                  default: "" # http://minio-tenant-hl.minio-tenant.svc.cluster.local:9000
-            gcs:
-              type: object
-              properties:
-                enabled:
-                  type: boolean
-                  default: false
-                accessKey:
-                  type: string
-                  default: "solo-operator"
-                url:
-                  type: string
-            envFromSecret:
-              type: string
-    OpenTelemetryCollectorSpec: # FIXME change to OpenTelemetryCollectorSpec and move to consensuscapsule.yaml
-      type: object
-      properties:
-        softwareVersion:
-          type: object
-          x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
-        resources:
-          type: object
-          x-java-type: io.fabric8.kubernetes.api.model.ResourceRequirements
-        receivers:
-          type: object
-          default: { }
-          properties:
-            prometheus:
-              type: object
-              properties:
-                scrapeTargets:
-                  description: |
-                    list of prometheus scrape targets
-                    target format: <IP or FQDN>:<Port>
-                    e.g. [ 0.0.0.0:9999 ]
-                  type: array
-                  items:
-                    type: string
-                scrapeInterval:
-                  type: string #5s
-        exporters:
-          type: object
-          default: { }
-          properties:
-            enabled:
-              type: boolean
-            endpoint:
-              type: string
-            tls:
-              type: object
-              properties:
-                insecure:
-                  type: boolean

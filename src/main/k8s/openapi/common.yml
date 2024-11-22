@@ -29,10 +29,6 @@ components:
           $ref: "#/components/schemas/SoftwareVersion"
         AddressBookEntry:
           $ref: "#/components/schemas/AddressBookEntry"
-        streamUploader:
-          $ref: "#/components/schemas/StreamUploader"
-        openTelemetryCollector:
-          $ref: "#/components/schemas/OpenTelemetryCollector"
 
     Condition:
       type: object
@@ -112,4 +108,245 @@ components:
           description: |
             The public signing key for the node. This should be in PEM format.
           type: string
-
+    
+    StreamUploader: # This is defined here so that we can generate model
+      type: object
+      properties:
+        name:
+          type: string
+        softwareVersion:
+          type: object
+          x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+        resources:
+          type: object
+          x-java-type: io.fabric8.kubernetes.api.model.ResourceRequirements
+        enabled:
+          type: boolean
+          default: false
+        config:
+          type: object
+          properties:
+            debug:
+              type: boolean
+              default: true
+            enableCompression:
+              type: boolean
+              default: false
+            enableSidecarFiles:
+              type: boolean
+              default: false
+            reaper:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  default: true
+                minKeep:
+                  type: integer
+                  default: 1
+                interval:
+                  type: integer
+                  default: 1
+                defaultBackoff:
+                  type: integer
+                  default: 1
+            signature:
+              type: object
+              properties:
+                require:
+                  type: boolean
+                  default: true
+                prioritize:
+                  type: boolean
+                  default: true
+            streamFileExtension:
+              type: string
+              default: ""
+            streamSigExtension:
+              type: string
+              default: ""
+            streamExtension:
+              type: string
+              default: ""
+            sigExtension:
+              type: string
+              default: ""
+            bucketName:
+              type: string
+            bucketPath:
+              type: string
+            s3:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  default: false
+                accessKey:
+                  type: string
+                  default: "solo-operator"
+                url:
+                  type: string
+                  default: "" # http://minio-tenant-hl.minio-tenant.svc.cluster.local:9000
+            gcs:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  default: false
+                accessKey:
+                  type: string
+                  default: "solo-operator"
+                url:
+                  type: string
+            envFromSecret:
+              type: string
+    
+    NetworkUpgrade:
+      type: object
+      required:
+        - orbit
+        - changesets
+        - marker
+      properties:
+        orbit:
+          type: string
+        changesets:
+          type: object
+          required:
+            - consensusNodeChangeset
+          properties:
+            consensusNodeChangeset:
+              type: object
+              x-java-type: com.hedera.solo.operator.model.networkinitialization.ConsensusChangeset
+            recordStreamUploaderChangeset:
+              type: object
+              x-java-type: com.hedera.solo.operator.model.networkinitialization.StreamUploaderChangeset
+            recordStreamSidecarUploaderChangeset:
+              type: object
+              x-java-type: com.hedera.solo.operator.model.networkinitialization.StreamUploaderChangeset
+            eventsStreamUploaderChangeset:
+              type: object
+              x-java-type: com.hedera.solo.operator.model.networkinitialization.StreamUploaderChangeset
+            backupUploaderChangeset:
+              type: object
+              x-java-type: com.hedera.solo.operator.model.networkinitialization.StreamUploaderChangeset
+        marker:
+          description: |
+            Marker file status is handled as below:
+            # ExecuteImmediate (T = 0)
+              1. validate image (ensure we can pull the image from specified registries and validate the layer hashes)
+                1a. store manifest hashes (including the registry details) in status field so that subsequent validation can validate against this list of layer hashes
+              2. potentially deploy firewall rule changes (TBD)
+            # FreezeScheduled (T + 2 days)
+              1. validate image (ensure we can pull the image and validate the layer hashes that are in the status field)
+            # FreezeAbort
+              1. rollback firewall rule changes (potentially)
+            # NowFrozen ( T + 3 days)
+              1. validate image (ensure we can pull the image and validate the layer hashes that are in the status field)
+                1a. check the list of registries in sequence and rollout the first valid one
+              2. rollout config file bundle
+                  2a. consensus-node: settings.txt, application.properties, config.txt, api-permission.properties...
+                  2b. HAProxy
+                  2c. Mirror Uploader (e.g env variables)
+              3. update image definition in consensus-capsule CR
+              4. optional:
+                  4a. update version info in HAProxy
+                  4b. update version info in mirror-uploader
+              5. Ensure everything is up or emit error
+          type: string
+          enum:
+            - ExecuteImmediate
+            - FreezeScheduled
+            - FreezeAbort
+            - NowFrozen
+        configurationFiles:
+          type: object
+          properties:
+            networkSettings:
+              description: |
+                The network settings for the `Orbit`. This is equivalent to the Platform SDK `settings.txt` file.
+              type: object
+              additionalProperties:
+                type: string
+            applicationProperties:
+              description: |
+                The application configuration for the `Orbit`. This is equivalent to the
+                `data/config/application.properties` file.
+              type: object
+              additionalProperties:
+                type: string
+            apiPermissions:
+              description: |
+                The application configuration for the `Orbit`. This is equivalent to the
+                `data/config/api-permissions.properties` file.
+              type: object
+              additionalProperties:
+                type: string
+            genesisProperties:
+              description: |
+                The application configuration for the `Orbit`. This is equivalent to the
+                `data/config/genesis.properties` file.
+              type: object
+              additionalProperties:
+                type: string
+            logging:
+              description: |
+                The application configuration for the `Orbit`. This is equivalent to the
+                `log4j2.xml` file.
+              type: string
+    
+    StreamUploaderChangeset:
+      type: object
+      properties:
+        name:
+          type: string
+        softwareVersion:
+          type: object
+          x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+        resources:
+          type: object
+          x-java-type: io.fabric8.kubernetes.api.model.ResourceRequirements
+        enabled:
+          type: boolean
+        config:
+          type: object
+          properties:
+            debug:
+              type: boolean
+            enableCompression:
+              type: boolean
+            enableSidecarFiles:
+              type: boolean
+            reaper:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                minKeep:
+                  type: integer
+                interval:
+                  type: integer
+                defaultBackoff:
+                  type: integer
+            signature:
+              type: object
+              properties:
+                require:
+                  type: boolean
+                prioritize:
+                  type: boolean
+            streamFileExtension:
+              type: string
+            streamSigExtension:
+              type: string
+            streamExtension:
+              type: string
+            sigExtension:
+              type: string
+    
+    ConsensusChangeset:
+      type: object
+      properties:
+        softwareVersion:
+          type: object
+          x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
