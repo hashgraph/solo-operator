@@ -14,14 +14,6 @@ import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-import com.google.protobuf.ByteString;
-import com.hedera.hashgraph.sdk.AccountId;
-import com.hedera.hashgraph.sdk.Client;
-import com.hedera.hashgraph.sdk.FileContentsQuery;
-import com.hedera.hashgraph.sdk.FileId;
-import com.hedera.hashgraph.sdk.NodeAddress;
-import com.hedera.hashgraph.sdk.NodeAddressBook;
-import com.hedera.hashgraph.sdk.PrivateKey;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleBuilder;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
@@ -43,8 +35,10 @@ import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podpropertie
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
+import com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkCheckAddressBook;
+import com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkClientContextFactory;
+import com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkClientFactory;
 import com.hedera.solo.operator.test.fixtures.snapshot.SnapshotFailureContext;
-import com.hedera.solo.operator.test.framework.HederaSdkClientFactory;
 import com.hedera.solo.operator.test.setup.ClusterSetupManager;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
@@ -61,7 +55,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import org.awaitility.core.ConditionTimeoutException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -432,13 +425,6 @@ public abstract class ConsensusCapsuleTestAbstract {
                 });
     }
 
-    List<NodeAddress> addresses(final Client client) throws Exception {
-        final ByteString raw =
-                new FileContentsQuery().setFileId(FileId.ADDRESS_BOOK).execute(client);
-        assertThat(raw).isNotNull();
-        return NodeAddressBook.fromBytes(raw).getNodeAddresses();
-    }
-
     String[] consensusNodeNames() {
         return kubernetesClient.resources(ConsensusCapsule.class).inNamespace(namespace).list().getItems().stream()
                 .map(CustomResource::getMetadata)
@@ -446,64 +432,14 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .toArray(String[]::new);
     }
 
-    interface ClientContextFactory {
-        HederaSdkClientFactory.ClientContext create(HederaSdkClientFactory factory, String nodeName, boolean secure);
-    }
-
-    void checkAddressBook(
-            HederaSdkClientFactory sdkClientFactory,
-            ClientContextFactory clientContextFactory,
-            String nodeName,
-            int expectedAddresses,
-            boolean secure) {
-        try (HederaSdkClientFactory.ClientContext context =
-                clientContextFactory.create(sdkClientFactory, nodeName, secure)) {
-            await().atMost(15, TimeUnit.SECONDS).untilAsserted(() -> {
-                Client client = context.client;
-
-                client.setOperator(
-                        AccountId.fromString(HederaSdkClientFactory.DEFAULT_ACCOUNT_ID),
-                        PrivateKey.fromString(HederaSdkClientFactory.DEFAULT_PRIVATE_KEY));
-
-                if (secure) {
-                    client.setTransportSecurity(true).setVerifyCertificates(true);
-                    assertThat(addresses(client).size()).isEqualTo(expectedAddresses);
-                } else {
-                    client.setTransportSecurity(false);
-                    assertThat(addresses(client).size()).isEqualTo(expectedAddresses);
-                }
-            });
-        }
-    }
-
-    void checkAddressBook(final ClientContextFactory clientContextFactory) throws AssertionError, Exception {
+    protected void checkAddressBook(final HederaSdkClientContextFactory hederaSdkClientContextFactory)
+            throws AssertionError, Exception {
         String[] consensusNodeNames = consensusNodeNames();
-        HederaSdkClientFactory sdkClientFactory = new HederaSdkClientFactory(kubernetesClient, namespace);
-        for (String nodeName : consensusNodeNames) {
-            AssertionError assertion = null;
-            ConditionTimeoutException timeout = null;
-            for (int attempt = 0; attempt < 10; attempt++) {
-                assertion = null;
-                timeout = null;
-                try {
-                    checkAddressBook(
-                            sdkClientFactory, clientContextFactory, nodeName, consensusNodeNames.length, false);
-                    checkAddressBook(sdkClientFactory, clientContextFactory, nodeName, consensusNodeNames.length, true);
-                } catch (AssertionError e) {
-                    assertion = e;
-                } catch (ConditionTimeoutException e) {
-                    timeout = e;
-                }
-                if (assertion == null && timeout == null) {
-                    break;
-                }
-            }
-            if (assertion != null) {
-                throw assertion;
-            }
-            if (timeout != null) {
-                throw timeout;
-            }
-        }
+        HederaSdkCheckAddressBook.checkAddressBook(
+                hederaSdkClientContextFactory,
+                kubernetesClient,
+                namespace,
+                consensusNodeNames.length,
+                consensusNodeNames);
     }
 }

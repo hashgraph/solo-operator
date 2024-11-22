@@ -78,6 +78,7 @@ dependencies {
     testFixturesImplementation("org.assertj:assertj-core:${assertjVersion}")
     testFixturesImplementation("org.junit.jupiter:junit-jupiter-api")
     testFixturesImplementation("org.eclipse.microprofile.config:microprofile-config-api")
+    testFixturesImplementation("com.hedera.hashgraph:sdk:${hederaSdkVersion}")
 }
 
 objectModelGenerator {

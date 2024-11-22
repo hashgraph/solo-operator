@@ -4,9 +4,15 @@ package com.hedera.solo.operator.reconciler.networkoperation.resources;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
+import static java.util.Collections.emptyList;
 
+import com.hedera.solo.operator.model.commonspec.AddressBookEntry;
+import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
+import com.hedera.solo.operator.model.v1alpha1.orbitspec.consensus.genesis.AddressBook;
+import com.hedera.solo.operator.reconciler.common.Metadata;
+import com.hedera.solo.operator.reconciler.networkoperation.NetworkOperationReconciler;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -17,19 +23,23 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDep
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResourceConfigBuilder;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 
 @KubernetesDependent
 public class NetworkOperationClusterConfig extends KubernetesDependentResource<ConfigMap, NetworkOperation>
         implements Creator<ConfigMap, NetworkOperation>,
                 ResourceDiscriminator<ConfigMap, NetworkOperation>,
                 Updater<ConfigMap, NetworkOperation> {
+    private final NetworkOperationReconciler reconciler;
 
     public static final String TEMPLATE = "cluster-config.yaml";
     public static final String NAME = "cluster-config";
 
-    public NetworkOperationClusterConfig() {
+    public NetworkOperationClusterConfig(final NetworkOperationReconciler reconciler) {
         super(ConfigMap.class);
+        this.reconciler = reconciler;
         configureWith(new KubernetesDependentResourceConfigBuilder<ConfigMap>()
                 .withLabelSelector("app=consensus,type=config")
                 .withResourceDiscriminator(this)
@@ -56,34 +66,62 @@ public class NetworkOperationClusterConfig extends KubernetesDependentResource<C
                 .findAny();
     }
 
-    record Node(String name, int weight, String internal, String external) {}
+    record Node(Long nodeId, String accountId, String name, String internal, String external) {}
 
-    List<Node> localNodes(final NetworkOperation primary) {
-        return primary.getStatus().getConsensusCapsules().stream()
-                .map(name -> new Node(name, 1, name + ".consensus", name + "-svc"))
+    Node node(final ConsensusCapsule capsule) {
+        String capsuleName = capsule.getMetadata().getName();
+        String namespace = capsule.getMetadata().getNamespace();
+        return new Node(
+                capsule.getSpec().getNodeId(),
+                capsule.getSpec().getAccountId(),
+                Metadata.prepareNodeName(capsule),
+                capsuleName + ".consensus." + namespace,
+                capsuleName + "-svc." + namespace);
+    }
+
+    List<Node> localNodes(final NetworkOperation primary, final Context<NetworkOperation> context) {
+        return reconciler.consensusCapsules(primary, context).values().stream()
+                .map(this::node)
                 .toList();
     }
 
     ConfigMapBuilder config(
             final ConfigMapBuilder builder, final NetworkOperation primary, final Context<NetworkOperation> context) {
-        // should include external address entries from orbit
-        Orbit orbit = context.getSecondaryResource(Orbit.class).orElseThrow();
-        int nodeId = 0;
+        AddressBook addressBook = context.getSecondaryResource(Orbit.class)
+                .orElseThrow()
+                .getSpec()
+                .getConsensus()
+                .getGenesis()
+                .getAddressBook();
         StringBuilder sb = new StringBuilder();
-        sb.append("swirld, ")
-                .append(orbit.getSpec()
-                        .getConsensus()
-                        .getGenesis()
-                        .getAddressBook()
-                        .getLedgerId())
-                .append("\n");
+        sb.append("swirld, ").append(addressBook.getLedgerId()).append("\n");
         sb.append("app, HederaNode.jar\n");
-        for (Node node : localNodes(primary)) {
-            sb.append("address, %d, %s, %s, 1, %s, 50111, %s, 50111, 0.0.%d\n"
-                    .formatted(nodeId, node.name, node.name, node.internal, node.external, nodeId + 3));
-            nodeId++;
+        Map<Long, String> addreses = new TreeMap<>();
+        for (Node node : localNodes(primary, context)) {
+            addreses.put(
+                    node.nodeId,
+                    "address, %d, %s, %s, 1, %s, 50111, %s, 50111, %s\n"
+                            .formatted(
+                                    node.nodeId, node.name, node.name, node.internal, node.external, node.accountId));
         }
-        sb.append("nextNodeId, ").append(nodeId);
+        for (AddressBookEntry entry :
+                Optional.ofNullable(addressBook.getExternalAddresses()).orElse(emptyList())) {
+            addreses.put(
+                    entry.getNodeId(),
+                    "address, %d, %s, %s, %d, %s, %d, %s, %d, %s\n"
+                            .formatted(
+                                    entry.getNodeId(),
+                                    entry.getNickName(),
+                                    entry.getSelfName(),
+                                    entry.getWeight(),
+                                    entry.getInternalHostname(),
+                                    entry.getInternalPort(),
+                                    entry.getExternalHostname(),
+                                    entry.getExternalPort(),
+                                    entry.getNodeAccount()));
+        }
+        addreses.values().forEach(sb::append);
+        sb.append("nextNodeId, ").append(addressBook.getNextNodeId());
         return builder.addToData("config.txt", sb.toString());
     }
 }

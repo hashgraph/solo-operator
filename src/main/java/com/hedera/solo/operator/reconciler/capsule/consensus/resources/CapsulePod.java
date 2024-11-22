@@ -2,6 +2,7 @@
 
 package com.hedera.solo.operator.reconciler.capsule.consensus.resources;
 
+import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.reconciler.common.Constants.DEFAULT_FILE_MODE;
 import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_BUCKET_PATH_TEMPLATE;
 import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_EXTENSION;
@@ -83,6 +84,12 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
     public static final String ERR_DUPLICATE_VOLUME_SPECIFICATION =
             "volume specification is duplicated in persistentVolumeClaims and volumes sections for: %s";
     public static final String OTEL_COLLECTOR = "otel-collector";
+    public static final ConsensusNode DEFAULT_CONSENSUS_NODE = edit(new ConsensusNode())
+            .with(version -> version.editSoftwareVersion()
+                    .withRepository("swirldslabs.jfrog.io/consensus-node-docker-dev")
+                    .withName("consensus-node")
+                    .withTag("0.56.0-develop.x4b7c054"))
+            .build();
 
     @Location("consensus-capsule/pod.yaml")
     Template tpl;
@@ -109,8 +116,6 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         Objects.requireNonNull(primary.getSpec().getAccountId());
         Objects.requireNonNull(primary.getSpec().getPodProperties());
         Objects.requireNonNull(primary.getSpec().getPodProperties().getContainers());
-        Objects.requireNonNull(
-                primary.getSpec().getPodProperties().getContainers().getConsensusNode());
         Objects.requireNonNull(context);
         Objects.requireNonNull(context.getClient());
 
@@ -265,8 +270,9 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
                 .withName("public-keys")
                 .get();
 
-        final ConsensusNode cn =
-                primary.getSpec().getPodProperties().getContainers().getConsensusNode();
+        final ConsensusNode cn = Optional.ofNullable(
+                        primary.getSpec().getPodProperties().getContainers().getConsensusNode())
+                .orElse(DEFAULT_CONSENSUS_NODE);
         final Map<String, Optional<StreamUploader>> uploaderMap = this.prepareStreamUploaderContainers(primary);
 
         // set template variables

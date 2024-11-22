@@ -73,7 +73,7 @@ public class NetworkOperationReconciler
     private EventSourceContext<NetworkOperation> eventSourceContext;
     private final AtomicLong sequenceNumber = new AtomicLong();
     private final RolloverComparator rolloverComparator = new RolloverComparator(63);
-    private final NetworkOperationClusterConfig clusterConfig = new NetworkOperationClusterConfig();
+    private final NetworkOperationClusterConfig clusterConfig = new NetworkOperationClusterConfig(this);
     private final NetworkOperationConsensusCapsule consensusCapsule = new NetworkOperationConsensusCapsule(this);
     private final NetworkOperationOrbit orbit = new NetworkOperationOrbit(this);
     private final NetworkOperationTrigger trigger = new NetworkOperationTrigger(this);
@@ -185,7 +185,7 @@ public class NetworkOperationReconciler
     private BuilderFunction<NetworkOperationBuilder> determinePhase(
             final NetworkOperation resource, final Context<NetworkOperation> context) {
         Collection<ConsensusCapsule> consensusCapsules =
-                consensusCapsule.getSecondaryResources(resource, context).values();
+                consensusCapsules(resource, context).values();
         List<ConsensusCapsuleStatus.Phase> phaseList = consensusCapsules.stream()
                 .map(CustomResource::getStatus)
                 .filter(Objects::nonNull)
@@ -276,5 +276,10 @@ public class NetworkOperationReconciler
                 .map(ResourceID::fromResource)
                 .map(Set::of)
                 .orElseGet(Collections::emptySet);
+    }
+
+    public Map<String, ConsensusCapsule> consensusCapsules(
+            final NetworkOperation primary, final Context<NetworkOperation> context) {
+        return consensusCapsule.getSecondaryResources(primary, context);
     }
 }

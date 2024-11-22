@@ -10,7 +10,7 @@ import static org.awaitility.Awaitility.await;
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsule;
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsuleBuilder;
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsuleStatus;
-import com.hedera.solo.operator.test.framework.HederaSdkClientFactory;
+import com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkClientFactory;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.apps.Deployment;

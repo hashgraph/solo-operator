@@ -51,7 +51,8 @@ components:
       type: object
       properties:
         nodeId:
-          type: string
+          type: integer
+          format: int64
         nickName:
           type: string
         selfName:
@@ -62,10 +63,16 @@ components:
           type: string
         internalPort:
           type: integer
+          format: int32
+          minimum: 0
+          maximum: 65535
         externalHostname:
           type: string
         externalPort:
           type: integer
+          format: int32
+          minimum: 0
+          maximum: 65535
         nodeAccount:
           description: |
             In the form `0.0.x`, where `x` is the account number. The Platform SDK address book
