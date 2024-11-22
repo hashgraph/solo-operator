@@ -27,6 +27,9 @@ spec:
     initContainers:
         - name: "init-consensus-node"
           image: "ubuntu:mantic-20240216" # using same image that is used for consensus-node deterministic image
+          securityContext:
+              runAsUser: 0
+              runAsGroup: 0
           volumeMounts:
               - name: gossip-keys
                 mountPath: /tmp/volumes/gossip-keys
@@ -56,11 +59,11 @@ spec:
               - |
                   setupDirs() \{
                     # setup directories required by stream-uploader sidecars as otherwise those wont' be able to start
-                    mkdir -p /opt/hgcapp/recordStreams/record{accountId}/sidecar
-                    mkdir -p /opt/hgcapp/eventsStreams/events_{accountId}
+                    mkdir -p /opt/hgcapp/recordStreams/record{accountId}/sidecar || return $?
+                    mkdir -p /opt/hgcapp/eventsStreams/events_{accountId} || return $?
 
                     # create empty VERSION file for backup-uploader
-                    touch /tmp/volumes/init/VERSION # FIXME change to copy when VERSION file is baked in the image
+                    touch /tmp/volumes/init/VERSION || return $? # FIXME change to copy when VERSION file is baked in the image
 
                     return 0
                   \}
@@ -70,9 +73,9 @@ spec:
                     echo ""
                     echo "Copying keys into /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/"
                     echo "--------------------------------------------------------------------------"
-                    cp -rLfv /tmp/volumes/gossip-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/
-                    cp -rLfv /tmp/volumes/public-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/
-                    chown -R hedera:hedera /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/
+                    cp -rLfv /tmp/volumes/gossip-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/ || return $?
+                    cp -rLfv /tmp/volumes/public-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/ || return $?
+                    chown -R hedera:hedera /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/ || return $?
 
                     return 0
                   \}
@@ -147,6 +150,11 @@ spec:
                   \}
 
                   runInit() \{
+                    id
+                    # create hedera user and group
+                    groupadd --gid 2000 hedera && \
+                      useradd --no-user-group --create-home --uid 2000 --gid 2000 --shell /bin/bash hedera
+
                     # setup directories before consensus-node and other sidecar containers start
                     setupDirs || return $?
 
