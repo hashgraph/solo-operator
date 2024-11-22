@@ -19,7 +19,11 @@ public final class Constants {
     public static final Long HEDERA_USER = 2000L;
     public static final Long HEDERA_GROUP = 2000L;
     public static final PodSecurityContextBuilder SECURITY_CONTEXT_BUILDER =
-            new PodSecurityContextBuilder().withRunAsUser(HEDERA_USER).withRunAsGroup(HEDERA_GROUP);
+            new PodSecurityContextBuilder()
+                    .withRunAsUser(HEDERA_USER)
+                    .withRunAsGroup(HEDERA_GROUP)
+                    .withFsGroup(HEDERA_GROUP)
+                    .withFsGroupChangePolicy("OnRootMismatch");
     public static final int DEFAULT_FILE_MODE = 493; // 0755
     public static final String NODE_NAME_FORMAT = "node%d";
 
