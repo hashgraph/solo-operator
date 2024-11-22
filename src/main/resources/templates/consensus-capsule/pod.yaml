@@ -27,7 +27,7 @@ spec:
   initContainers:
     - name: "init-consensus-node"
       image: "ubuntu:mantic-20240216" # using same image that is used for consensus-node deterministic image
-      securityContext:
+      securityContext: # run as root to create hedera user and group
         runAsUser: 0
         runAsGroup: 0
       volumeMounts:
@@ -184,7 +184,7 @@ spec:
             - /tmp/volumes/cluster-config/startup-probe
       volumeMounts:
         - name: cluster-config
-          mountPath: /tmp/volumes/cluster-config # mount to a directory so that we can run scripts from it
+          mountPath: /tmp/volumes/cluster-config # mount to a directory so that we can run custom scripts from it, e.g. startup-probe
         - name: cluster-config
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/config.txt
           subPath: "config.txt"
