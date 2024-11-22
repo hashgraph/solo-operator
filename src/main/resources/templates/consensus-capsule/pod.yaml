@@ -16,472 +16,472 @@
 kind: Pod
 apiVersion: v1
 metadata:
-    name: consensus-node
-    labels:
-        app: consensus-node
+  name: consensus-node
+  labels:
+    app: consensus-node
 spec:
-    restartPolicy: Never
-    hostname: "{nodeName}"
-    subdomain: consensus
-    serviceAccountName: "{nodeName}-sa"
-    initContainers:
-        - name: "init-consensus-node"
-          image: "ubuntu:mantic-20240216" # using same image that is used for consensus-node deterministic image
-          securityContext:
-              runAsUser: 0
-              runAsGroup: 0
-          volumeMounts:
-              - name: gossip-keys
-                mountPath: /tmp/volumes/gossip-keys
-              - name: public-keys
-                mountPath: /tmp/volumes/public-keys
-              - name: cluster-config
-                mountPath: /tmp/volumes/cluster-config
-              - name: hgcapp-init
-                mountPath: /tmp/volumes/init
-              - name: hgcapp-record-streams
-                mountPath: /opt/hgcapp/recordStreams
-              - name: hgcapp-events-streams
-                mountPath: /opt/hgcapp/eventsStreams
-              - name: hgcapp-output
-                mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/output
-              - name: hgcapp-states
-                mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/saved
-              - name: hgcapp-stats
-                mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/stats
-              - name: hgcapp-upgrade
-                mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade
-              - name: hgcapp-keys
-                mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
-          command:
-              - "/bin/bash"
-              - "-c"
-              - |
-                  setupDirs() \{
-                    # setup directories required by stream-uploader sidecars as otherwise those wont' be able to start
-                    mkdir -p /opt/hgcapp/recordStreams/record{accountId}/sidecar || return $?
-                    mkdir -p /opt/hgcapp/eventsStreams/events_{accountId} || return $?
-
-                    # create empty VERSION file for backup-uploader
-                    touch /tmp/volumes/init/VERSION || return $? # FIXME change to copy when VERSION file is baked in the image
-
-                    return 0
-                  \}
-
-                  # combine node keys into a single directory
-                  function copyKeys \{
-                    echo ""
-                    echo "Copying keys into /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/"
-                    echo "--------------------------------------------------------------------------"
-                    cp -rLfv /tmp/volumes/gossip-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/ || return $?
-                    cp -rLfv /tmp/volumes/public-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/ || return $?
-                    chown -R hedera:hedera /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/ || return $?
-
-                    return 0
-                  \}
-
-                  # lookup services
-                  lookupSvc() \{
-                    local svc="$1"
-                    local destFile="$2"
-                    local attempt=1
-                    local delay=5
-                    local maxAttempt=100
-                    local rc=0
-                    # Check for services with a timeout
-                    until [ $attempt -gt $maxAttempt ]; do
-                      echo "-------------------------------------------------------------------"
-                      result=$(getent hosts "$svc")
-                      rc=$?
-                      echo "$result"
-                      if [ "$rc" -eq 0 ]; then
-                        echo "OK: $svc"
-                        echo "-------------------------------------------------------------------"
-                        echo "$result" >> "$destFile"
-                        return $rc
-                      fi
-                      echo "Attempt $attempt failed for service $svc. Retrying in $delay seconds..."
-                      sleep "$delay"
-                      attempt=$(( attempt + 1 ))
-                    done
-
-                    echo "ERROR: Timeout occurred; lookup failed for services: $svc."
-                    return 1
-                  \}
-
-                  # Parse address lines in config.txt and lookup services using internal and external FQDN/IP addresses.
-                  checkConsensusNodeSvc() \{
-                    # 6th item is internal address and 8th item is external address
-                    parsed_internal_svcs=$(cat /tmp/volumes/cluster-config/config.txt | awk '\{print $6\}' | xargs);
-                    parsed_external_svcs=$(cat /tmp/volumes/cluster-config/config.txt | awk '\{print $8\}' | xargs);
-
-                    IFS=', ' read -r -a internal_svcs <<< "$parsed_internal_svcs";
-                    IFS=', ' read -r -a external_svcs <<< "$parsed_external_svcs";
-
-                    echo ""
-                    echo ""
-                    echo "Looking up consensus node services...."
-                    echo "Parsed Internal Addresses: $\{parsed_internal_svcs\}"
-                    echo "Parsed External Addresses: $\{parsed_external_svcs\}"
-                    echo "Internal Services Array: $\{internal_svcs[@]\}"
-                    echo "External Services Array: $\{external_svcs[@]\}"
-                    echo ""
-
-                    # capture service IPs in a file for debugging (if needed)
-                    local lookupFile="/tmp/volumes/init/hosts-lookup"
-                    touch "$lookupFile"
-                    for svc in "$\{internal_svcs[@]\}";do
-                      lookupSvc "$svc" "$lookupFile" || return $?
-                    done;
-
-                    for svc in "$\{external_svcs[@]\}";do
-                      lookupSvc "$svc" "$lookupFile" || return $?
-                    done;
-
-                    echo ""
-                    echo "hosts"
-                    echo "--------------------------------------------------------------------------"
-                    cat "$lookupFile"
-
-                    echo ""
-                    echo "*** Lookup succeeded for all services ***"
-
-                    return 0
-                  \}
-
-                  runInit() \{
-                    id
-                    # create hedera user and group
-                    groupadd --gid 2000 hedera && \
-                      useradd --no-user-group --create-home --uid 2000 --gid 2000 --shell /bin/bash hedera
-
-                    # setup directories before consensus-node and other sidecar containers start
-                    setupDirs || return $?
-
-                    # combine node keys into a single directory so that it is easy to mount
-                    copyKeys || return $?
-
-                    # lookup services
-                    checkConsensusNodeSvc || return $?
-
-                    return 0
-                  \}
-
-                  runInit
-    containers:
-        - name: "{cn.name}"
-          image: "{cn.softwareVersion.repository}/{cn.softwareVersion.name}:{cn.softwareVersion.tag}"
-          env:
-              - name: JAVA_OPTS
-                value: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"
-          startupProbe: # fails after a maximum of (failureThreshold * periodSeconds * timeoutSeconds) seconds
-              failureThreshold: 20 # maximum number of failures
-              periodSeconds: 15 # check every 15 seconds
-              timeoutSeconds: 60 # probe times out after 60 seconds
-              exec:
-                  command:
-                      - jshell
-                      - /tmp/volumes/cluster-config/startup-probe
-          volumeMounts:
-              - name: cluster-config
-                mountPath: /tmp/volumes/cluster-config # mount to a directory so that we can run scripts from it
-              - name: cluster-config
-                mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/config.txt
-                subPath: "config.txt"
-              - name: cluster-config
-                mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/settings.txt
-                subPath: "settings.txt"
-              - name: cluster-config
-                mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/log4j2.xml
-                subPath: "log4j2.xml"
-              - name: cluster-config
-                mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/config/application.properties
-                subPath: "application.properties"
-              - name: cluster-config
-                mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/config/api-permission.properties
-                subPath: "api-permission.properties"
-              - name: grpc-tls-keys
-                mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.key
-                subPath: "hedera-{nodeName}.key"
-              - name: grpc-tls-keys
-                mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.crt
-                subPath: "hedera-{nodeName}.crt"
-              - name: hgcapp-init
-                mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/VERSION
-                subPath: VERSION
-              - name: hgcapp-keys
-                mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
-              - name: hgcapp-record-streams
-                mountPath: /opt/hgcapp/recordStreams
-              - name: hgcapp-events-streams
-                mountPath: /opt/hgcapp/eventsStreams
-              - name: hgcapp-output
-                mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/output
-              - name: hgcapp-states
-                mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/saved
-              - name: hgcapp-stats
-                mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/stats
-              - name: hgcapp-upgrade
-                mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade
-        # {#if rsu && rsu.enabled}
-        # Sidecar: record-stream-uploader
-        - name: "{rsu.name}"
-          image: "{rsu.softwareVersion.repository}/{rsu.softwareVersion.name}:{rsu.softwareVersion.tag}"
-          imagePullPolicy: "{rsu.softwareVersion.imagePullPolicy}"
-          command:
-              - /usr/bin/env
-              - python3.7
-              - /usr/local/bin/mirror.py
-              - --linux
-              - --watch-directory
-              - /opt/hgcapp/recordStreams
-              - --csv-stats-directory
-              - /opt/hgcapp/recordStreams/uploader-stats
-              # {#if rsu.config.s3.enabled}
-              - --s3-endpoint
-              - "{rsu.config.s3.url}"
-              # {/if}
-              # {#if rsu.config.gcs.enabled}
-              - --gcs-endpoint
-              - "{rsu.config.gcs.url}"
-              # {/if}
-          volumeMounts:
-              - name: hgcapp-record-streams
-                mountPath: /opt/hgcapp/recordStreams
-                subPath: "record{accountId}"
-          env:
-              - name: DEBUG
-                value: "{rsu.config.debug}"
-              - name: REAPER_ENABLE
-                value: "{rsu.config.reaper.enabled}"
-              - name: REAPER_MIN_KEEP
-                value: "{rsu.config.reaper.minKeep}"
-              - name: REAPER_INTERVAL
-                value: "{rsu.config.reaper.interval}"
-              - name: REAPER_DEFAULT_BACKOFF
-                value: "{rsu.config.reaper.defaultBackoff}"
-              - name: STREAM_FILE_EXTENSION
-                value: "{rsu.config.streamFileExtension}"
-              - name: STREAM_SIG_EXTENSION
-                value: "{rsu.config.streamSigExtension}"
-              - name: STREAM_EXTENSION
-                value: "{rsu.config.streamExtension}"
-              - name: SIG_EXTENSION
-                value: "{rsu.config.sigExtension}"
-              - name: RECORD_STREAM_COMPRESSION
-                value: "{rsu.config.enableCompression}"
-              - name: RECORD_STREAM_SIDECAR
-                value: "{rsu.config.enableSidecarFiles}"
-              - name: SIG_REQUIRE
-                value: "{rsu.config.signature.require}"
-              - name: SIG_PRIORITIZE
-                value: "{rsu.config.signature.prioritize}"
-              - name: BUCKET_PATH
-                value: "{rsu.config.bucketPath}"
-              - name: BUCKET_NAME
-                value: "{rsu.config.bucketName}"
-              - name: S3_ENABLE
-                value: "{rsu.config.s3.enabled}"
-              - name: S3_ACCESS_KEY
-                value: "{rsu.config.s3.accessKey}"
-              - name: GCS_ENABLE
-                value: "{rsu.config.gcs.enabled}"
-              - name: GCS_ACCESS_KEY
-                value: "{rsu.config.gcs.accessKey}"
-          envFrom:
-              - secretRef:
-                    name: "{rsu.config.envFromSecret}"
-        # {/if}
-        # {#if rssu && rssu.enabled}
-        # Sidecar: record-stream-sidecar-files-uploader
-        - name: "{rssu.name}"
-          image: "{rssu.softwareVersion.repository}/{rssu.softwareVersion.name}:{rssu.softwareVersion.tag}"
-          imagePullPolicy: "{rssu.softwareVersion.imagePullPolicy}"
-          command:
-              - /usr/bin/env
-              - python3.7
-              - /usr/local/bin/mirror.py
-              - --linux
-              - --watch-directory
-              - /opt/hgcapp/recordStreams/sidecar
-              # {#if rssu.config.s3.enabled}
-              - --s3-endpoint
-              - "{rssu.config.s3.url}"
-              # {/if}
-              # {#if rssu.config.gcs.enabled}
-              - --gcs-endpoint
-              - "{rssu.config.gcs.url}"
-              # {/if}
-          volumeMounts:
-              - name: hgcapp-record-streams
-                mountPath: /opt/hgcapp/recordStreams
-                subPath: "record{accountId}"
-          env:
-              - name: DEBUG
-                value: "{rssu.config.debug}"
-              - name: REAPER_ENABLE
-                value: "{rssu.config.reaper.enabled}"
-              - name: REAPER_MIN_KEEP
-                value: "{rssu.config.reaper.minKeep}"
-              - name: REAPER_INTERVAL
-                value: "{rssu.config.reaper.interval}"
-              - name: REAPER_DEFAULT_BACKOFF
-                value: "{rssu.config.reaper.defaultBackoff}"
-              - name: STREAM_FILE_EXTENSION
-                value: "{rssu.config.streamFileExtension}"
-              - name: STREAM_SIG_EXTENSION
-                value: "{rssu.config.streamSigExtension}"
-              - name: STREAM_EXTENSION
-                value: "{rssu.config.streamExtension}"
-              - name: SIG_EXTENSION
-                value: "{rssu.config.sigExtension}"
-              - name: RECORD_STREAM_COMPRESSION
-                value: "{rssu.config.enableCompression}"
-              - name: RECORD_STREAM_SIDECAR
-                value: "{rssu.config.enableSidecarFiles}"
-              - name: SIG_REQUIRE
-                value: "{rssu.config.signature.require}"
-              - name: SIG_PRIORITIZE
-                value: "{rssu.config.signature.prioritize}"
-              - name: BUCKET_PATH
-                value: "{rssu.config.bucketPath}"
-              - name: BUCKET_NAME
-                value: "{rssu.config.bucketName}"
-              - name: S3_ENABLE
-                value: "{rssu.config.s3.enabled}"
-              - name: S3_ACCESS_KEY
-                value: "{rssu.config.s3.accessKey}"
-              - name: GCS_ENABLE
-                value: "{rssu.config.gcs.enabled}"
-              - name: GCS_ACCESS_KEY
-                value: "{rssu.config.gcs.accessKey}"
-          envFrom:
-              - secretRef:
-                    name: "{rssu.config.envFromSecret}"
-        # {/if}
-        # {#if esu && esu.enabled}
-        # Sidecar: event-stream-uploader
-        - name: "{esu.name}"
-          image: "{esu.softwareVersion.repository}/{esu.softwareVersion.name}:{esu.softwareVersion.tag}"
-          imagePullPolicy: "{esu.softwareVersion.imagePullPolicy}"
-          command:
-              - /usr/bin/env
-              - python3.7
-              - /usr/local/bin/mirror.py
-              - --linux
-              - --watch-directory
-              - /opt/hgcapp/eventsStreams
-              - --debug
-              # {#if esu.config.s3.enabled}
-              - --s3-endpoint
-              - "{esu.config.s3.url}"
-              # {/if}
-              # {#if esu.config.gcs.enabled}
-              - --gcs-endpoint
-              - "{esu.config.gcs.url}"
-              # {/if}
-          volumeMounts:
-              - name: hgcapp-events-streams
-                mountPath: /opt/hgcapp/eventsStreams
-                subPath: "events_{accountId}"
-          env:
-              - name: DEBUG
-                value: "{esu.config.debug}"
-              - name: REAPER_ENABLE
-                value: "{esu.config.reaper.enabled}"
-              - name: REAPER_MIN_KEEP
-                value: "{esu.config.reaper.minKeep}"
-              - name: REAPER_INTERVAL
-                value: "{esu.config.reaper.interval}"
-              - name: REAPER_DEFAULT_BACKOFF
-                value: "{esu.config.reaper.defaultBackoff}"
-              - name: STREAM_FILE_EXTENSION
-                value: "{esu.config.streamFileExtension}"
-              - name: STREAM_SIG_EXTENSION
-                value: "{esu.config.streamSigExtension}"
-              - name: STREAM_EXTENSION
-                value: "{esu.config.streamExtension}"
-              - name: SIG_EXTENSION
-                value: "{esu.config.sigExtension}"
-              - name: SIG_REQUIRE
-                value: "{esu.config.signature.require}"
-              - name: SIG_PRIORITIZE
-                value: "{esu.config.signature.prioritize}"
-              - name: BUCKET_PATH
-                value: "{esu.config.bucketPath}"
-              - name: BUCKET_NAME
-                value: "{esu.config.bucketName}"
-              - name: S3_ENABLE
-                value: "{esu.config.s3.enabled}"
-              - name: S3_ACCESS_KEY
-                value: "{esu.config.s3.accessKey}"
-              - name: GCS_ENABLE
-                value: "{esu.config.gcs.enabled}"
-              - name: GCS_ACCESS_KEY
-                value: "{esu.config.gcs.accessKey}"
-          envFrom:
-              - secretRef:
-                    name: "{esu.config.envFromSecret}"
-        # {/if}
-        # {#if bu && bu.enabled}
-        # Sidecar: backup-uploader
-        - name: "{bu.name}"
-          image: "{bu.softwareVersion.repository}/{bu.softwareVersion.name}:{bu.softwareVersion.tag}"
-          imagePullPolicy: "{bu.softwareVersion.imagePullPolicy}"
-          volumeMounts:
-              - name: hgcapp-states
-                mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/saved
-              - name: backup-uploader-config
-                mountPath: /home/hedera/.config/rclone/rclone.conf
-                subPath: rclone.conf
-              - name: hgcapp-init
-                mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/VERSION
-                subPath: VERSION
-          env:
-              - name: BACKUP_UPLOADER_BUCKET_1
-                value: "{bu.config.bucketName}"
-              - name: RCLONE_S3_ENDPOINT
-                value: "{#if bu.config.gcs.enabled}{bu.config.gcs.url}{#else}{bu.config.s3.url}{/if}"
-              - name: RCLONE_S3_ACCESS_KEY_ID
-                value: "{#if bu.config.gcs.enabled}{bu.config.gcs.accessKey}{#else}{bu.config.s3.accessKey}{/if}"
-          envFrom:
-              - secretRef:
-                    name: "{bu.config.envFromSecret}"
-        # {/if}
-    volumes:
-        - name: cluster-config
-          configMap:
-              name: cluster-config
-              defaultMode: "{defaultMode}"
-        - name: backup-uploader-config
-          configMap:
-              name: backup-uploader-config
-              defaultMode: "{defaultMode}"
-        - name: public-keys
-          configMap:
-              name: public-keys
-              defaultMode: "{defaultMode}"
+  restartPolicy: Never
+  hostname: "{nodeName}"
+  subdomain: consensus
+  serviceAccountName: "{nodeName}-sa"
+  initContainers:
+    - name: "init-consensus-node"
+      image: "ubuntu:mantic-20240216" # using same image that is used for consensus-node deterministic image
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
+      volumeMounts:
         - name: gossip-keys
-          secret:
-              secretName: "{nodeName}-gossip-keys"
-              defaultMode: "{defaultMode}"
-        - name: grpc-tls-keys
-          secret:
-              secretName: "{nodeName}-grpc-tls-keys"
-              defaultMode: "{defaultMode}"
-        - name: hgcapp-record-streams
-          emptyDir: {}
-        - name: hgcapp-events-streams
-          emptyDir: {}
-        - name: hgcapp-output
-          emptyDir: {}
-        - name: hgcapp-keys
-          emptyDir: {}
-        - name: hgcapp-states
-          emptyDir: {}
-        - name: hgcapp-stats
-          emptyDir: {}
-        - name: hgcapp-upgrade
-          emptyDir: {}
+          mountPath: /tmp/volumes/gossip-keys
+        - name: public-keys
+          mountPath: /tmp/volumes/public-keys
+        - name: cluster-config
+          mountPath: /tmp/volumes/cluster-config
         - name: hgcapp-init
-          emptyDir: {}
+          mountPath: /tmp/volumes/init
+        - name: hgcapp-record-streams
+          mountPath: /opt/hgcapp/recordStreams
+        - name: hgcapp-events-streams
+          mountPath: /opt/hgcapp/eventsStreams
+        - name: hgcapp-output
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/output
+        - name: hgcapp-states
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/saved
+        - name: hgcapp-stats
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/stats
+        - name: hgcapp-upgrade
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade
+        - name: hgcapp-keys
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
+      command:
+        - "/bin/bash"
+        - "-c"
+        - |
+          setupDirs() \{
+            # setup directories required by stream-uploader sidecars as otherwise those wont' be able to start
+            mkdir -p /opt/hgcapp/recordStreams/record{accountId}/sidecar || return $?
+            mkdir -p /opt/hgcapp/eventsStreams/events_{accountId} || return $?
+
+            # create empty VERSION file for backup-uploader
+            touch /tmp/volumes/init/VERSION || return $? # FIXME change to copy when VERSION file is baked in the image
+
+            return 0
+          \}
+
+          # combine node keys into a single directory
+          function copyKeys \{
+            echo ""
+            echo "Copying keys into /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/"
+            echo "--------------------------------------------------------------------------"
+            cp -rLfv /tmp/volumes/gossip-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/ || return $?
+            cp -rLfv /tmp/volumes/public-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/ || return $?
+            chown -R hedera:hedera /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/ || return $?
+
+            return 0
+          \}
+
+          # lookup services
+          lookupSvc() \{
+            local svc="$1"
+            local destFile="$2"
+            local attempt=1
+            local delay=5
+            local maxAttempt=100
+            local rc=0
+            # Check for services with a timeout
+            until [ $attempt -gt $maxAttempt ]; do
+              echo "-------------------------------------------------------------------"
+              result=$(getent hosts "$svc")
+              rc=$?
+              echo "$result"
+              if [ "$rc" -eq 0 ]; then
+                echo "OK: $svc"
+                echo "-------------------------------------------------------------------"
+                echo "$result" >> "$destFile"
+                return $rc
+              fi
+              echo "Attempt $attempt failed for service $svc. Retrying in $delay seconds..."
+              sleep "$delay"
+              attempt=$(( attempt + 1 ))
+            done
+
+            echo "ERROR: Timeout occurred; lookup failed for services: $svc."
+            return 1
+          \}
+
+          # Parse address lines in config.txt and lookup services using internal and external FQDN/IP addresses.
+          checkConsensusNodeSvc() \{
+            # 6th item is internal address and 8th item is external address
+            parsed_internal_svcs=$(cat /tmp/volumes/cluster-config/config.txt | awk '\{print $6\}' | xargs);
+            parsed_external_svcs=$(cat /tmp/volumes/cluster-config/config.txt | awk '\{print $8\}' | xargs);
+
+            IFS=', ' read -r -a internal_svcs <<< "$parsed_internal_svcs";
+            IFS=', ' read -r -a external_svcs <<< "$parsed_external_svcs";
+
+            echo ""
+            echo ""
+            echo "Looking up consensus node services...."
+            echo "Parsed Internal Addresses: $\{parsed_internal_svcs\}"
+            echo "Parsed External Addresses: $\{parsed_external_svcs\}"
+            echo "Internal Services Array: $\{internal_svcs[@]\}"
+            echo "External Services Array: $\{external_svcs[@]\}"
+            echo ""
+
+            # capture service IPs in a file for debugging (if needed)
+            local lookupFile="/tmp/volumes/init/hosts-lookup"
+            touch "$lookupFile"
+            for svc in "$\{internal_svcs[@]\}";do
+              lookupSvc "$svc" "$lookupFile" || return $?
+            done;
+
+            for svc in "$\{external_svcs[@]\}";do
+              lookupSvc "$svc" "$lookupFile" || return $?
+            done;
+
+            echo ""
+            echo "hosts"
+            echo "--------------------------------------------------------------------------"
+            cat "$lookupFile"
+
+            echo ""
+            echo "*** Lookup succeeded for all services ***"
+
+            return 0
+          \}
+
+          runInit() \{
+            id
+            # create hedera user and group
+            groupadd --gid 2000 hedera && \
+              useradd --no-user-group --create-home --uid 2000 --gid 2000 --shell /bin/bash hedera
+
+            # setup directories before consensus-node and other sidecar containers start
+            setupDirs || return $?
+
+            # combine node keys into a single directory so that it is easy to mount
+            copyKeys || return $?
+
+            # lookup services
+            checkConsensusNodeSvc || return $?
+
+            return 0
+          \}
+
+          runInit
+  containers:
+    - name: "{cn.name}"
+      image: "{cn.softwareVersion.repository}/{cn.softwareVersion.name}:{cn.softwareVersion.tag}"
+      env:
+        - name: JAVA_OPTS
+          value: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"
+      startupProbe: # fails after a maximum of (failureThreshold * periodSeconds * timeoutSeconds) seconds
+        failureThreshold: 20 # maximum number of failures
+        periodSeconds: 15 # check every 15 seconds
+        timeoutSeconds: 60 # probe times out after 60 seconds
+        exec:
+          command:
+            - jshell
+            - /tmp/volumes/cluster-config/startup-probe
+      volumeMounts:
+        - name: cluster-config
+          mountPath: /tmp/volumes/cluster-config # mount to a directory so that we can run scripts from it
+        - name: cluster-config
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/config.txt
+          subPath: "config.txt"
+        - name: cluster-config
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/settings.txt
+          subPath: "settings.txt"
+        - name: cluster-config
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/log4j2.xml
+          subPath: "log4j2.xml"
+        - name: cluster-config
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/config/application.properties
+          subPath: "application.properties"
+        - name: cluster-config
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/config/api-permission.properties
+          subPath: "api-permission.properties"
+        - name: grpc-tls-keys
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.key
+          subPath: "hedera-{nodeName}.key"
+        - name: grpc-tls-keys
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.crt
+          subPath: "hedera-{nodeName}.crt"
+        - name: hgcapp-init
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/VERSION
+          subPath: VERSION
+        - name: hgcapp-keys
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
+        - name: hgcapp-record-streams
+          mountPath: /opt/hgcapp/recordStreams
+        - name: hgcapp-events-streams
+          mountPath: /opt/hgcapp/eventsStreams
+        - name: hgcapp-output
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/output
+        - name: hgcapp-states
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/saved
+        - name: hgcapp-stats
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/stats
+        - name: hgcapp-upgrade
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade
+    # {#if rsu && rsu.enabled}
+    # Sidecar: record-stream-uploader
+    - name: "{rsu.name}"
+      image: "{rsu.softwareVersion.repository}/{rsu.softwareVersion.name}:{rsu.softwareVersion.tag}"
+      imagePullPolicy: "{rsu.softwareVersion.imagePullPolicy}"
+      command:
+        - /usr/bin/env
+        - python3.7
+        - /usr/local/bin/mirror.py
+        - --linux
+        - --watch-directory
+        - /opt/hgcapp/recordStreams
+        - --csv-stats-directory
+        - /opt/hgcapp/recordStreams/uploader-stats
+        # {#if rsu.config.s3.enabled}
+        - --s3-endpoint
+        - "{rsu.config.s3.url}"
+        # {/if}
+        # {#if rsu.config.gcs.enabled}
+        - --gcs-endpoint
+        - "{rsu.config.gcs.url}"
+        # {/if}
+      volumeMounts:
+        - name: hgcapp-record-streams
+          mountPath: /opt/hgcapp/recordStreams
+          subPath: "record{accountId}"
+      env:
+        - name: DEBUG
+          value: "{rsu.config.debug}"
+        - name: REAPER_ENABLE
+          value: "{rsu.config.reaper.enabled}"
+        - name: REAPER_MIN_KEEP
+          value: "{rsu.config.reaper.minKeep}"
+        - name: REAPER_INTERVAL
+          value: "{rsu.config.reaper.interval}"
+        - name: REAPER_DEFAULT_BACKOFF
+          value: "{rsu.config.reaper.defaultBackoff}"
+        - name: STREAM_FILE_EXTENSION
+          value: "{rsu.config.streamFileExtension}"
+        - name: STREAM_SIG_EXTENSION
+          value: "{rsu.config.streamSigExtension}"
+        - name: STREAM_EXTENSION
+          value: "{rsu.config.streamExtension}"
+        - name: SIG_EXTENSION
+          value: "{rsu.config.sigExtension}"
+        - name: RECORD_STREAM_COMPRESSION
+          value: "{rsu.config.enableCompression}"
+        - name: RECORD_STREAM_SIDECAR
+          value: "{rsu.config.enableSidecarFiles}"
+        - name: SIG_REQUIRE
+          value: "{rsu.config.signature.require}"
+        - name: SIG_PRIORITIZE
+          value: "{rsu.config.signature.prioritize}"
+        - name: BUCKET_PATH
+          value: "{rsu.config.bucketPath}"
+        - name: BUCKET_NAME
+          value: "{rsu.config.bucketName}"
+        - name: S3_ENABLE
+          value: "{rsu.config.s3.enabled}"
+        - name: S3_ACCESS_KEY
+          value: "{rsu.config.s3.accessKey}"
+        - name: GCS_ENABLE
+          value: "{rsu.config.gcs.enabled}"
+        - name: GCS_ACCESS_KEY
+          value: "{rsu.config.gcs.accessKey}"
+      envFrom:
+        - secretRef:
+            name: "{rsu.config.envFromSecret}"
+    # {/if}
+    # {#if rssu && rssu.enabled}
+    # Sidecar: record-stream-sidecar-files-uploader
+    - name: "{rssu.name}"
+      image: "{rssu.softwareVersion.repository}/{rssu.softwareVersion.name}:{rssu.softwareVersion.tag}"
+      imagePullPolicy: "{rssu.softwareVersion.imagePullPolicy}"
+      command:
+        - /usr/bin/env
+        - python3.7
+        - /usr/local/bin/mirror.py
+        - --linux
+        - --watch-directory
+        - /opt/hgcapp/recordStreams/sidecar
+        # {#if rssu.config.s3.enabled}
+        - --s3-endpoint
+        - "{rssu.config.s3.url}"
+        # {/if}
+        # {#if rssu.config.gcs.enabled}
+        - --gcs-endpoint
+        - "{rssu.config.gcs.url}"
+        # {/if}
+      volumeMounts:
+        - name: hgcapp-record-streams
+          mountPath: /opt/hgcapp/recordStreams
+          subPath: "record{accountId}"
+      env:
+        - name: DEBUG
+          value: "{rssu.config.debug}"
+        - name: REAPER_ENABLE
+          value: "{rssu.config.reaper.enabled}"
+        - name: REAPER_MIN_KEEP
+          value: "{rssu.config.reaper.minKeep}"
+        - name: REAPER_INTERVAL
+          value: "{rssu.config.reaper.interval}"
+        - name: REAPER_DEFAULT_BACKOFF
+          value: "{rssu.config.reaper.defaultBackoff}"
+        - name: STREAM_FILE_EXTENSION
+          value: "{rssu.config.streamFileExtension}"
+        - name: STREAM_SIG_EXTENSION
+          value: "{rssu.config.streamSigExtension}"
+        - name: STREAM_EXTENSION
+          value: "{rssu.config.streamExtension}"
+        - name: SIG_EXTENSION
+          value: "{rssu.config.sigExtension}"
+        - name: RECORD_STREAM_COMPRESSION
+          value: "{rssu.config.enableCompression}"
+        - name: RECORD_STREAM_SIDECAR
+          value: "{rssu.config.enableSidecarFiles}"
+        - name: SIG_REQUIRE
+          value: "{rssu.config.signature.require}"
+        - name: SIG_PRIORITIZE
+          value: "{rssu.config.signature.prioritize}"
+        - name: BUCKET_PATH
+          value: "{rssu.config.bucketPath}"
+        - name: BUCKET_NAME
+          value: "{rssu.config.bucketName}"
+        - name: S3_ENABLE
+          value: "{rssu.config.s3.enabled}"
+        - name: S3_ACCESS_KEY
+          value: "{rssu.config.s3.accessKey}"
+        - name: GCS_ENABLE
+          value: "{rssu.config.gcs.enabled}"
+        - name: GCS_ACCESS_KEY
+          value: "{rssu.config.gcs.accessKey}"
+      envFrom:
+        - secretRef:
+            name: "{rssu.config.envFromSecret}"
+    # {/if}
+    # {#if esu && esu.enabled}
+    # Sidecar: event-stream-uploader
+    - name: "{esu.name}"
+      image: "{esu.softwareVersion.repository}/{esu.softwareVersion.name}:{esu.softwareVersion.tag}"
+      imagePullPolicy: "{esu.softwareVersion.imagePullPolicy}"
+      command:
+        - /usr/bin/env
+        - python3.7
+        - /usr/local/bin/mirror.py
+        - --linux
+        - --watch-directory
+        - /opt/hgcapp/eventsStreams
+        - --debug
+        # {#if esu.config.s3.enabled}
+        - --s3-endpoint
+        - "{esu.config.s3.url}"
+        # {/if}
+        # {#if esu.config.gcs.enabled}
+        - --gcs-endpoint
+        - "{esu.config.gcs.url}"
+        # {/if}
+      volumeMounts:
+        - name: hgcapp-events-streams
+          mountPath: /opt/hgcapp/eventsStreams
+          subPath: "events_{accountId}"
+      env:
+        - name: DEBUG
+          value: "{esu.config.debug}"
+        - name: REAPER_ENABLE
+          value: "{esu.config.reaper.enabled}"
+        - name: REAPER_MIN_KEEP
+          value: "{esu.config.reaper.minKeep}"
+        - name: REAPER_INTERVAL
+          value: "{esu.config.reaper.interval}"
+        - name: REAPER_DEFAULT_BACKOFF
+          value: "{esu.config.reaper.defaultBackoff}"
+        - name: STREAM_FILE_EXTENSION
+          value: "{esu.config.streamFileExtension}"
+        - name: STREAM_SIG_EXTENSION
+          value: "{esu.config.streamSigExtension}"
+        - name: STREAM_EXTENSION
+          value: "{esu.config.streamExtension}"
+        - name: SIG_EXTENSION
+          value: "{esu.config.sigExtension}"
+        - name: SIG_REQUIRE
+          value: "{esu.config.signature.require}"
+        - name: SIG_PRIORITIZE
+          value: "{esu.config.signature.prioritize}"
+        - name: BUCKET_PATH
+          value: "{esu.config.bucketPath}"
+        - name: BUCKET_NAME
+          value: "{esu.config.bucketName}"
+        - name: S3_ENABLE
+          value: "{esu.config.s3.enabled}"
+        - name: S3_ACCESS_KEY
+          value: "{esu.config.s3.accessKey}"
+        - name: GCS_ENABLE
+          value: "{esu.config.gcs.enabled}"
+        - name: GCS_ACCESS_KEY
+          value: "{esu.config.gcs.accessKey}"
+      envFrom:
+        - secretRef:
+            name: "{esu.config.envFromSecret}"
+    # {/if}
+    # {#if bu && bu.enabled}
+    # Sidecar: backup-uploader
+    - name: "{bu.name}"
+      image: "{bu.softwareVersion.repository}/{bu.softwareVersion.name}:{bu.softwareVersion.tag}"
+      imagePullPolicy: "{bu.softwareVersion.imagePullPolicy}"
+      volumeMounts:
+        - name: hgcapp-states
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/saved
+        - name: backup-uploader-config
+          mountPath: /home/hedera/.config/rclone/rclone.conf
+          subPath: rclone.conf
+        - name: hgcapp-init
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/VERSION
+          subPath: VERSION
+      env:
+        - name: BACKUP_UPLOADER_BUCKET_1
+          value: "{bu.config.bucketName}"
+        - name: RCLONE_S3_ENDPOINT
+          value: "{#if bu.config.gcs.enabled}{bu.config.gcs.url}{#else}{bu.config.s3.url}{/if}"
+        - name: RCLONE_S3_ACCESS_KEY_ID
+          value: "{#if bu.config.gcs.enabled}{bu.config.gcs.accessKey}{#else}{bu.config.s3.accessKey}{/if}"
+      envFrom:
+        - secretRef:
+            name: "{bu.config.envFromSecret}"
+    # {/if}
+  volumes:
+    - name: cluster-config
+      configMap:
+        name: cluster-config
+        defaultMode: "{defaultMode}"
+    - name: backup-uploader-config
+      configMap:
+        name: backup-uploader-config
+        defaultMode: "{defaultMode}"
+    - name: public-keys
+      configMap:
+        name: public-keys
+        defaultMode: "{defaultMode}"
+    - name: gossip-keys
+      secret:
+        secretName: "{nodeName}-gossip-keys"
+        defaultMode: "{defaultMode}"
+    - name: grpc-tls-keys
+      secret:
+        secretName: "{nodeName}-grpc-tls-keys"
+        defaultMode: "{defaultMode}"
+    - name: hgcapp-record-streams
+      emptyDir: {}
+    - name: hgcapp-events-streams
+      emptyDir: {}
+    - name: hgcapp-output
+      emptyDir: {}
+    - name: hgcapp-keys
+      emptyDir: {}
+    - name: hgcapp-states
+      emptyDir: {}
+    - name: hgcapp-stats
+      emptyDir: {}
+    - name: hgcapp-upgrade
+      emptyDir: {}
+    - name: hgcapp-init
+      emptyDir: {}
