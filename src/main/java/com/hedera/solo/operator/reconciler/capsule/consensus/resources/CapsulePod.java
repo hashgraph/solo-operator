@@ -50,7 +50,6 @@ import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSourceBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.api.model.PodFluent;
-import io.fabric8.kubernetes.api.model.PodSecurityContext;
 import io.fabric8.kubernetes.api.model.ResourceRequirements;
 import io.fabric8.kubernetes.api.model.Volume;
 import io.fabric8.kubernetes.api.model.VolumeBuilder;
@@ -169,15 +168,11 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
     }
 
     private void setDesiredPodSpec(ConsensusCapsule primary, PodBuilder podBuilder) {
-        PodSecurityContext securityContext =
-                primary.getSpec().getPodProperties().getSecurityContext();
-        if (securityContext == null) {
-            securityContext = SECURITY_CONTEXT_BUILDER.build();
-        }
-
         copyPodProperties(primary.getSpec().getPodProperties(), podBuilder);
-
-        podBuilder.editSpec().withSecurityContext(securityContext).endSpec();
+        podBuilder
+                .editSpec()
+                .withSecurityContext(SECURITY_CONTEXT_BUILDER.build())
+                .endSpec(); // always override security context
     }
 
     PodBuilder copyPodProperties(@NonNull final PodProperties props, final PodBuilder builder) {
