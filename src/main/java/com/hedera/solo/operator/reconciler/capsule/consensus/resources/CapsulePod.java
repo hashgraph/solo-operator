@@ -51,7 +51,6 @@ import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSourceBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.api.model.PodFluent;
-import io.fabric8.kubernetes.api.model.PodSecurityContext;
 import io.fabric8.kubernetes.api.model.ResourceRequirements;
 import io.fabric8.kubernetes.api.model.Volume;
 import io.fabric8.kubernetes.api.model.VolumeBuilder;
@@ -174,30 +173,35 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
     }
 
     private void setDesiredPodSpec(ConsensusCapsule primary, PodBuilder podBuilder) {
-        PodSecurityContext securityContext =
-                primary.getSpec().getPodProperties().getSecurityContext();
-        if (securityContext == null) {
-            securityContext = SECURITY_CONTEXT_BUILDER.build();
-        }
-
         copyPodProperties(primary.getSpec().getPodProperties(), podBuilder);
 
-        podBuilder.editSpec().withSecurityContext(securityContext).endSpec();
+        // force security context if it is not set already
+        if (Objects.isNull(podBuilder.build().getSpec().getSecurityContext())) {
+            podBuilder
+                    .editSpec()
+                    .withSecurityContext(SECURITY_CONTEXT_BUILDER.build())
+                    .endSpec();
+        }
     }
 
+    // FIXME: check property is set before using it
     PodBuilder copyPodProperties(@NonNull final PodProperties props, final PodBuilder builder) {
         Objects.requireNonNull(props);
         PodFluent<PodBuilder>.SpecNested<PodBuilder> spec = builder.editSpec();
         spec.withAffinity(props.getAffinity());
         spec.withNodeSelector(props.getNodeSelector());
         PodProperties.PreemptionPolicy preemptionPolicy = props.getPreemptionPolicy();
-        if (null != preemptionPolicy) {
+        if (Objects.nonNull(preemptionPolicy)) {
             spec.withPreemptionPolicy(preemptionPolicy.getValue());
         }
         spec.withPriority(props.getPriority());
         spec.withPriorityClassName(props.getPriorityClassName());
         spec.withResourceClaims(props.getResourceClaims());
-        spec.withSecurityContext(props.getSecurityContext());
+
+        if (Objects.nonNull(props.getSecurityContext())) {
+            spec.withSecurityContext(props.getSecurityContext());
+        }
+
         spec.withServiceAccountName(props.getServiceAccountName());
         spec.withTerminationGracePeriodSeconds(props.getTerminationGracePeriodSeconds());
         spec.withTolerations(props.getTolerations());

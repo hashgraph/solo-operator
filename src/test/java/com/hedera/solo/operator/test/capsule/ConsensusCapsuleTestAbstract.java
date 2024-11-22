@@ -3,8 +3,6 @@
 package com.hedera.solo.operator.test.capsule;
 
 import static com.hedera.solo.operator.reconciler.common.Constants.CONSENSUS_NODE;
-import static com.hedera.solo.operator.reconciler.common.Constants.HEDERA_GROUP;
-import static com.hedera.solo.operator.reconciler.common.Constants.HEDERA_USER;
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GOSSIP;
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GRPC_TLS;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_APP;
@@ -43,7 +41,6 @@ import com.hedera.solo.operator.test.setup.ClusterSetupManager;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
-import io.fabric8.kubernetes.api.model.PodSecurityContextBuilder;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.client.CustomResource;
@@ -109,8 +106,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                         "services-hedera/HapiApp2.0/output/hgcaa.log",
                         "services-hedera/HapiApp2.0/output/swirlds.log",
                         "services-hedera/HapiApp2.0/config.txt",
-                        "/tmp/volumes/init/hosts-lookup",
-                        "/tmp/volumes/init/java.security")
+                        "/tmp/volumes/init/hosts-lookup")
                 .namespaces("minio-operator", "minio-tenant")
                 .namespacedResources()
                 .logs()
@@ -290,10 +286,6 @@ public abstract class ConsensusCapsuleTestAbstract {
 
     protected ConsensusCapsuleBuilder prepareConsensusCapsuleBuilder(NodeInfo node) {
         final PodProperties consensusPod = new PodPropertiesBuilder()
-                .withSecurityContext(new PodSecurityContextBuilder()
-                        .withRunAsUser(HEDERA_USER)
-                        .withRunAsGroup(HEDERA_GROUP)
-                        .build())
                 .withContainers(this.prepareConsensusPodContainers())
                 .withVolumes(this.prepareCapsulePodVolumes(node))
                 .build();

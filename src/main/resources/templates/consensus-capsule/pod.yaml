@@ -26,9 +26,10 @@ spec:
   serviceAccountName: "{nodeName}-sa"
   initContainers:
     - name: "init-consensus-node"
-      # Note: We must use consensus-node image so that we can chown using hedera user and
-      # also update java.security file from the consensus-node image
-      image: "{cn.softwareVersion.repository}/{cn.softwareVersion.name}:{cn.softwareVersion.tag}"
+      image: "ubuntu:mantic-20240216" # using same image that is used for consensus-node deterministic image
+      securityContext: # run as root to be able to set owner and create subdirectories in the mounted volumes (e.g. hostpath)
+        runAsUser: 0
+        runAsGroup: 0
       volumeMounts:
         - name: gossip-keys
           mountPath: /tmp/volumes/gossip-keys
@@ -56,31 +57,66 @@ spec:
         - "/bin/bash"
         - "-c"
         - |
-          setPermissions() \{
-            dir="$1"
-            sudo chown -R hedera:hedera "$dir"
-            echo ""
-            echo "Directory: $dir"
+          setOwnerPermissions() \{
+            path="$1"
+
+            current_owner=$(stat -c "%U" "$path") || return $?
+            if [[ "$current_owner" != "hedera" ]]; then
+              echo ""
+              echo "Changing current owner: $current_owner, path: $path"
+              chown -R hedera:hedera "$path" || return $?
+              chmod -R 755 "$path" || return $?
+            fi
+
+            echo "Path: $path"
             echo "--------------------------------------------------------------------------"
-            ls -la "$dir"
+            ls -la "$path"
           \}
 
           setupDirs() \{
-            # setup directories required by stream-uploader sidecars
-            mkdir -p /opt/hgcapp/recordStreams/record{accountId}/sidecar
-            mkdir -p /opt/hgcapp/eventsStreams/events_{accountId}
+            # setup directories required by stream-uploader sidecars as otherwise those wont' be able to start
+            if [[ ! -d "/opt/hgcapp/recordStreams/record{accountId}" ]]; then
+              mkdir -p "/opt/hgcapp/recordStreams/record{accountId}" || return $?
+              setOwnerPermissions "/opt/hgcapp/recordStreams/record{accountId}" || return $?
+            fi
 
-            setPermissions /opt/hgcapp/recordStreams
-            setPermissions /opt/hgcapp/eventsStreams
-            setPermissions /opt/hgcapp/services-hedera/HapiApp2.0
-            setPermissions /opt/hgcapp/services-hedera/HapiApp2.0/output
-            setPermissions /opt/hgcapp/services-hedera/HapiApp2.0/data/saved
-            setPermissions /opt/hgcapp/services-hedera/HapiApp2.0/data/stats
-            setPermissions /opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade
-            setPermissions /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
+            if [[ ! -d "/opt/hgcapp/recordStreams/record{accountId}/sidecar" ]]; then
+              mkdir -p "/opt/hgcapp/recordStreams/record{accountId}/sidecar" || return $?
+              setOwnerPermissions "/opt/hgcapp/recordStreams/record{accountId}/sidecar" || return $?
+            fi
+
+            if [[ ! -d "/opt/hgcapp/eventsStreams/events_{accountId}" ]]; then
+              mkdir -p "/opt/hgcapp/eventsStreams/events_{accountId}" || return $?
+              setOwnerPermissions "/opt/hgcapp/eventsStreams/events_{accountId}" || return $?
+            fi
 
             # create empty VERSION file for backup-uploader
-            touch /tmp/volumes/init/VERSION # FIXME change to copy when VERSION file is baked in the image
+            if [[ ! -f "/tmp/volumes/init/VERSION" ]]; then
+              touch "/tmp/volumes/init/VERSION" || return $? # FIXME change to copy when VERSION file is baked in the image
+              setOwnerPermissions "/tmp/volumes/init/VERSION" || return $?
+            fi
+
+            # set owners to the directories (if not already set)
+            setOwnerPermissions "/opt/hgcapp/services-hedera/HapiApp2.0/output" || return $?
+            setOwnerPermissions "/opt/hgcapp/services-hedera/HapiApp2.0/data/stats" || return $?
+            setOwnerPermissions "/opt/hgcapp/services-hedera/HapiApp2.0/data/saved" || return $?
+            setOwnerPermissions "/opt/hgcapp/services-hedera/HapiApp2.0/data/keys" || return $?
+            setOwnerPermissions "/opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade" || return $?
+            setOwnerPermissions "/opt/hgcapp/recordStreams" || return $?
+            setOwnerPermissions "/opt/hgcapp/eventsStreams" || return $?
+
+            return 0
+          \}
+
+          # combine node keys into a single directory
+          function prepareKeysDirectory \{
+            echo ""
+            echo "Copying keys into /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/"
+            echo "--------------------------------------------------------------------------"
+            cp -rLfv /tmp/volumes/gossip-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/ || return $?
+            cp -rLfv /tmp/volumes/public-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/ || return $?
+
+            setOwnerPermissions "/opt/hgcapp/services-hedera/HapiApp2.0/data/keys" || return $?
 
             return 0
           \}
@@ -154,66 +190,28 @@ spec:
             return 0
           \}
 
-          # Prepare java.security file with Java DNS caching disabled
-          #
-          # Currently our retryLogic in the platform code has a default retry limit of 10s. However, by default JVM
-          # cache unsuccessful name lookup for 10s. So the default retry logic fails to lookup. Ideally we don't want it
-          # to cache the unsuccessful lookup so that it can keep retrying.
-          #
-          # On the other hand, successful lookup is cached for infinity (-1), which is a problem since a pod may acquire
-          # new IP because of restart and we don't want it to use value from cache. However, we choose a 10s cache for
-          # successful lookup to improve performance.
-          #
-          # So essentially, we need to disable DNS caching.
-          #
-          # We are preparing the java.security file in the init-container just so that it can be reused if necessary and
-          # make it easier to debug without waiting for consensus pod to be running.
-          #
-          # References:
-          # 1. https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/net/doc-files/net-properties.html#address-cache-heading
-          # 2. https://stackoverflow.com/questions/1256556/how-to-make-java-honor-the-dns-caching-timeout
-          # 3. https://github.com/hashgraph/hedera-services/blob/develop/platform-sdk/swirlds-base/src/main/java/com/swirlds/base/utility/Retry.java#L37
-          function disableDNSCaching \{
-            local javaSecurityFile="/usr/local/java/conf/security/java.security"
-            local tmpFile="/tmp/volumes/init/java.security"
-
-            cp "$javaSecurityFile" "$tmpFile"
-            sed -e '/networkaddress.cache.ttl/c networkaddress.cache.ttl=10' -i "$tmpFile" || return $?
-            sed -e '/networkaddress.cache.stale.ttl/c networkaddress.cache.stale.ttl=0' -i "$tmpFile" || return $?
-            sed -e '/networkaddress.cache.negative.ttl/c networkaddress.cache.negative.ttl=0' -i "$tmpFile" || return $?
-
-            echo ""
-            echo "DNS cache settings"
-            echo "---------------------------------------------------------------------------------------------------"
-            cat "$tmpFile" | grep "ttl"
-            echo "---------------------------------------------------------------------------------------------------"
-
-            return 0
-          \}
-
-          function copyKeys \{
-            echo ""
-            echo "Copying keys into /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/"
-            echo "--------------------------------------------------------------------------"
-            cp -rLfv /tmp/volumes/gossip-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/
-            cp -rLfv /tmp/volumes/public-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/
-            sudo chown -R hedera:hedera /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/
-
-            return 0
-          \}
-
           runInit() \{
-            # setup directories before consensus-node starts
+            id # check which user is running the script
+
+            # create hedera user and group
+            if ! getent passwd hedera > /dev/null; then
+              groupadd --gid 2000 hedera && \
+                useradd --no-user-group --create-home --uid 2000 --gid 2000 --shell /bin/bash hedera
+              echo "User hedera created successfully!"
+            else
+              echo "User hedera already exists!"
+            fi
+
+            id # check again which user is running the script
+
+            # setup directories before consensus-node and other sidecar containers start
             setupDirs || return $?
 
-            # copy keys
-            copyKeys || return $?
+            # combine node keys into a single directory so that it is easy to mount
+            prepareKeysDirectory || return $?
 
             # lookup services
             checkConsensusNodeSvc || return $?
-
-            # prepare java.security file with DNS caching disabled
-            disableDNSCaching || return $?
 
             return 0
           \}
@@ -225,90 +223,41 @@ spec:
       env:
         - name: JAVA_OPTS
           value: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"
-      command:
-        - "/bin/bash"
-        - "-c"
-        - |
-          # copy file with appropriate ownership
-          function copyFile() \{
-            local src="$1"
-            local dst="$2"
-            cp -rLfv "$src" "$dst"
-            sudo chown hedera:hedera "$dst"
-          \}
-
-          function copyFiles() \{
-            CLUSTER_CONFIG_VOL="/tmp/volumes/cluster-config"
-            HAPI_APP="/opt/hgcapp/services-hedera/HapiApp2.0"
-
-            # copy config.txt
-            copyFile "$CLUSTER_CONFIG_VOL/config.txt" "$HAPI_APP/config.txt"
-            echo ""
-            echo "config.txt"
-            echo "--------------------------------------------------------------------------"
-            cat /tmp/volumes/cluster-config/config.txt
-
-            # copy other config files from cluster-config with appropriate file ownership
-            copyFile "$CLUSTER_CONFIG_VOL/settings.txt" "$HAPI_APP/settings.txt"
-            copyFile "$CLUSTER_CONFIG_VOL/log4j2.xml" "$HAPI_APP/log4j2.xml"
-            copyFile "$CLUSTER_CONFIG_VOL/api-permission.properties" "$HAPI_APP/data/config/api-permission.properties"
-            copyFile "$CLUSTER_CONFIG_VOL/application.properties" "$HAPI_APP/data/config/application.properties"
-
-            # copy grpc-tls-keys with appropriate permissions
-            GRPC_TLS_VOL="/tmp/volumes/grpc-tls-keys"
-            copyFile "$GRPC_TLS_VOL/hedera-{nodeName}.key" "$HAPI_APP/hedera.key"
-            copyFile "$GRPC_TLS_VOL/hedera-{nodeName}.crt" "$HAPI_APP/hedera.crt"
-
-            # copy entrypoint.sh (if it exists)
-            if [[ -f "$CLUSTER_CONFIG_VOL/entrypoint.sh" ]]; then
-              copyFile "$CLUSTER_CONFIG_VOL/entrypoint.sh" "$HAPI_APP/entrypoint.sh"
-            fi
-
-            # copy java.security file if it exists
-            local javaSecurityFile="/usr/local/java/conf/security/java.security"
-            PREP_DIR="/tmp/volumes/init"
-            if [[ -f "$PREP_DIR/java.security" ]]; then
-              sudo cp "$PREP_DIR/java.security" "$javaSecurityFile"
-
-              echo ""
-              echo "JVM DNS cache settings"
-              echo "---------------------------------------------------------------------------------------------------"
-              cat "$javaSecurityFile" | grep "ttl"
-              echo "---------------------------------------------------------------------------------------------------"
-            fi
-
-            return 0
-          \}
-
-          function setup() \{
-            copyFiles || return $?
-            return 0
-          \}
-
-          # setup
-          setup || exit $?
-
-          ls -la /opt/hgcapp
-          ls -la /opt/hgcapp/services-hedera/HapiApp2.0
-          ls -la /opt/hgcapp/services-hedera/HapiApp2.0/data
-
-          # start platform software
-          exec /init /opt/hgcapp/services-hedera/HapiApp2.0/entrypoint.sh
-      startupProbe:
-        failureThreshold: 10
-        periodSeconds: 15
-        timeoutSeconds: 60
+      startupProbe: # fails after a maximum of (failureThreshold * periodSeconds * timeoutSeconds) seconds
+        failureThreshold: 20 # maximum number of failures
+        periodSeconds: 15 # check every 15 seconds
+        timeoutSeconds: 60 # probe times out after 60 seconds
         exec:
           command:
             - jshell
             - /tmp/volumes/cluster-config/startup-probe
       volumeMounts:
         - name: cluster-config
-          mountPath: /tmp/volumes/cluster-config # mount to a temp directory to copy files with appropriate ownership
+          mountPath: /tmp/volumes/cluster-config # mount to a directory so that we can run custom scripts from it, e.g. startup-probe
+        - name: cluster-config
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/config.txt
+          subPath: "config.txt"
+        - name: cluster-config
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/settings.txt
+          subPath: "settings.txt"
+        - name: cluster-config
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/log4j2.xml
+          subPath: "log4j2.xml"
+        - name: cluster-config
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/config/application.properties
+          subPath: "application.properties"
+        - name: cluster-config
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/config/api-permission.properties
+          subPath: "api-permission.properties"
         - name: grpc-tls-keys
-          mountPath: /tmp/volumes/grpc-tls-keys # mount to a temp directory to copy files with appropriate ownership
-        - name: hgcapp-init # mount the volume with prepared files to copy to appropriate locations
-          mountPath: /tmp/volumes/init
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.key
+          subPath: "hedera-{nodeName}.key"
+        - name: grpc-tls-keys
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.crt
+          subPath: "hedera-{nodeName}.crt"
+        - name: hgcapp-init
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/VERSION
+          subPath: VERSION
         - name: hgcapp-keys
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
         - name: hgcapp-record-streams

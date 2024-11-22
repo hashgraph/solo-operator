@@ -5,4 +5,4 @@ name: "consensus-node"
 softwareVersion:
   repository: "swirldslabs.jfrog.io/consensus-node-docker-dev"
   name: "consensus-node"
-  tag: "0.56.0-develop.x4b7c054"
+  tag: "0.57.0-develop.x6553ab8" # released on 11-22-2024 05:31:48 +1100
