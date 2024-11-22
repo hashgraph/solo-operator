@@ -166,10 +166,10 @@ spec:
           env:
               - name: JAVA_OPTS
                 value: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"
-          startupProbe:
-              failureThreshold: 10
-              periodSeconds: 15
-              timeoutSeconds: 60
+          startupProbe: # fails after a maximum of (failureThreshold * periodSeconds * timeoutSeconds) seconds
+              failureThreshold: 20 # maximum number of failures
+              periodSeconds: 15 # check every 15 seconds
+              timeoutSeconds: 60 # probe times out after 60 seconds
               exec:
                   command:
                       - jshell
