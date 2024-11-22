@@ -307,20 +307,24 @@ public final class Metadata {
      *
      * @param customLabels the labels to which the standard labels should be added.
      * @param name the name.
-     * @param orbit the namespace.
+     * @param orbitName the namespace.
      * @param parentComponent the parent component name.
      * @param componentType the component name.
      * @return the labels with the standard labels added.
      */
     public static Map<String, String> prepareStandardLabels(
-            String name, String orbit, String parentComponent, String componentType, Map<String, String> customLabels) {
+            String name,
+            String orbitName,
+            String parentComponent,
+            String componentType,
+            Map<String, String> customLabels) {
         Map<String, String> standardLabels = new HashMap<>();
         if (customLabels != null) {
             standardLabels.putAll(customLabels); // add first so that standard labels are overwritten if those exist
         }
 
-        // solo-orbit specific labels
-        standardLabels.put(Constants.LABEL_ORBIT, orbit);
+        // solo-orbitName specific labels
+        standardLabels.put(Constants.LABEL_ORBIT, orbitName);
 
         // k8s standard labels
         standardLabels.put(Constants.LABEL_K8S_NAME, name);
@@ -340,5 +344,15 @@ public final class Metadata {
         labels.put(LABEL_ACCOUNT_ID, accountId);
         labels.put(LABEL_NODE_ID, nodeId.toString());
         return labels;
+    }
+
+    public static Map<String, String> prepareConsensusSecretsLabels(
+            String orbitName, Long nodeId, String accountId, String keyType) {
+        final Map<String, String> labels = Metadata.prepareConsensusNodeLabels(nodeId, accountId);
+        labels.put(Constants.LABEL_KEY_TYPE, keyType);
+
+        final String nodeName = prepareNodeName(nodeId);
+        return Metadata.prepareStandardLabels(
+                nodeName, orbitName, Constants.COMPONENT_CONSENSUS_NODE, Constants.COMPONENT_SECRET, labels);
     }
 }

@@ -3,8 +3,6 @@
 package com.hedera.solo.operator.test.orbit;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
-import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_CONSENSUS_CAPSULE_KEY_TYPE;
-import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_CONSENSUS_CAPSULE_NAME_KEY;
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GOSSIP;
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GRPC_TLS;
 import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
@@ -19,10 +17,13 @@ import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
+import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.test.capsule.ConsensusCapsuleTestAbstract;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
 import com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkClientFactory;
 import com.hedera.solo.operator.test.fixtures.snapshot.SnapshotFailureContext;
+import com.hedera.solo.operator.test.utils.NodeInfoGenerator;
+import com.hedera.solo.operator.test.utils.TestRecords;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Secret;
@@ -174,7 +175,7 @@ public class MultipleOrbitTest {
         Orbit orbit = edit(new Orbit())
                 .with(metadata -> metadata.editMetadata().withName(name))
                 .with(spec -> spec.editSpec()
-                        .editOrbitspecConsensus()
+                        .editConsensus()
                         .editGenesis()
                         .editAddressBook()
                         .withLedgerId("298")
@@ -189,6 +190,8 @@ public class MultipleOrbitTest {
         int i = 0;
         for (Orbit orbit : orbits) {
             String namespace = orbit.getMetadata().getName();
+            TestRecords.NodeInfo node = NodeInfoGenerator.nodeInfo((long) i, namespace);
+
             // load public keys
             for (String cmFile : List.of("public-keys.yaml")) {
                 kubernetesClient
@@ -200,17 +203,18 @@ public class MultipleOrbitTest {
                                 .build())
                         .create();
             }
+
             // load private keys
-            String name = "node" + i++;
             for (final String keyType : List.of(KEY_TYPE_GOSSIP, KEY_TYPE_GRPC_TLS)) {
-                final String nodeKeyFile = String.format("secrets/%s-%s-keys.yaml", name, keyType);
+                final String nodeKeyFile = String.format("secrets/%s-%s-keys.yaml", node.name(), keyType);
+                final Map<String, String> labels = Metadata.prepareConsensusSecretsLabels(
+                        orbit.getMetadata().getName(), node.id(), node.accountId(), keyType);
                 kubernetesClient
                         .resource(loadYaml(Secret.class, ConsensusCapsuleTestAbstract.class, nodeKeyFile)
                                 .edit()
                                 .editMetadata()
                                 .withNamespace(namespace)
-                                .addToLabels(LABEL_CONSENSUS_CAPSULE_NAME_KEY, name)
-                                .addToLabels(LABEL_CONSENSUS_CAPSULE_KEY_TYPE, keyType)
+                                .addToLabels(labels)
                                 .endMetadata()
                                 .build())
                         .create();

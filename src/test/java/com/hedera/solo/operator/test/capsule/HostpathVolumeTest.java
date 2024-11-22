@@ -14,6 +14,7 @@ import static org.awaitility.Awaitility.await;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Volumes;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.VolumesBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.volumes.StreamsBuilder;
+import com.hedera.solo.operator.test.utils.TestRecords;
 import io.fabric8.kubernetes.api.model.HostPathVolumeSource;
 import io.fabric8.kubernetes.api.model.HostPathVolumeSourceBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
@@ -37,7 +38,7 @@ public class HostpathVolumeTest extends ConsensusCapsuleTestAbstract {
             VOLUME_RECORD_STREAM_NAME_SUFFIX, "/tmp/%s/volumes/recordStreams",
             VOLUME_EVENTS_STREAM_NAME_SUFFIX, "/tmp/%s/volumes/eventsStreams");
 
-    protected Volume prepareVolumeWithHostpathSource(NodeInfo node, String volSuffix) {
+    protected Volume prepareVolumeWithHostpathSource(TestRecords.NodeInfo node, String volSuffix) {
         final HostPathVolumeSource hs = new HostPathVolumeSourceBuilder()
                 .withPath(hostPaths.get(volSuffix).formatted(node.name()))
                 .withType("DirectoryOrCreate")
@@ -47,7 +48,7 @@ public class HostpathVolumeTest extends ConsensusCapsuleTestAbstract {
     }
 
     @Override
-    protected Volumes prepareCapsulePodVolumes(NodeInfo node) {
+    protected Volumes prepareCapsulePodVolumes(TestRecords.NodeInfo node) {
         // note: do not specify states volume since the directory may exist with old data and causes the test to fail as
         // the node tries to reload old states.
         return new VolumesBuilder()

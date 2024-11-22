@@ -31,7 +31,6 @@ import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podpropertie
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Volumes;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.VolumesBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.ConsensusNode;
-import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
@@ -40,6 +39,8 @@ import com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkClientContex
 import com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkClientFactory;
 import com.hedera.solo.operator.test.fixtures.snapshot.SnapshotFailureContext;
 import com.hedera.solo.operator.test.setup.ClusterSetupManager;
+import com.hedera.solo.operator.test.utils.NodeInfoGenerator;
+import com.hedera.solo.operator.test.utils.TestRecords;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.Secret;
@@ -61,7 +62,6 @@ import org.junit.jupiter.api.Test;
 public abstract class ConsensusCapsuleTestAbstract {
     protected final String namespace = getClass().getSimpleName().toLowerCase();
     protected final String orbit = namespace; // for now orbit and namespace are the same
-    protected final String svcNameSuffix = ".%s.%s".formatted(namespace, "svc.cluster.local");
 
     @Inject
     @SuppressWarnings("CdiInjectionPointsInspection")
@@ -135,25 +135,6 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .until(() -> kubernetesClient.namespaces().withName(namespace).get() == null);
     }
 
-    protected record NodeInfo(Long id, String name, String accountId, int weight, String internal, String external) {}
-
-    private List<NodeInfo> prepareNodes(List<Long> nodeIds) {
-        List<NodeInfo> nodes = new ArrayList<>();
-        int accStart = Constants.HEDERA_ACCOUNT_START;
-        for (Long nodeId : nodeIds) {
-            String nodeName = Constants.NODE_NAME_FORMAT.formatted(nodeId);
-            nodes.add(new NodeInfo(
-                    nodeId,
-                    nodeName,
-                    String.format("0.0.%d", accStart++),
-                    1,
-                    String.format("%s.consensus%s", nodeName, svcNameSuffix),
-                    String.format("%s-svc%s", nodeName, svcNameSuffix)));
-        }
-
-        return nodes;
-    }
-
     private void setupConfigMaps() {
         // create config-maps
         for (String cmFile : List.of("backup-uploader-config.yaml", "public-keys.yaml")) {
@@ -168,7 +149,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         }
     }
 
-    private void setupSecrets(List<NodeInfo> nodes) {
+    private void setupSecrets(List<TestRecords.NodeInfo> nodes) {
         final ArrayList<String> secretFiles =
                 new ArrayList<>(List.of("secrets/uploader-secrets.yaml", "secrets/mirror-secrets.yaml"));
 
@@ -183,21 +164,18 @@ public abstract class ConsensusCapsuleTestAbstract {
                     .create();
         }
 
-        for (final NodeInfo node : nodes) {
+        for (final TestRecords.NodeInfo node : nodes) {
             for (final String keyType : List.of(KEY_TYPE_GOSSIP, KEY_TYPE_GRPC_TLS)) {
-                final String nodeKeyFile = String.format("secrets/%s-%s-keys.yaml", node.name, keyType);
-
-                final Map<String, String> labels = Metadata.prepareConsensusNodeLabels(node.id, node.accountId);
-                labels.put(Constants.LABEL_KEY_TYPE, keyType);
-                final Map<String, String> standardLabels = Metadata.prepareStandardLabels(
-                        node.name, orbit, Constants.COMPONENT_CONSENSUS_NODE, Constants.COMPONENT_SECRET, labels);
+                final String nodeKeyFile = String.format("secrets/%s-%s-keys.yaml", node.name(), keyType);
+                final Map<String, String> labels =
+                        Metadata.prepareConsensusSecretsLabels(orbit, node.id(), node.accountId(), keyType);
 
                 kubernetesClient
                         .resource(loadYaml(Secret.class, getClass(), nodeKeyFile)
                                 .edit()
                                 .editMetadata()
                                 .withNamespace(namespace)
-                                .addToLabels(standardLabels)
+                                .addToLabels(labels)
                                 .endMetadata()
                                 .build())
                         .create();
@@ -205,24 +183,14 @@ public abstract class ConsensusCapsuleTestAbstract {
         }
     }
 
-    protected Volumes prepareCapsulePodVolumes(NodeInfo node) {
+    protected Volumes prepareCapsulePodVolumes(TestRecords.NodeInfo node) {
         return new VolumesBuilder().build(); // default with no volume spec will use empty volumes
-    }
-
-    protected List<Long> prepareNodeIds(int count) {
-        long nodeId = 0L;
-        List<Long> nodeIds = new ArrayList<>();
-        while (count-- > 0) {
-            nodeIds.add(nodeId++);
-        }
-
-        return nodeIds;
     }
 
     @Test
     void testSingleNodeDeployment() throws Exception {
-        final List<Long> nodeIds = prepareNodeIds(1);
-        final List<NodeInfo> nodes = prepareNodes(nodeIds);
+        final List<Long> nodeIds = NodeInfoGenerator.nodeIds(1);
+        final List<TestRecords.NodeInfo> nodes = NodeInfoGenerator.nodes(nodeIds, namespace);
         this.setupConfigMaps();
         this.setupSecrets(nodes);
 
@@ -238,8 +206,8 @@ public abstract class ConsensusCapsuleTestAbstract {
 
     @Test
     void testMultiNodeDeployment() throws Exception {
-        final List<Long> nodeIds = prepareNodeIds(3);
-        final List<NodeInfo> nodes = prepareNodes(nodeIds);
+        final List<Long> nodeIds = NodeInfoGenerator.nodeIds(3);
+        final List<TestRecords.NodeInfo> nodes = NodeInfoGenerator.nodes(nodeIds, namespace);
         this.setupConfigMaps();
         this.setupSecrets(nodes);
 
@@ -287,11 +255,11 @@ public abstract class ConsensusCapsuleTestAbstract {
         return getContainersBuilder().build();
     }
 
-    protected PersistentVolumeClaims prepareCapsulePVCs(NodeInfo node) {
+    protected PersistentVolumeClaims prepareCapsulePVCs(TestRecords.NodeInfo node) {
         return new PersistentVolumeClaimsBuilder().build();
     }
 
-    protected ConsensusCapsuleBuilder prepareConsensusCapsuleBuilder(NodeInfo node) {
+    protected ConsensusCapsuleBuilder prepareConsensusCapsuleBuilder(TestRecords.NodeInfo node) {
         final PodProperties consensusPod = new PodPropertiesBuilder()
                 .withContainers(this.prepareConsensusPodContainers())
                 .withVolumes(this.prepareCapsulePodVolumes(node))
@@ -299,14 +267,14 @@ public abstract class ConsensusCapsuleTestAbstract {
 
         return new ConsensusCapsuleBuilder()
                 .withNewMetadata()
-                .withName(node.name)
+                .withName(node.name())
                 .withNamespace(namespace)
                 .endMetadata()
                 .withNewSpec()
                 .withPodProperties(consensusPod)
                 .withOrbit(orbit)
-                .withAccountId(node.accountId)
-                .withNodeId(node.id)
+                .withAccountId(node.accountId())
+                .withNodeId(node.id())
                 .withPersistentVolumeClaims(prepareCapsulePVCs(node))
                 .endSpec();
     }
@@ -320,10 +288,10 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .getItems();
     }
 
-    List<ConsensusCapsule> createConsensusCapsule(List<NodeInfo> nodes) {
+    List<ConsensusCapsule> createConsensusCapsule(List<TestRecords.NodeInfo> nodes) {
         // prepare a list of consensus-capsule for each node
         List<ConsensusCapsule> list = new ArrayList<>();
-        for (NodeInfo node : nodes) {
+        for (TestRecords.NodeInfo node : nodes) {
             list.add(kubernetesClient
                     .resource(prepareConsensusCapsuleBuilder(node).build())
                     .create());
