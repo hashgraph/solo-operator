@@ -9,7 +9,6 @@ import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GOSS
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GRPC_TLS;
 import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
 import static com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkCheckAddressBook.checkAddressBook;
-import static com.hedera.solo.operator.test.fixtures.snapshot.DefaultSnapshot.snapshot;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -100,7 +99,7 @@ public class MultipleOrbitTest {
 
     @AfterEach
     void tearDown(final SnapshotFailureContext snapshot) {
-        snapshot(operator.getKubernetesClient())
+        snapshot.client(operator.getKubernetesClient())
                 .nonNamespacedResources("operator.solo.hedera.com/v1alpha1")
                 .namespaces(orbits.stream()
                         .map(CustomResource::getMetadata)
@@ -128,6 +127,20 @@ public class MultipleOrbitTest {
     }
 
     void cleanup() {
+        for (Orbit orbit : orbits) {
+            operator.getKubernetesClient()
+                    .resources(ConsensusCapsule.class)
+                    .inNamespace(orbit.getMetadata().getName())
+                    .delete();
+            await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+                assertThat(operator.getKubernetesClient()
+                                .resources(ConsensusCapsule.class)
+                                .inNamespace(orbit.getMetadata().getName())
+                                .list()
+                                .getItems())
+                        .isEmpty();
+            });
+        }
         orbits.forEach(orbit -> operator.getKubernetesClient().resource(orbit).delete());
         await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
             for (Orbit orbit : orbits) {
