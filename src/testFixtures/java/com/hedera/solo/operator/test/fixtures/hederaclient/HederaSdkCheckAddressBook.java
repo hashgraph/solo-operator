@@ -14,11 +14,16 @@ import com.hedera.hashgraph.sdk.NodeAddress;
 import com.hedera.hashgraph.sdk.NodeAddressBook;
 import com.hedera.hashgraph.sdk.PrivateKey;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import java.lang.invoke.MethodHandles;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.awaitility.core.ConditionTimeoutException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class HederaSdkCheckAddressBook {
+    private static final Logger log =
+            LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
     public static List<NodeAddress> addresses(final Client client) throws Exception {
         final ByteString raw =
@@ -33,6 +38,7 @@ public class HederaSdkCheckAddressBook {
             final String nodeName,
             final int expectedAddresses,
             final boolean secure) {
+        log.info("checkAddressBook nodeName: {}", nodeName);
         try (HederaSdkClientFactory.ClientContext context =
                 hederaSdkClientContextFactory.create(sdkClientFactory, nodeName, secure)) {
             await().atMost(15, TimeUnit.SECONDS).untilAsserted(() -> {

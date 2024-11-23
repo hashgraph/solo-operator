@@ -5,6 +5,7 @@ package com.hedera.solo.operator.test.fixtures.hederaclient;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_CONSENSUS_NODE_APP;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_HAPROXY_APP;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.protobuf.ByteString;
 import com.hedera.hashgraph.sdk.Client;
 import com.hedera.hashgraph.sdk.NodeAddressBook;
@@ -16,6 +17,7 @@ import io.fabric8.kubernetes.client.LocalPortForward;
 import io.fabric8.kubernetes.client.dsl.PortForwardable;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.lang.invoke.MethodHandles;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
@@ -32,8 +34,12 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class HederaSdkClientFactory {
+    private static final Logger log =
+            LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
     public static final String DEFAULT_ACCOUNT_ID = "0.0.2";
     public static final String DEFAULT_PRIVATE_KEY =
             "302e020100300506032b65700422042091132178e72057a1d7528025956fe39b0b847f200ab59b2fdd367017f3087137";
@@ -87,6 +93,7 @@ public class HederaSdkClientFactory {
     }
 
     Client getClient(NodeAddressBook nodeAddressBook) throws Exception {
+        log.info("nodeAddressBook: {}", new ObjectMapper().writeValueAsString(nodeAddressBook));
         return Client.forNetwork(Collections.emptyMap()).setNetworkFromAddressBook(nodeAddressBook, true);
     }
 
