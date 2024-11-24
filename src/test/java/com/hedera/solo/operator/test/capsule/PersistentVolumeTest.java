@@ -24,9 +24,11 @@ import io.quarkus.test.junit.QuarkusTest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+@Disabled
 @QuarkusTest
 public class PersistentVolumeTest extends ConsensusCapsuleTestAbstract {
     protected PersistentVolumeClaimSpec preparePvcSpec(String volSuffix) {

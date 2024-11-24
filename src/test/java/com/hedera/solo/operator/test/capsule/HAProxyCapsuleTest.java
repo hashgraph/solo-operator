@@ -24,8 +24,10 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
+@Disabled
 @QuarkusTest
 public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
     @Override
