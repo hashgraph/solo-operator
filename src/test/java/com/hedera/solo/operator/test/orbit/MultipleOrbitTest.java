@@ -200,10 +200,10 @@ public class MultipleOrbitTest {
 
     void setupKeys() {
         KubernetesClient kubernetesClient = operator.getKubernetesClient();
-        int i = 0;
+        long nodeId = 0;
         for (Orbit orbit : orbits) {
             String namespace = orbit.getMetadata().getName();
-            TestRecords.NodeInfo node = NodeInfoGenerator.nodeInfo((long) i, namespace);
+            TestRecords.NodeInfo node = NodeInfoGenerator.nodeInfo(nodeId++, namespace);
 
             // load public keys
             for (String cmFile : List.of("public-keys.yaml")) {
@@ -261,6 +261,8 @@ public class MultipleOrbitTest {
                         .with(metadata -> metadata.editMetadata()
                                 .withName("net-op")
                                 .withNamespace(orbit.getMetadata().getName()))
+                        .with(spec ->
+                                spec.editSpec().withOrbit(orbit.getMetadata().getName()))
                         .build())
                 .create();
     }
