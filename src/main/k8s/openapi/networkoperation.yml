@@ -10,13 +10,20 @@ components:
   schemas:
     NetworkOperationSpec:
       type: object
+      required:
+        - mode
       properties:
         mode:
           description: The mode of the `NetworkOperation`.
           type: string
           enum:
-              - FirstInitialization
+              - FirstInitialization # can we rename to networkInit?
+              - NetworkUpgrade
               - NodeAddition
+              - NodeRemoval
+        payload:
+          description: Payload for the mode of operation.
+          type: object
 
     NetworkOperationStatus:
       type: object
@@ -38,7 +45,7 @@ components:
         observedGeneration:
           description: The generation observed by the operator.
           type: integer
-        consensusCapsules:
+        consensusCapsules: # is this only for network-init?
           description: Names of consensus-capsules to initialize
           type: array
           items:

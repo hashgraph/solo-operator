@@ -19,8 +19,11 @@ components:
               type: string
         haproxy:
           type: object
-          default: {}
+          default: { }
           properties:
+            softwareVersion:
+              type: object
+              x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
             user:
               description: stats user
               type: string

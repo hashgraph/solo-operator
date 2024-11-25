@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: haproxy
-          image: haproxy:2.8.10-alpine3.20
+          image: haproxy:2.8.10-alpine3.20 # FIXME use a property in CR
           resources: {}
           env:
           - name: HAPROXY_TARGET_IP
