@@ -2,11 +2,13 @@
 
 package com.hedera.solo.operator.test.orbit;
 
+import static com.hedera.solo.operator.library.resource.SystemResource.getSystemResourceAsString;
 import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
+import com.hedera.solo.operator.model.v1alpha1.OrbitBuilder;
 import com.hedera.solo.operator.model.v1alpha1.OrbitSpecBuilder;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.reconciler.orbit.resources.ConsensusConfigMap;
@@ -115,7 +117,45 @@ class OrbitTest {
                 assertThat(cm.getMetadata().getNamespace())
                         .isEqualTo(realOrbit.getMetadata().getName());
                 assertThat(cm.getMetadata().getLabels()).containsKeys(Metadata.ORBIT_NAME, Metadata.ORBIT_NAMESPACE);
+                // verify default configuration files match bundled resources
+                assertThat(cm.getData().get("api-permission.properties"))
+                        .isEqualTo(getSystemResourceAsString("import/hedera/mainnet/api-permission.properties"));
+                assertThat(cm.getData().get("application.properties"))
+                        .isEqualTo(getSystemResourceAsString("import/hedera/mainnet/application.properties"));
+                assertThat(cm.getData().get("settings.txt"))
+                        .isEqualTo(getSystemResourceAsString("import/hedera/mainnet/settings.txt"));
             });
+        });
+
+        // verify default configurations can be overridden
+        client.resource(orbit).edit(o -> new OrbitBuilder(o)
+                .editSpec()
+                .editConsensus()
+                .addToApplicationConfiguration("config1", "value1")
+                .addToApplicationConfiguration("config2", "value2")
+                .addToNetworkSettings("setting1", "value1")
+                .addToNetworkSettings("setting2", "value2")
+                .addToPermissionConfiguration("permission1", "value1")
+                .addToPermissionConfiguration("permission2", "value2")
+                .endConsensus()
+                .endSpec()
+                .build());
+
+        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+            final Orbit realOrbit = client.resource(orbit).get();
+            final ConfigMap cm = client.configMaps()
+                    .inNamespace(realOrbit.getMetadata().getName())
+                    .withName(ConsensusConfigMap.NAME)
+                    .get();
+            assertThat(cm).isNotNull();
+            assertThat(cm.getMetadata().getName()).isEqualTo(ConsensusConfigMap.NAME);
+            assertThat(cm.getMetadata().getNamespace())
+                    .isEqualTo(realOrbit.getMetadata().getName());
+            assertThat(cm.getMetadata().getLabels()).containsKeys(Metadata.ORBIT_NAME, Metadata.ORBIT_NAMESPACE);
+            assertThat(cm.getData().get("application.properties")).isEqualTo("config1=value1\nconfig2=value2\n");
+            assertThat(cm.getData().get("settings.txt")).isEqualTo("setting1,value1\nsetting2,value2\n");
+            assertThat(cm.getData().get("api-permission.properties"))
+                    .isEqualTo("permission1=value1\npermission2=value2\n");
         });
     }
 }

@@ -7,6 +7,7 @@ import static com.hedera.solo.operator.library.model.Labels.hasLabel;
 import com.hedera.solo.operator.library.generic.Compare;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleConfigMap;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsulePod;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleRoleBinding;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleService;
@@ -41,6 +42,7 @@ import org.jboss.logging.Logger;
             @Dependent(name = "sa", type = CapsuleServiceAccount.class),
             @Dependent(type = CapsuleRoleBinding.class, dependsOn = "sa"),
             @Dependent(type = CapsuleService.class),
+            @Dependent(type = CapsuleConfigMap.class),
             @Dependent(type = CapsuleLogsPvc.class, reconcilePrecondition = CapsuleLogsPvc.Ready.class),
             @Dependent(type = CapsuleStatsPvc.class, reconcilePrecondition = CapsuleStatsPvc.Ready.class),
             @Dependent(type = CapsuleStatesPvc.class, reconcilePrecondition = CapsuleStatesPvc.Ready.class),

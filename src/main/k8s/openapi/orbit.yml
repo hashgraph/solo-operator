@@ -105,6 +105,13 @@ components:
               type: object
               additionalProperties:
                 type: string
+            permissionConfiguration:
+              description: |
+                The permission configuration for the `Orbit`. This is equivalent to the
+                `data/config/api-permission.properties` file.
+              type: object
+              additionalProperties:
+                type: string
             genesis:
               description: |
                 Configuration properties used during the genesis initialization process. Prior to DAB Phase 2,
