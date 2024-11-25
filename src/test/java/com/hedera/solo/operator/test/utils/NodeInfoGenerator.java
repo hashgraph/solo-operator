@@ -8,7 +8,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class NodeInfoGenerator {
-    private static int curAccountSeq = Constants.HEDERA_ACCOUNT_START;
+    /** Generate account ID for a given node ID */
+    public static String accountId(Long nodeId) {
+        // FIXME: This is incorrect, but currently platform code assumes that account ID = node ID + 3
+        return String.format("0.0.%d", nodeId + Constants.HEDERA_ACCOUNT_START);
+    }
 
     public static String internalK8sServiceName(String nodeName, String namespace) {
         return String.format("%s.consensus.%s.svc.cluster.local", nodeName, namespace);
@@ -18,17 +22,13 @@ public class NodeInfoGenerator {
         return String.format("%s-svc.%s.svc.cluster.local", nodeName, namespace);
     }
 
-    public static String accountId(Long nodeId) {
-        return String.format("0.0.%d", curAccountSeq++);
-    }
-
     public static TestRecords.NodeInfo nodeInfo(Long nodeId, String namespace) {
         final String nodeName = Metadata.prepareNodeName(nodeId);
         return new TestRecords.NodeInfo(
                 nodeId,
                 nodeName,
                 accountId(nodeId),
-                1,
+                1, // staking weight
                 internalK8sServiceName(nodeName, namespace),
                 externalK8sServiceName(nodeName, namespace));
     }
