@@ -17,14 +17,119 @@ components:
           description: The mode of the `NetworkOperation`.
           type: string
           enum:
-              - FirstInitialization # can we rename to networkInit?
-              - NetworkUpgrade
-              - NodeAddition
-              - NodeRemoval
-        payload:
-          description: Payload for the mode of operation.
+            - FirstInitialization # use NetworkGenesis instead
+            - NetworkGenesis
+            - NetworkUpgrade
+            - NodeAddition
+            - NodeRemoval # not need for MVP
+            - ProxyUpgrade # not need for MVP
+        networkUpgrade:
           type: object
-
+          required:
+            - orbit
+            - changesets
+            - marker
+          properties:
+            orbit:
+              type: string
+            changesets:
+              type: object
+              required:
+                - consensusNodeChangeset
+              properties:
+                consensusNodeChangeset:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.ConsensusNodeChangeset
+                recordStreamUploaderChangeset:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploaderChangeset
+                recordStreamSidecarUploaderChangeset:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploaderChangeset
+                eventsStreamUploaderChangeset:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploaderChangeset
+                backupUploaderChangeset:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploaderChangeset
+            workflowStep: # can we find a better name for it?
+              description: |
+                Workflow step is handled as below:
+                # ExecuteImmediate (T = 0) # the build.zip file will contain manifest and other configuration files so that the "solo | solo-provisioner-bridge | ?" can use it to create the CR
+                  1. validate image (ensure we can pull the image from specified registries and validate the layer hashes, we may use HEAD request instead of downloading the image) # most likely the registries will be public, but solo-provisioner may inject k8s secrets for permissioned registries.
+                    1a. store the resolved manifest hashes (?), registry details as well as their validation status in the status field (e.g. probably need a new object e.g. SoftwareVersionStatus datamodel with status)
+                    1b. store the selected registry in the status field
+                  2. potentially deploy firewall rule changes (TBD)
+                # FreezeScheduled (T + 2 days)
+                  3. check that selected registry still has image and hashes match (e.g. use HEAD request)
+                    3a. iff registry doesn't have a valid image anymore, lookup other registries in sequence softwareVersionSource and pick the first valid one
+                      - update the status with this valid registry information.
+                      - update the old one with failed status
+                    3b. if no valid registry is found, emit error and abort. We mark the NI as failed.
+                # FreezeAbort
+                  4. rollback firewall rule changes (potentially)
+                # NowFrozen ( T + 3 days)
+                  5. check that selected registry still has image and hashes match (see 3)
+                  6. rollout config file bundle (patch the orbit CR)
+                      6a. orbit reconciler will create config-map: settings.txt, application.properties, api-permission.properties...
+                      6b. network-operation reconciler create config.txt
+                  7. single atomic patch to consensus-capsule CR
+                    7a. apply consensus-node changeset
+                    7b. apply streamUploader changesets (e.g recordStreamUploader, backUploader etc.)
+                  8. Ensure everything is up or emit error (NI already does this check)
+              type: string
+              enum:
+                - ExecuteImmediate
+                - FreezeScheduled
+                - FreezeAbort
+                - NowFrozen
+            configurationFiles:
+              type: object
+              properties:
+                networkSettings:
+                  description: |
+                    The network settings for the `Orbit`. This is equivalent to the Platform SDK `settings.txt` file.
+                  type: object
+                  additionalProperties:
+                    type: string
+                applicationProperties:
+                  description: |
+                    The application configuration for the `Orbit`. This is equivalent to the
+                    `data/config/application.properties` file.
+                  type: object
+                  additionalProperties:
+                    type: string
+                apiPermissions:
+                  description: |
+                    The application configuration for the `Orbit`. This is equivalent to the
+                    `data/config/api-permissions.properties` file.
+                  type: object
+                  additionalProperties:
+                    type: string
+                genesisProperties:
+                  description: |
+                    The application configuration for the `Orbit`. This is equivalent to the
+                    `data/config/genesis.properties` file.
+                  type: object
+                  additionalProperties:
+                    type: string
+                logging: # if it is specified, we'll apply to all the nodes if node specific logging is not specified
+                  description: |
+                    The application configuration for the `Orbit`. This is equivalent to the
+                    `log4j2.xml` file.
+                  type: string
+        proxyUpgrade:
+          type: object
+          properties:
+            changesets:
+              type: object
+              properties:
+                haproxyChangeset:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.HaproxyChangeset
+                envoyproxyChangeset:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.EnvoyproxyChangeset # need to define
     NetworkOperationStatus:
       type: object
       properties:
