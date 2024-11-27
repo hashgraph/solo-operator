@@ -26,7 +26,8 @@ spec:
   serviceAccountName: "{nodeName}-sa"
   initContainers:
     - name: "init-consensus-node"
-      image: "ubuntu:mantic-20240216" # using same image that is used for consensus-node deterministic image
+      # must use the same image as the consensus-node as we need to copy VERSION file from it
+      image: "{cn.softwareVersion.repository}/{cn.softwareVersion.name}:{cn.softwareVersion.tag}"
       securityContext: # run as root to be able to set owner and create subdirectories in the mounted volumes (e.g. hostpath)
         runAsUser: 0
         runAsGroup: 0
@@ -90,11 +91,9 @@ spec:
               setOwnerPermissions "/opt/hgcapp/eventsStreams/events_{accountId}" || return $?
             fi
 
-            # create empty VERSION file for backup-uploader
-            if [[ ! -f "/tmp/volumes/init/VERSION" ]]; then
-              touch "/tmp/volumes/init/VERSION" || return $? # FIXME change to copy when VERSION file is baked in the image
-              setOwnerPermissions "/tmp/volumes/init/VERSION" || return $?
-            fi
+            # copy VERSION file for backup-uploader
+            cp "/opt/hgcapp/services-hedera/HapiApp2.0/VERSION" "/tmp/volumes/init/"  || return $?
+            setOwnerPermissions "/tmp/volumes/init/VERSION" || return $?
 
             # set owners to the directories (if not already set)
             setOwnerPermissions "/opt/hgcapp/services-hedera/HapiApp2.0/output" || return $?
@@ -193,17 +192,6 @@ spec:
           runInit() \{
             id # check which user is running the script
 
-            # create hedera user and group
-            if ! getent passwd hedera > /dev/null; then
-              groupadd --gid 2000 hedera && \
-                useradd --no-user-group --create-home --uid 2000 --gid 2000 --shell /bin/bash hedera
-              echo "User hedera created successfully!"
-            else
-              echo "User hedera already exists!"
-            fi
-
-            id # check again which user is running the script
-
             # setup directories before consensus-node and other sidecar containers start
             setupDirs || return $?
 
@@ -255,9 +243,6 @@ spec:
         - name: grpc-tls-keys
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.crt
           subPath: "hedera-{nodeName}.crt"
-        - name: hgcapp-init
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/VERSION
-          subPath: VERSION
         - name: hgcapp-keys
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
         - name: hgcapp-record-streams
