@@ -3,12 +3,14 @@
 package com.hedera.solo.operator.reconciler.capsule.haproxy.resources;
 
 import static com.hedera.solo.operator.library.model.Labels.hasLabel;
-import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_CONSENSUS_CAPSULE_NAME_KEY;
-import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_SELECTOR_CONSENSUS_NODE;
+import static com.hedera.solo.operator.library.model.Labels.hasLabels;
 import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleReconciler.HAS_LABEL_SELECTOR_CONSENSUS_NODE;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_CONSENSUS_NODE_APP;
 
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsule;
 import com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleReconciler;
+import com.hedera.solo.operator.reconciler.common.Constants;
+import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.Service;
 import io.javaoperatorsdk.operator.api.config.informer.InformerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -20,6 +22,7 @@ import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.javaoperatorsdk.operator.processing.event.source.PrimaryToSecondaryMapper;
 import io.javaoperatorsdk.operator.processing.event.source.SecondaryToPrimaryMapper;
 import java.util.Collections;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -35,7 +38,7 @@ public class HAProxyConsensusService extends KubernetesDependentResource<Service
         super(Service.class);
         this.reconciler = reconciler;
         configureWith(new KubernetesDependentResourceConfigBuilder<Service>()
-                .withLabelSelector(LABEL_SELECTOR_CONSENSUS_NODE)
+                .withLabelSelector(LABEL_SELECTOR_CONSENSUS_NODE_APP)
                 .withResourceDiscriminator(this)
                 .build());
     }
@@ -61,8 +64,8 @@ public class HAProxyConsensusService extends KubernetesDependentResource<Service
                 .list(resource.getMetadata().getNamespace())
                 .filter(p -> hasLabel(
                         resource,
-                        LABEL_CONSENSUS_CAPSULE_NAME_KEY,
-                        p.getSpec().getConsensus().getNode()))
+                        Constants.LABEL_NODE_NAME,
+                        Metadata.prepareNodeName(p.getSpec().getNodeId())))
                 .findAny()
                 .map(ResourceID::fromResource)
                 .map(Set::of)
@@ -71,12 +74,12 @@ public class HAProxyConsensusService extends KubernetesDependentResource<Service
 
     @Override
     public Set<ResourceID> toSecondaryResourceIDs(final HAProxyCapsule primary) {
+        final String nodeName = Metadata.prepareNodeName(primary.getSpec().getNodeId());
+        final String namespace = primary.getMetadata().getNamespace();
         return eventSource()
-                .map(es -> es.list(primary.getMetadata().getNamespace()))
+                .map(es -> es.list(namespace))
                 .orElse(Stream.empty())
-                .filter(hasLabel(
-                        LABEL_CONSENSUS_CAPSULE_NAME_KEY,
-                        primary.getSpec().getConsensus().getNode()))
+                .filter(hasLabels(Map.of(Constants.LABEL_NODE_NAME, nodeName)))
                 .findAny()
                 .map(ResourceID::fromResource)
                 .map(Set::of)

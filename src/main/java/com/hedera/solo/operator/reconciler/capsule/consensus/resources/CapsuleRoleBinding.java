@@ -27,6 +27,8 @@ public class CapsuleRoleBinding extends CRUDKubernetesDependentResource<RoleBind
     protected RoleBinding desired(final ConsensusCapsule primary, final Context<ConsensusCapsule> context) {
         String rbName = primary.getMetadata().getName();
         final String namespace = primary.getMetadata().getNamespace();
+        final String orbit = primary.getSpec().getOrbit();
+
         rbName =
                 rbName.length() > (63 - NAME_SUFFIX.length()) ? rbName.substring(0, 63 - NAME_SUFFIX.length()) : rbName;
 
@@ -42,8 +44,8 @@ public class CapsuleRoleBinding extends CRUDKubernetesDependentResource<RoleBind
         RoleBindingBuilder rbb = Metadata.applyStandardLabels(
                         rb.edit().editMetadata(),
                         rbName,
-                        namespace,
-                        Constants.COMPONENT_CONSENSUS,
+                        orbit,
+                        Constants.COMPONENT_CONSENSUS_NODE,
                         Constants.COMPONENT_ROLE_BINDING,
                         null)
                 .withName(roleName)

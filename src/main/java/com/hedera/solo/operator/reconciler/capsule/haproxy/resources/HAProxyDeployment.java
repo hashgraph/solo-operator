@@ -2,7 +2,6 @@
 
 package com.hedera.solo.operator.reconciler.capsule.haproxy.resources;
 
-import static com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleConstants.LABEL_SELECTOR_HAPROXY;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
@@ -21,6 +20,7 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernete
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResourceConfigBuilder;
 import io.javaoperatorsdk.operator.processing.dependent.workflow.Condition;
+import java.util.HashMap;
 import java.util.Map;
 
 @KubernetesDependent
@@ -34,8 +34,18 @@ public class HAProxyDeployment extends CRUDKubernetesDependentResource<Deploymen
         this.reconciler = reconciler;
         configureWith(new KubernetesDependentResourceConfigBuilder<Deployment>()
                 .withUseSSA(Boolean.FALSE)
-                .withLabelSelector(LABEL_SELECTOR_HAPROXY)
+                .withLabelSelector(Constants.LABEL_SELECTOR_HAPROXY_APP)
                 .build());
+    }
+
+    static Map<String, String> prepareHAProxyLabels(HAProxyCapsule primary) {
+        final Map<String, String> labels = new HashMap<>();
+        labels.put(Constants.LABEL_APP, Constants.COMPONENT_HAPROXY);
+        labels.put(Constants.LABEL_NODE_ID, primary.getSpec().getNodeId().toString());
+        labels.put(
+                Constants.LABEL_NODE_NAME,
+                Metadata.prepareNodeName(primary.getSpec().getNodeId()));
+        return labels;
     }
 
     @Override
@@ -43,10 +53,11 @@ public class HAProxyDeployment extends CRUDKubernetesDependentResource<Deploymen
         final ObjectMeta metadata = primary.getMetadata();
         final String validName = validName(metadata.getName(), NAME_SUFFIX);
         final String namespace = metadata.getNamespace();
+        final String orbit = primary.getSpec().getOrbit();
 
-        final Map<String, String> labels = Map.of(
-                "consensus-capsule", primary.getSpec().getConsensus().getNode(),
-                "haproxy", metadata.getName());
+        final Map<String, String> labels = prepareHAProxyLabels(primary);
+        labels.put(Constants.COMPONENT_HAPROXY, metadata.getName()); // need it for HAProxyPod to find the primary
+
         final Deployment deployment = loadYaml(Deployment.class, getClass(), TEMPLATE);
         return Metadata.applyStandardLabels(
                         deployment
@@ -62,7 +73,7 @@ public class HAProxyDeployment extends CRUDKubernetesDependentResource<Deploymen
                                 .editTemplate()
                                 .editMetadata(),
                         validName,
-                        namespace,
+                        orbit,
                         Constants.COMPONENT_HAPROXY,
                         Constants.COMPONENT_DEPLOYMENT,
                         labels)

@@ -2,6 +2,9 @@
 
 package com.hedera.solo.operator.reconciler.common;
 
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_ACCOUNT_ID;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_NODE_ID;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_NODE_NAME;
 import static com.hedera.solo.operator.reconciler.common.Constants.OPERATOR_PREFIX;
 
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
@@ -273,7 +276,7 @@ public final class Metadata {
      *
      * @param dst the metadata to which the labels should be applied.
      * @param name the instance name.
-     * @param namespace the namespace.
+     * @param orbit the namespace.
      * @param parentComponent the parent component name.
      * @param componentType the component name.
      * @param customLabels the labels to apply.
@@ -284,18 +287,18 @@ public final class Metadata {
     public static <A extends ObjectMetaFluent<A>> A applyStandardLabels(
             @NotNull A dst,
             @NotNull String name,
-            @NotNull String namespace,
+            @NotNull String orbit,
             @NotNull String parentComponent,
             @NotNull String componentType,
             @Nullable Map<String, String> customLabels) {
         Objects.requireNonNull(dst, "dst must not be null");
         Objects.requireNonNull(name, "instanceName must not be null");
-        Objects.requireNonNull(namespace, "namespace must not be null");
+        Objects.requireNonNull(orbit, "orbit must not be null");
         Objects.requireNonNull(parentComponent, "parentComponent must not be null");
         Objects.requireNonNull(componentType, "componentType must not be null");
 
         Map<String, String> standardLabels =
-                prepareStandardLabels(name, namespace, parentComponent, componentType, customLabels);
+                prepareStandardLabels(name, orbit, parentComponent, componentType, customLabels);
         return setLabels(dst, standardLabels, ObjectMetaFluent::addToLabels, DEFAULT_FILTER);
     }
 
@@ -304,14 +307,14 @@ public final class Metadata {
      *
      * @param customLabels the labels to which the standard labels should be added.
      * @param name the name.
-     * @param namespace the namespace.
+     * @param orbitName the namespace.
      * @param parentComponent the parent component name.
      * @param componentType the component name.
      * @return the labels with the standard labels added.
      */
-    private static Map<String, String> prepareStandardLabels(
+    public static Map<String, String> prepareStandardLabels(
             String name,
-            String namespace,
+            String orbitName,
             String parentComponent,
             String componentType,
             Map<String, String> customLabels) {
@@ -320,15 +323,36 @@ public final class Metadata {
             standardLabels.putAll(customLabels); // add first so that standard labels are overwritten if those exist
         }
 
-        final String component = "%s-%s".formatted(parentComponent, componentType);
-        standardLabels.put(Constants.LABEL_NAMESPACE, namespace);
+        // solo-orbitName specific labels
+        standardLabels.put(Constants.LABEL_ORBIT, orbitName);
+
+        // k8s standard labels
         standardLabels.put(Constants.LABEL_K8S_NAME, name);
         standardLabels.put(Constants.LABEL_K8S_INSTANCE, name); // FIXME is this correct?
         standardLabels.put(Constants.LABEL_K8S_VERSION, Constants.SOLO_OPERATOR_VERSION);
-        standardLabels.put(Constants.LABEL_K8S_COMPONENT, component);
+        standardLabels.put(Constants.LABEL_K8S_COMPONENT, componentType);
         standardLabels.put(Constants.LABEL_K8S_PART_OF, parentComponent);
         standardLabels.put(Constants.LABEL_K8S_MANAGED_BY, Constants.SOLO_OPERATOR);
 
         return standardLabels;
+    }
+
+    public static Map<String, String> prepareConsensusNodeLabels(Long nodeId, String accountId) {
+        final Map<String, String> labels = new HashMap<>(); // return a mutable hashmap
+        labels.put(Constants.LABEL_APP, Constants.COMPONENT_CONSENSUS_NODE);
+        labels.put(LABEL_NODE_NAME, prepareNodeName(nodeId));
+        labels.put(LABEL_ACCOUNT_ID, accountId);
+        labels.put(LABEL_NODE_ID, nodeId.toString());
+        return labels;
+    }
+
+    public static Map<String, String> prepareConsensusSecretsLabels(
+            String orbitName, Long nodeId, String accountId, String keyType) {
+        final Map<String, String> labels = Metadata.prepareConsensusNodeLabels(nodeId, accountId);
+        labels.put(Constants.LABEL_KEY_TYPE, keyType);
+
+        final String nodeName = prepareNodeName(nodeId);
+        return Metadata.prepareStandardLabels(
+                nodeName, orbitName, Constants.COMPONENT_CONSENSUS_NODE, Constants.COMPONENT_SECRET, labels);
     }
 }

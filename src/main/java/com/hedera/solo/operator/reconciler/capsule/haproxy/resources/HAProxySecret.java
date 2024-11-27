@@ -2,7 +2,6 @@
 
 package com.hedera.solo.operator.reconciler.capsule.haproxy.resources;
 
-import static com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleConstants.LABEL_SELECTOR_HAPROXY;
 import static com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleReconciler.HAS_LABEL_SELECTOR_HAPROXY;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
@@ -36,7 +35,7 @@ public class HAProxySecret extends CRUDKubernetesDependentResource<Secret, HAPro
         super(Secret.class);
         this.reconciler = reconciler;
         configureWith(new KubernetesDependentResourceConfigBuilder<Secret>()
-                .withLabelSelector(LABEL_SELECTOR_HAPROXY)
+                .withLabelSelector(Constants.LABEL_SELECTOR_HAPROXY_APP)
                 .withResourceDiscriminator(this)
                 .build());
     }
@@ -44,9 +43,10 @@ public class HAProxySecret extends CRUDKubernetesDependentResource<Secret, HAPro
     @Override
     protected Secret desired(final HAProxyCapsule primary, final Context<HAProxyCapsule> context) {
         final ObjectMeta metadata = primary.getMetadata();
-        final String nodeName = metadata.getName();
+        final String nodeName = Metadata.prepareNodeName(primary.getSpec().getNodeId());
         final String validName = validName(metadata.getName(), NAME_SUFFIX);
         final String namespace = metadata.getNamespace();
+        final String orbit = primary.getSpec().getOrbit();
         final Base64.Decoder decoder = Base64.getDecoder();
         final Base64.Encoder encoder = Base64.getEncoder();
         BiFunction<Secret, String, String> get =
@@ -60,14 +60,15 @@ public class HAProxySecret extends CRUDKubernetesDependentResource<Secret, HAPro
                 .map(s -> encoder.encodeToString(s.getBytes(StandardCharsets.UTF_8)))
                 .orElseThrow();
 
+        final Map<String, String> labels = HAProxyDeployment.prepareHAProxyLabels(primary);
         final Secret secret = loadYaml(Secret.class, getClass(), TEMPLATE);
         return Metadata.applyStandardLabels(
                         secret.edit().editMetadata(),
                         validName,
-                        namespace,
+                        orbit,
                         Constants.COMPONENT_HAPROXY,
                         Constants.COMPONENT_SECRET,
-                        Map.of(Constants.LABEL_NODE_NAME, nodeName))
+                        labels)
                 .withName(validName)
                 .withNamespace(namespace)
                 .endMetadata()

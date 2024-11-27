@@ -2,7 +2,6 @@
 
 package com.hedera.solo.operator.reconciler.capsule.haproxy.resources;
 
-import static com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleConstants.LABEL_SELECTOR_HAPROXY;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
@@ -15,6 +14,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResourceConfigBuilder;
+import java.util.Map;
 
 @KubernetesDependent
 public class HAProxyConfigMap extends CRUDKubernetesDependentResource<ConfigMap, HAProxyCapsule> {
@@ -24,7 +24,7 @@ public class HAProxyConfigMap extends CRUDKubernetesDependentResource<ConfigMap,
     public HAProxyConfigMap() {
         super(ConfigMap.class);
         configureWith(new KubernetesDependentResourceConfigBuilder<ConfigMap>()
-                .withLabelSelector(LABEL_SELECTOR_HAPROXY)
+                .withLabelSelector(Constants.LABEL_SELECTOR_HAPROXY_APP)
                 .build());
     }
 
@@ -33,15 +33,17 @@ public class HAProxyConfigMap extends CRUDKubernetesDependentResource<ConfigMap,
         final ObjectMeta metadata = primary.getMetadata();
         final String validName = validName(metadata.getName(), NAME_SUFFIX);
         final String namespace = metadata.getNamespace();
+        final String orbit = primary.getSpec().getOrbit();
         final ConfigMap cm = loadYaml(ConfigMap.class, getClass(), TEMPLATE);
+        final Map<String, String> labels = HAProxyDeployment.prepareHAProxyLabels(primary);
 
         return Metadata.applyStandardLabels(
                         cm.edit().editMetadata(),
                         validName,
-                        namespace,
+                        orbit,
                         Constants.COMPONENT_HAPROXY,
                         Constants.COMPONENT_CONFIG_MAP,
-                        null)
+                        labels)
                 .withName(validName)
                 .withNamespace(namespace)
                 .endMetadata()

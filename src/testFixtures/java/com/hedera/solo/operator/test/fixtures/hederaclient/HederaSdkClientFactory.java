@@ -2,15 +2,15 @@
 
 package com.hedera.solo.operator.test.fixtures.hederaclient;
 
-import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_CONSENSUS_CAPSULE_NAME_KEY;
-import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_SELECTOR_CONSENSUS_NODE;
-import static com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleConstants.LABEL_SELECTOR_HAPROXY;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_CONSENSUS_NODE_APP;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_HAPROXY_APP;
 
 import com.google.protobuf.ByteString;
 import com.hedera.hashgraph.sdk.Client;
 import com.hedera.hashgraph.sdk.NodeAddressBook;
 import com.hedera.hashgraph.sdk.proto.AccountID;
 import com.hedera.hashgraph.sdk.proto.ServiceEndpoint;
+import com.hedera.solo.operator.reconciler.common.Constants;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.LocalPortForward;
 import io.fabric8.kubernetes.client.dsl.PortForwardable;
@@ -27,6 +27,7 @@ import java.util.Collections;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -122,16 +123,16 @@ public class HederaSdkClientFactory {
                 .getItems()
                 .stream()
                 .collect(Collectors.toMap(
-                        service -> service.getSpec().getSelector().get(LABEL_CONSENSUS_CAPSULE_NAME_KEY),
+                        service -> service.getSpec().getSelector().get(Constants.LABEL_NODE_NAME),
                         service -> service.getMetadata().getName()));
     }
 
     Map<String, String> direct() {
-        return services(LABEL_SELECTOR_CONSENSUS_NODE);
+        return services(LABEL_SELECTOR_CONSENSUS_NODE_APP);
     }
 
     Map<String, String> haproxy() {
-        return services(LABEL_SELECTOR_HAPROXY);
+        return services(LABEL_SELECTOR_HAPROXY_APP);
     }
 
     String configText() {
@@ -147,17 +148,17 @@ public class HederaSdkClientFactory {
     Map<String, byte[]> certificates() {
         Base64.Decoder decoder = Base64.getDecoder();
         return kubernetesClient.secrets().inNamespace(namespace).list().getItems().stream()
-                .filter(secret -> secret.getMetadata().getLabels().containsKey("consensus-capsule"))
+                .filter(secret -> secret.getMetadata().getLabels().containsKey(Constants.LABEL_NODE_NAME))
                 .filter(secret -> secret.getData()
                         .containsKey(String.format(
                                 "hedera-%s.crt",
-                                secret.getMetadata().getLabels().get("consensus-capsule"))))
+                                secret.getMetadata().getLabels().get(Constants.LABEL_NODE_NAME))))
                 .collect(Collectors.toMap(
-                        secret -> secret.getMetadata().getLabels().get("consensus-capsule"),
+                        secret -> secret.getMetadata().getLabels().get(Constants.LABEL_NODE_NAME),
                         secret -> decoder.decode(secret.getData()
                                 .get(String.format(
                                         "hedera-%s.crt",
-                                        secret.getMetadata().getLabels().get("consensus-capsule"))))));
+                                        secret.getMetadata().getLabels().get(Constants.LABEL_NODE_NAME))))));
     }
 
     Map<String, String> pubKeys() {
@@ -181,6 +182,12 @@ public class HederaSdkClientFactory {
             final String pubKey,
             final byte[] cert) {
         try {
+            Objects.requireNonNull(nodeId);
+            Objects.requireNonNull(accountId);
+            Objects.requireNonNull(portForwards);
+            Objects.requireNonNull(pubKey);
+            Objects.requireNonNull(cert);
+
             String[] account = accountId.split("\\.");
             String certHash = HexFormat.of()
                     .formatHex(MessageDigest.getInstance("SHA-384").digest(cert));

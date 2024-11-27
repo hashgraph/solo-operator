@@ -2,7 +2,6 @@
 
 package com.hedera.solo.operator.reconciler.capsule.consensus.resources;
 
-import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleConstants.LABEL_CONSENSUS_CAPSULE_NAME_KEY;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
@@ -32,21 +31,23 @@ public class CapsuleService extends CRUDKubernetesDependentResource<Service, Con
         final ObjectMeta metadata = primary.getMetadata();
         final String validName = validName(metadata.getName(), NAME_SUFFIX);
         final String namespace = metadata.getNamespace();
-        final Map<String, String> labels = Map.of(LABEL_CONSENSUS_CAPSULE_NAME_KEY, metadata.getName());
+        final String orbit = primary.getSpec().getOrbit();
+        final String nodeName = Metadata.prepareNodeName(primary.getSpec().getNodeId());
+        final Map<String, String> labels = CapsulePod.prepareLabels(primary);
         final Service service = loadYaml(Service.class, getClass(), TEMPLATE);
 
         return Metadata.applyStandardLabels(
                         service.edit().editMetadata(),
                         validName,
-                        namespace,
-                        Constants.COMPONENT_CONSENSUS,
+                        orbit,
+                        Constants.COMPONENT_CONSENSUS_NODE,
                         Constants.COMPONENT_SERVICE,
                         labels)
                 .withName(validName)
-                .withNamespace(metadata.getNamespace())
+                .withNamespace(namespace)
                 .endMetadata()
                 .editSpec()
-                .addToSelector(LABEL_CONSENSUS_CAPSULE_NAME_KEY, metadata.getName())
+                .addToSelector(Constants.LABEL_NODE_NAME, nodeName)
                 .endSpec()
                 .build();
     }

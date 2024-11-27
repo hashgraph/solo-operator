@@ -3,8 +3,6 @@
 package com.hedera.solo.operator.reconciler.capsule.haproxy;
 
 import static com.hedera.solo.operator.library.model.Labels.hasLabel;
-import static com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleConstants.LABEL_SELECTOR_HAPROXY_KEY;
-import static com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleConstants.LABEL_SELECTOR_HAPROXY_VALUE;
 
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsule;
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsuleStatus;
@@ -15,6 +13,7 @@ import com.hedera.solo.operator.reconciler.capsule.haproxy.resources.HAProxyDepl
 import com.hedera.solo.operator.reconciler.capsule.haproxy.resources.HAProxyPod;
 import com.hedera.solo.operator.reconciler.capsule.haproxy.resources.HAProxySecret;
 import com.hedera.solo.operator.reconciler.capsule.haproxy.resources.HAProxyService;
+import com.hedera.solo.operator.reconciler.common.Constants;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -34,7 +33,7 @@ import org.jboss.logging.Logger;
 @ControllerConfiguration
 public class HAProxyCapsuleReconciler implements Reconciler<HAProxyCapsule>, EventSourceInitializer<HAProxyCapsule> {
     public static final Predicate<HasMetadata> HAS_LABEL_SELECTOR_HAPROXY =
-            hasLabel(LABEL_SELECTOR_HAPROXY_KEY, LABEL_SELECTOR_HAPROXY_VALUE);
+            hasLabel(Constants.LABEL_APP, Constants.COMPONENT_HAPROXY);
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
     private EventSourceContext<HAProxyCapsule> eventSourceContext;
     public final HAProxyConfigMap haProxyConfigMap = new HAProxyConfigMap();

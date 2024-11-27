@@ -2,9 +2,8 @@
 
 package com.hedera.solo.operator.reconciler.capsule.haproxy.resources;
 
-import static com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleConstants.LABEL_SELECTOR_HAPROXY;
-
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsule;
+import com.hedera.solo.operator.reconciler.common.Constants;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
@@ -25,14 +24,14 @@ public class HAProxyPod extends KubernetesDependentResource<Pod, HAProxyCapsule>
     public HAProxyPod() {
         super(Pod.class);
         configureWith(new KubernetesDependentResourceConfigBuilder<Pod>()
-                .withLabelSelector(LABEL_SELECTOR_HAPROXY)
+                .withLabelSelector(Constants.LABEL_SELECTOR_HAPROXY_APP)
                 .withResourceDiscriminator(this)
                 .build());
     }
 
     @Override
     public Set<ResourceID> toPrimaryResourceIDs(Pod resource) {
-        String name = resource.getMetadata().getLabels().get("haproxy");
+        String name = resource.getMetadata().getLabels().get(Constants.COMPONENT_HAPROXY);
         return null == name
                 ? Collections.emptySet()
                 : Set.of(new ResourceID(name, resource.getMetadata().getNamespace()));
