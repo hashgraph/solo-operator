@@ -137,7 +137,8 @@ public abstract class ConsensusCapsuleTestAbstract {
 
     private void setupConfigMaps() {
         // create config-maps
-        for (String cmFile : List.of("backup-uploader-config.yaml", "public-keys.yaml")) {
+        for (String cmFile :
+                List.of("backup-uploader-config.yaml", "public-keys.yaml", "configmaps/otel-collector-config.yaml")) {
             kubernetesClient
                     .resource(loadYaml(ConfigMap.class, getClass(), cmFile)
                             .edit()

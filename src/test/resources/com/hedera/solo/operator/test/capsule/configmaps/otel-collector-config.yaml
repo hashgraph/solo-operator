@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: Apache-2.0
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+data:
+  config.yaml: |
+    receivers:
+      # Collect node metrics
+      prometheus:
+        config:
+          scrape_configs:
+            - job_name: 'node-metrics-scraper' # network-node metrics
+              scrape_interval: "5s"
+              static_configs:
+                - targets: [ 0.0.0.0:9999 ] # hedera node metrics are exposed at port 9999
+
+    processors:
+      batch:
+      # Add standard label sets to both logs and metrics.
+      attributes/addLabels:
+        actions:
+          - key: orbit # synonymous with "environment"
+            action: insert
+            value: "ORBIT_NAME" # set by init-container
+          - key: node_id
+            action: insert
+            value: "NODE_ID" # set by init-container
+
+    exporters:
+      prometheus:
+        endpoint: "0.0.0.0:9090" # export to 9090 which is exposed by consensus-node service
+
+    extensions:
+      health_check:
+
+    service:
+      extensions: [ health_check ]
+      pipelines:
+        metrics:
+          receivers:
+            - prometheus
+          processors:
+            - attributes/addLabels
+            - batch
+          exporters:
+            - prometheus

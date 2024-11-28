@@ -13,6 +13,8 @@ public class TemplateLoader {
             "/com/hedera/solo/operator/test/capsule/containers/backup-uploader.yaml";
     public static final String TEMPLATE_RECORD_STREAM_SIDECAR_UPLOADER =
             "/com/hedera/solo/operator/test/capsule/containers/record-stream-sidecar-files-uploader.yaml";
+    public static final String TEMPLATE_OPEN_TELEMETRY_COLLECTOR =
+            "/com/hedera/solo/operator/test/capsule/containers/open-telemetry-collector.yaml";
 
     public static <T> T load(Class<T> clazz, String templateName) {
         return ReconcilerUtils.loadYaml(clazz, TemplateLoader.class, templateName);

@@ -183,39 +183,19 @@ components:
     OpenTelemetryCollector:
       type: object
       properties:
+        name:
+          type: string
         softwareVersion:
           type: object
           x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
         resources:
           type: object
           x-java-type: io.fabric8.kubernetes.api.model.ResourceRequirements
-        receivers:
-          type: object
-          default: { }
-          properties:
-            prometheus:
-              type: object
-              properties:
-                scrapeTargets:
-                  description: |
-                    list of prometheus scrape targets
-                    target format: <IP or FQDN>:<Port>
-                    e.g. [ 0.0.0.0:9999 ]
-                  type: array
-                  items:
-                    type: string
-                scrapeInterval:
-                  type: string #5s
-        exporters:
-          type: object
-          default: { }
-          properties:
-            enabled:
-              type: boolean
-            endpoint:
-              type: string
-            tls:
-              type: object
-              properties:
-                insecure:
-                  type: boolean
+        enabled:
+          type: boolean
+          default: false
+        additionalVolumeMounts:
+          type: array
+          items:
+            type: object
+            x-java-type: io.fabric8.kubernetes.api.model.VolumeMount

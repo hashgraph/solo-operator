@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+
+---
+enabled: true
+name: "open-telemetry-collector"
+softwareVersion:
+  repository: "docker.io/otel"
+  name: "opentelemetry-collector-contrib"
+  tag: "0.72.0"

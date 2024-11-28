@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 ---
+# {@String orbitName}
 # {@String namespace}
 # {@Long nodeId}
 # {@String nodeName}
@@ -13,6 +14,7 @@
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader rssu}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader esu}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader bu}
+# {@com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector oc}
 kind: Pod
 apiVersion: v1
 metadata:
@@ -54,6 +56,8 @@ spec:
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade
         - name: hgcapp-keys
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
+        - name: otel-collector-config
+          mountPath: /tmp/volumes/otel-collector-config
       command:
         - "/bin/bash"
         - "-c"
@@ -189,6 +193,13 @@ spec:
             return 0
           \}
 
+          function processOpenTelemetryConfig() \{
+            cp /tmp/volumes/otel-collector-config/config.yaml /tmp/volumes/init/otel-config.yaml || return $?
+            sed -i "s/ORBIT_NAME/{orbitName}/g" /tmp/volumes/init/otel-config.yaml || return $?
+            sed -i "s/NODE_ID/{nodeId}/g" /tmp/volumes/init/otel-config.yaml || return $?
+            return 0
+          \}
+
           runInit() \{
             id # check which user is running the script
 
@@ -200,6 +211,9 @@ spec:
 
             # lookup services
             checkConsensusNodeSvc || return $?
+
+            # process OpenTelemetry config
+            processOpenTelemetryConfig || return $?
 
             return 0
           \}
@@ -222,6 +236,8 @@ spec:
       volumeMounts:
         - name: cluster-config
           mountPath: /tmp/volumes/cluster-config # mount to a directory so that we can run custom scripts from it, e.g. startup-probe
+        - name: hgcapp-init
+          mountPath: /tmp/volumes/init # mount for debugging
         - name: cluster-config
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/config.txt
           subPath: "config.txt"
@@ -482,6 +498,35 @@ spec:
         - secretRef:
             name: "{bu.config.envFromSecret}"
     # {/if}
+    #{#if oc && oc.enabled}
+    # Sidecar: open-telemetry-collector
+    - name: "{oc.name}"
+      image: "{oc.softwareVersion.repository}/{oc.softwareVersion.name}:{oc.softwareVersion.tag}"
+      imagePullPolicy: "{oc.softwareVersion.imagePullPolicy}"
+      ports:
+        - name: prometheus
+          containerPort: 9090 # consensus-node metrics are exported using this port after scraping from 9999
+          protocol: TCP
+        - name: health # otel-collector liveness check
+          containerPort: 13133
+          protocol: TCP
+        - name: metrics # otel-collector metrics
+          containerPort: 8888
+          protocol: TCP
+      livenessProbe:
+        httpGet:
+          path: /
+          port: health
+      readinessProbe:
+        httpGet:
+          path: /
+          port: health
+      volumeMounts:
+        - name: hgcapp-init # contains modified otel-collector config
+          mountPath: /etc/otelcol-contrib/config.yaml
+          subPath: otel-config.yaml
+          readOnly: true
+    #{/if}
   volumes:
     - name: cluster-config
       configMap:
@@ -490,6 +535,10 @@ spec:
     - name: backup-uploader-config
       configMap:
         name: backup-uploader-config
+        defaultMode: "{defaultMode}"
+    - name: otel-collector-config
+      configMap:
+        name: otel-collector-config
         defaultMode: "{defaultMode}"
     - name: public-keys
       configMap:

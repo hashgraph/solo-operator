@@ -167,7 +167,7 @@ components:
                 backupUploader:
                   type: object
                   x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
-                otelCollector:
+                openTelemetryCollector:
                   type: object
                   x-java-type: com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector
             volumes:
