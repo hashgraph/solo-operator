@@ -30,6 +30,7 @@ components:
             management of these operations.
           * Many of these concerns also apply to single K8S cluster modes of operation when adding new consensus nodes.
       type: object
+      default: {}
       properties:
         deploymentModel:
           description: |
@@ -52,29 +53,42 @@ components:
             type: string
         telemetry:
           type: object
+          default: {}
           properties:
             metrics:
               description: Metrics configuration for all members of the `Orbit`.
               type: object
+              default: {}
               properties:
                 enabled:
                   description: Whether metrics are enabled for the `Orbit`.
                   type: boolean
+                  default: false
                 interval:
                   description: The interval at which metrics are collected.
                   type: string
+                  default: 5s
                 labels:
                   description: Labels to attach to metrics.
                   type: object
                   additionalProperties:
                     type: string
+                port:
+                  description: The port on which metrics are exposed.
+                  type: integer
+                  default: 9998
+                remoteWrite:
+                  type: boolean
+                  default: false
             logging:
                 description: Logging configuration for all members of the `Orbit`.
                 type: object
+                default: {}
                 properties:
                   enabled:
                     description: Whether logging is enabled for the `Orbit`.
                     type: boolean
+                    default: false
                   labels:
                     description: Labels to attach to logs.
                     type: object

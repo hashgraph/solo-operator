@@ -21,7 +21,6 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperationBuilder;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
-import com.hedera.solo.operator.model.v1alpha1.OrbitBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PersistentVolumeClaims;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PersistentVolumeClaimsBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PodProperties;
@@ -137,8 +136,7 @@ public abstract class ConsensusCapsuleTestAbstract {
 
     private void setupConfigMaps() {
         // create config-maps
-        for (String cmFile :
-                List.of("backup-uploader-config.yaml", "public-keys.yaml", "configmaps/otel-collector-config.yaml")) {
+        for (String cmFile : List.of("backup-uploader-config.yaml", "public-keys.yaml")) {
             kubernetesClient
                     .resource(loadYaml(ConfigMap.class, getClass(), cmFile)
                             .edit()
@@ -223,21 +221,12 @@ public abstract class ConsensusCapsuleTestAbstract {
     }
 
     void createOrbit() {
-        Orbit orbit = new OrbitBuilder()
-                .withNewMetadata()
+        final Orbit orbit = loadYaml(Orbit.class, getClass(), "orbit.yaml")
+                .edit()
+                .editMetadata()
                 .withName(namespace)
                 .endMetadata()
-                .editSpec()
-                .editConsensus()
-                .editGenesis()
-                .editAddressBook()
-                .withLedgerId("298")
-                .endAddressBook()
-                .endGenesis()
-                .endConsensus()
-                .endSpec()
                 .build();
-
         kubernetesClient.resource(orbit).create();
 
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {

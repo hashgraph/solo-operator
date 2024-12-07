@@ -14,8 +14,8 @@ import java.util.Objects;
 
 public class CapsulePvcUtil {
     public static String validPvcName(ConsensusCapsule cc, String volSuffix) {
-        final String nodeId = Metadata.prepareNodeName(cc);
-        return "%s-%s".formatted(nodeId, volSuffix);
+        final String nodeName = Metadata.prepareNodeName(cc);
+        return "%s-%s".formatted(nodeName, volSuffix);
     }
 
     public static void validate(ConsensusCapsule primary) {

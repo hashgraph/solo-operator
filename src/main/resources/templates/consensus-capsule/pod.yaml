@@ -7,6 +7,7 @@
 # {@String nodeName}
 # {@java.util.List nodeNames}
 # {@String accountId}
+# {@String hostIp}
 # {@int defaultMode}
 # {@java.util.Set publicKeyFiles}
 # {@com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.ConsensusNode cn}
@@ -56,8 +57,6 @@ spec:
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade
         - name: hgcapp-keys
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
-        - name: otel-collector-config
-          mountPath: /tmp/volumes/otel-collector-config
       command:
         - "/bin/bash"
         - "-c"
@@ -193,13 +192,6 @@ spec:
             return 0
           \}
 
-          function processOpenTelemetryConfig() \{
-            cp /tmp/volumes/otel-collector-config/config.yaml /tmp/volumes/init/otel-config.yaml || return $?
-            sed -i "s/ORBIT_NAME/{orbitName}/g" /tmp/volumes/init/otel-config.yaml || return $?
-            sed -i "s/NODE_ID/{nodeId}/g" /tmp/volumes/init/otel-config.yaml || return $?
-            return 0
-          \}
-
           runInit() \{
             id # check which user is running the script
 
@@ -211,9 +203,6 @@ spec:
 
             # lookup services
             checkConsensusNodeSvc || return $?
-
-            # process OpenTelemetry config
-            processOpenTelemetryConfig || return $?
 
             return 0
           \}
@@ -503,15 +492,41 @@ spec:
     - name: "{oc.name}"
       image: "{oc.softwareVersion.repository}/{oc.softwareVersion.name}:{oc.softwareVersion.tag}"
       imagePullPolicy: "{oc.softwareVersion.imagePullPolicy}"
+      env:
+        - name: OTEL_ORBIT_NAME
+          value: "{orbitName}"
+        - name: OTEL_NODE_ID
+          value: "{nodeId}"
+        - name: OTEL_METRICS_NODE_ID
+          value: "{nodeId + 1}"
+        - name: OTEL_ACCOUNT_ID
+          value: "{accountId}"
+        - name: OTEL_HOST_IP
+          value: "{hostIp}"
+        - name: OTEL_LOG_LEVEL
+          value: "{oc.config.logLevel}"
+        - name: OTEL_ENVIRONMENT
+          value: "{oc.config.environment}"
+        - name: OTEL_APP_NAME
+          value: "{oc.config.appName}"
+        - name: OTEL_INSTANCE_TYPE
+          value: "{oc.config.appName}"
+        - name: OTEL_MEMORY_LIMITER_LIMIT_MIB
+          value: "{oc.config.processors..memoryLimiter.limitMib}"
+        - name: OTEL_MEMORY_LIMITER_SPIKE_LIMIT_MIB
+          value: "{oc.config.processors.memoryLimiter.spikeLimitMib}"
+        #{#if oc.config.exporters.loki.enabled}
+        - name: OTEL_LOKI_ENDPOINT
+          value: "{oc.config.exporters.loki.endpoint}"
+        #{/if}
+      #{#if oc.config.exporters.loki.enabled && oc.config.exporters.loki.auth.enabled}
+      envFrom:
+        - secretRef:
+            name: "{oc.config.exporters.loki.auth.secret.name}"
+      #{/if}
       ports:
-        - name: prometheus
-          containerPort: 9090 # consensus-node metrics are exported using this port after scraping from 9999
-          protocol: TCP
         - name: health # otel-collector liveness check
           containerPort: 13133
-          protocol: TCP
-        - name: metrics # otel-collector metrics
-          containerPort: 8888
           protocol: TCP
       livenessProbe:
         httpGet:
@@ -522,10 +537,15 @@ spec:
           path: /
           port: health
       volumeMounts:
-        - name: hgcapp-init # contains modified otel-collector config
+        - name: otel-collector-config
           mountPath: /etc/otelcol-contrib/config.yaml
-          subPath: otel-config.yaml
+          subPath: config.yaml
           readOnly: true
+        - name: hgcapp-output
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/output
+          readOnly: true
+        - name: hgcapp-otel-file-storage
+          mountPath: /var/lib/otelcol/file_storage
     #{/if}
   volumes:
     - name: cluster-config
@@ -538,7 +558,7 @@ spec:
         defaultMode: "{defaultMode}"
     - name: otel-collector-config
       configMap:
-        name: otel-collector-config
+        name: "{nodeName}-otel-collector-config"
         defaultMode: "{defaultMode}"
     - name: public-keys
       configMap:
@@ -567,4 +587,6 @@ spec:
     - name: hgcapp-upgrade
       emptyDir: {}
     - name: hgcapp-init
+      emptyDir: {}
+    - name: hgcapp-otel-file-storage
       emptyDir: {}

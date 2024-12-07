@@ -185,15 +185,98 @@ components:
       properties:
         name:
           type: string
+          default: "open-telemetry-collector"
         softwareVersion:
           type: object
           x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+          default:
+            repository: "docker.io/otel"
+            name: "opentelemetry-collector-contrib"
+            tag: "0.72.0"
         resources:
           type: object
           x-java-type: io.fabric8.kubernetes.api.model.ResourceRequirements
         enabled:
           type: boolean
           default: false
+        config:
+          type: object
+          default: { }
+          properties:
+            appName:
+              type: string
+              default: "hedera-node"
+            environment:
+              description: |
+                The network environment for which the `Orbit` is running; e.g. mainnet, testnet, previewnet-1, integration etc.
+              type: string
+              default: integration
+            logLevel:
+              description: The log level for the logging exporter.
+              type: string
+              default: DEBUG
+            processors:
+              type: object
+              default: { }
+              properties:
+                memoryLimiter:
+                  type: object
+                  default: { }
+                  properties:
+                    limitMib:
+                      type: string
+                      default: "400"
+                    spikeLimitMib:
+                      type: string
+                      default: "80" # 20% of limit
+            exporters:
+              type: object
+              default: { }
+              properties:
+                loki:
+                  type: object
+                  default: { }
+                  properties:
+                    enabled:
+                      description: Whether Loki logging is enabled for the `Orbit`.
+                      type: boolean
+                      default: true
+                    auth:
+                      type: object
+                      default: {}
+                      properties:
+                        enabled:
+                          type: boolean
+                          default: false
+                        secret:
+                          description: |
+                            The secret containing the OTEL_LOKI_USERNAME and OTEL_LOKI_PASSWORD for the Loki basic authentication.
+                            This will be exported as environment variables.
+                          type: object
+                          x-java-type: io.fabric8.kubernetes.api.model.LocalObjectReference
+                          default:
+                            name: "telemetry-secrets"
+                    endpoint:
+                      description: The endpoint for the Loki logging exporter.
+                      type: string
+            receivers:
+              type: object
+              default: { }
+              properties:
+                swirldsVMap:
+                  type: object
+                  default: { }
+                  properties:
+                    enabled:
+                      type: boolean
+                      default: false # disable by default. the log lines are too large (>4Mb) causing Loki limits to be exceeded during local development
+                hashstream:
+                  type: object
+                  default: { }
+                  properties:
+                    enabled:
+                      type: boolean
+                      default: false # disable by default
         additionalVolumeMounts:
           type: array
           items:

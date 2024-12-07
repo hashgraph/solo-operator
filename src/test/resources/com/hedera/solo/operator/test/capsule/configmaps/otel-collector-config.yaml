@@ -13,14 +13,14 @@ data:
         endpoint: "${env:OTEL_EXPORTER_LOKI_ENDPOINT}"
       logging:
         loglevel: "${env:OTEL_EXPORTER_LOGGING_LOGLEVEL}"
-    
+
     extensions:
       file_storage:
       health_check:
       memory_ballast:
         size_in_percentage: 20
-      
-    
+
+
     processors:
       batch:
       # Add standard label sets to both logs and metrics.
@@ -68,7 +68,7 @@ data:
         limit_mib: "${env.OTEL_PROCESSOR_MEMORY_LIMIT_MB}"
         # spike_limit_mib is recommended to be 20% of overall memory limit, as per https://github.com/open-telemetry/opentelemetry-collector/blob/main/processor/memorylimiterprocessor/README.md
         spike_limit_mib: "${env.OTEL_PROCESSOR_MEMORY_SPIKE_LIMIT_MB}"
-    
+
     receivers:
       filelog/hgcaa:
         storage: file_storage

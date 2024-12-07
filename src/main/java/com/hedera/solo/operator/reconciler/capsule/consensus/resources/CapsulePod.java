@@ -16,6 +16,7 @@ import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_BACKU
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_CONSENSUS_NODE;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_DEFAULT_MODE;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_EVENT_STREAM_UPLOADER;
+import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_HOST_EXTERNAL_IP;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NAMESPACE;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_ID;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_NAME;
@@ -236,6 +237,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         final String namespace = primary.getMetadata().getNamespace();
         final List<String> nodeNames = getNodeNames(context, namespace);
         final String orbitName = primary.getSpec().getOrbit();
+        final String podName = validName(primary.getMetadata().getName(), NAME_SUFFIX);
 
         final TemplateInstance templateInstance = tpl.instance();
 
@@ -246,6 +248,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         templateInstance.data(TPL_VAR_NODE_NAME, nodeName);
         templateInstance.data(TPL_VAR_NODE_NAMES, nodeNames);
         templateInstance.data(TPL_VAR_ACCOUNT_ID, accountId);
+        templateInstance.data(TPL_VAR_HOST_EXTERNAL_IP, "NOT_SET"); // FIXME: should be node's external IP
         templateInstance.data(TPL_VAR_DEFAULT_MODE, DEFAULT_FILE_MODE);
 
         return templateInstance;
