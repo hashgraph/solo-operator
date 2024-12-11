@@ -13,7 +13,10 @@ public class GitExtractorExtension {
     protected List<GitExtraction> extractions = new ArrayList<>();
 
     public GitExtractorExtension(Project project, SourceSet sourceSet) {
-        extractionDirectory = project.getLayout().getBuildDirectory().dir("generated/git-extractor/src/" + sourceSet.getName() + "/resources").get();
+        extractionDirectory = project.getLayout()
+                .getBuildDirectory()
+                .dir("generated/git-extractor/src/" + sourceSet.getName() + "/resources")
+                .get();
     }
 
     public void addResources(

@@ -20,11 +20,17 @@ class GitExtractorPluginTest {
         project.getPlugins().apply("com.hedera.solo.operator.buildlogic.gitExtractor");
 
         // Verify the result
-        SourceSet sourceSet = project.getExtensions().getByType(JavaPluginExtension.class).getSourceSets().getByName("main");
+        SourceSet sourceSet = project.getExtensions()
+                .getByType(JavaPluginExtension.class)
+                .getSourceSets()
+                .getByName("main");
         assertNotNull(sourceSet);
-        GitExtractorExtension gitExtractorExtension = project.getExtensions().create("gitExtractorExtension", GitExtractorExtension.class, project, sourceSet);
+        GitExtractorExtension gitExtractorExtension = project.getExtensions()
+                .create("gitExtractorExtension", GitExtractorExtension.class, project, sourceSet);
         assertNotNull(gitExtractorExtension);
-        GitExtractorTask gitExtractorTask = project.getTasks().register("gitExtractor", GitExtractorTask.class, gitExtractorExtension).get();
+        GitExtractorTask gitExtractorTask = project.getTasks()
+                .register("gitExtractor", GitExtractorTask.class, gitExtractorExtension)
+                .get();
         assertNotNull(gitExtractorTask);
     }
 }

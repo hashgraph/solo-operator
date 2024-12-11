@@ -18,7 +18,6 @@ import org.eclipse.jgit.archive.ZipFormat;
 import org.eclipse.jgit.transport.FetchResult;
 import org.eclipse.jgit.transport.URIish;
 import org.gradle.api.DefaultTask;
-import org.gradle.api.file.Directory;
 import org.gradle.api.tasks.CacheableTask;
 import org.gradle.api.tasks.OutputDirectories;
 import org.gradle.api.tasks.TaskAction;
@@ -38,7 +37,11 @@ public class GitExtractorTask extends DefaultTask {
     public GitExtractorTask(GitExtractorExtension extension) {
         this.extension = extension;
         outputDirectories = extension.extractions.stream()
-                .map(e -> extension.extractionDirectory.dir(e.destination()).getAsFile().toPath())
+                .map(e -> extension
+                        .extractionDirectory
+                        .dir(e.destination())
+                        .getAsFile()
+                        .toPath())
                 .collect(Collectors.toSet());
     }
 
@@ -73,7 +76,8 @@ public class GitExtractorTask extends DefaultTask {
                             .call();
                     ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(baos.toByteArray()))) {
                 ZipEntry ze;
-                Path destination = extension.extractionDirectory
+                Path destination = extension
+                        .extractionDirectory
                         .dir(extraction.destination())
                         .getAsFile()
                         .toPath();

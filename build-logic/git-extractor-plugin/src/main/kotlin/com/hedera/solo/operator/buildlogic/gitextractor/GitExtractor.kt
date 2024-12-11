@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 package com.hedera.solo.operator.buildlogic.gitextractor
 
 import org.gradle.api.NamedDomainObjectProvider
@@ -5,7 +7,6 @@ import org.gradle.api.Project
 import org.gradle.api.tasks.SourceSet
 import org.gradle.kotlin.dsl.create
 import org.gradle.kotlin.dsl.register
-import java.util.stream.Collectors
 
 class GitExtractor(private val project: Project) {
     fun register(
@@ -14,12 +15,12 @@ class GitExtractor(private val project: Project) {
     ) {
         var sourceSet = sourceSetProvider.get()
         val taskName = sourceSet.getTaskName("generate", "git-extractor")
-        var extension = project.extensions.create<GitExtractorExtension>(taskName + "Extension", sourceSet)
-            .apply(initBlock)
+        var extension =
+            project.extensions
+                .create<GitExtractorExtension>(taskName + "Extension", sourceSet)
+                .apply(initBlock)
         project.tasks.register<GitExtractorTask>(taskName, extension).get()
         sourceSet.resources.srcDir(extension.extractionDirectory)
-        project.tasks.named(sourceSet.processResourcesTaskName).configure {
-            dependsOn(taskName)
-        }
+        project.tasks.named(sourceSet.processResourcesTaskName).configure { dependsOn(taskName) }
     }
 }
