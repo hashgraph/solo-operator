@@ -7,7 +7,6 @@ import static com.hedera.solo.operator.test.fixtures.resource.ConvertResource.se
 import static com.hedera.solo.operator.test.fixtures.resource.SystemResource.getSystemResourceAsStringUnchecked;
 
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleBuilder;
-import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitBuilder;
 
 public class LoadResource {
@@ -33,9 +32,5 @@ public class LoadResource {
                 .withPermissionConfiguration(properties("import/hedera/mainnet/api-permission.properties"))
                 .endConsensus()
                 .endSpec();
-    }
-
-    public static Orbit orbitWithResources() {
-        return orbitBuilderWithResources().build();
     }
 }

@@ -2,21 +2,20 @@
 
 package com.hedera.solo.operator.test.orbit;
 
+import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
-import static com.hedera.solo.operator.test.fixtures.resource.LoadResource.orbitWithResources;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
-import com.hedera.solo.operator.model.v1alpha1.OrbitSpecBuilder;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.reconciler.orbit.resources.ConsensusConfigMap;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
+import com.hedera.solo.operator.test.fixtures.resource.LoadResource;
 import com.hedera.solo.operator.test.fixtures.snapshot.SnapshotFailureContext;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.Namespace;
-import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
 import io.quarkus.test.junit.QuarkusTest;
@@ -74,12 +73,11 @@ public class OrbitTest {
 
     @Test
     void test() {
-        final Orbit orbit = orbitWithResources();
-        orbit.setMetadata(new ObjectMetaBuilder().withName(TEST_ORBIT_NAME).build());
-        orbit.setSpec(new OrbitSpecBuilder()
-                .withLifetime("P2DT15H")
-                .addToFinalizers("kubernetes")
-                .build());
+        final Orbit orbit = edit(new Orbit())
+                .with(metadata -> metadata.editMetadata().withName(TEST_ORBIT_NAME))
+                .with(spec -> spec.editSpec().withLifetime("P2DT15H").addToFinalizers("kubernetes"))
+                .with(LoadResource::orbitBuilderWithResources)
+                .build();
 
         client.resource(orbit).create();
 
