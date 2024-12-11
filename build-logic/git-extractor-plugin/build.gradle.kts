@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 plugins {
-    // Apply the Java Gradle plugin development plugin to add support for developing Gradle plugins
+    `kotlin-dsl`
     `java-gradle-plugin`
 }
 

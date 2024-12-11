@@ -2,8 +2,6 @@
 
 package com.hedera.solo.operator.buildlogic.gitextractor;
 
-import static com.hedera.solo.operator.buildlogic.gitextractor.GitExtractorPlugin.extractionDirectory;
-
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
@@ -18,6 +16,7 @@ import org.eclipse.jgit.archive.ZipFormat;
 import org.eclipse.jgit.transport.FetchResult;
 import org.eclipse.jgit.transport.URIish;
 import org.gradle.api.DefaultTask;
+import org.gradle.api.file.Directory;
 import org.gradle.api.tasks.CacheableTask;
 import org.gradle.api.tasks.OutputDirectories;
 import org.gradle.api.tasks.TaskAction;
@@ -35,11 +34,11 @@ public class GitExtractorTask extends DefaultTask {
     public void gitExtractor() throws Exception {
         GitExtractorExtension extension = getProject().getExtensions().getByType(GitExtractorExtension.class);
         for (GitExtraction extraction : extension.extractions) {
-            extract(extraction);
+            extract(extension.extractionDirectory, extraction);
         }
     }
 
-    void extract(final GitExtraction extraction) throws Exception {
+    void extract(final Directory extractionDirectory, final GitExtraction extraction) throws Exception {
         try (TempDirectory tempDirectory = new TempDirectory("sologitextractor");
                 Git git = Git.init().setDirectory(tempDirectory.path.toFile()).call()) {
             git.remoteAdd()
@@ -63,7 +62,7 @@ public class GitExtractorTask extends DefaultTask {
                             .call();
                     ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(baos.toByteArray()))) {
                 ZipEntry ze;
-                Path destination = extractionDirectory(getProject())
+                Path destination = extractionDirectory
                         .dir(extraction.destination())
                         .getAsFile()
                         .toPath();
