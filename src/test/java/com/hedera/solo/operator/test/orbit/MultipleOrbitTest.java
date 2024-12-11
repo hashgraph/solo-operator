@@ -243,14 +243,14 @@ public class MultipleOrbitTest {
     }
 
     ConsensusCapsule createCapsule(final Orbit orbit, final String name, final long id) {
+        String namespace = orbit.getMetadata().getName();
         ConsensusCapsule capsule = edit(new ConsensusCapsule())
-                .with(metadata -> metadata.editMetadata()
-                        .withName(name)
-                        .withNamespace(orbit.getMetadata().getName()))
+                .with(metadata -> metadata.editMetadata().withName(name).withNamespace(namespace))
                 .with(spec -> spec.editSpec()
                         .withOrbit(orbit.getMetadata().getName())
                         .withAccountId("0.0." + (id + 3))
-                        .withNodeId(id))
+                        .withNodeId(id)
+                        .withExternalAddress("node" + id + "-svc." + namespace))
                 .build();
         return operator.getKubernetesClient().resource(capsule).create();
     }

@@ -78,12 +78,13 @@ public class NetworkOperationClusterConfig extends KubernetesDependentResource<C
     Node node(final ConsensusCapsule capsule) {
         String capsuleName = capsule.getMetadata().getName();
         String namespace = capsule.getMetadata().getNamespace();
+        String external = capsule.getSpec().getExternalAddress();
         return new Node(
                 capsule.getSpec().getNodeId(),
                 capsule.getSpec().getAccountId(),
                 Metadata.prepareNodeName(capsule),
                 capsuleName + ".consensus." + namespace,
-                capsuleName + "-svc." + namespace);
+                external != null ? external : capsuleName + "-svc." + namespace);
     }
 
     List<Node> localNodes(final NetworkOperation primary, final Context<NetworkOperation> context) {
