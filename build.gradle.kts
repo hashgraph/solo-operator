@@ -91,6 +91,14 @@ gitExtractor {
             "import/hedera/mainnet"
         )
     }
+    register(sourceSets.componentTest) {
+        addResources(
+            "https://github.com/hashgraph/hedera-services",
+            "refs/tags/v0.56.5",
+            "hedera-node/configuration/mainnet",
+            "import/hedera/mainnet"
+        )
+    }
 }
 
 objectModelGenerator {

@@ -16,6 +16,7 @@ import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
+import com.hedera.solo.operator.test.fixtures.resource.LoadResource;
 import com.hedera.solo.operator.test.fixtures.snapshot.SnapshotFailureContext;
 import com.hedera.solo.test.framework.AbstractOperatorTest;
 import io.fabric8.kubernetes.api.model.Condition;
@@ -204,6 +205,7 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                 .resource(edit(new Orbit())
                         .with(metadata ->
                                 metadata.editMetadata().withName(operator().getNamespace()))
+                        .with(LoadResource::orbitBuilderWithResources)
                         .with(spec -> spec.editSpec()
                                 .editConsensus()
                                 .editGenesis()
@@ -233,6 +235,7 @@ public class NetworkOperationTest extends AbstractOperatorTest {
         operator()
                 .create(edit(new ConsensusCapsule())
                         .with(metadata -> metadata.editMetadata().withName(name).addToLabels(labels))
+                        .with(LoadResource::consensusCapsuleBuilderWithResources)
                         .with(spec -> spec.editSpec()
                                 .withNodeId(nodeId)
                                 .withAccountId("0.0.%d".formatted(nodeId))

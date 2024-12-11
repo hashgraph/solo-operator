@@ -6,7 +6,6 @@ import static com.hedera.solo.operator.test.fixtures.resource.ConvertResource.pr
 import static com.hedera.solo.operator.test.fixtures.resource.ConvertResource.settings;
 import static com.hedera.solo.operator.test.fixtures.resource.SystemResource.getSystemResourceAsStringUnchecked;
 
-import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleBuilder;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitBuilder;
@@ -20,10 +19,6 @@ public class LoadResource {
         return builder.editSpec()
                 .withLog4j2Xml(getSystemResourceAsStringUnchecked("import/hedera/mainnet/log4j2.xml"))
                 .endSpec();
-    }
-
-    public static ConsensusCapsule consensusCapsuleWithResources() {
-        return consensusCapsuleBuilderWithResources().build();
     }
 
     public static OrbitBuilder orbitBuilderWithResources() {
