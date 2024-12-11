@@ -9,13 +9,9 @@ import org.gradle.api.file.Directory;
 import org.gradle.api.tasks.SourceSet;
 
 public class GitExtractorExtension {
-    Directory extractionDirectory;
+    protected Directory extractionDirectory;
     protected List<GitExtraction> extractions = new ArrayList<>();
 
-//    public String repository;
-//    public String refspec;
-//    public String source;
-//    public String destination;
     public GitExtractorExtension(Project project, SourceSet sourceSet) {
         extractionDirectory = project.getLayout().getBuildDirectory().dir("generated/git-extractor/src/" + sourceSet.getName() + "/resources").get();
     }
@@ -24,13 +20,4 @@ public class GitExtractorExtension {
             final String repository, final String refspec, final String source, final String destination) {
         extractions.add(new GitExtraction(repository, refspec, source, destination));
     }
-/*
-    static Directory extractionDirectory(final Project project) {
-        return project.getLayout()
-                .getBuildDirectory()
-                .dir("generated/git-extractor/src/main/resources")
-                .get();
-    }
-
-* */
 }

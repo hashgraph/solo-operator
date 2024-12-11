@@ -6,14 +6,11 @@ import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
-import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleSpec;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.ConfigMap;
-import io.fabric8.kubernetes.client.CustomResource;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
-import java.util.Optional;
 
 @KubernetesDependent(labelSelector = "app=consensus-node")
 public class CapsuleConfigMap extends CRUDKubernetesDependentResource<ConfigMap, ConsensusCapsule> {

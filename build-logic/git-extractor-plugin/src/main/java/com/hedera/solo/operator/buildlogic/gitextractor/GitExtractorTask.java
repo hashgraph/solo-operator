@@ -30,6 +30,10 @@ public class GitExtractorTask extends DefaultTask {
     @OutputDirectories
     Collection<Path> outputDirectories;
 
+    public Collection<Path> getOutputDirectories() {
+        return outputDirectories;
+    }
+
     @Inject
     public GitExtractorTask(GitExtractorExtension extension) {
         this.extension = extension;
@@ -41,15 +45,11 @@ public class GitExtractorTask extends DefaultTask {
     @TaskAction
     public void gitExtractor() throws Exception {
         for (GitExtraction extraction : extension.extractions) {
-            extract(extension.extractionDirectory, extraction);
+            extract(extraction);
         }
     }
 
-    public Collection<Path> getOutputDirectories() {
-        return outputDirectories;
-    }
-
-    void extract(final Directory extractionDirectory, final GitExtraction extraction) throws Exception {
+    void extract(final GitExtraction extraction) throws Exception {
         try (TempDirectory tempDirectory = new TempDirectory("sologitextractor");
                 Git git = Git.init().setDirectory(tempDirectory.path.toFile()).call()) {
             git.remoteAdd()
@@ -73,7 +73,7 @@ public class GitExtractorTask extends DefaultTask {
                             .call();
                     ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(baos.toByteArray()))) {
                 ZipEntry ze;
-                Path destination = extractionDirectory
+                Path destination = extension.extractionDirectory
                         .dir(extraction.destination())
                         .getAsFile()
                         .toPath();

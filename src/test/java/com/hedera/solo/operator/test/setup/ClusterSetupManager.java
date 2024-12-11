@@ -2,6 +2,7 @@
 
 package com.hedera.solo.operator.test.setup;
 
+import com.hedera.fullstack.helm.client.HelmExecutionException;
 import io.quarkus.runtime.ShutdownEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -20,17 +21,17 @@ public class ClusterSetupManager {
 
     /** Check and installed required services */
     public synchronized void check() {
-        //        if (setupDone) {
-        //            return;
-        //        }
-        //
-        //        try {
-        //            minioSetupManager.install();
-        //        } catch (HelmExecutionException e) {
-        //            log.error(e.getStdErr());
-        //            throw e;
-        //        }
-        //        setupDone = true;
+        if (setupDone) {
+            return;
+        }
+
+        try {
+            minioSetupManager.install();
+        } catch (HelmExecutionException e) {
+            log.error(e.getStdErr());
+            throw e;
+        }
+        setupDone = true;
     }
 
     /**
@@ -39,17 +40,17 @@ public class ClusterSetupManager {
      * @param event Shutdown event
      */
     public synchronized void cleanup(@Observes @Priority(1) ShutdownEvent event) {
-        //        if (!setupDone) {
-        //            return;
-        //        }
-        //
-        //        try {
-        //            minioSetupManager.uninstall();
-        //        } catch (HelmExecutionException e) {
-        //            log.error(e.getStdErr());
-        //            throw e;
-        //        }
-        //
-        //        setupDone = false;
+        if (!setupDone) {
+            return;
+        }
+
+        try {
+            minioSetupManager.uninstall();
+        } catch (HelmExecutionException e) {
+            log.error(e.getStdErr());
+            throw e;
+        }
+
+        setupDone = false;
     }
 }

@@ -90,21 +90,7 @@ gitExtractor {
             "hedera-node/configuration/mainnet",
             "import/hedera/mainnet"
         )
-//        addResources(
-//            "https://github.com/hashgraph/hedera-services",
-//            "refs/tags/v0.56.5",
-//            "hedera-node/configuration/mainnet",
-//            "import/hedera2/mainnet"
-//        )
     }
-//    register(sourceSets.main) {
-//        addResources(
-//            "https://github.com/hashgraph/hedera-services",
-//            "refs/tags/v0.56.5",
-//            "hedera-node/configuration/mainnet",
-//            "import/hedera/mainnet"
-//        )
-//    }
 }
 
 objectModelGenerator {
@@ -112,15 +98,15 @@ objectModelGenerator {
         configBuilderOverrides =
             mapOf(
                 "common.operator.solo.hedera.com-v1.yml" to
-                        defaultConfigBuilder
-                            .build()
-                            .toBuilder()
-                            .packageOverrides(
-                                mapOf(
-                                    "com.hedera.solo.operator.v1alpha1" to
-                                            "com.hedera.solo.operator.model"
-                                )
+                    defaultConfigBuilder
+                        .build()
+                        .toBuilder()
+                        .packageOverrides(
+                            mapOf(
+                                "com.hedera.solo.operator.v1alpha1" to
+                                    "com.hedera.solo.operator.model"
                             )
+                        )
             )
         removeFiles =
             setOf(
