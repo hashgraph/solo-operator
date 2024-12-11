@@ -8,8 +8,8 @@ import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GRPC
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_APP;
 import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
 import static com.hedera.solo.operator.test.fixtures.coredns.ConfigureCoredns.configureCoredns;
-import static com.hedera.solo.operator.test.orbit.OrbitTest.getSystemResourceAsStringUnchecked;
-import static com.hedera.solo.operator.test.orbit.OrbitTest.withResources;
+import static com.hedera.solo.operator.test.fixtures.resource.LoadResource.consensusCapsuleBuilderWithResources;
+import static com.hedera.solo.operator.test.fixtures.resource.LoadResource.orbitBuilderWithResources;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -23,7 +23,6 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperationBuilder;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
-import com.hedera.solo.operator.model.v1alpha1.OrbitBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PersistentVolumeClaims;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PersistentVolumeClaimsBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PodProperties;
@@ -224,7 +223,7 @@ public abstract class ConsensusCapsuleTestAbstract {
     }
 
     void createOrbit() {
-        Orbit orbit = new OrbitBuilder()
+        Orbit orbit = orbitBuilderWithResources()
                 .withNewMetadata()
                 .withName(namespace)
                 .endMetadata()
@@ -239,7 +238,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .endSpec()
                 .build();
 
-        kubernetesClient.resource(withResources(orbit)).create();
+        kubernetesClient.resource(orbit).create();
 
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
             assertThat(kubernetesClient.resource(orbit).get()).isNotNull();
@@ -267,18 +266,17 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .withVolumes(this.prepareCapsulePodVolumes(node))
                 .build();
 
-        return new ConsensusCapsuleBuilder()
+        return consensusCapsuleBuilderWithResources()
                 .withNewMetadata()
                 .withName(node.name())
                 .withNamespace(namespace)
                 .endMetadata()
-                .withNewSpec()
+                .editSpec()
                 .withPodProperties(consensusPod)
                 .withOrbit(orbit)
                 .withAccountId(node.accountId())
                 .withNodeId(node.id())
                 .withPersistentVolumeClaims(prepareCapsulePVCs(node))
-                .withLog4j2Xml(getSystemResourceAsStringUnchecked("import/hedera/mainnet/log4j2.xml"))
                 .endSpec();
     }
 

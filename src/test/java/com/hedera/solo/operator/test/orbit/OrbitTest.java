@@ -2,14 +2,12 @@
 
 package com.hedera.solo.operator.test.orbit;
 
-import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
+import static com.hedera.solo.operator.test.fixtures.resource.LoadResource.orbitWithResources;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-import com.hedera.solo.operator.library.builder.BuilderFunction;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
-import com.hedera.solo.operator.model.v1alpha1.OrbitBuilder;
 import com.hedera.solo.operator.model.v1alpha1.OrbitSpecBuilder;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.reconciler.orbit.resources.ConsensusConfigMap;
@@ -23,14 +21,8 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Properties;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 import org.jboss.logging.Logger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -80,69 +72,16 @@ public class OrbitTest {
                 .until(() -> client.namespaces().withName(TEST_ORBIT_NAME).get() == null);
     }
 
-    public static String getSystemResourceAsString(final String name) throws IOException {
-        return new String(
-                Objects.requireNonNull(ClassLoader.getSystemResourceAsStream(name))
-                        .readAllBytes(),
-                StandardCharsets.UTF_8);
-    }
-
-    public static String getSystemResourceAsStringUnchecked(final String name) {
-        try {
-            return getSystemResourceAsString(name);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    public static Map<String, String> properties(final String name) {
-        Properties properties = new Properties();
-        try {
-            properties.load(ClassLoader.getSystemResourceAsStream(name));
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        return properties.entrySet().stream()
-                .collect(Collectors.toMap(
-                        e -> e.getKey().toString(), e -> e.getValue().toString()));
-    }
-
-    public static Map.Entry<String, String> entry(final String line) {
-        int index = line.indexOf(',');
-        return index == -1 ? Map.entry(line, "") : Map.entry(line.substring(0, index), line.substring(index + 1));
-    }
-
-    public static Map<String, String> settings(final String name) {
-        return getSystemResourceAsStringUnchecked(name)
-                .lines()
-                .map(line -> line.replaceFirst("\\s*#.*", ""))
-                .filter(line -> !line.isEmpty())
-                .map(OrbitTest::entry)
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-    }
-
-    public static BuilderFunction<OrbitBuilder> withResources() {
-        return builder -> builder.editSpec()
-                .editConsensus()
-                .withApplicationConfiguration(properties("import/hedera/mainnet/application.properties"))
-                .withNetworkSettings(settings("import/hedera/mainnet/settings.txt"))
-                .withPermissionConfiguration(properties("import/hedera/mainnet/api-permission.properties"));
-    }
-
-    public static Orbit withResources(Orbit orbit) {
-        return edit(orbit).with(withResources()).build();
-    }
-
     @Test
     void test() {
-        final Orbit orbit = new Orbit();
+        final Orbit orbit = orbitWithResources();
         orbit.setMetadata(new ObjectMetaBuilder().withName(TEST_ORBIT_NAME).build());
         orbit.setSpec(new OrbitSpecBuilder()
                 .withLifetime("P2DT15H")
                 .addToFinalizers("kubernetes")
                 .build());
 
-        client.resource(withResources(orbit)).create();
+        client.resource(orbit).create();
 
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
             final Orbit realOrbit = client.resource(orbit).get();
