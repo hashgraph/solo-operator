@@ -82,15 +82,6 @@ dependencies {
     testFixturesImplementation("com.hedera.hashgraph:sdk:${hederaSdkVersion}")
 }
 
-//gitExtractor {
-//    addResources(
-//        "https://github.com/hashgraph/hedera-services",
-//        "refs/tags/v0.56.5",
-//        "hedera-node/configuration/mainnet",
-//        "import/hedera/mainnet"
-//    )
-//}
-
 gitExtractor {
     register(sourceSets.test) {
         addResources(
@@ -99,7 +90,21 @@ gitExtractor {
             "hedera-node/configuration/mainnet",
             "import/hedera/mainnet"
         )
+//        addResources(
+//            "https://github.com/hashgraph/hedera-services",
+//            "refs/tags/v0.56.5",
+//            "hedera-node/configuration/mainnet",
+//            "import/hedera2/mainnet"
+//        )
     }
+//    register(sourceSets.main) {
+//        addResources(
+//            "https://github.com/hashgraph/hedera-services",
+//            "refs/tags/v0.56.5",
+//            "hedera-node/configuration/mainnet",
+//            "import/hedera/mainnet"
+//        )
+//    }
 }
 
 objectModelGenerator {

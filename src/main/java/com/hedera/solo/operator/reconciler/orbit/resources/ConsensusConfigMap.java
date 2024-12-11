@@ -2,7 +2,6 @@
 
 package com.hedera.solo.operator.reconciler.orbit.resources;
 
-import static com.hedera.solo.operator.library.resource.SystemResource.getSystemResourceAsStringUnchecked;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
@@ -39,21 +38,24 @@ public class ConsensusConfigMap extends CRUDNoGCKubernetesDependentResource<Conf
         final ConfigMapBuilder cmb =
                 Metadata.applyOrbitMetaTo(primary, cm.edit().editMetadata()).endMetadata();
         cmb.addToData(
-                "settings.txt", get(primary, "import/hedera/mainnet/settings.txt", Consensus::getNetworkSettings, ","));
+                "settings.txt", join(primary.getSpec().getConsensus().getNetworkSettings(), ","));
+//                get(primary, "import/hedera/mainnet/settings.txt", Consensus::getNetworkSettings, ","));
         cmb.addToData(
                 "application.properties",
-                get(
-                        primary,
-                        "import/hedera/mainnet/application.properties",
-                        Consensus::getApplicationConfiguration,
-                        "="));
+                join(primary.getSpec().getConsensus().getApplicationConfiguration(), "="));
+//                get(
+//                        primary,
+//                        "import/hedera/mainnet/application.properties",
+//                        Consensus::getApplicationConfiguration,
+//                        "="));
         cmb.addToData(
                 "api-permission.properties",
-                get(
-                        primary,
-                        "import/hedera/mainnet/api-permission.properties",
-                        Consensus::getPermissionConfiguration,
-                        "="));
+                join(primary.getSpec().getConsensus().getPermissionConfiguration(), "="));
+//                get(
+//                        primary,
+//                        "import/hedera/mainnet/api-permission.properties",
+//                        Consensus::getPermissionConfiguration,
+//                        "="));
         return Metadata.applyStandardLabels(
                         cmb.editMetadata(),
                         NAME,
@@ -78,21 +80,26 @@ public class ConsensusConfigMap extends CRUDNoGCKubernetesDependentResource<Conf
         }
     }
 
-    String get(
-            final Orbit primary,
-            final String resource,
-            final Function<Consensus, Map<String, String>> configMap,
-            final String delimiter) {
-        Optional<Map<String, String>> networkSetting = Optional.ofNullable(primary)
-                .map(CustomResource::getSpec)
-                .map(OrbitSpec::getConsensus)
-                .map(configMap);
-        if (networkSetting.isPresent()) {
-            return networkSetting.get().entrySet().stream()
-                    .map(e -> e.getKey() + delimiter + e.getValue())
-                    .collect(Collectors.joining("\n", "", "\n"));
-        } else {
-            return getSystemResourceAsStringUnchecked(resource);
-        }
+    String join(Map<String, String> map, String delimiter) {
+        return map.entrySet().stream()
+                .map(e -> e.getKey() + delimiter + e.getValue())
+                .collect(Collectors.joining("\n", "", "\n"));
     }
+//    String get(
+//            final Orbit primary,
+//            final String resource,
+//            final Function<Consensus, Map<String, String>> configMap,
+//            final String delimiter) {
+//        Optional<Map<String, String>> networkSetting = Optional.ofNullable(primary)
+//                .map(CustomResource::getSpec)
+//                .map(OrbitSpec::getConsensus)
+//                .map(configMap);
+//        if (networkSetting.isPresent()) {
+//            return networkSetting.get().entrySet().stream()
+//                    .map(e -> e.getKey() + delimiter + e.getValue())
+//                    .collect(Collectors.joining("\n", "", "\n"));
+//        } else {
+//            return getSystemResourceAsStringUnchecked(resource);
+//        }
+//    }
 }

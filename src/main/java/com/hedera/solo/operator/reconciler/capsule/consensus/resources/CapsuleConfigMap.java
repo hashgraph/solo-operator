@@ -3,7 +3,6 @@
 package com.hedera.solo.operator.reconciler.capsule.consensus.resources;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
-import static com.hedera.solo.operator.library.resource.SystemResource.getSystemResourceAsStringUnchecked;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
@@ -31,12 +30,7 @@ public class CapsuleConfigMap extends CRUDKubernetesDependentResource<ConfigMap,
                         .withName(validName(Metadata.prepareNodeName(primary), NAME_SUFFIX))
                         .withNamespace(primary.getMetadata().getNamespace())
                         .addToLabels("app", "consensus-node"))
-                .with(data -> data.addToData(
-                        "log4j2.xml",
-                        Optional.of(primary)
-                                .map(CustomResource::getSpec)
-                                .map(ConsensusCapsuleSpec::getLog4j2_xml)
-                                .orElse(getSystemResourceAsStringUnchecked("import/hedera/mainnet/log4j2.xml"))))
+                .with(data -> data.addToData("log4j2.xml", primary.getSpec().getLog4j2_xml()))
                 .build();
     }
 }

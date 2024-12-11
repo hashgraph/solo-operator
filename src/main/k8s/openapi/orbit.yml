@@ -30,6 +30,8 @@ components:
             management of these operations.
           * Many of these concerns also apply to single K8S cluster modes of operation when adding new consensus nodes.
       type: object
+      required:
+        - consensus
       properties:
         deploymentModel:
           description: |
@@ -83,6 +85,10 @@ components:
         consensus:
           description: Shared (global) configuration for all `ConsensusCapsules` in the `Orbit`.
           type: object
+          required:
+            - networkSettings
+            - applicationConfiguration
+            - permissionConfiguration
           properties:
             provisioningModel:
               description: |

@@ -36,13 +36,23 @@ class GitExtractorPluginFunctionalTest {
                           id("java")
                           id("com.hedera.solo.operator.buildlogic.gitExtractor")
                         }
+                        gitExtractor {
+                            register(sourceSets.main) {
+                                addResources(
+                                    "https://github.com/hashgraph/hedera-services",
+                                    "refs/tags/v0.56.5",
+                                    "hedera-node/configuration/mainnet",
+                                    "import/hedera/mainnet"
+                                )
+                            }
+                        }
                         """);
 
         // Run the build
         GradleRunner runner = GradleRunner.create();
         runner.forwardOutput();
         runner.withPluginClasspath();
-        runner.withArguments("gitExtractor");
+        runner.withArguments("generateGitExtractor");
         runner.withProjectDir(projectDir);
         BuildResult result = runner.build();
 

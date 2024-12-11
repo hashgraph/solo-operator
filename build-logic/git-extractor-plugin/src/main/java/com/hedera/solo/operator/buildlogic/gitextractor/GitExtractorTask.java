@@ -8,8 +8,10 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
+import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import javax.inject.Inject;
 import org.eclipse.jgit.api.ArchiveCommand;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.archive.ZipFormat;
@@ -23,19 +25,28 @@ import org.gradle.api.tasks.TaskAction;
 
 @CacheableTask
 public class GitExtractorTask extends DefaultTask {
+    GitExtractorExtension extension;
+
     @OutputDirectories
     Collection<Path> outputDirectories;
 
-    public Collection<Path> getOutputDirectories() {
-        return outputDirectories;
+    @Inject
+    public GitExtractorTask(GitExtractorExtension extension) {
+        this.extension = extension;
+        outputDirectories = extension.extractions.stream()
+                .map(e -> extension.extractionDirectory.dir(e.destination()).getAsFile().toPath())
+                .collect(Collectors.toSet());
     }
 
     @TaskAction
     public void gitExtractor() throws Exception {
-        GitExtractorExtension extension = getProject().getExtensions().getByType(GitExtractorExtension.class);
         for (GitExtraction extraction : extension.extractions) {
             extract(extension.extractionDirectory, extraction);
         }
+    }
+
+    public Collection<Path> getOutputDirectories() {
+        return outputDirectories;
     }
 
     void extract(final Directory extractionDirectory, final GitExtraction extraction) throws Exception {

@@ -73,6 +73,7 @@ components:
         - orbit
         - nodeId
         - accountId
+        - log4j2.xml
       properties:
         orbit:
           description: |

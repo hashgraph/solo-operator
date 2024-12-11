@@ -8,6 +8,8 @@ import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GRPC
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_APP;
 import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
 import static com.hedera.solo.operator.test.fixtures.coredns.ConfigureCoredns.configureCoredns;
+import static com.hedera.solo.operator.test.orbit.OrbitTest.getSystemResourceAsStringUnchecked;
+import static com.hedera.solo.operator.test.orbit.OrbitTest.withResources;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -237,7 +239,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .endSpec()
                 .build();
 
-        kubernetesClient.resource(orbit).create();
+        kubernetesClient.resource(withResources(orbit)).create();
 
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
             assertThat(kubernetesClient.resource(orbit).get()).isNotNull();
@@ -276,6 +278,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .withAccountId(node.accountId())
                 .withNodeId(node.id())
                 .withPersistentVolumeClaims(prepareCapsulePVCs(node))
+                .withLog4j2Xml(getSystemResourceAsStringUnchecked("import/hedera/mainnet/log4j2.xml"))
                 .endSpec();
     }
 
