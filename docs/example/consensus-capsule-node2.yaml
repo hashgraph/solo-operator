@@ -12,9 +12,9 @@ spec:
       consensusNode:
         name: "consensus-node"
         softwareVersion:
-          repository: "gcr.io/hedera-registry"
+          repository: "swirldslabs.jfrog.io/consensus-node-docker-dev"
           name: "consensus-node"
-          tag: "0.52.0-alpha.6"
+          tag: "0.57.0-develop.x6553ab8" # released on 11-22-2024 05:31:48 +1100
           imagePullPolicy: IfNotPresent
       recordStreamUploader:
         enabled: true
@@ -96,6 +96,20 @@ spec:
           gcs:
             enabled: false
           envFromSecret: "uploader-secrets"
+      openTelemetryCollector:
+        enabled: true
+        name: "open-telemetry-collector"
+        softwareVersion:
+          repository: "docker.io/otel"
+          name: "opentelemetry-collector-contrib"
+          tag: "0.72.0"
+        config:
+          exporters:
+            loki:
+              enabled: true
+              auth:
+                enabled: false
+              endpoint: "http://loki.telemetry.svc.cluster.local:3100/loki/api/v1/push"
     volumes: # mix-n-match volumes: except logs and stats, rest are provisioned as empty dir
       logs:
         persistentVolumeClaim:

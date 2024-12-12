@@ -368,11 +368,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         final OpenTelemetryCollector oc =
                 primary.getSpec().getPodProperties().getContainers().getOpenTelemetryCollector();
 
-        if (Objects.isNull(oc) || !oc.getEnabled()) {
-            return Optional.empty();
-        }
-
-        return Optional.of(oc);
+        return Optional.ofNullable(oc);
     }
 
     protected Optional<StreamUploader> setStreamFileExtensions(
