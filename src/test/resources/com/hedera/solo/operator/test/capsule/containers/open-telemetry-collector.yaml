@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 ---
-enabled: true
+enabled: false # disable by default for CI. if needed, enable for local testing
 name: "open-telemetry-collector"
 softwareVersion:
   repository: "docker.io/otel"

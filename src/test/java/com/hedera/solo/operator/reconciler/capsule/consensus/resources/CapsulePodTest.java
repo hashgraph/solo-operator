@@ -2,6 +2,7 @@
 
 package com.hedera.solo.operator.reconciler.capsule.consensus.resources;
 
+import com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector;
 import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleSpec;
@@ -558,5 +559,38 @@ public class CapsulePodTest {
                 .get()
                 .getAdditionalVolumeMounts()
                 .contains(tvm1));
+    }
+
+    @Test
+    @Description("it should set additional volume mounts for otel-collector")
+    void testPrepareOtelCollectorWithAdditionalVolumeMounts() {
+        final VolumeMount tvm1 = new VolumeMountBuilder()
+                .withName("test")
+                .withMountPath("/test")
+                .withSubPath("test.txt")
+                .build();
+        final VolumeMount tvm2 = new VolumeMountBuilder()
+                .withName("test2")
+                .withMountPath("/test")
+                .withSubPath("test2.txt")
+                .build();
+
+        OpenTelemetryCollector oc =
+                TemplateLoader.load(OpenTelemetryCollector.class, TemplateLoader.TEMPLATE_OPEN_TELEMETRY_COLLECTOR);
+        oc.setEnabled(true);
+        oc.setAdditionalVolumeMounts(List.of(tvm1, tvm2));
+        Containers containers =
+                new ContainersBuilder().withOpenTelemetryCollector(oc).build();
+        Mockito.when(consensusCapsule.getSpec().getPodProperties().getContainers())
+                .thenReturn(containers);
+
+        Optional<OpenTelemetryCollector> opc = capsulePod.prepareOpenTelemetryCollector(consensusCapsule);
+        Assertions.assertTrue(opc.isPresent());
+
+        Assertions.assertEquals(2, opc.get().getAdditionalVolumeMounts().size());
+
+        // we should get back what we put in as volume mounts (for now we don't modify it, so it should come back as it
+        // is)
+        Assertions.assertTrue(opc.get().getAdditionalVolumeMounts().contains(tvm1));
     }
 }

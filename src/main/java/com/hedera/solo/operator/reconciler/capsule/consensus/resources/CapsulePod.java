@@ -364,7 +364,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         return Optional.of(bu);
     }
 
-    private Optional<OpenTelemetryCollector> prepareOpenTelemetryCollector(ConsensusCapsule primary) {
+    protected Optional<OpenTelemetryCollector> prepareOpenTelemetryCollector(ConsensusCapsule primary) {
         final OpenTelemetryCollector oc =
                 primary.getSpec().getPodProperties().getContainers().getOpenTelemetryCollector();
 

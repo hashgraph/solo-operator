@@ -70,7 +70,8 @@ public class SidecarContainersTest extends ConsensusCapsuleTestAbstract {
             for (Pod p : consensusPods) {
                 String accountId = p.getMetadata().getLabels().get(LABEL_ACCOUNT_ID);
                 assertThat(accountId).isNotEmpty();
-                assertThat(p.getSpec().getContainers()).hasSize(6);
+                assertThat(p.getSpec().getContainers().size())
+                        .isGreaterThanOrEqualTo(5); // otel-collector is optional, so we are checking for 5 or more
 
                 for (Container c : p.getSpec().getContainers()) {
                     Map<String, String> envMap = new HashMap<>();
@@ -113,6 +114,20 @@ public class SidecarContainersTest extends ConsensusCapsuleTestAbstract {
                                     .isEqualTo(RECORD_STREAM_BUCKET_PATH_TEMPLATE.formatted(accountId));
                             break;
                         case "open-telemetry-collector":
+                            assertThat(envMap.get("OTEL_ENVIRONMENT")).isNotEmpty();
+                            assertThat(envMap.get("OTEL_NODE_ID")).isNotEmpty();
+                            assertThat(envMap.get("OTEL_METRICS_NODE_ID")).isNotEmpty();
+                            assertThat(envMap.get("OTEL_ACCOUNT_ID")).isNotEmpty();
+                            assertThat(envMap.get("OTEL_HOST_IP")).isNotEmpty();
+                            assertThat(envMap.get("OTEL_ORBIT_NAME")).isNotEmpty();
+                            assertThat(envMap.get("OTEL_APP_NAME")).isNotEmpty();
+                            assertThat(envMap.get("OTEL_LOG_LEVEL")).isNotEmpty();
+                            assertThat(envMap.get("OTEL_INSTANCE_TYPE")).isNotEmpty();
+                            assertThat(envMap.get("OTEL_MEMORY_LIMITER_LIMIT_MIB"))
+                                    .isNotEmpty();
+                            assertThat(envMap.get("OTEL_MEMORY_LIMITER_SPIKE_LIMIT_MIB"))
+                                    .isNotEmpty();
+
                             assertThat(c.getPorts().size()).isGreaterThan(0);
                             break;
                     }
