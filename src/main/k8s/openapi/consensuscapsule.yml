@@ -83,6 +83,9 @@ components:
         nodeId:
           type: integer
           format: int64
+        externalAddress:
+          description: External FQDN or IP address of the consensus capsule.
+          type: string
         eligibleForDeployment:
           type: boolean
           default: false
