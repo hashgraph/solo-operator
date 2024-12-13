@@ -99,6 +99,15 @@ components:
             this should be set by the `NetworkOperation` reconciliation loop.
 
             This most likely will be removed in the future when DAB Phase 2/3 is available.
+        serviceType:
+          description: |
+            The type of consensus-node service
+          type: string
+          enum:
+            - "ClusterIP"
+            - "LoadBalancer"
+            - "NodePort"
+          default: "LoadBalancer"
         podProperties:
           type: object
           default: {}

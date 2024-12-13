@@ -15,6 +15,7 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.BooleanWithUn
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import java.util.Map;
+import java.util.Objects;
 
 @KubernetesDependent(useSSA = BooleanWithUndefined.FALSE, labelSelector = "app=consensus-node")
 public class CapsuleService extends CRUDKubernetesDependentResource<Service, ConsensusCapsule> {
@@ -28,11 +29,19 @@ public class CapsuleService extends CRUDKubernetesDependentResource<Service, Con
 
     @Override
     protected Service desired(final ConsensusCapsule primary, final Context<ConsensusCapsule> context) {
+        Objects.requireNonNull(primary, "primary must not be null");
+        Objects.requireNonNull(primary.getSpec(), "spec must not be null");
+        Objects.requireNonNull(primary.getMetadata(), "metadata must not be null");
+        Objects.requireNonNull(primary.getSpec().getNodeId(), "spec.nodeId must not be null");
+        Objects.requireNonNull(primary.getSpec().getOrbit(), "spec.orbit must not be null");
+        Objects.requireNonNull(primary.getSpec().getServiceType(), "spec.serviceType must not be null");
+
         final ObjectMeta metadata = primary.getMetadata();
         final String validName = validName(metadata.getName(), NAME_SUFFIX);
         final String namespace = metadata.getNamespace();
         final String orbit = primary.getSpec().getOrbit();
         final String nodeName = Metadata.prepareNodeName(primary.getSpec().getNodeId());
+        final String serviceType = primary.getSpec().getServiceType().getValue();
         final Map<String, String> labels = CapsulePod.prepareLabels(primary);
         final Service service = loadYaml(Service.class, getClass(), TEMPLATE);
 
@@ -48,6 +57,7 @@ public class CapsuleService extends CRUDKubernetesDependentResource<Service, Con
                 .endMetadata()
                 .editSpec()
                 .addToSelector(Constants.LABEL_NODE_NAME, nodeName)
+                .withType(serviceType)
                 .endSpec()
                 .build();
     }
