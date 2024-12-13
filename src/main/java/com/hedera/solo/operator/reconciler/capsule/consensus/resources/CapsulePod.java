@@ -16,10 +16,13 @@ import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_BACKU
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_CONSENSUS_NODE;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_DEFAULT_MODE;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_EVENT_STREAM_UPLOADER;
+import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_HOST_EXTERNAL_IP;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NAMESPACE;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_ID;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_NAME;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_NAMES;
+import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_OPEN_TELEMETRY_COLLECTOR;
+import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_ORBIT_NAME;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_PUBLIC_KEY_FILES;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_RECORD_STREAM_UPLOADER;
@@ -80,7 +83,6 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
             "a volume cannot have both HostPath and PersistentVolumeClaim specification: '%s'";
     public static final String ERR_DUPLICATE_VOLUME_SPECIFICATION =
             "volume specification is duplicated in persistentVolumeClaims and volumes sections for: %s";
-    public static final String OTEL_COLLECTOR = "otel-collector";
     public static final ConsensusNode DEFAULT_CONSENSUS_NODE = edit(new ConsensusNode())
             .with(version -> version.editSoftwareVersion()
                     .withRepository("swirldslabs.jfrog.io/consensus-node-docker-dev")
@@ -211,7 +213,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
                 Containers::getBackupUploader,
                 Containers::getConsensusNode,
                 Containers::getEventsStreamUploader,
-                Containers::getOtelCollector,
+                Containers::getOpenTelemetryCollector,
                 Containers::getRecordStreamSidecarFilesUploader,
                 Containers::getRecordStreamUploader);
         for (Function<Containers, ?> getContainer : list) {
@@ -221,8 +223,8 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
                 resources.accept(container.getName(), container.getResources());
             } else if (obj instanceof StreamUploader container && match.test(container.getName())) {
                 resources.accept(container.getName(), container.getResources());
-            } else if (obj instanceof OpenTelemetryCollector container && match.test(OTEL_COLLECTOR)) {
-                resources.accept(OTEL_COLLECTOR, container.getResources());
+            } else if (obj instanceof OpenTelemetryCollector container && match.test(container.getName())) {
+                resources.accept(container.getName(), container.getResources());
             }
         }
         return spec.endSpec();
@@ -234,15 +236,19 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         final String accountId = primary.getSpec().getAccountId();
         final String namespace = primary.getMetadata().getNamespace();
         final List<String> nodeNames = getNodeNames(context, namespace);
+        final String orbitName = primary.getSpec().getOrbit();
+        final String podName = validName(primary.getMetadata().getName(), NAME_SUFFIX);
 
         final TemplateInstance templateInstance = tpl.instance();
 
         // set defaults
+        templateInstance.data(TPL_VAR_ORBIT_NAME, orbitName);
         templateInstance.data(TPL_VAR_NAMESPACE, namespace);
         templateInstance.data(TPL_VAR_NODE_ID, nodeId);
         templateInstance.data(TPL_VAR_NODE_NAME, nodeName);
         templateInstance.data(TPL_VAR_NODE_NAMES, nodeNames);
         templateInstance.data(TPL_VAR_ACCOUNT_ID, accountId);
+        templateInstance.data(TPL_VAR_HOST_EXTERNAL_IP, "NOT_SET"); // FIXME: should be node's external IP
         templateInstance.data(TPL_VAR_DEFAULT_MODE, DEFAULT_FILE_MODE);
 
         return templateInstance;
@@ -274,11 +280,13 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
                         primary.getSpec().getPodProperties().getContainers().getConsensusNode())
                 .orElse(DEFAULT_CONSENSUS_NODE);
         final Map<String, Optional<StreamUploader>> uploaderMap = this.prepareStreamUploaderContainers(primary);
+        final Optional<OpenTelemetryCollector> oc = this.prepareOpenTelemetryCollector(primary);
 
         // set template variables
         TemplateInstance tplInstance = getTemplateWithDefaults(primary, context);
         tplInstance.data(TPL_VAR_PUBLIC_KEY_FILES, publicKeys.getData().keySet());
         tplInstance.data(TPL_VAR_CONSENSUS_NODE, cn);
+        tplInstance.data(TPL_VAR_OPEN_TELEMETRY_COLLECTOR, oc.orElse(null));
         uploaderMap.forEach((k, v) -> tplInstance.data(k, v.orElse(null)));
 
         // return an instance of Pod
@@ -354,6 +362,13 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
                                 bu.getConfig().getS3().getUrl(), bu.getConfig().getBucketName()));
 
         return Optional.of(bu);
+    }
+
+    protected Optional<OpenTelemetryCollector> prepareOpenTelemetryCollector(ConsensusCapsule primary) {
+        final OpenTelemetryCollector oc =
+                primary.getSpec().getPodProperties().getContainers().getOpenTelemetryCollector();
+
+        return Optional.ofNullable(oc);
     }
 
     protected Optional<StreamUploader> setStreamFileExtensions(

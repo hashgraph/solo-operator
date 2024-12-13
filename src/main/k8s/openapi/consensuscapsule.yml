@@ -158,6 +158,11 @@ components:
                     softwareVersion:
                       type: object
                       x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+                    additionalVolumeMounts:
+                      type: array
+                      items:
+                        type: object
+                        x-java-type: io.fabric8.kubernetes.api.model.VolumeMount
                 recordStreamUploader:
                   type: object
                   x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
@@ -170,7 +175,7 @@ components:
                 backupUploader:
                   type: object
                   x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploader
-                otelCollector:
+                openTelemetryCollector:
                   type: object
                   x-java-type: com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector
             volumes:

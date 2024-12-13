@@ -51,6 +51,8 @@ public final class Constants {
 
     // template variables
     public static final String TPL_VAR_NAMESPACE = "namespace";
+    public static final String TPL_VAR_ORBIT_NAME = "orbitName";
+    public static final String TPL_VAR_ENVIRONMENT = "environment";
     public static final String TPL_VAR_DEFAULT_MODE = "defaultMode"; // e.g. 0755
     public static final String TPL_VAR_NODE_ID = "nodeId";
     public static final String TPL_VAR_NODE_IDS = "nodeIds";
@@ -64,6 +66,9 @@ public final class Constants {
     public static final String TPL_VAR_EVENT_STREAM_UPLOADER = "esu";
     public static final String TPL_VAR_BACKUP_UPLOADER = "bu";
     public static final String TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER = "rssu";
+    public static final String TPL_VAR_OPEN_TELEMETRY_COLLECTOR = "oc";
+    public static final String TPL_VAR_TELEMETRY = "telemetry";
+    public static final String TPL_VAR_HOST_EXTERNAL_IP = "hostIp";
 
     // Sidecars
     public static final String RECORD_STREAM_BUCKET_PATH_TEMPLATE = "recordstreams/record%s";

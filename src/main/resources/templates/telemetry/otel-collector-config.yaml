@@ -1,0 +1,165 @@
+# SPDX-License-Identifier: Apache-2.0
+
+---
+# {@String environment}
+# {@String orbitName}
+# {@com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector oc}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+data:
+  config.yaml: |
+    exporters:
+      logging:
+        loglevel: $\{env:OTEL_LOG_LEVEL\}
+      # {#if  oc.config.exporters.loki.enabled == true}
+      loki:
+        # {#if  oc.config.exporters.loki.auth.enabled == true}
+        auth:
+          authenticator: basicauth/loki
+        # {/if}
+        endpoint: $\{env:OTEL_LOKI_ENDPOINT\}
+      # {/if}
+
+    extensions:
+      file_storage:
+      health_check:
+      memory_ballast:
+        size_in_percentage: 20
+      # {#if  oc.config.exporters.loki.enabled == true && oc.config.exporters.loki.auth.enabled == true}
+      basicauth/loki:
+        client_auth:
+          username: $\{env:OTEL_LOKI_USERNAME\}
+          password: $\{env:OTEL_LOKI_PASSWORD\}
+      # {/if}
+
+    processors:
+      batch:
+      # Add standard label sets to both logs and metrics.
+      attributes/addlabels:
+        actions:
+          - key: environment # mainnet, testnet, previewnet, etc.
+            action: insert
+            value: "$\{env:OTEL_ENVIRONMENT\}"
+          - key: orbit_name
+            action: insert
+            value: "$\{env:OTEL_ORBIT_NAME\}"
+          - key: node_id
+            action: insert
+            value: "$\{env:OTEL_NODE_ID\}"
+          - key: account_num
+            action: insert
+            value: "$\{env:OTEL_ACCOUNT_ID\}"
+          - key: inventory_name
+            action: insert
+            value: "$\{env:HOSTNAME\} - $\{env:OTEL_HOST_IP\}"
+          - key: instance_type
+            action: insert
+            value: "$\{env:OTEL_INSTANCE_TYPE\}"
+          - key: appname # seems redundant because of instance_type
+            action: insert
+            value: "$\{env:OTEL_APP_NAME\}"
+          - key: metrics_node_id
+            action: insert
+            value: "$\{env:OTEL_METRICS_NODE_ID\}"
+      # {#if  oc.config.exporters.loki.enabled == true}
+      attributes/lokilabels:
+        actions:
+          - key: service_name
+            action: insert
+            value: "$\{env:OTEL_NODE_ID\} - $\{env:HOSTNAME\} - $\{env:OTEL_ACCOUNT_ID\}"
+          # Map the log.file.name attribute to log_name. This is
+          # necessary, as Loki does not support labels with dots.
+          - key: log_name
+            action: insert
+            from_attribute: gcp.log_name # added by the filelog receivers
+          # The loki exporter does not automatically make attributes labels,
+          # so we must map labels here.
+          - key: loki.attribute.labels
+            action: insert
+            value: service_name, log_name, environment, orbit_name, node_id, account_num, inventory_name, instance_type, appname
+      {/if}
+      # Note that this configuration includes the recommended memory_limiter and batch plugins,
+      # which avoid high latency for reporting telemetry, and ensure that the collector itself will stay stable
+      # (not run out of memory) by dropping telemetry if needed.
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: "$\{env:OTEL_MEMORY_LIMITER_LIMIT_MIB\}"
+        spike_limit_mib: "$\{env:OTEL_MEMORY_LIMITER_SPIKE_LIMIT_MIB\}"
+
+    receivers:
+      filelog/hgcaa:
+        storage: file_storage
+        include:
+          - /opt/hgcapp/services-hedera/HapiApp2.0/output/hgcaa.log
+        multiline:
+          line_start_pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}'
+        operators:
+          - type: add
+            field: attributes["gcp.log_name"]
+            value: "hgcaa"
+      filelog/swirlds:
+        storage: file_storage
+        include:
+          - /opt/hgcapp/services-hedera/HapiApp2.0/output/swirlds.log
+        multiline:
+          line_start_pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}'
+        operators:
+          - type: add
+            field: attributes["gcp.log_name"]
+            value: "swirlds"
+      # {#if  oc.config.receivers.swirldsVMap.enabled == true}
+      filelog/swirlds-vmap:
+        storage: file_storage
+        include:
+          - /opt/hgcapp/services-hedera/HapiApp2.0/output/swirlds-vmap.log
+        multiline:
+          line_start_pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}'
+        operators:
+          - type: add
+            field: attributes["gcp.log_name"]
+            value: "swirlds-vmap"
+      # {/if}
+      # {#if  oc.config.receivers.hashstream.enabled == true}
+      filelog/swirlds-hashstream:
+        storage: file_storage
+        include:
+          -  /opt/hgcapp/services-hedera/HapiApp2.0/output/swirlds-hashstream/swirlds-hashstream.log
+        multiline:
+          line_start_pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}'
+        operators:
+          - type: add
+            field: attributes["gcp.log_name"]
+            value: "swirlds-hashstream"
+      # {/if}
+
+    service:
+      extensions:
+        - health_check
+        - file_storage
+        # {#if  oc.config.exporters.loki.enabled == true && oc.config.exporters.loki.auth.enabled == true}
+        - basicauth/loki
+        # {/if}
+
+      pipelines:
+        # {#if  oc.config.exporters.loki.enabled == true}
+        logs/loki:
+          receivers:
+            - filelog/hgcaa
+            - filelog/swirlds
+            # {#if  oc.config.receivers.swirldsVMap.enabled == true}
+            - filelog/swirlds-vmap
+            # {/if}
+            # {#if  oc.config.receivers.hashstream.enabled == true}
+            - filelog/swirlds-hashstream
+            # {/if}
+          processors:
+            - memory_limiter
+            - attributes/addlabels
+            - attributes/lokilabels
+            - batch
+          exporters:
+            - loki
+        # {/if}

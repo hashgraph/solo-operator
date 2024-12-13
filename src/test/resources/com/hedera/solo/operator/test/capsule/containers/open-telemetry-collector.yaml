@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+
+---
+enabled: false # disable by default for CI. if needed, enable for local testing
+name: "open-telemetry-collector"
+softwareVersion:
+  repository: "docker.io/otel"
+  name: "opentelemetry-collector-contrib"
+  tag: "0.72.0"
+config:
+  exporters:
+    loki:
+      enabled: true
+      auth:
+        enabled: false
+      endpoint: "http://loki.telemetry.svc.cluster.local:3100/loki/api/v1/push"

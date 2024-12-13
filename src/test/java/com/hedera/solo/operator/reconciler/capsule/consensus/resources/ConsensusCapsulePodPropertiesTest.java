@@ -3,7 +3,6 @@
 package com.hedera.solo.operator.reconciler.capsule.consensus.resources;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
-import static com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsulePod.OTEL_COLLECTOR;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector;
@@ -111,7 +110,7 @@ public class ConsensusCapsulePodPropertiesTest {
                         .withName("recordStreamUploader-" + suffix)
                         .withResources(factory.random(ResourceRequirements.class)))
                 .with(builder -> builder.editContainers()
-                        .editOtelCollector()
+                        .editOpenTelemetryCollector()
                         .withResources(factory.random(ResourceRequirements.class)))
                 .build();
         // containers in pod properties
@@ -134,7 +133,9 @@ public class ConsensusCapsulePodPropertiesTest {
                 .with(builder -> builder.editSpec()
                         .addNewContainer()
                         .withName(containers.getRecordStreamUploader().getName()))
-                .with(builder -> builder.editSpec().addNewContainer().withName(OTEL_COLLECTOR))
+                .with(builder -> builder.editSpec()
+                        .addNewContainer()
+                        .withName(containers.getOpenTelemetryCollector().getName()))
                 .build();
         // copy pod properties to pod builder and construct new pod
         pod = capsulePod.copyPodProperties(podProperties, pod.edit()).build();
@@ -153,8 +154,8 @@ public class ConsensusCapsulePodPropertiesTest {
                 .isEqualTo(rebuild(containers.getRecordStreamSidecarFilesUploader(), StreamUploader::getResources));
         assertThat(map.get(containers.getRecordStreamUploader().getName()).getResources())
                 .isEqualTo(rebuild(containers.getRecordStreamUploader(), StreamUploader::getResources));
-        assertThat(map.get(OTEL_COLLECTOR).getResources())
-                .isEqualTo(rebuild(containers.getOtelCollector(), OpenTelemetryCollector::getResources));
+        assertThat(map.get(containers.getOpenTelemetryCollector().getName()).getResources())
+                .isEqualTo(rebuild(containers.getOpenTelemetryCollector(), OpenTelemetryCollector::getResources));
     }
 
     <T, E> List<T> rebuild(

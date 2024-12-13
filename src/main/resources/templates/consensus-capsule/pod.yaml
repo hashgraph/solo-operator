@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 
 ---
+# {@String orbitName}
 # {@String namespace}
 # {@Long nodeId}
 # {@String nodeName}
 # {@java.util.List nodeNames}
 # {@String accountId}
+# {@String hostIp}
 # {@int defaultMode}
 # {@java.util.Set publicKeyFiles}
 # {@com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.ConsensusNode cn}
@@ -13,6 +15,7 @@
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader rssu}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader esu}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader bu}
+# {@com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector oc}
 kind: Pod
 apiVersion: v1
 metadata:
@@ -222,6 +225,8 @@ spec:
       volumeMounts:
         - name: cluster-config
           mountPath: /tmp/volumes/cluster-config # mount to a directory so that we can run custom scripts from it, e.g. startup-probe
+        - name: hgcapp-init
+          mountPath: /tmp/volumes/init # mount for debugging
         - name: cluster-config
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/config.txt
           subPath: "config.txt"
@@ -482,6 +487,66 @@ spec:
         - secretRef:
             name: "{bu.config.envFromSecret}"
     # {/if}
+    #{#if oc && oc.enabled}
+    # Sidecar: open-telemetry-collector
+    - name: "{oc.name}"
+      image: "{oc.softwareVersion.repository}/{oc.softwareVersion.name}:{oc.softwareVersion.tag}"
+      imagePullPolicy: "{oc.softwareVersion.imagePullPolicy}"
+      env:
+        - name: OTEL_ORBIT_NAME
+          value: "{orbitName}"
+        - name: OTEL_NODE_ID
+          value: "{nodeId}"
+        - name: OTEL_METRICS_NODE_ID
+          value: "{nodeId + 1}"
+        - name: OTEL_ACCOUNT_ID
+          value: "{accountId}"
+        - name: OTEL_HOST_IP
+          value: "{hostIp}"
+        - name: OTEL_LOG_LEVEL
+          value: "{oc.config.logLevel}"
+        - name: OTEL_ENVIRONMENT
+          value: "{oc.config.environment}"
+        - name: OTEL_APP_NAME
+          value: "{oc.config.appName}"
+        - name: OTEL_INSTANCE_TYPE
+          value: "{oc.config.appName}"
+        - name: OTEL_MEMORY_LIMITER_LIMIT_MIB
+          value: "{oc.config.processors..memoryLimiter.limitMib}"
+        - name: OTEL_MEMORY_LIMITER_SPIKE_LIMIT_MIB
+          value: "{oc.config.processors.memoryLimiter.spikeLimitMib}"
+        #{#if oc.config.exporters.loki.enabled}
+        - name: OTEL_LOKI_ENDPOINT
+          value: "{oc.config.exporters.loki.endpoint}"
+        #{/if}
+      #{#if oc.config.exporters.loki.enabled && oc.config.exporters.loki.auth.enabled}
+      envFrom:
+        - secretRef:
+            name: "{oc.config.exporters.loki.auth.secret.name}"
+      #{/if}
+      ports:
+        - name: health # otel-collector liveness check
+          containerPort: 13133
+          protocol: TCP
+      livenessProbe:
+        httpGet:
+          path: /
+          port: health
+      readinessProbe:
+        httpGet:
+          path: /
+          port: health
+      volumeMounts:
+        - name: otel-collector-config
+          mountPath: /etc/otelcol-contrib/config.yaml
+          subPath: config.yaml
+          readOnly: true
+        - name: hgcapp-output
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/output
+          readOnly: true
+        - name: hgcapp-otel-file-storage
+          mountPath: /var/lib/otelcol/file_storage
+    #{/if}
   volumes:
     - name: cluster-config
       configMap:
@@ -490,6 +555,10 @@ spec:
     - name: backup-uploader-config
       configMap:
         name: backup-uploader-config
+        defaultMode: "{defaultMode}"
+    - name: otel-collector-config
+      configMap:
+        name: "{nodeName}-otel-collector-config"
         defaultMode: "{defaultMode}"
     - name: public-keys
       configMap:
@@ -518,4 +587,6 @@ spec:
     - name: hgcapp-upgrade
       emptyDir: {}
     - name: hgcapp-init
+      emptyDir: {}
+    - name: hgcapp-otel-file-storage
       emptyDir: {}
