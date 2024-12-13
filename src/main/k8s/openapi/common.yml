@@ -20,6 +20,20 @@ components:
           $ref: "#/components/schemas/StreamUploader"
         openTelemetryCollector:
           $ref: "#/components/schemas/OpenTelemetryCollector"
+        streamUploaderChangeset:
+          $ref: "#/components/schemas/StreamUploaderChangeset"
+        nodeProperties:
+          $ref: "#/components/schemas/NodeProperties"
+        nodeLoggingConfiguration:
+          $ref: "#/components/schemas/NodeLoggingConfiguration"
+        softwareVersionSource:
+          $ref: "#/components/schemas/SoftwareVersionSource"
+        softwareVersionStatus:
+          $ref: "#/components/schemas/SoftwareVersionStatus"
+        consensusNodeChangeset:
+          $ref: "#/components/schemas/ConsensusNodeChangeset"
+        haproxyChangeset:
+          $ref: "#/components/schemas/HaproxyChangeset"
 
     SoftwareVersion:
       type: object
@@ -38,7 +52,7 @@ components:
           type: array
           items:
             type: object
-            x-java-type: io.fabric8.kubernetes.api.model.LocalObjectReference
+            x-java-type: io.fabric8.kubernetes.api.model.LocalObjectReference # refers to a k8s secret
         imagePullPolicy:
           type: string
           enum:
@@ -243,7 +257,7 @@ components:
                       default: true
                     auth:
                       type: object
-                      default: {}
+                      default: { }
                       properties:
                         enabled:
                           type: boolean
@@ -282,3 +296,175 @@ components:
           items:
             type: object
             x-java-type: io.fabric8.kubernetes.api.model.VolumeMount
+
+    StreamUploaderChangeset:
+      type: object
+      properties:
+        name:
+          type: string
+        softwareVersion:
+          type: object
+          x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+        resources:
+          type: object
+          x-java-type: io.fabric8.kubernetes.api.model.ResourceRequirements
+        enabled:
+          type: boolean
+        config:
+          type: object
+          properties:
+            debug:
+              type: boolean
+            enableCompression:
+              type: boolean
+            enableSidecarFiles:
+              type: boolean
+            reaper:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                minKeep:
+                  type: integer
+                interval:
+                  type: integer
+                defaultBackoff:
+                  type: integer
+            signature:
+              type: object
+              properties:
+                require:
+                  type: boolean
+                prioritize:
+                  type: boolean
+            streamFileExtension:
+              type: string
+            streamSigExtension:
+              type: string
+            streamExtension:
+              type: string
+            sigExtension:
+              type: string
+
+    NodeProperties: # corresponds to: node.properties
+      type: object
+      properties:
+        nodeId:
+          type: integer
+          format: int64
+        configuration:
+          type: object
+          additionalProperties:
+            type: string
+
+    NodeLoggingConfiguration:
+      type: object
+      properties:
+        nodeId:
+          type: integer
+          format: int64
+        configuration: # e.g. log4j2.xml content
+          type: string
+
+    SoftwareVersionSource: # move up close to SoftwareVersion
+      type: object
+      properties:
+        images:
+          type: array
+          items:
+            type: object
+            properties:
+              repository:
+                type: string
+              name:
+                type: string
+              tag:
+                type: string
+              imagePullSecrets:
+                type: array
+                items:
+                  type: object
+                  x-java-type: io.fabric8.kubernetes.api.model.LocalObjectReference
+        layerHashes:
+          type: array
+          items:
+            type: string
+        imagePullPolicy:
+          type: string
+          enum:
+            - Always
+            - Never
+            - IfNotPresent
+          default: IfNotPresent
+
+    SoftwareVersionStatus:
+      type: object
+      properties:
+        repository:
+          type: string
+        name:
+          type: string
+        tag:
+          type: string
+        valid:
+          type: string
+          enum:
+            - UNKNOWN
+            - VALID
+            - INVALID
+        selectedForDeployment:
+          type: boolean
+          default: false
+        manifestHash:
+          type: string
+
+    ConsensusNodeChangeset:
+      type: object
+      properties:
+        softwareVersionSource:
+          type: array
+          items:
+            type: object
+            x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersionSource
+        nodeProperties:
+          type: array
+          items:
+            type: object
+            x-java-type: com.hedera.solo.operator.model.commonspec.NodeProperties
+        logging:
+          type: array
+          items:
+            type: object
+            x-java-type: com.hedera.solo.operator.model.commonspec.NodeLoggingConfiguration
+
+    HaproxyChangeset:
+      type: object
+      properties:
+        haproxy:
+          type: object
+          default: { }
+          properties:
+            softwareVersion:
+              type: object
+              x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+            user:
+              description: stats user
+              type: string
+              default: "user"
+            auth:
+              description: stats auth
+              type: string
+              default: "auth"
+        serviceType:
+          type: string
+          default: LoadBalancer
+          enum:
+            - ClusterIP
+            - Ingress
+            - LoadBalancer
+        serviceSpec:
+          type: object
+          x-java-type: io.fabric8.kubernetes.api.model.ServiceSpec
+        ingressSpec:
+          type: object
+          x-java-type: io.fabric8.kubernetes.api.model.networking.v1.IngressSpec
