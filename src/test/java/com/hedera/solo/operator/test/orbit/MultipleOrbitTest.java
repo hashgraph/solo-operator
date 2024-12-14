@@ -14,6 +14,7 @@ import static org.awaitility.Awaitility.await;
 import com.hedera.solo.operator.model.commonspec.AddressBookEntry;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.reconciler.common.Metadata;
@@ -261,8 +262,9 @@ public class MultipleOrbitTest {
                         .with(metadata -> metadata.editMetadata()
                                 .withName("net-op")
                                 .withNamespace(orbit.getMetadata().getName()))
-                        .with(spec ->
-                                spec.editSpec().withOrbit(orbit.getMetadata().getName()))
+                        .with(spec -> spec.editSpec()
+                                .withMode(NetworkOperationSpec.Mode.FirstInitialization)
+                                .withOrbit(orbit.getMetadata().getName()))
                         .build())
                 .create();
     }
