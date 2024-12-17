@@ -17,6 +17,7 @@ val lombokVersion: String by project
 val hederaSdkVersion: String by project
 val javaoperatorsdkVersion: String by project
 val spotbugsVersion: String by project
+val wiremockVersion: String by project
 
 dependencies {
     annotationProcessor("io.sundr:builder-annotations:${sundrVersion}")
@@ -55,6 +56,7 @@ dependencies {
     testImplementation("org.assertj:assertj-core:${assertjVersion}")
     testImplementation("io.grpc:grpc-netty")
     testImplementation("com.hedera.fullstack:fullstack-helm-client:0.32.0")
+    testImplementation("org.wiremock:wiremock:${wiremockVersion}")
     componentTestImplementation(
         "io.javaoperatorsdk:operator-framework-junit-5:${javaoperatorsdkVersion}"
     )
