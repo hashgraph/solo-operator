@@ -14,7 +14,7 @@ import io.fabric8.kubernetes.client.utils.Serialization;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.DependentResource;
-import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDNoGCKubernetesDependentResource;
+import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import io.javaoperatorsdk.operator.processing.dependent.workflow.Condition;
 import io.quarkus.qute.Location;
@@ -24,7 +24,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 @KubernetesDependent(resourceDiscriminator = CapsuleTelemetryConfig.Discriminator.class)
-public class CapsuleTelemetryConfig extends CRUDNoGCKubernetesDependentResource<ConfigMap, ConsensusCapsule> {
+public class CapsuleTelemetryConfig extends CRUDKubernetesDependentResource<ConfigMap, ConsensusCapsule> {
 
     @Location("telemetry/otel-collector-config.yaml")
     Template tpl;
