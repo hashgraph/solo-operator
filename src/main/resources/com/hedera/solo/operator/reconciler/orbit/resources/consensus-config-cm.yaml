@@ -8,5 +8,4 @@ metadata:
   namespace: bogus-namespace
 data:
   settings.txt: ""
-  config.txt: ""
   application.properties: ""

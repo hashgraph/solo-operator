@@ -31,6 +31,8 @@ components:
           * Many of these concerns also apply to single K8S cluster modes of operation when adding new consensus nodes.
       type: object
       default: {}
+      required:
+        - consensus
       properties:
         deploymentModel:
           description: |
@@ -97,6 +99,10 @@ components:
         consensus:
           description: Shared (global) configuration for all `ConsensusCapsules` in the `Orbit`.
           type: object
+          required:
+            - networkSettings
+            - applicationConfiguration
+            - permissionConfiguration
           properties:
             provisioningModel:
               description: |
@@ -116,6 +122,13 @@ components:
               description: |
                 The application configuration for the `Orbit`. This is equivalent to the
                 `data/config/application.properties` file.
+              type: object
+              additionalProperties:
+                type: string
+            permissionConfiguration:
+              description: |
+                The permission configuration for the `Orbit`. This is equivalent to the
+                `data/config/api-permission.properties` file.
               type: object
               additionalProperties:
                 type: string
