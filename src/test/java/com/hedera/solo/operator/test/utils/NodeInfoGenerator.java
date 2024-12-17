@@ -14,23 +14,9 @@ public class NodeInfoGenerator {
         return String.format("0.0.%d", nodeId + Constants.HEDERA_ACCOUNT_START);
     }
 
-    public static String internalK8sServiceName(String nodeName, String namespace) {
-        return String.format("%s.consensus.%s.svc.cluster.local", nodeName, namespace);
-    }
-
-    public static String externalK8sServiceName(String nodeName, String namespace) {
-        return String.format("%s-svc.%s.svc.cluster.local", nodeName, namespace);
-    }
-
     public static TestRecords.NodeInfo nodeInfo(Long nodeId, String namespace) {
         final String nodeName = Metadata.prepareNodeName(nodeId);
-        return new TestRecords.NodeInfo(
-                nodeId,
-                nodeName,
-                accountId(nodeId),
-                1, // staking weight
-                internalK8sServiceName(nodeName, namespace),
-                externalK8sServiceName(nodeName, namespace));
+        return new TestRecords.NodeInfo(nodeId, nodeName, accountId(nodeId));
     }
 
     public static List<TestRecords.NodeInfo> nodes(List<Long> nodeIds, String namespace) {

@@ -3,6 +3,7 @@
 package com.hedera.solo.operator.test.orbit;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
+import static com.hedera.solo.operator.library.k8s.KubeletConfig.clusterDomain;
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GOSSIP;
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GRPC_TLS;
 import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
@@ -65,6 +66,7 @@ public class MultipleOrbitTest {
 
         List<String> names = List.of("alpha", "beta", "gamma");
         List<AddressBookEntry> addressBookEntries = new ArrayList<>();
+        String domain = clusterDomain(operator.getKubernetesClient());
         for (int loop = 0; loop < names.size(); loop++) {
             int id = loop;
             addressBookEntries.add(edit(new AddressBookEntry())
@@ -72,7 +74,8 @@ public class MultipleOrbitTest {
                             .withNickName("node" + id)
                             .withSelfName("node" + id)
                             .withWeight(1L)
-                            .withInternalHostname("node" + id + ".consensus.multipleorbittest-" + names.get(id))
+                            .withInternalHostname("node%s.consensus.multipleorbittest-%s.svc%s"
+                                    .formatted(id, names.get(id), domain != null ? "." + domain : ""))
                             .withInternalPort(50111)
                             .withExternalHostname("node" + id + "-svc.multipleorbittest-" + names.get(id))
                             .withExternalPort(50111)
