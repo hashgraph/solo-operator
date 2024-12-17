@@ -59,7 +59,7 @@ public class NetworkOperationTrigger extends KubernetesDependentResource<ConfigM
                                     String.valueOf(rolloverComparator.rollover(sequenceNumber.getAndIncrement()))))
                             .build())
                     .createOr(Updatable::update);
-        } catch (KubernetesClientException ignored) {
+        } catch (KubernetesClientException ignored) { // LM: Why is this exception ignored?
         }
     }
 
