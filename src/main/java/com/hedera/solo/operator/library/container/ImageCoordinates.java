@@ -36,7 +36,7 @@ public class ImageCoordinates {
         this.protocol = protocol;
         this.registry = registries.getOrDefault(registry, registry);
         this.name = name;
-        this.reference = reference == null ? "latest" : reference;
+        this.reference = reference == null || reference.isBlank() ? "latest" : reference;
         this.auth = auth;
     }
 
@@ -57,13 +57,13 @@ public class ImageCoordinates {
     }
 
     public static ImageCoordinates from(final String protocol, final String image, final String json) {
-        Matcher matcher = imagePattern.matcher(image);
+        final Matcher matcher = imagePattern.matcher(image);
         if (!matcher.matches()) {
             throw new IllegalArgumentException("Failed to read image: " + image);
         }
-        String registry = matcher.group("registry");
-        String name = matcher.group("name");
-        String reference = matcher.group("reference");
+        final String registry = matcher.group("registry");
+        final String name = matcher.group("name");
+        final String reference = matcher.group("reference");
         String auth = null;
         if (json != null) {
             Config config;
@@ -72,7 +72,7 @@ public class ImageCoordinates {
             } catch (IOException e) {
                 throw new IllegalArgumentException("Failed to read json", e);
             }
-            Auth entry = config.auths.get(registry);
+            final Auth entry = config.auths.get(registry);
             if (entry == null || entry.auth == null && (entry.username == null || entry.password == null)) {
                 throw new IllegalArgumentException("Failed to read auth");
             }
@@ -108,7 +108,7 @@ public class ImageCoordinates {
     }
 
     private static Map<String, String> registries() {
-        Map<String, String> registries = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        final Map<String, String> registries = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         registries.put("docker.io", "registry-1.docker.io");
         return registries;
     }
@@ -117,7 +117,7 @@ public class ImageCoordinates {
     public boolean equals(final Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        ImageCoordinates that = (ImageCoordinates) o;
+        final ImageCoordinates that = (ImageCoordinates) o;
         return Objects.equals(registry, that.registry)
                 && Objects.equals(name, that.name)
                 && Objects.equals(auth, that.auth);

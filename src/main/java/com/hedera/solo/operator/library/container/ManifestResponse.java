@@ -7,8 +7,8 @@ import java.net.http.HttpResponse;
 
 /** Manifest response from registry including unmarshalled manifest for recognized media types. */
 public class ManifestResponse {
-    public HttpResponse<byte[]> response;
-    public OCIManifest manifest;
+    public final HttpResponse<byte[]> response;
+    public final OCIManifest manifest;
 
     public ManifestResponse(final HttpResponse<byte[]> response) {
         this.response = response;

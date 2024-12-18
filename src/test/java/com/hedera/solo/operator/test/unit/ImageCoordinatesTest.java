@@ -32,4 +32,10 @@ public class ImageCoordinatesTest {
         assertThat(imageCoordinates.equals(null)).isFalse();
         assertThat(imageCoordinates.equals("")).isFalse();
     }
+
+    @Test
+    void testImageCoordinatesWithBlankReference() {
+        ImageCoordinates imageCoordinates = ImageCoordinates.http("host/path:");
+        assertThat(imageCoordinates.reference).isEqualTo("latest");
+    }
 }
