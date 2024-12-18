@@ -1,0 +1,31 @@
+// SPDX-License-Identifier: Apache-2.0
+
+package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
+
+import com.hedera.solo.operator.library.processor.ProcessorException;
+import com.hedera.solo.operator.library.processor.ProcessorStep;
+import com.hedera.solo.operator.model.commonspec.StreamUploaderChangeset;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
+import io.javaoperatorsdk.operator.api.reconciler.Context;
+import java.util.Objects;
+
+public class ApplyStreamUploaderChangeset implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
+    private final String containerName;
+
+    public ApplyStreamUploaderChangeset(String name) {
+        this.containerName = name;
+    }
+
+    @Override
+    public NetworkOperationStatus run(
+            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context)
+            throws ProcessorException {
+        final StreamUploaderChangeset changeset =
+                VerifyStreamUploaderChangeset.getChangeset(resource, this.containerName);
+        if (Objects.isNull(changeset)) {
+            return status; // no-op
+        }
+        return null;
+    }
+}

@@ -5,15 +5,20 @@ package com.hedera.solo.operator.library.processor;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 
-/** Processor executes a business process with the given resource object and a list of steps */
-public interface Processor<R extends HasMetadata> {
+/**
+ * Processor encapsulates the data and logic to execute a single step of business process.
+ *
+ * @param <R> the type of the resource
+ * @param <T> the type of the result
+ */
+public interface Processor<R extends HasMetadata, T> {
     /**
-     * Execute the business process with the given resource object and context
+     * Process the resource
      *
-     * @param resource the custom resource object
+     * @param resource the resource to process
      * @param context the context
-     * @return the desired custom resource object after the business process has been executed
-     * @throws ProcessorException if executing the business process fails
+     * @return the result of the specified type R
+     * @throws ProcessorException if processing the resource fails
      */
-    R process(R resource, Context<R> context) throws ProcessorException;
+    T process(R resource, Context<R> context) throws ProcessorException;
 }

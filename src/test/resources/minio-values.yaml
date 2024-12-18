@@ -268,8 +268,8 @@ tenant:
     # Enable automatic Kubernetes based `certificate generation and signing <https://kubernetes.io/docs/tasks/tls/managing-tls-in-a-cluster>`__
     requestAutoCert: false
     ###
-    # The minimum number of days to expiry before an alert for an expiring certificate is fired.
-    # In the below example, if a given certificate will expire in 7 days then expiration events will only be triggered 1 day before expiry
+    # The minimum number of days to retryExpiry before an alert for an expiring certificate is fired.
+    # In the below example, if a given certificate will expire in 7 days then expiration events will only be triggered 1 day before retryExpiry
     # certExpiryAlertThreshold: 1
     ###
     # This field is used only when ``requestAutoCert: true``.
@@ -414,7 +414,7 @@ tenant:
   #    admin:
   #      identity: ${MINIO_KES_IDENTITY}
   #    cache:
-  #      expiry:
+  #      retryExpiry:
   #        any: 5m0s
   #        unused: 20s
   #    log:
