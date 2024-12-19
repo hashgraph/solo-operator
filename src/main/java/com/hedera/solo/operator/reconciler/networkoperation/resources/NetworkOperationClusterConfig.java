@@ -3,6 +3,7 @@
 package com.hedera.solo.operator.reconciler.networkoperation.resources;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
+import static com.hedera.solo.operator.library.k8s.KubeletConfig.clusterDomain;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static java.util.Collections.emptyList;
 
@@ -75,7 +76,7 @@ public class NetworkOperationClusterConfig extends KubernetesDependentResource<C
 
     record Node(Long nodeId, String accountId, String name, String internal, String external) {}
 
-    Node node(final ConsensusCapsule capsule) {
+    Node node(final String domain, final ConsensusCapsule capsule) {
         String capsuleName = capsule.getMetadata().getName();
         String namespace = capsule.getMetadata().getNamespace();
         String external = capsule.getSpec().getExternalAddress();
@@ -83,13 +84,14 @@ public class NetworkOperationClusterConfig extends KubernetesDependentResource<C
                 capsule.getSpec().getNodeId(),
                 capsule.getSpec().getAccountId(),
                 Metadata.prepareNodeName(capsule),
-                capsuleName + ".consensus." + namespace,
+                "%s.consensus.%s.svc%s".formatted(capsuleName, namespace, domain != null ? "." + domain : ""),
                 external != null ? external : capsuleName + "-svc." + namespace);
     }
 
     List<Node> localNodes(final NetworkOperation primary, final Context<NetworkOperation> context) {
+        String clusterDomainSuffix = clusterDomain(context.getClient());
         return reconciler.consensusCapsules(primary, context).values().stream()
-                .map(this::node)
+                .map(capsule -> node(clusterDomainSuffix, capsule))
                 .toList();
     }
 
