@@ -13,6 +13,6 @@ public class ReverifyConsensusNodeChangeset implements ProcessorStep<NetworkOper
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context)
             throws ProcessorException {
-        return null;
+        throw new ProcessorException("Not implemented");
     }
 }

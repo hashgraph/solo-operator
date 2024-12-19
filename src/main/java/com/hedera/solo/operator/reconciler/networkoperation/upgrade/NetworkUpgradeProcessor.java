@@ -5,6 +5,7 @@ package com.hedera.solo.operator.reconciler.networkoperation.upgrade;
 import com.hedera.solo.operator.library.processor.Processor;
 import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorResult;
+import com.hedera.solo.operator.library.processor.ProcessorTask;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationspec.NetworkUpgrade;
@@ -18,7 +19,8 @@ import jakarta.inject.Inject;
 import java.util.Objects;
 
 @ApplicationScoped
-public class NetworkUpgradeProcessor implements Processor<NetworkOperation, ProcessorResult> {
+public class NetworkUpgradeProcessor
+        implements Processor<NetworkOperation, NetworkOperationStatus, ProcessorResult<NetworkOperationStatus>> {
     @Inject
     ExecuteImmediateTask executeImmediateTask;
 
@@ -41,33 +43,24 @@ public class NetworkUpgradeProcessor implements Processor<NetworkOperation, Proc
         Objects.requireNonNull(context, "context must not be null");
     }
 
+    private ProcessorTask<NetworkOperation, NetworkOperationStatus> taskFromStep(NetworkUpgrade.WorkflowStep step) {
+        return switch (step) {
+            case ExecuteImmediate -> executeImmediateTask;
+            case FreezeScheduled -> freezeScheduledTask;
+            case NowFrozen -> nowFrozenTask;
+            case FreezeAbort -> freezeAbortTask;
+            default -> throw new ProcessorException("Unknown workflow step: " + step);
+        };
+    }
+
     @Override
-    public ProcessorResult process(NetworkOperation resource, Context<NetworkOperation> context)
+    public ProcessorResult<NetworkOperationStatus> process(NetworkOperation resource, Context<NetworkOperation> context)
             throws ProcessorException {
 
         this.validate(resource, context);
 
-        final NetworkOperationStatus status;
         final NetworkUpgrade.WorkflowStep step =
                 resource.getSpec().getNetworkUpgrade().getWorkflowStep();
-
-        return switch (step) {
-            case ExecuteImmediate -> {
-                status = executeImmediateTask.execute(resource, context);
-                yield new ProcessorResult(status, ExecuteImmediateTask.RETRY_DELAY, ExecuteImmediateTask.MAX_RETRY);
-            }
-            case FreezeScheduled -> {
-                status = freezeScheduledTask.execute(resource, context);
-                yield new ProcessorResult(status, FreezeScheduledTask.RETRY_DELAY, FreezeScheduledTask.MAX_RETRY);
-            }
-            case NowFrozen -> {
-                status = nowFrozenTask.execute(resource, context);
-                yield new ProcessorResult(status, NowFrozenTask.RETRY_DELAY, NowFrozenTask.MAX_RETRY);
-            }
-            case FreezeAbort -> {
-                status = freezeAbortTask.execute(resource, context);
-                yield ProcessorResult.noRetry(status);
-            }
-        };
+        return taskFromStep(step).execute(resource, context);
     }
 }

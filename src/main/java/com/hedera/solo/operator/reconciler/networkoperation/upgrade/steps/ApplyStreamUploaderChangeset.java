@@ -26,6 +26,9 @@ public class ApplyStreamUploaderChangeset implements ProcessorStep<NetworkOperat
         if (Objects.isNull(changeset)) {
             return status; // no-op
         }
-        return null;
+
+        // TODO: Implement the logic to apply the changeset
+
+        throw new ProcessorException("Not implemented");
     }
 }

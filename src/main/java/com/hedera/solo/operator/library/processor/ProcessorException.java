@@ -2,18 +2,16 @@
 
 package com.hedera.solo.operator.library.processor;
 
+/**
+ * Exception thrown by the processor. Every exception thrown by the processor, task or step should be an instance of
+ * this class.
+ */
 public class ProcessorException extends RuntimeException {
-    public static final String ERR_MSG_PROCESSOR_FAILED = "Processor failed";
-
-    public ProcessorException(String message) {
+    public ProcessorException(final String message) {
         super(message);
     }
 
-    public ProcessorException(String message, Throwable cause) {
+    public ProcessorException(final String message, final Throwable cause) {
         super(message, cause);
-    }
-
-    public ProcessorException(Throwable cause) {
-        super(ERR_MSG_PROCESSOR_FAILED, cause);
     }
 }

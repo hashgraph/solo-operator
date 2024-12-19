@@ -6,12 +6,14 @@ import com.hedera.solo.operator.library.processor.Processor;
 import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorResult;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 
-public class NodeOperationProcessor implements Processor<NetworkOperation, ProcessorResult> {
+public class NodeOperationProcessor
+        implements Processor<NetworkOperation, NetworkOperationStatus, ProcessorResult<NetworkOperationStatus>> {
     @Override
-    public ProcessorResult process(NetworkOperation resource, Context<NetworkOperation> context)
+    public ProcessorResult<NetworkOperationStatus> process(NetworkOperation resource, Context<NetworkOperation> context)
             throws ProcessorException {
-        return null;
+        throw new ProcessorException("Not implemented");
     }
 }

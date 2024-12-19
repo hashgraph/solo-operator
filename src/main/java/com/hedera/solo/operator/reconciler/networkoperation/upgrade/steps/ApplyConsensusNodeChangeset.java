@@ -13,6 +13,8 @@ public class ApplyConsensusNodeChangeset implements ProcessorStep<NetworkOperati
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context)
             throws ProcessorException {
-        return null;
+        // TODO: Implement the logic to apply the changeset
+
+        throw new ProcessorException("Not implemented");
     }
 }

@@ -29,6 +29,8 @@ public class ReverifyStreamUploaderChangeset implements ProcessorStep<NetworkOpe
             return status; // no-op
         }
 
-        return null;
+        // FIXME: Implement the logic to reverify the changeset
+
+        throw new ProcessorException("Not implemented");
     }
 }

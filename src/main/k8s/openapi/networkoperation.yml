@@ -24,9 +24,11 @@ components:
           enum:
             - FirstInitialization # use NetworkGenesis instead
             - NetworkGenesis
-            - NetworkUpgrade
-            - NodeAddition
-            - NodeRemoval # not need for MVP
+            - NetworkCheck # check if network is in valid state.
+            - NetworkUpgrade # upgrade the network with new version of the consensus-node and other components
+            - NodeAdd
+            - NodeDelete # not need for MVP
+            - NodeUpdate # not need for MVP
             - ProxyUpgrade # not need for MVP
         networkUpgrade:
           type: object
@@ -136,9 +138,9 @@ components:
                 haproxyChangeset:
                   type: object
                   x-java-type: com.hedera.solo.operator.model.commonspec.HaproxyChangeset
-    #                envoyproxyChangeset: # need to define
-    #                  type: object
-    #                  x-java-type: com.hedera.solo.operator.model.commonspec.EnvoyproxyChangeset # need to define
+#                envoyproxyChangeset: # need to define
+#                  type: object
+#                  x-java-type: com.hedera.solo.operator.model.commonspec.EnvoyproxyChangeset # need to define
     NetworkOperationStatus:
       type: object
       properties:
@@ -165,28 +167,6 @@ components:
           items:
             type:
               string
-        retry:
-          description: Retry settings for the network operation
-          type: object
-          default: {}
-          properties:
-            delay:
-              description: Delay between retries
-              type: string
-              format: duration
-              default: 0s
-            count:
-              description: Number of retry attempts
-              type: integer
-              format: int64
-              default: 0
-            maxAttempts:
-              description: |
-                Maximum number of retry attempts allowed. If the retry count exceeds this value, the network operation
-                will be marked as failed. The default value is -1, which means there is no limit.
-              type: integer
-              format: int64
-              default: -1
         sequenceNumber:
           description: Used as secondary key to order reconciliation
           type: integer
