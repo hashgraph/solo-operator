@@ -17,7 +17,7 @@ dependencies {
     // Use JUnit Jupiter for testing.
     testImplementation(libs.junit.jupiter)
     implementation("org.eclipse.jgit:org.eclipse.jgit:7.0.0.202409031743-r")
-    implementation("org.eclipse.jgit:org.eclipse.jgit.archive:7.0.0.202409031743-r")
+    implementation("org.eclipse.jgit:org.eclipse.jgit.archive:7.1.0.202411261347-r")
 
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
