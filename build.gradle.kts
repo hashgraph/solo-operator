@@ -5,6 +5,7 @@ plugins {
     id("com.hedera.solo.operator.versioning")
     id("io.quarkus")
     id("com.hedera.solo.operator.buildlogic.objectModelGenerator")
+    id("com.hedera.solo.operator.buildlogic.gitExtractor")
 }
 
 val quarkusPlatformGroupId: String by project
@@ -81,6 +82,25 @@ dependencies {
     testFixturesImplementation("org.junit.jupiter:junit-jupiter-api")
     testFixturesImplementation("org.eclipse.microprofile.config:microprofile-config-api")
     testFixturesImplementation("com.hedera.hashgraph:sdk:${hederaSdkVersion}")
+}
+
+gitExtractor {
+    register(sourceSets.test) {
+        addResources(
+            "https://github.com/hashgraph/hedera-services",
+            "refs/tags/v0.56.5",
+            "hedera-node/configuration/mainnet",
+            "import/hedera/mainnet"
+        )
+    }
+    register(sourceSets.componentTest) {
+        addResources(
+            "https://github.com/hashgraph/hedera-services",
+            "refs/tags/v0.56.5",
+            "hedera-node/configuration/mainnet",
+            "import/hedera/mainnet"
+        )
+    }
 }
 
 objectModelGenerator {

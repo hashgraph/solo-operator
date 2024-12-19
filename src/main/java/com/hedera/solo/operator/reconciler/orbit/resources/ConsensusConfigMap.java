@@ -13,7 +13,9 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDNoGCKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @KubernetesDependent(resourceDiscriminator = ConsensusConfigMap.Discriminator.class)
 public class ConsensusConfigMap extends CRUDNoGCKubernetesDependentResource<ConfigMap, Orbit> {
@@ -31,6 +33,12 @@ public class ConsensusConfigMap extends CRUDNoGCKubernetesDependentResource<Conf
         final ConfigMap cm = loadYaml(ConfigMap.class, getClass(), TEMPLATE);
         final ConfigMapBuilder cmb =
                 Metadata.applyOrbitMetaTo(primary, cm.edit().editMetadata()).endMetadata();
+        cmb.addToData("settings.txt", join(primary.getSpec().getConsensus().getNetworkSettings(), ","));
+        cmb.addToData(
+                "application.properties", join(primary.getSpec().getConsensus().getApplicationConfiguration(), "="));
+        cmb.addToData(
+                "api-permission.properties",
+                join(primary.getSpec().getConsensus().getPermissionConfiguration(), "="));
         return Metadata.applyStandardLabels(
                         cmb.editMetadata(),
                         NAME,
@@ -53,5 +61,11 @@ public class ConsensusConfigMap extends CRUDNoGCKubernetesDependentResource<Conf
                     .withName(NAME)
                     .get());
         }
+    }
+
+    String join(final Map<String, String> map, final String delimiter) {
+        return map.entrySet().stream()
+                .map(e -> e.getKey() + delimiter + e.getValue())
+                .collect(Collectors.joining("\n", "", "\n"));
     }
 }

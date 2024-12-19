@@ -2,12 +2,14 @@
 
 package com.hedera.solo.operator.test.capsule;
 
+import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.reconciler.common.Constants.COMPONENT_CONSENSUS_NODE;
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GOSSIP;
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GRPC_TLS;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_APP;
 import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
 import static com.hedera.solo.operator.test.fixtures.coredns.ConfigureCoredns.configureCoredns;
+import static com.hedera.solo.operator.test.fixtures.resource.ResourceLoader.withResources;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -36,6 +38,7 @@ import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
 import com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkCheckAddressBook;
 import com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkClientContextFactory;
 import com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkClientFactory;
+import com.hedera.solo.operator.test.fixtures.resource.ResourceLoader;
 import com.hedera.solo.operator.test.fixtures.snapshot.SnapshotFailureContext;
 import com.hedera.solo.operator.test.setup.ClusterSetupManager;
 import com.hedera.solo.operator.test.utils.NodeInfoGenerator;
@@ -221,11 +224,9 @@ public abstract class ConsensusCapsuleTestAbstract {
     }
 
     void createOrbit() {
-        final Orbit orbit = loadYaml(Orbit.class, getClass(), "orbit.yaml")
-                .edit()
-                .editMetadata()
-                .withName(namespace)
-                .endMetadata()
+        final Orbit orbit = edit(loadYaml(Orbit.class, getClass(), "orbit.yaml"))
+                .with(metadata -> metadata.editMetadata().withName(namespace))
+                .with(ResourceLoader::withResources)
                 .build();
         kubernetesClient.resource(orbit).create();
 
@@ -255,12 +256,12 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .withVolumes(this.prepareCapsulePodVolumes(node))
                 .build();
 
-        return new ConsensusCapsuleBuilder()
+        return withResources(new ConsensusCapsuleBuilder())
                 .withNewMetadata()
                 .withName(node.name())
                 .withNamespace(namespace)
                 .endMetadata()
-                .withNewSpec()
+                .editSpec()
                 .withPodProperties(consensusPod)
                 .withOrbit(orbit)
                 .withAccountId(node.accountId())

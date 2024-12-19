@@ -22,6 +22,7 @@ import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.test.capsule.ConsensusCapsuleTestAbstract;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
 import com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkClientFactory;
+import com.hedera.solo.operator.test.fixtures.resource.ResourceLoader;
 import com.hedera.solo.operator.test.fixtures.snapshot.SnapshotFailureContext;
 import com.hedera.solo.operator.test.utils.NodeInfoGenerator;
 import com.hedera.solo.operator.test.utils.TestRecords;
@@ -198,6 +199,7 @@ public class MultipleOrbitTest {
                         .withLedgerId("298")
                         .withNextNodeId("3")
                         .withExternalAddresses(externalAddresses))
+                .with(ResourceLoader::withResources)
                 .build();
         return operator.getKubernetesClient().resource(orbit).create();
     }
@@ -255,6 +257,7 @@ public class MultipleOrbitTest {
                         .withAccountId("0.0." + (id + 3))
                         .withNodeId(id)
                         .withExternalAddress("node" + id + "-svc." + namespace))
+                .with(ResourceLoader::withResources)
                 .build();
         return operator.getKubernetesClient().resource(capsule).create();
     }
