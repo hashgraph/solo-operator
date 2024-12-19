@@ -11,6 +11,8 @@ import com.fasterxml.jackson.databind.ObjectReader;
 import com.hedera.solo.operator.library.container.oci.OCIContentDescriptor;
 import com.hedera.solo.operator.library.container.oci.OCIManifest;
 import com.hedera.solo.operator.library.generic.LRUCache;
+import edu.umd.cs.findbugs.annotations.NonNull;
+import jakarta.enterprise.context.Dependent;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -21,6 +23,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
@@ -37,6 +40,7 @@ import java.util.stream.Collectors;
  * @see <a href="https://github.com/opencontainers/distribution-spec/blob/main/spec.md">Open Container Initiative
  *     Distribution Specification</a>
  */
+@Dependent
 public class DistributionRegistryClient implements AutoCloseable {
     protected static final String[] manifestMediaTypes = OCIManifest.mediaTypes();
     protected final AuthClient client;
@@ -55,8 +59,11 @@ public class DistributionRegistryClient implements AutoCloseable {
      * @param coordinates to image
      * @param mediaTypes are optional and defaults to all recognized manifest media types.
      */
-    public ManifestResponse fetchManifest(final ImageCoordinates coordinates, final String... mediaTypes)
+    public ManifestResponse fetchManifest(
+            @NonNull final ImageCoordinates coordinates, @NonNull final String... mediaTypes)
             throws IOException, InterruptedException {
+        Objects.requireNonNull(coordinates, "coordinates cannot be null");
+        Objects.requireNonNull(mediaTypes, "mediaTypes cannot be null");
         return new ManifestResponse(get(
                 coordinates,
                 "manifests/" + coordinates.reference,
@@ -69,8 +76,10 @@ public class DistributionRegistryClient implements AutoCloseable {
      * @param coordinates to image
      * @param layer to check
      */
-    public boolean layerExists(final ImageCoordinates coordinates, final OCIContentDescriptor layer)
+    public boolean layerExists(@NonNull final ImageCoordinates coordinates, @NonNull final OCIContentDescriptor layer)
             throws IOException, InterruptedException {
+        Objects.requireNonNull(coordinates, "coordinates cannot be null");
+        Objects.requireNonNull(layer, "layer cannot be null");
         return head(coordinates, "blobs/" + layer.digest, layer.mediaType).statusCode() == HTTP_OK;
     }
 
@@ -99,9 +108,8 @@ public class DistributionRegistryClient implements AutoCloseable {
      */
     protected static class AuthClient implements AutoCloseable {
         protected static final Pattern authChallenge = Pattern.compile("(?<key>\\S+?)\\s*=\\s*\"(?<val>\\S+?)\"\\s*,?");
-        protected static final AuthResponse invalidAuthResponse = new AuthResponse();
         protected static final Set<String> necessaryAttributes = attributes();
-        protected final Map<ImageCoordinates, AuthResponse> cache;
+        protected final Map<ImageCoordinates, Optional<AuthResponse>> cache;
         protected final HttpClient client;
 
         public AuthClient(final int cacheSize, final HttpClient client) {
@@ -115,15 +123,16 @@ public class DistributionRegistryClient implements AutoCloseable {
                 final String endpoint,
                 final String... mediaTypes)
                 throws IOException, InterruptedException {
-            AuthResponse authResponse = cache.getOrDefault(coordinates, invalidAuthResponse);
-            if (authResponse == invalidAuthResponse) {
-                HttpResponse<byte[]> response = send(null, coordinates.v2uri(), HttpRequest.Builder::GET);
+            Optional<AuthResponse> authResponse = cache.get(coordinates);
+            if (authResponse == null) {
+                final HttpResponse<byte[]> response =
+                        send(Optional.empty(), coordinates.v2uri(), HttpRequest.Builder::GET);
                 authResponse = switch (response.statusCode()) {
-                    case HTTP_OK -> null;
-                    case HTTP_UNAUTHORIZED -> authenticate(coordinates, response);
+                    case HTTP_OK -> Optional.empty();
+                    case HTTP_UNAUTHORIZED -> Optional.of(authenticate(coordinates, response));
                     default -> throw new UnexpectedResponseException(response);};
             }
-            URI uri = coordinates.v2uri(endpoint);
+            final URI uri = coordinates.v2uri(endpoint);
             HttpResponse<byte[]> response = send(authResponse, uri, function, mediaTypes);
             if (response.statusCode() == HTTP_UNAUTHORIZED) {
                 // Cached token may be expired or registry may enforce single-use token policy.
@@ -138,42 +147,44 @@ public class DistributionRegistryClient implements AutoCloseable {
         }
 
         protected HttpResponse<byte[]> send(
-                final AuthResponse authResponse,
+                final Optional<AuthResponse> authResponse,
                 final URI uri,
                 final Function<HttpRequest.Builder, HttpRequest.Builder> function,
                 final String... mediaTypes)
                 throws IOException, InterruptedException {
-            HttpRequest.Builder builder = HttpRequest.newBuilder(uri);
+            final HttpRequest.Builder builder = HttpRequest.newBuilder(uri);
             Arrays.stream(mediaTypes).forEach(type -> builder.header("Accept", type));
-            if (authResponse != null) {
-                builder.header("Authorization", "Bearer " + authResponse.token());
-            }
+            authResponse.ifPresent(auth -> builder.header("Authorization", "Bearer " + auth.token()));
             return client.send(function.apply(builder).build(), HttpResponse.BodyHandlers.ofByteArray());
         }
 
         protected AuthResponse authenticate(
                 final ImageCoordinates coordinates, final HttpResponse<byte[]> unauthorizedResponse)
                 throws IOException, InterruptedException {
-            Optional<String> header = unauthorizedResponse.headers().firstValue("Www-Authenticate");
-            Matcher matcher = authChallenge.matcher(header.orElseThrow());
-            Map<String, String> attributes = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+            // Example header from: https://distribution.github.io/distribution/spec/auth/token/
+            // Www-Authenticate: Bearer
+            // realm="https://auth.docker.io/token",service="registry.docker.io",scope="repository:samalba/my-app:pull,push"
+            final Optional<String> header = unauthorizedResponse.headers().firstValue("Www-Authenticate");
+            final Matcher matcher = authChallenge.matcher(header.orElseThrow());
+            final Map<String, String> attributes = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
             while (matcher.find()) {
                 attributes.put(matcher.group("key"), matcher.group("val"));
             }
-            String realm = attributes.get("realm");
+            final String realm = attributes.get("realm");
             attributes.keySet().retainAll(necessaryAttributes);
             attributes.putIfAbsent("scope", "repository:" + coordinates.name + ":pull");
             attributes.putIfAbsent("service", coordinates.registry);
-            URI uri = URI.create(realm + "?"
+            final URI uri = URI.create(realm + "?"
                     + attributes.entrySet().stream()
                             .map(e -> URLEncoder.encode(e.getKey(), StandardCharsets.UTF_8) + "="
                                     + URLEncoder.encode(e.getValue(), StandardCharsets.UTF_8))
                             .collect(Collectors.joining("&")));
-            HttpRequest.Builder builder = HttpRequest.newBuilder(uri).GET();
+            final HttpRequest.Builder builder = HttpRequest.newBuilder(uri).GET();
             if (coordinates.auth != null) {
                 builder.header("Authorization", "Basic " + coordinates.auth);
             }
-            HttpResponse<byte[]> tokenResponse = client.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
+            final HttpResponse<byte[]> tokenResponse =
+                    client.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
             if (tokenResponse.statusCode() != HTTP_OK) {
                 throw new UnexpectedResponseException(tokenResponse);
             }
@@ -181,7 +192,7 @@ public class DistributionRegistryClient implements AutoCloseable {
         }
 
         private static Set<String> attributes() {
-            Set<String> attributes = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+            final Set<String> attributes = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
             attributes.addAll(Set.of("scope", "service"));
             return attributes;
         }

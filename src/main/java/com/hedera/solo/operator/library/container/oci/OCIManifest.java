@@ -47,7 +47,7 @@ public abstract sealed class OCIManifest permits OCIImageIndex, OCIImageManifest
     }
 
     private static Map<String, Function<byte[], ? extends OCIManifest>> constructors() {
-        Map<String, Function<byte[], ? extends OCIManifest>> map = new HashMap<>();
+        final Map<String, Function<byte[], ? extends OCIManifest>> map = new HashMap<>();
         add(map, OCIImageIndex.class, OCIImageIndex.mediaTypes());
         add(map, OCIImageManifest.class, OCIImageManifest.mediaTypes());
         return map;
