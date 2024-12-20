@@ -3,11 +3,13 @@
 package com.hedera.solo.operator.reconciler.networkoperation.node.tasks;
 
 import com.hedera.solo.operator.library.processor.AbstractProcessorTask;
+import com.hedera.solo.operator.library.processor.Processor;
 import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.node.steps.NodeAddStep;
+import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.time.Duration;
 import java.util.List;
 
@@ -23,5 +25,12 @@ public class NodeUpdateTask extends AbstractProcessorTask<NetworkOperation, Netw
     protected Duration computeReconcileDelay(NetworkOperation resource, NetworkOperationStatus status)
             throws ProcessorException {
         return RECONCILE_DELAY;
+    }
+
+    @Override
+    protected Processor<?, ?, ?> computeDeferredProcessor(NetworkOperation resource, Context<NetworkOperation> context)
+            throws ProcessorException {
+        // TODO: check status and return appropriate processor for deferred processing
+        return null;
     }
 }

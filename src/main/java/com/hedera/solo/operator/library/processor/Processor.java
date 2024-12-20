@@ -14,8 +14,8 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
  */
 public interface Processor<T extends HasMetadata, S extends KubernetesResource, R extends ProcessorResult<S>> {
     /**
-     * Run the business logic for the given resource and context Each processor can run a specific task at a time, where
-     * task has one or more steps.
+     * Run the business logic for the given resource and context. Each processor can run a specific task at a time,
+     * where task has one or more steps.
      *
      * @param resource the resource to process
      * @param context the context

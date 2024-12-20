@@ -8,10 +8,12 @@ import java.time.Duration;
 public class ProcessorResult<S extends KubernetesResource> {
     private final S status;
     private final Duration reconcileDelay;
+    private final Processor<?, ?, ?> deferred;
 
-    public ProcessorResult(final S status, final Duration reconcileDelay) {
+    public ProcessorResult(final S status, final Duration reconcileDelay, Processor<?, ?, ?> deferred) {
         this.status = status;
         this.reconcileDelay = reconcileDelay;
+        this.deferred = deferred;
     }
 
     public S getStatus() {
@@ -20,5 +22,9 @@ public class ProcessorResult<S extends KubernetesResource> {
 
     public Duration getReconcileDelay() {
         return reconcileDelay;
+    }
+
+    public Processor<?, ?, ?> getDeferred() {
+        return deferred;
     }
 }

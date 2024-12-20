@@ -3,6 +3,7 @@
 package com.hedera.solo.operator.reconciler.networkoperation.upgrade.tasks;
 
 import com.hedera.solo.operator.library.processor.AbstractProcessorTask;
+import com.hedera.solo.operator.library.processor.Processor;
 import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
@@ -12,6 +13,7 @@ import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ApplyC
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ApplyStreamUploaderChangeset;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ReverifyConsensusNodeChangeset;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ReverifyStreamUploaderChangeset;
+import io.javaoperatorsdk.operator.api.reconciler.Context;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.time.Duration;
 import java.util.List;
@@ -40,5 +42,12 @@ public class NowFrozenTask extends AbstractProcessorTask<NetworkOperation, Netwo
     protected Duration computeReconcileDelay(NetworkOperation resource, NetworkOperationStatus status)
             throws ProcessorException {
         return RECONCILE_DELAY;
+    }
+
+    @Override
+    protected Processor<?, ?, ?> computeDeferredProcessor(NetworkOperation resource, Context<NetworkOperation> context)
+            throws ProcessorException {
+        // TODO: check status and return appropriate processor for deferred processing
+        return null;
     }
 }
