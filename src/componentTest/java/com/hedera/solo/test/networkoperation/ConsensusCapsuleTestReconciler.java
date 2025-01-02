@@ -21,9 +21,7 @@ public class ConsensusCapsuleTestReconciler implements Reconciler<ConsensusCapsu
         if (Objects.equals(resource.getMetadata().getLabels().get("fail"), "true")) {
             phase = ConsensusCapsuleStatus.Phase.Failed;
         } else {
-            phase = resource.getSpec().getEligibleForDeployment()
-                    ? ConsensusCapsuleStatus.Phase.Running
-                    : ConsensusCapsuleStatus.Phase.Pending;
+            phase = ConsensusCapsuleStatus.Phase.Running;
         }
         return UpdateControl.patchStatus(edit(resource)
                 .with(status -> status.editStatus().withPhase(phase))

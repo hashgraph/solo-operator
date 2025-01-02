@@ -20,7 +20,6 @@ import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_HOST_
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NAMESPACE;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_ID;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_NAME;
-import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_NAMES;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_OPEN_TELEMETRY_COLLECTOR;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_ORBIT_NAME;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_PUBLIC_KEY_FILES;
@@ -57,11 +56,9 @@ import io.fabric8.kubernetes.api.model.Volume;
 import io.fabric8.kubernetes.api.model.VolumeBuilder;
 import io.fabric8.kubernetes.client.utils.Serialization;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.api.reconciler.dependent.DependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.BooleanWithUndefined;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
-import io.javaoperatorsdk.operator.processing.dependent.workflow.Condition;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
@@ -87,7 +84,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
             .with(version -> version.editSoftwareVersion()
                     .withRepository("swirldslabs.jfrog.io/consensus-node-docker-dev")
                     .withImageName("consensus-node")
-                    .withImageTag("0.57.0-develop.x32089ae"))
+                    .withImageTag("0.59.0-main.xebbbf0d"))
             .build();
 
     @Location("consensus-capsule/pod.yaml")
@@ -235,9 +232,7 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         final String nodeName = Metadata.prepareNodeName(primary);
         final String accountId = primary.getSpec().getAccountId();
         final String namespace = primary.getMetadata().getNamespace();
-        final List<String> nodeNames = getNodeNames(context, namespace);
         final String orbitName = primary.getSpec().getOrbit();
-        final String podName = validName(primary.getMetadata().getName(), NAME_SUFFIX);
 
         final TemplateInstance templateInstance = tpl.instance();
 
@@ -246,7 +241,6 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         templateInstance.data(TPL_VAR_NAMESPACE, namespace);
         templateInstance.data(TPL_VAR_NODE_ID, nodeId);
         templateInstance.data(TPL_VAR_NODE_NAME, nodeName);
-        templateInstance.data(TPL_VAR_NODE_NAMES, nodeNames);
         templateInstance.data(TPL_VAR_ACCOUNT_ID, accountId);
         templateInstance.data(TPL_VAR_HOST_EXTERNAL_IP, "NOT_SET"); // FIXME: should be node's external IP
         templateInstance.data(TPL_VAR_DEFAULT_MODE, DEFAULT_FILE_MODE);
@@ -398,33 +392,6 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         }
 
         return Optional.of(uploader);
-    }
-
-    private static List<String> getNodeNames(Context<ConsensusCapsule> context, String namespace) {
-        final List<String> nodeIds = new ArrayList<>();
-
-        final ConfigMap clusterConfig = context.getClient()
-                .resources(ConfigMap.class)
-                .inNamespace(namespace)
-                .withName("cluster-config")
-                .get();
-
-        // extract the node-ids from config.txt
-        final String configTxt = clusterConfig.getData().get("config.txt");
-        for (String line : configTxt.split("\n")) {
-            if (line.startsWith("address")) {
-                final String[] parts = line.split(",");
-                if (parts.length != 10) {
-                    throw new IllegalArgumentException("Invalid address line in config.txt: " + line);
-                }
-
-                // pick the node nickname/alias at index 2
-                // FIXME for DAB Phase-3, we may need to revisit this
-                nodeIds.add(parts[2].trim());
-            }
-        }
-
-        return nodeIds.stream().sorted().toList();
     }
 
     protected Optional<PersistentVolumeClaimSpec> getInputPvc(ConsensusCapsule primary, String volNameSuffix) {
@@ -583,15 +550,5 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
         });
 
         return volumes;
-    }
-
-    public static class Ready implements Condition<Pod, ConsensusCapsule> {
-        @Override
-        public boolean isMet(
-                DependentResource<Pod, ConsensusCapsule> dependentResource,
-                ConsensusCapsule primary,
-                Context<ConsensusCapsule> context) {
-            return primary.getSpec().getEligibleForDeployment();
-        }
     }
 }
