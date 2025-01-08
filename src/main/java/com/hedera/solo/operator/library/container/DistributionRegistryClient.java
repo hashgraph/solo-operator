@@ -3,7 +3,6 @@
 package com.hedera.solo.operator.library.container;
 
 import static com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES;
-import static java.net.HttpURLConnection.HTTP_NOT_FOUND;
 import static java.net.HttpURLConnection.HTTP_OK;
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED;
 
@@ -220,7 +219,7 @@ public class DistributionRegistryClient implements AutoCloseable {
                 authenticate(coordinates, response);
                 response = send(authResponse, uri, function, mediaTypes);
             }
-            if (response.statusCode() != HTTP_OK && response.statusCode() != HTTP_NOT_FOUND) {
+            if (response.statusCode() != HTTP_OK) {
                 throw new UnexpectedResponseException(response);
             }
             cache.put(coordinates, authResponse);

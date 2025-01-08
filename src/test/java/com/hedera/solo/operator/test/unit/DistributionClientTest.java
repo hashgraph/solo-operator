@@ -10,6 +10,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.unauthorized;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlMatching;
+import static java.net.HttpURLConnection.HTTP_NOT_FOUND;
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -117,9 +118,10 @@ public class DistributionClientTest {
             assertThat(resp.get().manifests.length).isGreaterThan(0);
 
             // failure scenario
-            final Optional<OCIImageIndex> invalid =
-                    registry.fetchImageIndex(ImageCoordinates.http(invalidImageUri, authJson));
-            assertThat(invalid.isEmpty()).isTrue();
+            UnexpectedResponseException exception = assertThrows(
+                    UnexpectedResponseException.class,
+                    () -> registry.fetchImageIndex(ImageCoordinates.http(invalidImageUri, authJson)));
+            assertThat(exception.response.statusCode()).isEqualTo(HTTP_NOT_FOUND);
         }
     }
 
@@ -140,11 +142,13 @@ public class DistributionClientTest {
             assertThat(imageManifest.get().layers.length).isGreaterThan(0);
 
             // failure scenario
-            final Optional<OCIImageManifest> invalid = registry.fetchImageManifest(
-                    ImageCoordinates.http(invalidImageUri, authJson),
-                    Layers.Os.linux.getValue(),
-                    Layers.Architecture.amd64.getValue());
-            assertThat(invalid.isEmpty()).isTrue();
+            UnexpectedResponseException exception = assertThrows(
+                    UnexpectedResponseException.class,
+                    () -> registry.fetchImageManifest(
+                            ImageCoordinates.http(invalidImageUri, authJson),
+                            Layers.Os.linux.getValue(),
+                            Layers.Architecture.amd64.getValue()));
+            assertThat(exception.response.statusCode()).isEqualTo(HTTP_NOT_FOUND);
         }
     }
 
