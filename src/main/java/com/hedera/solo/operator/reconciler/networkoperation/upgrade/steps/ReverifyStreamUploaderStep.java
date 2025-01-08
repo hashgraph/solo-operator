@@ -7,13 +7,14 @@ import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.commonspec.StreamUploaderChangeset;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
+import com.hedera.solo.operator.reconciler.networkoperation.upgrade.utils.StreamUploaderUtil;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.util.Objects;
 
-public class ApplyStreamUploaderChangeset implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
+public class ReverifyStreamUploaderStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     private final String containerName;
 
-    public ApplyStreamUploaderChangeset(String name) {
+    public ReverifyStreamUploaderStep(String name) {
         this.containerName = name;
     }
 
@@ -21,13 +22,14 @@ public class ApplyStreamUploaderChangeset implements ProcessorStep<NetworkOperat
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context)
             throws ProcessorException {
-        final StreamUploaderChangeset changeset =
-                VerifyStreamUploaderChangeset.getChangeset(resource, this.containerName);
+
+        final StreamUploaderChangeset changeset = StreamUploaderUtil.findChangeset(resource, this.containerName);
+
         if (Objects.isNull(changeset)) {
             return status; // no-op
         }
 
-        // TODO: Implement the logic to apply the changeset
+        // FIXME: Implement the logic to reverify the changeset
 
         throw new ProcessorException("Not implemented");
     }

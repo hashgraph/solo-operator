@@ -16,7 +16,7 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.util.Objects;
 
-public class VerifyConsensusNodeChangeset implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
+public class VerifyConsensusNodeStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     private ConsensusNodeChangeset getConsensusNodeChangeset(NetworkOperation resource) {
         Objects.requireNonNull(resource, "NetworkOperation must not be null");
         Objects.requireNonNull(resource.getSpec(), "NetworkOperation spec must not be null");

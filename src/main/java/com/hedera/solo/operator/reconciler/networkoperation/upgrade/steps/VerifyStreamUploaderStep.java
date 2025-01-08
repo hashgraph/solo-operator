@@ -10,44 +10,22 @@ import com.hedera.solo.operator.model.commonspec.SoftwareVersionStatusBuilder;
 import com.hedera.solo.operator.model.commonspec.StreamUploaderChangeset;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
-import com.hedera.solo.operator.reconciler.common.Constants;
+import com.hedera.solo.operator.reconciler.networkoperation.upgrade.utils.StreamUploaderUtil;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.util.Objects;
 
-public class VerifyStreamUploaderChangeset implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
+public class VerifyStreamUploaderStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     private final String containerName;
 
-    public VerifyStreamUploaderChangeset(String name) {
+    public VerifyStreamUploaderStep(String name) {
         this.containerName = name;
-    }
-
-    public static StreamUploaderChangeset getChangeset(NetworkOperation resource, String name) {
-        return switch (name) {
-            case Constants.TPL_VAR_RECORD_STREAM_UPLOADER -> resource.getSpec()
-                    .getNetworkUpgrade()
-                    .getChangesets()
-                    .getRecordStreamUploaderChangeset();
-            case Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER -> resource.getSpec()
-                    .getNetworkUpgrade()
-                    .getChangesets()
-                    .getRecordStreamSidecarUploaderChangeset();
-            case Constants.TPL_VAR_EVENT_STREAM_UPLOADER -> resource.getSpec()
-                    .getNetworkUpgrade()
-                    .getChangesets()
-                    .getEventsStreamUploaderChangeset();
-            case Constants.TPL_VAR_BACKUP_UPLOADER -> resource.getSpec()
-                    .getNetworkUpgrade()
-                    .getChangesets()
-                    .getBackupUploaderChangeset();
-            default -> null;
-        };
     }
 
     @Override
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context)
             throws ProcessorException {
-        final StreamUploaderChangeset changeset = getChangeset(resource, this.containerName);
+        final StreamUploaderChangeset changeset = StreamUploaderUtil.findChangeset(resource, this.containerName);
         if (Objects.isNull(changeset)) {
             return status; // no-op
         }
