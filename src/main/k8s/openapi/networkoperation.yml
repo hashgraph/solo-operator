@@ -24,9 +24,11 @@ components:
           enum:
             - FirstInitialization # use NetworkGenesis instead
             - NetworkGenesis
-            - NetworkUpgrade
-            - NodeAddition
-            - NodeRemoval # not need for MVP
+            - NetworkCheck # check if network is in valid state.
+            - NetworkUpgrade # upgrade the network with new version of the consensus-node and other components
+            - NodeAdd
+            - NodeDelete # not need for MVP
+            - NodeUpdate # not need for MVP
             - ProxyUpgrade # not need for MVP
         networkUpgrade:
           type: object

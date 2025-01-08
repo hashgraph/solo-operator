@@ -146,4 +146,6 @@ public final class Constants {
     public static final String COMPONENT_ROLE = "role";
     public static final String COMPONENT_NAMESPACE = "ns";
     public static final String COMPONENT_TRIGGER = "trigger";
+
+    public static final String CONDITION_TYPE_READY = "Ready";
 }
