@@ -33,6 +33,13 @@ public final class OCIImageIndex extends OCIManifest {
         public String architecture;
         public String os;
 
+        public OCIImageIndexPlatform() {}
+
+        public OCIImageIndexPlatform(final String os, final String architecture) {
+            this.os = os;
+            this.architecture = architecture;
+        }
+
         @JsonProperty("os.version")
         public String os_version;
 

@@ -3,12 +3,15 @@
 package com.hedera.solo.operator.library.container;
 
 import static com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES;
+import static java.net.HttpURLConnection.HTTP_NOT_FOUND;
 import static java.net.HttpURLConnection.HTTP_OK;
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
 import com.hedera.solo.operator.library.container.oci.OCIContentDescriptor;
+import com.hedera.solo.operator.library.container.oci.OCIImageIndex;
+import com.hedera.solo.operator.library.container.oci.OCIImageManifest;
 import com.hedera.solo.operator.library.container.oci.OCIManifest;
 import com.hedera.solo.operator.library.generic.LRUCache;
 import edu.umd.cs.findbugs.annotations.NonNull;
@@ -51,6 +54,84 @@ public class DistributionRegistryClient implements AutoCloseable {
 
     public DistributionRegistryClient(final int cacheSize, final HttpClient.Builder builder) {
         client = new AuthClient(cacheSize, builder.build());
+    }
+
+    /**
+     * Fetch image index corresponding to image coordinates.
+     *
+     * @param coordinates to image
+     */
+    public Optional<OCIImageIndex> fetchImageIndex(@NonNull final ImageCoordinates coordinates)
+            throws IOException, InterruptedException {
+        Objects.requireNonNull(coordinates, "coordinates cannot be null");
+        final HttpResponse<byte[]> resp =
+                get(coordinates, "manifests/" + coordinates.reference, OCIImageIndex.mediaTypes());
+        final String mediaType = resp.headers().firstValue("Content-Type").orElse(null);
+        return Optional.ofNullable((OCIImageIndex) OCIImageIndex.from(mediaType, resp.body()));
+    }
+
+    /**
+     * Fetch image manifest corresponding to image coordinates, os and architecture.
+     *
+     * @param coordinates to image
+     * @param os os os type.
+     * @param architecture architecture type.
+     */
+    public Optional<OCIImageManifest> fetchImageManifest(
+            @NonNull final ImageCoordinates coordinates, @NonNull final String os, @NonNull final String architecture)
+            throws IOException, InterruptedException {
+        Objects.requireNonNull(coordinates, "coordinates cannot be null");
+        Objects.requireNonNull(os, "os cannot be null");
+        Objects.requireNonNull(architecture, "architecture cannot be null");
+
+        OCIImageIndex.OCIImageIndexPlatform platform = new OCIImageIndex.OCIImageIndexPlatform(os, architecture);
+        return fetchImageManifest(coordinates, platform);
+    }
+
+    /**
+     * Fetch image manifest corresponding to image coordinates and platform.
+     *
+     * @param coordinates to image
+     * @param platform platform info including os and architecture
+     */
+    public Optional<OCIImageManifest> fetchImageManifest(
+            @NonNull final ImageCoordinates coordinates, @NonNull final OCIImageIndex.OCIImageIndexPlatform platform)
+            throws IOException, InterruptedException {
+        Optional<OCIImageIndex> resp = fetchImageIndex(coordinates);
+        if (resp.isEmpty()) {
+            return Optional.empty();
+        }
+        return fetchImageManifest(resp.get(), coordinates, platform);
+    }
+
+    /**
+     * Fetch image manifest using image index, image coordinates and platform.
+     *
+     * @param index OCI image index
+     * @param coordinates image coordinates
+     * @param platform platform info including os and architecture
+     */
+    public Optional<OCIImageManifest> fetchImageManifest(
+            final OCIImageIndex index,
+            final ImageCoordinates coordinates,
+            final OCIImageIndex.OCIImageIndexPlatform platform)
+            throws IOException, InterruptedException {
+        Objects.requireNonNull(index, "index cannot be null");
+        Objects.requireNonNull(coordinates, "coordinates cannot be null");
+        Objects.requireNonNull(platform, "platform cannot be null");
+        Objects.requireNonNull(platform.os, "os cannot be null");
+        Objects.requireNonNull(platform.architecture, "architecture cannot be null");
+
+        for (OCIImageIndex.OCIImageIndexManifest manifest : index.manifests) {
+            if (platform.architecture.equals(manifest.platform.architecture)
+                    && platform.os.equals(manifest.platform.os)) {
+                final ImageCoordinates referenceCoordinates = coordinates.reference(manifest.digest);
+                final ManifestResponse imageManifest = fetchManifest(referenceCoordinates, manifest.mediaType);
+                return Optional.of((OCIImageManifest) imageManifest.manifest);
+            }
+        }
+
+        return Optional.empty();
     }
 
     /**
@@ -139,7 +220,7 @@ public class DistributionRegistryClient implements AutoCloseable {
                 authenticate(coordinates, response);
                 response = send(authResponse, uri, function, mediaTypes);
             }
-            if (response.statusCode() != HTTP_OK) {
+            if (response.statusCode() != HTTP_OK && response.statusCode() != HTTP_NOT_FOUND) {
                 throw new UnexpectedResponseException(response);
             }
             cache.put(coordinates, authResponse);
