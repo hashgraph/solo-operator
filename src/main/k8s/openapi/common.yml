@@ -373,22 +373,38 @@ components:
           type: array
           items:
             type: object
-            properties:
+            properties: # docker.io/library/ubuntu:focal
               repository:
-                type: string
+                type: string # docker.io/library/
               name:
-                type: string
-              tag:
+                type: string # ubuntu
+              tag: # focal
                 type: string
               imagePullSecrets:
                 type: array
                 items:
                   type: object
                   x-java-type: io.fabric8.kubernetes.api.model.LocalObjectReference
-        layerHashes:
+        layers:
           type: array
           items:
-            type: string
+            type: object
+            properties:
+              os:
+                type: string
+                enum: # GOOS
+                  - darwin
+                  - linux
+                  - windows
+              architecture: # GOARCH
+                type: string
+                enum:
+                  - "amd64"
+                  - "arm64"
+              hashes: # digests
+                type: array
+                items:
+                  type: string
         imagePullPolicy:
           type: string
           enum:
