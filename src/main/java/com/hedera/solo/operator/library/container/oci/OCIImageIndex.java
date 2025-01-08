@@ -41,5 +41,12 @@ public final class OCIImageIndex extends OCIManifest {
 
         public String variant;
         public String[] features;
+
+        public OCIImageIndexPlatform() {}
+
+        public OCIImageIndexPlatform(String os, String architecture) {
+            this.os = os;
+            this.architecture = architecture;
+        }
     }
 }
