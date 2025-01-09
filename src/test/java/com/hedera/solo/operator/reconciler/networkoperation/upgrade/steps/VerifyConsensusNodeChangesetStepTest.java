@@ -21,13 +21,13 @@ import org.mockito.Mockito;
 public class VerifyConsensusNodeChangesetStepTest {
 
     @Test
-    @Description("Check that only one repository is valid and is selected for deployment")
+    @Description("Check that only one repository is valid and selected for deployment")
     void testWithSingleValidSoftwareVersionSourceRepo() {
         NetworkOperation networkOperation =
                 TemplateLoader.load(NetworkOperation.class, TemplateLoader.TEMPLATE_NETWORK_UPGRADE);
         NetworkOperationStatus status = executeStep(networkOperation);
-        validateStatus(status, 1);
-        validateConditions(networkOperation, status);
+        validateSuccessStatus(status, 1);
+        validateSuccessConditions(networkOperation, status);
     }
 
     @Test
@@ -57,8 +57,30 @@ public class VerifyConsensusNodeChangesetStepTest {
                 .add(validRepo);
 
         NetworkOperationStatus status = executeStep(networkOperation);
-        validateStatus(status, 2);
-        validateConditions(networkOperation, status);
+        validateSuccessStatus(status, 2);
+        validateSuccessConditions(networkOperation, status);
+    }
+
+    @Test
+    @Description("Check that status message is added when no valid image is found")
+    void testWithInvalidSoftwareVersionSourceRepo() {
+        NetworkOperation networkOperation =
+                TemplateLoader.load(NetworkOperation.class, TemplateLoader.TEMPLATE_NETWORK_UPGRADE);
+        networkOperation
+                .getSpec()
+                .getNetworkUpgrade()
+                .getChangesets()
+                .getConsensusNodeChangeset()
+                .getSoftwareVersionSource()
+                .getImageRepositories()
+                .removeLast(); // remove the valid entry at the end
+        NetworkOperationStatus status = executeStep(networkOperation);
+
+        // no valid repository should be found
+        validateFailureConditions(networkOperation, status);
+
+        // validate the status messages
+        validateFailureConditions(networkOperation, status);
     }
 
     private NetworkOperationStatus executeStep(NetworkOperation networkOperation) {
@@ -85,7 +107,7 @@ public class VerifyConsensusNodeChangesetStepTest {
         return resp;
     }
 
-    private void validateStatus(final NetworkOperationStatus status, int expectedCount) {
+    private void validateSuccessStatus(final NetworkOperationStatus status, int expectedCount) {
         List<ImageRepositoryStatus> valid = new ArrayList<>();
         ImageRepositoryStatus selected = null;
         for (ImageRepositoryStatus rs : status.getSoftwareSourceStatus().getConsensusNode()) {
@@ -107,7 +129,7 @@ public class VerifyConsensusNodeChangesetStepTest {
         assertThat(valid.contains(selected)).isTrue();
     }
 
-    private void validateConditions(NetworkOperation networkOperation, NetworkOperationStatus status) {
+    private void validateSuccessConditions(NetworkOperation networkOperation, NetworkOperationStatus status) {
         // upto second last message should be image verification fail message
         List<Condition> conditions = status.getConditions();
         for (int i = 0; i < conditions.size() - 2; i++) {
@@ -125,6 +147,40 @@ public class VerifyConsensusNodeChangesetStepTest {
                         .getLast()
                         .getMessage()
                         .equals(VerifyConsensusNodeChangesetStep.SUCCESS_STATUS_MESSAGE))
+                .isTrue();
+    }
+
+    private void validateFailStatus(final NetworkOperationStatus status) {
+        List<ImageRepositoryStatus> valid = new ArrayList<>();
+        ImageRepositoryStatus selected = null;
+        for (ImageRepositoryStatus rs : status.getSoftwareSourceStatus().getConsensusNode()) {
+            if (rs.getValidity().equals(ImageRepositoryStatus.Validity.Valid)) {
+                valid.add(rs);
+
+                if (rs.getSelectedForDeployment()) {
+                    selected = rs;
+                }
+            }
+        }
+
+        assertThat(valid).isEqualTo(0);
+        assertThat(selected).isNull();
+    }
+
+    private void validateFailureConditions(NetworkOperation networkOperation, NetworkOperationStatus status) {
+        // upto second last message should be image verification fail message
+        List<Condition> conditions = status.getConditions();
+        for (int i = 0; i < conditions.size(); i++) {
+            Condition c = conditions.get(i);
+            assertThat(c.getType())
+                    .contains(VerifyConsensusNodeChangesetStep.IMAGE_VERIFICATION_FAIL_MESSAGE.formatted(""));
+        }
+
+        // last message should be fail status message
+        assertThat(status.getConditions()
+                        .getLast()
+                        .getMessage()
+                        .equals(VerifyConsensusNodeChangesetStep.FAIL_STATUS_MESSAGE))
                 .isTrue();
     }
 }
