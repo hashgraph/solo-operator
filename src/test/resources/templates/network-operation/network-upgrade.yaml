@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+
+---
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: NetworkOperation
+spec:
+  orbit: solo-orbit
+  mode: NetworkUpgrade
+  networkUpgrade:
+    changesets:
+      consensusNodeChangeset:
+        softwareVersionSource:
+          imageRepositories: # provide multiple repositories where the same image exists.
+            - repository: "a.lenin.io/library" # should fail
+              imageName: "consensus-node"
+              imageTag: "0.57.0-lenin.x32089ae"
+            - repository: "gcr.io/hedera-registry" # should fail
+              imageName: "consensus-node"
+              imageTag: "0.57.0-develop.x32089ae"
+            - repository: "swirldslabs.jfrog.io/consensus-node-docker-dev" # should succeed
+              imageName: "consensus-node"
+              imageTag: "0.57.0-develop.x32089ae"
+          imageVerificationSpec: # layers that must match
+            - os: "linux"
+              architecture: "amd64"
+              layerHashes:
+                - "sha256:1"
+                - "sha256:2"
+                - "sha256:3"
+            - os: "linux"
+              architecture: "arm64"
+              layerHashes:
+                - "sha256:1a"
+                - "sha256:2a"
+                - "sha256:3a"

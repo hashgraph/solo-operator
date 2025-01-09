@@ -62,7 +62,7 @@ components:
                 # ExecuteImmediate (T = 0) # the build.zip file will contain manifest and other configuration files so that the "solo | solo-provisioner-bridge | ?" can use it to create the CR
                   1. validate image (ensure we can pull the image from specified registries and validate the layer hashes, we may use HEAD request instead of downloading the image) # most likely the registries will be public, but solo-provisioner may inject k8s secrets for permissioned registries.
                     1a. store the resolved manifest hashes (?), registry details as well as their validation status in the status field (e.g. probably need a new object e.g. SoftwareVersionStatus datamodel with status)
-                    1b. store the selected registry in the status field
+                    1b. select a valid registry randomly and store the selected registry in the status field
                     1c. add a condition to the status field explaining the validation status
                   2. potentially deploy firewall rule changes (TBD)
                 # FreezeScheduled (T + 2 days)

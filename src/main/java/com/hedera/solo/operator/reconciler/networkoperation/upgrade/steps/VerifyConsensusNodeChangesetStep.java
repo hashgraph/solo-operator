@@ -11,6 +11,12 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.util.Objects;
 
 public class VerifyConsensusNodeChangesetStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
+    public static final String SUCCESS_STATUS_MESSAGE =
+            "Consensus image verification succeeded. Selected for deployment: %s";
+    public static final String FAIL_STATUS_MESSAGE = "Consensus image verification failed";
+    public static final String IMAGE_VERIFICATION_SUCCESS_MESSAGE = "Image verification succeeded: %s";
+    public static final String IMAGE_VERIFICATION_FAIL_MESSAGE = "Image verification failed: %s";
+
     private ConsensusNodeChangeset getConsensusNodeChangeset(NetworkOperation resource) {
         Objects.requireNonNull(resource, "NetworkOperation must not be null");
         Objects.requireNonNull(resource.getSpec(), "NetworkOperation spec must not be null");
