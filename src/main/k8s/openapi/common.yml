@@ -28,8 +28,12 @@ components:
           $ref: "#/components/schemas/NodeLoggingConfiguration"
         softwareVersionSource:
           $ref: "#/components/schemas/SoftwareVersionSource"
-        softwareVersionStatus:
-          $ref: "#/components/schemas/SoftwareVersionStatus"
+        imageRepository:
+          $ref: "#/components/schemas/ImageRepository"
+        imageVerificationSpec:
+          $ref: "#/components/schemas/ImageVerificationSpec"
+        imageRepositoryStatus:
+          $ref: "#/components/schemas/ImageRepositoryStatus"
         consensusNodeChangeset:
           $ref: "#/components/schemas/ConsensusNodeChangeset"
         haproxyChangeset:
@@ -40,14 +44,13 @@ components:
       properties:
         repository:
           type: string
-        name:
+        imageName:
           type: string
-        tag:
+        imageTag:
           type: string
-        layerHashes:
-          type: array
-          items:
-            type: string
+        imageVerificationSpec:
+          type: object
+          x-java-type: com.hedera.solo.operator.model.commonspec.ImageVerificationSpec
         imagePullSecrets:
           type: array
           items:
@@ -366,45 +369,53 @@ components:
         configuration: # e.g. log4j2.xml content
           type: string
 
+    ImageRepository:
+      type: object
+      properties: # docker.io/library/ubuntu:focal
+        repository: # docker.io/library
+          type: string
+        imageName: # ubuntu
+          type: string
+        imageTag: # focal
+          type: string
+        imagePullSecrets:
+          type: array
+          items:
+            type: object
+            x-java-type: io.fabric8.kubernetes.api.model.LocalObjectReference
+
+    ImageVerificationSpec:
+      type: object
+      properties:
+        os:
+          type: string
+          enum: # GOOS
+            - darwin
+            - linux
+            - windows
+        architecture: # GOARCH
+          type: string
+          enum:
+            - "amd64"
+            - "arm64"
+        layerHashes: # digests
+          type: array
+          items:
+            type: string
+
     SoftwareVersionSource: # move up close to SoftwareVersion
       type: object
       properties:
-        images:
+        imageRepositories: # may be more than 32 entries from all node operators
           type: array
           items:
             type: object
-            properties: # docker.io/library/ubuntu:focal
-              repository: # docker.io/library
-                type: string
-              name: # ubuntu
-                type: string
-              tag: # focal
-                type: string
-              imagePullSecrets:
-                type: array
-                items:
-                  type: object
-                  x-java-type: io.fabric8.kubernetes.api.model.LocalObjectReference
-        layers:
+            x-java-type: com.hedera.solo.operator.model.commonspec.ImageRepository
+        imageVerificationSpec:
           type: array
           items:
             type: object
-            properties:
-              os:
-                type: string
-                enum: # GOOS
-                  - darwin
-                  - linux
-                  - windows
-              architecture: # GOARCH
-                type: string
-                enum:
-                  - "amd64"
-                  - "arm64"
-              hashes: # digests
-                type: array
-                items:
-                  type: string
+            x-java-type: com.hedera.solo.operator.model.commonspec.ImageVerificationSpec
         imagePullPolicy:
           type: string
           enum:
@@ -413,35 +424,34 @@ components:
             - IfNotPresent
           default: IfNotPresent
 
-    SoftwareVersionStatus:
+    ImageRepositoryStatus:
       type: object
       properties:
         repository:
           type: string
-        name:
+        imageName:
           type: string
-        tag:
+        imageTag:
           type: string
-        valid:
+        validity:
           type: string
           enum:
-            - UNKNOWN
-            - VALID
-            - INVALID
-        selectedForDeployment:
+            - Unknown
+            - Valid
+            - Invalid
+            - NotFound
+        selectedForDeployment: # take random from the valid list. When we check next time if this is not available, then we choose the first valid assuming user has listed in preferred order.
           type: boolean
           default: false
-        manifestHash:
+        manifestHash: # this is resolved for this repository in network-execute step
           type: string
 
     ConsensusNodeChangeset:
       type: object
       properties:
         softwareVersionSource:
-          type: array
-          items:
-            type: object
-            x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersionSource
+          type: object
+          x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersionSource
         nodeProperties:
           type: array
           items:
@@ -460,9 +470,9 @@ components:
           type: object
           default: { }
           properties:
-            softwareVersion:
+            softwareVersionSource:
               type: object
-              x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+              x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersionSource
             user:
               description: stats user
               type: string

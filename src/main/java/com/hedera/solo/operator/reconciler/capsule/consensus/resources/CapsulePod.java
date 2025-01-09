@@ -86,8 +86,8 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
     public static final ConsensusNode DEFAULT_CONSENSUS_NODE = edit(new ConsensusNode())
             .with(version -> version.editSoftwareVersion()
                     .withRepository("swirldslabs.jfrog.io/consensus-node-docker-dev")
-                    .withName("consensus-node")
-                    .withTag("0.57.0-develop.x32089ae"))
+                    .withImageName("consensus-node")
+                    .withImageTag("0.57.0-develop.x32089ae"))
             .build();
 
     @Location("consensus-capsule/pod.yaml")

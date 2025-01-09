@@ -33,12 +33,9 @@ components:
         networkUpgrade:
           type: object
           required:
-            - orbit
             - changesets
             - marker
           properties:
-            orbit:
-              type: string
             changesets:
               type: object
               required:
@@ -178,9 +175,9 @@ components:
               type: array
               items:
                 type: object
-                x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersionStatus
+                x-java-type: com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus
             streamUploader:
               type: array
               items:
                 type: object
-                x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersionStatus
+                x-java-type: com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus

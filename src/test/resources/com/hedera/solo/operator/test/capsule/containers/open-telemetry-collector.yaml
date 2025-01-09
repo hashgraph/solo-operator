@@ -5,8 +5,8 @@ enabled: false # disable by default for CI. if needed, enable for local testing
 name: "open-telemetry-collector"
 softwareVersion:
   repository: "docker.io/otel"
-  name: "opentelemetry-collector-contrib"
-  tag: "0.72.0"
+  imageName: "opentelemetry-collector-contrib"
+  imageTag: "0.72.0"
 config:
   exporters:
     loki:

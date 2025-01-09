@@ -20,7 +20,7 @@ import com.hedera.solo.operator.library.container.ImageCoordinates;
 import com.hedera.solo.operator.library.container.UnexpectedResponseException;
 import com.hedera.solo.operator.library.container.oci.OCIImageIndex;
 import com.hedera.solo.operator.library.container.oci.OCIImageManifest;
-import com.hedera.solo.operator.model.commonspec.softwareversionsource.Layers;
+import com.hedera.solo.operator.model.commonspec.ImageVerificationSpec;
 import java.io.IOException;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -107,7 +107,9 @@ class ImageRegistryTest {
         try (ImageRegistry registry = new ImageRegistry()) {
             final ImageCoordinates coordinates = ImageCoordinates.http(imageUri, authJson);
             final Optional<OCIImageManifest> imageManifest = registry.fetchImageManifest(
-                    coordinates, Layers.Os.linux.getValue(), Layers.Architecture.amd64.getValue());
+                    coordinates,
+                    ImageVerificationSpec.Os.linux.getValue(),
+                    ImageVerificationSpec.Architecture.amd64.getValue());
             assertThat(imageManifest.isPresent()).isTrue();
             assertThat(imageManifest.get().layers.length).isGreaterThan(0);
 
@@ -116,8 +118,8 @@ class ImageRegistryTest {
                     ImageRegistryException.class,
                     () -> registry.fetchImageManifest(
                             ImageCoordinates.http(invalidImageUri, authJson),
-                            Layers.Os.linux.getValue(),
-                            Layers.Architecture.amd64.getValue()));
+                            ImageVerificationSpec.Os.linux.getValue(),
+                            ImageVerificationSpec.Architecture.amd64.getValue()));
             assertThat(exception.getCause()).isInstanceOf(UnexpectedResponseException.class);
             assertThat(((UnexpectedResponseException) exception.getCause()).response.statusCode())
                     .isEqualTo(HTTP_NOT_FOUND);

@@ -5,8 +5,8 @@ enabled: true
 name: "record-stream-uploader"
 softwareVersion:
   repository: "gcr.io/hedera-registry"
-  name: "uploader-mirror"
-  tag: "1.3.0"
+  imageName: "uploader-mirror"
+  imageTag: "1.3.0"
 config:
   debug: true
   enableCompression: true
