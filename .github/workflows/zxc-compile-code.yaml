@@ -85,14 +85,14 @@ jobs:
           files: "**/build/test-results/test/TEST-*.xml"
 
       - name: Publish Unit Test Coverage Reports
-        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         if: ${{ inputs.enable-unit-tests && !cancelled() }}
         with:
           name: Unit Test Coverage Reports
           path: "**/jacoco*.xml"
 
       - name: Publish Test Reports
-        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         if: ${{ inputs.enable-unit-tests && !cancelled() }}
         with:
           name: Test Reports
@@ -104,7 +104,7 @@ jobs:
           (cd build; zip -qr snapshots.zip snapshots) || :
 
       - name: Publish Test Snapshots
-        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         if: ${{ inputs.enable-unit-tests && !cancelled() }}
         with:
           name: Test Snapshots
@@ -112,7 +112,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Publish Heap Dumps
-        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         if: ${{ inputs.enable-unit-tests && !cancelled() }}
         with:
           name: Test Heap Dumps
