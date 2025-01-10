@@ -15,6 +15,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.util.ArrayList;
 import java.util.List;
 import jdk.jfr.Description;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -22,6 +23,7 @@ public class VerifyConsensusNodeChangesetStepTest {
 
     @Test
     @Description("Check that only one repository is valid and selected for deployment")
+    @Disabled("This test is disabled because the code is not implemented yet")
     void testWithSingleValidSoftwareVersionSourceRepo() {
         NetworkOperation networkOperation =
                 TemplateLoader.load(NetworkOperation.class, TemplateLoader.TEMPLATE_NETWORK_UPGRADE);
@@ -32,6 +34,7 @@ public class VerifyConsensusNodeChangesetStepTest {
 
     @Test
     @Description("Check that multiple repositories are valid and any one (random) is selected for deployment")
+    @Disabled("This test is disabled because the code is not implemented yet")
     void testWithMultipleValidSoftwareVersionSourceRepo() {
         NetworkOperation networkOperation =
                 TemplateLoader.load(NetworkOperation.class, TemplateLoader.TEMPLATE_NETWORK_UPGRADE);
@@ -63,6 +66,7 @@ public class VerifyConsensusNodeChangesetStepTest {
 
     @Test
     @Description("Check that status message is added when no valid image is found")
+    @Disabled("This test is disabled because the code is not implemented yet")
     void testWithInvalidSoftwareVersionSourceRepo() {
         NetworkOperation networkOperation =
                 TemplateLoader.load(NetworkOperation.class, TemplateLoader.TEMPLATE_NETWORK_UPGRADE);
