@@ -208,8 +208,8 @@ components:
           x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
           default:
             repository: "docker.io/otel"
-            name: "opentelemetry-collector-contrib"
-            tag: "0.72.0"
+            imageName: "opentelemetry-collector-contrib"
+            imageTag: "0.72.0"
         resources:
           type: object
           x-java-type: io.fabric8.kubernetes.api.model.ResourceRequirements
