@@ -18,11 +18,12 @@ import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.github.tomakehurst.wiremock.junit5.WireMockTest;
 import com.hedera.solo.operator.library.container.ImageCoordinates;
 import com.hedera.solo.operator.library.container.UnexpectedResponseException;
+import com.hedera.solo.operator.library.container.oci.OCIContentDescriptor;
 import com.hedera.solo.operator.library.container.oci.OCIImageIndex;
 import com.hedera.solo.operator.library.container.oci.OCIImageManifest;
 import com.hedera.solo.operator.model.commonspec.ImageVerificationSpec;
 import java.io.IOException;
-import java.util.Optional;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 @WireMockTest
@@ -55,6 +56,8 @@ class ImageRegistryTest {
 
         stubFor(head(urlEqualTo("/v2/hedera-registry/consensus-node/blobs/hash:1"))
                 .willReturn(ok()));
+        stubFor(head(urlEqualTo("/v2/hedera-registry/consensus-node/blobs/hash:2"))
+                .willReturn(ok()));
     }
 
     private static String mockUri(String port) {
@@ -71,7 +74,7 @@ class ImageRegistryTest {
     }
 
     @Test
-    void testFetchImageIndex(WireMockRuntimeInfo wmRuntimeInfo) throws IOException, InterruptedException {
+    void fetchImageIndex(WireMockRuntimeInfo wmRuntimeInfo) throws IOException, InterruptedException {
         final String port = String.valueOf(wmRuntimeInfo.getHttpPort());
         final String imageUri = mockUri(port);
         final String invalidImageUri = mockInvalidUri(port);
@@ -81,13 +84,13 @@ class ImageRegistryTest {
 
         try (ImageRegistry registry = new ImageRegistry()) {
             final ImageCoordinates coordinates = ImageCoordinates.http(imageUri, authJson);
-            final Optional<OCIImageIndex> resp = registry.fetchImageIndex(coordinates);
-            assertThat(resp.isPresent()).isTrue();
-            assertThat(resp.get().manifests.length).isGreaterThan(0);
+            final OCIImageIndex resp = registry.fetchImageIndex(coordinates);
+            assertThat(resp).isNotNull();
+            assertThat(resp.manifests.length).isGreaterThan(0);
 
             // failure scenario
-            ImageRegistryException exception = assertThrows(
-                    ImageRegistryException.class,
+            RecordNotFoundException exception = assertThrows(
+                    RecordNotFoundException.class,
                     () -> registry.fetchImageIndex(ImageCoordinates.http(invalidImageUri, authJson)));
             assertThat(exception.getCause()).isInstanceOf(UnexpectedResponseException.class);
             assertThat(((UnexpectedResponseException) exception.getCause()).response.statusCode())
@@ -96,7 +99,7 @@ class ImageRegistryTest {
     }
 
     @Test
-    void testFetchImageManifest(WireMockRuntimeInfo wmRuntimeInfo) throws IOException, InterruptedException {
+    void fetchImageManifest(WireMockRuntimeInfo wmRuntimeInfo) throws IOException, InterruptedException {
         final String port = String.valueOf(wmRuntimeInfo.getHttpPort());
         final String imageUri = mockUri(port);
         final String invalidImageUri = mockInvalidUri(port);
@@ -106,16 +109,16 @@ class ImageRegistryTest {
 
         try (ImageRegistry registry = new ImageRegistry()) {
             final ImageCoordinates coordinates = ImageCoordinates.http(imageUri, authJson);
-            final Optional<OCIImageManifest> imageManifest = registry.fetchImageManifest(
+            final OCIImageManifest imageManifest = registry.fetchImageManifest(
                     coordinates,
                     ImageVerificationSpec.Os.linux.getValue(),
                     ImageVerificationSpec.Architecture.amd64.getValue());
-            assertThat(imageManifest.isPresent()).isTrue();
-            assertThat(imageManifest.get().layers.length).isGreaterThan(0);
+            assertThat(imageManifest).isNotNull();
+            assertThat(imageManifest.layers.length).isGreaterThan(0);
 
             // failure scenario
-            ImageRegistryException exception = assertThrows(
-                    ImageRegistryException.class,
+            RecordNotFoundException exception = assertThrows(
+                    RecordNotFoundException.class,
                     () -> registry.fetchImageManifest(
                             ImageCoordinates.http(invalidImageUri, authJson),
                             ImageVerificationSpec.Os.linux.getValue(),
@@ -123,6 +126,42 @@ class ImageRegistryTest {
             assertThat(exception.getCause()).isInstanceOf(UnexpectedResponseException.class);
             assertThat(((UnexpectedResponseException) exception.getCause()).response.statusCode())
                     .isEqualTo(HTTP_NOT_FOUND);
+        }
+    }
+
+    @Test
+    void isValidLayers(WireMockRuntimeInfo wmRuntimeInfo) {
+        final String port = String.valueOf(wmRuntimeInfo.getHttpPort());
+        final String imageUri = mockUri(port);
+        final String authJson = mockAuth(port);
+
+        mockStubResponse(port);
+
+        try (ImageRegistry registry = new ImageRegistry()) {
+            final ImageCoordinates coordinates = ImageCoordinates.http(imageUri, authJson);
+            final OCIImageManifest manifest = new OCIImageManifest();
+            manifest.layers = new OCIContentDescriptor[] {
+                OCIContentDescriptor.builder()
+                        .withDigest("hash:1")
+                        .withMediaType(OCIImageManifest.mediaTypes()[0])
+                        .build(),
+                OCIContentDescriptor.builder()
+                        .withDigest("hash:2")
+                        .withMediaType(OCIImageManifest.mediaTypes()[0])
+                        .build(),
+            };
+
+            // incorrect number of layers
+            assertThat(registry.hasValidLayers(coordinates, manifest, List.of("hash:11")))
+                    .isFalse();
+
+            // incorrect orders of layers
+            assertThat(registry.hasValidLayers(coordinates, manifest, List.of("hash:2", "hash:1")))
+                    .isFalse();
+
+            // correct orders of layers
+            assertThat(registry.hasValidLayers(coordinates, manifest, List.of("hash:1", "hash:2")))
+                    .isTrue();
         }
     }
 }
