@@ -16,6 +16,12 @@ public class ProcessorResult<S extends KubernetesResource> {
         this.deferred = deferred;
     }
 
+    public ProcessorResult(final S status) {
+        this.status = status;
+        this.reconcileDelay = Duration.ZERO;
+        this.deferred = null;
+    }
+
     public S getStatus() {
         return status;
     }
