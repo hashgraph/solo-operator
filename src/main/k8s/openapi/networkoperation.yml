@@ -176,7 +176,7 @@ components:
               items:
                 type: object
                 x-java-type: com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus
-            streamUploader:
+            streamUploader: # FIXME we may need to revise this so that it is easier to lookup the status of a specific stream-uploader image
               type: array
               items:
                 type: object

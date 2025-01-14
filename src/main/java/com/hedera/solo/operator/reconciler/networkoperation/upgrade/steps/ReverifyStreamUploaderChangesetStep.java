@@ -11,6 +11,24 @@ import com.hedera.solo.operator.reconciler.networkoperation.upgrade.utils.Stream
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.util.Objects;
 
+/**
+ * ReverifyStreamUploaderChangesetStep re-verifies the changeset for the stream uploaders and selects a new image if
+ * original selection is not available.
+ *
+ * <p>Check {@link ReverifyConsensusNodeChangesetStep} for consensus node changeset re-verification and apply similar
+ * logic for stream uploader changeset denoted by the containerName field.
+ *
+ * <p>The {@link NetworkOperationStatus} contains the image source status in the form of *
+ * {@link com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus} in the *
+ * 'NetworkOperationStatus.softwareSourceStatus.streamUploader' field. The selected image source is marked as "Valid"
+ * and * "selectedForDeployment" is set to true.
+ *
+ * <p>If the specified image is same for all stream uploader containers, then re-reverification is not required for all
+ * stream uploader changesets.
+ *
+ * <p>The changeset can be found by passing the NetworkOperation resource and containerName to
+ * {@link StreamUploaderUtil#findChangeset(NetworkOperation, String)}.
+ */
 public class ReverifyStreamUploaderChangesetStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     private final String containerName;
 
