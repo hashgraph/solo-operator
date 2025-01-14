@@ -11,10 +11,10 @@ import com.hedera.solo.operator.reconciler.networkoperation.upgrade.utils.Stream
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.util.Objects;
 
-public class ApplyStreamUploaderStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
+public class ReverifyStreamUploaderChangesetStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     private final String containerName;
 
-    public ApplyStreamUploaderStep(String name) {
+    public ReverifyStreamUploaderChangesetStep(String name) {
         this.containerName = name;
     }
 
@@ -22,12 +22,14 @@ public class ApplyStreamUploaderStep implements ProcessorStep<NetworkOperation, 
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context)
             throws ProcessorException {
+
         final StreamUploaderChangeset changeset = StreamUploaderUtil.findChangeset(resource, this.containerName);
+
         if (Objects.isNull(changeset)) {
             return status; // no-op
         }
 
-        // TODO: Implement the logic to apply the changeset
+        // FIXME: Implement the logic to reverify the changeset
 
         throw new ProcessorException("Not implemented");
     }

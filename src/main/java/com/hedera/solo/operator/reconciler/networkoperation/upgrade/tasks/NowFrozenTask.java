@@ -9,10 +9,10 @@ import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
-import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ApplyConsensusNodeStep;
-import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ApplyStreamUploaderStep;
-import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ReverifyConsensusNodeStep;
-import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ReverifyStreamUploaderStep;
+import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ApplyConsensusNodeChangesetStep;
+import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ApplyStreamUploaderChangesetStep;
+import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ReverifyConsensusNodeChangesetStep;
+import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ReverifyStreamUploaderChangesetStep;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.time.Duration;
@@ -26,16 +26,16 @@ public class NowFrozenTask extends AbstractProcessorTask<NetworkOperation, Netwo
     @Override
     public List<ProcessorStep<NetworkOperation, NetworkOperationStatus>> steps() throws ProcessorException {
         return List.of(
-                new ReverifyConsensusNodeStep(),
-                new ReverifyStreamUploaderStep(Constants.TPL_VAR_RECORD_STREAM_UPLOADER),
-                new ReverifyStreamUploaderStep(Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER),
-                new ReverifyStreamUploaderStep(Constants.TPL_VAR_EVENT_STREAM_UPLOADER),
-                new ReverifyStreamUploaderStep(Constants.TPL_VAR_BACKUP_UPLOADER),
-                new ApplyConsensusNodeStep(),
-                new ApplyStreamUploaderStep(Constants.TPL_VAR_RECORD_STREAM_UPLOADER),
-                new ApplyStreamUploaderStep(Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER),
-                new ApplyStreamUploaderStep(Constants.TPL_VAR_EVENT_STREAM_UPLOADER),
-                new ApplyStreamUploaderStep(Constants.TPL_VAR_BACKUP_UPLOADER));
+                new ReverifyConsensusNodeChangesetStep(),
+                new ReverifyStreamUploaderChangesetStep(Constants.TPL_VAR_RECORD_STREAM_UPLOADER),
+                new ReverifyStreamUploaderChangesetStep(Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER),
+                new ReverifyStreamUploaderChangesetStep(Constants.TPL_VAR_EVENT_STREAM_UPLOADER),
+                new ReverifyStreamUploaderChangesetStep(Constants.TPL_VAR_BACKUP_UPLOADER),
+                new ApplyConsensusNodeChangesetStep(),
+                new ApplyStreamUploaderChangesetStep(Constants.TPL_VAR_RECORD_STREAM_UPLOADER),
+                new ApplyStreamUploaderChangesetStep(Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER),
+                new ApplyStreamUploaderChangesetStep(Constants.TPL_VAR_EVENT_STREAM_UPLOADER),
+                new ApplyStreamUploaderChangesetStep(Constants.TPL_VAR_BACKUP_UPLOADER));
     }
 
     @Override

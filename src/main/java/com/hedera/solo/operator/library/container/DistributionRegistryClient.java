@@ -80,6 +80,8 @@ public class DistributionRegistryClient implements AutoCloseable {
             throws IOException, InterruptedException {
         Objects.requireNonNull(coordinates, "coordinates cannot be null");
         Objects.requireNonNull(layer, "layer cannot be null");
+        Objects.requireNonNull(layer.digest, "layer digest cannot be null");
+        Objects.requireNonNull(layer.mediaType, "layer mediaType cannot be null");
         return head(coordinates, "blobs/" + layer.digest, layer.mediaType).statusCode() == HTTP_OK;
     }
 

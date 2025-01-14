@@ -8,11 +8,13 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 
-public class ReverifyConsensusNodeStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
+public class ApplyConsensusNodeChangesetStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     @Override
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context)
             throws ProcessorException {
+        // TODO: Implement the logic to apply the changeset
+
         throw new ProcessorException("Not implemented");
     }
 }

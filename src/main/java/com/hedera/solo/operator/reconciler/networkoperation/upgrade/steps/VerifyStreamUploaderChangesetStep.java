@@ -9,12 +9,11 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.utils.StreamUploaderUtil;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import java.util.Objects;
 
-public class ReverifyStreamUploaderStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
+public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     private final String containerName;
 
-    public ReverifyStreamUploaderStep(String name) {
+    public VerifyStreamUploaderChangesetStep(String name) {
         this.containerName = name;
     }
 
@@ -22,15 +21,9 @@ public class ReverifyStreamUploaderStep implements ProcessorStep<NetworkOperatio
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context)
             throws ProcessorException {
-
         final StreamUploaderChangeset changeset = StreamUploaderUtil.findChangeset(resource, this.containerName);
 
-        if (Objects.isNull(changeset)) {
-            return status; // no-op
-        }
-
-        // FIXME: Implement the logic to reverify the changeset
-
-        throw new ProcessorException("Not implemented");
+        // FIXME update status
+        return status;
     }
 }

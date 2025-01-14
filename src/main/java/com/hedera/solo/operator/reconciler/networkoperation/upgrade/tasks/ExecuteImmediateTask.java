@@ -9,8 +9,8 @@ import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
-import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyConsensusNodeStep;
-import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyStreamUploaderStep;
+import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyConsensusNodeChangesetStep;
+import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyStreamUploaderChangesetStep;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.time.Duration;
@@ -24,11 +24,11 @@ public class ExecuteImmediateTask extends AbstractProcessorTask<NetworkOperation
     @Override
     public List<ProcessorStep<NetworkOperation, NetworkOperationStatus>> steps() throws ProcessorException {
         return List.of(
-                new VerifyConsensusNodeStep(),
-                new VerifyStreamUploaderStep(Constants.TPL_VAR_RECORD_STREAM_UPLOADER),
-                new VerifyStreamUploaderStep(Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER),
-                new VerifyStreamUploaderStep(Constants.TPL_VAR_EVENT_STREAM_UPLOADER),
-                new VerifyStreamUploaderStep(Constants.TPL_VAR_BACKUP_UPLOADER));
+                new VerifyConsensusNodeChangesetStep(),
+                new VerifyStreamUploaderChangesetStep(Constants.TPL_VAR_RECORD_STREAM_UPLOADER),
+                new VerifyStreamUploaderChangesetStep(Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER),
+                new VerifyStreamUploaderChangesetStep(Constants.TPL_VAR_EVENT_STREAM_UPLOADER),
+                new VerifyStreamUploaderChangesetStep(Constants.TPL_VAR_BACKUP_UPLOADER));
     }
 
     @Override
