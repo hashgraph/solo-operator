@@ -51,7 +51,7 @@ import org.jboss.logging.Logger;
             @Dependent(type = CapsuleUpgradePvc.class, reconcilePrecondition = CapsuleUpgradePvc.Ready.class),
             @Dependent(type = CapsuleRecordStreamPvc.class, reconcilePrecondition = CapsuleRecordStreamPvc.Ready.class),
             @Dependent(type = CapsuleEventsStreamPvc.class, reconcilePrecondition = CapsuleEventsStreamPvc.Ready.class),
-            @Dependent(type = CapsulePod.class, reconcilePrecondition = CapsulePod.Ready.class)
+            @Dependent(type = CapsulePod.class)
         })
 public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>, ErrorStatusHandler<ConsensusCapsule> {
 

@@ -79,6 +79,7 @@ public class NetworkOperationReconciler
     private final NetworkOperationTrigger trigger = new NetworkOperationTrigger(this);
     private final Workflow<NetworkOperation> workflow = new WorkflowBuilder<NetworkOperation>()
             .addDependentResource(clusterConfig)
+            .withReconcilePrecondition(clusterConfig::isReady)
             .addDependentResource(consensusCapsule)
             .dependsOn(clusterConfig)
             .addDependentResource(orbit)

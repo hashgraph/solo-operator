@@ -5,4 +5,4 @@ name: "consensus-node"
 softwareVersion:
   repository: "swirldslabs.jfrog.io/consensus-node-docker-dev"
   imageName: "consensus-node"
-  imageTag: "0.57.0-develop.x32089ae" # if updated, also update CapsulePod.DEFAULT_CONSENSUS_NODE
+  imageTag: "0.59.0-main.xebbbf0d" # if updated, also update CapsulePod.DEFAULT_CONSENSUS_NODE

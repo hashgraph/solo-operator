@@ -20,16 +20,13 @@ import com.hedera.solo.operator.test.fixtures.resource.ResourceLoader;
 import com.hedera.solo.operator.test.fixtures.snapshot.SnapshotFailureContext;
 import com.hedera.solo.test.framework.AbstractOperatorTest;
 import io.fabric8.kubernetes.api.model.Condition;
-import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.config.ControllerConfigurationOverrider;
 import io.javaoperatorsdk.operator.junit.LocallyRunOperatorExtension;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -95,7 +92,6 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                 verifyNetworkOperationSucceeded(name, true);
             });
         }
-        verifyClusterConfig(capsuleNames);
     }
 
     @Test
@@ -120,8 +116,6 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                 verifyNetworkOperationSucceeded("init-" + i, 0 != i % noUpdatePeriod);
             }
         });
-
-        verifyClusterConfig(capsuleNames);
     }
 
     @Test
@@ -153,23 +147,6 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                         .with(spec ->
                                 spec.editSpec().withMode(FirstInitialization).withOrbit(orbitName))
                         .build());
-    }
-
-    void verifyClusterConfig(final List<String> capsuleNames) {
-        ConfigMap cm = operator().get(ConfigMap.class, "cluster-config");
-        assertThat(cm).isNotNull();
-        String configTxt = cm.getData().get("config.txt");
-        assertThat(configTxt).isNotNull();
-        List<String> lines =
-                configTxt.lines().filter(line -> line.startsWith("address")).toList();
-        assertThat(lines).size().isEqualTo(3);
-        Map<String, Integer> nodes = lines.stream()
-                .map(line -> line.split("\\s*,\\s*"))
-                .collect(Collectors.toMap(a -> a[2], a -> Integer.valueOf(a[1])));
-        assertThat(nodes.keySet()).isEqualTo(new HashSet<>(capsuleNames));
-        assertThat(nodes.values().stream().distinct().count()).isEqualTo(capsuleNames.size());
-        assertThat(nodes.values().stream().min(Integer::compareTo)).contains(0);
-        assertThat(nodes.values().stream().max(Integer::compareTo)).contains(capsuleNames.size() - 1);
     }
 
     void deleteNetworkOperationStuckInPending(final String name) {

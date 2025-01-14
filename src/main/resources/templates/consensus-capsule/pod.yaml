@@ -5,7 +5,6 @@
 # {@String namespace}
 # {@Long nodeId}
 # {@String nodeName}
-# {@java.util.List nodeNames}
 # {@String accountId}
 # {@String hostIp}
 # {@int defaultMode}
@@ -39,8 +38,6 @@ spec:
           mountPath: /tmp/volumes/gossip-keys
         - name: public-keys
           mountPath: /tmp/volumes/public-keys
-        - name: cluster-config
-          mountPath: /tmp/volumes/cluster-config
         - name: hgcapp-init
           mountPath: /tmp/volumes/init
         - name: hgcapp-record-streams
@@ -123,75 +120,6 @@ spec:
             return 0
           \}
 
-          # lookup services
-          lookupSvc() \{
-            local svc="$1"
-            local destFile="$2"
-            local attempt=1
-            local delay=5
-            local maxAttempt=100
-            local rc=0
-            # Check for services with a timeout
-            until [ $attempt -gt $maxAttempt ]; do
-              echo "-------------------------------------------------------------------"
-              result=$(getent hosts "$svc")
-              rc=$?
-              echo "$result"
-              if [ "$rc" -eq 0 ]; then
-                echo "OK: $svc"
-                echo "-------------------------------------------------------------------"
-                echo "$result" >> "$destFile"
-                return $rc
-              fi
-              echo "Attempt $attempt failed for service $svc. Retrying in $delay seconds..."
-              sleep "$delay"
-              attempt=$(( attempt + 1 ))
-            done
-
-            echo "ERROR: Timeout occurred; lookup failed for services: $svc."
-            return 1
-          \}
-
-          # Parse address lines in config.txt and lookup services using internal and external FQDN/IP addresses.
-          checkConsensusNodeSvc() \{
-            # 6th item is internal address and 8th item is external address
-            parsed_internal_svcs=$(cat /tmp/volumes/cluster-config/config.txt | awk '\{print $6\}' | xargs);
-            parsed_external_svcs=$(cat /tmp/volumes/cluster-config/config.txt | awk '\{print $8\}' | xargs);
-
-            IFS=', ' read -r -a internal_svcs <<< "$parsed_internal_svcs";
-            IFS=', ' read -r -a external_svcs <<< "$parsed_external_svcs";
-
-            echo ""
-            echo ""
-            echo "Looking up consensus node services...."
-            echo "Parsed Internal Addresses: $\{parsed_internal_svcs\}"
-            echo "Parsed External Addresses: $\{parsed_external_svcs\}"
-            echo "Internal Services Array: $\{internal_svcs[@]\}"
-            echo "External Services Array: $\{external_svcs[@]\}"
-            echo ""
-
-            # capture service IPs in a file for debugging (if needed)
-            local lookupFile="/tmp/volumes/init/hosts-lookup"
-            touch "$lookupFile"
-            for svc in "$\{internal_svcs[@]\}";do
-              lookupSvc "$svc" "$lookupFile" || return $?
-            done;
-
-            for svc in "$\{external_svcs[@]\}";do
-              lookupSvc "$svc" "$lookupFile" || return $?
-            done;
-
-            echo ""
-            echo "hosts"
-            echo "--------------------------------------------------------------------------"
-            cat "$lookupFile"
-
-            echo ""
-            echo "*** Lookup succeeded for all services ***"
-
-            return 0
-          \}
-
           runInit() \{
             id # check which user is running the script
 
@@ -201,9 +129,6 @@ spec:
             # combine node keys into a single directory so that it is easy to mount
             prepareKeysDirectory || return $?
 
-            # lookup services
-            checkConsensusNodeSvc || return $?
-
             return 0
           \}
 
@@ -212,36 +137,32 @@ spec:
     - name: "{cn.name}"
       image: "{cn.softwareVersion.repository}/{cn.softwareVersion.imageName}:{cn.softwareVersion.imageTag}"
       env:
+        - name: AUTO_START_CONSENSUS_SERVICE
+          value: "false"
+        - name: CONSENSUS_NODE_ID
+          value: {nodeId}
         - name: JAVA_OPTS
           value: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"
-      startupProbe: # fails after a maximum of (failureThreshold * periodSeconds * timeoutSeconds) seconds
-        failureThreshold: 20 # maximum number of failures
-        periodSeconds: 15 # check every 15 seconds
-        timeoutSeconds: 60 # probe times out after 60 seconds
+      readinessProbe:
+        timeoutSeconds: 5
         exec:
           command:
             - jshell
-            - /tmp/volumes/cluster-config/startup-probe
+            - /mnt/cm/consensus-config/is-consensus-active
       volumeMounts:
+        - name: s6-start-consensus
+          mountPath: /etc/s6-overlay/s6-rc.d/start-consensus
+        - name: s6-user
+          mountPath: /etc/s6-overlay/s6-rc.d/user/contents.d
         - name: cluster-config
           mountPath: /tmp/volumes/cluster-config # mount to a directory so that we can run custom scripts from it, e.g. startup-probe
         - name: hgcapp-init
           mountPath: /tmp/volumes/init # mount for debugging
-        - name: cluster-config
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/config.txt
-          subPath: "config.txt"
         - name: consensus-config
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/settings.txt
-          subPath: "settings.txt"
+          mountPath: /mnt/cm/consensus-config
         - name: capsule-config
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/log4j2.xml
           subPath: "log4j2.xml"
-        - name: consensus-config
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/config/application.properties
-          subPath: "application.properties"
-        - name: consensus-config
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/config/api-permission.properties
-          subPath: "api-permission.properties"
         - name: grpc-tls-keys
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.key
           subPath: "hedera-{nodeName}.key"
@@ -548,10 +469,31 @@ spec:
           mountPath: /var/lib/otelcol/file_storage
     #{/if}
   volumes:
+    - name: s6-start-consensus
+      configMap:
+        name: consensus-config
+        items:
+          - key: empty
+            path: dependencies.d/base
+          - key: s6-start-consensus-run
+            path: run
+          - key: s6-type-longrun
+            path: type
+          - key: s6-start-consensus-finish
+            path: finish
+    - name: s6-user
+      configMap:
+        name: consensus-config
+        items:
+          - key: empty
+            path: consensus
+          - key: empty
+            path: start-consensus
     - name: cluster-config
       configMap:
         name: cluster-config
         defaultMode: "{defaultMode}"
+        optional: true
     - name: consensus-config
       configMap:
         name: consensus-config

@@ -87,19 +87,6 @@ components:
         externalAddress:
           description: External FQDN or IP address of the consensus capsule.
           type: string
-        eligibleForDeployment:
-          type: boolean
-          default: false
-          description: |
-            This field should not be set by the user.
-
-            Indicates whether the `ConsensusCapsule` is eligible for deployment. This is used to prevent the `ConsensusCapsule`
-            from being deployed until all required resources and configuration values are available.
-
-            This field is set to `true` by the operator when the `ConsensusCapsule` is ready for deployment. Typically
-            this should be set by the `NetworkOperation` reconciliation loop.
-
-            This most likely will be removed in the future when DAB Phase 2/3 is available.
         log4j2.xml:
           description: Logging configuration
           type: string

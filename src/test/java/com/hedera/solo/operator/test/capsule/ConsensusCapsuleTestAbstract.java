@@ -311,7 +311,6 @@ public abstract class ConsensusCapsuleTestAbstract {
                         .withName(name + "-svc")
                         .get();
                 assertThat(service).isNotNull();
-                assertThat(capsule.getSpec().getEligibleForDeployment()).isFalse();
             });
         }
 
@@ -324,14 +323,6 @@ public abstract class ConsensusCapsuleTestAbstract {
             ConsensusCapsule capsule =
                     kubernetesClient.resource(consensusCapsule).get();
             assertThat(capsule).isNotNull();
-            assertThat(capsule.getSpec().getEligibleForDeployment()).isFalse();
-
-            Pod pod = kubernetesClient
-                    .resources(Pod.class)
-                    .inNamespace(namespace)
-                    .withName(name + "-pod")
-                    .get();
-            assertThat(pod).isNull();
         }
 
         final NetworkOperation networkOperation = new NetworkOperationBuilder()
@@ -368,7 +359,6 @@ public abstract class ConsensusCapsuleTestAbstract {
                         ConsensusCapsule capsule =
                                 kubernetesClient.resource(consensusCapsule).get();
                         assertThat(capsule).isNotNull();
-                        assertThat(capsule.getSpec().getEligibleForDeployment()).isTrue();
 
                         Pod pod = kubernetesClient
                                 .resources(Pod.class)
