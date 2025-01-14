@@ -76,7 +76,8 @@ public class ExecuteImmediateTask extends AbstractProcessorTask<NetworkOperation
     @Override
     protected Processor<?, ?, ?> computeDeferredProcessor(NetworkOperation resource, Context<NetworkOperation> context)
             throws ProcessorException {
-        // TODO: check status and return NoopProcessor if nothing to do
+        // TODO: check status and return NoopProcessor if nothing to do. For example, if the images were checked very
+        // recently, it doesn't need to reverify those.
         return null;
     }
 }
