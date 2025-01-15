@@ -8,19 +8,55 @@ import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
+import com.hedera.solo.operator.reconciler.common.Constants;
+import com.hedera.solo.operator.reconciler.networkoperation.check.steps.CheckConsensusNodeRunningStep;
+import com.hedera.solo.operator.reconciler.networkoperation.check.steps.CheckConsensusPodConfigurationStep;
+import com.hedera.solo.operator.reconciler.networkoperation.check.steps.CheckOrbitConfigurationStep;
+import com.hedera.solo.operator.reconciler.networkoperation.check.steps.CheckStreamUploaderRunningStep;
+import com.hedera.solo.operator.reconciler.networkoperation.check.steps.FinalStatusCheckStep;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.time.Duration;
 import java.util.List;
 
-/** Checks that the network is in a valid state. */
+/**
+ * NetworkCheckTask checks that network is in valid state
+ *
+ * <p>A valid network state check be defined by the following:
+ *
+ * <ol>
+ *   <li>Verify that actual version updates are applied to the pods based on the CR and mode of operation (e.g.
+ *       NetworkGenesis, NetworkUpgrade etc.)
+ *   <li>Verify that all configuration are applied correctly based on the CR and mode of operation
+ *   <li>consensus nodes are in ACTIVE state and processing transactions.
+ *   <li>stream uploaders are running and uploading files
+ *   <li>Other auxiliary components (if deployed) are running (no need for phase-1 (MVP) release)
+ *       <ol>
+ *         <li>HAProxy
+ *         <li>EnvoyProxy
+ *         <li>JSON-RPC relay
+ *         <li>Mirror-node components
+ *       </ol>
+ * </ol>
+ *
+ * <p>It updates {@link NetworkOperationStatus} with condition describing the status of the network
+ */
 @ApplicationScoped
 public class NetworkCheckTask extends AbstractProcessorTask<NetworkOperation, NetworkOperationStatus> {
     public static final Duration RECONCILE_DELAY = Duration.ofSeconds(1);
 
     @Override
     public List<ProcessorStep<NetworkOperation, NetworkOperationStatus>> steps() throws ProcessorException {
-        return List.of(new NetworkCheckStep());
+        return List.of(
+                new CheckOrbitConfigurationStep(),
+                new CheckConsensusPodConfigurationStep(),
+                new CheckConsensusNodeRunningStep(),
+                new CheckStreamUploaderRunningStep(Constants.TPL_VAR_RECORD_STREAM_UPLOADER),
+                new CheckStreamUploaderRunningStep(Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER),
+                new CheckStreamUploaderRunningStep(Constants.TPL_VAR_EVENT_STREAM_UPLOADER),
+                new CheckStreamUploaderRunningStep(Constants.TPL_VAR_BACKUP_UPLOADER),
+                // FIXME we may need add more steps for each component that we would like to check
+                new FinalStatusCheckStep());
     }
 
     @Override
