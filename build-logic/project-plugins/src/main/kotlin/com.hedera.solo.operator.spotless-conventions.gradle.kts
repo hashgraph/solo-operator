@@ -15,7 +15,7 @@ spotless {
 
         // define the steps to apply to those files
         trimTrailingWhitespace()
-        indentWithSpaces()
+        leadingTabsToSpaces()
         endWithNewline()
     }
 
@@ -32,7 +32,7 @@ spotless {
         // prettier()
 
         trimTrailingWhitespace()
-        indentWithSpaces()
+        leadingTabsToSpaces()
         endWithNewline()
 
         licenseHeader("# SPDX-License-Identifier: Apache-2.0\n\n", "(---)")

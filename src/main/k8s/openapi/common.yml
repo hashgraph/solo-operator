@@ -41,6 +41,10 @@ components:
 
     SoftwareVersion:
       type: object
+      required:
+        - repository
+        - imageName
+        - imageTag
       properties:
         repository:
           type: string

@@ -216,7 +216,14 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                         .with(spec -> spec.editSpec()
                                 .withNodeId(nodeId)
                                 .withAccountId("0.0.%d".formatted(nodeId))
-                                .withOrbit(operator().getNamespace()))
+                                .withOrbit(operator().getNamespace())
+                                .editPodProperties()
+                                .editContainers()
+                                .editConsensusNode()
+                                .editSoftwareVersion()
+                                .withRepository("repository")
+                                .withImageName("image")
+                                .withImageTag("tag"))
                         .build());
     }
 
