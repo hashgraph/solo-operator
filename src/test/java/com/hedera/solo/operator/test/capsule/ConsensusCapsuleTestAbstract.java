@@ -9,14 +9,12 @@ import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GRPC
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_APP;
 import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
 import static com.hedera.solo.operator.test.fixtures.coredns.ConfigureCoredns.configureCoredns;
-import static com.hedera.solo.operator.test.fixtures.resource.ResourceLoader.withResources;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.hedera.solo.operator.beans.DefaultConsensusNodeBean;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
-import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleBuilder;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleSpec;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
@@ -32,6 +30,7 @@ import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podpropertie
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.ContainersBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Volumes;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.VolumesBuilder;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.secrets.SecretResources;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
@@ -142,7 +141,7 @@ public abstract class ConsensusCapsuleTestAbstract {
 
     private void setupConfigMaps() {
         // create config-maps
-        for (String cmFile : List.of("backup-uploader-config.yaml", "public-keys.yaml")) {
+        for (String cmFile : List.of("backup-uploader-config.yaml")) {
             kubernetesClient
                     .resource(loadYaml(ConfigMap.class, getClass(), cmFile)
                             .edit()
@@ -252,24 +251,40 @@ public abstract class ConsensusCapsuleTestAbstract {
         return new PersistentVolumeClaimsBuilder().build();
     }
 
-    protected ConsensusCapsuleBuilder prepareConsensusCapsuleBuilder(TestRecords.NodeInfo node) {
+    protected ConsensusCapsule prepareConsensusCapsuleBuilder(final TestRecords.NodeInfo node) {
         final PodProperties consensusPod = new PodPropertiesBuilder()
                 .withContainers(this.prepareConsensusPodContainers())
                 .withVolumes(this.prepareCapsulePodVolumes(node))
                 .build();
 
-        return withResources(new ConsensusCapsuleBuilder())
-                .withNewMetadata()
-                .withName(node.name())
-                .withNamespace(namespace)
-                .endMetadata()
-                .editSpec()
-                .withPodProperties(consensusPod)
-                .withOrbit(orbit)
-                .withAccountId(node.accountId())
-                .withNodeId(node.id())
-                .withPersistentVolumeClaims(prepareCapsulePVCs(node))
-                .endSpec();
+        return edit(new ConsensusCapsule())
+                .with(ResourceLoader::withResources)
+                .with(metadata -> metadata.editMetadata().withName(node.name()).withNamespace(namespace))
+                .with(spec -> spec.editSpec()
+                        .withPodProperties(consensusPod)
+                        .withOrbit(orbit)
+                        .withAccountId(node.accountId())
+                        .withNodeId(node.id())
+                        .withPersistentVolumeClaims(prepareCapsulePVCs(node)))
+                .with(secret -> secret.editSpec()
+                        .editSecrets()
+                        .withSecretResources(edit(new SecretResources())
+                                .with(signingCert -> signingCert
+                                        .editSigningPublicCertificate()
+                                        .withSecretName(node.name() + "-" + KEY_TYPE_GOSSIP + "-keys")
+                                        .withKeyName("s-public-" + node.name() + ".pem"))
+                                .with(signingKey -> signingKey
+                                        .editSigningPrivateKey()
+                                        .withSecretName(node.name() + "-" + KEY_TYPE_GOSSIP + "-keys")
+                                        .withKeyName("s-private-" + node.name() + ".pem"))
+                                .with(tlsCert -> tlsCert.editGrpcTlsPublicCertificate()
+                                        .withSecretName(node.name() + "-" + KEY_TYPE_GRPC_TLS + "-keys")
+                                        .withKeyName("hedera-" + node.name() + ".crt"))
+                                .with(tlsKey -> tlsKey.editGrpcTlsPrivateKey()
+                                        .withSecretName(node.name() + "-" + KEY_TYPE_GRPC_TLS + "-keys")
+                                        .withKeyName("hedera-" + node.name() + ".key"))
+                                .build()))
+                .build();
     }
 
     protected List<Pod> fetchConsensusPods() {
@@ -286,7 +301,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         List<ConsensusCapsule> list = new ArrayList<>();
         for (TestRecords.NodeInfo node : nodes) {
             list.add(kubernetesClient
-                    .resource(prepareConsensusCapsuleBuilder(node).build())
+                    .resource(prepareConsensusCapsuleBuilder(node))
                     .create());
         }
 

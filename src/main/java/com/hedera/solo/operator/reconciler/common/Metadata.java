@@ -268,7 +268,7 @@ public final class Metadata {
     }
 
     public static String prepareNodeName(Long nodeId) {
-        return Constants.NODE_NAME_FORMAT.formatted(nodeId);
+        return Constants.NODE_NAME_FORMAT.formatted(nodeId + 1);
     }
 
     /**

@@ -31,14 +31,26 @@ data:
     ln -s ${CONSENSUS_CFG}/application.properties ${APP_DIR}/data/config
     CLUSTER_CFG=/tmp/volumes/cluster-config
     ln -s ${CLUSTER_CFG}/config.txt ${APP_DIR}
+    ln -s ${APP_DIR}/data/keys/hedera.{crt,key} ${APP_DIR}
 
     # Wait until consensus service has been initialized, config.txt file is available and podIP is eligible
     SVC_DIR=/run/service/consensus
-    until [ -s /tmp/consensus/s6-svc/start \
-            -a "$(s6-svstat -o up ${SVC_DIR})" == "false" \
-            -a -f ${APP_DIR}/config.txt \
-            -a -f ${CLUSTER_CFG}/podips ] \
-            && grep -qFx $(hostname -i) ${CLUSTER_CFG}/podips; do
+    while true; do
+      if [ -s /tmp/consensus/s6-svc/start \
+           -a "$(s6-svstat -o up ${SVC_DIR})" == "false" \
+           -a -s ${APP_DIR}/config.txt \
+           -a -s ${CLUSTER_CFG}/podips ] \
+           && grep -qFx $(hostname -i) ${CLUSTER_CFG}/podips; then
+        # If using secret resources, additionally require all expected public keys are available
+        if [ -d /mnt/keys/public-keys ]; then
+          if [ $(grep ^address ${APP_DIR}/config.txt | wc -l) -eq $(ls /mnt/keys/public-keys/s-public-*.pem | wc -l) ]; then
+            ln -s $(find -L /mnt/keys -mindepth 2 -maxdepth 2 -type f) ${APP_DIR}/data/keys
+            break
+          fi
+        else
+          break
+        fi
+      fi
       sleep 1
     done
 

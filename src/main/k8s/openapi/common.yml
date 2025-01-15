@@ -38,6 +38,8 @@ components:
           $ref: "#/components/schemas/ConsensusNodeChangeset"
         haproxyChangeset:
           $ref: "#/components/schemas/HaproxyChangeset"
+        keyReference:
+          $ref: "#/components/schemas/KeyReference"
 
     SoftwareVersion:
       type: object
@@ -99,9 +101,13 @@ components:
             In the form `0.0.x`, where `x` is the account number. The Platform SDK address book
             calls this the `memo` field.
           type: string
-        publicSigningKey:
+        publicSigningCertificate:
           description: |
-            The public signing key for the node. This should be in PEM format.
+            The public signing certificate for the node. This should be in PEM format.
+          type: string
+        publicLedgerKey:
+          description: |
+            The public ledger key for the node. This should be in base64 encoded binary public key.
           type: string
 
     StreamUploader:
@@ -498,3 +504,13 @@ components:
         ingressSpec:
           type: object
           x-java-type: io.fabric8.kubernetes.api.model.networking.v1.IngressSpec
+
+    KeyReference:
+      type: object
+      required:
+      - secretName
+      properties:
+        secretName:
+          type: string
+        keyName:
+          type: string

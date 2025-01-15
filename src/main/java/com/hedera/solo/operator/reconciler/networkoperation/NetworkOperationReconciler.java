@@ -3,29 +3,42 @@
 package com.hedera.solo.operator.reconciler.networkoperation;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
+import static com.hedera.solo.operator.library.reconcile.ReconcileEvent.cleanupEvents;
+import static com.hedera.solo.operator.library.reconcile.ReconcileEvent.createOrUpdateEvent;
+import static com.hedera.solo.operator.library.time.Timestamp.timestamp;
+import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleUtils.secretsWithDefaultKeyNames;
 import static java.util.Objects.nonNull;
 
 import com.hedera.solo.operator.library.builder.BuilderFunction;
 import com.hedera.solo.operator.library.numeric.RolloverComparator;
+import com.hedera.solo.operator.library.validate.ManifestValidation;
+import com.hedera.solo.operator.model.commonspec.KeyReference;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationBuilder;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Secrets;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.secrets.SecretResources;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.resources.NetworkOperationClusterConfig;
 import com.hedera.solo.operator.reconciler.networkoperation.resources.NetworkOperationConsensusCapsule;
 import com.hedera.solo.operator.reconciler.networkoperation.resources.NetworkOperationOrbit;
+import com.hedera.solo.operator.reconciler.networkoperation.resources.NetworkOperationPublicKeys;
 import com.hedera.solo.operator.reconciler.networkoperation.resources.NetworkOperationTrigger;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
+import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.client.CustomResource;
+import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
+import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusHandler;
+import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.EventSourceContext;
 import io.javaoperatorsdk.operator.api.reconciler.EventSourceInitializer;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
@@ -36,7 +49,6 @@ import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import java.lang.invoke.MethodHandles;
 import java.time.Duration;
-import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayDeque;
@@ -49,9 +61,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.jboss.logging.Logger;
@@ -59,7 +74,10 @@ import org.jboss.logging.Logger;
 /** {@code NetworkOperationReconciler} operates on a single CR per namespace at any given time. */
 @ControllerConfiguration(name = "network-operation")
 public class NetworkOperationReconciler
-        implements Cleaner<NetworkOperation>, EventSourceInitializer<NetworkOperation>, Reconciler<NetworkOperation> {
+        implements Cleaner<NetworkOperation>,
+                ErrorStatusHandler<NetworkOperation>,
+                EventSourceInitializer<NetworkOperation>,
+                Reconciler<NetworkOperation> {
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
     private static final Set<NetworkOperationStatus.Phase> DONE =
             Set.of(NetworkOperationStatus.Phase.Failed, NetworkOperationStatus.Phase.Succeeded);
@@ -75,6 +93,7 @@ public class NetworkOperationReconciler
     private final RolloverComparator rolloverComparator = new RolloverComparator(63);
     private final NetworkOperationClusterConfig clusterConfig = new NetworkOperationClusterConfig(this);
     private final NetworkOperationConsensusCapsule consensusCapsule = new NetworkOperationConsensusCapsule(this);
+    private final NetworkOperationPublicKeys publicKeys = new NetworkOperationPublicKeys(this);
     private final NetworkOperationOrbit orbit = new NetworkOperationOrbit(this);
     private final NetworkOperationTrigger trigger = new NetworkOperationTrigger(this);
     private final Workflow<NetworkOperation> workflow = new WorkflowBuilder<NetworkOperation>()
@@ -82,6 +101,7 @@ public class NetworkOperationReconciler
             .withReconcilePrecondition(clusterConfig::isReady)
             .addDependentResource(consensusCapsule)
             .dependsOn(clusterConfig)
+            .addDependentResource(publicKeys)
             .addDependentResource(orbit)
             .addDependentResource(trigger)
             .build();
@@ -166,7 +186,7 @@ public class NetworkOperationReconciler
             workflow.reconcile(resource, context);
 
             // determine phase
-            NetworkOperation patchStatus = edit(resource)
+            NetworkOperation patchStatus = edit(validate(resource, context))
                     .with(status -> status.editStatus()
                             .withObservedGeneration(resource.getMetadata().getGeneration()))
                     .with(determinePhase(resource, context))
@@ -194,6 +214,54 @@ public class NetworkOperationReconciler
         }
     }
 
+    private NetworkOperation validate(final NetworkOperation resource, final Context<NetworkOperation> context) {
+        List<Condition> conditions = Optional.ofNullable(resource.getStatus())
+                .map(NetworkOperationStatus::getConditions)
+                .orElse(null);
+        return edit(resource)
+                .with(status -> status.editStatus()
+                        .withConditions(
+                                ManifestValidation.validate(resource, conditions, validSecrets(resource, context))))
+                .build();
+    }
+
+    Consumer<Condition> validSecrets(final NetworkOperation resource, final Context<NetworkOperation> context) {
+        record Key(Function<SecretResources, KeyReference> getKeyRef, String name) {}
+        List<Key> keys = List.of(
+                new Key(SecretResources::getGrpcTlsPrivateKey, "GrpcTlsPrivateKey"),
+                new Key(SecretResources::getGrpcTlsPublicCertificate, "GrpcTlsPublicCertificate"),
+                new Key(SecretResources::getLedgerEncryptionKey, "LedgerEncryptionKey"),
+                new Key(SecretResources::getLedgerSigningKey, "LedgerSigningKey"),
+                new Key(SecretResources::getSigningPrivateKey, "SigningPrivateKey"),
+                new Key(SecretResources::getSigningPublicCertificate, "SigningPublicCertificate"));
+        KubernetesClient client = context.getClient();
+        return condition -> {
+            for (ConsensusCapsule capsule : consensusCapsules(resource, context).values()) {
+                SecretResources secrets = Optional.ofNullable(secretsWithDefaultKeyNames(capsule))
+                        .map(Secrets::getSecretResources)
+                        .orElse(null);
+                if (secrets != null) {
+                    for (Key key : keys) {
+                        KeyReference ref = key.getKeyRef.apply(secrets);
+                        if (ref != null) {
+                            Secret secret = client.secrets()
+                                    .inNamespace(resource.getMetadata().getNamespace())
+                                    .withName(ref.getSecretName())
+                                    .get();
+                            if (secret == null || !secret.getData().containsKey(ref.getKeyName())) {
+                                condition.setMessage(key.name + " is not valid for capsule "
+                                        + capsule.getMetadata().getName());
+                                condition.setReason("SecretsValid");
+                                condition.setStatus(ConditionStatus.False);
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        };
+    }
+
     // collect consensus capsule status in status until any fail or all are running.
     private BuilderFunction<NetworkOperationBuilder> determinePhase(
             final NetworkOperation resource, final Context<NetworkOperation> context) {
@@ -214,7 +282,7 @@ public class NetworkOperationReconciler
             conditions.add(new ConditionBuilder()
                     .withType("Ready")
                     .withStatus(ConditionStatus.True)
-                    .withLastTransitionTime(Instant.now().toString())
+                    .withLastTransitionTime(timestamp())
                     .build());
         } else if (Set.of(
                         ConsensusCapsuleStatus.Phase.Pending,
@@ -237,7 +305,7 @@ public class NetworkOperationReconciler
                     .withStatus(ConditionStatus.False)
                     .withReason("CapsulePhase")
                     .withMessage("Capsule phases: " + map)
-                    .withLastTransitionTime(Instant.now().toString())
+                    .withLastTransitionTime(timestamp())
                     .build());
             log.warnf(
                     "Network Initialization - Failed [ name = '%s', capsules = '%s' ]",
@@ -273,6 +341,7 @@ public class NetworkOperationReconciler
 
     @Override
     public DeleteControl cleanup(final NetworkOperation resource, final Context<NetworkOperation> context) {
+        cleanupEvents(resource, context);
         try {
             trigger.next(resource, context);
         } catch (KubernetesClientException ignored) {
@@ -294,5 +363,12 @@ public class NetworkOperationReconciler
     public Map<String, ConsensusCapsule> consensusCapsules(
             final NetworkOperation primary, final Context<NetworkOperation> context) {
         return consensusCapsule.getSecondaryResources(primary, context);
+    }
+
+    @Override
+    public ErrorStatusUpdateControl<NetworkOperation> updateErrorStatus(
+            final NetworkOperation resource, final Context<NetworkOperation> context, final Exception e) {
+        createOrUpdateEvent(resource, context, e);
+        return ErrorStatusUpdateControl.patchStatus(validate(resource, context));
     }
 }

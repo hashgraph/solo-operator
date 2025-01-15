@@ -50,25 +50,40 @@ public class HederaSdkClientFactory {
     }
 
     public ClientContext directContextCreator(final String consensusNode, boolean secure) {
-        return createClientContext(direct(), consensusNode, secure);
+        return createClientContext(certificates(), pubKeys(), direct(), consensusNode, secure);
+    }
+
+    public static HederaSdkClientContextFactory directContextCreator(
+            final Map<String, byte[]> certificates, final Map<String, String> pubKeys) {
+        return (factory, consensusNode, secure) ->
+                factory.createClientContext(certificates, pubKeys, factory.direct(), consensusNode, secure);
     }
 
     public ClientContext haproxyContextCreator(final String consensusNode, boolean secure) {
-        return createClientContext(haproxy(), consensusNode, secure);
+        return createClientContext(certificates(), pubKeys(), haproxy(), consensusNode, secure);
     }
 
     ClientContext createClientContext(
-            final Map<String, String> nodeService, final String consensusNode, boolean secure) {
-        return getClientContext(
-                nodeService, consensusNode::equals, resource -> (secure ? Stream.of(50212) : Stream.of(50211))
-                        .map(resource::portForward)
-                        .toList());
+            final Map<String, byte[]> certificates,
+            final Map<String, String> pubKeys,
+            final Map<String, String> nodeService,
+            final String consensusNode,
+            final boolean secure) {
+        return getClientContext(certificates, pubKeys, nodeService, consensusNode::equals, resource -> (secure
+                        ? Stream.of(50212)
+                        : Stream.of(50211))
+                .map(resource::portForward)
+                .toList());
     }
 
     ClientContext getClientContext(
-            final Map<String, String> nodeService, final Predicate<String> predicate, final PortForward portForward) {
+            final Map<String, byte[]> certificates,
+            final Map<String, String> pubKeys,
+            final Map<String, String> nodeService,
+            final Predicate<String> predicate,
+            final PortForward portForward) {
         try {
-            return getClient(getPortForwarding(nodeService, predicate, portForward));
+            return getClient(certificates, pubKeys, getPortForwarding(nodeService, predicate, portForward));
         } catch (Exception exception) {
             throw new RuntimeException(exception);
         }
@@ -90,15 +105,21 @@ public class HederaSdkClientFactory {
         return Client.forNetwork(Collections.emptyMap()).setNetworkFromAddressBook(nodeAddressBook);
     }
 
-    ClientContext getClient(final Map<String, List<LocalPortForward>> services) throws Exception {
+    ClientContext getClient(
+            final Map<String, byte[]> certificates,
+            final Map<String, String> pubKeys,
+            final Map<String, List<LocalPortForward>> services)
+            throws Exception {
         return new ClientContext(
-                getClient(nodeAddressBook(services)),
+                getClient(nodeAddressBook(certificates, pubKeys, services)),
                 services.values().stream().flatMap(Collection::stream).toList());
     }
 
-    NodeAddressBook nodeAddressBook(final Map<String, List<LocalPortForward>> services) throws Exception {
-        Map<String, byte[]> certificates = certificates();
-        Map<String, String> pubKeys = pubKeys();
+    NodeAddressBook nodeAddressBook(
+            final Map<String, byte[]> certificates,
+            final Map<String, String> pubKeys,
+            final Map<String, List<LocalPortForward>> services)
+            throws Exception {
         final List<com.hedera.hashgraph.sdk.proto.NodeAddress> nodeAddresses = Arrays.stream(
                         configText().split("\n"))
                 .filter(line -> line.startsWith("address"))

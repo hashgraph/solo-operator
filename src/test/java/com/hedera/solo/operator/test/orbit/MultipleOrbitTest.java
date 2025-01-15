@@ -6,6 +6,7 @@ import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.library.k8s.KubeletConfig.clusterDomain;
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GOSSIP;
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GRPC_TLS;
+import static com.hedera.solo.operator.reconciler.common.Metadata.prepareNodeName;
 import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
 import static com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkCheckAddressBook.checkAddressBook;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
@@ -19,6 +20,7 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.secrets.SecretResources;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.test.capsule.ConsensusCapsuleTestAbstract;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
@@ -27,7 +29,6 @@ import com.hedera.solo.operator.test.fixtures.resource.ResourceLoader;
 import com.hedera.solo.operator.test.fixtures.snapshot.SnapshotFailureContext;
 import com.hedera.solo.operator.test.utils.NodeInfoGenerator;
 import com.hedera.solo.operator.test.utils.TestRecords;
-import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.client.CustomResource;
@@ -36,8 +37,10 @@ import io.javaoperatorsdk.operator.Operator;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import java.lang.invoke.MethodHandles;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,6 +58,8 @@ public class MultipleOrbitTest {
     protected Operator operator;
 
     List<Orbit> orbits = new ArrayList<>();
+    Map<String, byte[]> certificates = new HashMap<>();
+    Map<String, String> pubKeys = new HashMap<>();
 
     <T> List<T> copyListWithoutElement(List<T> list, int remove) {
         List<T> copy = new ArrayList<>(list);
@@ -72,19 +77,28 @@ public class MultipleOrbitTest {
         List<String> names = List.of("alpha", "beta", "gamma");
         List<AddressBookEntry> addressBookEntries = new ArrayList<>();
         String domain = clusterDomain(operator.getKubernetesClient());
+        Base64.Decoder decoder = Base64.getDecoder();
         for (int loop = 0; loop < names.size(); loop++) {
             int id = loop;
+            String nodeName = prepareNodeName((long) id);
+            Secret secret = loadYaml(
+                    Secret.class,
+                    ConsensusCapsuleTestAbstract.class,
+                    "secrets/" + nodeName + "-" + KEY_TYPE_GOSSIP + "-keys.yaml");
+            String publicKey = new String(
+                    decoder.decode(secret.getData().get("s-public-" + nodeName + ".pem")), StandardCharsets.UTF_8);
             addressBookEntries.add(edit(new AddressBookEntry())
                     .with(builder -> builder.withNodeId((long) id)
-                            .withNickName("node" + id)
-                            .withSelfName("node" + id)
+                            .withNickName(nodeName)
+                            .withSelfName(nodeName)
                             .withWeight(1L)
                             .withInternalHostname("node%s.consensus.multipleorbittest-%s.svc%s"
-                                    .formatted(id, names.get(id), domain != null ? "." + domain : ""))
+                                    .formatted(id + 1, names.get(id), domain != null ? "." + domain : ""))
                             .withInternalPort(50111)
-                            .withExternalHostname("node" + id + "-svc.multipleorbittest-" + names.get(id))
+                            .withExternalHostname(nodeName + "-svc.multipleorbittest-" + names.get(id))
                             .withExternalPort(50111)
-                            .withNodeAccount("0.0." + (id + 3)))
+                            .withNodeAccount("0.0." + (id + 3))
+                            .withPublicLedgerKey(publicKey))
                     .build());
         }
         Map<String, List<AddressBookEntry>> externalAddresses = new HashMap<>();
@@ -172,7 +186,7 @@ public class MultipleOrbitTest {
                 orbits.stream().map(this::createNetworkOperation).toList();
 
         // wait for nodes to start
-        await().atMost(Duration.ofSeconds(90)).untilAsserted(() -> {
+        await().atMost(Duration.ofSeconds(300)).untilAsserted(() -> {
             for (NetworkOperation no : networkOperations) {
                 no = operator.getKubernetesClient().resource(no).get();
                 assertThat(no.getStatus()).isNotNull();
@@ -185,7 +199,7 @@ public class MultipleOrbitTest {
         for (ConsensusCapsule capsule : capsules) {
             String namespace = capsule.getMetadata().getNamespace();
             checkAddressBook(
-                    HederaSdkClientFactory::directContextCreator,
+                    HederaSdkClientFactory.directContextCreator(certificates, pubKeys),
                     operator.getKubernetesClient(),
                     namespace,
                     capsules.size(),
@@ -201,7 +215,6 @@ public class MultipleOrbitTest {
                         .editGenesis()
                         .editAddressBook()
                         .withLedgerId("298")
-                        .withNextNodeId("3")
                         .withExternalAddresses(externalAddresses))
                 .with(ResourceLoader::withResources)
                 .build();
@@ -210,45 +223,50 @@ public class MultipleOrbitTest {
 
     void setupKeys() {
         KubernetesClient kubernetesClient = operator.getKubernetesClient();
+        Base64.Decoder decoder = Base64.getDecoder();
         long nodeId = 0;
         for (Orbit orbit : orbits) {
             String namespace = orbit.getMetadata().getName();
             TestRecords.NodeInfo node = NodeInfoGenerator.nodeInfo(nodeId++, namespace);
-
-            // load public keys
-            for (String cmFile : List.of("public-keys.yaml")) {
-                kubernetesClient
-                        .resource(loadYaml(ConfigMap.class, ConsensusCapsuleTestAbstract.class, cmFile)
-                                .edit()
-                                .editMetadata()
-                                .withNamespace(namespace)
-                                .endMetadata()
-                                .build())
-                        .create();
-            }
 
             // load private keys
             for (final String keyType : List.of(KEY_TYPE_GOSSIP, KEY_TYPE_GRPC_TLS)) {
                 final String nodeKeyFile = String.format("secrets/%s-%s-keys.yaml", node.name(), keyType);
                 final Map<String, String> labels = Metadata.prepareConsensusSecretsLabels(
                         orbit.getMetadata().getName(), node.id(), node.accountId(), keyType);
-                kubernetesClient
-                        .resource(loadYaml(Secret.class, ConsensusCapsuleTestAbstract.class, nodeKeyFile)
-                                .edit()
-                                .editMetadata()
-                                .withNamespace(namespace)
-                                .addToLabels(labels)
-                                .endMetadata()
-                                .build())
-                        .create();
+                Secret secret = loadYaml(Secret.class, ConsensusCapsuleTestAbstract.class, nodeKeyFile)
+                        .edit()
+                        .editMetadata()
+                        .withNamespace(namespace)
+                        .addToLabels(labels)
+                        .endMetadata()
+                        .build();
+                Map<String, String> data = secret.getData();
+                if (KEY_TYPE_GOSSIP.equals(keyType)) {
+                    pubKeys.put(
+                            node.name(),
+                            new String(
+                                    decoder.decode(data.get("s-public-" + node.name() + ".pem")),
+                                    StandardCharsets.UTF_8));
+                } else if (KEY_TYPE_GRPC_TLS.equals(keyType)) {
+                    certificates.put(node.name(), decoder.decode(data.get("hedera-" + node.name() + ".crt")));
+                }
+                secret.setData(Map.of(
+                        "tls.crt",
+                        data.getOrDefault(
+                                "s-public-" + node.name() + ".pem", data.get("hedera-" + node.name() + ".crt")),
+                        "tls.key",
+                        data.getOrDefault(
+                                "s-private-" + node.name() + ".pem", data.get("hedera-" + node.name() + ".key"))));
+                kubernetesClient.resource(secret).create();
             }
         }
     }
 
     List<ConsensusCapsule> createCapsules() {
-        int[] id = new int[] {0};
+        long[] id = new long[] {0};
         return orbits.stream()
-                .map(o -> createCapsule(o, "node" + id[0], id[0]++))
+                .map(o -> createCapsule(o, prepareNodeName(id[0]), id[0]++))
                 .toList();
     }
 
@@ -260,11 +278,25 @@ public class MultipleOrbitTest {
                         .withOrbit(orbit.getMetadata().getName())
                         .withAccountId("0.0." + (id + 3))
                         .withNodeId(id)
-                        .withExternalAddress("node" + id + "-svc." + namespace))
+                        .withExternalAddress(prepareNodeName(id) + "-svc." + namespace))
                 .with(image -> image.editSpec()
                         .editPodProperties()
                         .editContainers()
                         .withConsensusNode(defaultConsensusNode.defaultConsensusNode()))
+                .with(secret -> secret.editSpec()
+                        .editSecrets()
+                        .withSecretResources(edit(new SecretResources())
+                                .with(signingCert -> signingCert
+                                        .editSigningPublicCertificate()
+                                        .withSecretName(name + "-" + KEY_TYPE_GOSSIP + "-keys"))
+                                .with(signingKey -> signingKey
+                                        .editSigningPrivateKey()
+                                        .withSecretName(name + "-" + KEY_TYPE_GOSSIP + "-keys"))
+                                .with(tlsCert -> tlsCert.editGrpcTlsPublicCertificate()
+                                        .withSecretName(name + "-" + KEY_TYPE_GRPC_TLS + "-keys"))
+                                .with(tlsKey -> tlsKey.editGrpcTlsPrivateKey()
+                                        .withSecretName(name + "-" + KEY_TYPE_GRPC_TLS + "-keys"))
+                                .build()))
                 .with(ResourceLoader::withResources)
                 .build();
         return operator.getKubernetesClient().resource(capsule).create();

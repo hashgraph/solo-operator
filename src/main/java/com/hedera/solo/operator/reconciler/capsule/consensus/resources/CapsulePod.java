@@ -2,6 +2,7 @@
 
 package com.hedera.solo.operator.reconciler.capsule.consensus.resources;
 
+import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleUtils.secretsWithDefaultKeyNames;
 import static com.hedera.solo.operator.reconciler.common.Constants.DEFAULT_FILE_MODE;
 import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_BUCKET_PATH_TEMPLATE;
 import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_EXTENSION;
@@ -21,9 +22,9 @@ import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_NODE_NAME;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_OPEN_TELEMETRY_COLLECTOR;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_ORBIT_NAME;
-import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_PUBLIC_KEY_FILES;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_RECORD_STREAM_UPLOADER;
+import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_SECRETS;
 import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_EVENTS_STREAM_NAME_SUFFIX;
 import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_LOGS_NAME_SUFFIX;
 import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_MOUNT_NAMES;
@@ -271,9 +272,9 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
 
         // set template variables
         TemplateInstance tplInstance = getTemplateWithDefaults(primary, context);
-        tplInstance.data(TPL_VAR_PUBLIC_KEY_FILES, publicKeys.getData().keySet());
         tplInstance.data(TPL_VAR_CONSENSUS_NODE, cn);
         tplInstance.data(TPL_VAR_OPEN_TELEMETRY_COLLECTOR, oc.orElse(null));
+        tplInstance.data(TPL_VAR_SECRETS, secretsWithDefaultKeyNames(primary));
         uploaderMap.forEach((k, v) -> tplInstance.data(k, v.orElse(null)));
 
         // return an instance of Pod

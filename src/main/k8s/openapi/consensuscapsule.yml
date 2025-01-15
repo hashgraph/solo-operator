@@ -76,6 +76,45 @@ components:
         - log4j2.xml
         - podProperties
       properties:
+        secrets:
+          type: object
+          oneOf:
+            - required: [ "hostPath" ]
+            - required: [ "secretResources" ]
+          properties:
+            hostPath:
+              type: object
+              x-java-type: io.fabric8.kubernetes.api.model.HostPathVolumeSource
+            secretResources:
+              type: object
+              required:
+                - grpcTlsPrivateKey
+                - grpcTlsPublicCertificate
+                - signingPrivateKey
+                - signingPublicCertificate
+              properties:
+                grpcTlsPrivateKey:
+                  description: default keyName is tls.key
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.KeyReference
+                grpcTlsPublicCertificate:
+                  description: default keyName is tls.crt
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.KeyReference
+                signingPrivateKey:
+                  description: default keyName is tls.key
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.KeyReference
+                signingPublicCertificate:
+                  description: default keyName is tls.crt
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.KeyReference
+                ledgerEncryptionKey:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.KeyReference
+                ledgerSigningKey:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.KeyReference
         orbit:
           description: |
             Name of the orbit that this consensus capsule belongs to.

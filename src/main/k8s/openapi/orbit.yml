@@ -154,12 +154,6 @@ components:
                         file format. May be removed in the DAB Phase 3 refactors. The ledger ID should never change once
                         specified.
                       type: string
-                    nextNodeId:
-                      description: |
-                        The next node ID to use. Equivalent to the `nextNodeId` entry in the Platform SDK `config.txt`
-                        file format. May be removed in the DAB Phase 2/3 refactors. The next node ID should never change
-                        once specified.
-                      type: string
                     externalAddresses:
                       description: |
                         The list of external `OrbitCapsules` and physical consensus nodes not managed by this
@@ -167,6 +161,7 @@ components:
 
                         The operator should update the configmap deployed when this field changes.
                       type: array
+                      default: []
                       items:
                         type: object
                         x-java-type: com.hedera.solo.operator.model.commonspec.AddressBookEntry
