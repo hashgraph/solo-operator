@@ -24,7 +24,7 @@ components:
           enum:
             - FirstInitialization # use NetworkGenesis instead
             - NetworkGenesis
-            - NetworkCheck # check if network is in valid state.
+            - NetworkCheck # check if network is in valid state and try to self-heal (need more design thinking).
             - NetworkUpgrade # upgrade the network with new version of the consensus-node and other components
             - NodeAdd
             - NodeDelete # not need for MVP
