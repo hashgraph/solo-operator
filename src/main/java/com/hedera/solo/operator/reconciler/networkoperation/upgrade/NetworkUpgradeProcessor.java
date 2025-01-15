@@ -58,7 +58,8 @@ import java.util.Objects;
  *       set to FREEZE_ABORT, which invalidates the current network upgrade process and requires the flow to begin with
  *       PREPARE_UPGRADE. The network node generates a "freeze_aborted.mf" marker file at
  *       "/opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade/current/freeze_aborted.mf". This triggers the FreezeAbort
- *       step in solo-operator so that it can perform any cleanup actions to discard the current upgrade process.
+ *       step in solo-operator so that it can perform any cleanup actions to discard the current upgrade process. In
+ *       practice, this is rarely used and only expected to be sent before FREEZE_UPGRADE transaction is sent.
  * </ol>
  *
  * <p>This network upgrade process is represented as a workflow with steps corresponding to each marker file as below:
@@ -71,8 +72,8 @@ import java.util.Objects;
  *   <li><b>NowFrozen:</b> Triggered by the "now_frozen.mf" marker file, where it performs revalidation of image sources
  *       and updates CRs to trigger restarts of network nodes with new images.
  *   <li><b>FreezeAbort:</b> Triggered by the "freeze_aborted.mf" marker file, where this is essentially a noop
- *       operation since network nodes haven't been upgraded. However, solo-operator may need to do some housekeeping to
- *       discard the current upgrade event.
+ *       operation since network nodes haven't been impacted (e.g. frozen or upgraded). However, solo-operator may need
+ *       to do some housekeeping to discard the current upgrade cycle.
  * </ol>
  *
  * <p>For each of the above workflow step, NetworkUpgradeProcessor delegates to a corresponding task that performs the
