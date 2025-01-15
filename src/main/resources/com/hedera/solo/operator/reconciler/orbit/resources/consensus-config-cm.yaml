@@ -33,12 +33,17 @@ data:
     ln -s ${CLUSTER_CFG}/config.txt ${APP_DIR}
 
     # Wait until consensus service has been initialized, config.txt file is available and podIP is eligible
-    until [ -s /tmp/consensus/s6-svc/start -a -f ${APP_DIR}/config.txt ] && grep -qFx $(hostname -i) ${CLUSTER_CFG}/podips; do
+    SVC_DIR=/run/service/consensus
+    until [ -s /tmp/consensus/s6-svc/start \
+            -a "$(s6-svstat -o up ${SVC_DIR})" == "false" \
+            -a -f ${APP_DIR}/config.txt \
+            -a -f ${CLUSTER_CFG}/podips ] \
+            && grep -qFx $(hostname -i) ${CLUSTER_CFG}/podips; do
       sleep 1
     done
 
     # Start consensus service
-    /package/admin/s6/command/s6-svc -o /run/service/consensus
+    s6-svc -o ${SVC_DIR}
   s6-type-longrun: |
     longrun
   is-consensus-active: |
