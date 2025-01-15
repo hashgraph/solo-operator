@@ -13,14 +13,19 @@ import jakarta.enterprise.context.ApplicationScoped;
 import java.time.Duration;
 import java.util.List;
 
-/** ExecuteImmediateProcessor processes the ExecuteImmediate step of network upgrade process */
+/**
+ * FreezeAbortTask aborts network upgrade process in response to the "freeze-aborted.mf" marker file
+ *
+ * <p>If we received a {@link NetworkOperation} CR previously and processed {@link ExecuteImmediateTask} earlier, this
+ * steps needs to update the {@link NetworkOperationStatus} with a status saying that network upgrade was aborted.
+ */
 @ApplicationScoped
 public class FreezeAbortTask extends AbstractProcessorTask<NetworkOperation, NetworkOperationStatus> {
-    public static final Duration RECONCILE_DELAY = Duration.ofHours(12);
+    public static final Duration RECONCILE_DELAY = Duration.ZERO;
 
     @Override
     public List<ProcessorStep<NetworkOperation, NetworkOperationStatus>> steps() throws ProcessorException {
-        return List.of(); // FIXME: no-op?
+        return List.of(); // define a lambda or step to encapsulate the logic
     }
 
     @Override
@@ -32,7 +37,7 @@ public class FreezeAbortTask extends AbstractProcessorTask<NetworkOperation, Net
     @Override
     protected Processor<?, ?, ?> computeDeferredProcessor(NetworkOperation resource, Context<NetworkOperation> context)
             throws ProcessorException {
-        // TODO: check status and return appropriate processor for deferred processing
+        // TODO: check status and return NoopProcessor if nothing to do.
         return null;
     }
 }
