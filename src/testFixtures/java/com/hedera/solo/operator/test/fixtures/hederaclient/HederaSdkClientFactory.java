@@ -87,7 +87,7 @@ public class HederaSdkClientFactory {
     }
 
     Client getClient(NodeAddressBook nodeAddressBook) throws Exception {
-        return Client.forNetwork(Collections.emptyMap()).setNetworkFromAddressBook(nodeAddressBook, true);
+        return Client.forNetwork(Collections.emptyMap()).setNetworkFromAddressBook(nodeAddressBook);
     }
 
     ClientContext getClient(final Map<String, List<LocalPortForward>> services) throws Exception {
