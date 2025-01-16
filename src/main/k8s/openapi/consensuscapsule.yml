@@ -74,6 +74,7 @@ components:
         - nodeId
         - accountId
         - log4j2.xml
+        - podProperties
       properties:
         orbit:
           description: |
@@ -101,7 +102,8 @@ components:
           default: "LoadBalancer"
         podProperties:
           type: object
-          default: {}
+          required:
+            - containers
           properties:
             affinity:
               type: object
@@ -144,10 +146,13 @@ components:
               type: integer
             containers:
               type: object
-              default: {}
+              required:
+                - consensusNode
               properties:
                 consensusNode:
                   type: object
+                  required:
+                    - softwareVersion
                   properties:
                     name:
                       type: string

@@ -14,6 +14,7 @@ import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import com.hedera.solo.operator.beans.DefaultConsensusNodeBean;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleBuilder;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleSpec;
@@ -31,7 +32,6 @@ import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podpropertie
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.ContainersBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Volumes;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.VolumesBuilder;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.ConsensusNode;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
@@ -64,6 +64,9 @@ import org.junit.jupiter.api.Test;
 public abstract class ConsensusCapsuleTestAbstract {
     protected final String namespace = getClass().getSimpleName().toLowerCase();
     protected final String orbit = namespace; // for now orbit and namespace are the same
+
+    @Inject
+    DefaultConsensusNodeBean defaultConsensusNode;
 
     @Inject
     @SuppressWarnings("CdiInjectionPointsInspection")
@@ -238,8 +241,7 @@ public abstract class ConsensusCapsuleTestAbstract {
 
     protected ContainersBuilder getContainersBuilder() {
         // return the builder with the consensus-node container
-        final ConsensusNode consensusNode = loadYaml(ConsensusNode.class, getClass(), "containers/consensus-node.yaml");
-        return new ContainersBuilder().withConsensusNode(consensusNode);
+        return new ContainersBuilder().withConsensusNode(defaultConsensusNode.defaultConsensusNode());
     }
 
     protected Containers prepareConsensusPodContainers() {

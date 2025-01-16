@@ -12,6 +12,7 @@ import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import com.hedera.solo.operator.beans.DefaultConsensusNodeBean;
 import com.hedera.solo.operator.model.commonspec.AddressBookEntry;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
@@ -47,6 +48,9 @@ import org.junit.jupiter.api.Test;
 @QuarkusTest
 @SoloTest
 public class MultipleOrbitTest {
+    @Inject
+    DefaultConsensusNodeBean defaultConsensusNode;
+
     @Inject
     protected Operator operator;
 
@@ -257,6 +261,10 @@ public class MultipleOrbitTest {
                         .withAccountId("0.0." + (id + 3))
                         .withNodeId(id)
                         .withExternalAddress("node" + id + "-svc." + namespace))
+                .with(image -> image.editSpec()
+                        .editPodProperties()
+                        .editContainers()
+                        .withConsensusNode(defaultConsensusNode.defaultConsensusNode()))
                 .with(ResourceLoader::withResources)
                 .build();
         return operator.getKubernetesClient().resource(capsule).create();

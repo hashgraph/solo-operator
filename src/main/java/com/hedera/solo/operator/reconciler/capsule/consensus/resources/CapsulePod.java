@@ -2,7 +2,6 @@
 
 package com.hedera.solo.operator.reconciler.capsule.consensus.resources;
 
-import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.reconciler.common.Constants.DEFAULT_FILE_MODE;
 import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_BUCKET_PATH_TEMPLATE;
 import static com.hedera.solo.operator.reconciler.common.Constants.EVENT_STREAM_EXTENSION;
@@ -80,12 +79,6 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
             "a volume cannot have both HostPath and PersistentVolumeClaim specification: '%s'";
     public static final String ERR_DUPLICATE_VOLUME_SPECIFICATION =
             "volume specification is duplicated in persistentVolumeClaims and volumes sections for: %s";
-    public static final ConsensusNode DEFAULT_CONSENSUS_NODE = edit(new ConsensusNode())
-            .with(version -> version.editSoftwareVersion()
-                    .withRepository("swirldslabs.jfrog.io/consensus-node-docker-dev")
-                    .withImageName("consensus-node")
-                    .withImageTag("0.59.0-main.xebbbf0d"))
-            .build();
 
     @Location("consensus-capsule/pod.yaml")
     Template tpl;
@@ -270,9 +263,9 @@ public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCa
                 .withName("public-keys")
                 .get();
 
-        final ConsensusNode cn = Optional.ofNullable(
-                        primary.getSpec().getPodProperties().getContainers().getConsensusNode())
-                .orElse(DEFAULT_CONSENSUS_NODE);
+        final ConsensusNode cn =
+                primary.getSpec().getPodProperties().getContainers().getConsensusNode();
+        Objects.requireNonNull(cn, "spec.podProperties.containers.consensusNode is required");
         final Map<String, Optional<StreamUploader>> uploaderMap = this.prepareStreamUploaderContainers(primary);
         final Optional<OpenTelemetryCollector> oc = this.prepareOpenTelemetryCollector(primary);
 
