@@ -14,6 +14,7 @@ import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDNoGCKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -64,6 +65,10 @@ public class ConsensusConfigMap extends CRUDNoGCKubernetesDependentResource<Conf
     }
 
     String join(final Map<String, String> map, final String delimiter) {
+        if (Objects.isNull(map)) {
+            return "";
+        }
+
         return map.entrySet().stream()
                 .map(e -> e.getKey() + delimiter + e.getValue())
                 .collect(Collectors.joining("\n", "", "\n"));
