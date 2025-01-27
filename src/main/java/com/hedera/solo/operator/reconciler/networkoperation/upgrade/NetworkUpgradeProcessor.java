@@ -80,8 +80,8 @@ import java.util.Objects;
  * necessary action steps. The task and associated action steps are defined in the respective task as well as step
  * classes:
  *
- * @see "https://github.com/swirlds/swirlds-docker/blob/main/docs%2Fdocker-infrastructure-design.md#phase-1-design" for
- *     initial design details on how this network upgrade process is implemented in the network node along with Node
+ * @see "https://gitmediator.com/swirlds/swirlds-docker/blob/main/docs%2Fdocker-infrastructure-design.md#phase-1-design"
+ *     for initial design details on how this network upgrade process is implemented in the network node along with Node
  *     Management Tool(NMT) that acts as the agent to monitor the marker files. Solo-operator is going to replace NMT
  *     and help with the upgrade process in Kubernetes.
  * @see com.hedera.solo.operator.reconciler.networkoperation.upgrade.tasks.ExecuteImmediateTask

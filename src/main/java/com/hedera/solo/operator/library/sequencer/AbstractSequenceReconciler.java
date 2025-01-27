@@ -2,6 +2,7 @@
 
 package com.hedera.solo.operator.library.sequencer;
 
+import com.hedera.solo.operator.library.processor.ProcessorResult;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
@@ -11,6 +12,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import java.time.Duration;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -28,7 +30,7 @@ import java.util.Optional;
  */
 public abstract class AbstractSequenceReconciler<
                 T extends CustomResource<S, R>, S extends KubernetesResource, R extends KubernetesResource>
-        implements Reconciler<T>, SequenceResourceManager<T, S, R> {
+        implements SequenceResourceManager<T, S, R> {
 
     protected final Sequencer<T, S, R> sequencer = new Sequencer<>(this);
 
@@ -38,9 +40,10 @@ public abstract class AbstractSequenceReconciler<
      * <p>Here a concrete class can encapsulate the logic to specify different reconciliation delay as required
      *
      * @param resource a custom resource
+     * @param result a processor result, nullable
      * @return reconcile delay duration
      */
-    protected abstract Duration computeReconcileDelay(T resource);
+    protected abstract Duration computeReconcileDelay(T resource, ProcessorResult<R> result);
 
     /**
      * It assigns a sequence number and additional metadata to the resource if not done already
@@ -85,10 +88,29 @@ public abstract class AbstractSequenceReconciler<
         Optional<T> initialized = initializeWithSequenceNumber(resource, context);
         if (initialized.isPresent()) {
             return UpdateControl.patchStatus(initialized.get())
-                    .rescheduleAfter(computeReconcileDelay(initialized.get()));
+                    .rescheduleAfter(computeReconcileDelay(initialized.get(), null));
         }
 
-        return UpdateControl.<T>noUpdate().rescheduleAfter(computeReconcileDelay(resource));
+        return UpdateControl.<T>noUpdate().rescheduleAfter(computeReconcileDelay(resource, null));
+    }
+
+    /**
+     * A helper method to check if the resource should be processed or not
+     *
+     * <p>A child class may check the version of CRD to skip processing
+     *
+     * <p>By default, it is always true for a non-null resource
+     *
+     * @param resource a custom resource
+     * @param context a context object
+     */
+    protected boolean shouldProcess(T resource, Context<T> context) {
+        Objects.requireNonNull(resource, "resource must not be null");
+        Objects.requireNonNull(resource.getMetadata(), "metadata must not be null");
+        Objects.requireNonNull(resource.getSpec(), "spec must not be null");
+        Objects.requireNonNull(context, "context must not be null");
+
+        return true;
     }
 
     /**
@@ -114,6 +136,10 @@ public abstract class AbstractSequenceReconciler<
      * @param context context
      */
     public UpdateControl<T> reconcile(final T resource, final Context<T> context) throws Exception {
+        if (!shouldProcess(resource, context)) {
+            return UpdateControl.noUpdate();
+        }
+
         sequencer.load(resource, context, false);
 
         if (!sequencer.isFirstInQueue(resource, context)) {

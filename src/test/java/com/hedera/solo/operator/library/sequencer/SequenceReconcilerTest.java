@@ -24,7 +24,8 @@ public class SequenceReconcilerTest {
     @Test
     void testComputeReconcileDelay() {
         NetworkOperation networkOperation = new NetworkOperation();
-        assertThat(sequenceReconciler.computeReconcileDelay(networkOperation)).isEqualTo(Duration.ofSeconds(1));
+        assertThat(sequenceReconciler.computeReconcileDelay(networkOperation, null))
+                .isEqualTo(Duration.ofSeconds(1));
     }
 
     @Test

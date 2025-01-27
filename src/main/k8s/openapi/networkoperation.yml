@@ -14,6 +14,10 @@ components:
         - orbit
         - mode
       properties:
+        version:
+          description: The version of the `NetworkOperation` CRD.
+          type: string
+          default: "v1"
         orbit:
           description: |
             Name of the orbit where this network operation should take effect.

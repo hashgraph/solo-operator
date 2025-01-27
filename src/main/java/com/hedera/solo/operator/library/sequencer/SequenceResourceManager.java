@@ -14,6 +14,8 @@ public interface SequenceResourceManager<
      * <p>It is used as the suffix of the config map name used by the {@link Sequencer} to store the sequence numbers
      * for resources managed by this resource manager
      *
+     * <p>Only the lowercase of the name is used as the prefix and is expected to be less than 40 characters.
+     *
      * @return the name of the resource
      */
     String getName();

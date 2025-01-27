@@ -93,6 +93,10 @@ public class NetworkOperationReconciler
     public UpdateControl<NetworkOperation> reconcile(
             final NetworkOperation resource, final Context<NetworkOperation> context) throws Exception {
         try {
+            if (!resource.getSpec().getVersion().equals("v1")) {
+                return UpdateControl.noUpdate(); // ignore other versions
+            }
+
             log.infof(
                     "Network Initialization - Starting Reconciliation [ name = '%s' ]",
                     resource.getMetadata().getName());
@@ -175,18 +179,6 @@ public class NetworkOperationReconciler
                 trigger.next(resource, context);
             }
             return UpdateControl.patchStatus(patchStatus);
-
-            //            // FIXME: Here is an example of how processors would need to be used
-            //            // TODO check with sequencer if this resource should be reconciled or not
-            //            final var processor = processorFromMode(resource, context);
-            //            ProcessorResult<NetworkOperationStatus> result = processor.process(resource, context);
-            //            if (Objects.nonNull(result.getDeferred())) {
-            //                @SuppressWarnings("unchecked") final var deferred = (Processor<NetworkOperation,
-            //             NetworkOperationStatus,
-            //            ProcessorResult<NetworkOperationStatus>>) result.getDeferred();
-            //            result = deferred.process(resource, context);
-            //            }
-            //            return UpdateControl.patchStatus(resource.edit().withStatus(result.getStatus()).build());
         } finally {
             log.infof(
                     "Network Initialization - Finished Reconciliation [ name = '%s' ]",

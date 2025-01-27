@@ -66,8 +66,16 @@ public class Sequencer<T extends CustomResource<S, R>, S extends KubernetesResou
         this.sequenceResourceManager = sequenceResourceManager;
 
         // init
-        this.configName = "%s-sequencer-cm".formatted(sequenceResourceManager.getName());
+        this.configName = "%s-sequencer-cm".formatted(validNamePrefix(sequenceResourceManager.getName(), 40));
         this.operatorNamespace = System.getenv().getOrDefault("KUBERNETES_NAMESPACE", "default");
+    }
+
+    private String validNamePrefix(final String name, int max) {
+        String finalName = name.toLowerCase().replaceAll("\\.", "-");
+        if (finalName.length() > max) {
+            finalName = finalName.substring(0, max);
+        }
+        return finalName;
     }
 
     /**

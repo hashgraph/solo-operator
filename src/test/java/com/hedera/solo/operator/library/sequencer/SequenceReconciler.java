@@ -2,6 +2,7 @@
 
 package com.hedera.solo.operator.library.sequencer;
 
+import com.hedera.solo.operator.library.processor.ProcessorResult;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
@@ -52,7 +53,8 @@ public class SequenceReconciler
     }
 
     @Override
-    protected Duration computeReconcileDelay(NetworkOperation resource) {
+    protected Duration computeReconcileDelay(
+            NetworkOperation resource, ProcessorResult<NetworkOperationStatus> result) {
         return Duration.ofSeconds(1);
     }
 

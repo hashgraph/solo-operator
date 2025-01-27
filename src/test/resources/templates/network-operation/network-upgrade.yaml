@@ -4,6 +4,7 @@
 apiVersion: operator.solo.hedera.com/v1alpha1
 kind: NetworkOperation
 spec:
+  version: "v2"
   orbit: solo-orbit
   mode: NetworkUpgrade
   networkUpgrade:
