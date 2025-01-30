@@ -1,3 +1,7 @@
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
+import org.yaml.snakeyaml.Yaml
+
 // SPDX-License-Identifier: Apache-2.0
 
 plugins {
@@ -145,3 +149,19 @@ configurations.all {
         force("io.javaoperatorsdk:operator-framework-junit-5:${javaoperatorsdkVersion}")
     }
 }
+
+tasks.register("modifyCRD") {
+    doLast {
+        var mapper = ObjectMapper(YAMLFactory())
+        var f = project.layout.buildDirectory.dir("kubernetes").get().asFile.listFiles()
+        for (ff in f!!) {
+            var orig = project.layout.buildDirectory.dir("generated/object-model-generator/main/crd").get().file(ff.name).asFile
+            var m1 = mapper.readValue(orig, Map::class.java)
+            var m2 = mapper.readValue(ff, Map::class.java)
+            println(ff.absolutePath)
+        }
+    }
+}
+
+tasks.getByName("build").dependsOn("modifyCRD")
+tasks.getByName("modifyCRD").dependsOn("quarkusBuild")
