@@ -22,13 +22,15 @@ class SequencerCache<T extends HasMetadata> {
     private final Map<String, Map<String, Sequenced>> processed = new HashMap<>();
 
     // Any item older than this value will be pruned from the processed cache
-    public static final Duration PRUNE_AGE = Duration.ofHours(1);
+    private final Duration pruneAge;
 
-    // A delay to avoid pruning too often
-    public static final Duration PRUNE_DELAY = Duration.ofSeconds(600);
+    public SequencerCache() {
+        pruneAge = Duration.ofMinutes(30);
+    }
 
-    // A time to keep track of the last pruning time of the processed cache and avoid pruning too often.
-    private Instant lastPruneTime;
+    public SequencerCache(Duration pruneAge) {
+        this.pruneAge = pruneAge;
+    }
 
     /**
      * Add the item to the cache if it does not already exist or if already processed
@@ -106,6 +108,11 @@ class SequencerCache<T extends HasMetadata> {
         }
     }
 
+    boolean isFirstInQueue(T resource) {
+        Sequenced first = findFirst(resource.getMetadata().getNamespace());
+        return first != null && first.uid().equals(resource.getMetadata().getUid());
+    }
+
     Sequenced findLast(String namespace) {
         if (!unprocessed.containsKey(namespace)) {
             return null;
@@ -145,6 +152,12 @@ class SequencerCache<T extends HasMetadata> {
         return items.indexOf(findItem(resource));
     }
 
+    boolean isProcessed(T resource) {
+        return processed
+                .computeIfAbsent(resource.getMetadata().getNamespace(), (k) -> new HashMap<>())
+                .containsKey(resource.getMetadata().getUid());
+    }
+
     /**
      * Get all items in the cache for a given namespace in order
      *
@@ -169,21 +182,15 @@ class SequencerCache<T extends HasMetadata> {
     /** Remove old items from the processed list */
     synchronized void prune() {
         final Instant now = Instant.now();
-        if (lastPruneTime != null
-                && lastPruneTime.plusSeconds(PRUNE_DELAY.toSeconds()).isAfter(now)) {
-            return;
-        }
 
         processed.forEach((namespace, items) -> {
             items.entrySet().removeIf(entry -> entry.getValue()
                     .queuedAt()
-                    .plusSeconds(PRUNE_AGE.toSeconds())
+                    .plusSeconds(pruneAge.toSeconds())
                     .isBefore(now));
         });
 
         // cleanup namespace cache if items are empty in the cache
         processed.entrySet().removeIf(entry -> entry.getValue().isEmpty());
-
-        lastPruneTime = now;
     }
 }

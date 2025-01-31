@@ -2,7 +2,10 @@
 
 package com.hedera.solo.operator.library.sequencer;
 
+import io.fabric8.kubernetes.api.model.Condition;
+import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.fabric8.kubernetes.api.model.HasMetadata;
+import io.smallrye.mutiny.tuples.Functions;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
@@ -16,6 +19,7 @@ import java.util.function.Supplier;
 public final class Sequencer<T extends HasMetadata> {
     private final SequencerCache<T> cache = new SequencerCache<>();
     private final Supplier<List<T>> activeResources;
+    private final Functions.Function3<T, String, List<Condition>, T> setStatus;
 
     public static final Duration MAX_RECONCILIATION_DELAY = Duration.ofHours(1);
     public static final Duration DEFAULT_RECONCILIATION_DELAY = Duration.ofMillis(100);
@@ -23,9 +27,16 @@ public final class Sequencer<T extends HasMetadata> {
     public static final Duration MAX_ESTIMATED_PROCESSING_TIME = Duration.ofHours(1);
     public static final Duration DEFAULT_ESTIMATED_PROCESSING_TIME = Duration.ofSeconds(1);
 
-    public Sequencer(final Supplier<List<T>> activeResources) {
+    public static final String PENDING = "Pending";
+    public static final String SUCCEEDED = "Succeeded";
+    public static final String FAILED = "Failed";
+
+    public Sequencer(
+            final Supplier<List<T>> activeResources,
+            final Functions.Function3<T, String, List<Condition>, T> setStatus) {
         Objects.requireNonNull(activeResources, "activeResources parameter cannot be null");
         this.activeResources = activeResources;
+        this.setStatus = setStatus;
     }
 
     /** Refresh the cache using data from the Kubernetes API server using the provided supplier. */
@@ -50,7 +61,13 @@ public final class Sequencer<T extends HasMetadata> {
      *
      * @param resource custom resource
      */
-    private synchronized Sequenced findOrRefresh(final T resource) {
+    public synchronized Sequenced findOrRefresh(final T resource) {
+        Objects.requireNonNull(resource, "resource cannot be null");
+        Objects.requireNonNull(resource.getMetadata(), "metadata cannot be null");
+        Objects.requireNonNull(resource.getMetadata().getNamespace(), "namespace cannot be null");
+        Objects.requireNonNull(resource.getMetadata().getUid(), "uid cannot be null");
+        Objects.requireNonNull(resource.getMetadata().getName(), "name cannot be null");
+
         Sequenced sequencedItem = cache.findItem(resource);
         if (sequencedItem != null) {
             return sequencedItem;
@@ -124,6 +141,18 @@ public final class Sequencer<T extends HasMetadata> {
     }
 
     /**
+     * Check whether the resource is already processed based on the cache.
+     *
+     * <p>Reconciler must call this before it starts processing the resource.
+     *
+     * @param resource custom resource
+     */
+    public synchronized boolean isProcessed(T resource) {
+        Objects.requireNonNull(resource, "resource cannot be null");
+        return cache.isProcessed(resource);
+    }
+
+    /**
      * Check whether the resource is first in queue to be processed.
      *
      * <p>Reconciler must call this before it processes the resource.
@@ -141,22 +170,23 @@ public final class Sequencer<T extends HasMetadata> {
         final String namespace = resource.getMetadata().getNamespace();
         final String name = resource.getMetadata().getName();
 
-        // if it is a new element, refresh the cache and add the resource in the queue
         Sequenced sequencedItem = this.findOrRefresh(resource);
         if (sequencedItem == null) {
-            return null;
+            List<Condition> conditions = List.of(new ConditionBuilder()
+                    .withStatus("True")
+                    .withType("Failed")
+                    .withReason("SequencerError")
+                    .withMessage("Resource '%s/%s' not found".formatted(namespace, name))
+                    .build());
+            final T desired = this.setStatus.apply(resource, FAILED, conditions);
+            return new SequencerResponse<>(desired, Duration.ZERO, null, false);
         }
 
-        // determine if it is the first in the queue
-        final Sequenced first =
-                cache.findFirst(namespace); // this should never be null as we've at least added the current item
-        final boolean isFirst = sequencedItem.uid().equals(first.uid());
-
-        // compute reconcile delay
         final Duration reconcileDelay = computeReconcileDelay(request);
+        final boolean isFirst = cache.isFirstInQueue(resource);
+        final T desired = this.setStatus.apply(resource, PENDING, List.of());
 
-        // return response
-        return new SequencerResponse<>(resource, reconcileDelay, sequencedItem, isFirst);
+        return new SequencerResponse<>(desired, reconcileDelay, sequencedItem, isFirst);
     }
 
     /**
@@ -186,7 +216,8 @@ public final class Sequencer<T extends HasMetadata> {
 
         final Sequenced sequencedItem = cache.removeItem(resource);
         final Duration reconcileDelay = computeReconcileDelay(request);
-        return new SequencerResponse<>(resource, reconcileDelay, sequencedItem, false);
+        final T desired = this.setStatus.apply(resource, SUCCEEDED, List.of());
+        return new SequencerResponse<>(desired, reconcileDelay, sequencedItem, false);
     }
 
     /**

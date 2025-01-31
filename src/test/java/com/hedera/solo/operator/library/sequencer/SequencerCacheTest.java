@@ -11,6 +11,7 @@ import static com.hedera.solo.operator.library.sequencer.SequencerTestData.orbit
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
+import java.time.Duration;
 import java.util.List;
 import org.assertj.core.api.AssertionsForClassTypes;
 import org.junit.jupiter.api.Test;
@@ -152,5 +153,48 @@ class SequencerCacheTest {
         assertThat(items.size()).isEqualTo(2);
         assertThat(items.getFirst().uid().equals(no1.getMetadata().getUid())).isTrue();
         assertThat(items.getLast().uid().equals(no3.getMetadata().getUid())).isTrue();
+    }
+
+    @Test
+    void isFirstInQueue() {
+        final SequencerCache<NetworkOperation> cache = new SequencerCache<>();
+        AssertionsForClassTypes.assertThat(cache.items(orbit1).size()).isEqualTo(0);
+        AssertionsForClassTypes.assertThat(cache.size(orbit1)).isEqualTo(0);
+
+        cache.addItem(no1);
+        assertThat(cache.size(orbit1)).isEqualTo(1);
+        assertThat(cache.findFirst(orbit1).uid()).isEqualTo(no1.getMetadata().getUid());
+        assertThat(cache.findLast(orbit1).uid()).isEqualTo(no1.getMetadata().getUid());
+
+        cache.addItem(no3);
+        assertThat(cache.size(orbit1)).isEqualTo(2);
+        assertThat(cache.findFirst(orbit1).uid()).isEqualTo(no1.getMetadata().getUid());
+        assertThat(cache.findLast(orbit1).uid()).isEqualTo(no3.getMetadata().getUid());
+
+        assertThat(cache.isFirstInQueue(no1)).isTrue();
+        assertThat(cache.isFirstInQueue(no3)).isFalse();
+        assertThat(cache.isFirstInQueue(no4)).isFalse();
+    }
+
+    @Test
+    void prune() throws InterruptedException {
+        final SequencerCache<NetworkOperation> cache = new SequencerCache<>(Duration.ofSeconds(1));
+
+        cache.prune();
+        cache.addItem(no1);
+        assertThat(cache.isProcessed(no1)).isFalse();
+        assertThat(cache.findItem(no1)).isNotNull();
+
+        cache.removeItem(no1);
+        assertThat(cache.isProcessed(no1)).isTrue();
+
+        Thread.sleep(1);
+        cache.prune();
+        assertThat(cache.isProcessed(no1)).isTrue();
+
+        // lapse the prune age and then prune
+        Thread.sleep(1200);
+        cache.prune();
+        assertThat(cache.isProcessed(no1)).isFalse();
     }
 }

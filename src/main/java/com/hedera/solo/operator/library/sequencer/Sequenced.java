@@ -2,6 +2,7 @@
 
 package com.hedera.solo.operator.library.sequencer;
 
+import io.fabric8.kubernetes.api.model.HasMetadata;
 import java.time.Instant;
 
 public record Sequenced(String namespace, String uid, String name, Instant creationTime, Instant queuedAt)
@@ -10,6 +11,15 @@ public record Sequenced(String namespace, String uid, String name, Instant creat
     /** Create a deep copy with a new queuedAt time */
     public static Sequenced from(Sequenced item) {
         return new Sequenced(item.namespace(), item.uid(), item.name(), item.creationTime(), Instant.now());
+    }
+
+    public static Sequenced from(HasMetadata item) {
+        return new Sequenced(
+                item.getMetadata().getNamespace(),
+                item.getMetadata().getUid(),
+                item.getMetadata().getName(),
+                Instant.parse(item.getMetadata().getCreationTimestamp()),
+                Instant.now());
     }
 
     @Override
