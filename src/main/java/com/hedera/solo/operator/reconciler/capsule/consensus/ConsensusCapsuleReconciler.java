@@ -3,10 +3,14 @@
 package com.hedera.solo.operator.reconciler.capsule.consensus;
 
 import static com.hedera.solo.operator.library.model.Labels.hasLabel;
+import static com.hedera.solo.operator.library.reconcile.ReconcileEvent.cleanupEvents;
+import static com.hedera.solo.operator.library.reconcile.ReconcileEvent.createOrUpdateEvent;
+import static com.hedera.solo.operator.library.validate.ManifestValidation.validate;
 
 import com.hedera.solo.operator.library.generic.Compare;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Secrets;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleConfigMap;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsulePod;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleRoleBinding;
@@ -19,19 +23,26 @@ import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.Capsu
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsuleStatesPvc;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsuleStatsPvc;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsuleUpgradePvc;
+import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
+import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ContainerState;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.Pod;
+import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
+import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusHandler;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
 import jakarta.inject.Inject;
+import java.util.List;
+import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -53,8 +64,8 @@ import org.jboss.logging.Logger;
             @Dependent(type = CapsuleEventsStreamPvc.class, reconcilePrecondition = CapsuleEventsStreamPvc.Ready.class),
             @Dependent(type = CapsulePod.class)
         })
-public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>, ErrorStatusHandler<ConsensusCapsule> {
-
+public class ConsensusCapsuleReconciler
+        implements Cleaner<ConsensusCapsule>, Reconciler<ConsensusCapsule>, ErrorStatusHandler<ConsensusCapsule> {
     public static final Predicate<HasMetadata> HAS_LABEL_SELECTOR_CONSENSUS_NODE =
             hasLabel(Constants.LABEL_APP, Constants.COMPONENT_CONSENSUS_NODE);
     public static final String CONSENSUS_CONTAINER_NAME = "consensus-node";
@@ -75,11 +86,14 @@ public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>,
 
             ConsensusCapsuleStatus.Phase phase =
                     phase(context.getSecondaryResources(Pod.class).toArray(Pod[]::new));
-
+            List<Condition> conditions = Optional.ofNullable(capsule.getStatus())
+                    .map(ConsensusCapsuleStatus::getConditions)
+                    .orElse(null);
             ConsensusCapsule desired = capsule.edit()
                     .editStatus()
                     .withObservedGeneration(capsule.getMetadata().getGeneration())
                     .withPhase(phase)
+                    .withConditions(validate(capsule, conditions, validateSecrets(capsule)))
                     .endStatus()
                     .build();
 
@@ -121,9 +135,27 @@ public class ConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule>,
         return phase;
     }
 
+    Consumer<Condition> validateSecrets(final ConsensusCapsule capsule) {
+        return condition -> {
+            Secrets secrets = capsule.getSpec().getSecrets();
+            if (secrets != null && secrets.getHostPath() != null && secrets.getSecretResources() != null) {
+                condition.setMessage("Consensus Capsule may not define more then one type of secret");
+                condition.setReason("SpecSecrets");
+                condition.setStatus(ConditionStatus.False);
+            }
+        };
+    }
+
     @Override
     public ErrorStatusUpdateControl<ConsensusCapsule> updateErrorStatus(
             final ConsensusCapsule capsule, final Context<ConsensusCapsule> context, final Exception e) {
+        createOrUpdateEvent(capsule, context, e);
         return ErrorStatusUpdateControl.noStatusUpdate();
+    }
+
+    @Override
+    public DeleteControl cleanup(final ConsensusCapsule resource, final Context<ConsensusCapsule> context) {
+        cleanupEvents(resource, context);
+        return DeleteControl.defaultDelete();
     }
 }

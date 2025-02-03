@@ -27,6 +27,7 @@ public final class Constants {
 
     // names
     public static final String CLUSTER_CONFIG_NAME = "cluster-config";
+    public static final String PUBLIC_KEYS_NAME = "public-keys";
 
     // HEDERA related
     public static final int HEDERA_ACCOUNT_START = 3;
@@ -60,14 +61,13 @@ public final class Constants {
     public static final String TPL_VAR_NODE_NAMES = "nodeNames";
     public static final String TPL_VAR_ACCOUNT_ID = "accountId";
     public static final String TPL_VAR_SECURITY_CONTEXT = "securityContext";
-    public static final String TPL_VAR_PUBLIC_KEY_FILES = "publicKeyFiles";
     public static final String TPL_VAR_CONSENSUS_NODE = "cn";
     public static final String TPL_VAR_RECORD_STREAM_UPLOADER = "rsu";
     public static final String TPL_VAR_EVENT_STREAM_UPLOADER = "esu";
     public static final String TPL_VAR_BACKUP_UPLOADER = "bu";
     public static final String TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER = "rssu";
     public static final String TPL_VAR_OPEN_TELEMETRY_COLLECTOR = "oc";
-    public static final String TPL_VAR_TELEMETRY = "telemetry";
+    public static final String TPL_VAR_SECRETS = "secrets";
     public static final String TPL_VAR_HOST_EXTERNAL_IP = "hostIp";
 
     // Sidecars
@@ -96,7 +96,7 @@ public final class Constants {
     public static final String LABEL_SELECTOR_CONSENSUS_NODE_APP =
             Constants.LABEL_APP + "=" + Constants.COMPONENT_CONSENSUS_NODE;
     public static final String LABEL_SELECTOR_HAPROXY_APP = Constants.LABEL_APP + "=" + Constants.COMPONENT_HAPROXY;
-    public static final String LABEL_SELECTOR_CONSENSUS_CONFIG = "%s=%s,%s=%s,%s=%s"
+    public static final String LABEL_SELECTOR_CLUSTER_CONFIG = "%s=%s,%s=%s,%s=%s"
             .formatted(
                     Constants.LABEL_K8S_PART_OF,
                     Constants.COMPONENT_CONSENSUS_NODE,
@@ -104,6 +104,14 @@ public final class Constants {
                     Constants.COMPONENT_CONFIG_MAP,
                     Constants.LABEL_K8S_NAME,
                     Constants.CLUSTER_CONFIG_NAME);
+    public static final String LABEL_SELECTOR_PUBLIC_KEYS = "%s=%s,%s=%s,%s=%s"
+            .formatted(
+                    Constants.LABEL_K8S_PART_OF,
+                    Constants.COMPONENT_CONSENSUS_NODE,
+                    Constants.LABEL_K8S_COMPONENT,
+                    Constants.COMPONENT_CONFIG_MAP,
+                    Constants.LABEL_K8S_NAME,
+                    Constants.PUBLIC_KEYS_NAME);
     public static final String LABEL_SELECTOR_NET_OP_TRIGGER = "%s=%s,%s=%s"
             .formatted(
                     Constants.LABEL_K8S_PART_OF,

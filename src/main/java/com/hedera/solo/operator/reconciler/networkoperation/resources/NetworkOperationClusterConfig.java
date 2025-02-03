@@ -58,7 +58,7 @@ public class NetworkOperationClusterConfig extends KubernetesDependentResource<C
         super(ConfigMap.class);
         this.reconciler = reconciler;
         configureWith(new KubernetesDependentResourceConfigBuilder<ConfigMap>()
-                .withLabelSelector(Constants.LABEL_SELECTOR_CONSENSUS_CONFIG)
+                .withLabelSelector(Constants.LABEL_SELECTOR_CLUSTER_CONFIG)
                 .withResourceDiscriminator(this)
                 .build());
     }
@@ -148,7 +148,6 @@ public class NetworkOperationClusterConfig extends KubernetesDependentResource<C
                                     entry.getNodeAccount()));
         }
         addreses.values().forEach(sb::append);
-        sb.append("nextNodeId, ").append(addressBook.getNextNodeId());
         return builder.addToData("config.txt", sb.toString());
     }
 

@@ -8,13 +8,13 @@
 # {@String accountId}
 # {@String hostIp}
 # {@int defaultMode}
-# {@java.util.Set publicKeyFiles}
 # {@com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.ConsensusNode cn}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader rsu}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader rssu}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader esu}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader bu}
 # {@com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector oc}
+# {@com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Secrets secrets}
 kind: Pod
 apiVersion: v1
 metadata:
@@ -34,10 +34,6 @@ spec:
         runAsUser: 0
         runAsGroup: 0
       volumeMounts:
-        - name: gossip-keys
-          mountPath: /tmp/volumes/gossip-keys
-        - name: public-keys
-          mountPath: /tmp/volumes/public-keys
         - name: hgcapp-init
           mountPath: /tmp/volumes/init
         - name: hgcapp-record-streams
@@ -52,8 +48,6 @@ spec:
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/stats
         - name: hgcapp-upgrade
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade
-        - name: hgcapp-keys
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
       command:
         - "/bin/bash"
         - "-c"
@@ -107,27 +101,11 @@ spec:
             return 0
           \}
 
-          # combine node keys into a single directory
-          function prepareKeysDirectory \{
-            echo ""
-            echo "Copying keys into /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/"
-            echo "--------------------------------------------------------------------------"
-            cp -rLfv /tmp/volumes/gossip-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/ || return $?
-            cp -rLfv /tmp/volumes/public-keys/* /opt/hgcapp/services-hedera/HapiApp2.0/data/keys/ || return $?
-
-            setOwnerPermissions "/opt/hgcapp/services-hedera/HapiApp2.0/data/keys" || return $?
-
-            return 0
-          \}
-
           runInit() \{
             id # check which user is running the script
 
             # setup directories before consensus-node and other sidecar containers start
             setupDirs || return $?
-
-            # combine node keys into a single directory so that it is easy to mount
-            prepareKeysDirectory || return $?
 
             return 0
           \}
@@ -163,14 +141,6 @@ spec:
         - name: capsule-config
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/log4j2.xml
           subPath: "log4j2.xml"
-        - name: grpc-tls-keys
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.key
-          subPath: "hedera-{nodeName}.key"
-        - name: grpc-tls-keys
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/hedera.crt
-          subPath: "hedera-{nodeName}.crt"
-        - name: hgcapp-keys
-          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
         - name: hgcapp-record-streams
           mountPath: /opt/hgcapp/recordStreams
         - name: hgcapp-events-streams
@@ -183,6 +153,23 @@ spec:
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/stats
         - name: hgcapp-upgrade
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade
+        # {#if secrets}
+        # {#if secrets.hostPath}
+        - name: keys
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/keys
+        # {#else if secrets.secretResources}
+        - name: grpc-tls-key
+          mountPath: /mnt/keys/grpc-tls-key
+        - name: grpc-tls-crt
+          mountPath: /mnt/keys/grpc-tls-crt
+        - name: public-keys
+          mountPath: /mnt/keys/public-keys
+        - name: signing-private-key
+          mountPath: /mnt/keys/signing-private-key
+        # {/if}
+        # {#else}
+          # {! generated keys not currently supported !}
+        # {/if}
     # {#if rsu && rsu.enabled}
     # Sidecar: record-stream-uploader
     - name: "{rsu.name}"
@@ -510,25 +497,11 @@ spec:
       configMap:
         name: "{nodeName}-otel-collector-config"
         defaultMode: "{defaultMode}"
-    - name: public-keys
-      configMap:
-        name: public-keys
-        defaultMode: "{defaultMode}"
-    - name: gossip-keys
-      secret:
-        secretName: "{nodeName}-gossip-keys"
-        defaultMode: "{defaultMode}"
-    - name: grpc-tls-keys
-      secret:
-        secretName: "{nodeName}-grpc-tls-keys"
-        defaultMode: "{defaultMode}"
     - name: hgcapp-record-streams
       emptyDir: {}
     - name: hgcapp-events-streams
       emptyDir: {}
     - name: hgcapp-output
-      emptyDir: {}
-    - name: hgcapp-keys
       emptyDir: {}
     - name: hgcapp-states
       emptyDir: {}
@@ -540,3 +513,37 @@ spec:
       emptyDir: {}
     - name: hgcapp-otel-file-storage
       emptyDir: {}
+    # {#if secrets}
+    # {#if secrets.hostPath}
+    - name: keys
+      hostPath:
+        path: {secrets.hostPath.path}
+        type: {secrets.hostPath.type}
+    # {#else if secrets.secretResources}
+    - name: grpc-tls-key
+      secret:
+        secretName: {secrets.secretResources.grpcTlsPrivateKey.secretName}
+        items:
+          - key: {secrets.secretResources.grpcTlsPrivateKey.keyName}
+            path: hedera.key
+    - name: grpc-tls-crt
+      secret:
+        secretName: {secrets.secretResources.grpcTlsPublicCertificate.secretName}
+        items:
+          - key: {secrets.secretResources.grpcTlsPublicCertificate.keyName}
+            path: hedera.crt
+    - name: signing-private-key
+      secret:
+        secretName: {secrets.secretResources.signingPrivateKey.secretName}
+        items:
+          - key: {secrets.secretResources.signingPrivateKey.keyName}
+            path: s-private-{nodeName}.pem
+    - name: public-keys
+      configMap:
+        name: public-keys
+        defaultMode: "{defaultMode}"
+        optional: true
+    # {/if}
+    # {#else}
+      # {! generated keys not currently supported !}
+    # {/if}

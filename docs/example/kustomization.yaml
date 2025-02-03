@@ -8,14 +8,13 @@ resources:
   - storage/node2-pvcs.yaml
   - secrets/mirror-secrets.yaml
   - secrets/uploader-secrets.yaml
-  - secrets/node0-gossip-keys.yaml
-  - secrets/node0-grpc-tls-keys.yaml
   - secrets/node1-gossip-keys.yaml
   - secrets/node1-grpc-tls-keys.yaml
   - secrets/node2-gossip-keys.yaml
   - secrets/node2-grpc-tls-keys.yaml
-  - public-keys.yaml
-  - consensus-capsule-node0.yaml
+  - secrets/node3-gossip-keys.yaml
+  - secrets/node3-grpc-tls-keys.yaml
   - consensus-capsule-node1.yaml
   - consensus-capsule-node2.yaml
+  - consensus-capsule-node3.yaml
   - network-init.yaml
