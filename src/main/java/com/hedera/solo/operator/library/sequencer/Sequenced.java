@@ -3,23 +3,29 @@
 package com.hedera.solo.operator.library.sequencer;
 
 import io.fabric8.kubernetes.api.model.HasMetadata;
+
 import java.time.Instant;
 
-public record Sequenced(String namespace, String uid, String name, Instant creationTime, Instant queuedAt)
+/**
+ * Stores metadata of a resource that is stored in an ordered list in the cache
+ *
+ * @param namespace
+ * @param uid
+ * @param name
+ * @param creationTime
+ */
+public record Sequenced(String namespace, String uid, String name, Instant creationTime)
         implements Comparable<Sequenced> {
 
-    /** Create a deep copy with a new queuedAt time */
-    public static Sequenced from(Sequenced item) {
-        return new Sequenced(item.namespace(), item.uid(), item.name(), item.creationTime(), Instant.now());
-    }
-
-    public static Sequenced from(HasMetadata item) {
+    /**
+     * Create a record from resource
+     */
+    public static Sequenced from(HasMetadata resource) {
         return new Sequenced(
-                item.getMetadata().getNamespace(),
-                item.getMetadata().getUid(),
-                item.getMetadata().getName(),
-                Instant.parse(item.getMetadata().getCreationTimestamp()),
-                Instant.now());
+                resource.getMetadata().getNamespace(),
+                resource.getMetadata().getUid(),
+                resource.getMetadata().getName(),
+                Instant.parse(resource.getMetadata().getCreationTimestamp()));
     }
 
     @Override

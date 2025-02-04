@@ -17,13 +17,10 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import java.util.List;
-import org.jboss.logging.Logger;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 class SequenceReconcilerTest {
-    private static final Logger log = Logger.getLogger(SequenceReconcilerTest.class);
-
     @Test
     void testReconcile() throws Exception {
         final KubernetesClient client = Mockito.mock(KubernetesClient.class);
@@ -43,21 +40,16 @@ class SequenceReconcilerTest {
 
         @SuppressWarnings("unchecked")
         final Context<NetworkOperation> context = Mockito.mock(Context.class);
-        final SequenceReconciler sequenceReconciler = new SequenceReconciler(log, client);
+        final SequenceReconciler sequenceReconciler = new SequenceReconciler(client);
 
         // reconcile the network operations
         UpdateControl<NetworkOperation> resp = sequenceReconciler.reconcile(no1, context);
         assertThat(resp.isPatchStatus()).isTrue();
         assertThat(resp.getResource().getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Succeeded);
 
-        // reprocessing a processed resource would be idempotent and return no update
-        UpdateControl<NetworkOperation> resp2 = sequenceReconciler.reconcile(no1, context);
-        assertThat(resp2.isNoUpdate()).isTrue();
-
         // try to process a resource that is not the first in the queue
         resp = sequenceReconciler.reconcile(no3, context);
-        assertThat(resp.isPatchStatus()).isTrue();
-        assertThat(resp.getResource().getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Pending);
+        assertThat(resp.isPatchStatus()).isFalse();
         assertThat(resp.getScheduleDelay()).isPresent();
 
         // after delete, reattempt would be idempotent and return no update

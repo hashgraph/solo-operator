@@ -13,13 +13,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import io.fabric8.kubernetes.api.model.Condition;
-import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import java.time.Duration;
 import java.util.List;
+import org.jboss.logging.Logger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class SequencerTest {
+    private final Logger log = Logger.getLogger(SequencerTest.class.getName());
     Sequencer<NetworkOperation> sequencer;
 
     private static NetworkOperation setStatus(NetworkOperation resource, String phase, List<Condition> conditions) {
@@ -33,7 +34,7 @@ class SequencerTest {
 
     @BeforeEach
     void setUp() {
-        sequencer = new Sequencer<>(() -> List.of(no1, no2, no3), SequencerTest::setStatus);
+        sequencer = new Sequencer<>(() -> List.of(no1, no2, no3));
     }
 
     @Test
@@ -94,8 +95,6 @@ class SequencerTest {
     void checkNext() {
         SequencerResponse<NetworkOperation> response = sequencer.checkNext(new SequencerRequest<>(no1));
         assertThat(response.firstInQueue()).isTrue();
-        assertThat(response.sequenced().uid()).isEqualTo(no1.getMetadata().getUid());
-        assertThat(response.sequenced().name()).isEqualTo(no1.getMetadata().getName());
         assertThat(response.reconcileDelay()).isEqualTo(Duration.ZERO);
 
         response = sequencer.checkNext(new SequencerRequest<>(no3));
@@ -104,43 +103,19 @@ class SequencerTest {
         // invalid item would return desired resource with failed status
         response = sequencer.checkNext(new SequencerRequest<>(no4));
         assertThat(response.firstInQueue()).isFalse();
-        assertThat(response.sequenced()).isNull();
-        assertThat(response.resource().getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Failed);
-        assertThat(response.resource().getStatus().getConditions().getLast())
-                .isEqualTo(new ConditionBuilder()
-                        .withStatus("True")
-                        .withType("Failed")
-                        .withReason("SequencerError")
-                        .withMessage("Resource '%s/%s' not found"
-                                .formatted(
-                                        no4.getMetadata().getNamespace(),
-                                        no4.getMetadata().getName()))
-                        .build());
-        final Sequencer<NetworkOperation> sequencer1 = new Sequencer<>(List::of, SequencerTest::setStatus);
     }
 
     @Test
-    void markAsProcessed() {
-        assertThrows(NullPointerException.class, () -> sequencer.markAsProcessed(null));
-        assertThrows(NullPointerException.class, () -> sequencer.markAsProcessed(new SequencerRequest<>(null)));
-        assertThrows(SequencerException.class, () -> sequencer.markAsProcessed(new SequencerRequest<>(no1)));
+    void markAsCompleted() {
+        assertThrows(NullPointerException.class, () -> sequencer.markAsCompleted(null));
+        assertThrows(NullPointerException.class, () -> sequencer.markAsCompleted(new SequencerRequest<>(null)));
+        assertThat(sequencer.markAsCompleted(new SequencerRequest<>(no1))).isFalse();
 
-        SequencerResponse<NetworkOperation> response = sequencer.checkNext(new SequencerRequest<>(no1));
-        assertThat(response).isNotNull();
-        assertThat(response.firstInQueue()).isTrue();
-        assertThat(response.sequenced().uid()).isEqualTo(no1.getMetadata().getUid());
-        assertThat(response.sequenced().name()).isEqualTo(no1.getMetadata().getName());
-        assertThat(response.reconcileDelay()).isEqualTo(Duration.ZERO);
+        sequencer.checkNext(new SequencerRequest<>(no1));
+        sequencer.checkNext(new SequencerRequest<>(no2));
+        assertThrows(SequencerException.class, () -> sequencer.markAsCompleted(new SequencerRequest<>(no2)));
 
-        response = sequencer.markAsProcessed(new SequencerRequest<>(no1));
-        assertThat(response).isNotNull();
-        assertThat(response.firstInQueue()).isFalse();
-        assertThat(response.resource()).isEqualTo(no1);
-
-        // after processing, the item should be removed from the cache
-        assertThat(sequencer.checkNext(new SequencerRequest<>(no1)).sequenced()).isNull();
-        assertThrows(SequencerException.class, () -> sequencer.markAsProcessed(new SequencerRequest<>(no3)));
-        assertThrows(SequencerException.class, () -> sequencer.markAsProcessed(new SequencerRequest<>(no4)));
+        assertThat(sequencer.markAsCompleted(new SequencerRequest<>(no1))).isTrue();
     }
 
     @Test
@@ -151,19 +126,7 @@ class SequencerTest {
 
         sequencer.refresh();
         assertThat(sequencer.markAsDeleted(new SequencerRequest<>(no2))).isTrue();
-        assertThat(sequencer
-                        .checkNext(new SequencerRequest<>(no2))
-                        .resource()
-                        .getStatus()
-                        .getPhase())
-                .isEqualTo(NetworkOperationStatus.Phase.Failed);
         assertThat(sequencer.markAsDeleted(new SequencerRequest<>(no4))).isFalse();
-        assertThat(sequencer
-                        .checkNext(new SequencerRequest<>(no1))
-                        .resource()
-                        .getStatus()
-                        .getPhase())
-                .isEqualTo(NetworkOperationStatus.Phase.Pending);
     }
 
     @Test

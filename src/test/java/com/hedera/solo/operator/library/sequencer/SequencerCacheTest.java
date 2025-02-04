@@ -11,7 +11,6 @@ import static com.hedera.solo.operator.library.sequencer.SequencerTestData.orbit
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
-import java.time.Duration;
 import java.util.List;
 import org.assertj.core.api.AssertionsForClassTypes;
 import org.junit.jupiter.api.Test;
@@ -84,11 +83,6 @@ class SequencerCacheTest {
         assertThat(cache.size(orbit2)).isEqualTo(1);
         assertThat(cache.findFirst(orbit2).uid()).isEqualTo(no4.getMetadata().getUid());
         assertThat(cache.findLast(orbit2).uid()).isEqualTo(no4.getMetadata().getUid());
-
-        // re-adding the processed item should not be re-added
-        assertThat(cache.addItem(no1)).isFalse();
-        assertThat(cache.size(orbit1)).isEqualTo(1);
-        assertThat(cache.findFirst(orbit1).uid()).isEqualTo(no3.getMetadata().getUid());
     }
 
     @Test
@@ -178,23 +172,12 @@ class SequencerCacheTest {
 
     @Test
     void prune() throws InterruptedException {
-        final SequencerCache<NetworkOperation> cache = new SequencerCache<>(Duration.ofSeconds(1));
+        final SequencerCache<NetworkOperation> cache = new SequencerCache<>();
 
-        cache.prune();
         cache.addItem(no1);
-        assertThat(cache.isProcessed(no1)).isFalse();
-        assertThat(cache.findItem(no1)).isNotNull();
-
-        cache.removeItem(no1);
-        assertThat(cache.isProcessed(no1)).isTrue();
-
-        Thread.sleep(1);
-        cache.prune();
-        assertThat(cache.isProcessed(no1)).isTrue();
-
-        // lapse the prune age and then prune
-        Thread.sleep(1200);
-        cache.prune();
-        assertThat(cache.isProcessed(no1)).isFalse();
+        cache.addItem(no2);
+        cache.addItem(no3);
+        cache.prune(List.of(no2, no3));
+        assertThat(cache.contains(no1)).isFalse();
     }
 }

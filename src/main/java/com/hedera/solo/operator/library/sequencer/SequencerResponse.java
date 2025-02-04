@@ -6,4 +6,4 @@ import io.fabric8.kubernetes.api.model.HasMetadata;
 import java.time.Duration;
 
 public record SequencerResponse<T extends HasMetadata>(
-        T resource, Duration reconcileDelay, Sequenced sequenced, boolean firstInQueue) {}
+        Duration reconcileDelay, boolean firstInQueue, boolean shouldReschedule) {}

@@ -6,7 +6,6 @@ import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
-import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.KubernetesResourceList;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.dsl.MixedOperation;
@@ -26,17 +25,15 @@ import org.jboss.logging.Logger;
 
 @ControllerConfiguration
 public class SequenceReconciler implements Reconciler<NetworkOperation>, Cleaner<NetworkOperation> {
+    private static final Logger log = Logger.getLogger(SequenceReconciler.class);
     private static final Set<NetworkOperationStatus.Phase> DONE =
             Set.of(NetworkOperationStatus.Phase.Failed, NetworkOperationStatus.Phase.Succeeded);
 
-    private final Logger log;
     private static KubernetesClient client;
-    private static final Sequencer<NetworkOperation> sequencer =
-            new Sequencer<>(SequenceReconciler::activeResources, SequenceReconciler::setStatus);
+    private static final Sequencer<NetworkOperation> sequencer = new Sequencer<>(SequenceReconciler::activeResources);
 
     @Inject
-    public SequenceReconciler(final Logger log, KubernetesClient client) {
-        this.log = log;
+    public SequenceReconciler(KubernetesClient client) {
         SequenceReconciler.client = client;
     }
 
@@ -52,7 +49,12 @@ public class SequenceReconciler implements Reconciler<NetworkOperation>, Cleaner
 
         Thread.sleep(100);
 
-        return resource;
+        // set status succeeded and return resource
+        return edit(resource)
+                .with(r -> r.editStatus()
+                        .withPhase(NetworkOperationStatus.Phase.Succeeded)
+                        .endStatus())
+                .build();
     }
 
     @Override
@@ -60,7 +62,7 @@ public class SequenceReconciler implements Reconciler<NetworkOperation>, Cleaner
             final NetworkOperation resource, final Context<NetworkOperation> context) throws Exception {
 
         // is this resource done, then return
-        if (isDone(resource) || sequencer.isProcessed(resource)) {
+        if (isDone(resource)) {
             log.infof(
                     "Done '%s/%s' [created: %s]",
                     resource.getMetadata().getNamespace(),
@@ -78,13 +80,19 @@ public class SequenceReconciler implements Reconciler<NetworkOperation>, Cleaner
                     resource.getMetadata().getName(),
                     resource.getMetadata().getCreationTimestamp());
 
-            return UpdateControl.patchStatus(response.resource()).rescheduleAfter(response.reconcileDelay());
+            if (response.shouldReschedule()) {
+                return UpdateControl.<NetworkOperation>noUpdate().rescheduleAfter(response.reconcileDelay());
+            }
+
+            return UpdateControl.noUpdate();
         }
 
         NetworkOperation processed = process(resource, context);
-        response = sequencer.markAsProcessed(new SequencerRequest<>(processed));
+        if (isDone(processed)) {
+            sequencer.markAsCompleted(new SequencerRequest<>(processed));
+        }
 
-        return UpdateControl.patchStatus(response.resource()).rescheduleAfter(response.reconcileDelay());
+        return UpdateControl.patchStatus(processed).rescheduleAfter(response.reconcileDelay());
     }
 
     /** Prepare and return the list of active resources that needs to be considered for sequencing. */
@@ -101,15 +109,6 @@ public class SequenceReconciler implements Reconciler<NetworkOperation>, Cleaner
         }
 
         return activeItems;
-    }
-
-    public static NetworkOperation setStatus(NetworkOperation resource, String phase, List<Condition> conditions) {
-        return edit(resource)
-                .with(r -> r.editStatus()
-                        .withPhase(NetworkOperationStatus.Phase.valueOf(phase))
-                        .addAllToConditions(conditions)
-                        .endStatus())
-                .build();
     }
 
     private static boolean isDone(NetworkOperation resource) {
