@@ -28,9 +28,9 @@ import io.fabric8.kubernetes.api.model.VolumeMountBuilder;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import jdk.jfr.Description;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -56,7 +56,7 @@ public class CapsulePodTest {
     }
 
     @Test
-    @Description("it should return persistent volume claim spec input based on volume name suffix")
+    @DisplayName("it should return persistent volume claim spec input based on volume name suffix")
     void testGetInputPvc() {
         Assertions.assertThrows(
                 IllegalArgumentException.class, () -> capsulePod.getInputPvc(consensusCapsule, "INVALID"));
@@ -167,7 +167,7 @@ public class CapsulePodTest {
     }
 
     @Test
-    @Description("it should return volume builder for valid inputs")
+    @DisplayName("it should return volume builder for valid inputs")
     void testGetVolumeBuilder() {
         Volume inputVol = Mockito.mock(Volume.class);
         Assertions.assertThrows(
@@ -220,7 +220,7 @@ public class CapsulePodTest {
     }
 
     @Test
-    @Description("it should create volume based on specified PVC")
+    @DisplayName("it should create volume based on specified PVC")
     void testGetPvcVolumeBuilder() {
         Volume inputVol = Mockito.mock(Volume.class);
 
@@ -239,7 +239,7 @@ public class CapsulePodTest {
     }
 
     @Test
-    @Description("it should return a list of pod volumes")
+    @DisplayName("it should return a list of pod volumes")
     void testGetDesiredPodVolumes() {
         PodProperties pod = Mockito.mock(PodProperties.class);
         Volumes volumes = Mockito.mock(Volumes.class);
@@ -294,7 +294,7 @@ public class CapsulePodTest {
     }
 
     @Test
-    @Description("it should return a list of persistent pod volumes")
+    @DisplayName("it should return a list of persistent pod volumes")
     void testGetDesiredPvcVolumes() {
         // we just return mock PersistentVolumeClaimSpec since getDesiredPodVolumes does not use it
         Mockito.when(consensusCapsule.getSpec().getPersistentVolumeClaims().getLogs())
@@ -317,7 +317,7 @@ public class CapsulePodTest {
     }
 
     @Test
-    @Description("it should return stream uploader containers")
+    @DisplayName("it should return stream uploader containers")
     void testPrepareStreamUploaderContainers() {
         // no stream uploaders
         Mockito.when(consensusCapsule.getSpec().getPodProperties().getContainers())
@@ -412,7 +412,7 @@ public class CapsulePodTest {
     }
 
     @Test
-    @Description("it should not return stream uploader container when disabled")
+    @DisplayName("it should not return stream uploader container when disabled")
     void testPrepareStreamUploaderContainersWhenDisabled() {
         StreamUploader rsu = TemplateLoader.load(StreamUploader.class, TemplateLoader.TEMPLATE_RECORD_STREAM_UPLOADER);
         StreamUploader esu = TemplateLoader.load(StreamUploader.class, TemplateLoader.TEMPLATE_EVENTS_STREAM_UPLOADER);
@@ -516,7 +516,7 @@ public class CapsulePodTest {
     }
 
     @Test
-    @Description("it should set additional volume mounts for stream uploader containers")
+    @DisplayName("it should set additional volume mounts for stream uploader containers")
     void testPrepareStreamUploaderContainersWithAdditionalVolumeMounts() {
         final VolumeMount tvm1 = new VolumeMountBuilder()
                 .withName("test")
@@ -562,7 +562,7 @@ public class CapsulePodTest {
     }
 
     @Test
-    @Description("it should set additional volume mounts for otel-collector")
+    @DisplayName("it should set additional volume mounts for otel-collector")
     void testPrepareOtelCollectorWithAdditionalVolumeMounts() {
         final VolumeMount tvm1 = new VolumeMountBuilder()
                 .withName("test")
