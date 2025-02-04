@@ -59,6 +59,16 @@ public class SequenceReconcilerMock implements Cleaner<NetworkOperation> {
 
     public UpdateControl<NetworkOperation> reconcile(
             final NetworkOperation resource, final Context<NetworkOperation> context) throws Exception {
+        if (!resource.getSpec().getVersion().equals("v2")) {
+            log.infof(
+                    "%s: Skipping '%s/%s' [created: %s, version: %s]",
+                    getClass().getSimpleName(),
+                    resource.getMetadata().getNamespace(),
+                    resource.getMetadata().getName(),
+                    resource.getMetadata().getCreationTimestamp(),
+                    resource.getSpec().getVersion());
+            return UpdateControl.noUpdate();
+        }
 
         // is this resource done, then return
         if (isDone(resource)) {
