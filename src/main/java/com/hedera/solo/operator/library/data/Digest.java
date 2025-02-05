@@ -4,25 +4,40 @@ package com.hedera.solo.operator.library.data;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
 import java.util.HexFormat;
-import java.util.Map;
+import java.util.stream.Stream;
 
 public class Digest {
+    public static final Digest BLAKE_3 = new Digest(() -> MessageDigest.getInstance("BLAKE3-256", "BC"));
+    public static final Digest SHA_256 = new Digest(() -> MessageDigest.getInstance("SHA-256"));
+    public static final Digest SHA_384 = new Digest(() -> MessageDigest.getInstance("SHA-384"));
+    public static final Digest SHA_512 = new Digest(() -> MessageDigest.getInstance("SHA-512"));
+    private final MessageDigestSupplier supplier;
 
-    public static final String SHA_384 = "SHA-384";
+    private Digest(final MessageDigestSupplier supplier) {
+        this.supplier = supplier;
+    }
 
-    private Digest() {}
+    public String hexOf(final byte[] data) {
+        return HexFormat.of().formatHex(instance().digest(data));
+    }
 
-    public static String of(final Map<String, String> map) {
+    public String hexOf(final Stream<byte[]> stream) {
+        MessageDigest digest = instance();
+        stream.forEach(digest::update);
+        return HexFormat.of().formatHex(digest.digest());
+    }
+
+    public MessageDigest instance() {
         try {
-            MessageDigest digest = MessageDigest.getInstance(SHA_384);
-            map.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
-                digest.update(entry.getKey().getBytes());
-                digest.update(entry.getValue().getBytes());
-            });
-            return HexFormat.of().formatHex(digest.digest());
-        } catch (NoSuchAlgorithmException e) {
+            return supplier.getInstance();
+        } catch (NoSuchAlgorithmException | NoSuchProviderException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private interface MessageDigestSupplier {
+        MessageDigest getInstance() throws NoSuchAlgorithmException, NoSuchProviderException;
     }
 }

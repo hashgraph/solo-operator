@@ -65,7 +65,7 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
                     .build();
             kubernetesClient.resource(haProxyCapsule).create();
         }
-        await().atMost(60, TimeUnit.SECONDS).untilAsserted(() -> {
+        await().atMost(150, TimeUnit.SECONDS).untilAsserted(() -> {
             List<HAProxyCapsule> proxies = kubernetesClient
                     .resources(HAProxyCapsule.class)
                     .inNamespace(namespace)

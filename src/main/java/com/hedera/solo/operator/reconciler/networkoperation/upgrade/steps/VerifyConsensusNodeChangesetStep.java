@@ -2,11 +2,17 @@
 
 package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
 
+import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyLayerHashes.selectedImage;
+import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyLayerHashes.updateStatus;
+
 import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.commonspec.ConsensusNodeChangeset;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
+import com.hedera.solo.operator.model.v1alpha1.networkoperationstatus.SoftwareSourceStatus;
+import com.hedera.solo.operator.reconciler.common.ConditionStatus;
+import io.fabric8.kubernetes.api.model.Condition;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.util.Objects;
 
@@ -105,7 +111,21 @@ public class VerifyConsensusNodeChangesetStep implements ProcessorStep<NetworkOp
         final ConsensusNodeChangeset changeset = this.getConsensusNodeChangeset(resource);
         Objects.requireNonNull(changeset.getSoftwareVersionSource(), "SoftwareVersionSource must not be null");
 
-        // FIXME update status
-        return status;
+        return updateStatus(
+                resource,
+                status,
+                context.getClient(),
+                changeset.getSoftwareVersionSource(),
+                this::createCondition,
+                SoftwareSourceStatus::getConsensusNode,
+                SoftwareSourceStatus::setConsensusNode);
+    }
+
+    Condition createCondition(final NetworkOperationStatus status) {
+        String type = getClass().getSimpleName();
+        String image = selectedImage(status.getSoftwareSourceStatus().getConsensusNode());
+        return image == null
+                ? new Condition(null, FAIL_STATUS_MESSAGE, null, null, ConditionStatus.False, type)
+                : new Condition(null, SUCCESS_STATUS_MESSAGE.formatted(image), null, null, ConditionStatus.True, type);
     }
 }

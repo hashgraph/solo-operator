@@ -22,6 +22,7 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDep
 import io.javaoperatorsdk.operator.processing.dependent.workflow.Condition;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Stream;
 
 @KubernetesDependent
 public class HAProxyDeployment extends CRUDKubernetesDependentResource<Deployment, HAProxyCapsule> {
@@ -80,11 +81,17 @@ public class HAProxyDeployment extends CRUDKubernetesDependentResource<Deploymen
                 .addToLabels(labels)
                 .addToAnnotations(
                         "checksum/secret",
-                        Digest.of(reconciler
+                        Digest.SHA_384.hexOf(reconciler
                                 .haProxySecret
                                 .getSecondaryResource(primary, context)
                                 .orElseThrow()
-                                .getData()))
+                                .getData()
+                                .entrySet()
+                                .stream()
+                                .sorted(Map.Entry.comparingByKey())
+                                .flatMap(entry -> Stream.of(
+                                        entry.getKey().getBytes(),
+                                        entry.getValue().getBytes()))))
                 .endMetadata()
                 .editSpec()
                 .editMatchingContainer(c -> "haproxy".equalsIgnoreCase(c.getName()))

@@ -66,6 +66,7 @@ components:
 
     ImagePullSecrets:
       type: array
+      default: []
       items:
         type: object
         x-java-type: io.fabric8.kubernetes.api.model.LocalObjectReference # refers to a k8s secret
@@ -440,6 +441,10 @@ components:
         layerHashes: # digests
           type: array
           items:
+            description: |
+              Manifest layer digests are expected here, matching those reported by tools such as `skopeo inspect`.
+              Due to compression, manifest layer digests will in general differ from those reported by tools such as
+              `docker inspect` which report layer `DiffID`, or the digest of the uncompressed layer archive.
             type: string
 
     SoftwareVersionSource: # move up close to SoftwareVersion

@@ -42,6 +42,7 @@ dependencies {
     implementation("io.quarkus:quarkus-container-image-docker")
     implementation("io.quarkus:quarkus-kubernetes")
     implementation("io.quarkus:quarkus-kubernetes-client")
+    implementation("io.quarkus:quarkus-security")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk-bundle-generator")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk")
     implementation("io.quarkus:quarkus-resteasy-qute:${quarkusPlatformVersion}")
