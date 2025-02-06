@@ -12,9 +12,7 @@ import io.fabric8.kubernetes.client.dsl.MixedOperation;
 import io.fabric8.kubernetes.client.dsl.Resource;
 import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
-import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import jakarta.inject.Inject;
 import java.time.Duration;
@@ -23,18 +21,19 @@ import java.util.List;
 import java.util.Set;
 import org.jboss.logging.Logger;
 
-@ControllerConfiguration
-public class SequenceReconciler implements Reconciler<NetworkOperation>, Cleaner<NetworkOperation> {
-    private static final Logger log = Logger.getLogger(SequenceReconciler.class);
+// NOTE: This class shouldn't implement Reconciler<NetworkOperation> interface as it shouldn't be picked up by the
+// operator as a reconciler during test
+public class SequenceReconcilerMock implements Cleaner<NetworkOperation> {
+    private static final Logger log = Logger.getLogger(SequenceReconcilerMock.class);
     private static final Set<NetworkOperationStatus.Phase> DONE =
             Set.of(NetworkOperationStatus.Phase.Failed, NetworkOperationStatus.Phase.Succeeded);
 
     private static KubernetesClient client;
-    private static final Sequencer<NetworkOperation> sequencer = new Sequencer<>(SequenceReconciler::activeResources);
+    private static final Sequencer<NetworkOperation> sequencer = new Sequencer<>(SequenceReconcilerMock::activeResources);
 
     @Inject
-    public SequenceReconciler(KubernetesClient client) {
-        SequenceReconciler.client = client;
+    public SequenceReconcilerMock(KubernetesClient client) {
+        SequenceReconcilerMock.client = client;
     }
 
     public NetworkOperation process(final NetworkOperation resource, final Context<NetworkOperation> context)
@@ -57,7 +56,6 @@ public class SequenceReconciler implements Reconciler<NetworkOperation>, Cleaner
                 .build();
     }
 
-    @Override
     public UpdateControl<NetworkOperation> reconcile(
             final NetworkOperation resource, final Context<NetworkOperation> context) throws Exception {
 

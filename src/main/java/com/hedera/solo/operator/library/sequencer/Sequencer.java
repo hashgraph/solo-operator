@@ -3,16 +3,18 @@
 package com.hedera.solo.operator.library.sequencer;
 
 import io.fabric8.kubernetes.api.model.HasMetadata;
-import org.jboss.logging.Logger;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Supplier;
+import org.jboss.logging.Logger;
 
 /**
  * Sequencer is responsible for ordering the processing of custom resources and computing the reconcile delay.
+ *
+ * <p>TODO persist the currentlyExecuting item per namespace and per Reconciler in the cache to handle restarts. This
+ * should be stored in a configmap at the operator namespace level.
  *
  * @param <T> custom resource type
  */
@@ -38,9 +40,7 @@ public final class Sequencer<T extends HasMetadata> {
         this.activeResources = activeResources;
     }
 
-    /**
-     * Refresh the cache using data from the Kubernetes API server using the provided supplier.
-     */
+    /** Refresh the cache using data from the Kubernetes API server using the provided supplier. */
     public synchronized void refresh() {
         List<T> activeItems = activeResources.get();
         if (activeItems == null || activeItems.isEmpty()) {
@@ -97,8 +97,8 @@ public final class Sequencer<T extends HasMetadata> {
      * in the queue and then selects 30% of the execution time as the reconciliation delay. This value is then compared
      * with the delay recommended by the reconciler and the larger value is selected.
      *
-     * @param resource                custom resource
-     * @param recommendedDelay        recommended delay
+     * @param resource custom resource
+     * @param recommendedDelay recommended delay
      * @param estimatedProcessingTime estimated processing time
      * @return the reconcile delay based on the items in the queue and recommended metadata.
      */
@@ -160,7 +160,7 @@ public final class Sequencer<T extends HasMetadata> {
      *
      * @param request the request including the resource and other metadata
      * @return the response including the resource, reconcile delay, sequenced item and whether it is the first in the
-     * queue. It returns null if the item is not found in the cache or is already processed recently.
+     *     queue. It returns null if the item is not found in the cache or is already processed recently.
      */
     public synchronized SequencerResponse<T> checkNext(final SequencerRequest<T> request) {
         Objects.requireNonNull(request, "request cannot be null");
@@ -168,8 +168,6 @@ public final class Sequencer<T extends HasMetadata> {
         Objects.requireNonNull(request.resource().getMetadata(), "metadata cannot be null");
 
         final T resource = request.resource();
-        final String namespace = resource.getMetadata().getNamespace();
-        final String name = resource.getMetadata().getName();
 
         Sequenced sequencedItem = this.findOrRefresh(resource);
         if (sequencedItem == null) {
@@ -178,6 +176,9 @@ public final class Sequencer<T extends HasMetadata> {
 
         final Duration reconcileDelay = computeReconcileDelay(request);
         final boolean isFirst = cache.isFirstInQueue(resource);
+        if (isFirst) {
+            cache.markAsExecuting(resource);
+        }
 
         return new SequencerResponse<>(reconcileDelay, isFirst, true);
     }

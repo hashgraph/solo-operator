@@ -3,7 +3,6 @@
 package com.hedera.solo.operator.library.sequencer;
 
 import io.fabric8.kubernetes.api.model.HasMetadata;
-
 import java.time.Instant;
 
 /**
@@ -17,9 +16,7 @@ import java.time.Instant;
 public record Sequenced(String namespace, String uid, String name, Instant creationTime)
         implements Comparable<Sequenced> {
 
-    /**
-     * Create a record from resource
-     */
+    /** Create a record from resource */
     public static Sequenced from(HasMetadata resource) {
         return new Sequenced(
                 resource.getMetadata().getNamespace(),

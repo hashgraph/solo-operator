@@ -14,6 +14,7 @@ import java.util.Objects;
 
 class SequencerCache<T extends HasMetadata> {
     private final Map<String, List<Sequenced>> namespaceCache = new HashMap<>();
+    private Sequenced currentlyExecuting;
 
     /**
      * Add the item to the cache if it does not already exist or if already processed
@@ -61,6 +62,11 @@ class SequencerCache<T extends HasMetadata> {
                 namespaceCache.remove(namespace);
             }
 
+            if (currentlyExecuting != null
+                    && currentlyExecuting.uid().equals(resource.getMetadata().getUid())) {
+                currentlyExecuting = null;
+            }
+
             return item;
         }
 
@@ -81,6 +87,14 @@ class SequencerCache<T extends HasMetadata> {
 
     boolean isFirstInQueue(T resource) {
         Sequenced first = findFirst(resource.getMetadata().getNamespace());
+
+        // this solves the race condition where we have two resources crated at the same time but one is being processed
+        // first
+        if (currentlyExecuting != null
+                && !currentlyExecuting.uid().equals(resource.getMetadata().getUid())) {
+            return false;
+        }
+
         return first != null && first.uid().equals(resource.getMetadata().getUid());
     }
 
@@ -158,7 +172,30 @@ class SequencerCache<T extends HasMetadata> {
                     .noneMatch(active -> active.getMetadata().getUid().equals(item.uid())));
         }
 
+        // if currentlyExecuting is not active anymore, reset it
+        if (currentlyExecuting != null
+                && activeItems.stream()
+                        .noneMatch(active -> active.getMetadata().getUid().equals(currentlyExecuting.uid()))) {
+            currentlyExecuting = null;
+        }
+
         // remove empty namespace cache list
         namespaceCache.entrySet().removeIf(entry -> entry.getValue().isEmpty());
+    }
+
+    synchronized void markAsExecuting(T resource) {
+        if (currentlyExecuting != null) {
+            if (currentlyExecuting.uid().equals(resource.getMetadata().getUid())) {
+                return;
+            }
+
+            throw new SequencerException("Resource is already executing");
+        }
+
+        this.currentlyExecuting = Sequenced.from(resource);
+    }
+
+    synchronized Sequenced getCurrentlyExecuting() {
+        return currentlyExecuting;
     }
 }

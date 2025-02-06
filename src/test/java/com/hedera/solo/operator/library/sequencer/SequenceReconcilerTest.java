@@ -40,7 +40,7 @@ class SequenceReconcilerTest {
 
         @SuppressWarnings("unchecked")
         final Context<NetworkOperation> context = Mockito.mock(Context.class);
-        final SequenceReconciler sequenceReconciler = new SequenceReconciler(client);
+        final SequenceReconcilerMock sequenceReconciler = new SequenceReconcilerMock(client);
 
         // reconcile the network operations
         UpdateControl<NetworkOperation> resp = sequenceReconciler.reconcile(no1, context);
