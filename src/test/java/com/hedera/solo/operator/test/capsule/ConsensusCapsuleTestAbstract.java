@@ -32,6 +32,7 @@ import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podpropertie
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.VolumesBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.secrets.SecretResources;
 import com.hedera.solo.operator.reconciler.common.Metadata;
+import com.hedera.solo.operator.reconciler.networkoperation.NetworkOperationSequenceReconciler;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
 import com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkCheckAddressBook;
@@ -334,7 +335,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         return list;
     }
 
-    void createNetworkOperation(List<ConsensusCapsule> consensusCapsules) {
+    void createNetworkOperation(List<ConsensusCapsule> consensusCapsules) throws InterruptedException {
         for (ConsensusCapsule consensusCapsule : consensusCapsules) {
             String name = consensusCapsule.getMetadata().getName();
             ConsensusCapsule capsule =
@@ -342,35 +343,78 @@ public abstract class ConsensusCapsuleTestAbstract {
             assertThat(capsule).isNotNull();
         }
 
-        final NetworkOperation networkOperation = new NetworkOperationBuilder()
+        final NetworkOperation networkGenesis = new NetworkOperationBuilder()
                 .withNewMetadata()
-                .withName("network-operation")
+                .withName("network-genesis")
                 .withNamespace(namespace)
                 .endMetadata()
                 .withNewSpec()
                 .withOrbit(orbit)
-                .withMode(NetworkOperationSpec.Mode.FirstInitialization)
+                .withVersion(NetworkOperationSequenceReconciler.VERSION)
+                .withMode(NetworkOperationSpec.Mode.NetworkGenesis)
                 .endSpec()
                 .withNewStatus()
+                .withPhase(NetworkOperationStatus.Phase.Pending)
                 .endStatus()
                 .build();
-        kubernetesClient.resource(networkOperation).create();
+        kubernetesClient.resource(networkGenesis).create();
 
-        await().atMost(300, TimeUnit.SECONDS)
+        Thread.sleep(1000); // add delay after NetworkGenesis CR creation
+
+        // create few more NetworkCheck CRs with some delay to test that these runs after network-genesis
+        // Note: The name of the NetworkCheck CR should be unique and in chronological order as these are created with
+        // the same timestamp, so that it doesn't conflict with the NetworkGenesis CR
+        final int totalNetworkChecks = 3;
+        for (int i = 0; i < totalNetworkChecks; i++) {
+            final NetworkOperation networkCheck = new NetworkOperationBuilder()
+                    .withNewMetadata()
+                    .withName("%d-network-check".formatted(i))
+                    .withNamespace(namespace)
+                    .endMetadata()
+                    .withNewSpec()
+                    .withOrbit(orbit)
+                    .withVersion(NetworkOperationSequenceReconciler.VERSION)
+                    .withMode(NetworkOperationSpec.Mode.NetworkCheck)
+                    .endSpec()
+                    .withNewStatus()
+                    .withPhase(NetworkOperationStatus.Phase.Pending)
+                    .endStatus()
+                    .build();
+            kubernetesClient.resource(networkCheck).create();
+        }
+
+        await().atMost(600, TimeUnit.SECONDS)
                 .failFast(() -> {
-                    NetworkOperation netOp =
-                            kubernetesClient.resource(networkOperation).get();
-                    assertThat(netOp).isNotNull();
-                    if (netOp.getStatus() != null) {
-                        assertThat(netOp.getStatus().getPhase()).isNotEqualTo(NetworkOperationStatus.Phase.Failed);
+                    NetworkOperation netInit = kubernetesClient
+                            .resources(NetworkOperation.class)
+                            .inNamespace(namespace)
+                            .withName("network-genesis")
+                            .get();
+                    assertThat(netInit).isNotNull();
+                    if (netInit.getStatus() != null) {
+                        assertThat(netInit.getStatus().getPhase()).isNotEqualTo(NetworkOperationStatus.Phase.Failed);
                     }
                 })
                 .untilAsserted(() -> {
-                    NetworkOperation netInit =
-                            kubernetesClient.resource(networkOperation).get();
+                    NetworkOperation netInit = kubernetesClient
+                            .resources(NetworkOperation.class)
+                            .inNamespace(namespace)
+                            .withName("network-genesis")
+                            .get();
                     assertThat(netInit).isNotNull();
                     assertThat(netInit.getStatus()).isNotNull();
                     assertThat(netInit.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Succeeded);
+
+                    for (int i = 0; i < totalNetworkChecks; i++) {
+                        NetworkOperation netCheck = kubernetesClient
+                                .resources(NetworkOperation.class)
+                                .inNamespace(namespace)
+                                .withName("%d-network-check".formatted(i))
+                                .get();
+                        assertThat(netCheck).isNotNull();
+                        assertThat(netCheck.getStatus()).isNotNull();
+                        assertThat(netCheck.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Succeeded);
+                    }
                     for (ConsensusCapsule consensusCapsule : consensusCapsules) {
                         String name = consensusCapsule.getMetadata().getName();
                         ConsensusCapsule capsule =

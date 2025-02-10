@@ -88,6 +88,7 @@ public class NetworkOperationReconciler
             ConsensusCapsuleStatus.Phase.Succeeded,
             ConsensusCapsuleStatus.Phase.Unknown);
     private static final Duration DELAY = Duration.of(100, ChronoUnit.MILLIS);
+    public static final String VERSION = "v1";
     private EventSourceContext<NetworkOperation> eventSourceContext;
     private final AtomicLong sequenceNumber = new AtomicLong();
     private final RolloverComparator rolloverComparator = new RolloverComparator(63);
@@ -112,6 +113,17 @@ public class NetworkOperationReconciler
     @Override
     public UpdateControl<NetworkOperation> reconcile(
             final NetworkOperation resource, final Context<NetworkOperation> context) throws Exception {
+        if (!resource.getSpec().getVersion().equals(VERSION)) {
+            log.infof(
+                    " '%s/%s' [created: %s, version: %s, uuid: %s]: SKIPPED",
+                    resource.getMetadata().getNamespace(),
+                    resource.getMetadata().getName(),
+                    resource.getMetadata().getCreationTimestamp(),
+                    resource.getSpec().getVersion(),
+                    resource.getMetadata().getName());
+            return UpdateControl.noUpdate();
+        }
+
         try {
             log.infof(
                     "Network Initialization - Starting Reconciliation [ name = '%s' ]",

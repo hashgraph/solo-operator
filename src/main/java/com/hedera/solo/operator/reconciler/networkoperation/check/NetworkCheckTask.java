@@ -2,20 +2,17 @@
 
 package com.hedera.solo.operator.reconciler.networkoperation.check;
 
+import com.hedera.solo.operator.library.k8s.CustomResourceManager;
 import com.hedera.solo.operator.library.processor.AbstractProcessorTask;
 import com.hedera.solo.operator.library.processor.Processor;
 import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
-import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.networkoperation.check.steps.CheckConsensusNodeRunningStep;
-import com.hedera.solo.operator.reconciler.networkoperation.check.steps.CheckConsensusPodConfigurationStep;
-import com.hedera.solo.operator.reconciler.networkoperation.check.steps.CheckOrbitConfigurationStep;
-import com.hedera.solo.operator.reconciler.networkoperation.check.steps.CheckStreamUploaderRunningStep;
-import com.hedera.solo.operator.reconciler.networkoperation.check.steps.FinalStatusCheckStep;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import java.time.Duration;
 import java.util.List;
 
@@ -45,18 +42,26 @@ import java.util.List;
 public class NetworkCheckTask extends AbstractProcessorTask<NetworkOperation, NetworkOperationStatus> {
     public static final Duration RECONCILE_DELAY = Duration.ofSeconds(1);
 
+    private final CustomResourceManager customResourceManager;
+
+    @Inject
+    public NetworkCheckTask(CustomResourceManager customResourceManager) {
+        this.customResourceManager = customResourceManager;
+    }
+
     @Override
     public List<ProcessorStep<NetworkOperation, NetworkOperationStatus>> steps() throws ProcessorException {
         return List.of(
-                new CheckOrbitConfigurationStep(),
-                new CheckConsensusPodConfigurationStep(),
-                new CheckConsensusNodeRunningStep(),
-                new CheckStreamUploaderRunningStep(Constants.TPL_VAR_RECORD_STREAM_UPLOADER),
-                new CheckStreamUploaderRunningStep(Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER),
-                new CheckStreamUploaderRunningStep(Constants.TPL_VAR_EVENT_STREAM_UPLOADER),
-                new CheckStreamUploaderRunningStep(Constants.TPL_VAR_BACKUP_UPLOADER),
-                // FIXME we may need add more steps for each component that we would like to check
-                new FinalStatusCheckStep());
+                // FIXME: enable other steps
+                // new CheckOrbitConfigurationStep(customResourceManager),
+                // new CheckConsensusPodConfigurationStep(customResourceManager),
+                new CheckConsensusNodeRunningStep(customResourceManager)
+                // new CheckStreamUploaderRunningStep(customResourceManager, Constants.TPL_VAR_RECORD_STREAM_UPLOADER),
+                // new CheckStreamUploaderRunningStep(customResourceManager,
+                // Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER),
+                // new CheckStreamUploaderRunningStep(customResourceManager, Constants.TPL_VAR_EVENT_STREAM_UPLOADER),
+                // new CheckStreamUploaderRunningStep(customResourceManager, Constants.TPL_VAR_BACKUP_UPLOADER),
+                );
     }
 
     @Override
@@ -68,7 +73,11 @@ public class NetworkCheckTask extends AbstractProcessorTask<NetworkOperation, Ne
     @Override
     protected Processor<?, ?, ?> computeDeferredProcessor(NetworkOperation resource, Context<NetworkOperation> context)
             throws ProcessorException {
-        // TODO: check status and return appropriate processor for deferred processing
-        return null;
+        return null; // it does not have any deferred processor
+    }
+
+    public static boolean isDone(NetworkOperationStatus status) {
+        // FIXME: enable other steps' isDone checks
+        return CheckConsensusNodeRunningStep.isDone(status);
     }
 }

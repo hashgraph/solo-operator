@@ -155,5 +155,6 @@ public final class Constants {
     public static final String COMPONENT_NAMESPACE = "ns";
     public static final String COMPONENT_TRIGGER = "trigger";
 
-    public static final String CONDITION_TYPE_READY = "Ready";
+    public static final String CONFIG_KEY_POD_IPS = "podIps";
+    public static final String CONFIG_KEY_CONFIG_TXT = "config.txt";
 }

@@ -2,7 +2,7 @@
 
 package com.hedera.solo.operator.reconciler.networkoperation.check.steps;
 
-import com.hedera.solo.operator.library.processor.ProcessorException;
+import com.hedera.solo.operator.library.k8s.CustomResourceManager;
 import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
@@ -12,13 +12,17 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 public class CheckStreamUploaderRunningStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     private final String containerName;
 
-    public CheckStreamUploaderRunningStep(String name) {
+    private final CustomResourceManager customResourceManager;
+
+    public CheckStreamUploaderRunningStep(CustomResourceManager customResourceManager, String name) {
+        this.customResourceManager = customResourceManager;
         this.containerName = name;
     }
 
     @Override
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context) {
-        throw new ProcessorException("Not implemented");
+        // FIXME: Implement this method
+        return status;
     }
 }

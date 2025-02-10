@@ -160,7 +160,7 @@ public class NetworkOperationClusterConfig extends KubernetesDependentResource<C
                 .map(Objects::requireNonNull)
                 .sorted()
                 .collect(Collectors.joining("\n", "", "\n"));
-        return builder.addToData("podips", ips);
+        return builder.addToData("podIps", ips);
     }
 
     Map<String, List<Pod>> pods(final NetworkOperation primary, final Context<NetworkOperation> context) {
