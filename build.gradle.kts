@@ -19,6 +19,7 @@ val hederaSdkVersion: String by project
 val javaoperatorsdkVersion: String by project
 val spotbugsVersion: String by project
 val wiremockVersion: String by project
+val smallryeCertificateGeneratorVersion: String by project
 
 dependencies {
     annotationProcessor("io.sundr:builder-annotations:${sundrVersion}")
@@ -84,6 +85,10 @@ dependencies {
     testFixturesImplementation("org.junit.jupiter:junit-jupiter-api")
     testFixturesImplementation("org.eclipse.microprofile.config:microprofile-config-api")
     testFixturesImplementation("com.hedera.hashgraph:sdk:${hederaSdkVersion}")
+    testFixturesImplementation(
+        "io.smallrye.certs:smallrye-certificate-generator-junit5:${smallryeCertificateGeneratorVersion}"
+    )
+    testFixturesImplementation("org.wiremock:wiremock:${wiremockVersion}")
 }
 
 gitExtractor {
