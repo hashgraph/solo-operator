@@ -25,10 +25,10 @@ public final class Sequencer<T extends HasMetadata> {
     private final Supplier<List<T>> activeResources;
 
     public static final Duration MAX_RECONCILIATION_DELAY = Duration.ofHours(1);
-    public static final Duration DEFAULT_RECONCILIATION_DELAY = Duration.ofMillis(100);
+    public static final Duration DEFAULT_RECONCILIATION_DELAY = Duration.ofSeconds(5);
 
     public static final Duration MAX_ESTIMATED_PROCESSING_TIME = Duration.ofHours(1);
-    public static final Duration DEFAULT_ESTIMATED_PROCESSING_TIME = Duration.ofSeconds(1);
+    public static final Duration DEFAULT_ESTIMATED_PROCESSING_TIME = Duration.ofSeconds(30);
 
     // stores the time when the cache was refreshed last
     private Instant lastRefreshed;
