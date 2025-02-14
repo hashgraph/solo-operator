@@ -20,6 +20,7 @@ val javaoperatorsdkVersion: String by project
 val spotbugsVersion: String by project
 val wiremockVersion: String by project
 val smallryeCertificateGeneratorVersion: String by project
+val nettyVersion: String by project
 
 dependencies {
     annotationProcessor("io.sundr:builder-annotations:${sundrVersion}")
@@ -58,7 +59,7 @@ dependencies {
     testImplementation("io.quarkus:quarkus-jacoco")
     testImplementation("org.awaitility:awaitility")
     testImplementation("org.assertj:assertj-core:${assertjVersion}")
-    testImplementation("io.grpc:grpc-netty")
+    testImplementation("io.grpc:grpc-netty:${nettyVersion}")
     testImplementation("com.hedera.fullstack:fullstack-helm-client:0.32.0")
     testImplementation("org.wiremock:wiremock:${wiremockVersion}")
     componentTestImplementation(
