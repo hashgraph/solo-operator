@@ -25,6 +25,10 @@ public record Sequenced(String namespace, String uid, String name, Instant creat
                 Instant.parse(resource.getMetadata().getCreationTimestamp()));
     }
 
+    public static Sequenced clone(Sequenced item) {
+        return new Sequenced(item.namespace, item.uid, item.name, item.creationTime);
+    }
+
     @Override
     public int compareTo(Sequenced o) {
         if (o == null) {

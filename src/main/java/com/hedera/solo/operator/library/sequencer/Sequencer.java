@@ -237,4 +237,14 @@ public final class Sequencer<T extends HasMetadata> {
         final Sequenced item = cache.removeItem(resource);
         return item != null;
     }
+
+    /**
+     * Get the sequence of items in the cache for a given namespace
+     *
+     * @param namespace the namespace
+     * @return the list of items in the cache
+     */
+    public List<Sequenced> itemSequence(String namespace) {
+        return cache.itemSequence(namespace);
+    }
 }

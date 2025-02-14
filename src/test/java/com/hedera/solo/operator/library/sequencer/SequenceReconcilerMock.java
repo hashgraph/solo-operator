@@ -29,7 +29,8 @@ public class SequenceReconcilerMock implements Cleaner<NetworkOperation> {
             Set.of(NetworkOperationStatus.Phase.Failed, NetworkOperationStatus.Phase.Succeeded);
 
     private static KubernetesClient client;
-    private static final Sequencer<NetworkOperation> sequencer = new Sequencer<>(SequenceReconcilerMock::activeResources);
+    private static final Sequencer<NetworkOperation> sequencer =
+            new Sequencer<>(SequenceReconcilerMock::activeResources);
 
     @Inject
     public SequenceReconcilerMock(KubernetesClient client) {

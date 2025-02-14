@@ -198,4 +198,20 @@ class SequencerCache<T extends HasMetadata> {
     synchronized Sequenced getCurrentlyExecuting() {
         return currentlyExecuting;
     }
+
+    /**
+     * Get the sequence of items for a given namespace
+     *
+     * @param namespace the namespace
+     * @return the sequence of item names
+     */
+    synchronized List<Sequenced> itemSequence(String namespace) {
+        List<Sequenced> sequence = new ArrayList<>();
+        if (namespaceCache.containsKey(namespace)) {
+            for (Sequenced item : namespaceCache.get(namespace)) {
+                sequence.add(Sequenced.clone(item));
+            }
+        }
+        return sequence;
+    }
 }
