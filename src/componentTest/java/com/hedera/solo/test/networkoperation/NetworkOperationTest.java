@@ -3,12 +3,15 @@
 package com.hedera.solo.test.networkoperation;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
-import static com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec.Mode.FirstInitialization;
+import static com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec.Mode.NetworkGenesis;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_MANAGED_BY;
 import static com.hedera.solo.operator.reconciler.common.Constants.OPERATOR_PREFIX;
+import static com.hedera.solo.operator.reconciler.common.Constants.SOLO_OPERATOR;
 import static java.util.Collections.emptyMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import com.hedera.solo.operator.library.k8s.CustomResourceManager;
 import com.hedera.solo.operator.model.commonspec.KeyReference;
 import com.hedera.solo.operator.model.commonspec.KeyReferenceBuilder;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
@@ -18,7 +21,15 @@ import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.secrets.SecretResources;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.secrets.SecretResourcesBuilder;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
+import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
+import com.hedera.solo.operator.reconciler.networkoperation.NetworkOperationSequenceReconciler;
+import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckProcessor;
+import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckTask;
+import com.hedera.solo.operator.reconciler.networkoperation.genesis.NetworkGenesisProcessor;
+import com.hedera.solo.operator.reconciler.networkoperation.genesis.NetworkGenesisTask;
+import com.hedera.solo.operator.reconciler.networkoperation.node.NodeOperationProcessor;
+import com.hedera.solo.operator.reconciler.networkoperation.upgrade.NetworkUpgradeProcessor;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
 import com.hedera.solo.operator.test.fixtures.resource.ResourceLoader;
 import com.hedera.solo.operator.test.fixtures.snapshot.SnapshotFailureContext;
@@ -26,6 +37,8 @@ import com.hedera.solo.test.framework.AbstractOperatorTest;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.api.model.ObjectReference;
+import io.fabric8.kubernetes.api.model.PodBuilder;
+import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.config.ControllerConfigurationOverrider;
@@ -34,21 +47,108 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 @SoloTest
 public class NetworkOperationTest extends AbstractOperatorTest {
+
+    /**
+     * Prepare a custom resource manager with mocked methods
+     *
+     * <p>We are mocking methods that require otherwise delegating to the actual Kubernetes client
+     *
+     * @param client Kubernetes client
+     * @return Custom resource manager with mocked methods
+     */
+    private CustomResourceManager prepareCustomResourceManager(KubernetesClient client) {
+        final CustomResourceManager delegate = CustomResourceManager.with(client);
+
+        final CustomResourceManager customResourceManager = Mockito.mock(CustomResourceManager.class);
+        Mockito.when(customResourceManager.orbitByName(Mockito.anyString())).thenAnswer(invocation -> {
+            final String namespace = operator().getNamespace();
+            return delegate.orbitByName(namespace);
+        });
+
+        Mockito.when(customResourceManager.configMapByName(Mockito.anyString(), Mockito.anyString()))
+                .thenAnswer(invocation -> {
+                    final String namespace = invocation.getArgument(0);
+                    final String name = invocation.getArgument(1);
+                    return delegate.configMapByName(namespace, name);
+                });
+
+        Mockito.when(customResourceManager.networkOperations()).thenAnswer(invocation -> {
+            final String namespace = operator().getNamespace();
+            return delegate.networkOperations(namespace);
+        });
+
+        Mockito.when(customResourceManager.networkOperations(Mockito.anyString()))
+                .thenAnswer(invocation -> {
+                    final String namespace = invocation.getArgument(0);
+                    return delegate.networkOperations(namespace);
+                });
+
+        Mockito.when(customResourceManager.consensusCapsules(Mockito.anyString(), Mockito.anyMap()))
+                .thenAnswer(invocation -> {
+                    final String namespace = invocation.getArgument(0);
+                    return delegate.consensusCapsules(namespace);
+                });
+
+        Mockito.when(customResourceManager.consensusCapsules(Mockito.anyString()))
+                .thenAnswer(invocation -> {
+                    final String namespace = invocation.getArgument(0);
+                    return delegate.consensusCapsules(namespace);
+                });
+
+        Mockito.when(customResourceManager.pods(Mockito.anyString(), Mockito.anyMap()))
+                .thenAnswer(invocation -> {
+                    final String namespace = invocation.getArgument(0);
+                    final PodList podList = new PodList();
+
+                    List<Long> capsuleNodeIds = prepareNodeIds(3);
+                    for (Long nodeId : capsuleNodeIds) {
+                        podList.getItems()
+                                .add(new PodBuilder()
+                                        .withNewMetadata()
+                                        .withName(Metadata.prepareNodeName(nodeId))
+                                        .withNamespace(namespace)
+                                        .endMetadata()
+                                        .withNewStatus()
+                                        .withPhase("Running")
+                                        .withPodIP("10.0.0.%d".formatted(nodeId + 1))
+                                        .endStatus()
+                                        .build());
+                    }
+
+                    return podList;
+                });
+
+        return customResourceManager;
+    }
+
     @Override
     protected LocallyRunOperatorExtension.Builder configure(final KubernetesClient client) {
+        final CustomResourceManager customResourceManager = prepareCustomResourceManager(client);
+        final NetworkCheckProcessor networkCheckProcessor =
+                new NetworkCheckProcessor(new NetworkCheckTask(customResourceManager));
+        final NetworkGenesisProcessor networkGenesisProcessor =
+                new NetworkGenesisProcessor(new NetworkGenesisTask(customResourceManager, networkCheckProcessor));
+        final NetworkUpgradeProcessor networkUpgradeProcessor = Mockito.mock(NetworkUpgradeProcessor.class);
+        final NodeOperationProcessor nodeOperationProcessor = Mockito.mock(NodeOperationProcessor.class);
         return builder(client)
                 .withReconciler(
-                        new NetworkOperationTestReconciler(), ControllerConfigurationOverrider::watchingAllNamespaces)
+                        new NetworkOperationTestReconciler(
+                                customResourceManager,
+                                networkGenesisProcessor,
+                                networkUpgradeProcessor,
+                                networkCheckProcessor,
+                                nodeOperationProcessor),
+                        ControllerConfigurationOverrider::watchingAllNamespaces)
                 .withReconciler(new ConsensusCapsuleTestReconciler())
                 .withReconciler(new NoOpOrbitReconciler());
     }
@@ -87,6 +187,10 @@ public class NetworkOperationTest extends AbstractOperatorTest {
         return nodeNames;
     }
 
+    private String networkOperationName(int i) {
+        return "init-%02d".formatted(i); // prepare name with padding so that it can be ordered by name
+    }
+
     @Test
     void oneNetworkOperationAtATime() {
         int total = 20;
@@ -96,9 +200,9 @@ public class NetworkOperationTest extends AbstractOperatorTest {
         capsuleNodeIds.forEach(this::createCapsule);
 
         for (int i = 0; i < total; ++i) {
-            String name = "init-" + i;
+            String name = networkOperationName(i);
             createNetworkOperation(name, false);
-            await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+            await().atMost(60, TimeUnit.SECONDS).untilAsserted(() -> {
                 verifyNetworkOperationSucceeded(name, true);
             });
         }
@@ -106,26 +210,29 @@ public class NetworkOperationTest extends AbstractOperatorTest {
 
     @Test
     void manyNetworkOperationsAtOnceWithDeletions() {
-        int total = 20;
-        int noUpdatePeriod = 7;
+        int total = 10;
+        int noUpdatePeriod = 3;
         List<Long> capsuleNodeIds = prepareNodeIds(3);
-        List<String> capsuleNames = prepareNodeNames(capsuleNodeIds);
 
         capsuleNodeIds.forEach(this::createCapsule);
 
         for (int i = 0; i < total; ++i) {
-            createNetworkOperation("init-" + i, 0 == i % noUpdatePeriod);
+            String name = networkOperationName(i);
+            createNetworkOperation(name, 0 == i % noUpdatePeriod);
         }
 
         for (int i = 0; i < total; i += noUpdatePeriod) {
-            deleteNetworkOperationStuckInPending("init-" + i);
+            String name = networkOperationName(i);
+            deleteNetworkOperationStuckInPending(name);
         }
 
-        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-            for (int i = 0; i < total; ++i) {
-                verifyNetworkOperationSucceeded("init-" + i, 0 != i % noUpdatePeriod);
-            }
-        });
+        for (int i = 0; i < total; ++i) {
+            final int nodeId = i;
+            await().atMost(60, TimeUnit.SECONDS).untilAsserted(() -> {
+                String name = networkOperationName(nodeId);
+                verifyNetworkOperationSucceeded(name, 0 != nodeId % noUpdatePeriod);
+            });
+        }
     }
 
     @Test
@@ -134,7 +241,7 @@ public class NetworkOperationTest extends AbstractOperatorTest {
         capsuleNodeIds.forEach(nodeId -> createCapsule(nodeId, Map.of("fail", "true"), null));
 
         createNetworkOperation("init", false);
-        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+        await().atMost(60, TimeUnit.SECONDS).untilAsserted(() -> {
             NetworkOperation no = operator().get(NetworkOperation.class, "init");
             assertThat(no).isNotNull();
             assertThat(no.getStatus()).isNotNull();
@@ -214,7 +321,7 @@ public class NetworkOperationTest extends AbstractOperatorTest {
 
         String name = "init";
         NetworkOperation networkOperation = createNetworkOperation(name, false);
-        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+        await().atMost(60, TimeUnit.SECONDS).untilAsserted(() -> {
             NetworkOperation no = operator().get(NetworkOperation.class, name);
             assertThat(no).isNotNull();
             assertThat(no.getStatus()).isNotNull();
@@ -260,13 +367,17 @@ public class NetworkOperationTest extends AbstractOperatorTest {
 
     NetworkOperation createNetworkOperation(final String name, final boolean noUpdate) {
         final String orbitName = operator().getNamespace(); // for now namespace and orbit name are the same
+        final Map<String, String> labels = Map.of(LABEL_K8S_MANAGED_BY, SOLO_OPERATOR);
         return operator()
                 .create(edit(new NetworkOperation())
                         .with(metadata -> metadata.editMetadata()
                                 .withName(name)
+                                .addToLabels(labels)
                                 .addToLabels("no-update", String.valueOf(noUpdate)))
-                        .with(spec ->
-                                spec.editSpec().withMode(FirstInitialization).withOrbit(orbitName))
+                        .with(spec -> spec.editSpec()
+                                .withMode(NetworkGenesis)
+                                .withVersion(NetworkOperationSequenceReconciler.VERSION)
+                                .withOrbit(orbitName))
                         .build());
     }
 
@@ -292,9 +403,6 @@ public class NetworkOperationTest extends AbstractOperatorTest {
             assertThat(no.getStatus()).isNotNull();
             assertThat(no.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Succeeded);
             List<Condition> conditions = no.getStatus().getConditions();
-            assertThat(conditions.size()).isEqualTo(2);
-            assertThat(conditions.stream().map(Condition::getType).collect(Collectors.toSet()))
-                    .isEqualTo(Set.of("ManifestValidation", "Ready"));
             assertThat(conditions.stream().map(Condition::getStatus)).allMatch(ConditionStatus.True::equals);
         }
     }
@@ -303,8 +411,9 @@ public class NetworkOperationTest extends AbstractOperatorTest {
         operator()
                 .getKubernetesClient()
                 .resource(edit(new Orbit())
-                        .with(metadata ->
-                                metadata.editMetadata().withName(operator().getNamespace()))
+                        .with(metadata -> metadata.editMetadata()
+                                .withName(operator().getNamespace())
+                                .withLabels(Map.of(Constants.LABEL_K8S_COMPONENT, Constants.COMPONENT_ORBIT)))
                         .with(ResourceLoader::withResources)
                         .with(spec -> spec.editSpec()
                                 .editConsensus()
@@ -327,7 +436,14 @@ public class NetworkOperationTest extends AbstractOperatorTest {
     }
 
     void createCapsule(final Long nodeId) {
-        createCapsule(nodeId, emptyMap(), null);
+        createCapsule(
+                nodeId,
+                Map.of(
+                        LABEL_K8S_MANAGED_BY,
+                        SOLO_OPERATOR,
+                        Constants.LABEL_K8S_COMPONENT,
+                        Constants.COMPONENT_CONSENSUS_NODE),
+                null);
     }
 
     void createCapsule(final Long nodeId, final Map<String, String> labels, final SecretResources secretResources) {

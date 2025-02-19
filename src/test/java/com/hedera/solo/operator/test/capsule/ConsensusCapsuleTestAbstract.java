@@ -368,7 +368,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         for (int i = 0; i < totalNetworkChecks; i++) {
             final NetworkOperation networkCheck = new NetworkOperationBuilder()
                     .withNewMetadata()
-                    .withName("%d-network-check".formatted(i))
+                    .withName("network-check-%02d".formatted(i)) // padded with 0 so that it can be ordered by name
                     .withNamespace(namespace)
                     .endMetadata()
                     .withNewSpec()
