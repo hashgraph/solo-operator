@@ -18,6 +18,7 @@ import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Secrets;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.secrets.SecretResources;
 import com.hedera.solo.operator.model.v1alpha1.orbitspec.consensus.genesis.AddressBook;
+import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.Condition;
@@ -67,13 +68,13 @@ public class CreatePublicKeysConfigStep implements ProcessorStep<NetworkOperatio
         if (existing == null) {
             context.getClient().resource(desired).create();
         } else {
-            context.getClient().resource(desired).serverSideApply();
+            context.getClient().resource(desired).patch();
         }
 
         // add conditions to the status saying that the configmap has been created
         final Condition condition = new ConditionBuilder()
                 .withType(CONDITION_TYPE)
-                .withStatus("True")
+                .withStatus(ConditionStatus.True)
                 .withLastTransitionTime(Instant.now().toString())
                 .withMessage("%s/%s created for %d consensus nodes"
                         .formatted(
@@ -155,6 +156,6 @@ public class CreatePublicKeysConfigStep implements ProcessorStep<NetworkOperatio
 
         return status.getConditions().stream()
                 .anyMatch(
-                        c -> c.getType().equals(CONDITION_TYPE) && c.getStatus().equals("True"));
+                        c -> c.getType().equals(CONDITION_TYPE) && c.getStatus().equals(ConditionStatus.True));
     }
 }

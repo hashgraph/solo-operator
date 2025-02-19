@@ -23,6 +23,7 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.orbitspec.consensus.genesis.AddressBook;
+import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.Condition;
@@ -32,16 +33,20 @@ import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import java.lang.invoke.MethodHandles;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
+import org.jboss.logging.Logger;
 
 public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final String TEMPLATE = "cluster-config.yaml";
     public static final String CONDITION_TYPE = "ClusterConfigCreated";
+
+    private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     private final CustomResourceManager customResourceManager;
 
@@ -52,41 +57,55 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
     @Override
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context) {
+        try {
+            final String namespace = resource.getMetadata().getNamespace();
+            final Orbit orbit =
+                    customResourceManager.orbitByName(resource.getSpec().getOrbit());
+            if (orbit == null) {
+                throw new ProcessorException(
+                        "Orbit not found: %s".formatted(resource.getSpec().getOrbit()));
+            }
 
-        final String namespace = resource.getMetadata().getNamespace();
-        final Orbit orbit = customResourceManager.orbitByName(resource.getSpec().getOrbit());
-        if (orbit == null) {
-            throw new ProcessorException(
-                    "Orbit not found: %s".formatted(resource.getSpec().getOrbit()));
+            final List<ConsensusCapsule> consensusCapsules = customResourceManager.consensusCapsules(namespace);
+            if (consensusCapsules.isEmpty()) {
+                throw new ProcessorException("No consensus capsules found in orbit: %s"
+                        .formatted(orbit.getMetadata().getName()));
+            }
+
+            final ConfigMap existing = customResourceManager.configMapByName(namespace, Constants.CLUSTER_CONFIG_NAME);
+            final ConfigMap desired =
+                    this.prepareDesiredConfigMap(resource, context, orbit, consensusCapsules, existing);
+
+            if (existing == null) {
+                log.infof(
+                        "Creating cluster config: %s/%s",
+                        desired.getMetadata().getNamespace(),
+                        desired.getMetadata().getName());
+                context.getClient().resource(desired).create();
+            } else {
+                log.infof(
+                        "Updating cluster config: %s/%s",
+                        desired.getMetadata().getNamespace(),
+                        desired.getMetadata().getName());
+                context.getClient().resource(desired).patch();
+            }
+
+            // add conditions to the status saying that the configmap has been created
+            final Condition condition = new ConditionBuilder()
+                    .withType(CONDITION_TYPE)
+                    .withStatus(ConditionStatus.True)
+                    .withLastTransitionTime(Instant.now().toString())
+                    .withMessage("%s/%s created for %d consensus nodes"
+                            .formatted(
+                                    desired.getMetadata().getNamespace(),
+                                    desired.getMetadata().getName(),
+                                    consensusCapsules.size()))
+                    .build();
+            return edit(status).with(s -> s.addToConditions(condition)).build();
+        } catch (Exception ex) {
+            log.warnf("Failed to create cluster config: %s, will re-attempt during next reconcile loop", ex);
+            return status;
         }
-
-        final List<ConsensusCapsule> consensusCapsules = customResourceManager.consensusCapsules(namespace);
-        if (consensusCapsules.isEmpty()) {
-            throw new ProcessorException("No consensus capsules found in orbit: %s"
-                    .formatted(orbit.getMetadata().getName()));
-        }
-
-        final ConfigMap config = customResourceManager.configMapByName(namespace, Constants.CLUSTER_CONFIG_NAME);
-        final ConfigMap desired = this.prepareDesiredConfigMap(resource, context, orbit, consensusCapsules, config);
-
-        if (config == null) {
-            context.getClient().resource(desired).create();
-        } else {
-            context.getClient().resource(desired).serverSideApply();
-        }
-
-        // add conditions to the status saying that the configmap has been created
-        final Condition condition = new ConditionBuilder()
-                .withType(CONDITION_TYPE)
-                .withStatus("True")
-                .withLastTransitionTime(Instant.now().toString())
-                .withMessage("%s/%s created for %d consensus nodes"
-                        .formatted(
-                                desired.getMetadata().getNamespace(),
-                                desired.getMetadata().getName(),
-                                consensusCapsules.size()))
-                .build();
-        return edit(status).with(s -> s.addToConditions(condition)).build();
     }
 
     ConfigMap prepareDesiredConfigMap(
@@ -187,6 +206,11 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
                 podIps.add(pod.getStatus().getPodIP());
             }
         }
+
+        if (podIps.isEmpty()) {
+            throw new ProcessorException("No pod IPs found for pods with labels: %s".formatted(labels));
+        }
+
         String data = String.join("\n", podIps);
 
         return builder.addToData(CONFIG_KEY_POD_IPS, data);
@@ -199,6 +223,6 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
 
         return status.getConditions().stream()
                 .anyMatch(
-                        c -> c.getType().equals(CONDITION_TYPE) && c.getStatus().equals("True"));
+                        c -> c.getType().equals(CONDITION_TYPE) && c.getStatus().equals(ConditionStatus.True));
     }
 }

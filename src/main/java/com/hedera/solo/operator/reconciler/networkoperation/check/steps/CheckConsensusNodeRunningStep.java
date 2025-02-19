@@ -15,6 +15,7 @@ import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -24,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import org.jboss.logging.Logger;
 
 /** CheckConsensusNodeRunningStep checks if the consensus node is ACTIVE and processing transactions */
 public class CheckConsensusNodeRunningStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
@@ -31,6 +33,8 @@ public class CheckConsensusNodeRunningStep implements ProcessorStep<NetworkOpera
     public static final String CONDITION_TYPE = "ConsensusCapsuleReady";
 
     private final CustomResourceManager customResourceManager;
+
+    private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     public CheckConsensusNodeRunningStep(CustomResourceManager customResourceManager) {
         this.customResourceManager = customResourceManager;
@@ -74,6 +78,12 @@ public class CheckConsensusNodeRunningStep implements ProcessorStep<NetworkOpera
         }
 
         // return a new status with the phase and conditions
+        log.infof(
+                "Consensus capsules status: %s [ %s/%s status: %s ]",
+                phaseMap,
+                resource.getMetadata().getNamespace(),
+                resource.getMetadata().getName(),
+                resultingPhase);
         return status.edit()
                 .withPhase(resultingPhase)
                 .addAllToConditions(conditions)

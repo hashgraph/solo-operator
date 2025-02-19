@@ -15,14 +15,18 @@ import com.hedera.solo.operator.reconciler.networkoperation.genesis.steps.Create
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import java.lang.invoke.MethodHandles;
 import java.time.Duration;
 import java.util.List;
+import org.jboss.logging.Logger;
 
 @ApplicationScoped
 public class NetworkGenesisTask extends AbstractProcessorTask<NetworkOperation, NetworkOperationStatus> {
     public static final Duration RECONCILE_DELAY = Duration.ofSeconds(1);
 
     private final CustomResourceManager customResourceManager;
+
+    private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     @Inject
     NetworkCheckProcessor deferredProcessor;
@@ -49,6 +53,7 @@ public class NetworkGenesisTask extends AbstractProcessorTask<NetworkOperation, 
     protected Processor<?, ?, ?> computeDeferredProcessor(NetworkOperation resource, Context<NetworkOperation> context)
             throws ProcessorException {
         if (isDone(resource)) {
+            log.infof("Network genesis is done, deferring to network check");
             return deferredProcessor;
         }
 
