@@ -77,10 +77,10 @@ class SequencerTest {
         assertThat(d).isEqualTo(Duration.ofMillis((long) Math.floor(100 * 2 * 0.3)));
 
         // check zero, null, negative or too large processing time
-        d = sequencer.computeReconcileDelay(new SequencerRequest<>(no3, Duration.ofMillis(10000), null));
+        d = sequencer.computeReconcileDelay(new SequencerRequest<>(no3, Duration.ofSeconds(300), null));
         assertThat(d).isEqualTo(Duration.ofMillis((long) Math.floor(
                 Sequencer.DEFAULT_ESTIMATED_PROCESSING_TIME.multipliedBy(2).toMillis() * 0.3)));
-        d = sequencer.computeReconcileDelay(new SequencerRequest<>(no3, Duration.ofMillis(10000), Duration.ZERO));
+        d = sequencer.computeReconcileDelay(new SequencerRequest<>(no3, Duration.ofSeconds(300), Duration.ZERO));
         assertThat(d).isEqualTo(Duration.ofMillis((long) Math.floor(
                 Sequencer.DEFAULT_ESTIMATED_PROCESSING_TIME.multipliedBy(2).toMillis() * 0.3)));
         d = sequencer.computeReconcileDelay(new SequencerRequest<>(no3, Duration.ofMillis(200), Duration.ofMillis(-1)));
