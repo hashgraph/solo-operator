@@ -24,8 +24,13 @@ import jakarta.inject.Inject;
 @ApplicationScoped
 public class NetworkCheckProcessor
         implements Processor<NetworkOperation, NetworkOperationStatus, ProcessorResult<NetworkOperationStatus>> {
+
+    private final NetworkCheckTask networkGenesisTask;
+
     @Inject
-    NetworkCheckTask networkGenesisTask;
+    public NetworkCheckProcessor(NetworkCheckTask networkGenesisTask) {
+        this.networkGenesisTask = networkGenesisTask;
+    }
 
     @Override
     public ProcessorResult<NetworkOperationStatus> process(NetworkOperation resource, Context<NetworkOperation> context)

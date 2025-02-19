@@ -66,7 +66,8 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
                         "Orbit not found: %s".formatted(resource.getSpec().getOrbit()));
             }
 
-            final List<ConsensusCapsule> consensusCapsules = customResourceManager.consensusCapsules(namespace);
+            final List<ConsensusCapsule> consensusCapsules = customResourceManager.consensusCapsules(
+                    namespace, Map.of(Constants.LABEL_K8S_COMPONENT, Constants.COMPONENT_CONSENSUS_NODE));
             if (consensusCapsules.isEmpty()) {
                 throw new ProcessorException("No consensus capsules found in orbit: %s"
                         .formatted(orbit.getMetadata().getName()));
@@ -87,7 +88,7 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
                         "Updating cluster config: %s/%s",
                         desired.getMetadata().getNamespace(),
                         desired.getMetadata().getName());
-                context.getClient().resource(desired).patch();
+                context.getClient().resource(existing).patch(desired);
             }
 
             // add conditions to the status saying that the configmap has been created
@@ -194,11 +195,7 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
                 LABEL_K8S_PART_OF, COMPONENT_CONSENSUS_NODE,
                 LABEL_ORBIT, primary.getSpec().getOrbit());
 
-        PodList podList = context.getClient()
-                .pods()
-                .inNamespace(primary.getMetadata().getNamespace())
-                .withLabels(labels)
-                .list();
+        PodList podList = customResourceManager.pods(primary.getMetadata().getNamespace(), labels);
 
         List<String> podIps = new ArrayList<>();
         for (Pod pod : podList.getItems()) {

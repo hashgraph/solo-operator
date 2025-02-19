@@ -22,10 +22,6 @@ import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckPr
 import com.hedera.solo.operator.reconciler.networkoperation.genesis.NetworkGenesisProcessor;
 import com.hedera.solo.operator.reconciler.networkoperation.node.NodeOperationProcessor;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.NetworkUpgradeProcessor;
-import io.fabric8.kubernetes.api.model.KubernetesResourceList;
-import io.fabric8.kubernetes.client.KubernetesClient;
-import io.fabric8.kubernetes.client.dsl.MixedOperation;
-import io.fabric8.kubernetes.client.dsl.Resource;
 import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
@@ -47,7 +43,6 @@ import org.jboss.logging.Logger;
 public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOperation>, Cleaner<NetworkOperation> {
     public static final String VERSION = "v2";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
-    private static KubernetesClient client;
     private static final Sequencer<NetworkOperation> sequencer =
             new Sequencer<>(NetworkOperationSequenceReconciler::activeResources);
 
@@ -56,25 +51,28 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
 
     public static final Duration DEFAULT_RESCHEDULE_DELAY = Duration.ofSeconds(1);
 
-    @Inject
-    CustomResourceManager customResourceManager;
+    private static CustomResourceManager customResourceManager;
+
+    private final NetworkGenesisProcessor networkGenesisProcessor;
+
+    private final NetworkUpgradeProcessor networkUpgradeProcessor;
+
+    private final NetworkCheckProcessor networkCheckProcessor;
+
+    private final NodeOperationProcessor nodeOperationProcessor;
 
     @Inject
-    NetworkGenesisProcessor networkGenesisProcessor;
-
-    @Inject
-    NetworkUpgradeProcessor networkUpgradeProcessor;
-
-    @Inject
-    NetworkCheckProcessor networkCheckProcessor;
-
-    @Inject
-    NodeOperationProcessor nodeOperationProcessor;
-
-    @Inject
-    @SuppressWarnings("CdiInjectionPointsInspection")
-    public NetworkOperationSequenceReconciler(KubernetesClient client) {
-        NetworkOperationSequenceReconciler.client = client;
+    public NetworkOperationSequenceReconciler(
+            CustomResourceManager customResourceManager,
+            NetworkGenesisProcessor networkGenesisProcessor,
+            NetworkUpgradeProcessor networkUpgradeProcessor,
+            NetworkCheckProcessor networkCheckProcessor,
+            NodeOperationProcessor nodeOperationProcessor) {
+        NetworkOperationSequenceReconciler.customResourceManager = customResourceManager;
+        this.networkGenesisProcessor = networkGenesisProcessor;
+        this.networkUpgradeProcessor = networkUpgradeProcessor;
+        this.networkCheckProcessor = networkCheckProcessor;
+        this.nodeOperationProcessor = nodeOperationProcessor;
     }
 
     /**
@@ -251,18 +249,14 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
 
     /** Prepare and return the list of active resources that needs to be considered for sequencing. */
     public static List<NetworkOperation> activeResources() {
-        MixedOperation<NetworkOperation, KubernetesResourceList<NetworkOperation>, Resource<NetworkOperation>>
-                resources = client.resources(NetworkOperation.class);
-
-        // select active resources
-        final List<NetworkOperation> activeItems = new LinkedList<>();
-        for (NetworkOperation r : resources.list().getItems()) {
-            if (!isDone(r)) {
-                activeItems.add(r);
+        List<NetworkOperation> items = customResourceManager.networkOperations();
+        List<NetworkOperation> active = new ArrayList<>();
+        for (NetworkOperation item : items) {
+            if (!isDone(item)) {
+                active.add(item);
             }
         }
-
-        return activeItems;
+        return active;
     }
 
     /**

@@ -12,6 +12,7 @@ import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
+import com.hedera.solo.operator.reconciler.common.Constants;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -45,7 +46,8 @@ public class CheckConsensusNodeRunningStep implements ProcessorStep<NetworkOpera
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context) {
         // retrieve consensus capsule list and phases
         final String namespace = resource.getMetadata().getNamespace();
-        final Collection<ConsensusCapsule> consensusCapsules = customResourceManager.consensusCapsules(namespace);
+        final Collection<ConsensusCapsule> consensusCapsules = customResourceManager.consensusCapsules(
+                namespace, Map.of(Constants.LABEL_K8S_COMPONENT, Constants.COMPONENT_CONSENSUS_NODE));
         final Set<ConsensusCapsuleStatus.Phase> phaseSet = toPhaseSet(consensusCapsules);
         final Map<String, ConsensusCapsuleStatus.Phase> phaseMap = toPhaseMap(consensusCapsules);
 

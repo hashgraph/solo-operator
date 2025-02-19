@@ -68,7 +68,7 @@ public class CreatePublicKeysConfigStep implements ProcessorStep<NetworkOperatio
         if (existing == null) {
             context.getClient().resource(desired).create();
         } else {
-            context.getClient().resource(desired).patch();
+            context.getClient().resource(existing).patch(desired);
         }
 
         // add conditions to the status saying that the configmap has been created

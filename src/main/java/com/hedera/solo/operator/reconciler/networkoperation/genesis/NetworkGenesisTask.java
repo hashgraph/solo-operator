@@ -28,12 +28,12 @@ public class NetworkGenesisTask extends AbstractProcessorTask<NetworkOperation, 
 
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
-    @Inject
-    NetworkCheckProcessor deferredProcessor;
+    private final NetworkCheckProcessor deferredProcessor;
 
     @Inject
-    public NetworkGenesisTask(CustomResourceManager customResourceManager) {
+    public NetworkGenesisTask(CustomResourceManager customResourceManager, NetworkCheckProcessor deferredProcessor) {
         this.customResourceManager = customResourceManager;
+        this.deferredProcessor = deferredProcessor;
     }
 
     @Override

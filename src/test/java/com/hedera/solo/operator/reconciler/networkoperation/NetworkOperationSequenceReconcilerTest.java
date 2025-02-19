@@ -8,8 +8,14 @@ import static com.hedera.solo.operator.library.sequencer.SequencerTestData.no2;
 import static com.hedera.solo.operator.library.sequencer.SequencerTestData.no3;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
+import com.hedera.solo.operator.library.k8s.CustomResourceManager;
+import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleBuilder;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
+import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckProcessor;
+import com.hedera.solo.operator.reconciler.networkoperation.genesis.NetworkGenesisProcessor;
+import com.hedera.solo.operator.reconciler.networkoperation.node.NodeOperationProcessor;
+import com.hedera.solo.operator.reconciler.networkoperation.upgrade.NetworkUpgradeProcessor;
 import io.fabric8.kubernetes.api.model.KubernetesResourceList;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.dsl.MixedOperation;
@@ -43,11 +49,43 @@ class NetworkOperationSequenceReconcilerTest {
         return client;
     }
 
+    private NetworkOperationSequenceReconciler prepareReconciler() {
+        final String namespace = no1.getMetadata().getNamespace();
+        final CustomResourceManager customResourceManager = Mockito.mock(CustomResourceManager.class);
+
+        Mockito.when(customResourceManager.consensusCapsules(namespace))
+                .thenReturn(List.of(
+                        new ConsensusCapsuleBuilder()
+                                .withNewMetadata()
+                                .withName("node0")
+                                .withNamespace(namespace)
+                                .endMetadata()
+                                .build(),
+                        new ConsensusCapsuleBuilder()
+                                .withNewMetadata()
+                                .withName("node1")
+                                .withNamespace(namespace)
+                                .endMetadata()
+                                .build()));
+
+        Mockito.when(customResourceManager.networkOperations()).thenReturn(List.of(no1, no2, no3));
+
+        final NetworkGenesisProcessor networkGenesisProcessor = Mockito.mock(NetworkGenesisProcessor.class);
+        final NetworkUpgradeProcessor networkUpgradeProcessor = Mockito.mock(NetworkUpgradeProcessor.class);
+        final NetworkCheckProcessor networkCheckProcessor = Mockito.mock(NetworkCheckProcessor.class);
+        final NodeOperationProcessor nodeOperationProcessor = Mockito.mock(NodeOperationProcessor.class);
+
+        return new NetworkOperationSequenceReconciler(
+                customResourceManager,
+                networkGenesisProcessor,
+                networkUpgradeProcessor,
+                networkCheckProcessor,
+                nodeOperationProcessor);
+    }
+
     @Test
     void reconcile() throws Exception {
-        final KubernetesClient client = mockKubernetesClient();
-        final NetworkOperationSequenceReconciler reconciler = new NetworkOperationSequenceReconciler(client);
-
+        final NetworkOperationSequenceReconciler reconciler = prepareReconciler();
         @SuppressWarnings("unchecked")
         final Context<NetworkOperation> context = Mockito.mock(Context.class);
 
@@ -61,24 +99,18 @@ class NetworkOperationSequenceReconcilerTest {
         resp = reconciler.reconcile(no1, context);
         Assertions.assertThat(resp.isPatchStatus()).isTrue();
         Assertions.assertThat(resp.getResource().getStatus().getPhase())
-                .isEqualTo(NetworkOperationStatus.Phase.Succeeded);
+                .isEqualTo(NetworkOperationStatus.Phase.Pending);
 
         // try to process a resource that is not the first in the queue
         resp = reconciler.reconcile(no3, context);
-        Assertions.assertThat(resp.isNoUpdate()).isTrue();
-        Assertions.assertThat(resp.getScheduleDelay()).isPresent();
-
-        // after delete, reattempt would be idempotent and return no update
-        DeleteControl resp3 = reconciler.cleanup(no3, context);
-        Assertions.assertThat(resp3.isRemoveFinalizer()).isTrue();
-        resp = reconciler.reconcile(no3, context);
-        Assertions.assertThat(resp.isNoUpdate()).isTrue();
+        Assertions.assertThat(resp.isPatchStatus()).isTrue();
+        Assertions.assertThat(resp.getResource().getStatus().getPhase())
+                .isEqualTo(NetworkOperationStatus.Phase.Pending);
     }
 
     @Test
     void activeResources() {
-        final KubernetesClient client = mockKubernetesClient();
-        final NetworkOperationSequenceReconciler reconciler = new NetworkOperationSequenceReconciler(client);
+        final NetworkOperationSequenceReconciler reconciler = prepareReconciler();
         List<NetworkOperation> activeResources = NetworkOperationSequenceReconciler.activeResources();
         assertThat(activeResources).isNotNull();
         assertThat(activeResources.size()).isEqualTo(3);
@@ -86,8 +118,7 @@ class NetworkOperationSequenceReconcilerTest {
 
     @Test
     void cleanup() {
-        final KubernetesClient client = mockKubernetesClient();
-        final NetworkOperationSequenceReconciler reconciler = new NetworkOperationSequenceReconciler(client);
+        final NetworkOperationSequenceReconciler reconciler = prepareReconciler();
         @SuppressWarnings("unchecked")
         final Context<NetworkOperation> context = Mockito.mock(Context.class);
         DeleteControl resp = reconciler.cleanup(no1, context);
