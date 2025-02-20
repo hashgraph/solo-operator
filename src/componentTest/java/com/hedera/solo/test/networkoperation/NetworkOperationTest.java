@@ -4,10 +4,10 @@ package com.hedera.solo.test.networkoperation;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec.Mode.NetworkGenesis;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_COMPONENT;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_MANAGED_BY;
 import static com.hedera.solo.operator.reconciler.common.Constants.OPERATOR_PREFIX;
 import static com.hedera.solo.operator.reconciler.common.Constants.SOLO_OPERATOR;
-import static java.util.Collections.emptyMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -28,6 +28,7 @@ import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckPr
 import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckTask;
 import com.hedera.solo.operator.reconciler.networkoperation.genesis.NetworkGenesisProcessor;
 import com.hedera.solo.operator.reconciler.networkoperation.genesis.NetworkGenesisTask;
+import com.hedera.solo.operator.reconciler.networkoperation.genesis.steps.CheckConsensusNodeSecretsStep;
 import com.hedera.solo.operator.reconciler.networkoperation.node.NodeOperationProcessor;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.NetworkUpgradeProcessor;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
@@ -49,7 +50,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-import java.util.stream.LongStream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -61,7 +61,7 @@ public class NetworkOperationTest extends AbstractOperatorTest {
     /**
      * Prepare a custom resource manager with mocked methods
      *
-     * <p>We are mocking methods that require otherwise delegating to the actual Kubernetes client
+     * <p>We are mocking methods that are required; otherwise delegating to the actual Kubernetes client
      *
      * @param client Kubernetes client
      * @return Custom resource manager with mocked methods
@@ -80,6 +80,13 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                     final String namespace = invocation.getArgument(0);
                     final String name = invocation.getArgument(1);
                     return delegate.configMapByName(namespace, name);
+                });
+
+        Mockito.when(customResourceManager.secretByName(Mockito.anyString(), Mockito.anyString()))
+                .thenAnswer(invocation -> {
+                    final String namespace = invocation.getArgument(0);
+                    final String name = invocation.getArgument(1);
+                    return delegate.secretByName(namespace, name);
                 });
 
         Mockito.when(customResourceManager.networkOperations()).thenAnswer(invocation -> {
@@ -104,6 +111,9 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                     final String namespace = invocation.getArgument(0);
                     return delegate.consensusCapsules(namespace);
                 });
+
+        Mockito.when(customResourceManager.triggerEvent(Mockito.any()))
+                .thenAnswer(invocation -> delegate.triggerEvent(invocation.getArgument(0)));
 
         Mockito.when(customResourceManager.pods(Mockito.anyString(), Mockito.anyMap()))
                 .thenAnswer(invocation -> {
@@ -303,7 +313,13 @@ public class NetworkOperationTest extends AbstractOperatorTest {
     KeyReference createSecret() {
         Secret secret = operator()
                 .create(edit(new Secret())
-                        .with(metadata -> metadata.editMetadata().withGenerateName("secret-"))
+                        .with(metadata -> metadata.editMetadata()
+                                .withGenerateName("secret-")
+                                .withLabels(Map.of(
+                                        LABEL_K8S_MANAGED_BY,
+                                        SOLO_OPERATOR,
+                                        LABEL_K8S_COMPONENT,
+                                        Constants.COMPONENT_SECRET)))
                         .with(data -> data.withData(Map.of("key", "dmFsdWU=")))
                         .build());
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
@@ -317,7 +333,10 @@ public class NetworkOperationTest extends AbstractOperatorTest {
     }
 
     NetworkOperation secretsValid(final SecretResources secretResources, final boolean valid) {
-        LongStream.range(0, 4).forEach(id -> createCapsule(id, emptyMap(), secretResources));
+        List<Long> capsuleNodeIds = prepareNodeIds(3);
+        for (Long nodeId : capsuleNodeIds) {
+            createCapsule(nodeId, secretResources);
+        }
 
         String name = "init";
         NetworkOperation networkOperation = createNetworkOperation(name, false);
@@ -327,13 +346,23 @@ public class NetworkOperationTest extends AbstractOperatorTest {
             assertThat(no.getStatus()).isNotNull();
             assertThat(no.getStatus().getConditions()).isNotNull();
             List<Condition> conditions = no.getStatus().getConditions().stream()
-                    .filter(c -> "ManifestValidation".equals(c.getType()))
+                    .filter(c -> CheckConsensusNodeSecretsStep.CONDITION_TYPE.equals(c.getType()))
                     .toList();
             assertThat(conditions.size()).isEqualTo(1);
             Condition condition = conditions.getFirst();
             assertThat(condition.getStatus()).isEqualTo(valid ? ConditionStatus.True : ConditionStatus.False);
             if (!valid) {
-                assertThat(condition.getReason()).isEqualTo("SecretsValid");
+                // check that at least one condition no with reason SECRET_VALID is present and has status False
+                boolean found = false;
+                for (Condition c : no.getStatus().getConditions()) {
+                    if (CheckConsensusNodeSecretsStep.SECRETS_VALID.equals(c.getReason())) {
+                        if (c.getStatus().equals(ConditionStatus.False)) {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                assertThat(found).isTrue();
             }
         });
         return networkOperation;
@@ -360,8 +389,8 @@ public class NetworkOperationTest extends AbstractOperatorTest {
             Event event = events.getFirst();
             assertThat(event.getReportingComponent()).isEqualTo("solo-operator");
             assertThat(event.getType()).isEqualTo("Error");
-            assertThat(event.getReason()).isEqualTo("Failed");
-            assertThat(event.getMessage()).contains("Exception");
+            assertThat(event.getReason()).isEqualTo("NetworkOperationFailed");
+            assertThat(event.getMessage()).contains("Secrets validation failed");
         });
     }
 
@@ -413,7 +442,7 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                 .resource(edit(new Orbit())
                         .with(metadata -> metadata.editMetadata()
                                 .withName(operator().getNamespace())
-                                .withLabels(Map.of(Constants.LABEL_K8S_COMPONENT, Constants.COMPONENT_ORBIT)))
+                                .withLabels(Map.of(LABEL_K8S_COMPONENT, Constants.COMPONENT_ORBIT)))
                         .with(ResourceLoader::withResources)
                         .with(spec -> spec.editSpec()
                                 .editConsensus()
@@ -436,14 +465,14 @@ public class NetworkOperationTest extends AbstractOperatorTest {
     }
 
     void createCapsule(final Long nodeId) {
+        createCapsule(nodeId, null);
+    }
+
+    void createCapsule(final Long nodeId, final SecretResources secretResources) {
         createCapsule(
                 nodeId,
-                Map.of(
-                        LABEL_K8S_MANAGED_BY,
-                        SOLO_OPERATOR,
-                        Constants.LABEL_K8S_COMPONENT,
-                        Constants.COMPONENT_CONSENSUS_NODE),
-                null);
+                Map.of(LABEL_K8S_MANAGED_BY, SOLO_OPERATOR, LABEL_K8S_COMPONENT, Constants.COMPONENT_CONSENSUS_NODE),
+                secretResources);
     }
 
     void createCapsule(final Long nodeId, final Map<String, String> labels, final SecretResources secretResources) {

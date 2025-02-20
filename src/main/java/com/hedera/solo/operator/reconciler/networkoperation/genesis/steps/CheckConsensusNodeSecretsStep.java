@@ -16,6 +16,7 @@ import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Secrets;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.secrets.SecretResources;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationUtil;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.fabric8.kubernetes.api.model.Secret;
@@ -81,6 +82,11 @@ public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOpera
                     .withStatus(ConditionStatus.False)
                     .withMessage("One or more secrets are not valid for consensus capsules")
                     .build());
+
+            NetworkOperationUtil.triggerEvent(
+                    resource,
+                    customResourceManager,
+                    new ProcessorException("Secrets validation failed for consensus capsules"));
         } else {
             conditions.add(new ConditionBuilder()
                     .withType(CONDITION_TYPE)

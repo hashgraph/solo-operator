@@ -15,6 +15,7 @@ import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapList;
+import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.Secret;
@@ -38,6 +39,10 @@ public class CustomResourceManager {
 
     public static CustomResourceManager with(KubernetesClient client) {
         return new CustomResourceManager(client);
+    }
+
+    public KubernetesClient getKubernetesClient() {
+        return client;
     }
 
     @Inject
@@ -239,5 +244,9 @@ public class CustomResourceManager {
         }
 
         return podList;
+    }
+
+    public Event triggerEvent(final Event event) {
+        return client.resource(event).create();
     }
 }
