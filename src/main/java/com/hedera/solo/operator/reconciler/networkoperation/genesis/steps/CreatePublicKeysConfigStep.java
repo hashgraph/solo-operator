@@ -49,6 +49,15 @@ public class CreatePublicKeysConfigStep implements ProcessorStep<NetworkOperatio
     @Override
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context) {
+
+        Objects.requireNonNull(resource, "NetworkOperation resource is required");
+        Objects.requireNonNull(status, "NetworkOperationStatus status is required");
+        Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
+
+        if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed)) {
+            return status;
+        }
+
         final String namespace = resource.getMetadata().getNamespace();
         final Orbit orbit = customResourceManager.orbitByName(resource.getSpec().getOrbit());
         if (orbit == null) {
@@ -82,6 +91,7 @@ public class CreatePublicKeysConfigStep implements ProcessorStep<NetworkOperatio
                                 desired.getMetadata().getName(),
                                 consensusCapsules.size()))
                 .build();
+
         return edit(status).with(s -> s.addToConditions(condition)).build();
     }
 

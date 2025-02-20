@@ -7,7 +7,6 @@ import static com.hedera.solo.operator.reconciler.common.Constants.COMPONENT_CON
 import static com.hedera.solo.operator.reconciler.common.Constants.COMPONENT_SECRET;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_COMPONENT;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_MANAGED_BY;
-import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_NAME;
 import static com.hedera.solo.operator.reconciler.common.Constants.SOLO_OPERATOR;
 
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
@@ -55,7 +54,6 @@ public class CustomResourceManager {
         final List<ConfigMap> list = configMaps(
                         namespace,
                         Map.of(
-                                LABEL_K8S_NAME, name,
                                 LABEL_K8S_MANAGED_BY, SOLO_OPERATOR,
                                 LABEL_K8S_COMPONENT, COMPONENT_CONFIG_MAP))
                 .getItems();
@@ -94,7 +92,6 @@ public class CustomResourceManager {
         final List<Secret> list = secrets(
                         namespace,
                         Map.of(
-                                LABEL_K8S_NAME, name,
                                 LABEL_K8S_MANAGED_BY, SOLO_OPERATOR,
                                 LABEL_K8S_COMPONENT, COMPONENT_SECRET))
                 .getItems();
