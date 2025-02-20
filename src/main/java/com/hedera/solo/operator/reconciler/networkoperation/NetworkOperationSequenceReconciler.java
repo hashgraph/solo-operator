@@ -3,6 +3,8 @@
 package com.hedera.solo.operator.reconciler.networkoperation;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
+import static com.hedera.solo.operator.library.reconcile.ReconcileEvent.cleanupEvents;
+import static com.hedera.solo.operator.library.reconcile.ReconcileEvent.createOrUpdateEvent;
 import static com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec.Mode.NodeAdd;
 import static com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec.Mode.NodeDelete;
 import static com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec.Mode.NodeUpdate;
@@ -18,14 +20,18 @@ import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
+import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckProcessor;
 import com.hedera.solo.operator.reconciler.networkoperation.genesis.NetworkGenesisProcessor;
 import com.hedera.solo.operator.reconciler.networkoperation.node.NodeOperationProcessor;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.NetworkUpgradeProcessor;
+import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
+import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusHandler;
+import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import jakarta.inject.Inject;
@@ -40,7 +46,8 @@ import org.jboss.logging.Logger;
 
 /** {@code NetworkOperationReconciler} operates on a single CR per namespace at any given time. */
 @ControllerConfiguration(name = "network-operation-v2")
-public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOperation>, Cleaner<NetworkOperation> {
+public class NetworkOperationSequenceReconciler
+        implements ErrorStatusHandler<NetworkOperation>, Reconciler<NetworkOperation>, Cleaner<NetworkOperation> {
     public static final String VERSION = "v2";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
     private static final Sequencer<NetworkOperation> sequencer =
@@ -275,6 +282,45 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
     }
 
     /**
+     * Handle unexpected errors by updating the status of the resource and triggering an event
+     *
+     * <p>If we are in this method, it means that an unexpected error occurred. So, we simply trigger an event for the
+     * exception and mark the CR as failed
+     *
+     * @param resource to update the status on
+     * @param context the current context
+     * @param e exception thrown from the reconciler
+     * @return the updated resource with the error status
+     */
+    @Override
+    public ErrorStatusUpdateControl<NetworkOperation> updateErrorStatus(
+            final NetworkOperation resource, final Context<NetworkOperation> context, final Exception e) {
+        // @NeedToDiscuss: Do we need to validate the CR here and add validation errors/results in the status?
+        //  This seems redundant, since currently processors "should" handle the validation errors rather than
+        //  bubbling those up to this method. Also for such unforeseen error I don't see the need to make API calls to
+        //  validate the CR like capsule secrets and so on.
+        //  If we are here, it would mean that the error is not properly handled by the processor steps
+        //  (which is incorrect) or is an unexpected error. In the later case, we simply mark
+        //  the CR as failed with the error message.
+
+        log.error("An unexpected error occurred", e);
+        createOrUpdateEvent(resource, context, e);
+
+        final NetworkOperation updated = edit(resource)
+                .with(r -> r.editStatus()
+                        .withPhase(NetworkOperationStatus.Phase.Failed)
+                        .addToConditions(new ConditionBuilder()
+                                .withType("Error")
+                                .withStatus(ConditionStatus.True)
+                                .withReason("Exception")
+                                .withMessage(e.getMessage())
+                                .build()))
+                .build();
+
+        return ErrorStatusUpdateControl.patchStatus(updated);
+    }
+
+    /**
      * Cleanup the resource by marking it for deletion
      *
      * @param resource the resource that is marked for deletion
@@ -282,7 +328,12 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
      */
     @Override
     public DeleteControl cleanup(NetworkOperation resource, Context<NetworkOperation> context) {
+        log.error("Deleting the resource: %s/%s "
+                .formatted(
+                        resource.getMetadata().getNamespace(),
+                        resource.getMetadata().getName()));
         sequencer.markAsDeleted(new SequencerRequest<>(resource));
+        cleanupEvents(resource, context);
         return DeleteControl.defaultDelete();
     }
 }
