@@ -61,7 +61,8 @@ public class NetworkOperationTest extends AbstractOperatorTest {
     /**
      * Prepare a custom resource manager with mocked methods
      *
-     * <p>We are mocking methods that are required; otherwise delegating to the actual Kubernetes client
+     * <p>We are mocking methods that are required for example the pods method; otherwise delegating to the actual
+     * Kubernetes client
      *
      * @param client Kubernetes client
      * @return Custom resource manager with mocked methods
@@ -248,7 +249,16 @@ public class NetworkOperationTest extends AbstractOperatorTest {
     @Test
     void failNetworkOperation() {
         List<Long> capsuleNodeIds = prepareNodeIds(3);
-        capsuleNodeIds.forEach(nodeId -> createCapsule(nodeId, Map.of("fail", "true"), null));
+        capsuleNodeIds.forEach(nodeId -> createCapsule(
+                nodeId,
+                Map.of(
+                        LABEL_K8S_MANAGED_BY,
+                        SOLO_OPERATOR,
+                        LABEL_K8S_COMPONENT,
+                        Constants.COMPONENT_CONSENSUS_NODE,
+                        "fail",
+                        "true"),
+                null));
 
         createNetworkOperation("init", false);
         await().atMost(60, TimeUnit.SECONDS).untilAsserted(() -> {
@@ -258,14 +268,17 @@ public class NetworkOperationTest extends AbstractOperatorTest {
             assertThat(no.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Failed);
             Map<String, List<Condition>> conditions =
                     no.getStatus().getConditions().stream().collect(Collectors.groupingBy(Condition::getType));
+
             assertThat(conditions.values().stream().flatMap(Collection::stream))
                     .size()
-                    .isEqualTo(2);
-            Condition ready = conditions.get("Ready").getFirst();
-            Condition valid = conditions.get("ManifestValidation").getFirst();
+                    .isEqualTo(4);
+
+            Condition valid = conditions.get("CheckConsensusSecrets").getFirst();
+            assertThat(valid.getStatus()).isEqualTo(ConditionStatus.True);
+
+            Condition ready = conditions.get("ConsensusCapsuleReady").getFirst();
             assertThat(ready.getStatus()).isEqualTo(ConditionStatus.False);
             assertThat(ready.getMessage()).isEqualTo("Capsule phases: {node1=Failed, node2=Failed, node3=Failed}");
-            assertThat(valid.getStatus()).isEqualTo(ConditionStatus.True);
         });
     }
 
