@@ -49,7 +49,7 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
     public static final String CONDITION_TYPE = "ClusterConfigCreated";
 
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
-    public static final String NO_POD_IPS_FOUND = "No pod IPs found for pods with labels";
+    public static final String POD_IPS_NOT_FOUND = "Pod IPs are not found for all consensus nodes";
 
     private final CustomResourceManager customResourceManager;
 
@@ -113,8 +113,8 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
                     .build();
             return edit(status).with(s -> s.addToConditions(condition)).build();
         } catch (Exception ex) {
-            if (ex instanceof ProcessorException && ex.getMessage().contains(NO_POD_IPS_FOUND)) {
-                log.warnf("Pod IPs are not available yet; re-attempting during next reconcile loop", ex);
+            if (ex instanceof ProcessorException && ex.getMessage().contains(POD_IPS_NOT_FOUND)) {
+                log.warnf("All pod IPs are not available yet; re-attempting during next reconcile loop", ex);
                 return status;
             }
 
@@ -150,7 +150,7 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
 
         return edit(config)
                 .with(builder -> prepareConfigTxt(builder, addressBook, nodeAddresses))
-                .with(builder -> preparePodIPs(builder, resource, context))
+                .with(builder -> preparePodIPs(builder, resource))
                 .with(builder -> Metadata.applyStandardLabels(
                                 builder.editMetadata(),
                                 Constants.CLUSTER_CONFIG_NAME,
@@ -211,8 +211,7 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
         return addresses;
     }
 
-    ConfigMapBuilder preparePodIPs(
-            final ConfigMapBuilder builder, NetworkOperation primary, Context<NetworkOperation> context) {
+    ConfigMapBuilder preparePodIPs(final ConfigMapBuilder builder, NetworkOperation primary) {
         Map<String, String> labels = Map.of(
                 LABEL_K8S_MANAGED_BY, SOLO_OPERATOR,
                 LABEL_K8S_PART_OF, COMPONENT_CONSENSUS_NODE,
@@ -227,8 +226,10 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
             }
         }
 
-        if (podIps.isEmpty()) {
-            throw new ProcessorException(("%s: %s").formatted(NO_POD_IPS_FOUND, labels));
+        if (podIps.isEmpty()
+                || podIps.size() != primary.getStatus().getConsensusCapsules().size()) {
+            throw new ProcessorException(("%s [ labels: %s, consensus capsules: %s")
+                    .formatted(POD_IPS_NOT_FOUND, labels, primary.getStatus().getConsensusCapsules()));
         }
 
         String data = String.join("\n", podIps);
