@@ -402,7 +402,7 @@ public class NetworkOperationTest extends AbstractOperatorTest {
             Event event = events.getFirst();
             assertThat(event.getReportingComponent()).isEqualTo("solo-operator");
             assertThat(event.getType()).isEqualTo("Error");
-            assertThat(event.getReason()).isEqualTo("NetworkOperationFailed");
+            assertThat(event.getReason()).isEqualTo("Failed");
             assertThat(event.getMessage()).contains("Secrets validation failed");
         });
     }

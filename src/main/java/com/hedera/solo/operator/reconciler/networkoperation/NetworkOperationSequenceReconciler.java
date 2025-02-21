@@ -285,7 +285,7 @@ public class NetworkOperationSequenceReconciler
      * Handle unexpected errors by updating the status of the resource and triggering an event
      *
      * <p>If we are in this method, it means that an unexpected error occurred. So, we simply trigger an event for the
-     * exception and mark the CR as failed
+     * exception and mark the CR as failed with no-retry.
      *
      * @param resource to update the status on
      * @param context the current context
@@ -303,9 +303,15 @@ public class NetworkOperationSequenceReconciler
         //  (which is incorrect) or is an unexpected error. In the later case, we simply mark
         //  the CR as failed with the error message.
 
-        log.error("An unexpected error occurred", e);
+        log.error(
+                "An unexpected error occurred: %s/%s"
+                        .formatted(
+                                resource.getMetadata().getNamespace(),
+                                resource.getMetadata().getName()),
+                e);
         createOrUpdateEvent(resource, context, e);
 
+        // if the retry count exceeds the max retry count, then mark the resource as failed
         final NetworkOperation updated = edit(resource)
                 .with(r -> r.editStatus()
                         .withPhase(NetworkOperationStatus.Phase.Failed)
@@ -317,7 +323,7 @@ public class NetworkOperationSequenceReconciler
                                 .build()))
                 .build();
 
-        return ErrorStatusUpdateControl.patchStatus(updated);
+        return ErrorStatusUpdateControl.patchStatus(updated).withNoRetry();
     }
 
     /**

@@ -3,6 +3,7 @@
 package com.hedera.solo.operator.reconciler.networkoperation.genesis.steps;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
+import static com.hedera.solo.operator.library.reconcile.ReconcileEvent.createOrUpdateEvent;
 import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleUtils.secretsWithDefaultKeyNames;
 
 import com.hedera.solo.operator.library.k8s.CustomResourceManager;
@@ -16,7 +17,6 @@ import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Secrets;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.secrets.SecretResources;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
-import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationUtil;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.fabric8.kubernetes.api.model.Secret;
@@ -83,10 +83,8 @@ public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOpera
                     .withMessage("One or more secrets are not valid for consensus capsules")
                     .build());
 
-            NetworkOperationUtil.triggerEvent(
-                    resource,
-                    customResourceManager,
-                    new ProcessorException("Secrets validation failed for consensus capsules"));
+            createOrUpdateEvent(
+                    resource, context, new ProcessorException("Secrets validation failed for consensus capsules"));
         } else {
             conditions.add(new ConditionBuilder()
                     .withType(CONDITION_TYPE)
