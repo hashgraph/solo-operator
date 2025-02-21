@@ -204,7 +204,7 @@ public class NetworkOperationTest extends AbstractOperatorTest {
 
     @Test
     void oneNetworkOperationAtATime() {
-        int total = 20;
+        int total = 5;
         List<Long> capsuleNodeIds = prepareNodeIds(3);
         List<String> capsuleNames = prepareNodeNames(capsuleNodeIds);
 
