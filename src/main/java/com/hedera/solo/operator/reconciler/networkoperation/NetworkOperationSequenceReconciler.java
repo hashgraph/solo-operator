@@ -335,7 +335,7 @@ public class NetworkOperationSequenceReconciler
      */
     @Override
     public DeleteControl cleanup(NetworkOperation resource, Context<NetworkOperation> context) {
-        log.error("Deleting the resource: %s/%s "
+        log.info("Deleting the resource: %s/%s "
                 .formatted(
                         resource.getMetadata().getNamespace(),
                         resource.getMetadata().getName()));
