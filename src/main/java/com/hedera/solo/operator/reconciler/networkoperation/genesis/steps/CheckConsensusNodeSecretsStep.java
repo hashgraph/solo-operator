@@ -84,7 +84,9 @@ public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOpera
                     .build());
 
             createOrUpdateEvent(
-                    resource, context, new ProcessorException("Secrets validation failed for consensus capsules"));
+                    resource,
+                    context,
+                    new IllegalArgumentException("Secrets validation failed for consensus capsules"));
         } else {
             conditions.add(new ConditionBuilder()
                     .withType(CONDITION_TYPE)
