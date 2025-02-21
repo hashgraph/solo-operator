@@ -150,10 +150,11 @@ public class ConsensusCapsuleReconciler
     public ErrorStatusUpdateControl<ConsensusCapsule> updateErrorStatus(
             final ConsensusCapsule capsule, final Context<ConsensusCapsule> context, final Exception e) {
         log.error(
-                "Consensus Capsule - Error in reconciliation: %s/%s"
+                "Error in reconciliation '%s/%s': %s"
                         .formatted(
                                 capsule.getMetadata().getNamespace(),
-                                capsule.getMetadata().getName()),
+                                capsule.getMetadata().getName(),
+                                e.getMessage()),
                 e);
         createOrUpdateEvent(capsule, context, e);
         return ErrorStatusUpdateControl.noStatusUpdate();

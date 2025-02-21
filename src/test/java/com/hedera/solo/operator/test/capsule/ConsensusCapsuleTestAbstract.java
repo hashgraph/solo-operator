@@ -419,7 +419,8 @@ public abstract class ConsensusCapsuleTestAbstract {
                         NetworkOperation netCheck = kubernetesClient
                                 .resources(NetworkOperation.class)
                                 .inNamespace(namespace)
-                                .withName("%d-network-check".formatted(i))
+                                .withName("network-check-%02d"
+                                        .formatted(i)) // padded with 0 so that it can be ordered by name
                                 .get();
                         assertThat(netCheck).isNotNull();
                         assertThat(netCheck.getStatus()).isNotNull();
