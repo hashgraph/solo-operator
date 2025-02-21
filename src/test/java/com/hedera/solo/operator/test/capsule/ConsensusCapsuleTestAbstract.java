@@ -7,6 +7,9 @@ import static com.hedera.solo.operator.reconciler.common.Constants.COMPONENT_CON
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GOSSIP;
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GRPC_TLS;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_APP;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_COMPONENT;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_MANAGED_BY;
+import static com.hedera.solo.operator.reconciler.common.Constants.SOLO_OPERATOR;
 import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
 import static com.hedera.solo.operator.test.fixtures.coredns.ConfigureCoredns.configureCoredns;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
@@ -260,7 +263,12 @@ public abstract class ConsensusCapsuleTestAbstract {
 
         return edit(new ConsensusCapsule())
                 .with(ResourceLoader::withResources)
-                .with(metadata -> metadata.editMetadata().withName(node.name()).withNamespace(namespace))
+                .with(metadata -> metadata.editMetadata()
+                        .withName(node.name())
+                        .withNamespace(namespace)
+                        .withLabels(Map.of(
+                                LABEL_K8S_MANAGED_BY, SOLO_OPERATOR,
+                                LABEL_K8S_COMPONENT, COMPONENT_CONSENSUS_NODE)))
                 .with(spec -> spec.editSpec()
                         .withPodProperties(consensusPod)
                         .withOrbit(orbit)
@@ -347,6 +355,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .withNewMetadata()
                 .withName("network-genesis")
                 .withNamespace(namespace)
+                .withLabels(Map.of(LABEL_K8S_MANAGED_BY, SOLO_OPERATOR))
                 .endMetadata()
                 .withNewSpec()
                 .withOrbit(orbit)
@@ -370,6 +379,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                     .withNewMetadata()
                     .withName("network-check-%02d".formatted(i)) // padded with 0 so that it can be ordered by name
                     .withNamespace(namespace)
+                    .withLabels(Map.of(LABEL_K8S_MANAGED_BY, SOLO_OPERATOR))
                     .endMetadata()
                     .withNewSpec()
                     .withOrbit(orbit)

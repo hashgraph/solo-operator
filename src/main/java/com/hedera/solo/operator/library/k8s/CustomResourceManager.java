@@ -138,11 +138,7 @@ public class CustomResourceManager {
     }
 
     public List<NetworkOperation> networkOperations() {
-        return networkOperations(
-                client.getNamespace(),
-                Map.of(
-                        LABEL_K8S_MANAGED_BY, SOLO_OPERATOR,
-                        LABEL_K8S_COMPONENT, COMPONENT_CONSENSUS_NODE));
+        return networkOperations(null);
     }
 
     public List<NetworkOperation> networkOperations(final String namespace) {
@@ -150,11 +146,19 @@ public class CustomResourceManager {
     }
 
     public List<NetworkOperation> networkOperations(final String namespace, Map<String, String> labels) {
-        final List<Resource<NetworkOperation>> resources = client.resources(NetworkOperation.class)
-                .inNamespace(namespace)
-                .withLabels(labels)
-                .resources()
-                .toList();
+        final List<Resource<NetworkOperation>> resources;
+        if (namespace == null) {
+            resources = client.resources(NetworkOperation.class)
+                    .withLabels(labels)
+                    .resources()
+                    .toList();
+        } else {
+            resources = client.resources(NetworkOperation.class)
+                    .inNamespace(namespace)
+                    .withLabels(labels)
+                    .resources()
+                    .toList();
+        }
 
         // resources to PodList
         final List<NetworkOperation> list = new ArrayList<>();

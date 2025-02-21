@@ -256,6 +256,7 @@ public class NetworkOperationSequenceReconciler
 
     /** Prepare and return the list of active resources that needs to be considered for sequencing. */
     public static List<NetworkOperation> activeResources() {
+        // FIXME: should we fetch all network-operation CRs or only in the current namespace?
         List<NetworkOperation> items = customResourceManager.networkOperations();
         List<NetworkOperation> active = new ArrayList<>();
         for (NetworkOperation item : items) {
