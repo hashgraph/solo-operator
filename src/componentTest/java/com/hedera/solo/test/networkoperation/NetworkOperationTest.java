@@ -23,7 +23,6 @@ import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.secrets.Secr
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
-import com.hedera.solo.operator.reconciler.networkoperation.NetworkOperationSequenceReconciler;
 import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckProcessor;
 import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckTask;
 import com.hedera.solo.operator.reconciler.networkoperation.genesis.NetworkGenesisProcessor;
@@ -416,10 +415,7 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                                 .withName(name)
                                 .addToLabels(labels)
                                 .addToLabels("no-update", String.valueOf(noUpdate)))
-                        .with(spec -> spec.editSpec()
-                                .withMode(NetworkGenesis)
-                                .withVersion(NetworkOperationSequenceReconciler.VERSION)
-                                .withOrbit(orbitName))
+                        .with(spec -> spec.editSpec().withMode(NetworkGenesis).withOrbit(orbitName))
                         .build());
     }
 

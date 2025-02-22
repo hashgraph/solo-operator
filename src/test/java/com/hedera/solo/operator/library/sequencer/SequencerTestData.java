@@ -18,7 +18,6 @@ public final class SequencerTestData {
             .withCreationTimestamp("2025-01-28T00:00:00Z")
             .endMetadata()
             .withNewSpec()
-            .withVersion("v2")
             .withMode(NetworkOperationSpec.Mode.NetworkGenesis)
             .endSpec()
             .withNewStatus()
@@ -34,7 +33,6 @@ public final class SequencerTestData {
             .endMetadata()
             .withNewSpec()
             .withMode(NetworkOperationSpec.Mode.NetworkCheck)
-            .withVersion("v2")
             .endSpec()
             .build();
     public static final NetworkOperation no3 = new NetworkOperationBuilder()
@@ -46,7 +44,6 @@ public final class SequencerTestData {
             .endMetadata()
             .withNewSpec()
             .withMode(NetworkOperationSpec.Mode.NetworkCheck)
-            .withVersion("v2")
             .endSpec()
             .build();
     public static final NetworkOperation no4 = new NetworkOperationBuilder()
@@ -58,7 +55,6 @@ public final class SequencerTestData {
             .endMetadata()
             .withNewSpec()
             .withMode(NetworkOperationSpec.Mode.NetworkCheck)
-            .withVersion("v2")
             .endSpec()
             .build();
 }

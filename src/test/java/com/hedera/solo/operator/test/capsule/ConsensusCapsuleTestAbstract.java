@@ -35,7 +35,6 @@ import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podpropertie
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.VolumesBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.secrets.SecretResources;
 import com.hedera.solo.operator.reconciler.common.Metadata;
-import com.hedera.solo.operator.reconciler.networkoperation.NetworkOperationSequenceReconciler;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
 import com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkCheckAddressBook;
@@ -359,7 +358,6 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .endMetadata()
                 .withNewSpec()
                 .withOrbit(orbit)
-                .withVersion(NetworkOperationSequenceReconciler.VERSION)
                 .withMode(NetworkOperationSpec.Mode.NetworkGenesis)
                 .endSpec()
                 .withNewStatus()

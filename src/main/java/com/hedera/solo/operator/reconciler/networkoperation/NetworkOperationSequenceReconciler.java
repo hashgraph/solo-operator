@@ -48,7 +48,6 @@ import org.jboss.logging.Logger;
 @ControllerConfiguration(name = "network-operation-v2")
 public class NetworkOperationSequenceReconciler
         implements ErrorStatusHandler<NetworkOperation>, Reconciler<NetworkOperation>, Cleaner<NetworkOperation> {
-    public static final String VERSION = "v2";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
     private static final Sequencer<NetworkOperation> sequencer =
             new Sequencer<>(NetworkOperationSequenceReconciler::activeResources);
@@ -129,18 +128,6 @@ public class NetworkOperationSequenceReconciler
     @Override
     public UpdateControl<NetworkOperation> reconcile(
             final NetworkOperation resource, final Context<NetworkOperation> context) throws Exception {
-        // if the version is not v2, then skip
-        if (!resource.getSpec().getVersion().equals(VERSION)) {
-            log.infof(
-                    " '%s/%s' [created: %s, version: %s, uuid: %s]: SKIPPED",
-                    resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName(),
-                    resource.getMetadata().getCreationTimestamp(),
-                    resource.getSpec().getVersion(),
-                    resource.getMetadata().getName());
-            return UpdateControl.noUpdate();
-        }
-
         // if it hasn't been initialized yet, then initialize and reschedule so that initialized resource is persisted.
         // note, it initializes a new status object with consensus capsule names and phase as "Pending"
         if (resource.getStatus() == null

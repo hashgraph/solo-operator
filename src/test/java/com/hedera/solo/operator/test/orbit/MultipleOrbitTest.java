@@ -26,7 +26,6 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.secrets.SecretResources;
 import com.hedera.solo.operator.reconciler.common.Metadata;
-import com.hedera.solo.operator.reconciler.networkoperation.NetworkOperationSequenceReconciler;
 import com.hedera.solo.operator.test.capsule.ConsensusCapsuleTestAbstract;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
 import com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkClientFactory;
@@ -321,7 +320,6 @@ public class MultipleOrbitTest {
                                 .withNamespace(orbit.getMetadata().getName()))
                         .with(spec -> spec.editSpec()
                                 .withMode(NetworkOperationSpec.Mode.NetworkGenesis)
-                                .withVersion(NetworkOperationSequenceReconciler.VERSION)
                                 .withOrbit(orbit.getMetadata().getName()))
                         .build())
                 .create();

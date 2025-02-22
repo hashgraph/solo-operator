@@ -2,8 +2,6 @@
 
 package com.hedera.solo.operator.library.sequencer;
 
-import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
-
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import io.fabric8.kubernetes.api.model.KubernetesResourceList;
@@ -15,11 +13,14 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import jakarta.inject.Inject;
+import org.jboss.logging.Logger;
+
 import java.time.Duration;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
-import org.jboss.logging.Logger;
+
+import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 
 // NOTE: This class shouldn't implement Reconciler<NetworkOperation> interface as it shouldn't be picked up by the
 // operator as a reconciler during test
@@ -59,17 +60,6 @@ public class SequenceReconcilerMock implements Cleaner<NetworkOperation> {
 
     public UpdateControl<NetworkOperation> reconcile(
             final NetworkOperation resource, final Context<NetworkOperation> context) throws Exception {
-        if (!resource.getSpec().getVersion().equals("v2")) {
-            log.infof(
-                    "%s: Skipping '%s/%s' [created: %s, version: %s]",
-                    getClass().getSimpleName(),
-                    resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName(),
-                    resource.getMetadata().getCreationTimestamp(),
-                    resource.getSpec().getVersion());
-            return UpdateControl.noUpdate();
-        }
-
         // is this resource done, then return
         if (isDone(resource)) {
             log.infof(
@@ -104,7 +94,9 @@ public class SequenceReconcilerMock implements Cleaner<NetworkOperation> {
         return UpdateControl.patchStatus(processed).rescheduleAfter(response.reconcileDelay());
     }
 
-    /** Prepare and return the list of active resources that needs to be considered for sequencing. */
+    /**
+     * Prepare and return the list of active resources that needs to be considered for sequencing.
+     */
     public static List<NetworkOperation> activeResources() {
         MixedOperation<NetworkOperation, KubernetesResourceList<NetworkOperation>, Resource<NetworkOperation>>
                 resources = client.resources(NetworkOperation.class);

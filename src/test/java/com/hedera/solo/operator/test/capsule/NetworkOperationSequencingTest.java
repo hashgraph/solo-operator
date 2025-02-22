@@ -13,7 +13,6 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationBuilder;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
-import com.hedera.solo.operator.reconciler.networkoperation.NetworkOperationSequenceReconciler;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.quarkus.test.junit.QuarkusTest;
 import java.util.List;
@@ -53,7 +52,6 @@ public class NetworkOperationSequencingTest extends ConsensusCapsuleTestAbstract
                 .endMetadata()
                 .withNewSpec()
                 .withOrbit(orbit)
-                .withVersion(NetworkOperationSequenceReconciler.VERSION)
                 .withMode(NetworkOperationSpec.Mode.NetworkGenesis)
                 .endSpec()
                 .withNewStatus()
@@ -77,7 +75,6 @@ public class NetworkOperationSequencingTest extends ConsensusCapsuleTestAbstract
                     .endMetadata()
                     .withNewSpec()
                     .withOrbit(orbit)
-                    .withVersion(NetworkOperationSequenceReconciler.VERSION)
                     .withMode(NetworkOperationSpec.Mode.NetworkCheck)
                     .endSpec()
                     .withNewStatus()
