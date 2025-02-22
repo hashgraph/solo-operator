@@ -13,8 +13,11 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 
 class SequencerCache<T extends HasMetadata> {
+    // cache of items per namespace
     private final Map<String, List<Sequenced>> namespaceCache = new HashMap<>();
-    private Sequenced currentlyExecuting;
+
+    // currently executing item per namespace
+    private final Map<String, Sequenced> currentlyExecuting = new HashMap<>();
 
     /**
      * Add the item to the cache if it does not already exist or if already processed
@@ -62,9 +65,12 @@ class SequencerCache<T extends HasMetadata> {
                 namespaceCache.remove(namespace);
             }
 
-            if (currentlyExecuting != null
-                    && currentlyExecuting.uid().equals(resource.getMetadata().getUid())) {
-                currentlyExecuting = null;
+            if (currentlyExecuting.get(namespace) != null
+                    && currentlyExecuting
+                            .get(namespace)
+                            .uid()
+                            .equals(resource.getMetadata().getUid())) {
+                currentlyExecuting.remove(namespace);
             }
 
             return item;
@@ -90,8 +96,12 @@ class SequencerCache<T extends HasMetadata> {
 
         // this solves the race condition where we have two resources crated at the same time but one is being processed
         // first
-        if (currentlyExecuting != null
-                && !currentlyExecuting.uid().equals(resource.getMetadata().getUid())) {
+        final String namespace = resource.getMetadata().getNamespace();
+        if (currentlyExecuting.get(namespace) != null
+                && !currentlyExecuting
+                        .get(namespace)
+                        .uid()
+                        .equals(resource.getMetadata().getUid())) {
             return false;
         }
 
@@ -173,10 +183,12 @@ class SequencerCache<T extends HasMetadata> {
         }
 
         // if currentlyExecuting is not active anymore, reset it
-        if (currentlyExecuting != null
-                && activeItems.stream()
-                        .noneMatch(active -> active.getMetadata().getUid().equals(currentlyExecuting.uid()))) {
-            currentlyExecuting = null;
+        for (String namespace : currentlyExecuting.keySet()) {
+            if (activeItems.stream().noneMatch(active -> active.getMetadata()
+                    .getUid()
+                    .equals(currentlyExecuting.get(namespace).uid()))) {
+                currentlyExecuting.remove(namespace);
+            }
         }
 
         // remove empty namespace cache list
@@ -184,19 +196,23 @@ class SequencerCache<T extends HasMetadata> {
     }
 
     synchronized void markAsExecuting(T resource) {
-        if (currentlyExecuting != null) {
-            if (currentlyExecuting.uid().equals(resource.getMetadata().getUid())) {
+        final String namespace = resource.getMetadata().getNamespace();
+        if (currentlyExecuting.get(namespace) != null) {
+            if (currentlyExecuting
+                    .get(namespace)
+                    .uid()
+                    .equals(resource.getMetadata().getUid())) {
                 return;
             }
 
             throw new SequencerException("Resource is already executing");
         }
 
-        this.currentlyExecuting = Sequenced.from(resource);
+        this.currentlyExecuting.put(namespace, Sequenced.from(resource));
     }
 
-    synchronized Sequenced getCurrentlyExecuting() {
-        return currentlyExecuting;
+    synchronized Sequenced getCurrentlyExecuting(String namespace) {
+        return this.currentlyExecuting.get(namespace);
     }
 
     /**

@@ -171,6 +171,19 @@ class SequencerCacheTest {
     }
 
     @Test
+    void getCurrentlyExecuting() {
+        final SequencerCache<NetworkOperation> cache = new SequencerCache<>();
+        assertThat(cache.getCurrentlyExecuting("invalid")).isNull();
+
+        cache.addItem(no1);
+        assertThat(cache.getCurrentlyExecuting(orbit1)).isNull();
+        cache.markAsExecuting(no1);
+        assertThat(cache.getCurrentlyExecuting(orbit1)).isNotNull();
+        assertThat(cache.getCurrentlyExecuting(orbit1).uid())
+                .isEqualTo(no1.getMetadata().getUid());
+    }
+
+    @Test
     void prune() throws InterruptedException {
         final SequencerCache<NetworkOperation> cache = new SequencerCache<>();
 
