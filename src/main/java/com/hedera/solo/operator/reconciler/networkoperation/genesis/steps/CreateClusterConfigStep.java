@@ -114,7 +114,13 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
             return edit(status).with(s -> s.addToConditions(condition)).build();
         } catch (Exception ex) {
             if (ex instanceof ProcessorException && ex.getMessage().contains(POD_IPS_NOT_FOUND)) {
-                log.warnf("All pod IPs are not available yet; re-attempting during next reconcile loop", ex);
+                log.warnf(
+                        "%s:%s: pod IPs are not available yet for consensus nodes %s; re-attempting during next reconcile loop"
+                                .formatted(
+                                        resource.getMetadata().getNamespace(),
+                                        resource.getMetadata().getName(),
+                                        resource.getStatus().getConsensusCapsules()),
+                        ex);
                 return status;
             }
 
