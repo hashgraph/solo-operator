@@ -16,9 +16,12 @@ import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckPr
 import com.hedera.solo.operator.reconciler.networkoperation.genesis.NetworkGenesisProcessor;
 import com.hedera.solo.operator.reconciler.networkoperation.node.NodeOperationProcessor;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.NetworkUpgradeProcessor;
+import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.api.model.KubernetesResourceList;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.dsl.FilterWatchListDeletable;
 import io.fabric8.kubernetes.client.dsl.MixedOperation;
+import io.fabric8.kubernetes.client.dsl.NonNamespaceOperation;
 import io.fabric8.kubernetes.client.dsl.Resource;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
@@ -43,6 +46,26 @@ class NetworkOperationSequenceReconcilerTest {
             final KubernetesResourceList<NetworkOperation> list = Mockito.mock(KubernetesResourceList.class);
             Mockito.when(mixedOperation.list()).thenReturn(list);
             Mockito.when(list.getItems()).thenReturn(List.of(no1, no2, no3));
+            return mixedOperation;
+        });
+
+        Mockito.when(client.resources(Event.class)).thenAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            final MixedOperation<Event, KubernetesResourceList<Event>, Resource<Event>> mixedOperation =
+                    Mockito.mock(MixedOperation.class);
+            Mockito.when(mixedOperation.inNamespace(Mockito.anyString())).thenAnswer(in2 -> {
+                @SuppressWarnings("unchecked")
+                final NonNamespaceOperation<Event, KubernetesResourceList<Event>, Resource<Event>> nso =
+                        Mockito.mock(NonNamespaceOperation.class);
+                Mockito.when(nso.withInvolvedObject(Mockito.any())).thenAnswer(in3 -> {
+                    @SuppressWarnings("unchecked")
+                    final FilterWatchListDeletable<Event, KubernetesResourceList<Event>, Resource<Event>> fwd =
+                            Mockito.mock(FilterWatchListDeletable.class);
+                    Mockito.when(fwd.delete()).thenReturn(null);
+                    return fwd;
+                });
+                return nso;
+            });
             return mixedOperation;
         });
 
@@ -119,8 +142,12 @@ class NetworkOperationSequenceReconcilerTest {
     @Test
     void cleanup() {
         final NetworkOperationSequenceReconciler reconciler = prepareReconciler();
+
+        final KubernetesClient client = mockKubernetesClient();
         @SuppressWarnings("unchecked")
         final Context<NetworkOperation> context = Mockito.mock(Context.class);
+        Mockito.when(context.getClient()).thenReturn(client);
+
         DeleteControl resp = reconciler.cleanup(no1, context);
         assertThat(resp).isNotNull();
         assertThat(resp.isRemoveFinalizer()).isTrue();

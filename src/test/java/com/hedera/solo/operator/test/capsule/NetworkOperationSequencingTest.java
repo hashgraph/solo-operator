@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
-public class NetworkOperationSequenceReconcilerTest extends ConsensusCapsuleTestAbstract {
+public class NetworkOperationSequencingTest extends ConsensusCapsuleTestAbstract {
 
     @Override
     @Test
