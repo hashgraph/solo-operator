@@ -4,8 +4,12 @@ package com.hedera.solo.operator.test.orbit;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.library.k8s.KubeletConfig.clusterDomain;
+import static com.hedera.solo.operator.reconciler.common.Constants.COMPONENT_CONSENSUS_NODE;
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GOSSIP;
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GRPC_TLS;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_COMPONENT;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_MANAGED_BY;
+import static com.hedera.solo.operator.reconciler.common.Constants.SOLO_OPERATOR;
 import static com.hedera.solo.operator.reconciler.common.Metadata.prepareNodeName;
 import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
 import static com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkCheckAddressBook.checkAddressBook;
@@ -22,6 +26,7 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.secrets.SecretResources;
 import com.hedera.solo.operator.reconciler.common.Metadata;
+import com.hedera.solo.operator.reconciler.networkoperation.NetworkOperationSequenceReconciler;
 import com.hedera.solo.operator.test.capsule.ConsensusCapsuleTestAbstract;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
 import com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkClientFactory;
@@ -273,7 +278,12 @@ public class MultipleOrbitTest {
     ConsensusCapsule createCapsule(final Orbit orbit, final String name, final long id) {
         String namespace = orbit.getMetadata().getName();
         ConsensusCapsule capsule = edit(new ConsensusCapsule())
-                .with(metadata -> metadata.editMetadata().withName(name).withNamespace(namespace))
+                .with(metadata -> metadata.editMetadata()
+                        .withName(name)
+                        .withNamespace(namespace)
+                        .withLabels(Map.of(
+                                LABEL_K8S_MANAGED_BY, SOLO_OPERATOR,
+                                LABEL_K8S_COMPONENT, COMPONENT_CONSENSUS_NODE)))
                 .with(spec -> spec.editSpec()
                         .withOrbit(orbit.getMetadata().getName())
                         .withAccountId("0.0." + (id + 3))
@@ -307,9 +317,11 @@ public class MultipleOrbitTest {
                 .resource(edit(new NetworkOperation())
                         .with(metadata -> metadata.editMetadata()
                                 .withName("net-op")
+                                .withLabels(Map.of(LABEL_K8S_MANAGED_BY, SOLO_OPERATOR))
                                 .withNamespace(orbit.getMetadata().getName()))
                         .with(spec -> spec.editSpec()
-                                .withMode(NetworkOperationSpec.Mode.FirstInitialization)
+                                .withMode(NetworkOperationSpec.Mode.NetworkGenesis)
+                                .withVersion(NetworkOperationSequenceReconciler.VERSION)
                                 .withOrbit(orbit.getMetadata().getName()))
                         .build())
                 .create();
