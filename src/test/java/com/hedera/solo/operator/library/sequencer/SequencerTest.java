@@ -95,7 +95,7 @@ class SequencerTest {
     void checkNext() {
         SequencerResponse<NetworkOperation> response = sequencer.checkNext(new SequencerRequest<>(no1));
         assertThat(response.firstInQueue()).isTrue();
-        assertThat(response.reconcileDelay()).isEqualTo(Duration.ZERO);
+        assertThat(response.reconcileDelay()).isEqualTo(Sequencer.DEFAULT_RECONCILIATION_DELAY);
 
         response = sequencer.checkNext(new SequencerRequest<>(no3));
         assertThat(response.firstInQueue()).isFalse();
