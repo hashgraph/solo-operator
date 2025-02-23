@@ -2,6 +2,11 @@
 
 package com.hedera.solo.operator.reconciler.networkoperation;
 
+import static com.hedera.solo.operator.library.sequencer.SequencerTestData.no1;
+import static com.hedera.solo.operator.library.sequencer.SequencerTestData.no2;
+import static com.hedera.solo.operator.library.sequencer.SequencerTestData.no3;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+
 import com.hedera.solo.operator.library.k8s.CustomResourceManager;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleBuilder;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
@@ -20,16 +25,10 @@ import io.fabric8.kubernetes.client.dsl.Resource;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
+import java.util.List;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
-
-import java.util.List;
-
-import static com.hedera.solo.operator.library.sequencer.SequencerTestData.no1;
-import static com.hedera.solo.operator.library.sequencer.SequencerTestData.no2;
-import static com.hedera.solo.operator.library.sequencer.SequencerTestData.no3;
-import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
 class NetworkOperationSequenceReconcilerTest {
 
@@ -39,22 +38,27 @@ class NetworkOperationSequenceReconcilerTest {
 
         // return a list of network operations
         Mockito.when(client.resources(NetworkOperation.class)).thenAnswer(invocation -> {
-            @SuppressWarnings("unchecked") final MixedOperation<NetworkOperation, KubernetesResourceList<NetworkOperation>, Resource<NetworkOperation>>
+            @SuppressWarnings("unchecked")
+            final MixedOperation<NetworkOperation, KubernetesResourceList<NetworkOperation>, Resource<NetworkOperation>>
                     mixedOperation = Mockito.mock(MixedOperation.class);
-            @SuppressWarnings("unchecked") final KubernetesResourceList<NetworkOperation> list = Mockito.mock(KubernetesResourceList.class);
+            @SuppressWarnings("unchecked")
+            final KubernetesResourceList<NetworkOperation> list = Mockito.mock(KubernetesResourceList.class);
             Mockito.when(mixedOperation.list()).thenReturn(list);
             Mockito.when(list.getItems()).thenReturn(List.of(no1, no2, no3));
             return mixedOperation;
         });
 
         Mockito.when(client.resources(Event.class)).thenAnswer(invocation -> {
-            @SuppressWarnings("unchecked") final MixedOperation<Event, KubernetesResourceList<Event>, Resource<Event>> mixedOperation =
+            @SuppressWarnings("unchecked")
+            final MixedOperation<Event, KubernetesResourceList<Event>, Resource<Event>> mixedOperation =
                     Mockito.mock(MixedOperation.class);
             Mockito.when(mixedOperation.inNamespace(Mockito.anyString())).thenAnswer(in2 -> {
-                @SuppressWarnings("unchecked") final NonNamespaceOperation<Event, KubernetesResourceList<Event>, Resource<Event>> nso =
+                @SuppressWarnings("unchecked")
+                final NonNamespaceOperation<Event, KubernetesResourceList<Event>, Resource<Event>> nso =
                         Mockito.mock(NonNamespaceOperation.class);
                 Mockito.when(nso.withInvolvedObject(Mockito.any())).thenAnswer(in3 -> {
-                    @SuppressWarnings("unchecked") final FilterWatchListDeletable<Event, KubernetesResourceList<Event>, Resource<Event>> fwd =
+                    @SuppressWarnings("unchecked")
+                    final FilterWatchListDeletable<Event, KubernetesResourceList<Event>, Resource<Event>> fwd =
                             Mockito.mock(FilterWatchListDeletable.class);
                     Mockito.when(fwd.delete()).thenReturn(null);
                     return fwd;
@@ -104,7 +108,8 @@ class NetworkOperationSequenceReconcilerTest {
     @Test
     void reconcile() throws Exception {
         final NetworkOperationSequenceReconciler reconciler = prepareReconciler();
-        @SuppressWarnings("unchecked") final Context<NetworkOperation> context = Mockito.mock(Context.class);
+        @SuppressWarnings("unchecked")
+        final Context<NetworkOperation> context = Mockito.mock(Context.class);
 
         // reconcile the network operations
         UpdateControl<NetworkOperation> resp = reconciler.reconcile(no1, context);
@@ -132,7 +137,8 @@ class NetworkOperationSequenceReconcilerTest {
         final NetworkOperationSequenceReconciler reconciler = prepareReconciler();
 
         final KubernetesClient client = mockKubernetesClient();
-        @SuppressWarnings("unchecked") final Context<NetworkOperation> context = Mockito.mock(Context.class);
+        @SuppressWarnings("unchecked")
+        final Context<NetworkOperation> context = Mockito.mock(Context.class);
         Mockito.when(context.getClient()).thenReturn(client);
 
         DeleteControl resp = reconciler.cleanup(no1, context);
