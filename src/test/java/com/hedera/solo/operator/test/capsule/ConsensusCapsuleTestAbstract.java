@@ -364,6 +364,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .withPhase(NetworkOperationStatus.Phase.Pending)
                 .endStatus()
                 .build();
+
         kubernetesClient.resource(networkGenesis).create();
 
         await().atMost(600, TimeUnit.SECONDS)
@@ -387,25 +388,37 @@ public abstract class ConsensusCapsuleTestAbstract {
                     assertThat(netInit).isNotNull();
                     assertThat(netInit.getStatus()).isNotNull();
                     assertThat(netInit.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Succeeded);
-
-                    for (ConsensusCapsule consensusCapsule : consensusCapsules) {
-                        String name = consensusCapsule.getMetadata().getName();
-                        ConsensusCapsule capsule =
-                                kubernetesClient.resource(consensusCapsule).get();
-                        assertThat(capsule).isNotNull();
-
-                        Pod pod = kubernetesClient
-                                .resources(Pod.class)
-                                .inNamespace(namespace)
-                                .withName(name + "-pod")
-                                .get();
-                        assertThat(pod).isNotNull();
-                        assertThat(pod.getStatus()).isNotNull();
-                        assertThat(pod.getStatus().getPhase()).isEqualTo("Running");
-
-                        assertThat(capsule.getStatus().getPhase()).isEqualTo(ConsensusCapsuleStatus.Phase.Running);
-                    }
                 });
+
+        await().atMost(300, TimeUnit.SECONDS).untilAsserted(() -> {
+            NetworkOperation netInit = kubernetesClient
+                    .resources(NetworkOperation.class)
+                    .inNamespace(namespace)
+                    .withName("network-genesis")
+                    .get();
+            assertThat(netInit).isNotNull();
+            assertThat(netInit.getStatus()).isNotNull();
+            assertThat(netInit.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Succeeded);
+        });
+
+        // at this point all consensus capsules should be running
+        for (ConsensusCapsule consensusCapsule : consensusCapsules) {
+            String name = consensusCapsule.getMetadata().getName();
+            ConsensusCapsule capsule =
+                    kubernetesClient.resource(consensusCapsule).get();
+            assertThat(capsule).isNotNull();
+
+            Pod pod = kubernetesClient
+                    .resources(Pod.class)
+                    .inNamespace(namespace)
+                    .withName(name + "-pod")
+                    .get();
+            assertThat(pod).isNotNull();
+            assertThat(pod.getStatus()).isNotNull();
+            assertThat(pod.getStatus().getPhase()).isEqualTo("Running");
+
+            assertThat(capsule.getStatus().getPhase()).isEqualTo(ConsensusCapsuleStatus.Phase.Running);
+        }
     }
 
     Long[] consensusNodeIds() {
