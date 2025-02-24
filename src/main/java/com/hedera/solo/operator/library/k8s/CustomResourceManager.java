@@ -149,6 +149,7 @@ public class CustomResourceManager {
         final List<Resource<NetworkOperation>> resources;
         if (namespace == null) {
             resources = client.resources(NetworkOperation.class)
+                    .inAnyNamespace()
                     .withLabels(labels)
                     .resources()
                     .toList();
