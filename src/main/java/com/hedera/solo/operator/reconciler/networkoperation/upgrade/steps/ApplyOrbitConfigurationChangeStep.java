@@ -6,6 +6,9 @@ import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
+import com.hedera.solo.operator.model.v1alpha1.Orbit;
+import com.hedera.solo.operator.reconciler.networkoperation.render.NowFrozenOrbit;
+import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 
 /**
@@ -29,8 +32,10 @@ public class ApplyOrbitConfigurationChangeStep implements ProcessorStep<NetworkO
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context)
             throws ProcessorException {
-        // TODO: Implement the logic to apply the orbit level configuration changes
 
-        throw new ProcessorException("Not implemented");
+        KubernetesClient client = context.getClient();
+        NowFrozenOrbit nowFrozen = new NowFrozenOrbit(resource);
+        client.resources(Orbit.class).withName(resource.getSpec().getOrbit()).edit(nowFrozen::update);
+        return status;
     }
 }

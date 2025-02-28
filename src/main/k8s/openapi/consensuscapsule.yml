@@ -130,6 +130,11 @@ components:
         log4j2.xml:
           description: Logging configuration
           type: string
+        nodeProperties:
+          description: node.properties file
+          type: object
+          additionalProperties:
+            type: string
         serviceType:
           description: |
             The type of consensus-node service
