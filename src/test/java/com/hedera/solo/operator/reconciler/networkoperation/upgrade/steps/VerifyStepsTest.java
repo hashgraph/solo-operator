@@ -120,6 +120,7 @@ public class VerifyStepsTest {
         stubsFor(changesets.getEventsStreamUploaderChangeset().getSoftwareVersionSource());
         stubsFor(changesets.getRecordStreamSidecarUploaderChangeset().getSoftwareVersionSource());
         stubsFor(changesets.getRecordStreamUploaderChangeset().getSoftwareVersionSource());
+        stubsFor(changesets.getOtelCollector().getSoftwareVersionSource());
     }
 
     void stubsFor(final SoftwareVersionSource source) {
@@ -196,6 +197,11 @@ public class VerifyStepsTest {
                         .editRecordStreamUploaderChangeset()
                         .withSoftwareVersionSource(
                                 softwareVersionSource("record", "5.0", "windows", "amd64", "hash:5", "hash:6")))
+                .with(otel -> otel.editSpec()
+                        .editNetworkUpgrade()
+                        .editChangesets()
+                        .editOtelCollector()
+                        .withSoftwareVersionSource(softwareVersionSource("otel", "6.0", "windows", "amd64", "hash:7")))
                 .build();
     }
 
@@ -223,13 +229,13 @@ public class VerifyStepsTest {
             final NetworkOperationStatus status,
             final String conditionStatus,
             final ImageRepositoryStatus.Validity validity) {
-        assertThat(status.getConditions().size()).isEqualTo(5);
+        assertThat(status.getConditions().size()).isEqualTo(6);
         assertThat(status.getConditions().stream().map(Condition::getStatus).collect(Collectors.toSet()))
                 .isEqualTo(Set.of(conditionStatus));
         if (Valid.equals(validity)) {
             assertThat(status.getConditions().stream().map(Condition::getMessage))
-                    .allMatch(msg ->
-                            msg.matches(".*localhost:[0-9]+/(consensus|backup|event|record|recordSidecar):sha256:.*"));
+                    .allMatch(msg -> msg.matches(
+                            ".*localhost:[0-9]+/(consensus|backup|event|record|recordSidecar|otel):sha256:.*"));
         }
         Changesets specChangesets =
                 networkOperation.getSpec().getNetworkUpgrade().getChangesets();
@@ -254,6 +260,10 @@ public class VerifyStepsTest {
                 validity,
                 sourceStatus.getRecordStreamUploader(),
                 specChangesets.getRecordStreamUploaderChangeset().getSoftwareVersionSource());
+        match(
+                validity,
+                sourceStatus.getOtelCollector(),
+                specChangesets.getOtelCollector().getSoftwareVersionSource());
     }
 
     void match(
