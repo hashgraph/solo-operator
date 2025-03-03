@@ -35,7 +35,7 @@ public abstract class VerifyLayerHashesAbstract<Spec, Status, Repository> {
 
     protected abstract Status statusCode(final Repository repository, final int statusCode);
 
-    protected abstract Status valid(final Repository repository, final String digest);
+    protected abstract Status valid(final Repository repository, final Spec spec, final String digest);
 
     protected abstract boolean match(final Spec spec, final OCIImageIndex.OCIImageIndexManifest manifest);
 
@@ -120,7 +120,7 @@ public abstract class VerifyLayerHashesAbstract<Spec, Status, Repository> {
                         allExist = allExist && client.layerExists(coordinates, layer);
                     }
                     if (allExist) {
-                        list.add(valid(repository, response.digest));
+                        list.add(valid(repository, spec, response.digest));
                         return list;
                     }
                 }

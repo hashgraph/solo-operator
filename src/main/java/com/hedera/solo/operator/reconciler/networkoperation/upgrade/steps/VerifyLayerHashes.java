@@ -137,44 +137,54 @@ public class VerifyLayerHashes
     @Override
     protected ImageRepositoryStatus exception(final ImageRepository repository, final Exception e) {
         log.info("Exception in verifyLayerHashes", e);
-        return imageRepositoryStatus(repository, Unknown);
+        return imageRepositoryStatus(repository, null, Unknown);
     }
 
     protected ImageRepositoryStatus imageRepositoryStatus(
-            final ImageRepository repository, final ImageRepositoryStatus.Validity validity) {
-        return imageRepositoryStatus(repository, validity, null);
+            final ImageRepository repository,
+            final ImageVerificationSpec spec,
+            final ImageRepositoryStatus.Validity validity) {
+        return imageRepositoryStatus(repository, spec, validity, null);
     }
 
     protected ImageRepositoryStatus imageRepositoryStatus(
-            final ImageRepository repository, final ImageRepositoryStatus.Validity validity, final String digest) {
+            final ImageRepository repository,
+            final ImageVerificationSpec spec,
+            final ImageRepositoryStatus.Validity validity,
+            final String digest) {
         return edit(new ImageRepositoryStatus())
                 .with(builder -> builder.withRepository(repository.getRepository())
                         .withImageName(repository.getImageName())
                         .withImageTag(repository.getImageTag())
                         .withValidity(validity)
-                        .withManifestHash(digest))
+                        .withManifestHash(digest)
+                        .withImageVerificationSpec(spec)
+                        .withImagePullSecrets(repository.getImagePullSecrets())
+                        .withImagePullPolicy(ImageRepositoryStatus.ImagePullPolicy.valueOf(
+                                softwareVersionSource.getImagePullPolicy().getValue())))
                 .build();
     }
 
     @Override
     protected ImageRepositoryStatus invalid(final ImageRepository repository, final ManifestResponse response) {
         log.info("Invalid response for: {}", response.response.uri());
-        return imageRepositoryStatus(repository, Unknown);
+        return imageRepositoryStatus(repository, null, Unknown);
     }
 
     @Override
     protected ImageRepositoryStatus invalid(final ImageRepository repository, final String digest) {
-        return imageRepositoryStatus(repository, digest == null ? Unknown : Invalid, digest);
+        return imageRepositoryStatus(repository, null, digest == null ? Unknown : Invalid, digest);
     }
 
     @Override
     protected ImageRepositoryStatus statusCode(final ImageRepository repository, final int statusCode) {
-        return imageRepositoryStatus(repository, statusCode == 404 ? NotFound : Unknown);
+        return imageRepositoryStatus(repository, null, statusCode == 404 ? NotFound : Unknown);
     }
 
     @Override
-    protected ImageRepositoryStatus valid(final ImageRepository repository, final String digest) {
-        return imageRepositoryStatus(repository, Valid, digest);
+    protected ImageRepositoryStatus valid(
+            final ImageRepository repository, final ImageVerificationSpec spec, final String digest) {
+        return imageRepositoryStatus(repository, spec, Valid, digest);
     }
 
     @Override
