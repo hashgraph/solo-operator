@@ -119,6 +119,14 @@ public class NowFrozenConsensusCapsulesUnitTest {
                         updated,
                         SoftwareSourceStatus::getRecordStreamUploader,
                         Containers::getRecordStreamUploader);
+                maybeMatch(
+                        networkOperation.getStatus().getSoftwareSourceStatus().getOtelCollector(),
+                        initial.getSpec().getPodProperties().getContainers().getOpenTelemetryCollector(),
+                        orNull(() -> updated.getSpec()
+                                .getPodProperties()
+                                .getContainers()
+                                .getOpenTelemetryCollector()
+                                .getSoftwareVersion()));
             } else {
                 assertThat(updated.getSpec()).isEqualTo(initial.getSpec());
             }
@@ -158,8 +166,7 @@ public class NowFrozenConsensusCapsulesUnitTest {
                         .getSoftwareVersion()));
     }
 
-    void maybeMatch(
-            final List<ImageRepositoryStatus> list, final StreamUploader initial, final SoftwareVersion actual) {
+    void maybeMatch(final List<ImageRepositoryStatus> list, final Object initial, final SoftwareVersion actual) {
         if (list != null && initial != null) {
             match(list, actual);
         }
@@ -211,6 +218,11 @@ public class NowFrozenConsensusCapsulesUnitTest {
         streamUploader(containers.getEventsStreamUploader());
         streamUploader(containers.getRecordStreamSidecarFilesUploader());
         streamUploader(containers.getRecordStreamUploader());
+        if (containers.getOpenTelemetryCollector() != null) {
+            if (containers.getOpenTelemetryCollector().getSoftwareVersion() == null) {
+                containers.getOpenTelemetryCollector().setSoftwareVersion(factory.nonNull(SoftwareVersion.class));
+            }
+        }
         return consensusCapsule;
     }
 

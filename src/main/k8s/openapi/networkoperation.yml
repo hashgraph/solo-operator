@@ -56,6 +56,14 @@ components:
                 backupUploaderChangeset:
                   type: object
                   x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploaderChangeset
+                otelCollector:
+                  type: object
+                  required:
+                    - softwareVersionSource
+                  properties:
+                    softwareVersionSource:
+                      type: object
+                      x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersionSource
             workflowStep: # can we find a better name for it?
               description: |
                 Workflow step is handled as below:
@@ -201,6 +209,11 @@ components:
                 type: object
                 x-java-type: com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus
             backupUploader:
+              type: array
+              items:
+                type: object
+                x-java-type: com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus
+            otelCollector:
               type: array
               items:
                 type: object
