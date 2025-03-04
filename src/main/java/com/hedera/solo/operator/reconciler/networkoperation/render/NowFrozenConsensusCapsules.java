@@ -8,6 +8,7 @@ import static com.hedera.solo.operator.library.generic.Nullable.orNull;
 
 import com.hedera.solo.operator.model.commonspec.ConsensusNodeChangeset;
 import com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus;
+import com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector;
 import com.hedera.solo.operator.model.commonspec.SoftwareVersion;
 import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
@@ -30,6 +31,7 @@ public class NowFrozenConsensusCapsules {
     final ImageRepositoryStatus events;
     final ImageRepositoryStatus recordSidecar;
     final ImageRepositoryStatus record;
+    final ImageRepositoryStatus otel;
 
     public NowFrozenConsensusCapsules(final NetworkOperation networkOperation, final NetworkOperationStatus status) {
         this(networkOperation.edit().withStatus(status).build());
@@ -56,6 +58,7 @@ public class NowFrozenConsensusCapsules {
         events = orNull(() -> selected(sourceStatus.getEventsStreamUploader()));
         recordSidecar = orNull(() -> selected(sourceStatus.getRecordStreamSidecarUploader()));
         record = orNull(() -> selected(sourceStatus.getRecordStreamUploader()));
+        otel = orNull(() -> selected(sourceStatus.getOtelCollector()));
     }
 
     public ConsensusCapsule update(final ConsensusCapsule consensusCapsule) {
@@ -92,6 +95,10 @@ public class NowFrozenConsensusCapsules {
                         .editPodProperties()
                         .editContainers()
                         .withRecordStreamUploader(streamUploader(record, containers.getRecordStreamUploader())))
+                .with(builder -> builder.editSpec()
+                        .editPodProperties()
+                        .editContainers()
+                        .withOpenTelemetryCollector(otelCollector(otel, containers.getOpenTelemetryCollector())))
                 .build();
     }
 
@@ -100,6 +107,17 @@ public class NowFrozenConsensusCapsules {
                 .filter(ImageRepositoryStatus::getSelectedForDeployment)
                 .findAny()
                 .orElseThrow();
+    }
+
+    OpenTelemetryCollector otelCollector(
+            final ImageRepositoryStatus status, final OpenTelemetryCollector otelCollector) {
+        if (status == null || otelCollector == null) {
+            return null;
+        }
+        return edit(otelCollector)
+                .with(builder ->
+                        builder.withSoftwareVersion(softwareVersion(status, otelCollector.getSoftwareVersion())))
+                .build();
     }
 
     StreamUploader streamUploader(final ImageRepositoryStatus status, final StreamUploader uploader) {
