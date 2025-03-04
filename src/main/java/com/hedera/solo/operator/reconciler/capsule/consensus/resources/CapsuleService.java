@@ -54,6 +54,7 @@ public class CapsuleService extends CRUDKubernetesDependentResource<Service, Con
                         labels)
                 .withName(validName)
                 .withNamespace(namespace)
+                .withAnnotations(primary.getSpec().getServiceAnnotations())
                 .endMetadata()
                 .editSpec()
                 .addToSelector(Constants.LABEL_NODE_NAME, nodeName)
