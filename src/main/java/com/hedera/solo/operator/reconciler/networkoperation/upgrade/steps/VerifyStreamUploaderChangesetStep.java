@@ -2,6 +2,8 @@
 
 package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
 
+import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyLayerHashes.updateStatus;
+
 import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.commonspec.StreamUploaderChangeset;
@@ -39,16 +41,10 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
  *
  * <p>If a valid image source is found, add a condition to the status indicating the success and the selected source URL
  */
-public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
-    private final String containerName;
-    public static final String SUCCESS_STATUS_MESSAGE =
-            "Stream uploader image verification succeeded for '%s'. Selected for deployment: %s";
-    public static final String FAIL_STATUS_MESSAGE = "Stream uploader image verification failed for '%s'";
-    public static final String IMAGE_VERIFICATION_SUCCESS_MESSAGE = "Image verification succeeded for '%s': %s";
-    public static final String IMAGE_VERIFICATION_FAIL_MESSAGE = "Image verification failed for '%s': %s";
-
+public class VerifyStreamUploaderChangesetStep extends StreamUploaderVerifier
+        implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public VerifyStreamUploaderChangesetStep(String name) {
-        this.containerName = name;
+        super(name);
     }
 
     @Override
@@ -56,8 +52,17 @@ public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkO
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context)
             throws ProcessorException {
         final StreamUploaderChangeset changeset = StreamUploaderUtil.findChangeset(resource, this.containerName);
+        if (changeset == null || changeset.getSoftwareVersionSource() == null) {
+            return status;
+        }
 
-        // FIXME update status
-        return status;
+        return updateStatus(
+                resource,
+                status,
+                context.getClient(),
+                changeset.getSoftwareVersionSource(),
+                this::createCondition,
+                getter(),
+                setter());
     }
 }
