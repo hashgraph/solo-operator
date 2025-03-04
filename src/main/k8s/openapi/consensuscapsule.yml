@@ -144,6 +144,12 @@ components:
             - "LoadBalancer"
             - "NodePort"
           default: "LoadBalancer"
+        serviceAnnotations:
+          description: Annotations for the consensus-node service
+          default: {}
+          type: object
+          additionalProperties:
+            type: string
         podProperties:
           type: object
           required:
