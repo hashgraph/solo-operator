@@ -29,7 +29,11 @@ spec:
   initContainers:
     - name: "init-consensus-node"
       # must use the same image as the consensus-node as we need to copy VERSION file from it
+      # {#if cn.softwareVersion.manifestHash}
+      image: "{cn.softwareVersion.repository}/{cn.softwareVersion.imageName}:{cn.softwareVersion.manifestHash}"
+      # {#else}
       image: "{cn.softwareVersion.repository}/{cn.softwareVersion.imageName}:{cn.softwareVersion.imageTag}"
+      # {/if}
       securityContext: # run as root to be able to set owner and create subdirectories in the mounted volumes (e.g. hostpath)
         runAsUser: 0
         runAsGroup: 0
@@ -113,7 +117,11 @@ spec:
           runInit
   containers:
     - name: "{cn.name}"
+      # {#if cn.softwareVersion.manifestHash}
+      image: "{cn.softwareVersion.repository}/{cn.softwareVersion.imageName}:{cn.softwareVersion.manifestHash}"
+      # {#else}
       image: "{cn.softwareVersion.repository}/{cn.softwareVersion.imageName}:{cn.softwareVersion.imageTag}"
+      # {/if}
       env:
         - name: AUTO_START_CONSENSUS_SERVICE
           value: "false"
@@ -173,7 +181,11 @@ spec:
     # {#if rsu && rsu.enabled}
     # Sidecar: record-stream-uploader
     - name: "{rsu.name}"
+      # {#if rsu.softwareVersion.manifestHash}
+      image: "{rsu.softwareVersion.repository}/{rsu.softwareVersion.imageName}:{rsu.softwareVersion.manifestHash}"
+      # {#else}
       image: "{rsu.softwareVersion.repository}/{rsu.softwareVersion.imageName}:{rsu.softwareVersion.imageTag}"
+      # {/if}
       imagePullPolicy: "{rsu.softwareVersion.imagePullPolicy}"
       command:
         - /usr/bin/env
@@ -242,7 +254,11 @@ spec:
     # {#if rssu && rssu.enabled}
     # Sidecar: record-stream-sidecar-files-uploader
     - name: "{rssu.name}"
+      # {#if rssu.softwareVersion.manifestHash}
+      image: "{rssu.softwareVersion.repository}/{rssu.softwareVersion.imageName}:{rssu.softwareVersion.manifestHash}"
+      # {#else}
       image: "{rssu.softwareVersion.repository}/{rssu.softwareVersion.imageName}:{rssu.softwareVersion.imageTag}"
+      # {/if}
       imagePullPolicy: "{rssu.softwareVersion.imagePullPolicy}"
       command:
         - /usr/bin/env
@@ -309,7 +325,11 @@ spec:
     # {#if esu && esu.enabled}
     # Sidecar: event-stream-uploader
     - name: "{esu.name}"
+      # {#if esu.softwareVersion.manifestHash}
+      image: "{esu.softwareVersion.repository}/{esu.softwareVersion.imageName}:{esu.softwareVersion.manifestHash}"
+      # {#else}
       image: "{esu.softwareVersion.repository}/{esu.softwareVersion.imageName}:{esu.softwareVersion.imageTag}"
+      # {/if}
       imagePullPolicy: "{esu.softwareVersion.imagePullPolicy}"
       command:
         - /usr/bin/env
@@ -373,7 +393,11 @@ spec:
     # {#if bu && bu.enabled}
     # Sidecar: backup-uploader
     - name: "{bu.name}"
+      # {#if bu.softwareVersion.manifestHash}
+      image: "{bu.softwareVersion.repository}/{bu.softwareVersion.imageName}:{bu.softwareVersion.manifestHash}"
+      # {#else}
       image: "{bu.softwareVersion.repository}/{bu.softwareVersion.imageName}:{bu.softwareVersion.imageTag}"
+      # {/if}
       imagePullPolicy: "{bu.softwareVersion.imagePullPolicy}"
       volumeMounts:
         - name: hgcapp-states
@@ -398,7 +422,11 @@ spec:
     #{#if oc && oc.enabled}
     # Sidecar: open-telemetry-collector
     - name: "{oc.name}"
+      # {#if oc.softwareVersion.manifestHash}
+      image: "{oc.softwareVersion.repository}/{oc.softwareVersion.imageName}:{oc.softwareVersion.manifestHash}"
+      # {#else}
       image: "{oc.softwareVersion.repository}/{oc.softwareVersion.imageName}:{oc.softwareVersion.imageTag}"
+      # {/if}
       imagePullPolicy: "{oc.softwareVersion.imagePullPolicy}"
       env:
         - name: OTEL_ORBIT_NAME
