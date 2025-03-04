@@ -83,7 +83,7 @@ class ImageRegistryTest {
         mockStubResponse(port);
 
         try (ImageRegistry registry = new ImageRegistry()) {
-            final ImageCoordinates coordinates = ImageCoordinates.http(imageUri, authJson);
+            final ImageCoordinates coordinates = imageCoordinatesHttp(imageUri, authJson);
             final OCIImageIndex resp = registry.fetchImageIndex(coordinates);
             assertThat(resp).isNotNull();
             assertThat(resp.manifests.length).isGreaterThan(0);
@@ -91,7 +91,7 @@ class ImageRegistryTest {
             // failure scenario
             RecordNotFoundException exception = assertThrows(
                     RecordNotFoundException.class,
-                    () -> registry.fetchImageIndex(ImageCoordinates.http(invalidImageUri, authJson)));
+                    () -> registry.fetchImageIndex(imageCoordinatesHttp(invalidImageUri, authJson)));
             assertThat(exception.getCause()).isInstanceOf(UnexpectedResponseException.class);
             assertThat(((UnexpectedResponseException) exception.getCause()).response.statusCode())
                     .isEqualTo(HTTP_NOT_FOUND);
@@ -108,7 +108,7 @@ class ImageRegistryTest {
         mockStubResponse(port);
 
         try (ImageRegistry registry = new ImageRegistry()) {
-            final ImageCoordinates coordinates = ImageCoordinates.http(imageUri, authJson);
+            final ImageCoordinates coordinates = imageCoordinatesHttp(imageUri, authJson);
             final OCIImageManifest imageManifest = registry.fetchImageManifest(
                     coordinates,
                     ImageVerificationSpec.Os.linux.getValue(),
@@ -120,7 +120,7 @@ class ImageRegistryTest {
             RecordNotFoundException exception = assertThrows(
                     RecordNotFoundException.class,
                     () -> registry.fetchImageManifest(
-                            ImageCoordinates.http(invalidImageUri, authJson),
+                            imageCoordinatesHttp(invalidImageUri, authJson),
                             ImageVerificationSpec.Os.linux.getValue(),
                             ImageVerificationSpec.Architecture.amd64.getValue()));
             assertThat(exception.getCause()).isInstanceOf(UnexpectedResponseException.class);
@@ -138,7 +138,7 @@ class ImageRegistryTest {
         mockStubResponse(port);
 
         try (ImageRegistry registry = new ImageRegistry()) {
-            final ImageCoordinates coordinates = ImageCoordinates.http(imageUri, authJson);
+            final ImageCoordinates coordinates = imageCoordinatesHttp(imageUri, authJson);
             final OCIImageManifest manifest = new OCIImageManifest();
             manifest.layers = new OCIContentDescriptor[] {
                 OCIContentDescriptor.builder()
@@ -163,5 +163,9 @@ class ImageRegistryTest {
             assertThat(registry.hasValidLayers(coordinates, manifest, List.of("hash:1", "hash:2")))
                     .isTrue();
         }
+    }
+
+    ImageCoordinates imageCoordinatesHttp(final String image, final String json) {
+        return ImageCoordinates.from("http", image, json);
     }
 }

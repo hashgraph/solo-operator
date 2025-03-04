@@ -44,7 +44,7 @@ public class ImageRegistry extends DistributionRegistryClient {
     public OCIImageIndex fetchImageIndex(@NonNull final ImageCoordinates coordinates) {
         Objects.requireNonNull(coordinates, "coordinates cannot be null");
         final HttpResponse<byte[]> resp =
-                fetch(coordinates, "manifests/" + coordinates.reference, OCIImageIndex.mediaTypes());
+                fetch(coordinates, "manifests/" + coordinates.reference(), OCIImageIndex.mediaTypes());
         final String mediaType = resp.headers().firstValue("Content-Type").orElse(null);
         OCIManifest manifest = OCIManifest.from(mediaType, resp.body());
         return manifest instanceof OCIImageIndex ? (OCIImageIndex) manifest : null;
@@ -103,9 +103,9 @@ public class ImageRegistry extends DistributionRegistryClient {
         for (OCIImageIndex.OCIImageIndexManifest manifest : index.manifests) {
             if (platform.architecture.equals(manifest.platform.architecture)
                     && platform.os.equals(manifest.platform.os)) {
-                final ImageCoordinates refCoordinates = coordinates.reference(manifest.digest);
+                final ImageCoordinates refCoordinates = coordinates.digest(manifest.digest);
                 final HttpResponse<byte[]> resp =
-                        fetch(refCoordinates, "manifests/" + refCoordinates.reference, OCIImageManifest.mediaTypes());
+                        fetch(refCoordinates, "manifests/" + refCoordinates.reference(), OCIImageManifest.mediaTypes());
                 final String mediaType =
                         resp.headers().firstValue("Content-Type").orElse(null);
                 return (OCIImageManifest) OCIImageManifest.from(mediaType, resp.body());

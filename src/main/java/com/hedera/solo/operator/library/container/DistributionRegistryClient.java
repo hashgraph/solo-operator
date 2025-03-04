@@ -59,15 +59,15 @@ public class DistributionRegistryClient implements AutoCloseable {
      * @param coordinates to image
      * @param mediaTypes are optional and defaults to all recognized manifest media types.
      */
-    public ManifestResponse fetchManifest(
-            @NonNull final ImageCoordinates coordinates, @NonNull final String... mediaTypes)
+    public ManifestResponse fetchManifest(@NonNull final ImageCoordinates coordinates, final String... mediaTypes)
             throws IOException, InterruptedException {
         Objects.requireNonNull(coordinates, "coordinates cannot be null");
-        Objects.requireNonNull(mediaTypes, "mediaTypes cannot be null");
-        return new ManifestResponse(get(
+        return new ManifestResponse(
                 coordinates,
-                "manifests/" + coordinates.reference,
-                mediaTypes.length == 0 ? manifestMediaTypes : mediaTypes));
+                get(
+                        coordinates,
+                        "manifests/" + coordinates.reference(),
+                        mediaTypes == null || mediaTypes.length == 0 ? manifestMediaTypes : mediaTypes));
     }
 
     /**
@@ -138,7 +138,7 @@ public class DistributionRegistryClient implements AutoCloseable {
             HttpResponse<byte[]> response = send(authResponse, uri, function, mediaTypes);
             if (response.statusCode() == HTTP_UNAUTHORIZED) {
                 // Cached token may be expired or registry may enforce single-use token policy.
-                authenticate(coordinates, response);
+                authResponse = Optional.of(authenticate(coordinates, response));
                 response = send(authResponse, uri, function, mediaTypes);
             }
             if (response.statusCode() != HTTP_OK) {
@@ -181,12 +181,25 @@ public class DistributionRegistryClient implements AutoCloseable {
                             .map(e -> URLEncoder.encode(e.getKey(), StandardCharsets.UTF_8) + "="
                                     + URLEncoder.encode(e.getValue(), StandardCharsets.UTF_8))
                             .collect(Collectors.joining("&")));
+            for (String auth : coordinates.auths) {
+                AuthResponse authResponse = authenticate(uri, auth);
+                if (authResponse != null) {
+                    return authResponse;
+                }
+            }
+            return authenticate(uri, null);
+        }
+
+        protected AuthResponse authenticate(final URI uri, final String auth) throws IOException, InterruptedException {
             final HttpRequest.Builder builder = HttpRequest.newBuilder(uri).GET();
-            if (coordinates.auth != null) {
-                builder.header("Authorization", "Basic " + coordinates.auth);
+            if (auth != null) {
+                builder.header("Authorization", "Basic " + auth);
             }
             final HttpResponse<byte[]> tokenResponse =
                     client.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
+            if (auth != null && tokenResponse.statusCode() == HTTP_UNAUTHORIZED) {
+                return null;
+            }
             if (tokenResponse.statusCode() != HTTP_OK) {
                 throw new UnexpectedResponseException(tokenResponse);
             }
