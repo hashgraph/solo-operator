@@ -58,8 +58,8 @@ public class NowFrozenTask extends AbstractProcessorTask<NetworkOperation, Netwo
                 new ReverifyStreamUploaderChangesetStep(Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER),
                 new ReverifyStreamUploaderChangesetStep(Constants.TPL_VAR_EVENT_STREAM_UPLOADER),
                 new ReverifyStreamUploaderChangesetStep(Constants.TPL_VAR_BACKUP_UPLOADER),
-                new ApplyOrbitConfigurationChangeStep(),
-                new ApplyConsensusPodChangeStep());
+                new ApplyConsensusPodChangeStep(),
+                new ApplyOrbitConfigurationChangeStep());
     }
 
     @Override
