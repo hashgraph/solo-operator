@@ -29,6 +29,7 @@ data:
     ln -s ${CONSENSUS_CFG}/settings.txt ${APP_DIR}
     ln -s ${CONSENSUS_CFG}/api-permission.properties ${APP_DIR}/data/config
     ln -s ${CONSENSUS_CFG}/application.properties ${APP_DIR}/data/config
+    ln -s ${CONSENSUS_CFG}/genesis.properties ${APP_DIR}/data/config
     CLUSTER_CFG=/tmp/volumes/cluster-config
     ln -s ${CLUSTER_CFG}/config.txt ${APP_DIR}
     ln -s ${APP_DIR}/data/keys/hedera.{crt,key} ${APP_DIR}
