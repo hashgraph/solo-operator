@@ -59,7 +59,6 @@ public class SequenceReconcilerMock implements Cleaner<NetworkOperation> {
 
     public UpdateControl<NetworkOperation> reconcile(
             final NetworkOperation resource, final Context<NetworkOperation> context) throws Exception {
-
         // is this resource done, then return
         if (isDone(resource)) {
             log.infof(

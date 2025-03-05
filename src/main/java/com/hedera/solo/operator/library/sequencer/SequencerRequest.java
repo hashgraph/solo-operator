@@ -7,11 +7,11 @@ import java.time.Duration;
 
 public record SequencerRequest<T extends HasMetadata>(T resource, Duration reconcileDelay, Duration processingTime) {
     public SequencerRequest(T resource) {
-        this(resource, Duration.ZERO, Duration.ZERO);
+        this(resource, Sequencer.DEFAULT_RECONCILIATION_DELAY, Sequencer.DEFAULT_ESTIMATED_PROCESSING_TIME);
     }
 
     public SequencerRequest(T resource, Duration reconcileDelay) {
-        this(resource, reconcileDelay, Duration.ZERO);
+        this(resource, reconcileDelay, Sequencer.DEFAULT_ESTIMATED_PROCESSING_TIME);
     }
 
     public static <T extends HasMetadata> SequencerRequest<T> of(

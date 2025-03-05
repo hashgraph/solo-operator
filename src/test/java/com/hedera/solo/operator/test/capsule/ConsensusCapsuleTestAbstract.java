@@ -7,6 +7,9 @@ import static com.hedera.solo.operator.reconciler.common.Constants.COMPONENT_CON
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GOSSIP;
 import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GRPC_TLS;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_APP;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_COMPONENT;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_MANAGED_BY;
+import static com.hedera.solo.operator.reconciler.common.Constants.SOLO_OPERATOR;
 import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
 import static com.hedera.solo.operator.test.fixtures.coredns.ConfigureCoredns.configureCoredns;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
@@ -259,7 +262,12 @@ public abstract class ConsensusCapsuleTestAbstract {
 
         return edit(new ConsensusCapsule())
                 .with(ResourceLoader::withResources)
-                .with(metadata -> metadata.editMetadata().withName(node.name()).withNamespace(namespace))
+                .with(metadata -> metadata.editMetadata()
+                        .withName(node.name())
+                        .withNamespace(namespace)
+                        .withLabels(Map.of(
+                                LABEL_K8S_MANAGED_BY, SOLO_OPERATOR,
+                                LABEL_K8S_COMPONENT, COMPONENT_CONSENSUS_NODE)))
                 .with(spec -> spec.editSpec()
                         .withPodProperties(consensusPod)
                         .withOrbit(orbit)
@@ -334,7 +342,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         return list;
     }
 
-    void createNetworkOperation(List<ConsensusCapsule> consensusCapsules) {
+    protected void createNetworkOperation(List<ConsensusCapsule> consensusCapsules) throws InterruptedException {
         for (ConsensusCapsule consensusCapsule : consensusCapsules) {
             String name = consensusCapsule.getMetadata().getName();
             ConsensusCapsule capsule =
@@ -342,53 +350,75 @@ public abstract class ConsensusCapsuleTestAbstract {
             assertThat(capsule).isNotNull();
         }
 
-        final NetworkOperation networkOperation = new NetworkOperationBuilder()
+        final NetworkOperation networkGenesis = new NetworkOperationBuilder()
                 .withNewMetadata()
-                .withName("network-operation")
+                .withName("network-genesis")
                 .withNamespace(namespace)
+                .withLabels(Map.of(LABEL_K8S_MANAGED_BY, SOLO_OPERATOR))
                 .endMetadata()
                 .withNewSpec()
                 .withOrbit(orbit)
-                .withMode(NetworkOperationSpec.Mode.FirstInitialization)
+                .withMode(NetworkOperationSpec.Mode.NetworkGenesis)
                 .endSpec()
                 .withNewStatus()
+                .withPhase(NetworkOperationStatus.Phase.Pending)
                 .endStatus()
                 .build();
-        kubernetesClient.resource(networkOperation).create();
+
+        kubernetesClient.resource(networkGenesis).create();
 
         await().atMost(300, TimeUnit.SECONDS)
                 .failFast(() -> {
-                    NetworkOperation netOp =
-                            kubernetesClient.resource(networkOperation).get();
-                    assertThat(netOp).isNotNull();
-                    if (netOp.getStatus() != null) {
-                        assertThat(netOp.getStatus().getPhase()).isNotEqualTo(NetworkOperationStatus.Phase.Failed);
+                    NetworkOperation netInit = kubernetesClient
+                            .resources(NetworkOperation.class)
+                            .inNamespace(namespace)
+                            .withName("network-genesis")
+                            .get();
+                    assertThat(netInit).isNotNull();
+                    if (netInit.getStatus() != null) {
+                        assertThat(netInit.getStatus().getPhase()).isNotEqualTo(NetworkOperationStatus.Phase.Failed);
                     }
                 })
                 .untilAsserted(() -> {
-                    NetworkOperation netInit =
-                            kubernetesClient.resource(networkOperation).get();
+                    NetworkOperation netInit = kubernetesClient
+                            .resources(NetworkOperation.class)
+                            .inNamespace(namespace)
+                            .withName("network-genesis")
+                            .get();
                     assertThat(netInit).isNotNull();
                     assertThat(netInit.getStatus()).isNotNull();
                     assertThat(netInit.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Succeeded);
-                    for (ConsensusCapsule consensusCapsule : consensusCapsules) {
-                        String name = consensusCapsule.getMetadata().getName();
-                        ConsensusCapsule capsule =
-                                kubernetesClient.resource(consensusCapsule).get();
-                        assertThat(capsule).isNotNull();
-
-                        Pod pod = kubernetesClient
-                                .resources(Pod.class)
-                                .inNamespace(namespace)
-                                .withName(name + "-pod")
-                                .get();
-                        assertThat(pod).isNotNull();
-                        assertThat(pod.getStatus()).isNotNull();
-                        assertThat(pod.getStatus().getPhase()).isEqualTo("Running");
-
-                        assertThat(capsule.getStatus().getPhase()).isEqualTo(ConsensusCapsuleStatus.Phase.Running);
-                    }
                 });
+
+        await().atMost(300, TimeUnit.SECONDS).untilAsserted(() -> {
+            NetworkOperation netInit = kubernetesClient
+                    .resources(NetworkOperation.class)
+                    .inNamespace(namespace)
+                    .withName("network-genesis")
+                    .get();
+            assertThat(netInit).isNotNull();
+            assertThat(netInit.getStatus()).isNotNull();
+            assertThat(netInit.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Succeeded);
+        });
+
+        // at this point all consensus capsules should be running
+        for (ConsensusCapsule consensusCapsule : consensusCapsules) {
+            String name = consensusCapsule.getMetadata().getName();
+            ConsensusCapsule capsule =
+                    kubernetesClient.resource(consensusCapsule).get();
+            assertThat(capsule).isNotNull();
+
+            Pod pod = kubernetesClient
+                    .resources(Pod.class)
+                    .inNamespace(namespace)
+                    .withName(name + "-pod")
+                    .get();
+            assertThat(pod).isNotNull();
+            assertThat(pod.getStatus()).isNotNull();
+            assertThat(pod.getStatus().getPhase()).isEqualTo("Running");
+
+            assertThat(capsule.getStatus().getPhase()).isEqualTo(ConsensusCapsuleStatus.Phase.Running);
+        }
     }
 
     Long[] consensusNodeIds() {

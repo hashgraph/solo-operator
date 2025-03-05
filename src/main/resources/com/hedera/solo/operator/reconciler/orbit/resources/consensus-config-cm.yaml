@@ -37,10 +37,9 @@ data:
     SVC_DIR=/run/service/consensus
     while true; do
       if [ -s /tmp/consensus/s6-svc/start \
-           -a "$(s6-svstat -o up ${SVC_DIR})" == "false" \
            -a -s ${APP_DIR}/config.txt \
-           -a -s ${CLUSTER_CFG}/podips ] \
-           && grep -qFx $(hostname -i) ${CLUSTER_CFG}/podips; then
+           -a -s ${CLUSTER_CFG}/podIps ] \
+           && grep -qFx $(hostname -i) ${CLUSTER_CFG}/podIps; then
         # If using secret resources, additionally require all expected public keys are available
         if [ -d /mnt/keys/public-keys ]; then
           if [ $(grep ^address ${APP_DIR}/config.txt | wc -l) -eq $(ls /mnt/keys/public-keys/s-public-*.pem | wc -l) ]; then

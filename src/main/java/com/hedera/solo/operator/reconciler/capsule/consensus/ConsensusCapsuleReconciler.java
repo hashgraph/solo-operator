@@ -149,6 +149,13 @@ public class ConsensusCapsuleReconciler
     @Override
     public ErrorStatusUpdateControl<ConsensusCapsule> updateErrorStatus(
             final ConsensusCapsule capsule, final Context<ConsensusCapsule> context, final Exception e) {
+        log.error(
+                "Error in reconciliation '%s/%s': %s"
+                        .formatted(
+                                capsule.getMetadata().getNamespace(),
+                                capsule.getMetadata().getName(),
+                                e.getMessage()),
+                e);
         createOrUpdateEvent(capsule, context, e);
         return ErrorStatusUpdateControl.noStatusUpdate();
     }

@@ -151,9 +151,9 @@ components:
                 haproxyChangeset:
                   type: object
                   x-java-type: com.hedera.solo.operator.model.commonspec.HaproxyChangeset
-#                envoyproxyChangeset: # need to define
-#                  type: object
-#                  x-java-type: com.hedera.solo.operator.model.commonspec.EnvoyproxyChangeset # need to define
+    #                envoyproxyChangeset: # need to define
+    #                  type: object
+    #                  x-java-type: com.hedera.solo.operator.model.commonspec.EnvoyproxyChangeset # need to define
     NetworkOperationStatus:
       type: object
       default: {}
