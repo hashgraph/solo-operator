@@ -29,15 +29,6 @@ public record Sequenced(String namespace, String uid, String name, Instant creat
         return new Sequenced(item.namespace, item.uid, item.name, item.creationTime);
     }
 
-    public static Sequenced from(HasMetadata item) {
-        return new Sequenced(
-                item.getMetadata().getNamespace(),
-                item.getMetadata().getUid(),
-                item.getMetadata().getName(),
-                Instant.parse(item.getMetadata().getCreationTimestamp()),
-                Instant.now());
-    }
-
     @Override
     public int compareTo(Sequenced o) {
         if (o == null) {
