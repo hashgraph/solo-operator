@@ -2,17 +2,27 @@
 
 package com.hedera.solo.operator.test.capsule;
 
+import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_MANAGED_BY;
+import static com.hedera.solo.operator.reconciler.common.Constants.SOLO_OPERATOR;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import com.hedera.solo.operator.model.commonspec.AddressBookEntry;
+import com.hedera.solo.operator.model.commonspec.AddressBookEntryBuilder;
+import com.hedera.solo.operator.model.commonspec.ImageRepository;
+import com.hedera.solo.operator.model.commonspec.ImageVerificationSpec;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
-import com.hedera.solo.operator.test.utils.TemplateLoader;
+import com.hedera.solo.operator.model.v1alpha1.networkoperationspec.NetworkUpgrade;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.quarkus.test.junit.QuarkusTest;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
@@ -23,40 +33,81 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract {
     @Test
     void testSingleNodeDeployment() throws Exception {
         super.testSingleNodeDeployment();
-        createNetworkUpgradeOperation(consensusCapsules);
+        triggerNowFrozen(consensusCapsules);
     }
 
     @Override
     @Test
     void testMultiNodeDeployment() throws Exception {
         super.testMultiNodeDeployment();
-        createNetworkUpgradeOperation(consensusCapsules);
+        triggerNowFrozen(consensusCapsules);
     }
 
-    protected void createNetworkUpgradeOperation(List<ConsensusCapsule> consensusCapsules) throws InterruptedException {
+    protected void triggerNowFrozen(List<ConsensusCapsule> consensusCapsules) throws InterruptedException {
+        final List<AddressBookEntry> addressBookEntries = new ArrayList<>();
         for (ConsensusCapsule consensusCapsule : consensusCapsules) {
-            String name = consensusCapsule.getMetadata().getName();
             ConsensusCapsule capsule =
                     kubernetesClient.resource(consensusCapsule).get();
             assertThat(capsule).isNotNull();
+
+            final AddressBookEntry abe = new AddressBookEntryBuilder()
+                    .withNodeId(capsule.getSpec().getNodeId())
+                    .withExternalHostname("")
+                    .withExternalPort(1)
+                    .withInternalHostname("")
+                    .withInternalPort(1)
+                    .withNickName("")
+                    .withSelfName("")
+                    .withNodeAccount("")
+                    .withWeight(1L)
+                    .build();
+            addressBookEntries.add(abe);
         }
 
-        final NetworkOperation networkUpgrade =
-                TemplateLoader.load(NetworkOperation.class, TemplateLoader.TEMPLATE_NETWORK_UPGRADE);
-        networkUpgrade.getMetadata().setNamespace(orbit);
-        kubernetesClient.resource(networkUpgrade).create();
+        //        final NetworkOperation networkUpgrade =
+        //                TemplateLoader.load(NetworkOperation.class, TemplateLoader.TEMPLATE_NETWORK_UPGRADE);
+        //        networkUpgrade.getMetadata().setNamespace(orbit);
 
+        NetworkOperation upgrade = edit(new NetworkOperation())
+                .with(metadata -> metadata.editMetadata()
+                        .withName("network-upgrade")
+                        .withLabels(Map.of(LABEL_K8S_MANAGED_BY, SOLO_OPERATOR)))
+                .with(spec -> spec.editSpec()
+                        .withMode(NetworkOperationSpec.Mode.NetworkUpgrade)
+                        .withOrbit(orbit)
+                        .editNetworkUpgrade()
+                        .withWorkflowStep(NetworkUpgrade.WorkflowStep.NowFrozen)
+                        .editChangesets()
+                        .editConsensusNodeChangeset()
+                        .editSoftwareVersionSource()
+                        .withImageRepositories(edit(new ImageRepository())
+                                .with(repo -> repo.withRepository("swirldslabs.jfrog.io/consensus-node-docker-dev")
+                                        .withImageName("consensus-node")
+                                        .withImageTag("0.59.0-main.x02ba8df"))
+                                .build())
+                        .withImageVerificationSpec(edit(new ImageVerificationSpec())
+                                .with(
+                                        ivs -> ivs.withOs(ImageVerificationSpec.Os.linux)
+                                                .withArchitecture(ImageVerificationSpec.Architecture.arm64)
+                                                .withLayerHashes(
+                                                        "sha256:cf3813c609184ac4f804a288f5bf39adebb84b1ace91c9a49445f5fa757b56bc",
+                                                        "sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1"))
+                                .build()))
+                .with(ab -> ab.editSpec().editNetworkUpgrade().withAddressBook(addressBookEntries))
+                .build();
+
+        kubernetesClient.resource(upgrade).create();
         await().atMost(600, TimeUnit.SECONDS).untilAsserted(() -> {
-            NetworkOperation netInit = kubernetesClient
+            NetworkOperation netOp = kubernetesClient
                     .resources(NetworkOperation.class)
                     .inNamespace(namespace)
                     .withName("network-upgrade")
                     .get();
-            assertThat(netInit).isNotNull();
-            assertThat(netInit.getStatus()).isNotNull();
-            assertThat(netInit.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Pending);
-            assertThat(netInit.getStatus().getSoftwareSourceStatus()).isNotNull();
-            assertThat(netInit.getStatus().getSoftwareSourceStatus().getConsensusNode())
+            assertThat(netOp).isNotNull();
+            assertThat(netOp.getStatus()).isNotNull();
+            assertThat(netOp.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Pending);
+            assertThat(netOp.getStatus().getSoftwareSourceStatus()).isNotNull();
+            assertThat(netOp.getStatus().getSoftwareSourceStatus().getConsensusNode())
                     .isNotNull();
         });
 
