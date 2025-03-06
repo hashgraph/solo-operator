@@ -13,10 +13,13 @@ import com.hedera.solo.operator.model.v1alpha1.networkoperationstatus.SoftwareSo
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import java.lang.invoke.MethodHandles;
 import java.util.Objects;
+import org.jboss.logging.Logger;
 
 public class VerifyOtelCollectorStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final String CONDITION_TYPE = "ImageVerified: OtelCollector";
+    private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     @Override
     public NetworkOperationStatus run(
@@ -32,9 +35,16 @@ public class VerifyOtelCollectorStep implements ProcessorStep<NetworkOperation, 
                 || Objects.isNull(otelCollector.getSoftwareVersionSource())
                 || status.getPhase().equals(NetworkOperationStatus.Phase.Failed)
                 || isDone(status)) {
+            log.infof(
+                    "Skipping otel-collector image for network operation: %s/%s",
+                    resource.getMetadata().getNamespace(),
+                    resource.getMetadata().getName());
             return status;
         }
 
+        log.infof(
+                "Verifying otel-collector image for network operation: %s/%s",
+                resource.getMetadata().getNamespace(), resource.getMetadata().getName());
         return updateStatus(
                 resource,
                 status,
@@ -59,9 +69,12 @@ public class VerifyOtelCollectorStep implements ProcessorStep<NetworkOperation, 
     }
 
     public static boolean isDone(NetworkOperationStatus status) {
-        return ApplyConsensusPodChangeStep.isDone(status)
-                || status.getConditions().stream()
-                        .anyMatch(c -> c.getType().equals(CONDITION_TYPE)
-                                && c.getStatus().equals(ConditionStatus.True));
+        if (status == null || status.getConditions() == null) {
+            return false;
+        }
+
+        return status.getConditions().stream()
+                .anyMatch(
+                        c -> c.getType().equals(CONDITION_TYPE) && c.getStatus().equals(ConditionStatus.True));
     }
 }

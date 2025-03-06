@@ -4,6 +4,7 @@ package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyLayerHashes.selectedImage;
+import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.utils.StreamUploaderUtil.computeConditionType;
 
 import com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
@@ -46,18 +47,6 @@ public class StreamUploaderVerifier {
             case Constants.TPL_VAR_RECORD_STREAM_UPLOADER -> SoftwareSourceStatus::setRecordStreamUploader;
             default -> throw new IllegalStateException("Unrecognized stream uploader container name: " + containerName);
         };
-    }
-
-    public static String computeConditionType(final String containerName) {
-        return "ImageVerified: "
-                + switch (containerName) {
-                    case Constants.TPL_VAR_BACKUP_UPLOADER -> "BackupUploader";
-                    case Constants.TPL_VAR_EVENT_STREAM_UPLOADER -> "EventsStreamUploader";
-                    case Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER -> "RecordStreamSidecarUploader";
-                    case Constants.TPL_VAR_RECORD_STREAM_UPLOADER -> "RecordStreamUploader";
-                    default -> throw new IllegalStateException(
-                            "Unrecognized stream uploader container name: " + containerName);
-                };
     }
 
     Condition createCondition(final NetworkOperationStatus status) {

@@ -74,7 +74,7 @@ public class ApplyConsensusPodChangeStep implements ProcessorStep<NetworkOperati
         } catch (Exception ex) {
             List<Long> upgradedNodes = excludeNodes.stream().sorted().toList();
             log.errorf(
-                    "failed to update consensus capsules for network operation %s/%s: %s"
+                    "Failed to update consensus capsules for network operation %s/%s: %s"
                             .formatted(
                                     resource.getMetadata().getNamespace(),
                                     resource.getMetadata().getName(),
@@ -94,6 +94,7 @@ public class ApplyConsensusPodChangeStep implements ProcessorStep<NetworkOperati
         }
 
         List<Long> upgradedNodes = excludeNodes.stream().sorted().toList();
+        log.infof("List of updated consensus capsules: %s", upgradedNodes);
         return edit(status)
                 .with(s -> s.addToConditions(new ConditionBuilder()
                                 .withType(CONDITION_TYPE)
@@ -129,10 +130,10 @@ public class ApplyConsensusPodChangeStep implements ProcessorStep<NetworkOperati
             final Set<Long> excludeNodes) {
         long nodeId = capsule.getSpec().getNodeId();
         if (includeNodes.contains(nodeId) && !excludeNodes.contains(nodeId)) {
-            log.infof("updating consensus capsule: %s", capsule.getMetadata().getName());
+            log.infof("Updating consensus capsule: %s", capsule.getMetadata().getName());
             client.resource(nowFrozen.update(capsule)).update();
             excludeNodes.add(nodeId);
-            log.infof("list of updated consensus capsules: %s", excludeNodes);
+            log.infof("List of updated consensus capsules: %s", excludeNodes);
         }
     }
 

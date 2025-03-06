@@ -58,7 +58,7 @@ public class ApplyOrbitConfigurationChangeStep implements ProcessorStep<NetworkO
                     .edit(nowFrozen::update);
         } catch (Exception ex) {
             log.errorf(
-                    "failed to update orbit for network operation %s/%s: %s"
+                    "Failed to update orbit for network operation %s/%s: %s"
                             .formatted(
                                     resource.getMetadata().getNamespace(),
                                     resource.getMetadata().getName(),
@@ -76,6 +76,7 @@ public class ApplyOrbitConfigurationChangeStep implements ProcessorStep<NetworkO
                     .build();
         }
 
+        log.infof("Updated orbit: %s", resource.getMetadata().getName());
         return edit(status)
                 .with(s -> s.addToConditions(new ConditionBuilder()
                                 .withType(CONDITION_TYPE)
