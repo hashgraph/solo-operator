@@ -52,7 +52,8 @@ public class DeleteClusterConfigStep implements ProcessorStep<NetworkOperation, 
                                 .withType(CONDITION_TYPE)
                                 .withStatus(ConditionStatus.True)
                                 .withLastTransitionTime(Instant.now().toString())
-                                .withMessage("Deleted cluster config: %s".formatted(Constants.CLUSTER_CONFIG_NAME))
+                                .withMessage("Successfully deleted cluster config: %s"
+                                        .formatted(Constants.CLUSTER_CONFIG_NAME))
                                 .build()))
                         .build();
             }
@@ -62,8 +63,8 @@ public class DeleteClusterConfigStep implements ProcessorStep<NetworkOperation, 
                             .withType(CONDITION_TYPE)
                             .withStatus(ConditionStatus.True)
                             .withLastTransitionTime(Instant.now().toString())
-                            .withMessage(
-                                    "Nothing to delete. '%s' doesn't exist".formatted(Constants.CLUSTER_CONFIG_NAME))
+                            .withMessage("Nothing to delete. config '%s/%s' doesn't exist"
+                                    .formatted(resource.getMetadata().getNamespace(), Constants.CLUSTER_CONFIG_NAME))
                             .build()))
                     .build();
 

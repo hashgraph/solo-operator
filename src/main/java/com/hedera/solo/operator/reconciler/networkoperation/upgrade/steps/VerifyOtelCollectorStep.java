@@ -61,7 +61,7 @@ public class VerifyOtelCollectorStep implements ProcessorStep<NetworkOperation, 
                 ? new Condition(null, "image verification failed", null, null, ConditionStatus.False, CONDITION_TYPE)
                 : new Condition(
                         null,
-                        "image verification succeeded: " + image,
+                        "Successfully verified image: " + image,
                         null,
                         null,
                         ConditionStatus.True,

@@ -71,11 +71,14 @@ public class ConsensusCapsuleReconciler
     public static final Predicate<HasMetadata> HAS_LABEL_SELECTOR_CONSENSUS_NODE =
             hasLabel(Constants.LABEL_APP, Constants.COMPONENT_CONSENSUS_NODE);
     public static final String CONSENSUS_CONTAINER_NAME = "consensus-node";
-    private final Logger log;
+
+    private static Logger log = Logger.getLogger(ConsensusCapsuleReconciler.class);
 
     @Inject
     public ConsensusCapsuleReconciler(final Logger log) {
-        this.log = log;
+        if (log != null) {
+            ConsensusCapsuleReconciler.log = log;
+        }
     }
 
     @Override
@@ -86,12 +89,17 @@ public class ConsensusCapsuleReconciler
                     "Consensus Capsule - Starting Reconciliation [ name = '%s' ]",
                     capsule.getMetadata().getName());
 
-            ConsensusCapsuleStatus.Phase phase =
-                    phase(context.getSecondaryResources(Pod.class).toArray(Pod[]::new));
-            List<Condition> conditions = Optional.ofNullable(capsule.getStatus())
+            final Pod[] pods = context.getSecondaryResources(Pod.class).toArray(Pod[]::new);
+            final ConsensusCapsuleStatus.Phase phase = phase(pods);
+            log.infof(
+                    "Consensus Capsule - Phase [ name = '%s', phase = '%s' ]",
+                    capsule.getMetadata().getName(), phase);
+
+            final List<Condition> conditions = Optional.ofNullable(capsule.getStatus())
                     .map(ConsensusCapsuleStatus::getConditions)
                     .orElse(null);
-            ConsensusCapsule desired = capsule.edit()
+
+            final ConsensusCapsule desired = capsule.edit()
                     .editStatus()
                     .withObservedGeneration(capsule.getMetadata().getGeneration())
                     .withPhase(phase)
@@ -99,13 +107,15 @@ public class ConsensusCapsuleReconciler
                     .endStatus()
                     .build();
 
-            try {
-                if (Compare.allMatch(capsule, desired, o -> o.getStatus().getObservedGeneration(), o -> o.getStatus()
-                        .getPhase())) {
-                    return UpdateControl.noUpdate();
-                }
-            } catch (NullPointerException e) {
+            // if possible, avoid updating capsule
+            if (Compare.allMatch(
+                    capsule,
+                    desired,
+                    o -> o.getStatus() != null ? o.getStatus().getObservedGeneration() : null,
+                    o -> o.getStatus() != null ? o.getStatus().getPhase() : null)) {
+                return UpdateControl.noUpdate();
             }
+
             return UpdateControl.patchStatus(desired);
         } finally {
             log.infof(
@@ -116,12 +126,20 @@ public class ConsensusCapsuleReconciler
 
     public static ConsensusCapsuleStatus.Phase phase(final Pod... pods) {
         ConsensusCapsuleStatus.Phase phase = ConsensusCapsuleStatus.Phase.Unknown;
+
         if (1 == pods.length) {
-            ContainerStatus containerStatus = pods[0].getStatus().getContainerStatuses().stream()
+            final Pod pod = pods[0];
+
+            // check if the consensus container is running
+            // FIXME also check for other sidecar containers
+            final ContainerStatus containerStatus = pod.getStatus().getContainerStatuses().stream()
                     .collect(Collectors.toMap(ContainerStatus::getName, Function.identity()))
                     .get(CONSENSUS_CONTAINER_NAME);
             if (containerStatus != null) {
-                ContainerState state = containerStatus.getState();
+                log.infof(
+                        "Consensus Capsule - Phase [ name = '%s' containerStatus.phase = '%s ]",
+                        pod.getMetadata().getName(), containerStatus.getState().getRunning());
+                final ContainerState state = containerStatus.getState();
                 if (state.getRunning() != null) {
                     phase = containerStatus.getReady()
                             ? ConsensusCapsuleStatus.Phase.Running
@@ -134,6 +152,7 @@ public class ConsensusCapsuleReconciler
                 }
             }
         }
+
         return phase;
     }
 

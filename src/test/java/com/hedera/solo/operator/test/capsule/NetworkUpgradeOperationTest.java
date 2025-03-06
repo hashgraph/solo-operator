@@ -4,7 +4,10 @@ package com.hedera.solo.operator.test.capsule;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_MANAGED_BY;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_NODE_NAME;
 import static com.hedera.solo.operator.reconciler.common.Constants.SOLO_OPERATOR;
+import static com.hedera.solo.operator.reconciler.networkoperation.genesis.steps.CreateClusterConfigStep.computeNodeExternalAddress;
+import static com.hedera.solo.operator.reconciler.networkoperation.genesis.steps.CreateClusterConfigStep.computeNodeInternalAddress;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -13,11 +16,13 @@ import com.hedera.solo.operator.model.commonspec.AddressBookEntryBuilder;
 import com.hedera.solo.operator.model.commonspec.ImageRepository;
 import com.hedera.solo.operator.model.commonspec.ImageVerificationSpec;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
-import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec;
-import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationspec.NetworkUpgrade;
+import com.hedera.solo.operator.reconciler.common.Constants;
+import com.hedera.solo.operator.reconciler.common.Metadata;
+import com.hedera.solo.operator.reconciler.networkoperation.upgrade.tasks.NowFrozenTask;
+import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.quarkus.test.junit.QuarkusTest;
 import java.util.ArrayList;
@@ -50,23 +55,27 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract {
                     kubernetesClient.resource(consensusCapsule).get();
             assertThat(capsule).isNotNull();
 
+            // prepare address book entry
+            String domain = "";
+            String nodeName = Metadata.prepareNodeName(capsule);
+            String namespace = capsule.getMetadata().getNamespace();
+            String internal = computeNodeInternalAddress(domain, capsule, namespace);
+            String external = computeNodeExternalAddress(capsule, nodeName, namespace);
+            Long nodeId = capsule.getSpec().getNodeId();
+            String accountId = capsule.getSpec().getAccountId();
             final AddressBookEntry abe = new AddressBookEntryBuilder()
-                    .withNodeId(capsule.getSpec().getNodeId())
-                    .withExternalHostname("")
-                    .withExternalPort(1)
-                    .withInternalHostname("")
-                    .withInternalPort(1)
-                    .withNickName("")
-                    .withSelfName("")
-                    .withNodeAccount("")
+                    .withNodeId(nodeId)
+                    .withExternalHostname(external)
+                    .withExternalPort(Constants.GOSSIP_PORT)
+                    .withInternalHostname(internal)
+                    .withInternalPort(Constants.GOSSIP_PORT)
+                    .withNickName(nodeName)
+                    .withSelfName(nodeName)
+                    .withNodeAccount(accountId)
                     .withWeight(1L)
                     .build();
             addressBookEntries.add(abe);
         }
-
-        //        final NetworkOperation networkUpgrade =
-        //                TemplateLoader.load(NetworkOperation.class, TemplateLoader.TEMPLATE_NETWORK_UPGRADE);
-        //        networkUpgrade.getMetadata().setNamespace(orbit);
 
         NetworkOperation upgrade = edit(new NetworkOperation())
                 .with(metadata -> metadata.editMetadata()
@@ -98,7 +107,12 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract {
                 .build();
 
         kubernetesClient.resource(upgrade).create();
-        await().atMost(600, TimeUnit.SECONDS).untilAsserted(() -> {
+        checkStatus(consensusCapsules);
+    }
+
+    private void checkStatus(List<ConsensusCapsule> consensusCapsules) {
+        await().atMost(5, TimeUnit.MINUTES).untilAsserted(() -> {
+            Thread.sleep(2000);
             NetworkOperation netOp = kubernetesClient
                     .resources(NetworkOperation.class)
                     .inNamespace(namespace)
@@ -106,10 +120,18 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract {
                     .get();
             assertThat(netOp).isNotNull();
             assertThat(netOp.getStatus()).isNotNull();
-            assertThat(netOp.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Pending);
+            assertThat(NowFrozenTask.isDone(netOp)).isTrue();
             assertThat(netOp.getStatus().getSoftwareSourceStatus()).isNotNull();
             assertThat(netOp.getStatus().getSoftwareSourceStatus().getConsensusNode())
                     .isNotNull();
+            assertThat(netOp.getStatus().getUpgradedNodes().size()).isEqualTo(consensusCapsules.size());
+
+            ConfigMap cc = kubernetesClient
+                    .resources(ConfigMap.class)
+                    .inNamespace(namespace)
+                    .withName(Constants.CLUSTER_CONFIG_NAME)
+                    .get();
+            assertThat(cc).isNotNull();
         });
 
         for (ConsensusCapsule consensusCapsule : consensusCapsules) {
@@ -118,16 +140,18 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract {
                     kubernetesClient.resource(consensusCapsule).get();
             assertThat(capsule).isNotNull();
 
-            Pod pod = kubernetesClient
+            List<Pod> pods = kubernetesClient
                     .resources(Pod.class)
                     .inNamespace(namespace)
-                    .withName(name + "-pod")
-                    .get();
-            assertThat(pod).isNotNull();
-            assertThat(pod.getStatus()).isNotNull();
-            assertThat(pod.getStatus().getPhase()).isEqualTo("Running");
-
-            assertThat(capsule.getStatus().getPhase()).isEqualTo(ConsensusCapsuleStatus.Phase.Running);
+                    .withLabel(LABEL_NODE_NAME, name) // convention: capsule name is the node name
+                    .list()
+                    .getItems();
+            assertThat(pods.size()).isEqualTo(2); // two pods per node should be running at this stage
+            assertThat(pods.getFirst().getStatus()).isNotNull();
+            for (Pod pod : pods) {
+                assertThat(pod.getStatus().getPhase()).isEqualTo("Running");
+                assertThat(pod.getStatus().getPodIP()).isNotEmpty();
+            }
         }
     }
 }

@@ -102,8 +102,7 @@ public class ApplyConsensusPodChangeStep implements ProcessorStep<NetworkOperati
                                 .withLastTransitionTime(Instant.now().toString())
                                 .withMessage("Successfully updated consensus capsules")
                                 .build())
-                        .withUpgradedNodes(upgradedNodes)
-                        .withPhase(NetworkOperationStatus.Phase.Failed))
+                        .withUpgradedNodes(upgradedNodes))
                 .build();
     }
 

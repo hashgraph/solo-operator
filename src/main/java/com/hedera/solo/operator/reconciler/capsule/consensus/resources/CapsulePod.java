@@ -28,10 +28,11 @@ public class CapsulePod extends KubernetesDependentResource<Pod, ConsensusCapsul
 
     @Override
     public Set<ResourceID> toPrimaryResourceIDs(Pod resource) {
-        String name = resource.getMetadata().getLabels().get(LABEL_NODE_NAME);
-        return null == name
+        // convention: nodeName is the same as the ConsensusCapsule name
+        String nodeName = resource.getMetadata().getLabels().get(LABEL_NODE_NAME);
+        return null == nodeName
                 ? Collections.emptySet()
-                : Set.of(new ResourceID(name, resource.getMetadata().getNamespace()));
+                : Set.of(new ResourceID(nodeName, resource.getMetadata().getNamespace()));
     }
 
     @Override
@@ -41,8 +42,14 @@ public class CapsulePod extends KubernetesDependentResource<Pod, ConsensusCapsul
 
     @Override
     public Set<ResourceID> toSecondaryResourceIDs(final ConsensusCapsule primary) {
-        return eventSource().orElseThrow().list(primary.getMetadata().getNamespace())
-                .max(Comparator.comparing(pod -> ZonedDateTime.parse(pod.getMetadata().getCreationTimestamp())))
+        // convention: nodeName is the same as the ConsensusCapsule name, so need to filter by nodeName
+        String nodeName = primary.getMetadata().getName();
+        return eventSource()
+                .orElseThrow()
+                .list(primary.getMetadata().getNamespace())
+                .filter(pod -> nodeName.equals(pod.getMetadata().getLabels().get(LABEL_NODE_NAME)))
+                .max(Comparator.comparing(
+                        pod -> ZonedDateTime.parse(pod.getMetadata().getCreationTimestamp())))
                 .map(ResourceID::fromResource)
                 .map(Set::of)
                 .orElse(Collections.emptySet());

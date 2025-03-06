@@ -79,13 +79,12 @@ public class ApplyOrbitConfigurationChangeStep implements ProcessorStep<NetworkO
         log.infof("Updated orbit: %s", resource.getMetadata().getName());
         return edit(status)
                 .with(s -> s.addToConditions(new ConditionBuilder()
-                                .withType(CONDITION_TYPE)
-                                .withStatus(ConditionStatus.True)
-                                .withLastTransitionTime(Instant.now().toString())
-                                .withMessage("Successfully updated orbit: %s"
-                                        .formatted(resource.getSpec().getOrbit()))
-                                .build())
-                        .withPhase(NetworkOperationStatus.Phase.Failed))
+                        .withType(CONDITION_TYPE)
+                        .withStatus(ConditionStatus.True)
+                        .withLastTransitionTime(Instant.now().toString())
+                        .withMessage("Successfully updated orbit: %s"
+                                .formatted(resource.getSpec().getOrbit()))
+                        .build()))
                 .build();
     }
 
