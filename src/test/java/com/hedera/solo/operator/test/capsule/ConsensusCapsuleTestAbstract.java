@@ -17,6 +17,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.hedera.solo.operator.beans.DefaultConsensusNodeBean;
+import com.hedera.solo.operator.model.commonspec.AddressBookEntry;
+import com.hedera.solo.operator.model.commonspec.ImageRepository;
+import com.hedera.solo.operator.model.commonspec.ImageVerificationSpec;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleSpec;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
@@ -34,6 +37,8 @@ import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podpropertie
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Volumes;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.VolumesBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.secrets.SecretResources;
+import com.hedera.solo.operator.model.v1alpha1.networkoperationspec.NetworkUpgrade;
+import com.hedera.solo.operator.model.v1alpha1.orbitspec.consensus.genesis.AddressBook;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.test.fixtures.Resources;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
@@ -209,6 +214,51 @@ public abstract class ConsensusCapsuleTestAbstract {
 
         // test with client
         checkAddressBook(HederaSdkClientFactory::directContextCreator);
+
+        NetworkOperation upgrade = edit(new NetworkOperation())
+                .with(metadata -> metadata.editMetadata()
+                        .withName("network-upgrade")
+                        .withLabels(Map.of(LABEL_K8S_MANAGED_BY, SOLO_OPERATOR)))
+                .with(spec -> spec.editSpec()
+                        .withMode(NetworkOperationSpec.Mode.NetworkUpgrade)
+                        .withOrbit(orbit)
+                        .editNetworkUpgrade().withWorkflowStep(NetworkUpgrade.WorkflowStep.NowFrozen)
+                        .editChangesets()
+                        .editConsensusNodeChangeset()
+                        .editSoftwareVersionSource()
+                        .withImageRepositories(edit(new ImageRepository())
+                                .with(repo -> repo.withRepository("swirldslabs.jfrog.io/consensus-node-docker-dev")
+                                        .withImageName("consensus-node")
+                                        .withImageTag("0.59.0-main.x02ba8df"))
+                                .build())
+                        .withImageVerificationSpec(edit(new ImageVerificationSpec())
+                                .with(ivs -> ivs.withOs(ImageVerificationSpec.Os.linux)
+                                        .withArchitecture(ImageVerificationSpec.Architecture.arm64)
+                                        .withLayerHashes("sha256:cf3813c609184ac4f804a288f5bf39adebb84b1ace91c9a49445f5fa757b56bc",
+                                                "sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1"))
+                                .build())
+                )
+                .with(ab -> ab.editSpec().editNetworkUpgrade().withAddressBook(
+                        edit(new AddressBookEntry())
+                                .with(abb -> abb.withNodeId(0L)
+                                        .withExternalHostname("")
+                                        .withExternalPort(1)
+                                        .withInternalHostname("")
+                                        .withInternalPort(1)
+                                        .withNickName("")
+                                        .withSelfName("")
+                                        .withNodeAccount("")
+                                        .withWeight(1L)
+                                )
+                                .build()
+                ))
+                .build();
+        kubernetesClient.resource(upgrade).inNamespace(namespace).create();
+
+        boolean sleep = true;
+        while (sleep) {
+            Thread.sleep(1_000);
+        }
     }
 
     @Test
