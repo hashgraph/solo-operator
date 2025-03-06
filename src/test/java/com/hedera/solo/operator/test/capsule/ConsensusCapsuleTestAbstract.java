@@ -49,6 +49,7 @@ import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.Service;
+import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
@@ -405,7 +406,7 @@ public abstract class ConsensusCapsuleTestAbstract {
 
         // at this point all consensus capsules should be running
         for (ConsensusCapsule consensusCapsule : consensusCapsules) {
-            String name = consensusCapsule.getMetadata().getName();
+            String name = Metadata.prepareNodeName(consensusCapsule.getSpec().getNodeId());
             ConsensusCapsule capsule =
                     kubernetesClient.resource(consensusCapsule).get();
             assertThat(capsule).isNotNull();
@@ -413,8 +414,10 @@ public abstract class ConsensusCapsuleTestAbstract {
             Pod pod = kubernetesClient
                     .resources(Pod.class)
                     .inNamespace(namespace)
-                    .withName(name + "-pod")
-                    .get();
+                    .withLabel("operator.solo.hedera.com/node-name", name)
+                    .list()
+                    .getItems()
+                    .getFirst();
             assertThat(pod).isNotNull();
             assertThat(pod.getStatus()).isNotNull();
             assertThat(pod.getStatus().getPhase()).isEqualTo("Running");

@@ -20,6 +20,7 @@ import io.fabric8.kubernetes.api.model.PodResourceClaim;
 import io.fabric8.kubernetes.api.model.PodResourceClaimBuilder;
 import io.fabric8.kubernetes.api.model.PodSecurityContext;
 import io.fabric8.kubernetes.api.model.PodSecurityContextBuilder;
+import io.fabric8.kubernetes.api.model.PodTemplateSpec;
 import io.fabric8.kubernetes.api.model.Quantity;
 import io.fabric8.kubernetes.api.model.ResourceRequirements;
 import io.fabric8.kubernetes.api.model.ResourceRequirementsBuilder;
@@ -27,6 +28,8 @@ import io.fabric8.kubernetes.api.model.Toleration;
 import io.fabric8.kubernetes.api.model.TolerationBuilder;
 import io.fabric8.kubernetes.api.model.TopologySpreadConstraint;
 import io.fabric8.kubernetes.api.model.TopologySpreadConstraintBuilder;
+import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,7 +40,7 @@ import org.junit.jupiter.api.Test;
 
 public class ConsensusCapsulePodPropertiesTest {
     BeanFactory factory = new BeanFactory().maxList(5).maxMap(5).nullProbability(0.2);
-    CapsulePod capsulePod = new CapsulePod();
+    CapsuleDeployment capsulePod = new CapsuleDeployment();
 
     @Test
     void testProperties() {
@@ -56,7 +59,8 @@ public class ConsensusCapsulePodPropertiesTest {
 
     void testProperties(final PodProperties src) {
         // copy pod properties to new pod builder and construct pod
-        Pod pod = capsulePod.copyPodProperties(src, new PodBuilder()).build();
+        Deployment deployment = capsulePod.copyPodProperties(src, new DeploymentBuilder()).build();
+        PodTemplateSpec pod = deployment.getSpec().getTemplate();
         // verify the pod properties are equivalent to the values in the pod spec
         assertThat(pod.getSpec().getAffinity())
                 .isEqualTo(nullable(src.getAffinity(), Affinity::edit, AffinityBuilder::build));
@@ -138,9 +142,12 @@ public class ConsensusCapsulePodPropertiesTest {
                         .withName(containers.getOpenTelemetryCollector().getName()))
                 .build();
         // copy pod properties to pod builder and construct new pod
-        pod = capsulePod.copyPodProperties(podProperties, pod.edit()).build();
+        Deployment deployment = edit(new Deployment())
+                .with(builder -> builder.editSpec().editTemplate().withSpec(pod.getSpec()))
+                .build();
+        deployment = capsulePod.copyPodProperties(podProperties, deployment.edit()).build();
         // create a map from container name to containers in pod
-        Map<String, Container> map = pod.getSpec().getContainers().stream()
+        Map<String, Container> map = deployment.getSpec().getTemplate().getSpec().getContainers().stream()
                 .collect(Collectors.toMap(Container::getName, Function.identity()));
         // verify the containers in pod properties are equivalent to corresponding container in pod
         assertThat(map.get(containers.getBackupUploader().getName()).getResources())

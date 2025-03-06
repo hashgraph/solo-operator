@@ -12,6 +12,7 @@ import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleStatus;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Secrets;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleConfigMap;
+import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleDeployment;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsulePod;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleRoleBinding;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.CapsuleService;
@@ -62,6 +63,7 @@ import org.jboss.logging.Logger;
             @Dependent(type = CapsuleUpgradePvc.class, reconcilePrecondition = CapsuleUpgradePvc.Ready.class),
             @Dependent(type = CapsuleRecordStreamPvc.class, reconcilePrecondition = CapsuleRecordStreamPvc.Ready.class),
             @Dependent(type = CapsuleEventsStreamPvc.class, reconcilePrecondition = CapsuleEventsStreamPvc.Ready.class),
+            @Dependent(type = CapsuleDeployment.class),
             @Dependent(type = CapsulePod.class)
         })
 public class ConsensusCapsuleReconciler
