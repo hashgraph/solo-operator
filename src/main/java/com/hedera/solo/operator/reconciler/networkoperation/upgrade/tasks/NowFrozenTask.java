@@ -2,6 +2,7 @@
 
 package com.hedera.solo.operator.reconciler.networkoperation.upgrade.tasks;
 
+import com.hedera.solo.operator.library.k8s.CustomResourceManager;
 import com.hedera.solo.operator.library.processor.AbstractProcessorTask;
 import com.hedera.solo.operator.library.processor.Processor;
 import com.hedera.solo.operator.library.processor.ProcessorException;
@@ -10,15 +11,20 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckProcessor;
+import com.hedera.solo.operator.reconciler.networkoperation.genesis.steps.CreateClusterConfigStep;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ApplyConsensusPodChangeStep;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ApplyOrbitConfigurationChangeStep;
+import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.DeleteClusterConfigStep;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ReverifyConsensusNodeChangesetStep;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ReverifyOtelCollectorStep;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ReverifyStreamUploaderChangesetStep;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import java.lang.invoke.MethodHandles;
 import java.time.Duration;
 import java.util.List;
+import org.jboss.logging.Logger;
 
 /**
  * NowFrozenTask executes the network upgrade steps in response to the "now-frozen.mf" marker file
@@ -51,6 +57,17 @@ import java.util.List;
 public class NowFrozenTask extends AbstractProcessorTask<NetworkOperation, NetworkOperationStatus> {
     public static final Duration RECONCILE_DELAY = Duration.ofSeconds(1);
 
+    private final CustomResourceManager customResourceManager;
+    private final NetworkCheckProcessor deferredProcessor;
+
+    private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
+
+    @Inject
+    public NowFrozenTask(CustomResourceManager customResourceManager, NetworkCheckProcessor deferredProcessor) {
+        this.customResourceManager = customResourceManager;
+        this.deferredProcessor = deferredProcessor;
+    }
+
     @Override
     public List<ProcessorStep<NetworkOperation, NetworkOperationStatus>> steps() throws ProcessorException {
         return List.of(
@@ -60,6 +77,8 @@ public class NowFrozenTask extends AbstractProcessorTask<NetworkOperation, Netwo
                 new ReverifyStreamUploaderChangesetStep(Constants.TPL_VAR_EVENT_STREAM_UPLOADER),
                 new ReverifyStreamUploaderChangesetStep(Constants.TPL_VAR_BACKUP_UPLOADER),
                 new ReverifyOtelCollectorStep(),
+                new DeleteClusterConfigStep(customResourceManager),
+                new CreateClusterConfigStep(customResourceManager),
                 new ApplyConsensusPodChangeStep(),
                 new ApplyOrbitConfigurationChangeStep());
     }
@@ -73,7 +92,17 @@ public class NowFrozenTask extends AbstractProcessorTask<NetworkOperation, Netwo
     @Override
     protected Processor<?, ?, ?> computeDeferredProcessor(NetworkOperation resource, Context<NetworkOperation> context)
             throws ProcessorException {
-        // TODO: check status and return appropriate processor for deferred processing
+        if (isDone(resource)) {
+            log.infof("NowFrozen is done, deferring to network check");
+            return deferredProcessor;
+        }
+
         return null;
+    }
+
+    public static boolean isDone(NetworkOperation resource) {
+        // FIXME add isDone method to all steps and update the below logic
+        return DeleteClusterConfigStep.isDone(resource.getStatus())
+                && CreateClusterConfigStep.isDone(resource.getStatus());
     }
 }
