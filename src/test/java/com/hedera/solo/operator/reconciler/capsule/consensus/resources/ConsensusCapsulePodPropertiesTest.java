@@ -15,7 +15,6 @@ import io.fabric8.kubernetes.api.model.Affinity;
 import io.fabric8.kubernetes.api.model.AffinityBuilder;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.Pod;
-import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.api.model.PodResourceClaim;
 import io.fabric8.kubernetes.api.model.PodResourceClaimBuilder;
 import io.fabric8.kubernetes.api.model.PodSecurityContext;
@@ -59,7 +58,8 @@ public class ConsensusCapsulePodPropertiesTest {
 
     void testProperties(final PodProperties src) {
         // copy pod properties to new pod builder and construct pod
-        Deployment deployment = capsulePod.copyPodProperties(src, new DeploymentBuilder()).build();
+        Deployment deployment =
+                capsulePod.copyPodProperties(src, new DeploymentBuilder()).build();
         PodTemplateSpec pod = deployment.getSpec().getTemplate();
         // verify the pod properties are equivalent to the values in the pod spec
         assertThat(pod.getSpec().getAffinity())
@@ -145,7 +145,8 @@ public class ConsensusCapsulePodPropertiesTest {
         Deployment deployment = edit(new Deployment())
                 .with(builder -> builder.editSpec().editTemplate().withSpec(pod.getSpec()))
                 .build();
-        deployment = capsulePod.copyPodProperties(podProperties, deployment.edit()).build();
+        deployment =
+                capsulePod.copyPodProperties(podProperties, deployment.edit()).build();
         // create a map from container name to containers in pod
         Map<String, Container> map = deployment.getSpec().getTemplate().getSpec().getContainers().stream()
                 .collect(Collectors.toMap(Container::getName, Function.identity()));
