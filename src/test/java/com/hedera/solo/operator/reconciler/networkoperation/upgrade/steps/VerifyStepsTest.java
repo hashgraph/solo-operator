@@ -270,14 +270,23 @@ public class VerifyStepsTest {
             final ImageRepositoryStatus.Validity validity,
             final List<ImageRepositoryStatus> statusList,
             final SoftwareVersionSource source) {
+        assertThat(statusList.stream().map(ImageRepositoryStatus::getValidity).collect(Collectors.toSet()))
+                .isEqualTo(Set.of(validity));
+        assertThat(statusList.stream()
+                        .map(ImageRepositoryStatus::getImagePullPolicy)
+                        .map(ImageRepositoryStatus.ImagePullPolicy::getValue)
+                        .collect(Collectors.toSet()))
+                .isEqualTo(Set.of(source.getImagePullPolicy().getValue()));
+        assertThat(source.getImageVerificationSpec())
+                .containsAll(statusList.stream()
+                        .map(ImageRepositoryStatus::getImageVerificationSpec)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet()));
         for (ImageRepository repository : source.getImageRepositories()) {
-            assertThat(statusList.stream()
-                            .map(ImageRepositoryStatus::getValidity)
-                            .collect(Collectors.toSet()))
-                    .isEqualTo(Set.of(validity));
             assertThat(statusList.stream())
                     .anyMatch(status -> Objects.equals(repository.getImageName(), status.getImageName())
-                            && Objects.equals(repository.getImageTag(), status.getImageTag()));
+                            && Objects.equals(repository.getImageTag(), status.getImageTag())
+                            && Objects.equals(repository.getImagePullSecrets(), status.getImagePullSecrets()));
         }
     }
 
