@@ -71,6 +71,7 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract {
         NetworkOperation upgrade = edit(new NetworkOperation())
                 .with(metadata -> metadata.editMetadata()
                         .withName("network-upgrade")
+                        .withNamespace(orbit)
                         .withLabels(Map.of(LABEL_K8S_MANAGED_BY, SOLO_OPERATOR)))
                 .with(spec -> spec.editSpec()
                         .withMode(NetworkOperationSpec.Mode.NetworkUpgrade)
