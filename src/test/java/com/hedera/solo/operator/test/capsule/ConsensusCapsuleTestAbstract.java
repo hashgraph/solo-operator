@@ -272,6 +272,7 @@ public abstract class ConsensusCapsuleTestAbstract {
                         .withPodProperties(consensusPod)
                         .withOrbit(orbit)
                         .withAccountId(node.accountId())
+                        .withWeight(1L)
                         .withNodeId(node.id())
                         .withPersistentVolumeClaims(prepareCapsulePVCs(node)))
                 .with(secret -> secret.editSpec()

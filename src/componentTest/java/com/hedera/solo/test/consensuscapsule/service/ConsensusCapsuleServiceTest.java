@@ -67,6 +67,7 @@ public class ConsensusCapsuleServiceTest extends AbstractOperatorTest {
                         .with(metadata -> metadata.editMetadata().withGenerateName("cc-"))
                         .with(spec -> spec.editSpec()
                                 .withAccountId("0")
+                                .withWeight(1L)
                                 .withLog4j2Xml("log")
                                 .withNodeId(0L)
                                 .withOrbit("orbit")

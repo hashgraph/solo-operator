@@ -191,10 +191,11 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
                     : name + "-svc." + namespace;
             Long nodeId = capsule.getSpec().getNodeId();
             String accountId = capsule.getSpec().getAccountId();
+            Long weight = capsule.getSpec().getWeight();
             addresses.put(
                     nodeId,
-                    "address, %d, %s, %s, 1, %s, 50111, %s, 50111, %s\n"
-                            .formatted(nodeId, name, name, internal, external, accountId));
+                    "address, %d, %s, %s, %s, %s, 50111, %s, 50111, %s\n"
+                            .formatted(nodeId, name, name, weight, internal, external, accountId));
         }
 
         for (AddressBookEntry entry :

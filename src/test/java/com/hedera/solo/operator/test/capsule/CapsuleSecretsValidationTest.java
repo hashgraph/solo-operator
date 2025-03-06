@@ -127,6 +127,7 @@ public class CapsuleSecretsValidationTest {
                                         Constants.COMPONENT_CONSENSUS_NODE)))
                         .with(spec -> spec.editSpec()
                                 .withAccountId("0.0.3")
+                                .withWeight(1L)
                                 .withLog4j2Xml("")
                                 .withNodeId(1L)
                                 .withOrbit(namespace))

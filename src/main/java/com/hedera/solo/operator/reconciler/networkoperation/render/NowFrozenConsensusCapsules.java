@@ -6,6 +6,7 @@ import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.library.generic.Nullable.orEmptyList;
 import static com.hedera.solo.operator.library.generic.Nullable.orNull;
 
+import com.hedera.solo.operator.model.commonspec.AddressBookEntry;
 import com.hedera.solo.operator.model.commonspec.ConsensusNodeChangeset;
 import com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus;
 import com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector;
@@ -25,6 +26,7 @@ public class NowFrozenConsensusCapsules {
     final NetworkOperation networkOperation;
     final Map<Long, String> logging = new HashMap<>();
     final Map<Long, Map<String, String>> nodeProperties = new HashMap<>();
+    final Map<Long, AddressBookEntry> addressBook = new HashMap<>();
     final String defaultLogging;
     final ImageRepositoryStatus consensus;
     final ImageRepositoryStatus backup;
@@ -39,6 +41,8 @@ public class NowFrozenConsensusCapsules {
 
     public NowFrozenConsensusCapsules(final NetworkOperation networkOperation) {
         this.networkOperation = networkOperation;
+        orEmptyList(() -> networkOperation.getSpec().getNetworkUpgrade().getAddressBook())
+                .forEach(entry -> addressBook.put(entry.getNodeId(), entry));
         ConsensusNodeChangeset changeset = orNull(() ->
                 networkOperation.getSpec().getNetworkUpgrade().getChangesets().getConsensusNodeChangeset());
         if (changeset != null) {
@@ -62,16 +66,21 @@ public class NowFrozenConsensusCapsules {
     }
 
     public ConsensusCapsule update(final ConsensusCapsule consensusCapsule) {
-        if (!Objects.equals(
-                networkOperation.getSpec().getOrbit(),
-                consensusCapsule.getSpec().getOrbit())) {
+        AddressBookEntry addressBookEntry =
+                addressBook.get(consensusCapsule.getSpec().getNodeId());
+        if (addressBookEntry == null
+                || !Objects.equals(
+                        networkOperation.getSpec().getOrbit(),
+                        consensusCapsule.getSpec().getOrbit())) {
             return consensusCapsule;
         }
         Containers containers = consensusCapsule.getSpec().getPodProperties().getContainers();
         return edit(consensusCapsule)
                 .with(spec -> spec.editSpec()
                         .withLog4j2Xml(logging(consensusCapsule))
-                        .withNodeProperties(nodeProperties(consensusCapsule)))
+                        .withNodeProperties(nodeProperties(consensusCapsule))
+                        .withAccountId(addressBookEntry.getNodeAccount())
+                        .withWeight(addressBookEntry.getWeight()))
                 .with(builder -> builder.editSpec()
                         .editPodProperties()
                         .editContainers()

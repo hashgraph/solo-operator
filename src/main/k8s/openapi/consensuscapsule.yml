@@ -75,6 +75,7 @@ components:
         - accountId
         - log4j2.xml
         - podProperties
+        - weight
       properties:
         secrets:
           type: object
@@ -135,6 +136,8 @@ components:
           type: object
           additionalProperties:
             type: string
+        weight:
+          type: integer
         serviceType:
           description: |
             The type of consensus-node service
