@@ -12,6 +12,7 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDep
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.javaoperatorsdk.operator.processing.event.source.PrimaryToSecondaryMapper;
 import io.javaoperatorsdk.operator.processing.event.source.SecondaryToPrimaryMapper;
+import java.time.ZonedDateTime;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Set;
@@ -41,7 +42,7 @@ public class CapsulePod extends KubernetesDependentResource<Pod, ConsensusCapsul
     @Override
     public Set<ResourceID> toSecondaryResourceIDs(final ConsensusCapsule primary) {
         return eventSource().orElseThrow().list(primary.getMetadata().getNamespace())
-                .max(Comparator.comparing(pod -> pod.getMetadata().getCreationTimestamp()))
+                .max(Comparator.comparing(pod -> ZonedDateTime.parse(pod.getMetadata().getCreationTimestamp())))
                 .map(ResourceID::fromResource)
                 .map(Set::of)
                 .orElse(Collections.emptySet());
