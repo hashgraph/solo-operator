@@ -66,6 +66,7 @@ import org.junit.jupiter.api.Test;
 public abstract class ConsensusCapsuleTestAbstract {
     protected final String namespace = getClass().getSimpleName().toLowerCase();
     protected final String orbit = namespace; // for now orbit and namespace are the same
+    protected List<ConsensusCapsule> consensusCapsules;
 
     @Inject
     DefaultConsensusNodeBean defaultConsensusNode;
@@ -202,7 +203,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         this.setupSecrets(nodes);
 
         // create consensus capsule
-        List<ConsensusCapsule> consensusCapsules = createConsensusCapsule(nodes);
+        consensusCapsules = createConsensusCapsule(nodes);
 
         // create network initialization
         createNetworkOperation(consensusCapsules);
@@ -219,7 +220,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         this.setupSecrets(nodes);
 
         // create consensus capsule
-        List<ConsensusCapsule> consensusCapsules = createConsensusCapsule(nodes);
+        consensusCapsules = createConsensusCapsule(nodes);
 
         // create network initialization
         createNetworkOperation(consensusCapsules);
