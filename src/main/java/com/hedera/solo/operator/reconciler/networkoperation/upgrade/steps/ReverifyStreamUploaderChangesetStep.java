@@ -9,6 +9,7 @@ import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.commonspec.StreamUploaderChangeset;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
+import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.utils.StreamUploaderUtil;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.util.Objects;
@@ -41,14 +42,17 @@ public class ReverifyStreamUploaderChangesetStep extends StreamUploaderVerifier
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context)
             throws ProcessorException {
+        Objects.requireNonNull(resource, "NetworkOperation resource is required");
+        Objects.requireNonNull(status, "NetworkOperationStatus status is required");
+        Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
 
         final StreamUploaderChangeset changeset = StreamUploaderUtil.findChangeset(resource, this.containerName);
 
-        if (Objects.isNull(changeset) || changeset.getSoftwareVersionSource() == null) {
+        if (Objects.isNull(changeset)
+                || Objects.isNull(changeset.getSoftwareVersionSource())
+                || isDone(status, this.containerName)) {
             return status; // no-op
         }
-
-        // FIXME: Implement the logic to reverify the changeset
 
         return updateStatus(
                 resource,
@@ -58,5 +62,12 @@ public class ReverifyStreamUploaderChangesetStep extends StreamUploaderVerifier
                 this::createCondition,
                 getter(),
                 setter());
+    }
+
+    public static boolean isDone(NetworkOperationStatus status, String containerName) {
+        final String type = computeConditionType(containerName);
+        return ApplyConsensusPodChangeStep.isDone(status)
+                || status.getConditions().stream()
+                        .anyMatch(c -> c.getType().equals(type) && c.getStatus().equals(ConditionStatus.True));
     }
 }

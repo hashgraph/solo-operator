@@ -48,8 +48,8 @@ public class StreamUploaderVerifier {
         };
     }
 
-    Condition createCondition(final NetworkOperationStatus status) {
-        String type = getClass().getSimpleName()
+    public static String computeConditionType(final String containerName) {
+        return "ImageVerified: "
                 + switch (containerName) {
                     case Constants.TPL_VAR_BACKUP_UPLOADER -> "BackupUploader";
                     case Constants.TPL_VAR_EVENT_STREAM_UPLOADER -> "EventsStreamUploader";
@@ -58,6 +58,10 @@ public class StreamUploaderVerifier {
                     default -> throw new IllegalStateException(
                             "Unrecognized stream uploader container name: " + containerName);
                 };
+    }
+
+    Condition createCondition(final NetworkOperationStatus status) {
+        String type = computeConditionType(containerName);
         String image = selectedImage(getter().apply(status.getSoftwareSourceStatus()));
         return edit(new Condition())
                 .with(builder -> builder.withType(type)

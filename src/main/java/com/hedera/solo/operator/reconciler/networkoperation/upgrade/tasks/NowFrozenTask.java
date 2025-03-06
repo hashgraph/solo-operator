@@ -78,9 +78,9 @@ public class NowFrozenTask extends AbstractProcessorTask<NetworkOperation, Netwo
                 new ReverifyStreamUploaderChangesetStep(Constants.TPL_VAR_BACKUP_UPLOADER),
                 new ReverifyOtelCollectorStep(),
                 new DeleteClusterConfigStep(customResourceManager),
-                new CreateClusterConfigStep(customResourceManager),
                 new ApplyConsensusPodChangeStep(),
-                new ApplyOrbitConfigurationChangeStep());
+                new ApplyOrbitConfigurationChangeStep(),
+                new CreateClusterConfigStep(customResourceManager));
     }
 
     @Override
@@ -101,8 +101,9 @@ public class NowFrozenTask extends AbstractProcessorTask<NetworkOperation, Netwo
     }
 
     public static boolean isDone(NetworkOperation resource) {
-        // FIXME add isDone method to all steps and update the below logic
         return DeleteClusterConfigStep.isDone(resource.getStatus())
+                && ApplyConsensusPodChangeStep.isDone(resource.getStatus())
+                && ApplyOrbitConfigurationChangeStep.isDone(resource.getStatus())
                 && CreateClusterConfigStep.isDone(resource.getStatus());
     }
 }
