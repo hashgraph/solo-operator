@@ -149,6 +149,9 @@ spec:
         - name: capsule-config
           mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/log4j2.xml
           subPath: "log4j2.xml"
+        - name: capsule-config
+          mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/config/node.properties
+          subPath: "nodeProperties"
         - name: hgcapp-record-streams
           mountPath: /opt/hgcapp/recordStreams
         - name: hgcapp-events-streams

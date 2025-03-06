@@ -2,6 +2,7 @@
 
 package com.hedera.solo.operator.reconciler.orbit.resources;
 
+import static com.hedera.solo.operator.library.render.RenderUtils.join;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
@@ -13,9 +14,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDNoGCKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
-import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 @KubernetesDependent(resourceDiscriminator = ConsensusConfigMap.Discriminator.class)
 public class ConsensusConfigMap extends CRUDNoGCKubernetesDependentResource<ConfigMap, Orbit> {
@@ -39,6 +38,8 @@ public class ConsensusConfigMap extends CRUDNoGCKubernetesDependentResource<Conf
         cmb.addToData(
                 "api-permission.properties",
                 join(primary.getSpec().getConsensus().getPermissionConfiguration(), "="));
+        cmb.addToData(
+                "genesis.properties", join(primary.getSpec().getConsensus().getGenesisProperties(), "="));
         return Metadata.applyStandardLabels(
                         cmb.editMetadata(),
                         NAME,
@@ -61,11 +62,5 @@ public class ConsensusConfigMap extends CRUDNoGCKubernetesDependentResource<Conf
                     .withName(NAME)
                     .get());
         }
-    }
-
-    String join(final Map<String, String> map, final String delimiter) {
-        return map.entrySet().stream()
-                .map(e -> e.getKey() + delimiter + e.getValue())
-                .collect(Collectors.joining("\n", "", "\n"));
     }
 }
