@@ -94,7 +94,7 @@ public class ApplyConsensusPodChangeStep implements ProcessorStep<NetworkOperati
         }
 
         List<Long> upgradedNodes = excludeNodes.stream().sorted().toList();
-        log.infof("List of updated consensus capsules: %s", upgradedNodes);
+        log.infof("List of updated node IDs: %s", upgradedNodes);
         return edit(status)
                 .with(s -> s.addToConditions(new ConditionBuilder()
                                 .withType(CONDITION_TYPE)
