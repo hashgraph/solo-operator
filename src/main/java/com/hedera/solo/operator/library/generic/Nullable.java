@@ -4,6 +4,7 @@ package com.hedera.solo.operator.library.generic;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Supplier;
 
 public class Nullable {
@@ -24,6 +25,10 @@ public class Nullable {
 
     public static <T> List<T> orEmptyList(final Supplier<List<T>> supplier) {
         return orElseGet(supplier, Collections::emptyList);
+    }
+
+    public static <K, V> Map<K, V> orEmptyMap(final Supplier<Map<K, V>> supplier) {
+        return orElseGet(supplier, Collections::emptyMap);
     }
 
     public static <T> T orNull(final Supplier<T> supplier) {
