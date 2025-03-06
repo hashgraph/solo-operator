@@ -13,6 +13,7 @@ import io.fabric8.kubernetes.api.model.Condition;
 import java.util.Objects;
 
 public class ConsensusVerifier {
+    public static final String CONDITION_TYPE = "ImageVerified: ConsensusNode";
     static final String SUCCESS_STATUS_MESSAGE = "Consensus image verification succeeded. Selected for deployment: %s";
     static final String FAIL_STATUS_MESSAGE = "Consensus image verification failed";
 
@@ -30,10 +31,15 @@ public class ConsensusVerifier {
     }
 
     Condition createCondition(final NetworkOperationStatus status) {
-        String type = getClass().getSimpleName();
         String image = selectedImage(status.getSoftwareSourceStatus().getConsensusNode());
         return image == null
-                ? new Condition(null, FAIL_STATUS_MESSAGE, null, null, ConditionStatus.False, type)
-                : new Condition(null, SUCCESS_STATUS_MESSAGE.formatted(image), null, null, ConditionStatus.True, type);
+                ? new Condition(null, FAIL_STATUS_MESSAGE, null, null, ConditionStatus.False, CONDITION_TYPE)
+                : new Condition(
+                        null,
+                        SUCCESS_STATUS_MESSAGE.formatted(image),
+                        null,
+                        null,
+                        ConditionStatus.True,
+                        CONDITION_TYPE);
     }
 }

@@ -46,7 +46,7 @@ public class ApplyOrbitConfigurationChangeStep implements ProcessorStep<NetworkO
         Objects.requireNonNull(status, "NetworkOperationStatus status is required");
         Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
 
-        if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed)) {
+        if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed) || isDone(status)) {
             return status;
         }
 

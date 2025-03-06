@@ -15,6 +15,7 @@ import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.lang.invoke.MethodHandles;
 import java.time.Instant;
+import java.util.Objects;
 import org.jboss.logging.Logger;
 
 public class DeleteClusterConfigStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
@@ -30,6 +31,11 @@ public class DeleteClusterConfigStep implements ProcessorStep<NetworkOperation, 
     @Override
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context) {
+
+        Objects.requireNonNull(resource, "NetworkOperation resource is required");
+        Objects.requireNonNull(status, "NetworkOperationStatus status is required");
+        Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
+
         if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed) || isDone(status)) {
             return status;
         }

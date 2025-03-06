@@ -9,7 +9,9 @@ import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationstatus.SoftwareSourceStatus;
+import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import java.util.Objects;
 
 /**
  * ReverifyConsensusNodeChangesetStep re-verifies the consensus node changeset and selects a new image if the original
@@ -51,6 +53,14 @@ public class ReverifyConsensusNodeChangesetStep extends ConsensusVerifier
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context)
             throws ProcessorException {
+        Objects.requireNonNull(resource, "NetworkOperation resource is required");
+        Objects.requireNonNull(status, "NetworkOperationStatus status is required");
+        Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
+
+        if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed) || isDone(status)) {
+            return status;
+        }
+
         return updateStatus(
                 resource,
                 status,
@@ -59,5 +69,12 @@ public class ReverifyConsensusNodeChangesetStep extends ConsensusVerifier
                 this::createCondition,
                 SoftwareSourceStatus::getConsensusNode,
                 SoftwareSourceStatus::setConsensusNode);
+    }
+
+    public static boolean isDone(NetworkOperationStatus status) {
+        return ApplyConsensusPodChangeStep.isDone(status)
+                || status.getConditions().stream()
+                        .anyMatch(c -> c.getType().equals(ConsensusVerifier.CONDITION_TYPE)
+                                && c.getStatus().equals(ConditionStatus.True));
     }
 }
