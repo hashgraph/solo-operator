@@ -48,10 +48,6 @@ import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpec;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSourceBuilder;
-import io.fabric8.kubernetes.api.model.Pod;
-import io.fabric8.kubernetes.api.model.PodBuilder;
-import io.fabric8.kubernetes.api.model.PodFluent;
-import io.fabric8.kubernetes.api.model.PodTemplateSpecBuilder;
 import io.fabric8.kubernetes.api.model.ResourceRequirements;
 import io.fabric8.kubernetes.api.model.Volume;
 import io.fabric8.kubernetes.api.model.VolumeBuilder;
@@ -74,7 +70,9 @@ import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
-@KubernetesDependent(labelSelector = "app.kubernetes.io/managed-by=solo-operator,app.kubernetes.io/part-of=consensus-node,app.kubernetes.io/component=deployment")
+@KubernetesDependent(
+        labelSelector =
+                "app.kubernetes.io/managed-by=solo-operator,app.kubernetes.io/part-of=consensus-node,app.kubernetes.io/component=deployment")
 public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deployment, ConsensusCapsule> {
     public static final String NAME_SUFFIX = "-deploy";
 
@@ -183,7 +181,8 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         copyPodProperties(primary.getSpec().getPodProperties(), deploymentBuilder);
 
         // force security context if it is not set already
-        if (Objects.isNull(deploymentBuilder.build().getSpec().getTemplate().getSpec().getSecurityContext())) {
+        if (Objects.isNull(
+                deploymentBuilder.build().getSpec().getTemplate().getSpec().getSecurityContext())) {
             deploymentBuilder
                     .editSpec()
                     .editTemplate()
