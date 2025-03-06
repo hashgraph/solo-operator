@@ -30,7 +30,7 @@ spec:
     - name: "init-consensus-node"
       # must use the same image as the consensus-node as we need to copy VERSION file from it
       # {#if cn.softwareVersion.manifestHash}
-      image: "{cn.softwareVersion.repository}/{cn.softwareVersion.imageName}:{cn.softwareVersion.manifestHash}"
+      image: "{cn.softwareVersion.repository}/{cn.softwareVersion.imageName}@{cn.softwareVersion.manifestHash}"
       # {#else}
       image: "{cn.softwareVersion.repository}/{cn.softwareVersion.imageName}:{cn.softwareVersion.imageTag}"
       # {/if}
@@ -118,7 +118,7 @@ spec:
   containers:
     - name: "{cn.name}"
       # {#if cn.softwareVersion.manifestHash}
-      image: "{cn.softwareVersion.repository}/{cn.softwareVersion.imageName}:{cn.softwareVersion.manifestHash}"
+      image: "{cn.softwareVersion.repository}/{cn.softwareVersion.imageName}@{cn.softwareVersion.manifestHash}"
       # {#else}
       image: "{cn.softwareVersion.repository}/{cn.softwareVersion.imageName}:{cn.softwareVersion.imageTag}"
       # {/if}
@@ -185,7 +185,7 @@ spec:
     # Sidecar: record-stream-uploader
     - name: "{rsu.name}"
       # {#if rsu.softwareVersion.manifestHash}
-      image: "{rsu.softwareVersion.repository}/{rsu.softwareVersion.imageName}:{rsu.softwareVersion.manifestHash}"
+      image: "{rsu.softwareVersion.repository}/{rsu.softwareVersion.imageName}@{rsu.softwareVersion.manifestHash}"
       # {#else}
       image: "{rsu.softwareVersion.repository}/{rsu.softwareVersion.imageName}:{rsu.softwareVersion.imageTag}"
       # {/if}
@@ -258,7 +258,7 @@ spec:
     # Sidecar: record-stream-sidecar-files-uploader
     - name: "{rssu.name}"
       # {#if rssu.softwareVersion.manifestHash}
-      image: "{rssu.softwareVersion.repository}/{rssu.softwareVersion.imageName}:{rssu.softwareVersion.manifestHash}"
+      image: "{rssu.softwareVersion.repository}/{rssu.softwareVersion.imageName}@{rssu.softwareVersion.manifestHash}"
       # {#else}
       image: "{rssu.softwareVersion.repository}/{rssu.softwareVersion.imageName}:{rssu.softwareVersion.imageTag}"
       # {/if}
@@ -329,7 +329,7 @@ spec:
     # Sidecar: event-stream-uploader
     - name: "{esu.name}"
       # {#if esu.softwareVersion.manifestHash}
-      image: "{esu.softwareVersion.repository}/{esu.softwareVersion.imageName}:{esu.softwareVersion.manifestHash}"
+      image: "{esu.softwareVersion.repository}/{esu.softwareVersion.imageName}@{esu.softwareVersion.manifestHash}"
       # {#else}
       image: "{esu.softwareVersion.repository}/{esu.softwareVersion.imageName}:{esu.softwareVersion.imageTag}"
       # {/if}
@@ -397,7 +397,7 @@ spec:
     # Sidecar: backup-uploader
     - name: "{bu.name}"
       # {#if bu.softwareVersion.manifestHash}
-      image: "{bu.softwareVersion.repository}/{bu.softwareVersion.imageName}:{bu.softwareVersion.manifestHash}"
+      image: "{bu.softwareVersion.repository}/{bu.softwareVersion.imageName}@{bu.softwareVersion.manifestHash}"
       # {#else}
       image: "{bu.softwareVersion.repository}/{bu.softwareVersion.imageName}:{bu.softwareVersion.imageTag}"
       # {/if}
@@ -426,7 +426,7 @@ spec:
     # Sidecar: open-telemetry-collector
     - name: "{oc.name}"
       # {#if oc.softwareVersion.manifestHash}
-      image: "{oc.softwareVersion.repository}/{oc.softwareVersion.imageName}:{oc.softwareVersion.manifestHash}"
+      image: "{oc.softwareVersion.repository}/{oc.softwareVersion.imageName}@{oc.softwareVersion.manifestHash}"
       # {#else}
       image: "{oc.softwareVersion.repository}/{oc.softwareVersion.imageName}:{oc.softwareVersion.imageTag}"
       # {/if}
