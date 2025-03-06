@@ -28,4 +28,18 @@ public class StreamUploaderUtil {
             default -> null;
         };
     }
+
+    public static String toStreamUploaderType(String containerName) {
+        return switch (containerName) {
+            case Constants.TPL_VAR_BACKUP_UPLOADER -> "BackupUploader";
+            case Constants.TPL_VAR_EVENT_STREAM_UPLOADER -> "EventsStreamUploader";
+            case Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER -> "RecordStreamSidecarUploader";
+            case Constants.TPL_VAR_RECORD_STREAM_UPLOADER -> "RecordStreamUploader";
+            default -> throw new IllegalStateException("Unrecognized stream uploader container name: " + containerName);
+        };
+    }
+
+    public static String computeConditionType(final String containerName) {
+        return "ImageVerified: " + toStreamUploaderType(containerName);
+    }
 }

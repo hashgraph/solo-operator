@@ -11,7 +11,9 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationstatus.SoftwareSourceStatus;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import java.lang.invoke.MethodHandles;
 import java.util.Objects;
+import org.jboss.logging.Logger;
 
 /**
  * ReverifyConsensusNodeChangesetStep re-verifies the consensus node changeset and selects a new image if the original
@@ -49,6 +51,8 @@ import java.util.Objects;
  */
 public class ReverifyConsensusNodeChangesetStep extends ConsensusVerifier
         implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
+    private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
+
     @Override
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context)
@@ -61,6 +65,9 @@ public class ReverifyConsensusNodeChangesetStep extends ConsensusVerifier
             return status;
         }
 
+        log.infof(
+                "Verifying consensus node image for network operation: %s/%s",
+                resource.getMetadata().getNamespace(), resource.getMetadata().getName());
         return updateStatus(
                 resource,
                 status,
@@ -72,9 +79,12 @@ public class ReverifyConsensusNodeChangesetStep extends ConsensusVerifier
     }
 
     public static boolean isDone(NetworkOperationStatus status) {
-        return ApplyConsensusPodChangeStep.isDone(status)
-                || status.getConditions().stream()
-                        .anyMatch(c -> c.getType().equals(ConsensusVerifier.CONDITION_TYPE)
-                                && c.getStatus().equals(ConditionStatus.True));
+        if (status == null || status.getConditions() == null) {
+            return false;
+        }
+
+        return status.getConditions().stream()
+                .anyMatch(c -> c.getType().equals(ConsensusVerifier.CONDITION_TYPE)
+                        && c.getStatus().equals(ConditionStatus.True));
     }
 }

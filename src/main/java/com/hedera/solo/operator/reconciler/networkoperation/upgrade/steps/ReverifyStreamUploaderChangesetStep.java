@@ -3,6 +3,8 @@
 package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
 
 import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyLayerHashes.updateStatus;
+import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.utils.StreamUploaderUtil.computeConditionType;
+import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.utils.StreamUploaderUtil.toStreamUploaderType;
 
 import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorStep;
@@ -12,7 +14,9 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.utils.StreamUploaderUtil;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import java.lang.invoke.MethodHandles;
 import java.util.Objects;
+import org.jboss.logging.Logger;
 
 /**
  * ReverifyStreamUploaderChangesetStep re-verifies the changeset for the stream uploaders and selects a new image if
@@ -34,6 +38,8 @@ import java.util.Objects;
  */
 public class ReverifyStreamUploaderChangesetStep extends StreamUploaderVerifier
         implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
+    private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
+
     public ReverifyStreamUploaderChangesetStep(String name) {
         super(name);
     }
@@ -54,6 +60,12 @@ public class ReverifyStreamUploaderChangesetStep extends StreamUploaderVerifier
             return status; // no-op
         }
 
+        log.infof(
+                "Verifying '%s' image verification for network operation: %s/%s",
+                toStreamUploaderType(this.containerName),
+                resource.getMetadata().getNamespace(),
+                resource.getMetadata().getName());
+
         return updateStatus(
                 resource,
                 status,
@@ -65,9 +77,12 @@ public class ReverifyStreamUploaderChangesetStep extends StreamUploaderVerifier
     }
 
     public static boolean isDone(NetworkOperationStatus status, String containerName) {
+        if (status == null || status.getConditions() == null) {
+            return false;
+        }
+
         final String type = computeConditionType(containerName);
-        return ApplyConsensusPodChangeStep.isDone(status)
-                || status.getConditions().stream()
-                        .anyMatch(c -> c.getType().equals(type) && c.getStatus().equals(ConditionStatus.True));
+        return status.getConditions().stream()
+                .anyMatch(c -> c.getType().equals(type) && c.getStatus().equals(ConditionStatus.True));
     }
 }
