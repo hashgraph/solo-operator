@@ -5,7 +5,7 @@ package com.hedera.solo.operator.reconciler.networkoperation.genesis.steps;
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.library.k8s.KubeletConfig.clusterDomain;
 import static com.hedera.solo.operator.reconciler.common.Constants.COMPONENT_CONSENSUS_NODE;
-import static com.hedera.solo.operator.reconciler.common.Constants.COMPONENT_POD;
+import static com.hedera.solo.operator.reconciler.common.Constants.COMPONENT_DEPLOYMENT;
 import static com.hedera.solo.operator.reconciler.common.Constants.CONFIG_KEY_CONFIG_TXT;
 import static com.hedera.solo.operator.reconciler.common.Constants.CONFIG_KEY_POD_IPS;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_COMPONENT;
@@ -221,7 +221,7 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
         Map<String, String> labels = Map.of(
                 LABEL_K8S_MANAGED_BY, SOLO_OPERATOR,
                 LABEL_K8S_PART_OF, COMPONENT_CONSENSUS_NODE,
-                LABEL_K8S_COMPONENT, COMPONENT_POD);
+                LABEL_K8S_COMPONENT, COMPONENT_DEPLOYMENT);
 
         PodList podList = customResourceManager.pods(primary.getMetadata().getNamespace(), labels);
 

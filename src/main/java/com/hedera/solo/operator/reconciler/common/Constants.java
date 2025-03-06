@@ -146,7 +146,6 @@ public final class Constants {
     public static final String COMPONENT_CONFIG_MAP = "cm";
     public static final String COMPONENT_SECRET = "secret";
     public static final String COMPONENT_SERVICE = "svc";
-    public static final String COMPONENT_POD = "pod";
     public static final String COMPONENT_PVC = "pvc";
     public static final String COMPONENT_DEPLOYMENT = "deployment";
     public static final String COMPONENT_ROLE_BINDING = "role-binding";
