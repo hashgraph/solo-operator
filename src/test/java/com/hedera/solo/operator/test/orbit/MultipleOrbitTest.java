@@ -286,6 +286,7 @@ public class MultipleOrbitTest {
                 .with(spec -> spec.editSpec()
                         .withOrbit(orbit.getMetadata().getName())
                         .withAccountId("0.0." + (id + 3))
+                        .withWeight(1L)
                         .withNodeId(id)
                         .withExternalAddress(prepareNodeName(id) + "-svc." + namespace))
                 .with(image -> image.editSpec()

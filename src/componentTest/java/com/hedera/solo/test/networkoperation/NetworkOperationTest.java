@@ -493,6 +493,7 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                         .with(spec -> spec.editSpec()
                                 .withNodeId(nodeId)
                                 .withAccountId("0.0.%d".formatted(nodeId))
+                                .withWeight(1L)
                                 .withOrbit(operator().getNamespace())
                                 .editPodProperties()
                                 .editContainers()
