@@ -50,6 +50,7 @@ public class ReverifyStreamUploaderChangesetStep extends StreamUploaderVerifier
             throws ProcessorException {
         Objects.requireNonNull(resource, "NetworkOperation resource is required");
         Objects.requireNonNull(status, "NetworkOperationStatus status is required");
+        Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus phase is required");
         Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
 
         final StreamUploaderChangeset changeset = StreamUploaderUtil.findChangeset(resource, this.containerName);

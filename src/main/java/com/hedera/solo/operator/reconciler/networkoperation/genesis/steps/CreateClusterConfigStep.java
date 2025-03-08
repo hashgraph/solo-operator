@@ -67,8 +67,8 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context) {
         Objects.requireNonNull(resource, "NetworkOperation resource is required");
         Objects.requireNonNull(status, "NetworkOperationStatus status is required");
+        Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus phase is required");
         Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
-
         if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed) || isDone(status)) {
             return status;
         }

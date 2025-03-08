@@ -59,6 +59,7 @@ public class ReverifyConsensusNodeChangesetStep extends ConsensusVerifier
             throws ProcessorException {
         Objects.requireNonNull(resource, "NetworkOperation resource is required");
         Objects.requireNonNull(status, "NetworkOperationStatus status is required");
+        Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus phase is required");
         Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
 
         if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed) || isDone(status)) {

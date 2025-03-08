@@ -7,6 +7,7 @@ import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import java.util.Objects;
 
 /** CheckStreamUploaderRunningStep checks that a particular stream uploader is in running state */
 public class CheckStreamUploaderRunningStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
@@ -22,6 +23,11 @@ public class CheckStreamUploaderRunningStep implements ProcessorStep<NetworkOper
     @Override
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context) {
+        Objects.requireNonNull(resource, "NetworkOperation resource is required");
+        Objects.requireNonNull(status, "NetworkOperationStatus status is required");
+        Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus phase is required");
+        Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
+
         // FIXME: Implement this method
         return status;
     }

@@ -96,7 +96,9 @@ public class VerifyStepsTest {
         allUnknown(networkOperation, new FreezeScheduledTask());
 
         // re-verify (with empty status)
-        networkOperation.setStatus(new NetworkOperationStatus());
+        networkOperation.setStatus(new NetworkOperationStatusBuilder()
+                .withPhase(NetworkOperationStatus.Phase.Failed)
+                .build());
         allUnknown(networkOperation, new FreezeScheduledTask());
     }
 
@@ -112,7 +114,9 @@ public class VerifyStepsTest {
         allMatch(networkOperation, new FreezeScheduledTask());
 
         // re-verify (with empty status)
-        networkOperation.setStatus(new NetworkOperationStatus());
+        networkOperation.setStatus(new NetworkOperationStatusBuilder()
+                .withPhase(NetworkOperationStatus.Phase.Pending)
+                .build());
         allMatch(networkOperation, new FreezeScheduledTask());
     }
 
