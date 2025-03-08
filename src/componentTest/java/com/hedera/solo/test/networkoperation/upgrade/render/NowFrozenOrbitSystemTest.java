@@ -67,7 +67,7 @@ public class NowFrozenOrbitSystemTest extends NowFrozenOrbitUnitTest {
         Context<NetworkOperation> context = mock(Context.class);
         when(context.getClient()).thenReturn(kubernetesClient);
         ApplyOrbitConfigurationChangeStep applyOrbitConfigurationChangeStep = new ApplyOrbitConfigurationChangeStep();
-        applyOrbitConfigurationChangeStep.run(networkOperation, null, context);
+        applyOrbitConfigurationChangeStep.run(networkOperation, networkOperation.getStatus(), context);
         return kubernetesClient.resource(initial).get();
     }
 
