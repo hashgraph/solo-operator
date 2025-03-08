@@ -40,7 +40,6 @@ import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
-import jakarta.inject.Inject;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -72,14 +71,7 @@ public class ConsensusCapsuleReconciler
             hasLabel(Constants.LABEL_APP, Constants.COMPONENT_CONSENSUS_NODE);
     public static final String CONSENSUS_CONTAINER_NAME = "consensus-node";
 
-    private static Logger log = Logger.getLogger(ConsensusCapsuleReconciler.class);
-
-    @Inject
-    public ConsensusCapsuleReconciler(final Logger log) {
-        if (log != null) {
-            ConsensusCapsuleReconciler.log = log;
-        }
-    }
+    private static final Logger log = Logger.getLogger(ConsensusCapsuleReconciler.class);
 
     @Override
     public UpdateControl<ConsensusCapsule> reconcile(
