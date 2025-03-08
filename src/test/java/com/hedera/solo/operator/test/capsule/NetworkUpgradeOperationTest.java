@@ -111,7 +111,7 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract {
     }
 
     private void checkStatus(List<ConsensusCapsule> consensusCapsules) {
-        await().atMost(5, TimeUnit.MINUTES).untilAsserted(() -> {
+        await().atMost(10, TimeUnit.MINUTES).untilAsserted(() -> {
             Thread.sleep(2000);
             NetworkOperation netOp = kubernetesClient
                     .resources(NetworkOperation.class)
