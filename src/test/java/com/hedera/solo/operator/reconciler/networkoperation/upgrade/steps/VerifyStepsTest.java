@@ -24,6 +24,7 @@ import com.hedera.solo.operator.model.commonspec.ImageVerificationSpec;
 import com.hedera.solo.operator.model.commonspec.SoftwareVersionSource;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatusBuilder;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationspec.networkupgrade.Changesets;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationstatus.SoftwareSourceStatus;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
@@ -75,7 +76,9 @@ public class VerifyStepsTest {
         allNotFound(networkOperation, new FreezeScheduledTask());
 
         // re-verify (with empty status)
-        networkOperation.setStatus(new NetworkOperationStatus());
+        networkOperation.setStatus(new NetworkOperationStatusBuilder()
+                .withPhase(NetworkOperationStatus.Phase.Pending)
+                .build());
         allNotFound(networkOperation, new FreezeScheduledTask());
     }
 
@@ -146,19 +149,19 @@ public class VerifyStepsTest {
                 .willReturn(ok().withHeader("Content-Type", "application/vnd.oci.image.index.v1+json")
                         .withBody(
                                 """
-                                {
-                                  "manifests": [
-                                    {
-                                      "mediaType": "application/vnd.oci.image.manifest.v1+json",
-                                      "digest": "%s",
-                                      "platform": {
-                                        "os": "%s",
-                                        "architecture": "%s"
-                                      }
-                                    }
-                                  ]
-                                }
-                                """
+                                        {
+                                          "manifests": [
+                                            {
+                                              "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                                              "digest": "%s",
+                                              "platform": {
+                                                "os": "%s",
+                                                "architecture": "%s"
+                                              }
+                                            }
+                                          ]
+                                        }
+                                        """
                                         .formatted(digest, spec.getOs(), spec.getArchitecture()))));
     }
 
@@ -202,6 +205,7 @@ public class VerifyStepsTest {
                         .editChangesets()
                         .editOtelCollector()
                         .withSoftwareVersionSource(softwareVersionSource("otel", "6.0", "windows", "amd64", "hash:7")))
+                .with(status -> status.editStatus().withPhase(NetworkOperationStatus.Phase.Pending))
                 .build();
     }
 
