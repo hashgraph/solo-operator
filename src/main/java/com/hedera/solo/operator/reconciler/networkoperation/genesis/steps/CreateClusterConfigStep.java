@@ -129,7 +129,7 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
                 return status;
             }
 
-            log.error("Failed to create cluster config", ex);
+            log.errorf("Failed to create cluster config: %s", ex);
             return edit(status)
                     .with(s -> s.addToConditions(new ConditionBuilder()
                                     .withType(CONDITION_TYPE)

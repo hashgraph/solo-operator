@@ -6,6 +6,7 @@ import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec.Mode.NetworkGenesis;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_COMPONENT;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_MANAGED_BY;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_NODE_ID;
 import static com.hedera.solo.operator.reconciler.common.Constants.OPERATOR_PREFIX;
 import static com.hedera.solo.operator.reconciler.common.Constants.SOLO_OPERATOR;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,6 +44,7 @@ import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.config.ControllerConfigurationOverrider;
 import io.javaoperatorsdk.operator.junit.LocallyRunOperatorExtension;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -122,11 +124,15 @@ public class NetworkOperationTest extends AbstractOperatorTest {
 
                     List<Long> capsuleNodeIds = prepareNodeIds(3);
                     for (Long nodeId : capsuleNodeIds) {
+                        String creationTimestamp =
+                                Instant.now().plusSeconds(nodeId + 1).toString();
                         podList.getItems()
                                 .add(new PodBuilder()
                                         .withNewMetadata()
                                         .withName(Metadata.prepareNodeName(nodeId))
                                         .withNamespace(namespace)
+                                        .withCreationTimestamp(creationTimestamp)
+                                        .withLabels(Map.of(LABEL_NODE_ID, String.valueOf(nodeId)))
                                         .endMetadata()
                                         .withNewStatus()
                                         .withPhase("Running")
