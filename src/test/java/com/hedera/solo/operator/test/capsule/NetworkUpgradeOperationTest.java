@@ -132,26 +132,26 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract {
                     .withName(Constants.CLUSTER_CONFIG_NAME)
                     .get();
             assertThat(cc).isNotNull();
-        });
 
-        for (ConsensusCapsule consensusCapsule : consensusCapsules) {
-            String name = consensusCapsule.getMetadata().getName();
-            ConsensusCapsule capsule =
-                    kubernetesClient.resource(consensusCapsule).get();
-            assertThat(capsule).isNotNull();
+            for (ConsensusCapsule consensusCapsule : consensusCapsules) {
+                String name = consensusCapsule.getMetadata().getName();
+                ConsensusCapsule capsule =
+                        kubernetesClient.resource(consensusCapsule).get();
+                assertThat(capsule).isNotNull();
 
-            List<Pod> pods = kubernetesClient
-                    .resources(Pod.class)
-                    .inNamespace(namespace)
-                    .withLabel(LABEL_NODE_NAME, name) // convention: capsule name is the node name
-                    .list()
-                    .getItems();
-            assertThat(pods.size()).isEqualTo(2); // two pods per node should be running at this stage
-            assertThat(pods.getFirst().getStatus()).isNotNull();
-            for (Pod pod : pods) {
-                assertThat(pod.getStatus().getPhase()).isEqualTo("Running");
-                assertThat(pod.getStatus().getPodIP()).isNotEmpty();
+                List<Pod> pods = kubernetesClient
+                        .resources(Pod.class)
+                        .inNamespace(namespace)
+                        .withLabel(LABEL_NODE_NAME, name) // convention: capsule name is the node name
+                        .list()
+                        .getItems();
+                assertThat(pods.size()).isEqualTo(2); // two pods per node should be running at this stage
+                assertThat(pods.getFirst().getStatus()).isNotNull();
+                for (Pod pod : pods) {
+                    assertThat(pod.getStatus().getPhase()).isEqualTo("Running");
+                    assertThat(pod.getStatus().getPodIP()).isNotEmpty();
+                }
             }
-        }
+        });
     }
 }
