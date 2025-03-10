@@ -2,6 +2,7 @@
 
 package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
 
+import static com.hedera.solo.operator.library.time.Timestamp.timestamp;
 import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyLayerHashes.selectedImage;
 
 import com.hedera.solo.operator.model.commonspec.ConsensusNodeChangeset;
@@ -32,10 +33,11 @@ public class ConsensusVerifier {
 
     Condition createCondition(final NetworkOperationStatus status) {
         String image = selectedImage(status.getSoftwareSourceStatus().getConsensusNode());
+        String timestamp = timestamp();
         return image == null
                 ? new Condition(null, FAIL_STATUS_MESSAGE, null, null, ConditionStatus.False, CONDITION_TYPE)
                 : new Condition(
-                        null,
+                        timestamp,
                         SUCCESS_STATUS_MESSAGE.formatted(image),
                         null,
                         null,

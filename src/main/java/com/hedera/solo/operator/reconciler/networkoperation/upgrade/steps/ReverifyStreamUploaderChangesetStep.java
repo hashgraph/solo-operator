@@ -61,6 +61,10 @@ public class ReverifyStreamUploaderChangesetStep extends StreamUploaderVerifier
             return status; // no-op
         }
 
+        if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed) || isDone(status, this.containerName)) {
+            return status;
+        }
+
         log.infof(
                 "Verifying '%s' image verification for network operation: %s/%s",
                 toStreamUploaderType(this.containerName),

@@ -2,6 +2,7 @@
 
 package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
 
+import static com.hedera.solo.operator.library.time.Timestamp.timestamp;
 import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyLayerHashes.selectedImage;
 import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyLayerHashes.updateStatus;
 
@@ -58,8 +59,15 @@ public class VerifyOtelCollectorStep implements ProcessorStep<NetworkOperation, 
 
     Condition createCondition(final NetworkOperationStatus status) {
         String image = selectedImage(status.getSoftwareSourceStatus().getConsensusNode());
+        String timestamp = timestamp();
         return image == null
-                ? new Condition(null, "image verification failed", null, null, ConditionStatus.False, CONDITION_TYPE)
+                ? new Condition(
+                        timestamp,
+                        "image verification failed for 'otel-collector'",
+                        null,
+                        null,
+                        ConditionStatus.False,
+                        CONDITION_TYPE)
                 : new Condition(
                         null,
                         "Successfully verified image: " + image,

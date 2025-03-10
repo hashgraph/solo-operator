@@ -3,6 +3,7 @@
 package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
+import static com.hedera.solo.operator.library.time.Timestamp.timestamp;
 
 import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorStep;
@@ -16,7 +17,6 @@ import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.lang.invoke.MethodHandles;
-import java.time.Instant;
 import java.util.Objects;
 import org.jboss.logging.Logger;
 
@@ -51,6 +51,7 @@ public class ApplyOrbitConfigurationChangeStep implements ProcessorStep<NetworkO
             return status;
         }
 
+        String timestamp = timestamp();
         try {
             KubernetesClient client = context.getClient();
             NowFrozenOrbit nowFrozen = new NowFrozenOrbit(resource);
@@ -69,7 +70,7 @@ public class ApplyOrbitConfigurationChangeStep implements ProcessorStep<NetworkO
                     .with(s -> s.addToConditions(new ConditionBuilder()
                                     .withType(CONDITION_TYPE)
                                     .withStatus(ConditionStatus.False)
-                                    .withLastTransitionTime(Instant.now().toString())
+                                    .withLastTransitionTime(timestamp)
                                     .withMessage("Failed to update orbit '%s': %s"
                                             .formatted(resource.getSpec().getOrbit(), ex.getMessage()))
                                     .build())
@@ -82,7 +83,7 @@ public class ApplyOrbitConfigurationChangeStep implements ProcessorStep<NetworkO
                 .with(s -> s.addToConditions(new ConditionBuilder()
                         .withType(CONDITION_TYPE)
                         .withStatus(ConditionStatus.True)
-                        .withLastTransitionTime(Instant.now().toString())
+                        .withLastTransitionTime(timestamp)
                         .withMessage("Successfully updated orbit: %s"
                                 .formatted(resource.getSpec().getOrbit()))
                         .build()))

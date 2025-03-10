@@ -3,6 +3,7 @@
 package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
+import static com.hedera.solo.operator.library.time.Timestamp.timestamp;
 import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyLayerHashes.selectedImage;
 import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.utils.StreamUploaderUtil.computeConditionType;
 
@@ -52,8 +53,10 @@ public class StreamUploaderVerifier {
     Condition createCondition(final NetworkOperationStatus status) {
         String type = computeConditionType(containerName);
         String image = selectedImage(getter().apply(status.getSoftwareSourceStatus()));
+        String timestamp = timestamp();
         return edit(new Condition())
                 .with(builder -> builder.withType(type)
+                        .withLastTransitionTime(timestamp)
                         .withMessage(
                                 image == null
                                         ? FAIL_STATUS_MESSAGE.formatted(containerName)

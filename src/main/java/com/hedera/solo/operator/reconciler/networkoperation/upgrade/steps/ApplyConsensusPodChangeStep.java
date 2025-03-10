@@ -3,6 +3,7 @@
 package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
+import static com.hedera.solo.operator.library.time.Timestamp.timestamp;
 
 import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorStep;
@@ -21,7 +22,6 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.dsl.Listable;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.lang.invoke.MethodHandles;
-import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -65,6 +65,7 @@ public class ApplyConsensusPodChangeStep implements ProcessorStep<NetworkOperati
         Set<Long> includeNodes = resource.getSpec().getNetworkUpgrade().getAddressBook().stream()
                 .map(AddressBookEntry::getNodeId)
                 .collect(Collectors.toSet());
+        String timestamp = timestamp();
         try {
             KubernetesClient client = context.getClient();
             String namespace = resource.getMetadata().getNamespace();
@@ -86,7 +87,7 @@ public class ApplyConsensusPodChangeStep implements ProcessorStep<NetworkOperati
                     .with(s -> s.addToConditions(new ConditionBuilder()
                                     .withType(CONDITION_TYPE)
                                     .withStatus(ConditionStatus.False)
-                                    .withLastTransitionTime(Instant.now().toString())
+                                    .withLastTransitionTime(timestamp)
                                     .withMessage("Failed to update consensus capsules: %s".formatted(ex.getMessage()))
                                     .build())
                             .withUpgradedNodes(upgradedNodes)
@@ -100,7 +101,7 @@ public class ApplyConsensusPodChangeStep implements ProcessorStep<NetworkOperati
                 .with(s -> s.addToConditions(new ConditionBuilder()
                                 .withType(CONDITION_TYPE)
                                 .withStatus(ConditionStatus.True)
-                                .withLastTransitionTime(Instant.now().toString())
+                                .withLastTransitionTime(timestamp)
                                 .withMessage("Successfully updated consensus capsules")
                                 .build())
                         .withUpgradedNodes(upgradedNodes))

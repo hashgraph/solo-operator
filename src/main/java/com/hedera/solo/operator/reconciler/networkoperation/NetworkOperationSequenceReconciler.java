@@ -5,6 +5,7 @@ package com.hedera.solo.operator.reconciler.networkoperation;
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.library.reconcile.ReconcileEvent.cleanupEvents;
 import static com.hedera.solo.operator.library.reconcile.ReconcileEvent.createOrUpdateEvent;
+import static com.hedera.solo.operator.library.time.Timestamp.timestamp;
 import static com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec.Mode.NodeAdd;
 import static com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec.Mode.NodeDelete;
 import static com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec.Mode.NodeUpdate;
@@ -25,6 +26,7 @@ import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckPr
 import com.hedera.solo.operator.reconciler.networkoperation.genesis.NetworkGenesisProcessor;
 import com.hedera.solo.operator.reconciler.networkoperation.node.NodeOperationProcessor;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.NetworkUpgradeProcessor;
+import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -206,10 +208,18 @@ public class NetworkOperationSequenceReconciler
             capsuleNames.add(capsule.getMetadata().getName());
         }
 
+        String timestamp = timestamp();
         return edit(resource)
                 .with(r -> r.withNewStatus() // initializing an empty new status
                         .withConsensusCapsules(capsuleNames)
-                        .withPhase(NetworkOperationStatus.Phase.Pending))
+                        .withPhase(NetworkOperationStatus.Phase.Pending)
+                        .withConditions(new Condition(
+                                timestamp,
+                                "Network operation initialized",
+                                null,
+                                null,
+                                ConditionStatus.True,
+                                "Initialized")))
                 .build();
     }
 
