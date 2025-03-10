@@ -56,7 +56,6 @@ import io.fabric8.kubernetes.api.model.Volume;
 import io.fabric8.kubernetes.api.model.VolumeBuilder;
 import io.fabric8.kubernetes.client.utils.Serialization;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.processing.dependent.kubernetes.BooleanWithUndefined;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import io.quarkus.qute.Location;
@@ -72,7 +71,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
-@KubernetesDependent(useSSA = BooleanWithUndefined.FALSE, labelSelector = "app=consensus-node")
+@KubernetesDependent(labelSelector = "app=consensus-node")
 public class CapsulePod extends CRUDKubernetesDependentResource<Pod, ConsensusCapsule> {
     public static final String NAME_SUFFIX = "-pod";
 

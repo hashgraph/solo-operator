@@ -2,11 +2,14 @@
 
 package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
 
+import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyLayerHashes.updateStatus;
+
 import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.commonspec.ConsensusNodeChangeset;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
+import com.hedera.solo.operator.model.v1alpha1.networkoperationstatus.SoftwareSourceStatus;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.util.Objects;
 
@@ -76,25 +79,8 @@ import java.util.Objects;
  *
  * <p>If a valid image source is found, add a condition to the status indicating the success and the selected source URL
  */
-public class VerifyConsensusNodeChangesetStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
-    public static final String SUCCESS_STATUS_MESSAGE =
-            "Consensus image verification succeeded. Selected for deployment: %s";
-    public static final String FAIL_STATUS_MESSAGE = "Consensus image verification failed";
-    public static final String IMAGE_VERIFICATION_SUCCESS_MESSAGE = "Image verification succeeded: %s";
-    public static final String IMAGE_VERIFICATION_FAIL_MESSAGE = "Image verification failed: %s";
-
-    private ConsensusNodeChangeset getConsensusNodeChangeset(NetworkOperation resource) {
-        Objects.requireNonNull(resource, "NetworkOperation must not be null");
-        Objects.requireNonNull(resource.getSpec(), "NetworkOperation spec must not be null");
-        Objects.requireNonNull(resource.getSpec().getNetworkUpgrade(), "Network upgrade spec must not be null");
-        Objects.requireNonNull(resource.getSpec().getNetworkUpgrade().getChangesets(), "Changesets must not be null");
-        Objects.requireNonNull(
-                resource.getSpec().getNetworkUpgrade().getChangesets().getConsensusNodeChangeset(),
-                "consensus-node changeset must not be null");
-
-        return resource.getSpec().getNetworkUpgrade().getChangesets().getConsensusNodeChangeset();
-    }
-
+public class VerifyConsensusNodeChangesetStep extends ConsensusVerifier
+        implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     @Override
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context)
@@ -102,10 +88,13 @@ public class VerifyConsensusNodeChangesetStep implements ProcessorStep<NetworkOp
         Objects.requireNonNull(resource, "NetworkOperation must not be null");
         Objects.requireNonNull(context, "Context must not be null");
 
-        final ConsensusNodeChangeset changeset = this.getConsensusNodeChangeset(resource);
-        Objects.requireNonNull(changeset.getSoftwareVersionSource(), "SoftwareVersionSource must not be null");
-
-        // FIXME update status
-        return status;
+        return updateStatus(
+                resource,
+                status,
+                context.getClient(),
+                getSoftwareVersionSource(resource),
+                this::createCondition,
+                SoftwareSourceStatus::getConsensusNode,
+                SoftwareSourceStatus::setConsensusNode);
     }
 }

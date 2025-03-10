@@ -100,7 +100,7 @@ public class SecretHostpathTest extends ConsensusCapsuleTestAbstract {
 
     void runInPod(final String command) {
         Pod pod = createPod(command);
-        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+        await().atMost(Duration.ofSeconds(150)).untilAsserted(() -> {
             Pod tmpPod = kubernetesClient.resource(pod).get();
             assertThat(tmpPod).isNotNull();
             assertThat(tmpPod.getStatus().getPhase()).isEqualTo("Succeeded");

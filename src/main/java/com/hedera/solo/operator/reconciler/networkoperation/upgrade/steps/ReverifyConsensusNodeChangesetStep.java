@@ -2,10 +2,13 @@
 
 package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
 
+import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyLayerHashes.updateStatus;
+
 import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
+import com.hedera.solo.operator.model.v1alpha1.networkoperationstatus.SoftwareSourceStatus;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 
 /**
@@ -42,11 +45,19 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
  *       </ol>
  * </ol>
  */
-public class ReverifyConsensusNodeChangesetStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
+public class ReverifyConsensusNodeChangesetStep extends ConsensusVerifier
+        implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     @Override
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context)
             throws ProcessorException {
-        throw new ProcessorException("Not implemented");
+        return updateStatus(
+                resource,
+                status,
+                context.getClient(),
+                getSoftwareVersionSource(resource),
+                this::createCondition,
+                SoftwareSourceStatus::getConsensusNode,
+                SoftwareSourceStatus::setConsensusNode);
     }
 }

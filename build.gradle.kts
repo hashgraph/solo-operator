@@ -19,11 +19,13 @@ val hederaSdkVersion: String by project
 val javaoperatorsdkVersion: String by project
 val spotbugsVersion: String by project
 val wiremockVersion: String by project
+val smallryeCertificateGeneratorVersion: String by project
 
 dependencies {
     annotationProcessor("io.sundr:builder-annotations:${sundrVersion}")
     annotationProcessor("io.fabric8:kubernetes-client:${fabric8Version}")
     annotationProcessor("io.fabric8:crd-generator-apt:${fabric8Version}")
+    annotationProcessor("org.projectlombok:lombok:${lombokVersion}")
     implementation("io.fabric8:generator-annotations:${fabric8Version}")
 
     implementation(
@@ -41,6 +43,7 @@ dependencies {
     implementation("io.quarkus:quarkus-container-image-docker")
     implementation("io.quarkus:quarkus-kubernetes")
     implementation("io.quarkus:quarkus-kubernetes-client")
+    implementation("io.quarkus:quarkus-security")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk-bundle-generator")
     implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk")
     implementation("io.quarkus:quarkus-resteasy-qute:${quarkusPlatformVersion}")
@@ -82,6 +85,10 @@ dependencies {
     testFixturesImplementation("org.junit.jupiter:junit-jupiter-api")
     testFixturesImplementation("org.eclipse.microprofile.config:microprofile-config-api")
     testFixturesImplementation("com.hedera.hashgraph:sdk:${hederaSdkVersion}")
+    testFixturesImplementation(
+        "io.smallrye.certs:smallrye-certificate-generator-junit5:${smallryeCertificateGeneratorVersion}"
+    )
+    testFixturesImplementation("org.wiremock:wiremock:${wiremockVersion}")
 }
 
 gitExtractor {
@@ -90,7 +97,7 @@ gitExtractor {
             "https://github.com/hashgraph/hedera-services",
             "refs/tags/v0.56.5",
             "hedera-node/configuration/mainnet",
-            "import/hedera/mainnet"
+            "import/hedera/mainnet",
         )
     }
     register(sourceSets.componentTest) {
@@ -98,7 +105,7 @@ gitExtractor {
             "https://github.com/hashgraph/hedera-services",
             "refs/tags/v0.56.5",
             "hedera-node/configuration/mainnet",
-            "import/hedera/mainnet"
+            "import/hedera/mainnet",
         )
     }
 }

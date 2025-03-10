@@ -2,6 +2,8 @@
 
 package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
 
+import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyLayerHashes.updateStatus;
+
 import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.commonspec.StreamUploaderChangeset;
@@ -29,11 +31,10 @@ import java.util.Objects;
  * <p>The changeset can be found by passing the NetworkOperation resource and containerName to
  * {@link StreamUploaderUtil#findChangeset(NetworkOperation, String)}.
  */
-public class ReverifyStreamUploaderChangesetStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
-    private final String containerName;
-
+public class ReverifyStreamUploaderChangesetStep extends StreamUploaderVerifier
+        implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public ReverifyStreamUploaderChangesetStep(String name) {
-        this.containerName = name;
+        super(name);
     }
 
     @Override
@@ -43,12 +44,19 @@ public class ReverifyStreamUploaderChangesetStep implements ProcessorStep<Networ
 
         final StreamUploaderChangeset changeset = StreamUploaderUtil.findChangeset(resource, this.containerName);
 
-        if (Objects.isNull(changeset)) {
+        if (Objects.isNull(changeset) || changeset.getSoftwareVersionSource() == null) {
             return status; // no-op
         }
 
         // FIXME: Implement the logic to reverify the changeset
 
-        throw new ProcessorException("Not implemented");
+        return updateStatus(
+                resource,
+                status,
+                context.getClient(),
+                changeset.getSoftwareVersionSource(),
+                this::createCondition,
+                getter(),
+                setter());
     }
 }

@@ -132,6 +132,13 @@ components:
               type: object
               additionalProperties:
                 type: string
+            genesisProperties:
+              description: |
+                The application configuration for the `Orbit`. This is equivalent to the
+                `data/config/genesis.properties` file.
+              type: object
+              additionalProperties:
+                type: string
             genesis:
               description: |
                 Configuration properties used during the genesis initialization process. Prior to DAB Phase 2,
