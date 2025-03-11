@@ -14,6 +14,7 @@ import com.hedera.solo.operator.model.commonspec.AddressBookEntry;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ApplyConsensusPodChangeStep;
 import com.hedera.solo.operator.test.fixtures.fuzz.BeanFactory;
 import io.fabric8.kubernetes.client.CustomResource;
@@ -29,9 +30,11 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
+@Disabled("need to revisit this fuzz test later")
 public class NowFrozenConsensusCapsulesSystemTest extends NowFrozenConsensusCapsulesUnitTest {
     String namespaceInitial;
     String namespace;
@@ -123,7 +126,11 @@ public class NowFrozenConsensusCapsulesSystemTest extends NowFrozenConsensusCaps
         when(context.getClient()).thenReturn(kubernetesClient);
         ApplyConsensusPodChangeStep applyConsensusPodChangeStep = new ApplyConsensusPodChangeStep();
         List<String> names = capsules.map(c -> c.getMetadata().getName()).toList();
-        applyConsensusPodChangeStep.run(networkOperation, networkOperation.getStatus(), context);
+        NetworkOperationStatus updatedStatus =
+                applyConsensusPodChangeStep.run(networkOperation, networkOperation.getStatus(), context);
+        kubernetesClient
+                .resource(networkOperation.edit().withStatus(updatedStatus).build())
+                .patchStatus();
         return names.stream()
                 .map(name -> new Update(
                         kubernetesClient

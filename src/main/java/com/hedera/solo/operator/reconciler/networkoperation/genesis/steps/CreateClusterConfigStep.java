@@ -5,12 +5,13 @@ package com.hedera.solo.operator.reconciler.networkoperation.genesis.steps;
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.library.k8s.KubeletConfig.clusterDomain;
 import static com.hedera.solo.operator.reconciler.common.Constants.COMPONENT_CONSENSUS_NODE;
-import static com.hedera.solo.operator.reconciler.common.Constants.COMPONENT_POD;
+import static com.hedera.solo.operator.reconciler.common.Constants.COMPONENT_DEPLOYMENT;
 import static com.hedera.solo.operator.reconciler.common.Constants.CONFIG_KEY_CONFIG_TXT;
 import static com.hedera.solo.operator.reconciler.common.Constants.CONFIG_KEY_POD_IPS;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_COMPONENT;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_MANAGED_BY;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_PART_OF;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_NODE_ID;
 import static com.hedera.solo.operator.reconciler.common.Constants.SOLO_OPERATOR;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static java.util.Collections.emptyList;
@@ -37,11 +38,15 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.lang.invoke.MethodHandles;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.SortedSet;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import org.jboss.logging.Logger;
 
 public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
@@ -62,9 +67,9 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context) {
         Objects.requireNonNull(resource, "NetworkOperation resource is required");
         Objects.requireNonNull(status, "NetworkOperationStatus status is required");
+        Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus phase is required");
         Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
-
-        if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed)) {
+        if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed) || isDone(status)) {
             return status;
         }
 
@@ -106,7 +111,7 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
                     .withType(CONDITION_TYPE)
                     .withStatus(ConditionStatus.True)
                     .withLastTransitionTime(Instant.now().toString())
-                    .withMessage("%s/%s created"
+                    .withMessage("Successfully created config: %s/%s"
                             .formatted(
                                     desired.getMetadata().getNamespace(),
                                     desired.getMetadata().getName()))
@@ -181,23 +186,25 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
     Map<Long, String> prepareNodeAddressMap(
             final String domain, final List<ConsensusCapsule> consensusCapsules, final AddressBook addressBook) {
         Map<Long, String> addresses = new TreeMap<>();
+
+        // compute local consensus node addresses
         for (ConsensusCapsule capsule : consensusCapsules) {
-            String name = Metadata.prepareNodeName(capsule);
+            String nodeName = Metadata.prepareNodeName(capsule);
             String namespace = capsule.getMetadata().getNamespace();
-            String internal = "%s.consensus.%s.svc%s"
-                    .formatted(capsule.getMetadata().getName(), namespace, domain != null ? "." + domain : "");
-            String external = capsule.getSpec().getExternalAddress() != null
-                    ? capsule.getSpec().getExternalAddress()
-                    : name + "-svc." + namespace;
+            String internal = computeNodeInternalAddress(domain, capsule, namespace);
+            String external = computeNodeExternalAddress(capsule, nodeName, namespace);
             Long nodeId = capsule.getSpec().getNodeId();
             String accountId = capsule.getSpec().getAccountId();
             Long weight = capsule.getSpec().getWeight();
             addresses.put(
                     nodeId,
                     "address, %d, %s, %s, %s, %s, 50111, %s, 50111, %s\n"
-                            .formatted(nodeId, name, name, weight, internal, external, accountId));
+                            .formatted(nodeId, nodeName, nodeName, weight, internal, external, accountId));
         }
 
+        // override with external addresses from the address book
+        // Note address book may have the full list of nodes or just the external addresses
+        // during network upgrade, we expect the address book to have the full list of nodes
         for (AddressBookEntry entry :
                 Optional.ofNullable(addressBook.getExternalAddresses()).orElse(emptyList())) {
             addresses.put(
@@ -218,21 +225,25 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
         return addresses;
     }
 
+    public static String computeNodeExternalAddress(ConsensusCapsule capsule, String name, String namespace) {
+        return capsule.getSpec().getExternalAddress() != null
+                ? capsule.getSpec().getExternalAddress()
+                : name + "-svc." + namespace;
+    }
+
+    public static String computeNodeInternalAddress(String domain, ConsensusCapsule capsule, String namespace) {
+        return "%s.consensus.%s.svc%s"
+                .formatted(capsule.getMetadata().getName(), namespace, domain != null ? "." + domain : "");
+    }
+
     ConfigMapBuilder preparePodIPs(final ConfigMapBuilder builder, NetworkOperation primary) {
         Map<String, String> labels = Map.of(
                 LABEL_K8S_MANAGED_BY, SOLO_OPERATOR,
                 LABEL_K8S_PART_OF, COMPONENT_CONSENSUS_NODE,
-                LABEL_K8S_COMPONENT, COMPONENT_POD);
+                LABEL_K8S_COMPONENT, COMPONENT_DEPLOYMENT);
 
         PodList podList = customResourceManager.pods(primary.getMetadata().getNamespace(), labels);
-
-        List<String> podIps = new ArrayList<>();
-        for (Pod pod : podList.getItems()) {
-            if (pod.getStatus() != null && pod.getStatus().getPodIP() != null) {
-                podIps.add(pod.getStatus().getPodIP());
-            }
-        }
-
+        List<String> podIps = extractPodIps(podList);
         if (podIps.isEmpty()
                 || podIps.size() != primary.getStatus().getConsensusCapsules().size()) {
             throw new ProcessorException(("%s [ labels: %s, consensus capsules: %s")
@@ -242,6 +253,37 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
         String data = String.join("\n", podIps);
 
         return builder.addToData(CONFIG_KEY_POD_IPS, data);
+    }
+
+    private static List<String> extractPodIps(PodList podList) {
+        // create a map of node id to the list of pods sorted by creation timestamp
+        Map<String, SortedSet<Pod>> podMap = new HashMap<>();
+        for (Pod pod : podList.getItems()) {
+            if (pod.getMetadata().getCreationTimestamp() != null) {
+                podMap.computeIfAbsent(
+                                pod.getMetadata().getLabels().get(LABEL_NODE_ID),
+                                k -> new TreeSet<Pod>(Comparator.comparing(
+                                        p -> Instant.parse(p.getMetadata().getCreationTimestamp()))))
+                        .add(pod);
+            }
+        }
+
+        // extract the pod IPs from the last pod in the sorted set
+        List<String> podIps = new ArrayList<>();
+        for (SortedSet<Pod> pods : podMap.values()) {
+            final Pod pod = pods.last();
+            if (pod.getStatus() != null && pod.getStatus().getPodIP() != null) {
+                podIps.add(pod.getStatus().getPodIP());
+            } else {
+                // all pods must have an IP, otherwise let's just wait for the next reconcile loop
+                log.warnf(
+                        "Pod IP not found for pod: %s/%s, waiting for next reconcile loop",
+                        pod.getMetadata().getNamespace(), pod.getMetadata().getName());
+                return emptyList();
+            }
+        }
+
+        return podIps;
     }
 
     public static boolean isDone(NetworkOperationStatus status) {

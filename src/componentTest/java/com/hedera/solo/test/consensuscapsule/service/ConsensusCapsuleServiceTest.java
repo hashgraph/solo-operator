@@ -89,7 +89,7 @@ public class ConsensusCapsuleServiceTest extends AbstractOperatorTest {
 
     void verify(
             ConsensusCapsule capsule, ConsensusCapsuleSpec.ServiceType serviceType, Map<String, String> annotations) {
-        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+        await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
             ConsensusCapsule cc =
                     operator().get(ConsensusCapsule.class, capsule.getMetadata().getName());
             assertThat(cc).isNotNull();

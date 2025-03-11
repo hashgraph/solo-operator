@@ -66,6 +66,7 @@ import org.junit.jupiter.api.Test;
 public abstract class ConsensusCapsuleTestAbstract {
     protected final String namespace = getClass().getSimpleName().toLowerCase();
     protected final String orbit = namespace; // for now orbit and namespace are the same
+    protected List<ConsensusCapsule> consensusCapsules;
 
     @Inject
     DefaultConsensusNodeBean defaultConsensusNode;
@@ -202,7 +203,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         this.setupSecrets(nodes);
 
         // create consensus capsule
-        List<ConsensusCapsule> consensusCapsules = createConsensusCapsule(nodes);
+        consensusCapsules = createConsensusCapsule(nodes);
 
         // create network initialization
         createNetworkOperation(consensusCapsules);
@@ -219,7 +220,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         this.setupSecrets(nodes);
 
         // create consensus capsule
-        List<ConsensusCapsule> consensusCapsules = createConsensusCapsule(nodes);
+        consensusCapsules = createConsensusCapsule(nodes);
 
         // create network initialization
         createNetworkOperation(consensusCapsules);
@@ -404,7 +405,7 @@ public abstract class ConsensusCapsuleTestAbstract {
 
         // at this point all consensus capsules should be running
         for (ConsensusCapsule consensusCapsule : consensusCapsules) {
-            String name = consensusCapsule.getMetadata().getName();
+            String name = Metadata.prepareNodeName(consensusCapsule.getSpec().getNodeId());
             ConsensusCapsule capsule =
                     kubernetesClient.resource(consensusCapsule).get();
             assertThat(capsule).isNotNull();
@@ -412,8 +413,10 @@ public abstract class ConsensusCapsuleTestAbstract {
             Pod pod = kubernetesClient
                     .resources(Pod.class)
                     .inNamespace(namespace)
-                    .withName(name + "-pod")
-                    .get();
+                    .withLabel("operator.solo.hedera.com/node-name", name)
+                    .list()
+                    .getItems()
+                    .getFirst();
             assertThat(pod).isNotNull();
             assertThat(pod.getStatus()).isNotNull();
             assertThat(pod.getStatus().getPhase()).isEqualTo("Running");

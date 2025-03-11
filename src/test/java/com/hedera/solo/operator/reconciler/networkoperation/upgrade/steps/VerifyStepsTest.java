@@ -24,6 +24,7 @@ import com.hedera.solo.operator.model.commonspec.ImageVerificationSpec;
 import com.hedera.solo.operator.model.commonspec.SoftwareVersionSource;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatusBuilder;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationspec.networkupgrade.Changesets;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationstatus.SoftwareSourceStatus;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
@@ -69,14 +70,16 @@ public class VerifyStepsTest {
         wm.stubFor(get(urlMatching("/v2/.*")).willReturn(notFound()));
 
         // verify
-        allNotFound(networkOperation, new ExecuteImmediateTask());
+        allNotFound(networkOperation, new ExecuteImmediateTask(), 6);
 
         // re-verify
-        allNotFound(networkOperation, new FreezeScheduledTask());
+        allNotFound(networkOperation, new FreezeScheduledTask(), 6);
 
         // re-verify (with empty status)
-        networkOperation.setStatus(new NetworkOperationStatus());
-        allNotFound(networkOperation, new FreezeScheduledTask());
+        networkOperation.setStatus(new NetworkOperationStatusBuilder()
+                .withPhase(NetworkOperationStatus.Phase.Failed)
+                .build());
+        allNotFound(networkOperation, new FreezeScheduledTask(), 0);
     }
 
     @Test
@@ -87,14 +90,16 @@ public class VerifyStepsTest {
                         .withBody("{}")));
 
         // verify
-        allUnknown(networkOperation, new ExecuteImmediateTask());
+        allUnknown(networkOperation, new ExecuteImmediateTask(), 6);
 
         // re-verify
-        allUnknown(networkOperation, new FreezeScheduledTask());
+        allUnknown(networkOperation, new FreezeScheduledTask(), 6);
 
         // re-verify (with empty status)
-        networkOperation.setStatus(new NetworkOperationStatus());
-        allUnknown(networkOperation, new FreezeScheduledTask());
+        networkOperation.setStatus(new NetworkOperationStatusBuilder()
+                .withPhase(NetworkOperationStatus.Phase.Failed)
+                .build());
+        allUnknown(networkOperation, new FreezeScheduledTask(), 0);
     }
 
     @Test
@@ -103,14 +108,16 @@ public class VerifyStepsTest {
         stubsFor(networkOperation);
 
         // verify
-        allMatch(networkOperation, new ExecuteImmediateTask());
+        allMatch(networkOperation, new ExecuteImmediateTask(), 6);
 
         // re-verify
-        allMatch(networkOperation, new FreezeScheduledTask());
+        allMatch(networkOperation, new FreezeScheduledTask(), 6);
 
         // re-verify (with empty status)
-        networkOperation.setStatus(new NetworkOperationStatus());
-        allMatch(networkOperation, new FreezeScheduledTask());
+        networkOperation.setStatus(new NetworkOperationStatusBuilder()
+                .withPhase(NetworkOperationStatus.Phase.Failed)
+                .build());
+        allMatch(networkOperation, new FreezeScheduledTask(), 0);
     }
 
     void stubsFor(final NetworkOperation networkOperation) {
@@ -146,19 +153,19 @@ public class VerifyStepsTest {
                 .willReturn(ok().withHeader("Content-Type", "application/vnd.oci.image.index.v1+json")
                         .withBody(
                                 """
-                                {
-                                  "manifests": [
-                                    {
-                                      "mediaType": "application/vnd.oci.image.manifest.v1+json",
-                                      "digest": "%s",
-                                      "platform": {
-                                        "os": "%s",
-                                        "architecture": "%s"
-                                      }
-                                    }
-                                  ]
-                                }
-                                """
+                                        {
+                                          "manifests": [
+                                            {
+                                              "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                                              "digest": "%s",
+                                              "platform": {
+                                                "os": "%s",
+                                                "architecture": "%s"
+                                              }
+                                            }
+                                          ]
+                                        }
+                                        """
                                         .formatted(digest, spec.getOs(), spec.getArchitecture()))));
     }
 
@@ -202,34 +209,58 @@ public class VerifyStepsTest {
                         .editChangesets()
                         .editOtelCollector()
                         .withSoftwareVersionSource(softwareVersionSource("otel", "6.0", "windows", "amd64", "hash:7")))
+                .with(status -> status.editStatus().withPhase(NetworkOperationStatus.Phase.Pending))
                 .build();
     }
 
     void allNotFound(
             final NetworkOperation networkOperation,
-            final ProcessorTask<NetworkOperation, NetworkOperationStatus> task) {
+            final ProcessorTask<NetworkOperation, NetworkOperationStatus> task,
+            final int totalConditions) {
         allMatch(
-                networkOperation, task.execute(networkOperation, context).getStatus(), ConditionStatus.False, NotFound);
+                networkOperation,
+                task.execute(networkOperation, context).getStatus(),
+                ConditionStatus.False,
+                NotFound,
+                totalConditions);
     }
 
     void allUnknown(
             final NetworkOperation networkOperation,
-            final ProcessorTask<NetworkOperation, NetworkOperationStatus> task) {
-        allMatch(networkOperation, task.execute(networkOperation, context).getStatus(), ConditionStatus.False, Unknown);
+            final ProcessorTask<NetworkOperation, NetworkOperationStatus> task,
+            final int totalConditions) {
+        allMatch(
+                networkOperation,
+                task.execute(networkOperation, context).getStatus(),
+                ConditionStatus.False,
+                Unknown,
+                totalConditions);
     }
 
     void allMatch(
             final NetworkOperation networkOperation,
-            final ProcessorTask<NetworkOperation, NetworkOperationStatus> task) {
-        allMatch(networkOperation, task.execute(networkOperation, context).getStatus(), ConditionStatus.True, Valid);
+            final ProcessorTask<NetworkOperation, NetworkOperationStatus> task,
+            final int totalConditions) {
+        allMatch(
+                networkOperation,
+                task.execute(networkOperation, context).getStatus(),
+                ConditionStatus.True,
+                Valid,
+                totalConditions);
     }
 
     void allMatch(
             final NetworkOperation networkOperation,
             final NetworkOperationStatus status,
             final String conditionStatus,
-            final ImageRepositoryStatus.Validity validity) {
-        assertThat(status.getConditions().size()).isEqualTo(6);
+            final ImageRepositoryStatus.Validity validity,
+            final int totalConditions) {
+        if (totalConditions == 0) {
+            assertThat(status.getConditions()).isNull();
+            return;
+        }
+
+        assertThat(status.getConditions().size()).isEqualTo(totalConditions);
         assertThat(status.getConditions().stream().map(Condition::getStatus).collect(Collectors.toSet()))
                 .isEqualTo(Set.of(conditionStatus));
         if (Valid.equals(validity)) {
@@ -237,6 +268,7 @@ public class VerifyStepsTest {
                     .allMatch(msg -> msg.matches(
                             ".*localhost:[0-9]+/(consensus|backup|event|record|recordSidecar|otel):sha256:.*"));
         }
+
         Changesets specChangesets =
                 networkOperation.getSpec().getNetworkUpgrade().getChangesets();
         SoftwareSourceStatus sourceStatus = status.getSoftwareSourceStatus();

@@ -3,6 +3,7 @@
 package com.hedera.solo.operator.test.capsule;
 
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_MANAGED_BY;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_NODE_NAME;
 import static com.hedera.solo.operator.reconciler.common.Constants.SOLO_OPERATOR;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -114,14 +115,17 @@ public class NetworkOperationSequencingTest extends ConsensusCapsuleTestAbstract
                     kubernetesClient.resource(consensusCapsule).get();
             assertThat(capsule).isNotNull();
 
-            Pod pod = kubernetesClient
+            List<Pod> pods = kubernetesClient
                     .resources(Pod.class)
                     .inNamespace(namespace)
-                    .withName(name + "-pod")
-                    .get();
-            assertThat(pod).isNotNull();
-            assertThat(pod.getStatus()).isNotNull();
-            assertThat(pod.getStatus().getPhase()).isEqualTo("Running");
+                    .withLabel(LABEL_NODE_NAME, name)
+                    .list()
+                    .getItems();
+            assertThat(pods).isNotEmpty();
+            assertThat(pods).hasSize(1);
+            assertThat(pods.getFirst()).isNotNull();
+            assertThat(pods.getFirst().getStatus()).isNotNull();
+            assertThat(pods.getFirst().getStatus().getPhase()).isEqualTo("Running");
 
             assertThat(capsule.getStatus().getPhase()).isEqualTo(ConsensusCapsuleStatus.Phase.Running);
         }

@@ -20,6 +20,9 @@ import org.junit.jupiter.api.Test;
 public class ConsensusCapsuleContainerStatusTest {
     Pod running(final String containerName, final boolean ready) {
         return new PodBuilder()
+                .withNewMetadata()
+                .withName(containerName)
+                .endMetadata()
                 .editStatus()
                 .withContainerStatuses(new ContainerStatusBuilder()
                         .withName(containerName)
@@ -34,6 +37,9 @@ public class ConsensusCapsuleContainerStatusTest {
 
     Pod terminated(final String containerName, final int exitCode) {
         return new PodBuilder()
+                .withNewMetadata()
+                .withName(containerName)
+                .endMetadata()
                 .editStatus()
                 .withContainerStatuses(new ContainerStatusBuilder()
                         .withName(containerName)
@@ -49,6 +55,9 @@ public class ConsensusCapsuleContainerStatusTest {
 
     Pod waiting(final String containerName) {
         return new PodBuilder()
+                .withNewMetadata()
+                .withName(containerName)
+                .endMetadata()
                 .editStatus()
                 .withContainerStatuses(new ContainerStatusBuilder()
                         .withName(containerName)

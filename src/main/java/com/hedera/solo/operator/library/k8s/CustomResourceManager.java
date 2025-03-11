@@ -232,7 +232,8 @@ public class CustomResourceManager {
 
     public PodList pods(final String namespace) {
         return pods(
-                namespace, Map.of(LABEL_K8S_MANAGED_BY, SOLO_OPERATOR, LABEL_K8S_COMPONENT, Constants.COMPONENT_POD));
+                namespace,
+                Map.of(LABEL_K8S_MANAGED_BY, SOLO_OPERATOR, LABEL_K8S_COMPONENT, Constants.COMPONENT_DEPLOYMENT));
     }
 
     public PodList pods(final String namespace, final Map<String, String> labels) {

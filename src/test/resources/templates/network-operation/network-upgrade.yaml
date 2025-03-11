@@ -3,26 +3,25 @@
 ---
 apiVersion: operator.solo.hedera.com/v1alpha1
 kind: NetworkOperation
+metadata:
+  name: "network-upgrade"
+  labels:
+    "app.kubernetes.io/managed-by": "solo-operator"
 spec:
   orbit: solo-orbit
   mode: NetworkUpgrade
   networkUpgrade:
+    workflowStep: "ExecuteImmediate"
     changesets:
       consensusNodeChangeset:
         softwareVersionSource:
           imageRepositories: # provide multiple repositories where the same image exists.
-            - repository: "a.lenin.io/library" # should fail
-              imageName: "consensus-node"
-              imageTag: "0.57.0-lenin.x32089ae"
-            - repository: "gcr.io/hedera-registry" # should fail
-              imageName: "consensus-node"
-              imageTag: "0.57.0-develop.x32089ae"
             - repository: "swirldslabs.jfrog.io/consensus-node-docker-dev" # should succeed
               imageName: "consensus-node"
-              imageTag: "0.57.0-develop.x32089ae"
+              imageTag: "0.59.0-main.x02ba8df"
           imageVerificationSpec: # layers that must match
             - os: "linux"
-              architecture: "amd64"
+              architecture: "arm64"
               layerHashes:
-                - "sha256:42b2c2e479ffbc8d1ec266e8ac1a434ad7c239d43ac0f66009eef9883ab8db15"
+                - "sha256:cf3813c609184ac4f804a288f5bf39adebb84b1ace91c9a49445f5fa757b56bc"
                 - "sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1"

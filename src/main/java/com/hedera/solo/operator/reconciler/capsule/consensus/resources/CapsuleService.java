@@ -42,7 +42,7 @@ public class CapsuleService extends CRUDKubernetesDependentResource<Service, Con
         final String orbit = primary.getSpec().getOrbit();
         final String nodeName = Metadata.prepareNodeName(primary.getSpec().getNodeId());
         final String serviceType = primary.getSpec().getServiceType().getValue();
-        final Map<String, String> labels = CapsulePod.prepareLabels(primary);
+        final Map<String, String> labels = CapsuleDeployment.prepareLabels(primary);
         final Service service = loadYaml(Service.class, getClass(), TEMPLATE);
 
         return Metadata.applyStandardLabels(
