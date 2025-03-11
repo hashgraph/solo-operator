@@ -29,7 +29,7 @@ import java.util.Set;
 import org.jboss.logging.Logger;
 
 /** CheckConsensusNodeRunningStep checks if the consensus node is ACTIVE and processing transactions */
-public class CheckConsensusNodeRunningStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
+public class CheckConsensusNodeReadyStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
 
     public static final String CONDITION_TYPE = "ConsensusCapsuleReady";
 
@@ -37,7 +37,7 @@ public class CheckConsensusNodeRunningStep implements ProcessorStep<NetworkOpera
 
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
-    public CheckConsensusNodeRunningStep(CustomResourceManager customResourceManager) {
+    public CheckConsensusNodeReadyStep(CustomResourceManager customResourceManager) {
         this.customResourceManager = customResourceManager;
     }
 
@@ -48,6 +48,10 @@ public class CheckConsensusNodeRunningStep implements ProcessorStep<NetworkOpera
         Objects.requireNonNull(status, "NetworkOperationStatus status is required");
         Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus phase is required");
         Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
+
+        if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed) || isDone(status)) {
+            return status;
+        }
 
         // retrieve consensus capsule list and phases
         final String namespace = resource.getMetadata().getNamespace();

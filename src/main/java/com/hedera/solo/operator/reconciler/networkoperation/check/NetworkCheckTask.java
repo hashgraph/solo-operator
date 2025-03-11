@@ -9,7 +9,7 @@ import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
-import com.hedera.solo.operator.reconciler.networkoperation.check.steps.CheckConsensusNodeRunningStep;
+import com.hedera.solo.operator.reconciler.networkoperation.check.steps.CheckConsensusNodeReadyStep;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -52,16 +52,9 @@ public class NetworkCheckTask extends AbstractProcessorTask<NetworkOperation, Ne
     @Override
     public List<ProcessorStep<NetworkOperation, NetworkOperationStatus>> steps() throws ProcessorException {
         return List.of(
-                // FIXME: enable other steps
                 // new CheckOrbitConfigurationStep(customResourceManager),
                 // new CheckConsensusPodConfigurationStep(customResourceManager),
-                new CheckConsensusNodeRunningStep(customResourceManager)
-                // new CheckStreamUploaderRunningStep(customResourceManager, Constants.TPL_VAR_RECORD_STREAM_UPLOADER),
-                // new CheckStreamUploaderRunningStep(customResourceManager,
-                // Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER),
-                // new CheckStreamUploaderRunningStep(customResourceManager, Constants.TPL_VAR_EVENT_STREAM_UPLOADER),
-                // new CheckStreamUploaderRunningStep(customResourceManager, Constants.TPL_VAR_BACKUP_UPLOADER),
-                );
+                new CheckConsensusNodeReadyStep(customResourceManager));
     }
 
     @Override
@@ -77,7 +70,6 @@ public class NetworkCheckTask extends AbstractProcessorTask<NetworkOperation, Ne
     }
 
     public static boolean isDone(NetworkOperationStatus status) {
-        // FIXME: enable other steps' isDone checks
-        return CheckConsensusNodeRunningStep.isDone(status);
+        return CheckConsensusNodeReadyStep.isDone(status);
     }
 }

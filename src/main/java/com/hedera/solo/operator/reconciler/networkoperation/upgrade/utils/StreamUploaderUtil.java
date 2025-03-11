@@ -4,27 +4,22 @@ package com.hedera.solo.operator.reconciler.networkoperation.upgrade.utils;
 
 import com.hedera.solo.operator.model.commonspec.StreamUploaderChangeset;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
+import com.hedera.solo.operator.model.v1alpha1.networkoperationspec.networkupgrade.Changesets;
 import com.hedera.solo.operator.reconciler.common.Constants;
 
 public class StreamUploaderUtil {
     public static StreamUploaderChangeset findChangeset(NetworkOperation resource, String name) {
+        final Changesets changesets = resource.getSpec().getNetworkUpgrade().getChangesets();
+        if (changesets == null) {
+            return null;
+        }
+
         return switch (name) {
-            case Constants.TPL_VAR_RECORD_STREAM_UPLOADER -> resource.getSpec()
-                    .getNetworkUpgrade()
-                    .getChangesets()
-                    .getRecordStreamUploaderChangeset();
-            case Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER -> resource.getSpec()
-                    .getNetworkUpgrade()
-                    .getChangesets()
+            case Constants.TPL_VAR_RECORD_STREAM_UPLOADER -> changesets.getRecordStreamUploaderChangeset();
+            case Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER -> changesets
                     .getRecordStreamSidecarUploaderChangeset();
-            case Constants.TPL_VAR_EVENT_STREAM_UPLOADER -> resource.getSpec()
-                    .getNetworkUpgrade()
-                    .getChangesets()
-                    .getEventsStreamUploaderChangeset();
-            case Constants.TPL_VAR_BACKUP_UPLOADER -> resource.getSpec()
-                    .getNetworkUpgrade()
-                    .getChangesets()
-                    .getBackupUploaderChangeset();
+            case Constants.TPL_VAR_EVENT_STREAM_UPLOADER -> changesets.getEventsStreamUploaderChangeset();
+            case Constants.TPL_VAR_BACKUP_UPLOADER -> changesets.getBackupUploaderChangeset();
             default -> null;
         };
     }
