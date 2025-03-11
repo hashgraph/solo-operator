@@ -75,6 +75,7 @@ components:
         - accountId
         - log4j2.xml
         - podProperties
+        - weight
       properties:
         secrets:
           type: object
@@ -130,6 +131,13 @@ components:
         log4j2.xml:
           description: Logging configuration
           type: string
+        nodeProperties:
+          description: node.properties file
+          type: object
+          additionalProperties:
+            type: string
+        weight:
+          type: integer
         serviceType:
           description: |
             The type of consensus-node service
@@ -139,6 +147,12 @@ components:
             - "LoadBalancer"
             - "NodePort"
           default: "LoadBalancer"
+        serviceAnnotations:
+          description: Annotations for the consensus-node service
+          default: {}
+          type: object
+          additionalProperties:
+            type: string
         podProperties:
           type: object
           required:

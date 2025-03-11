@@ -1,0 +1,256 @@
+// SPDX-License-Identifier: Apache-2.0
+
+package com.hedera.solo.operator.reconciler.networkoperation.genesis.steps;
+
+import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
+import static com.hedera.solo.operator.library.k8s.KubeletConfig.clusterDomain;
+import static com.hedera.solo.operator.reconciler.common.Constants.COMPONENT_CONSENSUS_NODE;
+import static com.hedera.solo.operator.reconciler.common.Constants.COMPONENT_POD;
+import static com.hedera.solo.operator.reconciler.common.Constants.CONFIG_KEY_CONFIG_TXT;
+import static com.hedera.solo.operator.reconciler.common.Constants.CONFIG_KEY_POD_IPS;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_COMPONENT;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_MANAGED_BY;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_PART_OF;
+import static com.hedera.solo.operator.reconciler.common.Constants.SOLO_OPERATOR;
+import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
+import static java.util.Collections.emptyList;
+
+import com.hedera.solo.operator.library.k8s.CustomResourceManager;
+import com.hedera.solo.operator.library.processor.ProcessorException;
+import com.hedera.solo.operator.library.processor.ProcessorStep;
+import com.hedera.solo.operator.model.commonspec.AddressBookEntry;
+import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
+import com.hedera.solo.operator.model.v1alpha1.Orbit;
+import com.hedera.solo.operator.model.v1alpha1.orbitspec.consensus.genesis.AddressBook;
+import com.hedera.solo.operator.reconciler.common.ConditionStatus;
+import com.hedera.solo.operator.reconciler.common.Constants;
+import com.hedera.solo.operator.reconciler.common.Metadata;
+import io.fabric8.kubernetes.api.model.Condition;
+import io.fabric8.kubernetes.api.model.ConditionBuilder;
+import io.fabric8.kubernetes.api.model.ConfigMap;
+import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
+import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodList;
+import io.javaoperatorsdk.operator.api.reconciler.Context;
+import java.lang.invoke.MethodHandles;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.TreeMap;
+import org.jboss.logging.Logger;
+
+public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
+    public static final String TEMPLATE = "cluster-config.yaml";
+    public static final String CONDITION_TYPE = "ClusterConfigCreated";
+
+    private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
+    public static final String POD_IPS_NOT_FOUND = "Pod IPs are not found for all consensus nodes";
+
+    private final CustomResourceManager customResourceManager;
+
+    public CreateClusterConfigStep(CustomResourceManager customResourceManager) {
+        this.customResourceManager = customResourceManager;
+    }
+
+    @Override
+    public NetworkOperationStatus run(
+            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context) {
+        Objects.requireNonNull(resource, "NetworkOperation resource is required");
+        Objects.requireNonNull(status, "NetworkOperationStatus status is required");
+        Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
+
+        if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed)) {
+            return status;
+        }
+
+        try {
+            final String namespace = resource.getMetadata().getNamespace();
+            final Orbit orbit =
+                    customResourceManager.orbitByName(resource.getSpec().getOrbit());
+            if (orbit == null) {
+                throw new ProcessorException(
+                        "Orbit not found: %s".formatted(resource.getSpec().getOrbit()));
+            }
+
+            final List<ConsensusCapsule> consensusCapsules = customResourceManager.consensusCapsules(namespace);
+            if (consensusCapsules.isEmpty()) {
+                throw new ProcessorException("No consensus capsules found in orbit: %s"
+                        .formatted(orbit.getMetadata().getName()));
+            }
+
+            final ConfigMap existing = customResourceManager.configMapByName(namespace, Constants.CLUSTER_CONFIG_NAME);
+            final ConfigMap desired =
+                    this.prepareDesiredConfigMap(resource, context, orbit, consensusCapsules, existing);
+
+            if (existing == null) {
+                log.infof(
+                        "Creating cluster config: %s/%s",
+                        desired.getMetadata().getNamespace(),
+                        desired.getMetadata().getName());
+                context.getClient().resource(desired).create();
+            } else {
+                log.infof(
+                        "Updating cluster config: %s/%s",
+                        desired.getMetadata().getNamespace(),
+                        desired.getMetadata().getName());
+                context.getClient().resource(existing).patch(desired);
+            }
+
+            // add conditions to the status saying that the configmap has been created
+            final Condition condition = new ConditionBuilder()
+                    .withType(CONDITION_TYPE)
+                    .withStatus(ConditionStatus.True)
+                    .withLastTransitionTime(Instant.now().toString())
+                    .withMessage("%s/%s created"
+                            .formatted(
+                                    desired.getMetadata().getNamespace(),
+                                    desired.getMetadata().getName()))
+                    .build();
+            return edit(status).with(s -> s.addToConditions(condition)).build();
+        } catch (Exception ex) {
+            if (ex instanceof ProcessorException && ex.getMessage().contains(POD_IPS_NOT_FOUND)) {
+                log.warnf(
+                        "%s:%s: pod IPs are not available yet for consensus nodes %s; re-attempting during next reconcile loop"
+                                .formatted(
+                                        resource.getMetadata().getNamespace(),
+                                        resource.getMetadata().getName(),
+                                        resource.getStatus().getConsensusCapsules()),
+                        ex);
+                return status;
+            }
+
+            log.error("Failed to create cluster config", ex);
+            return edit(status)
+                    .with(s -> s.addToConditions(new ConditionBuilder()
+                                    .withType(CONDITION_TYPE)
+                                    .withStatus(ConditionStatus.False)
+                                    .withLastTransitionTime(Instant.now().toString())
+                                    .withMessage("Failed to create cluster config: %s".formatted(ex.getMessage()))
+                                    .build())
+                            .withPhase(NetworkOperationStatus.Phase.Failed))
+                    .build();
+        }
+    }
+
+    ConfigMap prepareDesiredConfigMap(
+            final NetworkOperation resource,
+            final Context<NetworkOperation> context,
+            final Orbit orbit,
+            final List<ConsensusCapsule> consensusCapsules,
+            ConfigMap config) {
+
+        final String orbitName = resource.getSpec().getOrbit();
+        if (config == null) {
+            config = loadYaml(ConfigMap.class, getClass(), TEMPLATE);
+        }
+
+        String clusterDomain = clusterDomain(context.getClient());
+        final AddressBook addressBook =
+                orbit.getSpec().getConsensus().getGenesis().getAddressBook();
+        Map<Long, String> nodeAddresses = prepareNodeAddressMap(clusterDomain, consensusCapsules, addressBook);
+
+        return edit(config)
+                .with(builder -> prepareConfigTxt(builder, addressBook, nodeAddresses))
+                .with(builder -> preparePodIPs(builder, resource))
+                .with(builder -> Metadata.applyStandardLabels(
+                                builder.editMetadata(),
+                                Constants.CLUSTER_CONFIG_NAME,
+                                orbitName,
+                                COMPONENT_CONSENSUS_NODE,
+                                Constants.COMPONENT_CONFIG_MAP,
+                                null)
+                        .withName(Constants.CLUSTER_CONFIG_NAME)
+                        .withNamespace(resource.getMetadata().getNamespace()))
+                .build();
+    }
+
+    ConfigMapBuilder prepareConfigTxt(
+            final ConfigMapBuilder builder, final AddressBook addressBook, final Map<Long, String> nodeAddressMap) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("swirld, ").append(addressBook.getLedgerId()).append("\n");
+        sb.append("app, HederaNode.jar\n");
+        nodeAddressMap.values().forEach(sb::append);
+        return builder.addToData(CONFIG_KEY_CONFIG_TXT, sb.toString());
+    }
+
+    Map<Long, String> prepareNodeAddressMap(
+            final String domain, final List<ConsensusCapsule> consensusCapsules, final AddressBook addressBook) {
+        Map<Long, String> addresses = new TreeMap<>();
+        for (ConsensusCapsule capsule : consensusCapsules) {
+            String name = Metadata.prepareNodeName(capsule);
+            String namespace = capsule.getMetadata().getNamespace();
+            String internal = "%s.consensus.%s.svc%s"
+                    .formatted(capsule.getMetadata().getName(), namespace, domain != null ? "." + domain : "");
+            String external = capsule.getSpec().getExternalAddress() != null
+                    ? capsule.getSpec().getExternalAddress()
+                    : name + "-svc." + namespace;
+            Long nodeId = capsule.getSpec().getNodeId();
+            String accountId = capsule.getSpec().getAccountId();
+            Long weight = capsule.getSpec().getWeight();
+            addresses.put(
+                    nodeId,
+                    "address, %d, %s, %s, %s, %s, 50111, %s, 50111, %s\n"
+                            .formatted(nodeId, name, name, weight, internal, external, accountId));
+        }
+
+        for (AddressBookEntry entry :
+                Optional.ofNullable(addressBook.getExternalAddresses()).orElse(emptyList())) {
+            addresses.put(
+                    entry.getNodeId(),
+                    "address, %d, %s, %s, %d, %s, %d, %s, %d, %s\n"
+                            .formatted(
+                                    entry.getNodeId(),
+                                    entry.getNickName(),
+                                    entry.getSelfName(),
+                                    entry.getWeight(),
+                                    entry.getInternalHostname(),
+                                    entry.getInternalPort(),
+                                    entry.getExternalHostname(),
+                                    entry.getExternalPort(),
+                                    entry.getNodeAccount()));
+        }
+
+        return addresses;
+    }
+
+    ConfigMapBuilder preparePodIPs(final ConfigMapBuilder builder, NetworkOperation primary) {
+        Map<String, String> labels = Map.of(
+                LABEL_K8S_MANAGED_BY, SOLO_OPERATOR,
+                LABEL_K8S_PART_OF, COMPONENT_CONSENSUS_NODE,
+                LABEL_K8S_COMPONENT, COMPONENT_POD);
+
+        PodList podList = customResourceManager.pods(primary.getMetadata().getNamespace(), labels);
+
+        List<String> podIps = new ArrayList<>();
+        for (Pod pod : podList.getItems()) {
+            if (pod.getStatus() != null && pod.getStatus().getPodIP() != null) {
+                podIps.add(pod.getStatus().getPodIP());
+            }
+        }
+
+        if (podIps.isEmpty()
+                || podIps.size() != primary.getStatus().getConsensusCapsules().size()) {
+            throw new ProcessorException(("%s [ labels: %s, consensus capsules: %s")
+                    .formatted(POD_IPS_NOT_FOUND, labels, primary.getStatus().getConsensusCapsules()));
+        }
+
+        String data = String.join("\n", podIps);
+
+        return builder.addToData(CONFIG_KEY_POD_IPS, data);
+    }
+
+    public static boolean isDone(NetworkOperationStatus status) {
+        if (status == null || status.getConditions() == null) {
+            return false;
+        }
+
+        return status.getConditions().stream()
+                .anyMatch(
+                        c -> c.getType().equals(CONDITION_TYPE) && c.getStatus().equals(ConditionStatus.True));
+    }
+}

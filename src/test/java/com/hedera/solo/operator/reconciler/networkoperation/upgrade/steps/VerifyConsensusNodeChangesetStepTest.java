@@ -2,6 +2,7 @@
 
 package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
 
+import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyConsensusNodeChangesetStep.FAIL_STATUS_MESSAGE;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.hedera.solo.operator.library.processor.ProcessorStep;
@@ -10,11 +11,9 @@ import com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.test.utils.TemplateLoader;
-import io.fabric8.kubernetes.api.model.Condition;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.util.ArrayList;
 import java.util.List;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -23,7 +22,6 @@ public class VerifyConsensusNodeChangesetStepTest {
 
     @Test
     @DisplayName("Check that only one repository is valid and selected for deployment")
-    @Disabled("This test is disabled because the code is not implemented yet")
     void testWithSingleValidSoftwareVersionSourceRepo() {
         NetworkOperation networkOperation =
                 TemplateLoader.load(NetworkOperation.class, TemplateLoader.TEMPLATE_NETWORK_UPGRADE);
@@ -34,7 +32,6 @@ public class VerifyConsensusNodeChangesetStepTest {
 
     @Test
     @DisplayName("Check that multiple repositories are valid and any one (random) is selected for deployment")
-    @Disabled("This test is disabled because the code is not implemented yet")
     void testWithMultipleValidSoftwareVersionSourceRepo() {
         NetworkOperation networkOperation =
                 TemplateLoader.load(NetworkOperation.class, TemplateLoader.TEMPLATE_NETWORK_UPGRADE);
@@ -66,7 +63,6 @@ public class VerifyConsensusNodeChangesetStepTest {
 
     @Test
     @DisplayName("Check that status message is added when no valid image is found")
-    @Disabled("This test is disabled because the code is not implemented yet")
     void testWithInvalidSoftwareVersionSourceRepo() {
         NetworkOperation networkOperation =
                 TemplateLoader.load(NetworkOperation.class, TemplateLoader.TEMPLATE_NETWORK_UPGRADE);
@@ -124,7 +120,7 @@ public class VerifyConsensusNodeChangesetStepTest {
             }
         }
 
-        assertThat(valid).isEqualTo(expectedCount);
+        assertThat(valid.size()).isEqualTo(expectedCount);
         assertThat(selected).isNotNull();
         assertThat(selected.getManifestHash()).isNotEmpty();
         assertThat(selected.getSelectedForDeployment()).isTrue();
@@ -134,24 +130,9 @@ public class VerifyConsensusNodeChangesetStepTest {
     }
 
     private void validateSuccessConditions(NetworkOperation networkOperation, NetworkOperationStatus status) {
-        // upto second last message should be image verification fail message
-        List<Condition> conditions = status.getConditions();
-        for (int i = 0; i < conditions.size() - 2; i++) {
-            Condition c = conditions.get(i);
-            assertThat(c.getType())
-                    .contains(VerifyConsensusNodeChangesetStep.IMAGE_VERIFICATION_FAIL_MESSAGE.formatted(""));
-        }
-
-        // second last message should be image verification success message
-        assertThat(conditions.get(conditions.size() - 2).getMessage())
-                .contains(VerifyConsensusNodeChangesetStep.IMAGE_VERIFICATION_SUCCESS_MESSAGE.formatted(""));
-
-        // last message should be success status message
-        assertThat(status.getConditions()
-                        .getLast()
-                        .getMessage()
-                        .equals(VerifyConsensusNodeChangesetStep.SUCCESS_STATUS_MESSAGE))
-                .isTrue();
+        assertThat(status.getConditions().size()).isEqualTo(1);
+        assertThat(status.getConditions().getFirst().getMessage())
+                .startsWith(VerifyConsensusNodeChangesetStep.SUCCESS_STATUS_MESSAGE.formatted(""));
     }
 
     private void validateFailStatus(final NetworkOperationStatus status) {
@@ -172,19 +153,7 @@ public class VerifyConsensusNodeChangesetStepTest {
     }
 
     private void validateFailureConditions(NetworkOperation networkOperation, NetworkOperationStatus status) {
-        // upto second last message should be image verification fail message
-        List<Condition> conditions = status.getConditions();
-        for (int i = 0; i < conditions.size(); i++) {
-            Condition c = conditions.get(i);
-            assertThat(c.getType())
-                    .contains(VerifyConsensusNodeChangesetStep.IMAGE_VERIFICATION_FAIL_MESSAGE.formatted(""));
-        }
-
-        // last message should be fail status message
-        assertThat(status.getConditions()
-                        .getLast()
-                        .getMessage()
-                        .equals(VerifyConsensusNodeChangesetStep.FAIL_STATUS_MESSAGE))
-                .isTrue();
+        assertThat(status.getConditions().size()).isEqualTo(1);
+        assertThat(status.getConditions().getFirst().getMessage()).isEqualTo(FAIL_STATUS_MESSAGE);
     }
 }

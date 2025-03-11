@@ -17,6 +17,8 @@ import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleBuilder;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.secrets.SecretResources;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
+import com.hedera.solo.operator.reconciler.common.Constants;
+import com.hedera.solo.operator.test.fixtures.Resources;
 import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
 import com.hedera.solo.operator.test.fixtures.snapshot.SnapshotFailureContext;
 import io.fabric8.kubernetes.api.model.Condition;
@@ -25,6 +27,7 @@ import io.javaoperatorsdk.operator.Operator;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import java.time.Duration;
+import java.util.Map;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,7 +56,8 @@ public class CapsuleSecretsValidationTest {
         Orbit orbit = kubernetesClient
                 .resource(edit(new Orbit())
                         .with(metadata -> metadata.editMetadata()
-                                .withGenerateName(getClass().getSimpleName().toLowerCase() + "-"))
+                                .withGenerateName(getClass().getSimpleName().toLowerCase() + "-")
+                                .withLabels(Map.of(Constants.LABEL_K8S_MANAGED_BY, Constants.SOLO_OPERATOR)))
                         .with(spec -> spec.editSpec()
                                 .editConsensus()
                                 .withApplicationConfiguration(emptyMap())
@@ -70,8 +74,15 @@ public class CapsuleSecretsValidationTest {
 
     @AfterEach
     void afterEach(final SnapshotFailureContext snapshot) {
-        snapshot.client(kubernetesClient).nonNamespacedResources("operator.solo.hedera.com/v1alpha1");
-        kubernetesClient.resources(Orbit.class).withName(namespace).delete();
+        kubernetesClient
+                .resources(ConsensusCapsule.class)
+                .inNamespace(namespace)
+                .delete();
+
+        Resources.removeByName(kubernetesClient, Orbit.class, namespace);
+
+        await().atMost(Duration.ofSeconds(120))
+                .until(() -> kubernetesClient.namespaces().withName(namespace).get() == null);
     }
 
     @Test
@@ -108,9 +119,15 @@ public class CapsuleSecretsValidationTest {
                 .resource(edit(new ConsensusCapsule())
                         .with(metadata -> metadata.editMetadata()
                                 .withGenerateName("test-")
-                                .withNamespace(namespace))
+                                .withNamespace(namespace)
+                                .withLabels(Map.of(
+                                        Constants.LABEL_K8S_MANAGED_BY,
+                                        Constants.SOLO_OPERATOR,
+                                        Constants.LABEL_K8S_COMPONENT,
+                                        Constants.COMPONENT_CONSENSUS_NODE)))
                         .with(spec -> spec.editSpec()
                                 .withAccountId("0.0.3")
+                                .withWeight(1L)
                                 .withLog4j2Xml("")
                                 .withNodeId(1L)
                                 .withOrbit(namespace))

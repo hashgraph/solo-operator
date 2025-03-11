@@ -13,6 +13,7 @@ import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckPr
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ApplyConsensusPodChangeStep;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ApplyOrbitConfigurationChangeStep;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ReverifyConsensusNodeChangesetStep;
+import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ReverifyOtelCollectorStep;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ReverifyStreamUploaderChangesetStep;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -58,8 +59,9 @@ public class NowFrozenTask extends AbstractProcessorTask<NetworkOperation, Netwo
                 new ReverifyStreamUploaderChangesetStep(Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER),
                 new ReverifyStreamUploaderChangesetStep(Constants.TPL_VAR_EVENT_STREAM_UPLOADER),
                 new ReverifyStreamUploaderChangesetStep(Constants.TPL_VAR_BACKUP_UPLOADER),
-                new ApplyOrbitConfigurationChangeStep(),
-                new ApplyConsensusPodChangeStep());
+                new ReverifyOtelCollectorStep(),
+                new ApplyConsensusPodChangeStep(),
+                new ApplyOrbitConfigurationChangeStep());
     }
 
     @Override

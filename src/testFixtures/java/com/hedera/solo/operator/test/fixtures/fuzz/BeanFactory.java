@@ -59,6 +59,11 @@ public class BeanFactory {
         maxArray(10).maxList(10).maxMap(10).maxSet(10).maxString(10).nullProbability(0.1);
     }
 
+    /** Access PRNG */
+    public Random random() {
+        return random;
+    }
+
     /** Returns an instance of the given class with pseudo random values. */
     public <T> T nonNull(final Class<T> aClass) {
         return aClass.cast(nonNull((Type) aClass));
@@ -157,20 +162,33 @@ public class BeanFactory {
     }
 
     /** Customize how objects are generated. */
+    public <T> BeanFactory supplier(final Class<T> aClass, final BiFunction<BeanFactory, Type, Object> supplier) {
+        map.put(aClass::equals, supplier);
+        return this;
+    }
+
+    /** Customize how objects are generated. */
+    public <T> BeanFactory supplier(
+            final TypeReference<T> typeReference, final BiFunction<BeanFactory, Type, Object> supplier) {
+        map.put(typeReference.getType()::equals, supplier);
+        return this;
+    }
+
+    /** Customize how objects are generated. */
     public BeanFactory suppliers(final SequencedMap<Predicate<Type>, BiFunction<BeanFactory, Type, Object>> map) {
         this.map = new LinkedHashMap<>(map);
         return this;
     }
 
-    public static Predicate<Type> isClass(final Class<?> aClass) {
+    protected static Predicate<Type> isClass(final Class<?> aClass) {
         return type -> type instanceof Class<?> cls && cls.isAssignableFrom(aClass);
     }
 
-    public static Predicate<Type> isClass(final Predicate<Class<?>> predicate) {
+    protected static Predicate<Type> isClass(final Predicate<Class<?>> predicate) {
         return type -> type instanceof Class<?> aClass && predicate.test(aClass);
     }
 
-    public static Predicate<Type> isParameterizedType(final Class<?> aClass) {
+    protected static Predicate<Type> isParameterizedType(final Class<?> aClass) {
         return type -> type instanceof ParameterizedType parameterizedType
                 && parameterizedType.getRawType() instanceof Class<?> rawClass
                 && rawClass.isAssignableFrom(aClass);

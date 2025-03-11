@@ -34,7 +34,7 @@ components:
           type: object
           required:
             - changesets
-            - marker
+            - workflowStep
           properties:
             changesets:
               type: object
@@ -56,6 +56,14 @@ components:
                 backupUploaderChangeset:
                   type: object
                   x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploaderChangeset
+                otelCollector:
+                  type: object
+                  required:
+                    - softwareVersionSource
+                  properties:
+                    softwareVersionSource:
+                      type: object
+                      x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersionSource
             workflowStep: # can we find a better name for it?
               description: |
                 Workflow step is handled as below:
@@ -126,6 +134,14 @@ components:
                     The application configuration for the `Orbit`. This is equivalent to the
                     `log4j2.xml` file.
                   type: string
+            addressBook:
+              description: |
+                Updated address book
+              type: array
+              default: []
+              items:
+                type: object
+                x-java-type: com.hedera.solo.operator.model.commonspec.AddressBookEntry
         proxyUpgrade:
           type: object
           properties:
@@ -135,11 +151,12 @@ components:
                 haproxyChangeset:
                   type: object
                   x-java-type: com.hedera.solo.operator.model.commonspec.HaproxyChangeset
-#                envoyproxyChangeset: # need to define
-#                  type: object
-#                  x-java-type: com.hedera.solo.operator.model.commonspec.EnvoyproxyChangeset # need to define
+    #                envoyproxyChangeset: # need to define
+    #                  type: object
+    #                  x-java-type: com.hedera.solo.operator.model.commonspec.EnvoyproxyChangeset # need to define
     NetworkOperationStatus:
       type: object
+      default: {}
       properties:
         phase:
           description: The current phase of the `ConsensusCapsule`.
@@ -176,8 +193,35 @@ components:
               items:
                 type: object
                 x-java-type: com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus
-            streamUploader: # FIXME we may need to revise this so that it is easier to lookup the status of a specific stream-uploader image
+            recordStreamUploader:
               type: array
               items:
                 type: object
                 x-java-type: com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus
+            recordStreamSidecarUploader:
+              type: array
+              items:
+                type: object
+                x-java-type: com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus
+            eventsStreamUploader:
+              type: array
+              items:
+                type: object
+                x-java-type: com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus
+            backupUploader:
+              type: array
+              items:
+                type: object
+                x-java-type: com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus
+            otelCollector:
+              type: array
+              items:
+                type: object
+                x-java-type: com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus
+        upgradedNodes:
+          description: Node IDs that have been upgraded
+          type: array
+          default: []
+          items:
+            type: integer
+            format: int64

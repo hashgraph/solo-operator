@@ -14,7 +14,7 @@ import jakarta.inject.Inject;
 /**
  * NetworkCheckProcessor checks that the network is in a valid state.
  *
- * <p>Other processors task usually defer to this if those tasks have finished processing and need this to ensure
+ * <p>Other processors task usually defer to this if those tasks have finished processing and need to ensure that the
  * network is in valid state. For example
  * {@link com.hedera.solo.operator.reconciler.networkoperation.upgrade.tasks.NowFrozenTask} defers to this once it rolls
  * out the orbit configuration changes and consensus node changesets.
@@ -24,8 +24,13 @@ import jakarta.inject.Inject;
 @ApplicationScoped
 public class NetworkCheckProcessor
         implements Processor<NetworkOperation, NetworkOperationStatus, ProcessorResult<NetworkOperationStatus>> {
+
+    private final NetworkCheckTask networkGenesisTask;
+
     @Inject
-    NetworkCheckTask networkGenesisTask;
+    public NetworkCheckProcessor(NetworkCheckTask networkGenesisTask) {
+        this.networkGenesisTask = networkGenesisTask;
+    }
 
     @Override
     public ProcessorResult<NetworkOperationStatus> process(NetworkOperation resource, Context<NetworkOperation> context)

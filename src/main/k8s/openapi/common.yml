@@ -54,24 +54,43 @@ components:
           type: string
         imageTag:
           type: string
+        manifestHash:
+          type: string
         imageVerificationSpec:
           type: object
           x-java-type: com.hedera.solo.operator.model.commonspec.ImageVerificationSpec
         imagePullSecrets:
-          type: array
-          items:
-            type: object
-            x-java-type: io.fabric8.kubernetes.api.model.LocalObjectReference # refers to a k8s secret
+          $ref: "#/components/schemas/ImagePullSecrets"
         imagePullPolicy:
-          type: string
-          enum:
-            - Always
-            - Never
-            - IfNotPresent
-          default: IfNotPresent
+          $ref: "#/components/schemas/ImagePullPolicy"
+
+    ImagePullSecrets:
+      type: array
+      default: []
+      items:
+        type: object
+        x-java-type: io.fabric8.kubernetes.api.model.LocalObjectReference # refers to a k8s secret
+
+    ImagePullPolicy:
+      type: string
+      enum:
+        - Always
+        - Never
+        - IfNotPresent
+      default: IfNotPresent
 
     AddressBookEntry:
       type: object
+      required:
+        - nodeId
+        - nickName
+        - selfName
+        - weight
+        - internalHostname
+        - internalPort
+        - externalHostname
+        - externalPort
+        - nodeAccount
       properties:
         nodeId:
           type: integer
@@ -112,6 +131,8 @@ components:
 
     StreamUploader:
       type: object
+      required:
+        - softwareVersion
       properties:
         name:
           type: string
@@ -315,9 +336,9 @@ components:
       properties:
         name:
           type: string
-        softwareVersion:
+        softwareVersionSource:
           type: object
-          x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersion
+          x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersionSource
         resources:
           type: object
           x-java-type: io.fabric8.kubernetes.api.model.ResourceRequirements
@@ -361,6 +382,9 @@ components:
 
     NodeProperties: # corresponds to: node.properties
       type: object
+      required:
+        - nodeId
+        - configuration
       properties:
         nodeId:
           type: integer
@@ -372,6 +396,9 @@ components:
 
     NodeLoggingConfiguration:
       type: object
+      required:
+        - nodeId
+        - configuration
       properties:
         nodeId:
           type: integer
@@ -381,6 +408,10 @@ components:
 
     ImageRepository:
       type: object
+      required:
+        - imageName
+        - imageTag
+        - repository
       properties: # docker.io/library/ubuntu:focal
         repository: # docker.io/library
           type: string
@@ -389,13 +420,12 @@ components:
         imageTag: # focal
           type: string
         imagePullSecrets:
-          type: array
-          items:
-            type: object
-            x-java-type: io.fabric8.kubernetes.api.model.LocalObjectReference
+          $ref: "#/components/schemas/ImagePullSecrets"
 
     ImageVerificationSpec:
       type: object
+      required:
+        - layerHashes
       properties:
         os:
           type: string
@@ -411,10 +441,17 @@ components:
         layerHashes: # digests
           type: array
           items:
+            description: |
+              Manifest layer digests are expected here, matching those reported by tools such as `skopeo inspect`.
+              Due to compression, manifest layer digests will in general differ from those reported by tools such as
+              `docker inspect` which report layer `DiffID`, or the digest of the uncompressed layer archive.
             type: string
 
     SoftwareVersionSource: # move up close to SoftwareVersion
       type: object
+      required:
+        - imageRepositories
+        - imageVerificationSpec
       properties:
         imageRepositories: # may be more than 32 entries from all node operators
           type: array
@@ -427,15 +464,16 @@ components:
             type: object
             x-java-type: com.hedera.solo.operator.model.commonspec.ImageVerificationSpec
         imagePullPolicy:
-          type: string
-          enum:
-            - Always
-            - Never
-            - IfNotPresent
-          default: IfNotPresent
+          $ref: "#/components/schemas/ImagePullPolicy"
 
     ImageRepositoryStatus:
       type: object
+      required:
+        - imageName
+        - imageTag
+        - repository
+        - selectedForDeployment
+        - validity
       properties:
         repository:
           type: string
@@ -455,6 +493,13 @@ components:
           default: false
         manifestHash: # this is resolved for this repository in network-execute step
           type: string
+        imageVerificationSpec:
+          type: object
+          x-java-type: com.hedera.solo.operator.model.commonspec.ImageVerificationSpec
+        imagePullSecrets:
+          $ref: "#/components/schemas/ImagePullSecrets"
+        imagePullPolicy:
+          $ref: "#/components/schemas/ImagePullPolicy"
 
     ConsensusNodeChangeset:
       type: object
