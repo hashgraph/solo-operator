@@ -121,26 +121,41 @@ public class ConsensusCapsuleReconciler
 
         if (1 == pods.length) {
             final Pod pod = pods[0];
-
-            // check if the consensus container is running
-            // FIXME also check for other sidecar containers
             final ContainerStatus containerStatus = pod.getStatus().getContainerStatuses().stream()
                     .collect(Collectors.toMap(ContainerStatus::getName, Function.identity()))
                     .get(CONSENSUS_CONTAINER_NAME);
+
             if (containerStatus != null) {
                 log.infof(
                         "Consensus Capsule - Phase [ name = '%s' containerStatus.phase = '%s ]",
                         pod.getMetadata().getName(), containerStatus.getState().getRunning());
                 final ContainerState state = containerStatus.getState();
-                if (state.getRunning() != null) {
-                    phase = containerStatus.getReady()
-                            ? ConsensusCapsuleStatus.Phase.Running
-                            : ConsensusCapsuleStatus.Phase.Pending;
-                }
+
+                // if terminated already, return Succeeded or Failed based on exit code
                 if (state.getTerminated() != null) {
                     phase = state.getTerminated().getExitCode() == 0
                             ? ConsensusCapsuleStatus.Phase.Succeeded
                             : ConsensusCapsuleStatus.Phase.Failed;
+                    return phase;
+                }
+
+                // if it is running, return Running if all containers are ready, otherwise return Pending
+                if (state.getRunning() != null) {
+                    phase = containerStatus.getReady()
+                            ? ConsensusCapsuleStatus.Phase.Running
+                            : ConsensusCapsuleStatus.Phase.Pending;
+
+                    // check if all sidecar containers are also ready
+                    if (phase.equals(ConsensusCapsuleStatus.Phase.Running)) {
+                        log.infof("Consensus container '%s' is ready", containerStatus.getName());
+                        for (final ContainerStatus cs : pod.getStatus().getContainerStatuses()) {
+                            if (!cs.getName().equals(CONSENSUS_CONTAINER_NAME) && !cs.getReady()) {
+                                log.infof("Sidecar container '%s' is not ready yet", cs.getName());
+                                phase = ConsensusCapsuleStatus.Phase.Pending;
+                                return phase;
+                            }
+                        }
+                    }
                 }
             }
         }
