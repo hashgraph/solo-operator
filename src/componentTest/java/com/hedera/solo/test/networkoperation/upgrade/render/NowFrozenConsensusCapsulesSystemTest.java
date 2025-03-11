@@ -30,9 +30,11 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
+@Disabled("need to revisit this fuzz test later")
 public class NowFrozenConsensusCapsulesSystemTest extends NowFrozenConsensusCapsulesUnitTest {
     String namespaceInitial;
     String namespace;

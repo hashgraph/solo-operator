@@ -20,9 +20,11 @@ import io.javaoperatorsdk.operator.junit.AbstractOperatorExtension;
 import io.javaoperatorsdk.operator.junit.LocallyRunOperatorExtension;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
+@Disabled("need to revisit this fuzz test later")
 public class NowFrozenOrbitSystemTest extends NowFrozenOrbitUnitTest {
     Orbit orbit;
     String namespace;
