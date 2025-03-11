@@ -7,7 +7,6 @@ import static com.hedera.solo.test.framework.KubernetesDevServiceExecutionListen
 import static com.hedera.solo.test.networkoperation.upgrade.render.SystemTestUtils.create;
 import static com.hedera.solo.test.networkoperation.upgrade.render.SystemTestUtils.createNamespace;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -27,7 +26,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
@@ -72,26 +70,24 @@ public class NowFrozenConsensusCapsulesSystemTest extends NowFrozenConsensusCaps
     @Override
     public void test() {
         super.test();
-        await().atMost(5, TimeUnit.MINUTES).untilAsserted(() -> {
-            NetworkOperation networkOperation = kubernetesClient
-                    .resources(NetworkOperation.class)
-                    .inNamespace(namespace)
-                    .list()
-                    .getItems()
-                    .getFirst();
-            Set<Long> capsules =
-                    kubernetesClient.resources(ConsensusCapsule.class).inNamespace(namespace).list().getItems().stream()
-                            .map(CustomResource::getSpec)
-                            .map(ConsensusCapsuleSpec::getNodeId)
-                            .collect(Collectors.toSet());
-            Set<Long> addressBook = networkOperation.getSpec().getNetworkUpgrade().getAddressBook().stream()
-                    .map(AddressBookEntry::getNodeId)
-                    .collect(Collectors.toSet());
-            Set<Long> upgraded = new HashSet<>(networkOperation.getStatus().getUpgradedNodes());
-            Set<Long> intersection = new HashSet<>(addressBook);
-            intersection.retainAll(capsules);
-            assertThat(upgraded).isEqualTo(intersection);
-        });
+        NetworkOperation networkOperation = kubernetesClient
+                .resources(NetworkOperation.class)
+                .inNamespace(namespace)
+                .list()
+                .getItems()
+                .getFirst();
+        Set<Long> capsules =
+                kubernetesClient.resources(ConsensusCapsule.class).inNamespace(namespace).list().getItems().stream()
+                        .map(CustomResource::getSpec)
+                        .map(ConsensusCapsuleSpec::getNodeId)
+                        .collect(Collectors.toSet());
+        Set<Long> addressBook = networkOperation.getSpec().getNetworkUpgrade().getAddressBook().stream()
+                .map(AddressBookEntry::getNodeId)
+                .collect(Collectors.toSet());
+        Set<Long> upgraded = new HashSet<>(networkOperation.getStatus().getUpgradedNodes());
+        Set<Long> intersection = new HashSet<>(addressBook);
+        intersection.retainAll(capsules);
+        assertThat(upgraded).isEqualTo(intersection);
     }
 
     @Override

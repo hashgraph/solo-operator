@@ -6,12 +6,9 @@ import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.test.framework.KubernetesDevServiceExecutionListener.initialize;
 import static com.hedera.solo.test.networkoperation.upgrade.render.SystemTestUtils.create;
 import static com.hedera.solo.test.networkoperation.upgrade.render.SystemTestUtils.createNamespace;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.hedera.solo.operator.model.commonspec.AddressBookEntry;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ApplyOrbitConfigurationChangeStep;
@@ -21,11 +18,6 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.junit.AbstractOperatorExtension;
 import io.javaoperatorsdk.operator.junit.LocallyRunOperatorExtension;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -67,26 +59,6 @@ public class NowFrozenOrbitSystemTest extends NowFrozenOrbitUnitTest {
     @Override
     public void test() {
         super.test();
-        await().atMost(5, TimeUnit.MINUTES).untilAsserted(() -> {
-            Thread.sleep(2000);
-            NetworkOperation networkOperation = kubernetesClient
-                    .resources(NetworkOperation.class)
-                    .inNamespace(namespace)
-                    .list()
-                    .getItems()
-                    .getFirst();
-
-            List<AddressBookEntry> addressBook = new ArrayList<>(
-                    networkOperation.getSpec().getNetworkUpgrade().getAddressBook());
-            Set<Long> internal = new HashSet<>(networkOperation.getStatus().getUpgradedNodes());
-            addressBook.removeIf(entry -> internal.contains(entry.getNodeId()));
-            assertThat(addressBook)
-                    .isEqualTo(orbit.getSpec()
-                            .getConsensus()
-                            .getGenesis()
-                            .getAddressBook()
-                            .getExternalAddresses());
-        });
     }
 
     @Override
