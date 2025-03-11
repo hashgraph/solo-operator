@@ -39,7 +39,7 @@ public class StreamUploaderUtil {
         };
     }
 
-    public static String computeConditionType(final String containerName) {
-        return "ImageVerified: " + toStreamUploaderType(containerName);
+    public static String computeConditionType(final String conditionType, final String containerName) {
+        return "%s: %s".formatted(conditionType, toStreamUploaderType(containerName));
     }
 }

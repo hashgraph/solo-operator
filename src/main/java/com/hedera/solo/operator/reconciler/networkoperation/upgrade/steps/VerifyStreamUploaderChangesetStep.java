@@ -3,14 +3,20 @@
 package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
 
 import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyLayerHashes.updateStatus;
+import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.utils.StreamUploaderUtil.computeConditionType;
+import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.utils.StreamUploaderUtil.toStreamUploaderType;
 
 import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.commonspec.StreamUploaderChangeset;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
+import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.utils.StreamUploaderUtil;
+import io.fabric8.kubernetes.api.model.Condition;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import java.lang.invoke.MethodHandles;
+import org.jboss.logging.Logger;
 
 /**
  * VerifyStreamUploaderChangesetStep verifies the changeset for StreamUploader
@@ -43,6 +49,9 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
  */
 public class VerifyStreamUploaderChangesetStep extends StreamUploaderVerifier
         implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
+    public static final String CONDITION_TYPE = "ImageVerification";
+    private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
+
     public VerifyStreamUploaderChangesetStep(String name) {
         super(name);
     }
@@ -51,10 +60,21 @@ public class VerifyStreamUploaderChangesetStep extends StreamUploaderVerifier
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context)
             throws ProcessorException {
+
         final StreamUploaderChangeset changeset = StreamUploaderUtil.findChangeset(resource, this.containerName);
         if (changeset == null || changeset.getSoftwareVersionSource() == null) {
             return status;
         }
+
+        if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed) || isDone(status, this.containerName)) {
+            return status;
+        }
+
+        log.infof(
+                "Verifying '%s' image verification for network operation: %s/%s",
+                toStreamUploaderType(this.containerName),
+                resource.getMetadata().getNamespace(),
+                resource.getMetadata().getName());
 
         return updateStatus(
                 resource,
@@ -64,5 +84,20 @@ public class VerifyStreamUploaderChangesetStep extends StreamUploaderVerifier
                 this::createCondition,
                 getter(),
                 setter());
+    }
+
+    Condition createCondition(final NetworkOperationStatus status) {
+        String type = computeConditionType(CONDITION_TYPE, containerName);
+        return this.addCondition(status, type);
+    }
+
+    public static boolean isDone(NetworkOperationStatus status, String containerName) {
+        if (status == null || status.getConditions() == null) {
+            return false;
+        }
+
+        final String type = computeConditionType(CONDITION_TYPE, containerName);
+        return status.getConditions().stream()
+                .anyMatch(c -> c.getType().equals(type) && c.getStatus().equals(ConditionStatus.True));
     }
 }

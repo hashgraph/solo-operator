@@ -5,7 +5,6 @@ package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.library.time.Timestamp.timestamp;
 import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyLayerHashes.selectedImage;
-import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.utils.StreamUploaderUtil.computeConditionType;
 
 import com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
@@ -50,12 +49,11 @@ public class StreamUploaderVerifier {
         };
     }
 
-    Condition createCondition(final NetworkOperationStatus status) {
-        String type = computeConditionType(containerName);
+    Condition addCondition(final NetworkOperationStatus status, final String conditionType) {
         String image = selectedImage(getter().apply(status.getSoftwareSourceStatus()));
         String timestamp = timestamp();
         return edit(new Condition())
-                .with(builder -> builder.withType(type)
+                .with(builder -> builder.withType(conditionType)
                         .withLastTransitionTime(timestamp)
                         .withMessage(
                                 image == null

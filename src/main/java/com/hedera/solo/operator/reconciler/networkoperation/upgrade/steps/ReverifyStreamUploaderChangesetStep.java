@@ -13,6 +13,7 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.utils.StreamUploaderUtil;
+import io.fabric8.kubernetes.api.model.Condition;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.lang.invoke.MethodHandles;
 import java.util.Objects;
@@ -38,6 +39,8 @@ import org.jboss.logging.Logger;
  */
 public class ReverifyStreamUploaderChangesetStep extends StreamUploaderVerifier
         implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
+
+    public static final String CONDITION_TYPE = "ImageReverification";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     public ReverifyStreamUploaderChangesetStep(String name) {
@@ -54,7 +57,6 @@ public class ReverifyStreamUploaderChangesetStep extends StreamUploaderVerifier
         Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
 
         final StreamUploaderChangeset changeset = StreamUploaderUtil.findChangeset(resource, this.containerName);
-
         if (Objects.isNull(changeset)
                 || Objects.isNull(changeset.getSoftwareVersionSource())
                 || isDone(status, this.containerName)) {
@@ -81,12 +83,17 @@ public class ReverifyStreamUploaderChangesetStep extends StreamUploaderVerifier
                 setter());
     }
 
+    Condition createCondition(final NetworkOperationStatus status) {
+        String type = computeConditionType(CONDITION_TYPE, containerName);
+        return this.addCondition(status, type);
+    }
+
     public static boolean isDone(NetworkOperationStatus status, String containerName) {
         if (status == null || status.getConditions() == null) {
             return false;
         }
 
-        final String type = computeConditionType(containerName);
+        final String type = computeConditionType(CONDITION_TYPE, containerName);
         return status.getConditions().stream()
                 .anyMatch(c -> c.getType().equals(type) && c.getStatus().equals(ConditionStatus.True));
     }
