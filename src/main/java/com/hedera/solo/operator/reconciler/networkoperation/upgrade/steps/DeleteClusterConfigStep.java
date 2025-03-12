@@ -11,6 +11,7 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -20,6 +21,8 @@ import org.jboss.logging.Logger;
 
 public class DeleteClusterConfigStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final String CONDITION_TYPE = "ClusterConfigDeleted";
+    static final String SUCCESS_STATUS_MESSAGE = "Successfully deleted '%s'";
+    static final String FAIL_STATUS_MESSAGE = "Failed to delete '%s':'%s'";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     private final CustomResourceManager customResourceManager;
@@ -38,8 +41,21 @@ public class DeleteClusterConfigStep implements ProcessorStep<NetworkOperation, 
         Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
 
         if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed) || isDone(status)) {
+            log.debugf(
+                    "Skipping deletion of '%s' for network operation: %s/%s [ Phase: %s, Done: %s ]",
+                    Constants.CLUSTER_CONFIG_NAME,
+                    resource.getMetadata().getNamespace(),
+                    resource.getMetadata().getName(),
+                    status.getPhase(),
+                    isDone(status));
             return status;
         }
+
+        log.debugf(
+                "Deleting '%s' for network operation: %s/%s",
+                Constants.CLUSTER_CONFIG_NAME,
+                resource.getMetadata().getNamespace(),
+                resource.getMetadata().getName());
 
         String timestamp = timestamp();
         try {
@@ -47,21 +63,25 @@ public class DeleteClusterConfigStep implements ProcessorStep<NetworkOperation, 
             final ConfigMap existing = customResourceManager.configMapByName(namespace, Constants.CLUSTER_CONFIG_NAME);
             if (existing != null) {
                 customResourceManager.getKubernetesClient().resource(existing).delete();
-                log.info("Deleted cluster config: %s"
-                        .formatted(existing.getMetadata().getName()));
+                log.debugf(
+                        "Successfully deleted '%s' for network operation: %s/%s",
+                        Constants.CLUSTER_CONFIG_NAME,
+                        resource.getMetadata().getNamespace(),
+                        resource.getMetadata().getName());
                 return edit(status)
                         .with(s -> s.addToConditions(new ConditionBuilder()
+                                .withObservedGeneration(resource.getMetadata().getGeneration())
                                 .withType(CONDITION_TYPE)
                                 .withStatus(ConditionStatus.True)
                                 .withLastTransitionTime(timestamp)
-                                .withMessage("Successfully deleted cluster config: %s"
-                                        .formatted(Constants.CLUSTER_CONFIG_NAME))
+                                .withMessage(SUCCESS_STATUS_MESSAGE.formatted(Constants.CLUSTER_CONFIG_NAME))
                                 .build()))
                         .build();
             }
 
             return edit(status)
                     .with(s -> s.addToConditions(new ConditionBuilder()
+                            .withObservedGeneration(resource.getMetadata().getGeneration())
                             .withType(CONDITION_TYPE)
                             .withStatus(ConditionStatus.True)
                             .withLastTransitionTime(timestamp)
@@ -71,13 +91,20 @@ public class DeleteClusterConfigStep implements ProcessorStep<NetworkOperation, 
                     .build();
 
         } catch (Exception ex) {
-            log.error("Failed to delete cluster config", ex);
+            log.errorf(
+                    ex,
+                    "Failed to delete cluster config: %s/%s",
+                    resource.getMetadata().getNamespace(),
+                    Constants.CLUSTER_CONFIG_NAME);
             return edit(status)
                     .with(s -> s.addToConditions(new ConditionBuilder()
+                                    .withObservedGeneration(
+                                            resource.getMetadata().getGeneration())
                                     .withType(CONDITION_TYPE)
                                     .withStatus(ConditionStatus.False)
                                     .withLastTransitionTime(timestamp)
-                                    .withMessage("Failed to delete cluster config: %s".formatted(ex.getMessage()))
+                                    .withMessage(FAIL_STATUS_MESSAGE.formatted(
+                                            Constants.CLUSTER_CONFIG_NAME, ex.getMessage()))
                                     .build())
                             .withPhase(NetworkOperationStatus.Phase.Failed))
                     .build();
@@ -85,12 +112,6 @@ public class DeleteClusterConfigStep implements ProcessorStep<NetworkOperation, 
     }
 
     public static boolean isDone(NetworkOperationStatus status) {
-        if (status == null || status.getConditions() == null) {
-            return false;
-        }
-
-        return status.getConditions().stream()
-                .anyMatch(
-                        c -> c.getType().equals(CONDITION_TYPE) && c.getStatus().equals(ConditionStatus.True));
+        return NetworkOperationStepUtil.isDone(status, CONDITION_TYPE);
     }
 }

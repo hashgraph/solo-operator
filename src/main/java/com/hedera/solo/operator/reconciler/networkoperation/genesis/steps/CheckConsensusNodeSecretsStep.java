@@ -4,6 +4,7 @@ package com.hedera.solo.operator.reconciler.networkoperation.genesis.steps;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.library.reconcile.ReconcileEvent.createOrUpdateEvent;
+import static com.hedera.solo.operator.library.time.Timestamp.timestamp;
 import static com.hedera.solo.operator.reconciler.capsule.consensus.ConsensusCapsuleUtils.secretsWithDefaultKeyNames;
 
 import com.hedera.solo.operator.library.k8s.CustomResourceManager;
@@ -17,15 +18,18 @@ import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Secrets;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.secrets.SecretResources;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import org.jboss.logging.Logger;
 
 public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final String GRPC_TLS_PRIVATE_KEY = "GrpcTlsPrivateKey";
@@ -37,6 +41,7 @@ public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOpera
 
     public static final String CONDITION_TYPE = "CheckConsensusSecrets";
     public static final String SECRETS_VALID = "SecretsValid";
+    private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     private final CustomResourceManager customResourceManager;
 
@@ -55,50 +60,66 @@ public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOpera
             return status;
         }
 
-        final String namespace = resource.getMetadata().getNamespace();
-        final List<ConsensusCapsule> consensusCapsules = customResourceManager.consensusCapsules(
-                namespace, Map.of(Constants.LABEL_K8S_COMPONENT, Constants.COMPONENT_CONSENSUS_NODE));
-        if (consensusCapsules.isEmpty()) {
-            throw new ProcessorException("No consensus capsules found in namespace: %s".formatted(namespace));
-        }
-
-        boolean validationFailed = false;
-        final List<Condition> conditions = new ArrayList<>();
-        for (ConsensusCapsule capsule : consensusCapsules) {
-            final List<Condition> validationFailures = validateSecretsOfConsensusCapsule(resource, status, capsule);
-            if (!validationFailures.isEmpty()) {
-                validationFailed = true;
+        final String timestamp = timestamp();
+        try {
+            final String namespace = resource.getMetadata().getNamespace();
+            final List<ConsensusCapsule> consensusCapsules = customResourceManager.consensusCapsules(
+                    namespace, Map.of(Constants.LABEL_K8S_COMPONENT, Constants.COMPONENT_CONSENSUS_NODE));
+            if (consensusCapsules.isEmpty()) {
+                throw new ProcessorException("No consensus capsules found in namespace: %s".formatted(namespace));
             }
-            conditions.addAll(validationFailures);
+
+            boolean validationFailed = false;
+            final List<Condition> conditions = new ArrayList<>();
+            for (ConsensusCapsule capsule : consensusCapsules) {
+                final List<Condition> validationFailures = validateSecretsOfConsensusCapsule(resource, status, capsule);
+                if (!validationFailures.isEmpty()) {
+                    validationFailed = true;
+                }
+                conditions.addAll(validationFailures);
+            }
+
+            final NetworkOperationStatus.Phase phase =
+                    validationFailed ? NetworkOperationStatus.Phase.Failed : status.getPhase();
+
+            if (validationFailed) {
+                conditions.add(new ConditionBuilder()
+                        .withObservedGeneration(resource.getMetadata().getGeneration())
+                        .withType(CONDITION_TYPE)
+                        .withLastTransitionTime(timestamp)
+                        .withStatus(ConditionStatus.False)
+                        .withMessage("Failed to validated secrets")
+                        .build());
+
+                createOrUpdateEvent(resource, context, new IllegalArgumentException("Failed to validate secrets"));
+            } else {
+                conditions.add(new ConditionBuilder()
+                        .withObservedGeneration(resource.getMetadata().getGeneration())
+                        .withType(CONDITION_TYPE)
+                        .withLastTransitionTime(timestamp)
+                        .withStatus(ConditionStatus.True)
+                        .withMessage("Successfully validated secrets")
+                        .build());
+            }
+
+            return edit(status)
+                    .with(s -> s.withConditions(conditions).withPhase(phase))
+                    .build();
+        } catch (final Exception ex) {
+            log.error("Failed to validate secrets", ex);
+            return edit(status)
+                    .with(s -> s.addToConditions(new ConditionBuilder()
+                                    .withObservedGeneration(
+                                            resource.getMetadata().getGeneration())
+                                    .withType(CONDITION_TYPE)
+                                    .withStatus(ConditionStatus.False)
+                                    .withLastTransitionTime(timestamp)
+                                    .withMessage(
+                                            "Failed to validate secrets for exception: %s".formatted(ex.getMessage()))
+                                    .build())
+                            .withPhase(NetworkOperationStatus.Phase.Failed))
+                    .build();
         }
-
-        final NetworkOperationStatus.Phase phase =
-                validationFailed ? NetworkOperationStatus.Phase.Failed : status.getPhase();
-
-        if (validationFailed) {
-            conditions.add(new ConditionBuilder()
-                    .withType(CONDITION_TYPE)
-                    .withObservedGeneration(resource.getMetadata().getGeneration())
-                    .withStatus(ConditionStatus.False)
-                    .withMessage("One or more secrets are not valid for consensus capsules")
-                    .build());
-
-            createOrUpdateEvent(
-                    resource,
-                    context,
-                    new IllegalArgumentException("Secrets validation failed for consensus capsules"));
-        } else {
-            conditions.add(new ConditionBuilder()
-                    .withType(CONDITION_TYPE)
-                    .withObservedGeneration(resource.getMetadata().getGeneration())
-                    .withStatus(ConditionStatus.True)
-                    .withMessage("Secrets validation was successful for consensus capsules")
-                    .build());
-        }
-
-        return edit(status)
-                .with(s -> s.withConditions(conditions).withPhase(phase))
-                .build();
     }
 
     private List<Condition> validateSecretsOfConsensusCapsule(
@@ -164,12 +185,14 @@ public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOpera
             NetworkOperation resource, NetworkOperationStatus status, ConsensusCapsule capsule, String keyType) {
 
         // check if a condition for the key type already exists, if so, update it
+        final String timestamp = timestamp();
         if (status != null && status.getConditions() != null) {
             for (Condition c : status.getConditions()) {
                 if (keyType.equals(c.getType())) {
                     return c.edit()
                             .withType(keyType)
                             .withReason(SECRETS_VALID)
+                            .withLastTransitionTime(timestamp)
                             .withObservedGeneration(resource.getMetadata().getGeneration())
                             .withStatus(ConditionStatus.False)
                             .withMessage("%s is not valid for capsule: %s "
@@ -183,6 +206,7 @@ public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOpera
         return new ConditionBuilder()
                 .withType(keyType)
                 .withObservedGeneration(resource.getMetadata().getGeneration())
+                .withLastTransitionTime(timestamp)
                 .withReason(SECRETS_VALID)
                 .withStatus(ConditionStatus.False)
                 .withMessage("%s is not valid for capsule: %s "
@@ -191,12 +215,6 @@ public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOpera
     }
 
     public static boolean isDone(NetworkOperationStatus status) {
-        if (status == null || status.getConditions() == null) {
-            return false;
-        }
-
-        return status.getConditions().stream()
-                .anyMatch(
-                        c -> c.getType().equals(CONDITION_TYPE) && c.getStatus().equals(ConditionStatus.True));
+        return NetworkOperationStepUtil.isDone(status, CONDITION_TYPE);
     }
 }

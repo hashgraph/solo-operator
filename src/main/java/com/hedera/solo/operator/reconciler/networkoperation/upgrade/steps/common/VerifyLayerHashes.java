@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
+package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.common;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus.Validity.Invalid;

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package com.hedera.solo.operator.reconciler.networkoperation.render;
+package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.render;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 

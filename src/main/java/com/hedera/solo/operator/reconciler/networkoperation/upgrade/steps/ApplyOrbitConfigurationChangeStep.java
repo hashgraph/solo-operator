@@ -12,7 +12,8 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckProcessor;
-import com.hedera.solo.operator.reconciler.networkoperation.render.NowFrozenOrbit;
+import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.render.NowFrozenOrbit;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -36,6 +37,8 @@ import org.jboss.logging.Logger;
  */
 public class ApplyOrbitConfigurationChangeStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final String CONDITION_TYPE = "OrbitUpdated";
+    static final String SUCCESS_STATUS_MESSAGE = "Successfully updated orbit '%s'";
+    static final String FAIL_STATUS_MESSAGE = "Failed to update orbit '%s': %s";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     @Override
@@ -48,8 +51,18 @@ public class ApplyOrbitConfigurationChangeStep implements ProcessorStep<NetworkO
         Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
 
         if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed) || isDone(status)) {
+            log.debugf(
+                    "Skipping orbit change for network operation: %s/%s [ Phase: %s, Done: %s ]",
+                    resource.getMetadata().getNamespace(),
+                    resource.getMetadata().getName(),
+                    status.getPhase(),
+                    isDone(status));
             return status;
         }
+
+        log.infof(
+                "Applying orbit change for network operation: %s/%s",
+                resource.getMetadata().getNamespace(), resource.getMetadata().getName());
 
         String timestamp = timestamp();
         try {
@@ -58,45 +71,42 @@ public class ApplyOrbitConfigurationChangeStep implements ProcessorStep<NetworkO
             client.resources(Orbit.class)
                     .withName(resource.getSpec().getOrbit())
                     .edit(nowFrozen::update);
+
+            log.infof("Successfully updated orbit: %s", resource.getMetadata().getName());
+            return edit(status)
+                    .with(s -> s.addToConditions(new ConditionBuilder()
+                            .withObservedGeneration(resource.getMetadata().getGeneration())
+                            .withType(CONDITION_TYPE)
+                            .withStatus(ConditionStatus.True)
+                            .withLastTransitionTime(timestamp)
+                            .withMessage(SUCCESS_STATUS_MESSAGE.formatted(
+                                    resource.getSpec().getOrbit()))
+                            .build()))
+                    .build();
         } catch (Exception ex) {
             log.errorf(
+                    ex,
                     "Failed to update orbit for network operation %s/%s: %s"
                             .formatted(
                                     resource.getMetadata().getNamespace(),
                                     resource.getMetadata().getName(),
-                                    resource.getStatus().getConsensusCapsules()),
-                    ex);
+                                    resource.getStatus().getConsensusCapsules()));
             return edit(status)
                     .with(s -> s.addToConditions(new ConditionBuilder()
+                                    .withObservedGeneration(
+                                            resource.getMetadata().getGeneration())
                                     .withType(CONDITION_TYPE)
                                     .withStatus(ConditionStatus.False)
                                     .withLastTransitionTime(timestamp)
-                                    .withMessage("Failed to update orbit '%s': %s"
-                                            .formatted(resource.getSpec().getOrbit(), ex.getMessage()))
+                                    .withMessage(FAIL_STATUS_MESSAGE.formatted(
+                                            resource.getSpec().getOrbit(), ex.getMessage()))
                                     .build())
                             .withPhase(NetworkOperationStatus.Phase.Failed))
                     .build();
         }
-
-        log.infof("Updated orbit: %s", resource.getMetadata().getName());
-        return edit(status)
-                .with(s -> s.addToConditions(new ConditionBuilder()
-                        .withType(CONDITION_TYPE)
-                        .withStatus(ConditionStatus.True)
-                        .withLastTransitionTime(timestamp)
-                        .withMessage("Successfully updated orbit: %s"
-                                .formatted(resource.getSpec().getOrbit()))
-                        .build()))
-                .build();
     }
 
     public static boolean isDone(NetworkOperationStatus status) {
-        if (status == null || status.getConditions() == null) {
-            return false;
-        }
-
-        return status.getConditions().stream()
-                .anyMatch(
-                        c -> c.getType().equals(CONDITION_TYPE) && c.getStatus().equals(ConditionStatus.True));
+        return NetworkOperationStepUtil.isDone(status, CONDITION_TYPE);
     }
 }

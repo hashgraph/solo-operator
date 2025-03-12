@@ -4,6 +4,7 @@ package com.hedera.solo.operator.reconciler.networkoperation.genesis.steps;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.library.k8s.KubeletConfig.clusterDomain;
+import static com.hedera.solo.operator.library.time.Timestamp.timestamp;
 import static com.hedera.solo.operator.reconciler.common.Constants.COMPONENT_CONSENSUS_NODE;
 import static com.hedera.solo.operator.reconciler.common.Constants.COMPONENT_DEPLOYMENT;
 import static com.hedera.solo.operator.reconciler.common.Constants.CONFIG_KEY_CONFIG_TXT;
@@ -28,7 +29,7 @@ import com.hedera.solo.operator.model.v1alpha1.orbitspec.consensus.genesis.Addre
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
-import io.fabric8.kubernetes.api.model.Condition;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
@@ -52,6 +53,8 @@ import org.jboss.logging.Logger;
 public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final String TEMPLATE = "cluster-config.yaml";
     public static final String CONDITION_TYPE = "ClusterConfigCreated";
+    static final String SUCCESS_STATUS_MESSAGE = "Successfully created cluster config: %s/%s";
+    static final String FAIL_STATUS_MESSAGE = "Failed to create cluster config: %s";
 
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
     public static final String POD_IPS_NOT_FOUND = "Pod IPs are not found for all consensus nodes";
@@ -69,10 +72,12 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
         Objects.requireNonNull(status, "NetworkOperationStatus status is required");
         Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus phase is required");
         Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
+
         if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed) || isDone(status)) {
             return status;
         }
 
+        final String timestamp = timestamp();
         try {
             final String namespace = resource.getMetadata().getNamespace();
             final Orbit orbit =
@@ -107,16 +112,17 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
             }
 
             // add conditions to the status saying that the configmap has been created
-            final Condition condition = new ConditionBuilder()
-                    .withType(CONDITION_TYPE)
-                    .withStatus(ConditionStatus.True)
-                    .withLastTransitionTime(Instant.now().toString())
-                    .withMessage("Successfully created config: %s/%s"
-                            .formatted(
+            return edit(status)
+                    .with(s -> s.addToConditions(new ConditionBuilder()
+                            .withObservedGeneration(resource.getMetadata().getGeneration())
+                            .withType(CONDITION_TYPE)
+                            .withStatus(ConditionStatus.True)
+                            .withLastTransitionTime(timestamp)
+                            .withMessage(SUCCESS_STATUS_MESSAGE.formatted(
                                     desired.getMetadata().getNamespace(),
                                     desired.getMetadata().getName()))
+                            .build()))
                     .build();
-            return edit(status).with(s -> s.addToConditions(condition)).build();
         } catch (Exception ex) {
             if (ex instanceof ProcessorException && ex.getMessage().contains(POD_IPS_NOT_FOUND)) {
                 log.warnf(
@@ -132,10 +138,12 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
             log.error("Failed to create cluster config", ex);
             return edit(status)
                     .with(s -> s.addToConditions(new ConditionBuilder()
+                                    .withObservedGeneration(
+                                            resource.getMetadata().getGeneration())
                                     .withType(CONDITION_TYPE)
                                     .withStatus(ConditionStatus.False)
-                                    .withLastTransitionTime(Instant.now().toString())
-                                    .withMessage("Failed to create cluster config: %s".formatted(ex.getMessage()))
+                                    .withLastTransitionTime(timestamp)
+                                    .withMessage(FAIL_STATUS_MESSAGE.formatted(ex.getMessage()))
                                     .build())
                             .withPhase(NetworkOperationStatus.Phase.Failed))
                     .build();
@@ -238,7 +246,7 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
                         .formatted(capsule.getMetadata().getName(), namespace, domain != null ? "." + domain : "");
     }
 
-    ConfigMapBuilder preparePodIPs(final ConfigMapBuilder builder, NetworkOperation primary) {
+    private ConfigMapBuilder preparePodIPs(final ConfigMapBuilder builder, NetworkOperation primary) {
         Map<String, String> labels = Map.of(
                 LABEL_K8S_MANAGED_BY, SOLO_OPERATOR,
                 LABEL_K8S_PART_OF, COMPONENT_CONSENSUS_NODE,
@@ -289,12 +297,6 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
     }
 
     public static boolean isDone(NetworkOperationStatus status) {
-        if (status == null || status.getConditions() == null) {
-            return false;
-        }
-
-        return status.getConditions().stream()
-                .anyMatch(
-                        c -> c.getType().equals(CONDITION_TYPE) && c.getStatus().equals(ConditionStatus.True));
+        return NetworkOperationStepUtil.isDone(status, CONDITION_TYPE);
     }
 }

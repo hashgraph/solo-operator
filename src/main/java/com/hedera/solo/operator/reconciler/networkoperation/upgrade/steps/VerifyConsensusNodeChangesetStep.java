@@ -2,7 +2,9 @@
 
 package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
 
-import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyLayerHashes.updateStatus;
+import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
+import static com.hedera.solo.operator.library.time.Timestamp.timestamp;
+import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.common.VerifyLayerHashes.updateStatus;
 
 import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorStep;
@@ -10,8 +12,15 @@ import com.hedera.solo.operator.model.commonspec.ConsensusNodeChangeset;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationstatus.SoftwareSourceStatus;
+import com.hedera.solo.operator.reconciler.common.ConditionStatus;
+import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.common.ConsensusVerifier;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
+import io.fabric8.kubernetes.api.model.Condition;
+import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import java.lang.invoke.MethodHandles;
 import java.util.Objects;
+import org.jboss.logging.Logger;
 
 /**
  * This step is responsible for verifying the consensus node changeset and updating the status accordingly.
@@ -79,8 +88,13 @@ import java.util.Objects;
  *
  * <p>If a valid image source is found, add a condition to the status indicating the success and the selected source URL
  */
-public class VerifyConsensusNodeChangesetStep extends ConsensusVerifier
-        implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
+public class VerifyConsensusNodeChangesetStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
+    public static final String CONDITION_TYPE = "ImageVerified: ConsensusNode";
+    static final String SUCCESS_STATUS_MESSAGE =
+            "Image verification succeeded for 'consensus-node'. Selected for deployment: %s";
+    static final String FAIL_STATUS_MESSAGE = "Image verification failed for 'consensus-node'";
+    private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
+
     @Override
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context)
@@ -88,13 +102,54 @@ public class VerifyConsensusNodeChangesetStep extends ConsensusVerifier
         Objects.requireNonNull(resource, "NetworkOperation must not be null");
         Objects.requireNonNull(context, "Context must not be null");
 
-        return updateStatus(
-                resource,
-                status,
-                context.getClient(),
-                getSoftwareVersionSource(resource),
-                this::createCondition,
-                SoftwareSourceStatus::getConsensusNode,
-                SoftwareSourceStatus::setConsensusNode);
+        if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed) || isDone(status)) {
+            log.debugf(
+                    "Skipping verification of 'consensus-node' image for network operation: %s/%s [ Phase: %s, Done: %s ]",
+                    resource.getMetadata().getNamespace(),
+                    resource.getMetadata().getName(),
+                    status.getPhase(),
+                    isDone(status));
+            return status;
+        }
+
+        String timestamp = timestamp();
+        try {
+            final NetworkOperationStatus updated = updateStatus(
+                    resource,
+                    status,
+                    context.getClient(),
+                    ConsensusVerifier.getSoftwareVersionSource(resource),
+                    this::createCondition,
+                    SoftwareSourceStatus::getConsensusNode,
+                    SoftwareSourceStatus::setConsensusNode);
+
+            return NetworkOperationStepUtil.checkLastCondition(updated);
+        } catch (final Exception ex) {
+            log.errorf(
+                    ex,
+                    "Failed to verify consensus node image for network operation: %s/%s",
+                    resource.getMetadata().getNamespace(),
+                    resource.getMetadata().getName());
+
+            return edit(status)
+                    .with(s -> s.addToConditions(new ConditionBuilder()
+                                    .withObservedGeneration(
+                                            resource.getMetadata().getGeneration())
+                                    .withType(CONDITION_TYPE)
+                                    .withStatus(ConditionStatus.False)
+                                    .withLastTransitionTime(timestamp)
+                                    .withMessage("%s: %s".formatted(FAIL_STATUS_MESSAGE, ex.getMessage()))
+                                    .build())
+                            .withPhase(NetworkOperationStatus.Phase.Failed))
+                    .build();
+        }
+    }
+
+    private Condition createCondition(final NetworkOperationStatus status) {
+        return ConsensusVerifier.createCondition(status, SUCCESS_STATUS_MESSAGE, FAIL_STATUS_MESSAGE, CONDITION_TYPE);
+    }
+
+    public static boolean isDone(NetworkOperationStatus status) {
+        return NetworkOperationStepUtil.isDone(status, CONDITION_TYPE);
     }
 }

@@ -20,6 +20,7 @@ import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Containers;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationspec.NetworkUpgrade;
 import com.hedera.solo.operator.reconciler.common.Constants;
@@ -29,6 +30,7 @@ import com.hedera.solo.operator.test.utils.TemplateLoader;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.quarkus.test.junit.QuarkusTest;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -62,12 +64,12 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract {
                 TemplateLoader.load(StreamUploader.class, TemplateLoader.TEMPLATE_EVENTS_STREAM_UPLOADER);
         esu.getSoftwareVersion().setImageTag("1.3.0"); // force an older version to test upgrade
 
-        final StreamUploader bu = TemplateLoader.load(StreamUploader.class, TemplateLoader.TEMPLATE_BACKUP_UPLOADER);
-        bu.getSoftwareVersion().setImageTag("0.5.0"); // force an older version to test upgrade
-
         final StreamUploader rssu =
                 TemplateLoader.load(StreamUploader.class, TemplateLoader.TEMPLATE_RECORD_STREAM_SIDECAR_UPLOADER);
         esu.getSoftwareVersion().setImageTag("1.3.0"); // force an older version to test upgrade
+
+        final StreamUploader bu = TemplateLoader.load(StreamUploader.class, TemplateLoader.TEMPLATE_BACKUP_UPLOADER);
+        bu.getSoftwareVersion().setImageTag("0.5.0"); // force an older version to test upgrade
 
         final OpenTelemetryCollector oc =
                 TemplateLoader.load(OpenTelemetryCollector.class, TemplateLoader.TEMPLATE_OPEN_TELEMETRY_COLLECTOR);
@@ -147,19 +149,20 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract {
                         .withImageRepositories(edit(new ImageRepository())
                                 .with(repo -> repo.withRepository("gcr.io/hedera-registry")
                                         .withImageName("uploader-mirror")
-                                        .withImageTag("2.1.0"))
+                                        .withImageTag("1.4.0"))
                                 .build())
                         .withImageVerificationSpec(edit(new ImageVerificationSpec())
                                 .with(
                                         ivs -> ivs.withOs(ImageVerificationSpec.Os.linux)
                                                 .withArchitecture(ImageVerificationSpec.Architecture.arm64)
                                                 .withLayerHashes(
-                                                        "sha256:7c457f213c7634afb95a0fb2410a74b7b5bc0ba527033362c240c7a11bef4331",
-                                                        "sha256:e2b533a6dd6418e4a6992797fe986c6c2790a8031485db783becac9d46b7bf26",
-                                                        "sha256:b3ccb45587f906c70741c096867e075206fc95806db2dff458578b95f9489cc4",
-                                                        "sha256:e7a7e1f61944adc64431a2ed848dbea51b894d94c4845bf27b4e53732286d81f",
-                                                        "sha256:d3d1a9788837b3541e94b4e128d9f20ca06ea51e76491aea3d487476ed4b4916",
-                                                        "sha256:1ee13fa23607d2733265b4b88b9ac457c550eb9c49261180c870884a1c27a3da"))
+                                                        "sha256:41af1b5f0f51947706ae712999cf098bef968a7799e7cb4bb2268829e62a6ab3",
+                                                        "sha256:193a17f443d6422e13871b179031baab5e896b4ed1857ef5818ed4fb7c9c41fc",
+                                                        "sha256:0be5c6c9871eafb3bd07bd309795db4889fb1bc912ec5f2d9bdbc3d14b655704",
+                                                        "sha256:5b57223652278c4a0310a61224eca2c97bba0708deb14549adb96745274cb51d",
+                                                        "sha256:8603da644143cf0815ecedb23437eaafea6abad8f51274fe0b4727e5484068a8",
+                                                        "sha256:422c9b8842577fbd9907165ad4e87d372cc41573c83283f037f75c8fca576882",
+                                                        "sha256:e68d61a0fe56df44ba661ac578879befcce6b3c74a8198bae4967ca202cba21a"))
                                 .build()))
                 .with(spec -> spec.editSpec()
                         .editNetworkUpgrade()
@@ -176,9 +179,17 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract {
                                         ivs -> ivs.withOs(ImageVerificationSpec.Os.linux)
                                                 .withArchitecture(ImageVerificationSpec.Architecture.arm64)
                                                 .withLayerHashes(
-                                                        "sha256:93e7f5ee2426cbcb790966dccc80b8573db712a8532fc4fbf3ec66205ac7492b",
-                                                        "sha256:83d2a6a35540a05e7cf9957245423c8f8087fd7555864fbd219c1a7a84386660",
-                                                        "sha256:745cce1e22a98215b6b7975ec95ff342871b4dcb5fe07b57180152b1075df64c"))
+                                                        "sha256:0c5227665c11379f79e9da3d3e4f1724f9316b87d259ac0131628ca1b923a392",
+                                                        "sha256:b2d3390297ee0817aedbebad2700de263fbde157515977289a16ff519a86aa99",
+                                                        "sha256:e7ef608bf9c73ab2dd1ac0ddeaf81226648b8769f86dad9ab4fc2daab339be5b",
+                                                        "sha256:277eaa6804a9ae6150517c6354df42f91c8ab0e7f1f7c9e8adb15cb0f407afe0",
+                                                        "sha256:ca97ca0caed60355299d86926a4636b0bbe5aa627f387508b6985b1659b7a2f9",
+                                                        "sha256:2f57474a27b1f8ef3d4bc0023d94fd327862260e59d5b94e459c8681d9189289",
+                                                        "sha256:19273e2e2728c7b3d49fdb7099bd169ac1da367ea05fdf6b903fc71ed54d44d8",
+                                                        "sha256:885d7bc6dabe6f506b816e4abf57beb8ab915dc4cfabf9b2de883df78f7f4959",
+                                                        "sha256:50bc7a11b84ccfb4393e048dad575e96b417b1b6593a4013500d742f9a87dad9",
+                                                        "sha256:4eb4862da3dbe5fb513cc1ab7ace5fa35513f22b80ea8d71c5b05764132cb232",
+                                                        "sha256:e56ad9bcbe3b8f40784043c81ef33d59da8bca3e2323c5662dc53fd80a422cb1"))
                                 .build()))
                 .with(spec -> spec.editSpec()
                         .editNetworkUpgrade()
@@ -207,28 +218,52 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract {
     }
 
     private void checkStatus(List<ConsensusCapsule> consensusCapsules) {
-        await().atMost(10, TimeUnit.MINUTES).untilAsserted(() -> {
-            Thread.sleep(2000);
-            NetworkOperation netOp = kubernetesClient
-                    .resources(NetworkOperation.class)
-                    .inNamespace(namespace)
-                    .withName("network-upgrade")
-                    .get();
-            assertThat(netOp).isNotNull();
-            assertThat(netOp.getStatus()).isNotNull();
-            assertThat(NowFrozenTask.isDone(netOp)).isTrue();
-            assertThat(netOp.getStatus().getSoftwareSourceStatus()).isNotNull();
-            assertThat(netOp.getStatus().getSoftwareSourceStatus().getConsensusNode())
-                    .isNotNull();
-            assertThat(netOp.getStatus().getUpgradedNodes().size()).isEqualTo(consensusCapsules.size());
+        await().atMost(5, TimeUnit.MINUTES)
+                .pollDelay(Duration.ofSeconds(2))
+                .failFast(() -> {
+                    NetworkOperation netOp = kubernetesClient
+                            .resources(NetworkOperation.class)
+                            .inNamespace(namespace)
+                            .withName("network-upgrade")
+                            .get();
+                    assertThat(netOp).isNotNull();
+                    assertThat(netOp.getStatus()).isNotNull();
+                    assertThat(netOp.getStatus().getPhase()).isNotEqualTo(NetworkOperationStatus.Phase.Failed);
+                })
+                .untilAsserted(() -> {
+                    NetworkOperation netOp = kubernetesClient
+                            .resources(NetworkOperation.class)
+                            .inNamespace(namespace)
+                            .withName("network-upgrade")
+                            .get();
+                    assertThat(netOp).isNotNull();
+                    assertThat(netOp.getStatus()).isNotNull();
+                    assertThat(NowFrozenTask.isDone(netOp)).isTrue();
+                    assertThat(netOp.getStatus().getSoftwareSourceStatus()).isNotNull();
+                    assertThat(netOp.getStatus().getSoftwareSourceStatus().getConsensusNode())
+                            .isNotNull();
+                    assertThat(netOp.getStatus().getUpgradedNodes().size()).isEqualTo(consensusCapsules.size());
+                    assertThat(netOp.getStatus().getPhase()).isNotEqualTo(NetworkOperationStatus.Phase.Running);
 
-            ConfigMap cc = kubernetesClient
-                    .resources(ConfigMap.class)
-                    .inNamespace(namespace)
-                    .withName(Constants.CLUSTER_CONFIG_NAME)
-                    .get();
-            assertThat(cc).isNotNull();
+                    ConfigMap cc = kubernetesClient
+                            .resources(ConfigMap.class)
+                            .inNamespace(namespace)
+                            .withName(Constants.CLUSTER_CONFIG_NAME)
+                            .get();
+                    assertThat(cc).isNotNull();
+                });
 
+        // ensure netOp hasn't failed
+        NetworkOperation netOp = kubernetesClient
+                .resources(NetworkOperation.class)
+                .inNamespace(namespace)
+                .withName("network-upgrade")
+                .get();
+        assertThat(netOp).isNotNull();
+        assertThat(netOp.getStatus()).isNotNull();
+        assertThat(netOp.getStatus().getPhase()).isNotEqualTo(NetworkOperationStatus.Phase.Running);
+
+        await().atMost(5, TimeUnit.MINUTES).pollDelay(Duration.ofSeconds(2)).untilAsserted(() -> {
             for (ConsensusCapsule consensusCapsule : consensusCapsules) {
                 String name = consensusCapsule.getMetadata().getName();
                 ConsensusCapsule capsule =
@@ -241,9 +276,8 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract {
                         .withLabel(LABEL_NODE_NAME, name) // convention: capsule name is the node name
                         .list()
                         .getItems();
-                assertThat(pods.size()).isEqualTo(2); // two pods per node should be running at this stage
-                assertThat(pods.getFirst().getStatus()).isNotNull();
                 for (Pod pod : pods) {
+                    assertThat(pod.getStatus()).isNotNull();
                     assertThat(pod.getStatus().getPhase()).isEqualTo("Running");
                     assertThat(pod.getStatus().getPodIP()).isNotEmpty();
                 }

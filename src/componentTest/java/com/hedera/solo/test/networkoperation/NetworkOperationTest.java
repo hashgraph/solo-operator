@@ -283,7 +283,8 @@ public class NetworkOperationTest extends AbstractOperatorTest {
 
             Condition ready = conditions.get("ConsensusCapsuleReady").getFirst();
             assertThat(ready.getStatus()).isEqualTo(ConditionStatus.False);
-            assertThat(ready.getMessage()).isEqualTo("Capsule phases: {node1=Failed, node2=Failed, node3=Failed}");
+            assertThat(ready.getMessage())
+                    .isEqualTo("Failed with capsule phases: {node1=Failed, node2=Failed, node3=Failed}");
         });
     }
 
@@ -408,7 +409,7 @@ public class NetworkOperationTest extends AbstractOperatorTest {
             assertThat(event.getReportingComponent()).isEqualTo("solo-operator");
             assertThat(event.getType()).isEqualTo("Error");
             assertThat(event.getReason()).isEqualTo("Failed");
-            assertThat(event.getMessage()).contains("Secrets validation failed");
+            assertThat(event.getMessage()).contains("Failed to validate secrets");
         });
     }
 

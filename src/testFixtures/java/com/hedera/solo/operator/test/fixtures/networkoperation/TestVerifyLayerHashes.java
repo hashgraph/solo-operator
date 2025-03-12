@@ -7,7 +7,7 @@ import com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus;
 import com.hedera.solo.operator.model.commonspec.SoftwareVersionSource;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationstatus.SoftwareSourceStatus;
-import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyLayerHashes;
+import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.common.VerifyLayerHashes;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.client.KubernetesClient;

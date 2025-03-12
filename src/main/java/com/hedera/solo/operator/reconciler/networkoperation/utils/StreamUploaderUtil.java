@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package com.hedera.solo.operator.reconciler.networkoperation.upgrade.utils;
+package com.hedera.solo.operator.reconciler.networkoperation.utils;
 
 import com.hedera.solo.operator.model.commonspec.StreamUploaderChangeset;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationspec.networkupgrade.Changesets;
 import com.hedera.solo.operator.reconciler.common.Constants;
 
-public class StreamUploaderUtil {
+public final class StreamUploaderUtil {
     public static StreamUploaderChangeset findChangeset(NetworkOperation resource, String name) {
         final Changesets changesets = resource.getSpec().getNetworkUpgrade().getChangesets();
         if (changesets == null) {
@@ -35,6 +35,6 @@ public class StreamUploaderUtil {
     }
 
     public static String computeConditionType(final String conditionType, final String containerName) {
-        return "%s: %s".formatted(conditionType, toStreamUploaderType(containerName));
+        return "%s [%s]".formatted(conditionType, toStreamUploaderType(containerName));
     }
 }
