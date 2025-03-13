@@ -7,6 +7,7 @@ import com.hedera.solo.operator.library.processor.AbstractProcessorTask;
 import com.hedera.solo.operator.library.processor.Processor;
 import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorStep;
+import com.hedera.solo.operator.library.processor.RetryableStepRunner;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
@@ -80,7 +81,8 @@ public class NowFrozenTask extends AbstractProcessorTask<NetworkOperation, Netwo
                 new DeleteClusterConfigStep(customResourceManager),
                 new ApplyConsensusPodChangeStep(),
                 new ApplyOrbitConfigurationChangeStep(),
-                new CreateClusterConfigStep(customResourceManager));
+                new RetryableStepRunner<>(
+                        new CreateClusterConfigStep(customResourceManager), Duration.ofSeconds(2), 60));
     }
 
     @Override
