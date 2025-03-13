@@ -77,9 +77,6 @@ public class VerifyConsensusNodeChangesetStepTest {
                 .removeLast(); // remove the valid entry at the end
         NetworkOperationStatus status = executeStep(networkOperation);
 
-        // no valid repository should be found
-        validateFailureConditions(networkOperation, status);
-
         // validate the status messages
         validateFailureConditions(networkOperation, status);
     }
@@ -93,7 +90,12 @@ public class VerifyConsensusNodeChangesetStepTest {
         @SuppressWarnings("unchecked")
         Context<NetworkOperation> context = Mockito.mock(Context.class);
 
-        NetworkOperationStatus resp = step.run(networkOperation, status, context);
+        NetworkOperationStatus resp;
+        try {
+            resp = step.run(networkOperation, status, context);
+        } catch (Exception e) {
+            resp = step.handleError(networkOperation, status, context, e);
+        }
 
         assertThat(resp).isNotNull();
         assertThat(resp.getSoftwareSourceStatus()).isNotNull();

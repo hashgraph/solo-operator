@@ -21,8 +21,8 @@ import org.jboss.logging.Logger;
 
 public class DeleteClusterConfigStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final String CONDITION_TYPE = "ClusterConfigDeleted";
-    static final String SUCCESS_STATUS_MESSAGE = "Successfully deleted '%s'";
-    static final String FAIL_STATUS_MESSAGE = "Failed to delete '%s':'%s'";
+    public static final String SUCCESS_STATUS_MESSAGE = "Successfully deleted '%s'";
+    public static final String FAIL_STATUS_MESSAGE = "Failed to delete '%s':'%s'";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     private final CustomResourceManager customResourceManager;
@@ -51,64 +51,54 @@ public class DeleteClusterConfigStep implements ProcessorStep<NetworkOperation, 
             return status;
         }
 
-        log.debugf(
-                "Deleting '%s' for network operation: %s/%s",
-                Constants.CLUSTER_CONFIG_NAME,
-                resource.getMetadata().getNamespace(),
-                resource.getMetadata().getName());
-
-        String timestamp = timestamp();
-        try {
-            final String namespace = resource.getMetadata().getNamespace();
-            final ConfigMap existing = customResourceManager.configMapByName(namespace, Constants.CLUSTER_CONFIG_NAME);
-            if (existing != null) {
-                customResourceManager.getKubernetesClient().resource(existing).delete();
-                log.debugf(
-                        "Successfully deleted '%s' for network operation: %s/%s",
-                        Constants.CLUSTER_CONFIG_NAME,
-                        resource.getMetadata().getNamespace(),
-                        resource.getMetadata().getName());
-                return edit(status)
-                        .with(s -> s.addToConditions(new ConditionBuilder()
-                                .withObservedGeneration(resource.getMetadata().getGeneration())
-                                .withType(CONDITION_TYPE)
-                                .withStatus(ConditionStatus.True)
-                                .withLastTransitionTime(timestamp)
-                                .withMessage(SUCCESS_STATUS_MESSAGE.formatted(Constants.CLUSTER_CONFIG_NAME))
-                                .build()))
-                        .build();
-            }
-
-            return edit(status)
-                    .with(s -> s.addToConditions(new ConditionBuilder()
-                            .withObservedGeneration(resource.getMetadata().getGeneration())
-                            .withType(CONDITION_TYPE)
-                            .withStatus(ConditionStatus.True)
-                            .withLastTransitionTime(timestamp)
-                            .withMessage("Nothing to delete. config '%s/%s' doesn't exist"
-                                    .formatted(resource.getMetadata().getNamespace(), Constants.CLUSTER_CONFIG_NAME))
-                            .build()))
-                    .build();
-
-        } catch (Exception ex) {
-            log.errorf(
-                    ex,
-                    "Failed to delete cluster config: %s/%s",
+        final String namespace = resource.getMetadata().getNamespace();
+        final ConfigMap existing = customResourceManager.configMapByName(namespace, Constants.CLUSTER_CONFIG_NAME);
+        if (existing != null) {
+            log.debugf(
+                    "Deleting '%s' for network operation: %s/%s",
+                    Constants.CLUSTER_CONFIG_NAME,
                     resource.getMetadata().getNamespace(),
-                    Constants.CLUSTER_CONFIG_NAME);
-            return edit(status)
-                    .with(s -> s.addToConditions(new ConditionBuilder()
-                                    .withObservedGeneration(
-                                            resource.getMetadata().getGeneration())
-                                    .withType(CONDITION_TYPE)
-                                    .withStatus(ConditionStatus.False)
-                                    .withLastTransitionTime(timestamp)
-                                    .withMessage(FAIL_STATUS_MESSAGE.formatted(
-                                            Constants.CLUSTER_CONFIG_NAME, ex.getMessage()))
-                                    .build())
-                            .withPhase(NetworkOperationStatus.Phase.Failed))
-                    .build();
+                    resource.getMetadata().getName());
+
+            customResourceManager.getKubernetesClient().resource(existing).delete();
+
+            log.debugf(
+                    "Successfully deleted '%s' for network operation: %s/%s",
+                    Constants.CLUSTER_CONFIG_NAME,
+                    resource.getMetadata().getNamespace(),
+                    resource.getMetadata().getName());
+        } else {
+            log.warnf(
+                    "'%s/%s' doesn't exist. Nothing to delete, continuing to next step...",
+                    resource.getMetadata().getNamespace(), Constants.CLUSTER_CONFIG_NAME);
         }
+
+        return edit(status)
+                .with(s -> s.addToConditions(new ConditionBuilder()
+                        .withObservedGeneration(resource.getMetadata().getGeneration())
+                        .withType(CONDITION_TYPE)
+                        .withStatus(ConditionStatus.True)
+                        .withLastTransitionTime(timestamp())
+                        .withMessage(SUCCESS_STATUS_MESSAGE.formatted(Constants.CLUSTER_CONFIG_NAME))
+                        .build()))
+                .build();
+    }
+
+    @Override
+    public NetworkOperationStatus handleError(
+            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context, Exception ex) {
+        Objects.requireNonNull(resource, "NetworkOperation resource is required");
+        Objects.requireNonNull(status, "NetworkOperation status is required");
+        Objects.requireNonNull(ex, "Exception is required");
+
+        log.errorf(
+                ex,
+                "Failed to delete cluster config: %s/%s",
+                resource.getMetadata().getNamespace(),
+                Constants.CLUSTER_CONFIG_NAME);
+
+        final String failMessage = FAIL_STATUS_MESSAGE.formatted(Constants.CLUSTER_CONFIG_NAME, ex.getMessage());
+        return NetworkOperationStepUtil.prepareFailed(resource, status, failMessage, CONDITION_TYPE);
     }
 
     public static boolean isDone(NetworkOperationStatus status) {

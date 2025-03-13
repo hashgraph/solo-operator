@@ -2,7 +2,6 @@
 
 package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
 
-import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.library.time.Timestamp.timestamp;
 import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.common.VerifyLayerHashes.selectedImage;
 import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.common.VerifyLayerHashes.updateStatus;
@@ -15,7 +14,6 @@ import com.hedera.solo.operator.model.v1alpha1.networkoperationstatus.SoftwareSo
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
 import io.fabric8.kubernetes.api.model.Condition;
-import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.lang.invoke.MethodHandles;
 import java.util.Objects;
@@ -23,8 +21,8 @@ import org.jboss.logging.Logger;
 
 public class ReverifyOtelCollectorStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final String CONDITION_TYPE = "ImageReVerified: OtelCollector";
-    static final String SUCCESS_STATUS_MESSAGE = "Image re-verification succeeded for 'otel-collector': %s";
-    static final String FAIL_STATUS_MESSAGE = "Image re-verification failed for 'otel-collector'";
+    public static final String SUCCESS_STATUS_MESSAGE = "Image re-verification succeeded for 'otel-collector': %s";
+    public static final String FAIL_STATUS_MESSAGE = "Image re-verification failed for 'otel-collector'";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     @Override
@@ -55,37 +53,32 @@ public class ReverifyOtelCollectorStep implements ProcessorStep<NetworkOperation
                 "Re-verifying 'otel-collector' image for network operation: %s/%s",
                 resource.getMetadata().getNamespace(), resource.getMetadata().getName());
 
-        String timestamp = timestamp();
-        try {
-            final NetworkOperationStatus updated = updateStatus(
-                    resource,
-                    status,
-                    context.getClient(),
-                    otelCollector.getSoftwareVersionSource(),
-                    this::createCondition,
-                    SoftwareSourceStatus::getOtelCollector,
-                    SoftwareSourceStatus::setOtelCollector);
+        final NetworkOperationStatus updated = updateStatus(
+                resource,
+                status,
+                context.getClient(),
+                otelCollector.getSoftwareVersionSource(),
+                this::createCondition,
+                SoftwareSourceStatus::getOtelCollector,
+                SoftwareSourceStatus::setOtelCollector);
 
-            return NetworkOperationStepUtil.checkLastCondition(updated);
-        } catch (final Exception ex) {
-            log.errorf(
-                    ex,
-                    "Failed to re-verify otel-collector image for network operation: %s/%s",
-                    resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName());
+        return NetworkOperationStepUtil.checkLastCondition(updated);
+    }
 
-            return edit(status)
-                    .with(s -> s.addToConditions(new ConditionBuilder()
-                                    .withObservedGeneration(
-                                            resource.getMetadata().getGeneration())
-                                    .withType(CONDITION_TYPE)
-                                    .withStatus(ConditionStatus.False)
-                                    .withLastTransitionTime(timestamp)
-                                    .withMessage("%s: %s".formatted(FAIL_STATUS_MESSAGE, ex.getMessage()))
-                                    .build())
-                            .withPhase(NetworkOperationStatus.Phase.Failed))
-                    .build();
-        }
+    @Override
+    public NetworkOperationStatus handleError(
+            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context, Exception ex) {
+        Objects.requireNonNull(resource, "NetworkOperation resource is required");
+        Objects.requireNonNull(status, "NetworkOperation status is required");
+        Objects.requireNonNull(ex, "Exception is required");
+
+        log.errorf(
+                ex,
+                "Failed to re-verify otel-collector image for network operation: %s/%s",
+                resource.getMetadata().getNamespace(),
+                resource.getMetadata().getName());
+
+        return NetworkOperationStepUtil.prepareFailed(resource, status, ex.getMessage(), CONDITION_TYPE);
     }
 
     private Condition createCondition(final NetworkOperationStatus status) {

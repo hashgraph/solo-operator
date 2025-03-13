@@ -2,8 +2,6 @@
 
 package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
 
-import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
-import static com.hedera.solo.operator.library.time.Timestamp.timestamp;
 import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.common.VerifyLayerHashes.updateStatus;
 import static com.hedera.solo.operator.reconciler.networkoperation.utils.StreamUploaderUtil.computeConditionType;
 import static com.hedera.solo.operator.reconciler.networkoperation.utils.StreamUploaderUtil.toStreamUploaderType;
@@ -13,12 +11,10 @@ import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.commonspec.StreamUploaderChangeset;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
-import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.common.StreamUploaderVerifier;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.StreamUploaderUtil;
 import io.fabric8.kubernetes.api.model.Condition;
-import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.lang.invoke.MethodHandles;
 import java.util.Objects;
@@ -55,8 +51,9 @@ import org.jboss.logging.Logger;
  */
 public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final String CONDITION_TYPE = "ImageVerified: StreamUploader";
-    static final String SUCCESS_STATUS_MESSAGE = "Image verification succeeded for '%s'. Selected for deployment: %s";
-    static final String FAIL_STATUS_MESSAGE = "Image verification failed for '%s'";
+    public static final String SUCCESS_STATUS_MESSAGE =
+            "Image verification succeeded for '%s'. Selected for deployment: %s";
+    public static final String FAIL_STATUS_MESSAGE = "Image verification failed for '%s'";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
     private final String containerName;
 
@@ -96,39 +93,34 @@ public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkO
                 resource.getMetadata().getNamespace(),
                 resource.getMetadata().getName());
 
-        String timestamp = timestamp();
-        try {
-            final NetworkOperationStatus updated = updateStatus(
-                    resource,
-                    status,
-                    context.getClient(),
-                    changeset.getSoftwareVersionSource(),
-                    this::createCondition,
-                    StreamUploaderVerifier.getter(this.containerName),
-                    StreamUploaderVerifier.setter(this.containerName));
+        final NetworkOperationStatus updated = updateStatus(
+                resource,
+                status,
+                context.getClient(),
+                changeset.getSoftwareVersionSource(),
+                this::createCondition,
+                StreamUploaderVerifier.getter(this.containerName),
+                StreamUploaderVerifier.setter(this.containerName));
 
-            return NetworkOperationStepUtil.checkLastCondition(updated);
-        } catch (final Exception ex) {
-            String conditionType = computeConditionType(CONDITION_TYPE, containerName);
-            log.errorf(
-                    ex,
-                    "Failed to verify '%s' for network operation: %s/%s",
-                    toStreamUploaderType(this.containerName),
-                    resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName());
+        return NetworkOperationStepUtil.checkLastCondition(updated);
+    }
 
-            return edit(status)
-                    .with(s -> s.addToConditions(new ConditionBuilder()
-                                    .withObservedGeneration(
-                                            resource.getMetadata().getGeneration())
-                                    .withType(conditionType)
-                                    .withStatus(ConditionStatus.False)
-                                    .withLastTransitionTime(timestamp)
-                                    .withMessage("%s: %s".formatted(FAIL_STATUS_MESSAGE, ex.getMessage()))
-                                    .build())
-                            .withPhase(NetworkOperationStatus.Phase.Failed))
-                    .build();
-        }
+    @Override
+    public NetworkOperationStatus handleError(
+            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context, Exception ex) {
+        Objects.requireNonNull(resource, "NetworkOperation resource is required");
+        Objects.requireNonNull(status, "NetworkOperation status is required");
+        Objects.requireNonNull(ex, "Exception is required");
+
+        log.errorf(
+                ex,
+                "Failed to verify '%s' for network operation: %s/%s",
+                toStreamUploaderType(this.containerName),
+                resource.getMetadata().getNamespace(),
+                resource.getMetadata().getName());
+
+        final String conditionType = computeConditionType(CONDITION_TYPE, containerName);
+        return NetworkOperationStepUtil.prepareFailed(resource, status, ex.getMessage(), conditionType);
     }
 
     Condition createCondition(final NetworkOperationStatus status) {

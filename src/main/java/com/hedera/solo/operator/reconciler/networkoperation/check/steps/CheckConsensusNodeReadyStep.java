@@ -2,7 +2,6 @@
 
 package com.hedera.solo.operator.reconciler.networkoperation.check.steps;
 
-import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.library.time.Timestamp.timestamp;
 import static java.util.Objects.nonNull;
 
@@ -33,6 +32,8 @@ import org.jboss.logging.Logger;
 /** CheckConsensusNodeRunningStep checks if the consensus node is ACTIVE and processing transactions */
 public class CheckConsensusNodeReadyStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final String CONDITION_TYPE = "ConsensusCapsuleReady";
+    public static final String SUCCESS_STATUS_MESSAGE = "Successful with capsule phases: %s";
+    public static final String FAIL_STATUS_MESSAGE = "Failed with capsule phases: %s";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     private final CustomResourceManager customResourceManager;
@@ -54,70 +55,65 @@ public class CheckConsensusNodeReadyStep implements ProcessorStep<NetworkOperati
         }
 
         final String timestamp = timestamp();
-        try {
-            // retrieve consensus capsule list and phases
-            final String namespace = resource.getMetadata().getNamespace();
-            final Collection<ConsensusCapsule> consensusCapsules = customResourceManager.consensusCapsules(
-                    namespace, Map.of(Constants.LABEL_K8S_COMPONENT, Constants.COMPONENT_CONSENSUS_NODE));
-            final Set<ConsensusCapsuleStatus.Phase> phaseSet = toPhaseSet(consensusCapsules);
-            final Map<String, ConsensusCapsuleStatus.Phase> phaseMap = toPhaseMap(consensusCapsules);
+        // retrieve consensus capsule list and phases
+        final String namespace = resource.getMetadata().getNamespace();
+        final Collection<ConsensusCapsule> consensusCapsules = customResourceManager.consensusCapsules(
+                namespace, Map.of(Constants.LABEL_K8S_COMPONENT, Constants.COMPONENT_CONSENSUS_NODE));
+        final Set<ConsensusCapsuleStatus.Phase> phaseSet = toPhaseSet(consensusCapsules);
+        final Map<String, ConsensusCapsuleStatus.Phase> phaseMap = toPhaseMap(consensusCapsules);
 
-            // determine phase and conditions based on the consensus capsule status
-            final NetworkOperationStatus.Phase resultingPhase;
+        // determine phase and conditions based on the consensus capsule status
+        final NetworkOperationStatus.Phase resultingPhase;
 
-            List<Condition> conditions = new ArrayList<>();
-            if (Set.of(ConsensusCapsuleStatus.Phase.Running).equals(phaseSet)) {
-                resultingPhase = NetworkOperationStatus.Phase.Succeeded;
-                conditions.add(new ConditionBuilder()
-                        .withObservedGeneration(resource.getMetadata().getGeneration())
-                        .withType(CONDITION_TYPE)
-                        .withStatus(ConditionStatus.True)
-                        .withMessage("Successful with capsule phases: %s".formatted(phaseMap))
-                        .withLastTransitionTime(timestamp)
-                        .build());
-            } else if (Set.of(
-                            ConsensusCapsuleStatus.Phase.Pending,
-                            ConsensusCapsuleStatus.Phase.Running,
-                            ConsensusCapsuleStatus.Phase.Unknown)
-                    .containsAll(phaseSet)) {
-                resultingPhase = NetworkOperationStatus.Phase.Running;
-            } else {
-                resultingPhase = NetworkOperationStatus.Phase.Failed;
-                conditions.add(new ConditionBuilder()
-                        .withObservedGeneration(resource.getMetadata().getGeneration())
-                        .withType(CONDITION_TYPE)
-                        .withStatus(ConditionStatus.False)
-                        .withMessage("Failed with capsule phases: %s".formatted(phaseMap))
-                        .withLastTransitionTime(timestamp)
-                        .build());
-            }
-
-            // return a new status with the phase and conditions
-            log.infof(
-                    "Consensus capsules status: %s [ %s/%s status: %s ]",
-                    phaseMap,
-                    resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName(),
-                    resultingPhase);
-            return status.edit()
-                    .withPhase(resultingPhase)
-                    .addAllToConditions(conditions)
-                    .build();
-        } catch (final Exception ex) {
-            log.error("Failed to check consensus-capsule readiness", ex);
-            return edit(status)
-                    .with(s -> s.addToConditions(new ConditionBuilder()
-                                    .withObservedGeneration(
-                                            resource.getMetadata().getGeneration())
-                                    .withType(CONDITION_TYPE)
-                                    .withStatus(ConditionStatus.False)
-                                    .withLastTransitionTime(timestamp)
-                                    .withMessage("Failed to check consensus-capsule readiness: %s"
-                                            .formatted(ex.getMessage()))
-                                    .build())
-                            .withPhase(NetworkOperationStatus.Phase.Failed))
-                    .build();
+        List<Condition> conditions = new ArrayList<>();
+        if (Set.of(ConsensusCapsuleStatus.Phase.Running).equals(phaseSet)) {
+            resultingPhase = NetworkOperationStatus.Phase.Succeeded;
+            conditions.add(new ConditionBuilder()
+                    .withObservedGeneration(resource.getMetadata().getGeneration())
+                    .withType(CONDITION_TYPE)
+                    .withStatus(ConditionStatus.True)
+                    .withMessage(SUCCESS_STATUS_MESSAGE.formatted(phaseMap))
+                    .withLastTransitionTime(timestamp)
+                    .build());
+        } else if (Set.of(
+                        ConsensusCapsuleStatus.Phase.Pending,
+                        ConsensusCapsuleStatus.Phase.Running,
+                        ConsensusCapsuleStatus.Phase.Unknown)
+                .containsAll(phaseSet)) {
+            resultingPhase = NetworkOperationStatus.Phase.Running;
+        } else {
+            resultingPhase = NetworkOperationStatus.Phase.Failed;
+            conditions.add(new ConditionBuilder()
+                    .withObservedGeneration(resource.getMetadata().getGeneration())
+                    .withType(CONDITION_TYPE)
+                    .withStatus(ConditionStatus.False)
+                    .withMessage(FAIL_STATUS_MESSAGE.formatted(phaseMap))
+                    .withLastTransitionTime(timestamp)
+                    .build());
         }
+
+        // return a new status with the phase and conditions
+        log.infof(
+                "Consensus capsules status: %s [ %s/%s status: %s ]",
+                phaseMap,
+                resource.getMetadata().getNamespace(),
+                resource.getMetadata().getName(),
+                resultingPhase);
+        return status.edit()
+                .withPhase(resultingPhase)
+                .addAllToConditions(conditions)
+                .build();
+    }
+
+    @Override
+    public NetworkOperationStatus handleError(
+            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context, Exception ex) {
+        Objects.requireNonNull(resource, "NetworkOperation resource is required");
+        Objects.requireNonNull(status, "NetworkOperation status is required");
+        Objects.requireNonNull(ex, "Exception is required");
+
+        log.error("Failed to check consensus-capsule readiness", ex);
+        return NetworkOperationStepUtil.prepareFailed(resource, status, ex.getMessage(), CONDITION_TYPE);
     }
 
     private Set<ConsensusCapsuleStatus.Phase> toPhaseSet(Collection<ConsensusCapsule> capsules) {

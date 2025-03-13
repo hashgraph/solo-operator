@@ -409,7 +409,7 @@ public class NetworkOperationTest extends AbstractOperatorTest {
             assertThat(event.getReportingComponent()).isEqualTo("solo-operator");
             assertThat(event.getType()).isEqualTo("Error");
             assertThat(event.getReason()).isEqualTo("Failed");
-            assertThat(event.getMessage()).contains("Failed to validate secrets");
+            assertThat(event.getMessage()).contains(CheckConsensusNodeSecretsStep.FAIL_STATUS_MESSAGE);
         });
     }
 

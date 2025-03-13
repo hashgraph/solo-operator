@@ -43,8 +43,8 @@ import org.jboss.logging.Logger;
 public class CreatePublicKeysConfigStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     private final CustomResourceManager customResourceManager;
     public static final String CONDITION_TYPE = "PublicKeyConfigCreated";
-    static final String SUCCESS_STATUS_MESSAGE = "Successfully created public key secret: %s/%s";
-    static final String FAIL_STATUS_MESSAGE = "Failed to create public key secret: %s";
+    public static final String SUCCESS_STATUS_MESSAGE = "Successfully created public key secret: %s/%s";
+    public static final String FAIL_STATUS_MESSAGE = "Failed to create public key secret: %s";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     public CreatePublicKeysConfigStep(CustomResourceManager customResourceManager) {
@@ -65,64 +65,68 @@ public class CreatePublicKeysConfigStep implements ProcessorStep<NetworkOperatio
             return status;
         }
 
-        final String timestamp = timestamp();
-        try {
-            final String namespace = resource.getMetadata().getNamespace();
-            final Orbit orbit =
-                    customResourceManager.orbitByName(resource.getSpec().getOrbit());
-            if (orbit == null) {
-                throw new ProcessorException(
-                        "Orbit not found: %s".formatted(resource.getSpec().getOrbit()));
-            }
+        final String namespace = resource.getMetadata().getNamespace();
+        final Orbit orbit = customResourceManager.orbitByName(resource.getSpec().getOrbit());
+        if (orbit == null) {
+            throw new ProcessorException(
+                    "Orbit not found: %s".formatted(resource.getSpec().getOrbit()));
+        }
 
-            final List<ConsensusCapsule> consensusCapsules = customResourceManager.consensusCapsules(namespace);
-            if (consensusCapsules.isEmpty()) {
-                throw new ProcessorException("No consensus capsules found in orbit: %s"
-                        .formatted(orbit.getMetadata().getName()));
-            }
+        final List<ConsensusCapsule> consensusCapsules = customResourceManager.consensusCapsules(namespace);
+        if (consensusCapsules.isEmpty()) {
+            throw new ProcessorException("No consensus capsules found in orbit: %s"
+                    .formatted(orbit.getMetadata().getName()));
+        }
 
-            final ConfigMap existing = customResourceManager.configMapByName(namespace, Constants.PUBLIC_KEYS_NAME);
-            final ConfigMap desired =
-                    this.prepareDesiredConfigMap(resource, context, orbit, consensusCapsules, existing);
+        final ConfigMap existing = customResourceManager.configMapByName(namespace, Constants.PUBLIC_KEYS_NAME);
+        final ConfigMap desired = this.prepareDesiredConfigMap(resource, context, orbit, consensusCapsules, existing);
 
+        if (existing == null) {
             log.infof(
                     "Creating public key config: %s/%s",
                     desired.getMetadata().getNamespace(), desired.getMetadata().getName());
-
-            if (existing == null) {
-                context.getClient().resource(desired).create();
-            } else {
-                context.getClient().resource(existing).patch(desired);
-            }
-
-            return edit(status)
-                    .with(s -> s.addToConditions(new ConditionBuilder()
-                            .withObservedGeneration(resource.getMetadata().getGeneration())
-                            .withType(CONDITION_TYPE)
-                            .withStatus(ConditionStatus.True)
-                            .withLastTransitionTime(timestamp)
-                            .withMessage(SUCCESS_STATUS_MESSAGE.formatted(
-                                    resource.getMetadata().getNamespace(),
-                                    resource.getMetadata().getName()))
-                            .build()))
-                    .build();
-        } catch (final Exception ex) {
-            log.error("Failed to create public key secret", ex);
-            return edit(status)
-                    .with(s -> s.addToConditions(new ConditionBuilder()
-                                    .withObservedGeneration(
-                                            resource.getMetadata().getGeneration())
-                                    .withType(CONDITION_TYPE)
-                                    .withStatus(ConditionStatus.True)
-                                    .withLastTransitionTime(timestamp)
-                                    .withMessage(FAIL_STATUS_MESSAGE.formatted(
-                                            resource.getMetadata().getNamespace(),
-                                            resource.getMetadata().getName(),
-                                            ex.getMessage()))
-                                    .build())
-                            .withPhase(NetworkOperationStatus.Phase.Failed))
-                    .build();
+            context.getClient().resource(desired).create();
+            log.infof(
+                    "Successfully created public key config: %s/%s",
+                    desired.getMetadata().getNamespace(), desired.getMetadata().getName());
+        } else {
+            log.infof(
+                    "Updating public key config: %s/%s",
+                    desired.getMetadata().getNamespace(), desired.getMetadata().getName());
+            context.getClient().resource(existing).patch(desired);
+            log.infof(
+                    "Successfully updated public key config: %s/%s",
+                    desired.getMetadata().getNamespace(), desired.getMetadata().getName());
         }
+
+        return edit(status)
+                .with(s -> s.addToConditions(new ConditionBuilder()
+                        .withObservedGeneration(resource.getMetadata().getGeneration())
+                        .withType(CONDITION_TYPE)
+                        .withStatus(ConditionStatus.True)
+                        .withLastTransitionTime(timestamp())
+                        .withMessage(SUCCESS_STATUS_MESSAGE.formatted(
+                                resource.getMetadata().getNamespace(),
+                                resource.getMetadata().getName()))
+                        .build()))
+                .build();
+    }
+
+    @Override
+    public NetworkOperationStatus handleError(
+            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context, Exception ex) {
+        Objects.requireNonNull(resource, "NetworkOperation resource is required");
+        Objects.requireNonNull(status, "NetworkOperation status is required");
+        Objects.requireNonNull(ex, "Exception is required");
+
+        log.errorf(
+                ex,
+                "Failed to create public key config '%s/%s': %s",
+                resource.getMetadata().getNamespace(),
+                Constants.PUBLIC_KEYS_NAME,
+                ex);
+        final String failedMessage = FAIL_STATUS_MESSAGE.formatted(ex.getMessage());
+        return NetworkOperationStepUtil.prepareFailed(resource, status, failedMessage, CONDITION_TYPE);
     }
 
     private ConfigMap prepareDesiredConfigMap(

@@ -19,7 +19,7 @@ import static java.util.Collections.emptyList;
 
 import com.hedera.solo.operator.library.k8s.CustomResourceManager;
 import com.hedera.solo.operator.library.processor.ProcessorException;
-import com.hedera.solo.operator.library.processor.RetryableStep;
+import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.commonspec.AddressBookEntry;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
@@ -50,11 +50,12 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import org.jboss.logging.Logger;
 
-public class CreateClusterConfigStep implements RetryableStep<NetworkOperation, NetworkOperationStatus> {
+/** CreateClusterConfigStep creates the cluster config ConfigMap */
+public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final String TEMPLATE = "cluster-config.yaml";
     public static final String CONDITION_TYPE = "ClusterConfigCreated";
-    static final String SUCCESS_STATUS_MESSAGE = "Successfully created cluster config: %s/%s";
-    static final String FAIL_STATUS_MESSAGE = "Failed to create cluster config: %s";
+    public static final String SUCCESS_STATUS_MESSAGE = "Successfully created cluster config: %s/%s";
+    public static final String FAIL_STATUS_MESSAGE = "Failed to create cluster config: %s";
 
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
     public static final String POD_IPS_NOT_FOUND = "Pod IP not found for consensus node";
@@ -124,10 +125,12 @@ public class CreateClusterConfigStep implements RetryableStep<NetworkOperation, 
     }
 
     @Override
-    public NetworkOperationStatus handleRetryError(
+    public NetworkOperationStatus handleError(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context, Exception ex) {
         Objects.requireNonNull(resource, "NetworkOperation resource is required");
         Objects.requireNonNull(status, "NetworkOperationStatus status is required");
+        Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
+        Objects.requireNonNull(ex, "Exception is required");
 
         log.errorf(
                 ex,
@@ -135,16 +138,9 @@ public class CreateClusterConfigStep implements RetryableStep<NetworkOperation, 
                 resource.getMetadata().getNamespace(),
                 Constants.CLUSTER_CONFIG_NAME,
                 ex);
-        return edit(status)
-                .with(s -> s.addToConditions(new ConditionBuilder()
-                                .withObservedGeneration(resource.getMetadata().getGeneration())
-                                .withType(CONDITION_TYPE)
-                                .withStatus(ConditionStatus.False)
-                                .withLastTransitionTime(timestamp())
-                                .withMessage(FAIL_STATUS_MESSAGE.formatted(ex.getMessage()))
-                                .build())
-                        .withPhase(NetworkOperationStatus.Phase.Failed))
-                .build();
+
+        final String failedMessage = FAIL_STATUS_MESSAGE.formatted(ex.getMessage());
+        return NetworkOperationStepUtil.prepareFailed(resource, status, failedMessage, CONDITION_TYPE);
     }
 
     ConfigMap prepareDesiredConfigMap(
@@ -279,9 +275,9 @@ public class CreateClusterConfigStep implements RetryableStep<NetworkOperation, 
                 throw new ProcessorException("%s [nodeId: %s, pod: %s/%s]"
                         .formatted(
                                 POD_IPS_NOT_FOUND,
+                                pod.getMetadata().getLabels().get(LABEL_NODE_ID),
                                 pod.getMetadata().getNamespace(),
-                                pod.getMetadata().getName(),
-                                pod.getMetadata().getLabels().get(LABEL_NODE_ID)));
+                                pod.getMetadata().getName()));
             }
         }
 

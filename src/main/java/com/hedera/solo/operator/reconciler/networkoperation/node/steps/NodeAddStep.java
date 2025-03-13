@@ -15,4 +15,10 @@ public class NodeAddStep implements ProcessorStep<NetworkOperation, NetworkOpera
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context) {
         throw new ProcessorException("Not implemented");
     }
+
+    @Override
+    public NetworkOperationStatus handleError(
+            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context, Exception ex) {
+        throw new ProcessorException("Not implemented");
+    }
 }

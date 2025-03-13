@@ -47,8 +47,8 @@ import org.jboss.logging.Logger;
  */
 public class ApplyConsensusPodChangeStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final String CONDITION_TYPE = "ConsensusCapsuleUpdated";
-    static final String SUCCESS_STATUS_MESSAGE = "Successfully updated consensus capsules";
-    static final String FAIL_STATUS_MESSAGE = "Failed to update consensus capsules:'%s'";
+    public static final String SUCCESS_STATUS_MESSAGE = "Successfully updated consensus capsules";
+    public static final String FAIL_STATUS_MESSAGE = "Failed to update consensus capsules:'%s'";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     @Override
@@ -74,57 +74,63 @@ public class ApplyConsensusPodChangeStep implements ProcessorStep<NetworkOperati
                 "Applying consensus node update for network operation: %s/%s",
                 resource.getMetadata().getNamespace(), resource.getMetadata().getName());
 
-        String timestamp = timestamp();
         Set<Long> excludeNodes = new HashSet<>(resource.getStatus().getUpgradedNodes());
         Set<Long> includeNodes = resource.getSpec().getNetworkUpgrade().getAddressBook().stream()
                 .map(AddressBookEntry::getNodeId)
                 .collect(Collectors.toSet());
 
-        try {
-            KubernetesClient client = context.getClient();
-            String namespace = resource.getMetadata().getNamespace();
-            NowFrozenConsensusCapsules nowFrozen = new NowFrozenConsensusCapsules(resource, status);
+        KubernetesClient client = context.getClient();
+        String namespace = resource.getMetadata().getNamespace();
+        NowFrozenConsensusCapsules nowFrozen = new NowFrozenConsensusCapsules(resource, status);
 
-            forEach(
-                    client.resources(ConsensusCapsule.class).inNamespace(namespace),
-                    cc -> update(client, nowFrozen, cc, includeNodes, excludeNodes));
+        forEach(
+                client.resources(ConsensusCapsule.class).inNamespace(namespace),
+                cc -> update(client, nowFrozen, cc, includeNodes, excludeNodes));
 
-            List<Long> upgradedNodes = excludeNodes.stream().sorted().toList();
-            log.infof("Successfully updated consensus nodes: %s", upgradedNodes);
-            return edit(status)
-                    .with(s -> s.addToConditions(new ConditionBuilder()
-                                    .withObservedGeneration(
-                                            resource.getMetadata().getGeneration())
-                                    .withType(CONDITION_TYPE)
-                                    .withStatus(ConditionStatus.True)
-                                    .withLastTransitionTime(timestamp)
-                                    .withMessage(SUCCESS_STATUS_MESSAGE)
-                                    .build())
-                            .withUpgradedNodes(upgradedNodes))
-                    .build();
-        } catch (Exception ex) {
-            List<Long> upgradedNodes = excludeNodes.stream().sorted().toList();
-            log.errorf(
-                    ex,
-                    "Failed to update consensus nodes for network operation %s/%s: %s"
-                            .formatted(
-                                    resource.getMetadata().getNamespace(),
-                                    resource.getMetadata().getName(),
-                                    resource.getStatus().getConsensusCapsules()));
+        List<Long> upgradedNodes = excludeNodes.stream().sorted().toList();
 
-            return edit(status)
-                    .with(s -> s.addToConditions(new ConditionBuilder()
-                                    .withObservedGeneration(
-                                            resource.getMetadata().getGeneration())
-                                    .withType(CONDITION_TYPE)
-                                    .withStatus(ConditionStatus.False)
-                                    .withLastTransitionTime(timestamp)
-                                    .withMessage(FAIL_STATUS_MESSAGE.formatted(ex.getMessage()))
-                                    .build())
-                            .withUpgradedNodes(upgradedNodes)
-                            .withPhase(NetworkOperationStatus.Phase.Failed))
-                    .build();
+        // FIXME need to make this step retryable without running the steps that come after it
+        //  Thoughts: rather than saving the upgrade list in the status, we could add labels (e.g. upgraded-by,
+        //  upgraded-at) in the consensus capsule to indicate that it has been upgraded by a certain network-operation.
+        //  Then we can skip updating it if the labels are present.
+        //  So, if not all nodes are upgraded, we can throw exception and retry without running following steps.
+        if (upgradedNodes.size() != includeNodes.size()) {
+            log.infof(
+                    "Failed to upgrade all consensus nodes, reattempting during next reconciliation... [ updated: %s]",
+                    upgradedNodes);
+            return edit(status).with(s -> s.withUpgradedNodes(upgradedNodes)).build();
         }
+
+        log.infof("Successfully upgrade consensus nodes [updated = %s]", upgradedNodes);
+        return edit(status)
+                .with(s -> s.addToConditions(new ConditionBuilder()
+                                .withObservedGeneration(resource.getMetadata().getGeneration())
+                                .withType(CONDITION_TYPE)
+                                .withStatus(ConditionStatus.True)
+                                .withLastTransitionTime(timestamp())
+                                .withMessage(SUCCESS_STATUS_MESSAGE)
+                                .build())
+                        .withUpgradedNodes(upgradedNodes))
+                .build();
+    }
+
+    @Override
+    public NetworkOperationStatus handleError(
+            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context, Exception ex) {
+        Objects.requireNonNull(resource, "NetworkOperation resource is required");
+        Objects.requireNonNull(status, "NetworkOperation status is required");
+        Objects.requireNonNull(ex, "Exception is required");
+
+        log.errorf(
+                ex,
+                "Failed to update consensus nodes for network operation %s/%s: %s"
+                        .formatted(
+                                resource.getMetadata().getNamespace(),
+                                resource.getMetadata().getName(),
+                                resource.getStatus().getConsensusCapsules()));
+
+        final String failMessage = FAIL_STATUS_MESSAGE.formatted(ex.getMessage());
+        return NetworkOperationStepUtil.prepareFailed(resource, status, failMessage, CONDITION_TYPE);
     }
 
     <T extends HasMetadata> void forEach(Listable<KubernetesResourceList<T>> listable, Consumer<T> consumer) {

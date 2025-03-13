@@ -49,6 +49,17 @@ public class CheckConsensusPodConfigurationStep implements ProcessorStep<Network
         return status; // FIXME implement the logic
     }
 
+    @Override
+    public NetworkOperationStatus handleError(
+            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context, Exception ex) {
+        Objects.requireNonNull(resource, "NetworkOperation resource is required");
+        Objects.requireNonNull(status, "NetworkOperation status is required");
+        Objects.requireNonNull(ex, "Exception is required");
+
+        log.error("Failed to check consensus pod configuration", ex);
+        return NetworkOperationStepUtil.prepareFailed(resource, status, ex.getMessage(), CONDITION_TYPE);
+    }
+
     public static boolean isDone(NetworkOperationStatus status) {
         return NetworkOperationStepUtil.isDone(status, CONDITION_TYPE);
     }

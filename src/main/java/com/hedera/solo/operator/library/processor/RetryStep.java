@@ -10,28 +10,25 @@ import java.util.Objects;
 import org.jboss.logging.Logger;
 
 /**
- * A wrapper class to execute a RetryableStep multiple times with a delay between each attempt.
+ * A wrapper class to execute a step multiple times with a delay between each attempt.
  *
- * <p>Any existing step can be converted to a retryable step by implementing {@link RetryableStep} interface and
- * wrapping it with this class.
- *
- * <p>If the step fails, it will log the error and retry the step after the specified delay.
+ * <p>The step needs to throw an exception if it fails in order to trigger a retry.
  *
  * <p>It will retry the step until it succeeds or the maximum number of retries is reached.
  *
- * <p>After the maximum number of retries is reached, the step will call {@link RetryableStep#handleRetryError} to
- * handle the last exception.
+ * <p>After the maximum number of retries is reached, the step will call {@link ProcessorStep#handleError} to handle the
+ * last exception.
  *
  * @param <T> custom resource type
  * @param <S> custom resource status type
  */
-public final class RetryableStepRunner<T extends CustomResource<?, S>, S> implements ProcessorStep<T, S> {
-    private final RetryableStep<T, S> step;
+public final class RetryStep<T extends CustomResource<?, S>, S> implements ProcessorStep<T, S> {
+    private final ProcessorStep<T, S> step;
     private final Duration retryInterval;
     private final int maxRetries;
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
-    public RetryableStepRunner(RetryableStep<T, S> step, Duration retryInterval, int maxRetries) {
+    public RetryStep(ProcessorStep<T, S> step, Duration retryInterval, int maxRetries) {
         Objects.requireNonNull(step, "retryable step must not be null");
         Objects.requireNonNull(retryInterval, "retryInterval must not be null");
 
@@ -61,18 +58,25 @@ public final class RetryableStepRunner<T extends CustomResource<?, S>, S> implem
                         "%s. Retrying in %s seconds... [%d/%d]",
                         e.getMessage(), retryInterval.getSeconds(), retries, maxRetries);
 
-                try {
-                    Thread.sleep(retryInterval.toMillis());
-                } catch (InterruptedException ex) {
-                    Thread.currentThread().interrupt();
-                    log.errorf("Interrupted while waiting for retry: %s", ex.getMessage());
-                    break;
-                }
-
+                this.applyRetryInterval();
                 retries++;
             }
         }
 
-        return step.handleRetryError(resource, status, context, lastException);
+        throw new ProcessorException("Failed to execute step after maximum retries", lastException);
+    }
+
+    private void applyRetryInterval() {
+        try {
+            Thread.sleep(retryInterval.toMillis());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ProcessorException("Interrupted while waiting for retry interval", e);
+        }
+    }
+
+    @Override
+    public S handleError(T resource, S status, Context<T> context, Exception ex) {
+        return step.handleError(resource, status, context, ex);
     }
 }

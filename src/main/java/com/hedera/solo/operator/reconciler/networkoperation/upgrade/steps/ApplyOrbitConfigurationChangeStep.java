@@ -37,8 +37,8 @@ import org.jboss.logging.Logger;
  */
 public class ApplyOrbitConfigurationChangeStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final String CONDITION_TYPE = "OrbitUpdated";
-    static final String SUCCESS_STATUS_MESSAGE = "Successfully updated orbit '%s'";
-    static final String FAIL_STATUS_MESSAGE = "Failed to update orbit '%s': %s";
+    public static final String SUCCESS_STATUS_MESSAGE = "Successfully updated orbit '%s'";
+    public static final String FAIL_STATUS_MESSAGE = "Failed to update orbit '%s': %s";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     @Override
@@ -60,50 +60,47 @@ public class ApplyOrbitConfigurationChangeStep implements ProcessorStep<NetworkO
             return status;
         }
 
+        KubernetesClient client = context.getClient();
+        NowFrozenOrbit nowFrozen = new NowFrozenOrbit(resource);
+
         log.infof(
                 "Applying orbit change for network operation: %s/%s",
                 resource.getMetadata().getNamespace(), resource.getMetadata().getName());
 
-        String timestamp = timestamp();
-        try {
-            KubernetesClient client = context.getClient();
-            NowFrozenOrbit nowFrozen = new NowFrozenOrbit(resource);
-            client.resources(Orbit.class)
-                    .withName(resource.getSpec().getOrbit())
-                    .edit(nowFrozen::update);
+        client.resources(Orbit.class).withName(resource.getSpec().getOrbit()).edit(nowFrozen::update);
 
-            log.infof("Successfully updated orbit: %s", resource.getMetadata().getName());
-            return edit(status)
-                    .with(s -> s.addToConditions(new ConditionBuilder()
-                            .withObservedGeneration(resource.getMetadata().getGeneration())
-                            .withType(CONDITION_TYPE)
-                            .withStatus(ConditionStatus.True)
-                            .withLastTransitionTime(timestamp)
-                            .withMessage(SUCCESS_STATUS_MESSAGE.formatted(
-                                    resource.getSpec().getOrbit()))
-                            .build()))
-                    .build();
-        } catch (Exception ex) {
-            log.errorf(
-                    ex,
-                    "Failed to update orbit for network operation %s/%s: %s"
-                            .formatted(
-                                    resource.getMetadata().getNamespace(),
-                                    resource.getMetadata().getName(),
-                                    resource.getStatus().getConsensusCapsules()));
-            return edit(status)
-                    .with(s -> s.addToConditions(new ConditionBuilder()
-                                    .withObservedGeneration(
-                                            resource.getMetadata().getGeneration())
-                                    .withType(CONDITION_TYPE)
-                                    .withStatus(ConditionStatus.False)
-                                    .withLastTransitionTime(timestamp)
-                                    .withMessage(FAIL_STATUS_MESSAGE.formatted(
-                                            resource.getSpec().getOrbit(), ex.getMessage()))
-                                    .build())
-                            .withPhase(NetworkOperationStatus.Phase.Failed))
-                    .build();
-        }
+        log.infof("Successfully updated orbit: %s", resource.getMetadata().getName());
+
+        return edit(status)
+                .with(s -> s.addToConditions(new ConditionBuilder()
+                        .withObservedGeneration(resource.getMetadata().getGeneration())
+                        .withType(CONDITION_TYPE)
+                        .withStatus(ConditionStatus.True)
+                        .withLastTransitionTime(timestamp())
+                        .withMessage(SUCCESS_STATUS_MESSAGE.formatted(
+                                resource.getSpec().getOrbit()))
+                        .build()))
+                .build();
+    }
+
+    @Override
+    public NetworkOperationStatus handleError(
+            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context, Exception ex) {
+        Objects.requireNonNull(resource, "NetworkOperation resource is required");
+        Objects.requireNonNull(status, "NetworkOperation status is required");
+        Objects.requireNonNull(ex, "Exception is required");
+
+        log.errorf(
+                ex,
+                "Failed to update orbit for network operation %s/%s: %s"
+                        .formatted(
+                                resource.getMetadata().getNamespace(),
+                                resource.getMetadata().getName(),
+                                resource.getStatus().getConsensusCapsules()));
+
+        final String failMessage =
+                FAIL_STATUS_MESSAGE.formatted(resource.getSpec().getOrbit(), ex.getMessage());
+        return NetworkOperationStepUtil.prepareFailed(resource, status, failMessage, CONDITION_TYPE);
     }
 
     public static boolean isDone(NetworkOperationStatus status) {
