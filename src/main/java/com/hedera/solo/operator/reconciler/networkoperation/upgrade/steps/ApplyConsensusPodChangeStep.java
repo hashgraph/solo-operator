@@ -53,7 +53,9 @@ public class ApplyConsensusPodChangeStep implements ProcessorStep<NetworkOperati
 
     @Override
     public NetworkOperationStatus run(
-            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context)
+            final NetworkOperation resource,
+            final NetworkOperationStatus status,
+            final Context<NetworkOperation> context)
             throws ProcessorException {
         Objects.requireNonNull(resource, "NetworkOperation resource is required");
         Objects.requireNonNull(status, "NetworkOperationStatus status is required");
@@ -78,30 +80,39 @@ public class ApplyConsensusPodChangeStep implements ProcessorStep<NetworkOperati
         Set<Long> includeNodes = resource.getSpec().getNetworkUpgrade().getAddressBook().stream()
                 .map(AddressBookEntry::getNodeId)
                 .collect(Collectors.toSet());
+        List<Long> upgradedNodes;
 
-        KubernetesClient client = context.getClient();
-        String namespace = resource.getMetadata().getNamespace();
-        NowFrozenConsensusCapsules nowFrozen = new NowFrozenConsensusCapsules(resource, status);
+        try {
+            KubernetesClient client = context.getClient();
+            String namespace = resource.getMetadata().getNamespace();
+            NowFrozenConsensusCapsules nowFrozen = new NowFrozenConsensusCapsules(resource, status);
+            forEach(
+                    client.resources(ConsensusCapsule.class).inNamespace(namespace),
+                    cc -> update(client, nowFrozen, cc, includeNodes, excludeNodes));
+        } finally {
+            upgradedNodes = excludeNodes.stream().sorted().toList();
 
-        forEach(
-                client.resources(ConsensusCapsule.class).inNamespace(namespace),
-                cc -> update(client, nowFrozen, cc, includeNodes, excludeNodes));
-
-        List<Long> upgradedNodes = excludeNodes.stream().sorted().toList();
-
-        // FIXME need to make this step retryable without running the steps that come after it
-        //  Thoughts: rather than saving the upgrade list in the status, we could add labels (e.g. upgraded-by,
-        //  upgraded-at) in the consensus capsule to indicate that it has been upgraded by a certain network-operation.
-        //  Then we can skip updating it if the labels are present.
-        //  So, if not all nodes are upgraded, we can throw exception and retry without running following steps.
-        if (upgradedNodes.size() != includeNodes.size()) {
-            log.infof(
-                    "Failed to upgrade all consensus nodes, reattempting during next reconciliation... [ updated: %s]",
-                    upgradedNodes);
-            return edit(status).with(s -> s.withUpgradedNodes(upgradedNodes)).build();
+            // Persist the updated node list so that this step is idempotent and can be retried safely
+            // It would trigger an event for reconciliation; but JOSDK guarantees serialization of the events. So
+            // we should be safe to patch and continue with current reconciliation.
+            //
+            //  Thoughts: rather than saving the upgrade list in the status, we could add labels (e.g. upgraded-by,
+            //  upgraded-at) in the consensus capsule to indicate that it has been upgraded by a certain
+            // network-operation.
+            //  Then we can skip updating it if the labels are present.
+            context.getClient()
+                    .resource(edit(resource)
+                            .with(r -> r.editStatus().withUpgradedNodes(upgradedNodes))
+                            .build())
+                    .patchStatus();
         }
 
-        log.infof("Successfully upgrade consensus nodes [updated = %s]", upgradedNodes);
+        if (upgradedNodes.size() != includeNodes.size()) {
+            throw new ProcessorException(
+                    "Failed to update all consensus nodes [upgraded = %s]".formatted(upgradedNodes));
+        }
+
+        log.infof("Successfully upgraded all consensus nodes [updated = %s]", upgradedNodes);
         return edit(status)
                 .with(s -> s.addToConditions(new ConditionBuilder()
                                 .withObservedGeneration(resource.getMetadata().getGeneration())
@@ -121,16 +132,9 @@ public class ApplyConsensusPodChangeStep implements ProcessorStep<NetworkOperati
         Objects.requireNonNull(status, "NetworkOperation status is required");
         Objects.requireNonNull(ex, "Exception is required");
 
-        log.errorf(
-                ex,
-                "Failed to update consensus nodes for network operation %s/%s: %s"
-                        .formatted(
-                                resource.getMetadata().getNamespace(),
-                                resource.getMetadata().getName(),
-                                resource.getStatus().getConsensusCapsules()));
+        log.error(ex.getMessage(), ex);
 
-        final String failMessage = FAIL_STATUS_MESSAGE.formatted(ex.getMessage());
-        return NetworkOperationStepUtil.prepareFailed(resource, status, failMessage, CONDITION_TYPE);
+        return NetworkOperationStepUtil.prepareFailed(resource, status, ex.getMessage(), CONDITION_TYPE);
     }
 
     <T extends HasMetadata> void forEach(Listable<KubernetesResourceList<T>> listable, Consumer<T> consumer) {

@@ -79,7 +79,7 @@ public class NowFrozenTask extends AbstractProcessorTask<NetworkOperation, Netwo
                 new ReverifyStreamUploaderChangesetStep(Constants.TPL_VAR_BACKUP_UPLOADER),
                 new ReverifyOtelCollectorStep(),
                 new DeleteClusterConfigStep(customResourceManager),
-                new ApplyConsensusPodChangeStep(),
+                new RetryStep<>(new ApplyConsensusPodChangeStep(), Duration.ofSeconds(3), 10),
                 new ApplyOrbitConfigurationChangeStep(),
                 new RetryStep<>(new CreateClusterConfigStep(customResourceManager), Duration.ofSeconds(2), 60));
     }
