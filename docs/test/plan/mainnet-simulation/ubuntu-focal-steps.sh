@@ -6,6 +6,10 @@ OS="${OS,,}"
 ARCH="$(dpkg --print-architecture)"
 readonly OS ARCH
 
+USER="$(id -un)"
+GROUP="$(id -gn)"
+readonly USER GROUP
+
 readonly CONTAINERD_VERSION="1.7.26"
 readonly RUNC_VERSION="1.2.5"
 readonly CNI_PLUGINS_VERSION="1.6.2"
@@ -14,7 +18,9 @@ readonly KUBERNETES_VERSION="1.32.3"
 readonly KREL_VERSION="v0.18.0"
 readonly K9S_VERSION="0.40.8"
 readonly HELM_VERSION="3.17.1"
-readonly CILIUM_VERSION="0.18.2"
+readonly CILIUM_CLI_VERSION="0.18.2"
+readonly CILIUM_VERSION="1.17.1"
+readonly METALLB_VERSION="0.14.9"
 
 # Update System Packages
 sudo apt update && sudo apt upgrade -y
@@ -26,11 +32,19 @@ sudo swapoff -a
 # Remove existing containerd
 sudo apt remove -y containerd containerd.io
 
+# Install iptables
+sudo apt install -y iptables
+
 # Install gpg package (if required)
 sudo apt install -y gpg
 
-# Install Conntrack, EBTables and SoCat
-sudo apt install -y conntrack socat ebtables
+# Install Conntrack, EBTables, SoCat, and NFTables
+sudo apt install -y conntrack socat ebtables nftables
+sudo apt autoremove -y
+
+# Enable nftables service
+sudo systemctl enable nftables
+sudo systemctl start nftables
 
 # Install Kernel Modules
 sudo modprobe overlay
@@ -38,15 +52,19 @@ sudo modprobe br_netfilter
 echo "overlay" | sudo tee /etc/modules-load.d/overlay.conf
 echo "br_netfilter" | sudo tee /etc/modules-load.d/br_netfilter.conf
 
+sudo rm -f /etc/sysctl.d/15-network-performance.conf || true
+sudo rm -f /etc/sysctl.d/15-k8s-networking.conf || true
+sudo rm -f /etc/sysctl.d/15-inotify.conf || true
+
 # Configure System Control Settings
-cat <<EOF | sudo tee /etc/sysctl.d/15-k8s-networking.conf
+cat <<EOF | sudo tee /etc/sysctl.d/75-k8s-networking.conf
 net.bridge.bridge-nf-call-iptables = 1
 net.bridge.bridge-nf-call-ip6tables = 1
 net.ipv4.ip_forward = 1
 net.ipv6.conf.all.forwarding = 1
 EOF
 
-cat <<EOF | sudo tee /etc/sysctl.d/15-network-performance.conf
+cat <<EOF | sudo tee /etc/sysctl.d/75-network-performance.conf
 net.core.rmem_default = 31457280
 net.core.wmem_default = 31457280
 net.core.rmem_max = 33554432
@@ -74,12 +92,16 @@ vm.dirty_ratio = 60
 vm.dirty_background_ratio = 2
 EOF
 
-cat <<EOF | sudo tee /etc/sysctl.d/15-inotify.conf
+cat <<EOF | sudo tee /etc/sysctl.d/75-inotify.conf
 fs.inotify.max_user_watches = 524288
 fs.inotify.max_user_instances = 512
 EOF
 
 sudo sysctl --system >/dev/null
+
+# Configure cgroupv2 of focal
+#sudo sed -i 's/^GRUB_CMDLINE_LINUX="\(.*\)"$/GRUB_CMDLINE_LINUX="systemd.unified_cgroup_hierarchy=1"/' /etc/default/grub
+#sudo update-grub
 
 # Setup working directories
 mkdir -p /tmp/provisioner/containerd
@@ -87,6 +109,9 @@ mkdir -p /tmp/provisioner/runc
 mkdir -p /tmp/provisioner/cni
 mkdir -p /tmp/provisioner/kubernetes
 mkdir -p /tmp/provisioner/cilium
+
+# Cleanup Kube Components in Wrong Directory
+rm -f /usr/local/bin/kubeadm /usr/local/bin/kubelet /usr/local/bin/kubectl || true
 
 # Download Components
 pushd "/tmp/provisioner/runc" >/dev/null 2>&1 || true
@@ -124,8 +149,8 @@ curl -sSLo "helm-v${HELM_VERSION}-${OS}-${ARCH}.tar.gz" "https://get.helm.sh/hel
 popd >/dev/null 2>&1 || true
 
 pushd "/tmp/provisioner/cilium" >/dev/null 2>&1 || true
-curl -sSLo "cilium-${OS}-${ARCH}.tar.gz" "https://github.com/cilium/cilium-cli/releases/download/v${CILIUM_VERSION}/cilium-${OS}-${ARCH}.tar.gz"
-curl -sSLo "cilium-${OS}-${ARCH}.tar.gz.sha256sum" "https://github.com/cilium/cilium-cli/releases/download/v${CILIUM_VERSION}/cilium-${OS}-${ARCH}.tar.gz.sha256sum"
+curl -sSLo "cilium-${OS}-${ARCH}.tar.gz" "https://github.com/cilium/cilium-cli/releases/download/v${CILIUM_CLI_VERSION}/cilium-${OS}-${ARCH}.tar.gz"
+curl -sSLo "cilium-${OS}-${ARCH}.tar.gz.sha256sum" "https://github.com/cilium/cilium-cli/releases/download/v${CILIUM_CLI_VERSION}/cilium-${OS}-${ARCH}.tar.gz.sha256sum"
 sha256sum -c "cilium-${OS}-${ARCH}.tar.gz.sha256sum"
 popd >/dev/null 2>&1 || true
 
@@ -143,9 +168,9 @@ sudo tar -C /opt/cni/bin -zxvf "/tmp/provisioner/cni/cni-plugins-${OS}-${ARCH}-v
 sudo tar -C /usr/local/bin -zxvf "/tmp/provisioner/kubernetes/crictl-v${CRICTL_VERSION}-${OS}-${ARCH}.tar.gz"
 
 # Install Kubernetes
-sudo install -m 755 "/tmp/provisioner/kubernetes/kubeadm" "/usr/local/bin/kubeadm"
-sudo install -m 755 "/tmp/provisioner/kubernetes/kubelet" "/usr/local/bin/kubelet"
-sudo install -m 755 "/tmp/provisioner/kubernetes/kubectl" "/usr/local/bin/kubectl"
+sudo install -m 755 "/tmp/provisioner/kubernetes/kubeadm" "/usr/bin/kubeadm"
+sudo install -m 755 "/tmp/provisioner/kubernetes/kubelet" "/usr/bin/kubelet"
+sudo install -m 755 "/tmp/provisioner/kubernetes/kubectl" "/usr/bin/kubectl"
 
 sudo mkdir -p /usr/lib/systemd/system/kubelet.service.d
 sudo cp "/tmp/provisioner/kubernetes/kubelet.service" "/usr/lib/systemd/system/kubelet.service"
@@ -170,3 +195,198 @@ sudo sed -i.bak 's/^\(.*\)SystemdCgroup =.*$/\1SystemdCgroup = true/' /etc/conta
 sudo systemctl daemon-reload
 sudo systemctl enable containerd kubelet
 sudo systemctl start containerd kubelet
+
+# Torch prior KubeADM Configuration
+sudo kubeadm reset --force || true
+sudo rm -rf /etc/kubernetes /etc/cni/net.d /var/lib/etcd || true
+
+# Setup KubeADM Configuration
+kube_bootstrap_token="$(kubeadm token generate)"
+machine_ip="$(ip route get 1 | head -1 | sed 's/^.*src \(.*\)$/\1/' | awk '{print $1}')"
+
+cat <<EOF | sudo tee /tmp/provisioner/kubernetes/kubeadm-init.yaml >/dev/null
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: InitConfiguration
+bootstrapTokens:
+  - groups:
+    - system:bootstrappers:kubeadm:default-node-token
+    token: ${kube_bootstrap_token}
+    ttl: 720h0m0s
+    usages:
+      - signing
+      - authentication
+localAPIEndpoint:
+  advertiseAddress: ${machine_ip}
+  bindPort: 6443
+nodeRegistration:
+  imagePullPolicy: IfNotPresent
+  imagePullSerial: true
+  name: $(hostname)
+  taints:
+    - key: "node.cilium.io/agent-not-ready"
+      value: "true"
+      effect: "NoExecute"
+  kubeletExtraArgs:
+    - name: node-ip
+      value: ${machine_ip}
+skipPhases:
+  - addon/kube-proxy
+timeouts:
+  controlPlaneComponentHealthCheck: 4m0s
+  discovery: 5m0s
+  etcdAPICall: 2m0s
+  kubeletHealthCheck: 4m0s
+  kubernetesAPICall: 1m0s
+  tlsBootstrap: 5m0s
+  upgradeManifests: 5m0s
+---
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+controlPlaneEndpoint: "${machine_ip}:6443"
+certificatesDir: /etc/kubernetes/pki
+caCertificateValidityPeriod: 87600h0m0s
+certificateValidityPeriod: 8760h0m0s
+encryptionAlgorithm: RSA-2048
+clusterName: k8s.main.gcp
+etcd:
+  local:
+    dataDir: /var/lib/etcd
+imageRepository: registry.k8s.io
+kubernetesVersion: ${KUBERNETES_VERSION}
+networking:
+  dnsDomain: cluster.local
+  serviceSubnet: 10.0.0.0/14
+  podSubnet: 10.4.0.0/14
+controllerManager:
+  extraArgs:
+    - name: node-cidr-mask-size-ipv4
+      value: "24"
+EOF
+
+# Stop on failure past this point
+set -eo pipefail
+
+# Initialize Kubernetes Cluster
+sudo kubeadm init --upload-certs --config /tmp/provisioner/kubernetes/kubeadm-init.yaml
+mkdir -p "${HOME}/.kube"
+sudo cp -f /etc/kubernetes/admin.conf "${HOME}/.kube/config"
+sudo chown "${USER}:${GROUP}" "${HOME}/.kube/config"
+
+# Configure Cilium
+cat <<EOF | sudo tee /tmp/provisioner/cilium/cilium-config.yaml >/dev/null
+# StepSecurity Required Features
+extraArgs:
+  - --tofqdns-dns-reject-response-code=nameError
+
+# Hubble Support
+hubble:
+  relay:
+    enabled: true
+  ui:
+    enabled: true
+
+# KubeProxy Replacement Config
+kubeProxyReplacement: true
+k8sServiceHost: ${machine_ip}
+k8sServicePort: 6443
+
+# IP Version Support
+ipam:
+  mode: "kubernetes"
+k8s:
+  requireIPv4PodCIDR: true
+  requireIPv6PodCIDR: false
+ipv4:
+  enabled: true
+ipv6:
+  enabled: false
+
+# Routing Configuration
+routingMode: native
+autoDirectNodeRoutes: true
+ipv4NativeRoutingCIDR: 10.128.0.0/20
+
+# Load Balancer Configuration
+loadBalancer:
+  mode: dsr
+  dsrDispatch: opt
+  algorithm: maglev
+  acceleration: "best-effort"
+  l7:
+    backend: disabled
+
+nodePort:
+  enabled: true
+
+hostPort:
+  enabled: true
+
+# BPF & IP Masquerading Support
+ipMasqAgent:
+  enabled: true
+bpf:
+  masquerade: true
+  hostLegacyRouting: false
+  lbExternalClusterIP: true
+  preallocateMaps: true
+
+# Envoy DaemonSet Support
+envoy:
+  enabled: false
+
+# BGP Control Plane
+bgpControlPlane:
+  enabled: false
+
+# L2 Announcements
+l2announcements:
+  enabled: false
+k8sClientRateLimit:
+  qps: 100
+  burst: 150
+
+EOF
+
+# Install Cilium CNI
+cilium install --version "${CILIUM_VERSION}" --values /tmp/provisioner/cilium/cilium-config.yaml
+cilium status --wait
+
+# Install MetalLB
+helm repo add metallb https://metallb.github.io/metallb
+helm install metallb metallb/metallb --version ${METALLB_VERSION} \
+  --set speaker.frr.enabled=false \
+  --namespace metallb-system --create-namespace
+
+# Deploy MetalLB Configuration
+cat <<EOF | kubectl apply -f -
+---
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: private-address-pool
+  namespace: metallb-system
+spec:
+  addresses:
+    - 192.168.99.0/24
+---
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: public-address-pool
+  namespace: metallb-system
+spec:
+  addresses:
+    - ${machine_ip}/32
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: primary-l2-advertisement
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+  - private-address-pool
+  - public-address-pool
+EOF
+
+
