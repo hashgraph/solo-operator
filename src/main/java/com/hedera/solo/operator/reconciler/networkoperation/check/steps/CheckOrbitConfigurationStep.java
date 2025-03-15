@@ -9,6 +9,7 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.lang.invoke.MethodHandles;
+import java.util.List;
 import java.util.Objects;
 import org.jboss.logging.Logger;
 
@@ -19,6 +20,8 @@ import org.jboss.logging.Logger;
  */
 public class CheckOrbitConfigurationStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final String CONDITION_TYPE = "OrbitUpdated";
+    public static final String SUCCESS_STATUS_MESSAGE = "Successfully verified orbit configuration: %s";
+    public static final String FAIL_STATUS_MESSAGE = "Failed to verify orbit configuration: %s";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     private final CustomResourceManager customResourceManager;
@@ -28,38 +31,33 @@ public class CheckOrbitConfigurationStep implements ProcessorStep<NetworkOperati
     }
 
     @Override
-    public NetworkOperationStatus run(
-            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context) {
-        Objects.requireNonNull(resource, "NetworkOperation resource is required");
-        Objects.requireNonNull(status, "NetworkOperationStatus status is required");
-        Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus phase is required");
-        Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
-
-        if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed) || isDone(status)) {
-            log.debugf(
-                    "Skipping verification of 'orbit' configuration changes for network operation: %s/%s [ Phase: %s, Done: %s ]",
-                    resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName(),
-                    status.getPhase(),
-                    isDone(status));
-            return status;
-        }
-
-        return status; // FIXME implement the logic
+    public boolean isSuccessful(NetworkOperation resource, NetworkOperationStatus status) {
+        return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }
 
     @Override
-    public NetworkOperationStatus handleError(
-            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context, Exception ex) {
-        Objects.requireNonNull(resource, "NetworkOperation resource is required");
-        Objects.requireNonNull(status, "NetworkOperation status is required");
-        Objects.requireNonNull(ex, "Exception is required");
+    public boolean shouldSkip(NetworkOperation resource, NetworkOperationStatus status) {
+        return status.getPhase().equals(NetworkOperationStatus.Phase.Failed)
+                || NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
+    }
 
-        log.error("Failed to check orbit configuration", ex);
-        return NetworkOperationStepUtil.prepareFailed(resource, status, ex.getMessage(), CONDITION_TYPE);
+    @Override
+    public NetworkOperationStatus run(
+            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context) {
+        try {
+            Objects.requireNonNull(resource, "NetworkOperation resource is required");
+            Objects.requireNonNull(status, "NetworkOperationStatus status is required");
+            Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus phase is required");
+            Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
+
+            return NetworkOperationStepUtil.prepareStatus(status, List.of()); // FIXME implement the logic
+        } catch (Throwable t) {
+            log.errorf(t, FAIL_STATUS_MESSAGE, t.getMessage());
+            return NetworkOperationStepUtil.prepareFailed(resource, status, t.getMessage(), CONDITION_TYPE);
+        }
     }
 
     public static boolean isDone(NetworkOperationStatus status) {
-        return NetworkOperationStepUtil.isDone(status, CONDITION_TYPE);
+        return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }
 }

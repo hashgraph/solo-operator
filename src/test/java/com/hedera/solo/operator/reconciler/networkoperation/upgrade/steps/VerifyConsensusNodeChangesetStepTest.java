@@ -90,12 +90,7 @@ public class VerifyConsensusNodeChangesetStepTest {
         @SuppressWarnings("unchecked")
         Context<NetworkOperation> context = Mockito.mock(Context.class);
 
-        NetworkOperationStatus resp;
-        try {
-            resp = step.run(networkOperation, status, context);
-        } catch (Exception e) {
-            resp = step.handleError(networkOperation, status, context, e);
-        }
+        NetworkOperationStatus resp = step.run(networkOperation, status, context);
 
         assertThat(resp).isNotNull();
         assertThat(resp.getSoftwareSourceStatus()).isNotNull();

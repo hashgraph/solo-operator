@@ -12,13 +12,6 @@ import org.jboss.logging.Logger;
 /**
  * A wrapper class to execute a step multiple times with a delay between each attempt.
  *
- * <p>The step needs to throw an exception if it fails in order to trigger a retry.
- *
- * <p>It will retry the step until it succeeds or the maximum number of retries is reached.
- *
- * <p>After the maximum number of retries is reached, the step will call {@link ProcessorStep#handleError} to handle the
- * last exception.
- *
  * @param <T> custom resource type
  * @param <S> custom resource status type
  */
@@ -29,12 +22,12 @@ public final class RetryStep<T extends CustomResource<?, S>, S> implements Proce
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     /**
-     * Create a new RetryStep with default retry interval of 5 seconds and maximum retries of 12.
+     * Create a new RetryStep with defaults
      *
      * @param step the step to retry
      */
     public RetryStep(ProcessorStep<T, S> step) {
-        this(step, Duration.ofSeconds(5), 12); // default retry for 1 minutes
+        this(step, Duration.ofSeconds(2), 30); // default retry for 1 minutes
     }
 
     /**
@@ -63,23 +56,32 @@ public final class RetryStep<T extends CustomResource<?, S>, S> implements Proce
 
     @Override
     public S run(T resource, S status, Context<T> context) {
-        Exception lastException = null;
-        int retries = 1;
-        while (retries <= maxRetries) {
-            try {
-                return step.run(resource, status, context);
-            } catch (Exception e) {
-                lastException = e;
-                log.warnf(
-                        "%s. Retrying in %s seconds... [%d/%d]",
-                        e.getMessage(), retryInterval.getSeconds(), retries, maxRetries);
+        S updated = step.run(resource, status, context);
 
-                this.applyRetryInterval();
-                retries++;
-            }
+        int retries = 0;
+        while (!step.isSuccessful(resource, updated) && retries++ < maxRetries) {
+            log.warnf(
+                    "'%s' failed. Retrying in %s seconds... [%d/%d]",
+                    step.getClass().getSimpleName(), retryInterval.getSeconds(), retries, maxRetries);
+
+            this.applyRetryInterval();
+
+            // Note: we pass the updated status to the next run so that a step can store info in status object for
+            // subsequent runs
+            updated = step.run(resource, updated, context);
         }
 
-        throw new ProcessorException("Failed to execute step after maximum retries", lastException);
+        return updated;
+    }
+
+    @Override
+    public boolean isSuccessful(T resource, S status) {
+        return step.isSuccessful(resource, status);
+    }
+
+    @Override
+    public boolean shouldSkip(T resource, S status) {
+        return step.shouldSkip(resource, status);
     }
 
     private void applyRetryInterval() {
@@ -87,12 +89,7 @@ public final class RetryStep<T extends CustomResource<?, S>, S> implements Proce
             Thread.sleep(retryInterval.toMillis());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new ProcessorException("Interrupted while waiting for retry interval", e);
+            log.error(new ProcessorException("Interrupted while waiting for retry interval", e));
         }
-    }
-
-    @Override
-    public S handleError(T resource, S status, Context<T> context, Exception ex) {
-        return step.handleError(resource, status, context, ex);
     }
 }

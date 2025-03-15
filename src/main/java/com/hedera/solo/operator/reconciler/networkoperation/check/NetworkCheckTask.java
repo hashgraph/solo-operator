@@ -7,6 +7,7 @@ import com.hedera.solo.operator.library.processor.AbstractProcessorTask;
 import com.hedera.solo.operator.library.processor.Processor;
 import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorStep;
+import com.hedera.solo.operator.library.processor.RetryStep;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.check.steps.CheckConsensusNodeReadyStep;
@@ -54,7 +55,7 @@ public class NetworkCheckTask extends AbstractProcessorTask<NetworkOperation, Ne
         return List.of(
                 // new CheckOrbitConfigurationStep(customResourceManager),
                 // new CheckConsensusPodConfigurationStep(customResourceManager),
-                new CheckConsensusNodeReadyStep(customResourceManager));
+                new RetryStep<>(new CheckConsensusNodeReadyStep(customResourceManager), Duration.ofSeconds(2), 150));
     }
 
     @Override

@@ -62,65 +62,53 @@ public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkO
     }
 
     @Override
+    public boolean isSuccessful(NetworkOperation resource, NetworkOperationStatus status) {
+        return isDone(status, containerName);
+    }
+
+    @Override
+    public boolean shouldSkip(NetworkOperation resource, NetworkOperationStatus status) {
+        final String conditionType = computeConditionType(CONDITION_TYPE, containerName);
+        return status.getPhase().equals(NetworkOperationStatus.Phase.Failed)
+                || NetworkOperationStepUtil.isSuccessful(status, conditionType);
+    }
+
+    @Override
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context)
             throws ProcessorException {
 
-        final StreamUploaderChangeset changeset = StreamUploaderUtil.findChangeset(resource, this.containerName);
-        if (Objects.isNull(changeset) || Objects.isNull(changeset.getSoftwareVersionSource())) {
-            log.debugf(
-                    "Ignore checking '%s' image as it is not specified in network operation: %s/%s",
-                    this.containerName,
+        try {
+            final StreamUploaderChangeset changeset = StreamUploaderUtil.findChangeset(resource, this.containerName);
+            if (Objects.isNull(changeset) || Objects.isNull(changeset.getSoftwareVersionSource())) {
+                log.debugf(
+                        "Ignore checking '%s' image as it is not specified in network operation: %s/%s",
+                        this.containerName,
+                        resource.getMetadata().getNamespace(),
+                        resource.getMetadata().getName());
+                return status;
+            }
+
+            log.infof(
+                    "Verifying '%s' image for network operation: %s/%s",
+                    toStreamUploaderType(this.containerName),
                     resource.getMetadata().getNamespace(),
                     resource.getMetadata().getName());
-            return status;
+
+            final NetworkOperationStatus updated = updateStatus(
+                    resource,
+                    status,
+                    context.getClient(),
+                    changeset.getSoftwareVersionSource(),
+                    this::createCondition,
+                    StreamUploaderVerifier.getter(this.containerName),
+                    StreamUploaderVerifier.setter(this.containerName));
+
+            return NetworkOperationStepUtil.checkLastCondition(updated);
+        } catch (Throwable t) {
+            log.errorf(t, FAIL_STATUS_MESSAGE, t.getMessage());
+            return NetworkOperationStepUtil.prepareFailed(resource, status, t.getMessage(), CONDITION_TYPE);
         }
-
-        if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed) || isDone(status, this.containerName)) {
-            log.debugf(
-                    "Skipping verification of '%s' image for network operation: %s/%s [ Phase: %s, Done: %s ]",
-                    this.containerName,
-                    resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName(),
-                    status.getPhase(),
-                    isDone(status, this.containerName));
-            return status;
-        }
-
-        log.infof(
-                "Verifying '%s' image verification for network operation: %s/%s",
-                toStreamUploaderType(this.containerName),
-                resource.getMetadata().getNamespace(),
-                resource.getMetadata().getName());
-
-        final NetworkOperationStatus updated = updateStatus(
-                resource,
-                status,
-                context.getClient(),
-                changeset.getSoftwareVersionSource(),
-                this::createCondition,
-                StreamUploaderVerifier.getter(this.containerName),
-                StreamUploaderVerifier.setter(this.containerName));
-
-        return NetworkOperationStepUtil.checkLastCondition(updated);
-    }
-
-    @Override
-    public NetworkOperationStatus handleError(
-            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context, Exception ex) {
-        Objects.requireNonNull(resource, "NetworkOperation resource is required");
-        Objects.requireNonNull(status, "NetworkOperation status is required");
-        Objects.requireNonNull(ex, "Exception is required");
-
-        log.errorf(
-                ex,
-                "Failed to verify '%s' for network operation: %s/%s",
-                toStreamUploaderType(this.containerName),
-                resource.getMetadata().getNamespace(),
-                resource.getMetadata().getName());
-
-        final String conditionType = computeConditionType(CONDITION_TYPE, containerName);
-        return NetworkOperationStepUtil.prepareFailed(resource, status, ex.getMessage(), conditionType);
     }
 
     Condition createCondition(final NetworkOperationStatus status) {
@@ -131,6 +119,6 @@ public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkO
 
     public static boolean isDone(NetworkOperationStatus status, String containerName) {
         final String conditionType = computeConditionType(CONDITION_TYPE, containerName);
-        return NetworkOperationStepUtil.isDone(status, conditionType);
+        return NetworkOperationStepUtil.isSuccessful(status, conditionType);
     }
 }

@@ -91,47 +91,42 @@ public class VerifyConsensusNodeChangesetStep implements ProcessorStep<NetworkOp
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     @Override
-    public NetworkOperationStatus run(
-            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context) {
-        Objects.requireNonNull(resource, "NetworkOperation must not be null");
-        Objects.requireNonNull(context, "Context must not be null");
-
-        if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed) || isDone(status)) {
-            log.debugf(
-                    "Skipping verification of 'consensus-node' image for network operation: %s/%s [ Phase: %s, Done: %s ]",
-                    resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName(),
-                    status.getPhase(),
-                    isDone(status));
-            return status;
-        }
-
-        final NetworkOperationStatus updated = updateStatus(
-                resource,
-                status,
-                context.getClient(),
-                ConsensusVerifier.getSoftwareVersionSource(resource),
-                this::createCondition,
-                SoftwareSourceStatus::getConsensusNode,
-                SoftwareSourceStatus::setConsensusNode);
-
-        return NetworkOperationStepUtil.checkLastCondition(updated);
+    public boolean isSuccessful(NetworkOperation resource, NetworkOperationStatus status) {
+        return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }
 
     @Override
-    public NetworkOperationStatus handleError(
-            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context, Exception ex) {
-        Objects.requireNonNull(resource, "NetworkOperation resource is required");
-        Objects.requireNonNull(status, "NetworkOperation status is required");
-        Objects.requireNonNull(ex, "Exception is required");
+    public boolean shouldSkip(NetworkOperation resource, NetworkOperationStatus status) {
+        return status.getPhase().equals(NetworkOperationStatus.Phase.Failed)
+                || NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
+    }
 
-        log.errorf(
-                ex,
-                "Failed to verify consensus node image for network operation: %s/%s",
-                resource.getMetadata().getNamespace(),
-                resource.getMetadata().getName());
+    @Override
+    public NetworkOperationStatus run(
+            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context) {
+        try {
+            Objects.requireNonNull(resource, "NetworkOperation must not be null");
+            Objects.requireNonNull(context, "Context must not be null");
 
-        return NetworkOperationStepUtil.prepareFailed(resource, status, ex.getMessage(), CONDITION_TYPE);
+            log.infof(
+                    "Verifying 'consensus-node' image for network operation: %s/%s",
+                    resource.getMetadata().getNamespace(),
+                    resource.getMetadata().getName());
+
+            final NetworkOperationStatus updated = updateStatus(
+                    resource,
+                    status,
+                    context.getClient(),
+                    ConsensusVerifier.getSoftwareVersionSource(resource),
+                    this::createCondition,
+                    SoftwareSourceStatus::getConsensusNode,
+                    SoftwareSourceStatus::setConsensusNode);
+
+            return NetworkOperationStepUtil.checkLastCondition(updated);
+        } catch (Throwable t) {
+            log.errorf(t, FAIL_STATUS_MESSAGE, t.getMessage());
+            return NetworkOperationStepUtil.prepareFailed(resource, status, t.getMessage(), CONDITION_TYPE);
+        }
     }
 
     private Condition createCondition(final NetworkOperationStatus status) {
@@ -139,6 +134,6 @@ public class VerifyConsensusNodeChangesetStep implements ProcessorStep<NetworkOp
     }
 
     public static boolean isDone(NetworkOperationStatus status) {
-        return NetworkOperationStepUtil.isDone(status, CONDITION_TYPE);
+        return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }
 }

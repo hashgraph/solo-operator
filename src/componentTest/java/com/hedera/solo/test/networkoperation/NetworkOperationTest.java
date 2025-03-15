@@ -371,14 +371,12 @@ public class NetworkOperationTest extends AbstractOperatorTest {
             Condition condition = conditions.getFirst();
             assertThat(condition.getStatus()).isEqualTo(valid ? ConditionStatus.True : ConditionStatus.False);
             if (!valid) {
-                // check that at least one condition no with reason SECRET_VALID is present and has status False
                 boolean found = false;
                 for (Condition c : no.getStatus().getConditions()) {
-                    if (CheckConsensusNodeSecretsStep.SECRETS_VALID.equals(c.getReason())) {
-                        if (c.getStatus().equals(ConditionStatus.False)) {
-                            found = true;
-                            break;
-                        }
+                    if (!c.getType().equals(CheckConsensusNodeSecretsStep.CONDITION_TYPE)
+                            && c.getStatus().equals(ConditionStatus.False)) {
+                        found = true;
+                        break;
                     }
                 }
                 assertThat(found).isTrue();

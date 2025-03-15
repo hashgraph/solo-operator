@@ -87,11 +87,13 @@ public abstract class AbstractProcessorTask<T extends CustomResource<?, S>, S ex
         // process the steps and determine the new status
         final List<ProcessorStep<T, S>> steps = steps();
         for (ProcessorStep<T, S> step : steps) {
-            Objects.requireNonNull(step, "step must not be null");
-            try {
-                current = step.run(resource, current, context);
-            } catch (Exception e) {
-                current = step.handleError(resource, current, context, e);
+            if (step.shouldSkip(resource, current)) {
+                continue;
+            }
+
+            current = step.run(resource, current, context);
+            if (!step.isSuccessful(resource, current)) {
+                break;
             }
         }
 

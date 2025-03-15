@@ -8,6 +8,11 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 /**
  * ProcessorStep encapsulates the data and logic to execute a single step of a task.
  *
+ * <p>A ProcessorStep is a single unit of work that can be executed by a Processor.
+ *
+ * <p>A ProcessorStep must not throw exceptions. If a ProcessorStep fails, it should handle errors and return the status
+ * with appropriate metadata.
+ *
  * @param <T> the type of the custom resource
  * @param <S> the type of the custom resource status
  */
@@ -15,24 +20,29 @@ public interface ProcessorStep<T extends CustomResource<?, S>, S> {
     /**
      * Execute the step
      *
-     * @return the desired custom resource status
-     * @throws ProcessorException if executing the step fails
+     * <p>This method must never throw exception.
+     *
+     * @return updated custom resource status
      */
     S run(final T resource, final S status, Context<T> context);
 
     /**
-     * Handle the exception thrown by the step
+     * Check if the step is successful
      *
-     * <p>If the error cannot be handled, the step should rethrow the exception. This method allows steps to add
-     * appropriate condition and phase to the custom resource status.
+     * @param status the custom resource status
+     * @return true if the step is successful, false otherwise
+     */
+    boolean isSuccessful(final T resource, final S status);
+
+    /**
+     * Check if the step should be skipped
      *
-     * <p>This method will be called by the {@link RetryStep} of the maximum number of retries is reached.
+     * <p>Step's run method must not skip processing based on response from this method as it is left to be handled by
+     * the {@link AbstractProcessorTask} and {@link RetryStep} to control the flow.
      *
      * @param resource the custom resource
      * @param status the custom resource status
-     * @param context the context
-     * @param ex the exception
-     * @return the updated custom resource status
+     * @return true if the step should be skipped, false otherwise
      */
-    S handleError(final T resource, final S status, Context<T> context, final Exception ex);
+    boolean shouldSkip(final T resource, final S status);
 }

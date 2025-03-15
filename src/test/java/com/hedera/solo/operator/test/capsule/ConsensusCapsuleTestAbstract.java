@@ -26,7 +26,6 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PersistentVolumeClaims;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PersistentVolumeClaimsBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PodProperties;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PodPropertiesBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Containers;
@@ -267,7 +266,7 @@ public abstract class ConsensusCapsuleTestAbstract {
     }
 
     protected PersistentVolumeClaims prepareCapsulePVCs(TestRecords.NodeInfo node) {
-        return new PersistentVolumeClaimsBuilder().build();
+        return null;
     }
 
     protected ConsensusCapsule prepareConsensusCapsuleBuilder(final TestRecords.NodeInfo node) {

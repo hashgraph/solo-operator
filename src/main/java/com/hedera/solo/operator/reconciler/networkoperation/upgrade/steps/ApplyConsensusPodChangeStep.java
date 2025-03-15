@@ -15,6 +15,7 @@ import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckProcessor;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.render.NowFrozenConsensusCapsules;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
+import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.KubernetesResourceList;
@@ -52,89 +53,76 @@ public class ApplyConsensusPodChangeStep implements ProcessorStep<NetworkOperati
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     @Override
+    public boolean isSuccessful(NetworkOperation resource, NetworkOperationStatus status) {
+        return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
+    }
+
+    @Override
+    public boolean shouldSkip(NetworkOperation resource, NetworkOperationStatus status) {
+        return status.getPhase().equals(NetworkOperationStatus.Phase.Failed)
+                || NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
+    }
+
+    @Override
     public NetworkOperationStatus run(
             final NetworkOperation resource,
             final NetworkOperationStatus status,
             final Context<NetworkOperation> context)
             throws ProcessorException {
         Objects.requireNonNull(resource, "NetworkOperation resource is required");
+        Objects.requireNonNull(resource.getSpec().getNetworkUpgrade().getAddressBook(), "AddressBook is required");
         Objects.requireNonNull(status, "NetworkOperationStatus status is required");
         Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus phase is required");
         Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
-
-        if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed) || isDone(status)) {
-            log.debugf(
-                    "Skipping consensus node update for network operation: %s/%s [ Phase: %s, Done: %s ]",
-                    resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName(),
-                    status.getPhase(),
-                    isDone(status));
-            return status;
-        }
-
-        log.infof(
-                "Applying consensus node update for network operation: %s/%s",
-                resource.getMetadata().getNamespace(), resource.getMetadata().getName());
 
         Set<Long> excludeNodes = new HashSet<>(resource.getStatus().getUpgradedNodes());
         Set<Long> includeNodes = resource.getSpec().getNetworkUpgrade().getAddressBook().stream()
                 .map(AddressBookEntry::getNodeId)
                 .collect(Collectors.toSet());
-        List<Long> upgradedNodes;
 
         try {
+            log.infof(
+                    "Applying consensus node update for network operation: %s/%s",
+                    resource.getMetadata().getNamespace(),
+                    resource.getMetadata().getName());
+
             KubernetesClient client = context.getClient();
             String namespace = resource.getMetadata().getNamespace();
             NowFrozenConsensusCapsules nowFrozen = new NowFrozenConsensusCapsules(resource, status);
             forEach(
                     client.resources(ConsensusCapsule.class).inNamespace(namespace),
                     cc -> update(client, nowFrozen, cc, includeNodes, excludeNodes));
-        } finally {
-            upgradedNodes = excludeNodes.stream().sorted().toList();
 
-            // Persist the updated node list so that this step is idempotent and can be retried safely
-            // It would trigger an event for reconciliation; but JOSDK guarantees serialization of the events. So
-            // we should be safe to patch and continue with current reconciliation.
-            //
-            //  Thoughts: rather than saving the upgrade list in the status, we could add labels (e.g. upgraded-by,
-            //  upgraded-at) in the consensus capsule to indicate that it has been upgraded by a certain
-            // network-operation.
-            //  Then we can skip updating it if the labels are present.
-            context.getClient()
-                    .resource(edit(resource)
-                            .with(r -> r.editStatus().withUpgradedNodes(upgradedNodes))
-                            .build())
-                    .patchStatus();
+            final List<Long> upgradedNodes = excludeNodes.stream().sorted().toList();
+            if (upgradedNodes.size() != includeNodes.size()) {
+                final NetworkOperationStatus updated = NetworkOperationStepUtil.prepareFailed(
+                        resource, status, FAIL_STATUS_MESSAGE.formatted(includeNodes), CONDITION_TYPE);
+                return edit(updated)
+                        .with(s -> s.withUpgradedNodes(upgradedNodes))
+                        .build();
+            }
+
+            log.infof("Successfully upgraded all consensus nodes [updated = %s]", upgradedNodes);
+            final Condition condition = new ConditionBuilder()
+                    .withObservedGeneration(resource.getMetadata().getGeneration())
+                    .withType(CONDITION_TYPE)
+                    .withStatus(ConditionStatus.True)
+                    .withLastTransitionTime(timestamp())
+                    .withMessage(SUCCESS_STATUS_MESSAGE)
+                    .build();
+
+            NetworkOperationStatus updated = NetworkOperationStepUtil.prepareStatus(status, List.of(condition));
+            return edit(updated).with(s -> s.withUpgradedNodes(upgradedNodes)).build();
+        } catch (Throwable t) {
+            // add upgraded node list so that during retry we can skip the already upgraded nodes
+            final List<Long> upgradedNodes = excludeNodes.stream().sorted().toList();
+            final NetworkOperationStatus updated =
+                    edit(status).with(s -> s.withUpgradedNodes(upgradedNodes)).build();
+
+            // prepare failed status
+            log.errorf(t, FAIL_STATUS_MESSAGE, t.getMessage());
+            return NetworkOperationStepUtil.prepareFailed(resource, updated, t.getMessage(), CONDITION_TYPE);
         }
-
-        if (upgradedNodes.size() != includeNodes.size()) {
-            throw new ProcessorException(
-                    "Failed to update all consensus nodes [upgraded = %s]".formatted(upgradedNodes));
-        }
-
-        log.infof("Successfully upgraded all consensus nodes [updated = %s]", upgradedNodes);
-        return edit(status)
-                .with(s -> s.addToConditions(new ConditionBuilder()
-                                .withObservedGeneration(resource.getMetadata().getGeneration())
-                                .withType(CONDITION_TYPE)
-                                .withStatus(ConditionStatus.True)
-                                .withLastTransitionTime(timestamp())
-                                .withMessage(SUCCESS_STATUS_MESSAGE)
-                                .build())
-                        .withUpgradedNodes(upgradedNodes))
-                .build();
-    }
-
-    @Override
-    public NetworkOperationStatus handleError(
-            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context, Exception ex) {
-        Objects.requireNonNull(resource, "NetworkOperation resource is required");
-        Objects.requireNonNull(status, "NetworkOperation status is required");
-        Objects.requireNonNull(ex, "Exception is required");
-
-        log.error(ex.getMessage(), ex);
-
-        return NetworkOperationStepUtil.prepareFailed(resource, status, ex.getMessage(), CONDITION_TYPE);
     }
 
     <T extends HasMetadata> void forEach(Listable<KubernetesResourceList<T>> listable, Consumer<T> consumer) {
@@ -168,6 +156,6 @@ public class ApplyConsensusPodChangeStep implements ProcessorStep<NetworkOperati
     }
 
     public static boolean isDone(NetworkOperationStatus status) {
-        return NetworkOperationStepUtil.isDone(status, CONDITION_TYPE);
+        return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }
 }

@@ -2,7 +2,6 @@
 
 package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
 
-import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.library.time.Timestamp.timestamp;
 
 import com.hedera.solo.operator.library.processor.ProcessorException;
@@ -14,10 +13,12 @@ import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckProcessor;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.render.NowFrozenOrbit;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
+import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.lang.invoke.MethodHandles;
+import java.util.List;
 import java.util.Objects;
 import org.jboss.logging.Logger;
 
@@ -42,68 +43,55 @@ public class ApplyOrbitConfigurationChangeStep implements ProcessorStep<NetworkO
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     @Override
-    public NetworkOperationStatus run(
-            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context)
-            throws ProcessorException {
-        Objects.requireNonNull(resource, "NetworkOperation resource is required");
-        Objects.requireNonNull(status, "NetworkOperationStatus status is required");
-        Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus phase is required");
-        Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
-
-        if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed) || isDone(status)) {
-            log.debugf(
-                    "Skipping orbit change for network operation: %s/%s [ Phase: %s, Done: %s ]",
-                    resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName(),
-                    status.getPhase(),
-                    isDone(status));
-            return status;
-        }
-
-        KubernetesClient client = context.getClient();
-        NowFrozenOrbit nowFrozen = new NowFrozenOrbit(resource);
-
-        log.infof(
-                "Applying orbit change for network operation: %s/%s",
-                resource.getMetadata().getNamespace(), resource.getMetadata().getName());
-
-        client.resources(Orbit.class).withName(resource.getSpec().getOrbit()).edit(nowFrozen::update);
-
-        log.infof("Successfully updated orbit: %s", resource.getMetadata().getName());
-
-        return edit(status)
-                .with(s -> s.addToConditions(new ConditionBuilder()
-                        .withObservedGeneration(resource.getMetadata().getGeneration())
-                        .withType(CONDITION_TYPE)
-                        .withStatus(ConditionStatus.True)
-                        .withLastTransitionTime(timestamp())
-                        .withMessage(SUCCESS_STATUS_MESSAGE.formatted(
-                                resource.getSpec().getOrbit()))
-                        .build()))
-                .build();
+    public boolean isSuccessful(NetworkOperation resource, NetworkOperationStatus status) {
+        return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }
 
     @Override
-    public NetworkOperationStatus handleError(
-            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context, Exception ex) {
-        Objects.requireNonNull(resource, "NetworkOperation resource is required");
-        Objects.requireNonNull(status, "NetworkOperation status is required");
-        Objects.requireNonNull(ex, "Exception is required");
+    public boolean shouldSkip(NetworkOperation resource, NetworkOperationStatus status) {
+        return status.getPhase().equals(NetworkOperationStatus.Phase.Failed)
+                || NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
+    }
 
-        log.errorf(
-                ex,
-                "Failed to update orbit for network operation %s/%s: %s"
-                        .formatted(
-                                resource.getMetadata().getNamespace(),
-                                resource.getMetadata().getName(),
-                                resource.getStatus().getConsensusCapsules()));
+    @Override
+    public NetworkOperationStatus run(
+            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context)
+            throws ProcessorException {
+        try {
+            Objects.requireNonNull(resource, "NetworkOperation resource is required");
+            Objects.requireNonNull(status, "NetworkOperationStatus status is required");
+            Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus phase is required");
+            Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
 
-        final String failMessage =
-                FAIL_STATUS_MESSAGE.formatted(resource.getSpec().getOrbit(), ex.getMessage());
-        return NetworkOperationStepUtil.prepareFailed(resource, status, failMessage, CONDITION_TYPE);
+            KubernetesClient client = context.getClient();
+            NowFrozenOrbit nowFrozen = new NowFrozenOrbit(resource);
+
+            log.infof(
+                    "Applying orbit change for network operation: %s/%s",
+                    resource.getMetadata().getNamespace(),
+                    resource.getMetadata().getName());
+
+            client.resources(Orbit.class)
+                    .withName(resource.getSpec().getOrbit())
+                    .edit(nowFrozen::update);
+
+            log.infof("Successfully updated orbit: %s", resource.getMetadata().getName());
+            final Condition condition = new ConditionBuilder()
+                    .withObservedGeneration(resource.getMetadata().getGeneration())
+                    .withType(CONDITION_TYPE)
+                    .withStatus(ConditionStatus.True)
+                    .withLastTransitionTime(timestamp())
+                    .withMessage(
+                            SUCCESS_STATUS_MESSAGE.formatted(resource.getSpec().getOrbit()))
+                    .build();
+            return NetworkOperationStepUtil.prepareStatus(status, List.of(condition));
+        } catch (Throwable t) {
+            log.errorf(t, FAIL_STATUS_MESSAGE, t.getMessage());
+            return NetworkOperationStepUtil.prepareFailed(resource, status, t.getMessage(), CONDITION_TYPE);
+        }
     }
 
     public static boolean isDone(NetworkOperationStatus status) {
-        return NetworkOperationStepUtil.isDone(status, CONDITION_TYPE);
+        return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }
 }

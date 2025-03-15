@@ -43,7 +43,7 @@ public class NetworkGenesisTask extends AbstractProcessorTask<NetworkOperation, 
         return List.of(
                 new CheckConsensusNodeSecretsStep(customResourceManager),
                 new CreatePublicKeysConfigStep(customResourceManager),
-                new RetryStep<>(new CreateClusterConfigStep(customResourceManager), Duration.ofSeconds(2), 60));
+                new RetryStep<>(new CreateClusterConfigStep(customResourceManager), Duration.ofSeconds(2), 150));
     }
 
     @Override

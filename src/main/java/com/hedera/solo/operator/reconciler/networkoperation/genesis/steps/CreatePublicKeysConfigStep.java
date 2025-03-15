@@ -23,6 +23,7 @@ import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
+import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
@@ -52,81 +53,79 @@ public class CreatePublicKeysConfigStep implements ProcessorStep<NetworkOperatio
     }
 
     @Override
-    public NetworkOperationStatus run(
-            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context) {
-        Objects.requireNonNull(resource, "NetworkOperation resource is required");
-        Objects.requireNonNull(status, "NetworkOperationStatus status is required");
-        Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus phase is required");
-        Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
-        if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed) || isDone(status)) {
-            log.infof(
-                    "Skipping creation of public key config: %s/%s",
-                    resource.getMetadata().getNamespace(), Constants.PUBLIC_KEYS_NAME);
-            return status;
-        }
-
-        final String namespace = resource.getMetadata().getNamespace();
-        final Orbit orbit = customResourceManager.orbitByName(resource.getSpec().getOrbit());
-        if (orbit == null) {
-            throw new ProcessorException(
-                    "Orbit not found: %s".formatted(resource.getSpec().getOrbit()));
-        }
-
-        final List<ConsensusCapsule> consensusCapsules = customResourceManager.consensusCapsules(namespace);
-        if (consensusCapsules.isEmpty()) {
-            throw new ProcessorException("No consensus capsules found in orbit: %s"
-                    .formatted(orbit.getMetadata().getName()));
-        }
-
-        final ConfigMap existing = customResourceManager.configMapByName(namespace, Constants.PUBLIC_KEYS_NAME);
-        final ConfigMap desired = this.prepareDesiredConfigMap(resource, context, orbit, consensusCapsules, existing);
-
-        if (existing == null) {
-            log.infof(
-                    "Creating public key config: %s/%s",
-                    desired.getMetadata().getNamespace(), desired.getMetadata().getName());
-            context.getClient().resource(desired).create();
-            log.infof(
-                    "Successfully created public key config: %s/%s",
-                    desired.getMetadata().getNamespace(), desired.getMetadata().getName());
-        } else {
-            log.infof(
-                    "Updating public key config: %s/%s",
-                    desired.getMetadata().getNamespace(), desired.getMetadata().getName());
-            context.getClient().resource(existing).patch(desired);
-            log.infof(
-                    "Successfully updated public key config: %s/%s",
-                    desired.getMetadata().getNamespace(), desired.getMetadata().getName());
-        }
-
-        return edit(status)
-                .with(s -> s.addToConditions(new ConditionBuilder()
-                        .withObservedGeneration(resource.getMetadata().getGeneration())
-                        .withType(CONDITION_TYPE)
-                        .withStatus(ConditionStatus.True)
-                        .withLastTransitionTime(timestamp())
-                        .withMessage(SUCCESS_STATUS_MESSAGE.formatted(
-                                resource.getMetadata().getNamespace(),
-                                resource.getMetadata().getName()))
-                        .build()))
-                .build();
+    public boolean isSuccessful(NetworkOperation resource, NetworkOperationStatus status) {
+        return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }
 
     @Override
-    public NetworkOperationStatus handleError(
-            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context, Exception ex) {
-        Objects.requireNonNull(resource, "NetworkOperation resource is required");
-        Objects.requireNonNull(status, "NetworkOperation status is required");
-        Objects.requireNonNull(ex, "Exception is required");
+    public boolean shouldSkip(NetworkOperation resource, NetworkOperationStatus status) {
+        return status.getPhase().equals(NetworkOperationStatus.Phase.Failed)
+                || NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
+    }
 
-        log.errorf(
-                ex,
-                "Failed to create public key config '%s/%s': %s",
-                resource.getMetadata().getNamespace(),
-                Constants.PUBLIC_KEYS_NAME,
-                ex);
-        final String failedMessage = FAIL_STATUS_MESSAGE.formatted(ex.getMessage());
-        return NetworkOperationStepUtil.prepareFailed(resource, status, failedMessage, CONDITION_TYPE);
+    @Override
+    public NetworkOperationStatus run(
+            NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context) {
+        try {
+            Objects.requireNonNull(resource, "NetworkOperation resource is required");
+            Objects.requireNonNull(status, "NetworkOperationStatus status is required");
+            Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus phase is required");
+            Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
+
+            final String namespace = resource.getMetadata().getNamespace();
+            final Orbit orbit =
+                    customResourceManager.orbitByName(resource.getSpec().getOrbit());
+            if (orbit == null) {
+                throw new ProcessorException(
+                        "Orbit not found: %s".formatted(resource.getSpec().getOrbit()));
+            }
+
+            final List<ConsensusCapsule> consensusCapsules = customResourceManager.consensusCapsules(namespace);
+            if (consensusCapsules.isEmpty()) {
+                throw new ProcessorException("No consensus capsules found in orbit: %s"
+                        .formatted(orbit.getMetadata().getName()));
+            }
+
+            final ConfigMap existing = customResourceManager.configMapByName(namespace, Constants.PUBLIC_KEYS_NAME);
+            final ConfigMap desired =
+                    this.prepareDesiredConfigMap(resource, context, orbit, consensusCapsules, existing);
+
+            if (existing == null) {
+                log.infof(
+                        "Creating public key config: %s/%s",
+                        desired.getMetadata().getNamespace(),
+                        desired.getMetadata().getName());
+                context.getClient().resource(desired).create();
+                log.infof(
+                        "Successfully created public key config: %s/%s",
+                        desired.getMetadata().getNamespace(),
+                        desired.getMetadata().getName());
+            } else {
+                log.infof(
+                        "Updating public key config: %s/%s",
+                        desired.getMetadata().getNamespace(),
+                        desired.getMetadata().getName());
+                context.getClient().resource(existing).patch(desired);
+                log.infof(
+                        "Successfully updated public key config: %s/%s",
+                        desired.getMetadata().getNamespace(),
+                        desired.getMetadata().getName());
+            }
+
+            final Condition condition = new ConditionBuilder()
+                    .withObservedGeneration(resource.getMetadata().getGeneration())
+                    .withType(CONDITION_TYPE)
+                    .withStatus(ConditionStatus.True)
+                    .withLastTransitionTime(timestamp())
+                    .withMessage(SUCCESS_STATUS_MESSAGE.formatted(
+                            resource.getMetadata().getNamespace(),
+                            resource.getMetadata().getName()))
+                    .build();
+            return NetworkOperationStepUtil.prepareStatus(status, List.of(condition));
+        } catch (Throwable t) {
+            log.errorf(t, FAIL_STATUS_MESSAGE, t.getMessage());
+            return NetworkOperationStepUtil.prepareFailed(resource, status, t.getMessage(), CONDITION_TYPE);
+        }
     }
 
     private ConfigMap prepareDesiredConfigMap(
@@ -194,6 +193,6 @@ public class CreatePublicKeysConfigStep implements ProcessorStep<NetworkOperatio
     }
 
     public static boolean isDone(NetworkOperationStatus status) {
-        return NetworkOperationStepUtil.isDone(status, CONDITION_TYPE);
+        return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }
 }

@@ -81,7 +81,7 @@ public class NowFrozenTask extends AbstractProcessorTask<NetworkOperation, Netwo
                 new DeleteClusterConfigStep(customResourceManager),
                 new RetryStep<>(new ApplyConsensusPodChangeStep(), Duration.ofSeconds(3), 10),
                 new ApplyOrbitConfigurationChangeStep(),
-                new RetryStep<>(new CreateClusterConfigStep(customResourceManager), Duration.ofSeconds(2), 60));
+                new RetryStep<>(new CreateClusterConfigStep(customResourceManager), Duration.ofSeconds(2), 150));
     }
 
     @Override

@@ -103,7 +103,9 @@ public class VerifyLayerHashes
             final Function<NetworkOperationStatus, Condition> conditionFunction,
             final Function<SoftwareSourceStatus, List<ImageRepositoryStatus>> getStatusList,
             final BiConsumer<SoftwareSourceStatus, List<ImageRepositoryStatus>> setStatusList) {
-        NetworkOperationStatus result = status == null ? new NetworkOperationStatus() : status;
+        NetworkOperationStatus result = status == null
+                ? new NetworkOperationStatus()
+                : edit(status).build(); // make a new copy instead of modifying the input
         if (result.getSoftwareSourceStatus() == null) {
             result.setSoftwareSourceStatus(new SoftwareSourceStatus());
         }

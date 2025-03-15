@@ -94,7 +94,7 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
     public ProcessorResult<NetworkOperationStatus> process(
             final NetworkOperation resource, final Context<NetworkOperation> context) throws Exception {
         log.infof(
-                "'%s/%s' [mode: %s, created: %s, uuid: %s, phase: %s]: PROCESSING",
+                "Processing network operation mode '%s/%s' [mode: %s, created: %s, uuid: %s, phase: %s]",
                 resource.getMetadata().getNamespace(),
                 resource.getMetadata().getName(),
                 resource.getSpec().getMode(),
@@ -131,7 +131,7 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
     public UpdateControl<NetworkOperation> reconcile(
             final NetworkOperation resource, final Context<NetworkOperation> context) throws Exception {
         log.infof(
-                "'%s/%s' [mode: %s, created: %s, uuid: %s]: Reconciling",
+                "Reconciling '%s/%s' [mode: %s, created: %s, uuid: %s]: Reconciling",
                 resource.getMetadata().getNamespace(),
                 resource.getMetadata().getName(),
                 resource.getSpec().getMode(),
@@ -149,7 +149,7 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
         // is this resource is done, then return
         if (isDone(resource)) {
             log.infof(
-                    "'%s/%s' [created: %s, uuid: %s]: DONE",
+                    "Networkoperation is done: '%s/%s' [created: %s, uuid: %s]",
                     resource.getMetadata().getNamespace(),
                     resource.getMetadata().getName(),
                     resource.getMetadata().getCreationTimestamp(),
@@ -167,7 +167,7 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
             }
 
             log.infof(
-                    "'%s/%s' [created: %s, uuid: %s, queue: %s]: NOT FIRST IN QUEUE",
+                    "Not first in queue: '%s/%s' [created: %s, uuid: %s, queue: %s]",
                     resource.getMetadata().getNamespace(),
                     resource.getMetadata().getName(),
                     resource.getMetadata().getCreationTimestamp(),
@@ -191,7 +191,7 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
                 .build();
         if (isDone(desired)) {
             log.infof(
-                    "'%s/%s' [mode: %s, created: %s, uuid: %s]: MARK AS DONE",
+                    "Marking as done: '%s/%s' [mode: %s, created: %s, uuid: %s]",
                     resource.getMetadata().getNamespace(),
                     resource.getMetadata().getName(),
                     resource.getSpec().getMode(),
@@ -276,7 +276,7 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
 
     /** Prepare and return the list of active resources that needs to be considered for sequencing. */
     public static List<NetworkOperation> activeResources() {
-        // FIXME: should we fetch all network-operation CRs or only in the current namespace?
+        // fetch all network-operation CRs
         List<NetworkOperation> items = customResourceManager.networkOperations();
         List<NetworkOperation> active = new ArrayList<>();
         for (NetworkOperation item : items) {

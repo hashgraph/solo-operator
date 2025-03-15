@@ -13,7 +13,12 @@ public class NoopStep<T extends CustomResource<?, S>, S> implements ProcessorSte
     }
 
     @Override
-    public S handleError(T resource, S status, Context<T> context, Exception ex) {
-        return status;
+    public boolean isSuccessful(T resource, S status) {
+        return false;
+    }
+
+    @Override
+    public boolean shouldSkip(T resource, S status) {
+        return false;
     }
 }
