@@ -18,6 +18,8 @@ spec:
     - name: v1alpha1
       schema:
         openAPIV3Schema:
+          required:
+            - spec
           properties:
             spec:
               $ref: "../openapi/orbit.yml#/components/schemas/OrbitSpec"
