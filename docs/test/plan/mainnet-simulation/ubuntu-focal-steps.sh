@@ -349,13 +349,18 @@ EOF
 
 # Install Cilium CNI
 cilium install --version "${CILIUM_VERSION}" --values /tmp/provisioner/cilium/cilium-config.yaml
+
+# Restart Container and Kubelet (fix for cilium CNI not initializing - CNI not ready error)
+sudo sysctl --system >/dev/null
+sudo systemctl restart containerd kubelet
+
 cilium status --wait
 
 # Install MetalLB
 helm repo add metallb https://metallb.github.io/metallb
 helm install metallb metallb/metallb --version ${METALLB_VERSION} \
   --set speaker.frr.enabled=false \
-  --namespace metallb-system --create-namespace
+  --namespace metallb-system --create-namespace --atomic --wait
 
 # Deploy MetalLB Configuration
 cat <<EOF | kubectl apply -f -
