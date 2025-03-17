@@ -27,6 +27,7 @@ import jakarta.inject.Inject;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * It exposes functionalities to retrieve or update resources using the Kubernetes API directly
@@ -166,6 +167,8 @@ public class CustomResourceManager {
         for (Resource<NetworkOperation> r : resources) {
             list.add(r.get());
         }
+
+        list.removeIf(Objects::isNull);
 
         return list;
     }

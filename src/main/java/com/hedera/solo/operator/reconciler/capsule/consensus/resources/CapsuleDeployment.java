@@ -54,6 +54,7 @@ import io.fabric8.kubernetes.api.model.VolumeBuilder;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
 import io.fabric8.kubernetes.client.utils.Serialization;
+import io.javaoperatorsdk.operator.api.config.informer.Informer;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
@@ -71,8 +72,10 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 @KubernetesDependent(
-        labelSelector =
-                "app.kubernetes.io/managed-by=solo-operator,app.kubernetes.io/part-of=consensus-node,app.kubernetes.io/component=deployment")
+        informer =
+                @Informer(
+                        labelSelector =
+                                "app.kubernetes.io/managed-by=solo-operator,app.kubernetes.io/part-of=consensus-node,app.kubernetes.io/component=deployment"))
 public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deployment, ConsensusCapsule> {
     public static final String NAME_SUFFIX = "-deploy";
 

@@ -114,13 +114,15 @@ class NetworkOperationSequenceReconcilerTest {
         // reconcile the network operations
         UpdateControl<NetworkOperation> resp = reconciler.reconcile(no1, context);
         Assertions.assertThat(resp.isPatchStatus()).isTrue();
-        Assertions.assertThat(resp.getResource().getStatus().getPhase())
+        Assertions.assertThat(resp.getResource()).isPresent();
+        Assertions.assertThat(resp.getResource().orElseThrow().getStatus().getPhase())
                 .isEqualTo(NetworkOperationStatus.Phase.Pending);
 
         // try to process a resource that is not the first in the queue
         resp = reconciler.reconcile(no3, context);
         Assertions.assertThat(resp.isPatchStatus()).isTrue();
-        Assertions.assertThat(resp.getResource().getStatus().getPhase())
+        Assertions.assertThat(resp.getResource()).isPresent();
+        Assertions.assertThat(resp.getResource().orElseThrow().getStatus().getPhase())
                 .isEqualTo(NetworkOperationStatus.Phase.Pending);
     }
 

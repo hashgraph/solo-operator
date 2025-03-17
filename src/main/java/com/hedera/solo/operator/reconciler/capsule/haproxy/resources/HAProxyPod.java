@@ -2,11 +2,14 @@
 
 package com.hedera.solo.operator.reconciler.capsule.haproxy.resources;
 
+import static com.hedera.solo.operator.library.model.Labels.hasLabel;
+
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsule;
 import com.hedera.solo.operator.reconciler.common.Constants;
+import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.Pod;
+import io.javaoperatorsdk.operator.api.config.informer.InformerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResourceConfigBuilder;
@@ -20,12 +23,13 @@ import java.util.Set;
 
 @KubernetesDependent
 public class HAProxyPod extends KubernetesDependentResource<Pod, HAProxyCapsule>
-        implements SecondaryToPrimaryMapper<Pod>, ResourceDiscriminator<Pod, HAProxyCapsule> {
+        implements SecondaryToPrimaryMapper<Pod> {
     public HAProxyPod() {
         super(Pod.class);
         configureWith(new KubernetesDependentResourceConfigBuilder<Pod>()
-                .withLabelSelector(Constants.LABEL_SELECTOR_HAPROXY_APP)
-                .withResourceDiscriminator(this)
+                .withKubernetesDependentInformerConfig(InformerConfiguration.builder(Pod.class)
+                        .withLabelSelector((Constants.LABEL_SELECTOR_HAPROXY_APP))
+                        .build())
                 .build());
     }
 
@@ -38,11 +42,13 @@ public class HAProxyPod extends KubernetesDependentResource<Pod, HAProxyCapsule>
     }
 
     @Override
-    public Optional<Pod> distinguish(
-            final Class<Pod> resource, final HAProxyCapsule primary, final Context<HAProxyCapsule> context) {
-        return context.getSecondaryResourcesAsStream(resource)
+    public Optional<Pod> getSecondaryResource(final HAProxyCapsule primary, final Context<HAProxyCapsule> context) {
+        String namespace = primary.getMetadata().getNamespace();
+        String nodeName = Metadata.prepareNodeName(primary.getSpec().getNodeId());
+        return eventSource().flatMap(es -> es.list(namespace)
+                .filter(hasLabel(Constants.LABEL_NODE_NAME, nodeName))
                 .max(Comparator.comparing(
                         (Pod pod) -> ZonedDateTime.parse(pod.getMetadata().getCreationTimestamp())
-                                .toEpochSecond()));
+                                .toEpochSecond())));
     }
 }

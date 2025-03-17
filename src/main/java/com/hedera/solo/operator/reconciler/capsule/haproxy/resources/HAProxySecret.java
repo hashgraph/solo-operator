@@ -2,7 +2,6 @@
 
 package com.hedera.solo.operator.reconciler.capsule.haproxy.resources;
 
-import static com.hedera.solo.operator.reconciler.capsule.haproxy.HAProxyCapsuleReconciler.HAS_LABEL_SELECTOR_HAPROXY;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
@@ -12,20 +11,18 @@ import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Secret;
+import io.javaoperatorsdk.operator.api.config.informer.InformerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResourceConfigBuilder;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Map;
-import java.util.Optional;
 import java.util.function.BiFunction;
 
 @KubernetesDependent
-public class HAProxySecret extends CRUDKubernetesDependentResource<Secret, HAProxyCapsule>
-        implements ResourceDiscriminator<Secret, HAProxyCapsule> {
+public class HAProxySecret extends CRUDKubernetesDependentResource<Secret, HAProxyCapsule> {
 
     public static final String TEMPLATE = "secret.yaml";
     public static final String NAME_SUFFIX = "-ha-keys";
@@ -35,8 +32,9 @@ public class HAProxySecret extends CRUDKubernetesDependentResource<Secret, HAPro
         super(Secret.class);
         this.reconciler = reconciler;
         configureWith(new KubernetesDependentResourceConfigBuilder<Secret>()
-                .withLabelSelector(Constants.LABEL_SELECTOR_HAPROXY_APP)
-                .withResourceDiscriminator(this)
+                .withKubernetesDependentInformerConfig(InformerConfiguration.builder(Secret.class)
+                        .withLabelSelector((Constants.LABEL_SELECTOR_HAPROXY_APP))
+                        .build())
                 .build());
     }
 
@@ -74,13 +72,5 @@ public class HAProxySecret extends CRUDKubernetesDependentResource<Secret, HAPro
                 .endMetadata()
                 .addToData("hedera.pem", pem)
                 .build();
-    }
-
-    @Override
-    public Optional<Secret> distinguish(
-            final Class<Secret> resource, final HAProxyCapsule primary, final Context<HAProxyCapsule> context) {
-        return context.getSecondaryResources(Secret.class).stream()
-                .filter(HAS_LABEL_SELECTOR_HAPROXY)
-                .findAny();
     }
 }

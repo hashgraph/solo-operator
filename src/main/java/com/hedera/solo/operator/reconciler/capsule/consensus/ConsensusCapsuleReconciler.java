@@ -2,6 +2,7 @@
 
 package com.hedera.solo.operator.reconciler.capsule.consensus;
 
+import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.library.model.Labels.hasLabel;
 import static com.hedera.solo.operator.library.reconcile.ReconcileEvent.cleanupEvents;
 import static com.hedera.solo.operator.library.reconcile.ReconcileEvent.createOrUpdateEvent;
@@ -35,10 +36,10 @@ import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
-import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusHandler;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
+import io.javaoperatorsdk.operator.api.reconciler.Workflow;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
 import java.util.List;
 import java.util.Optional;
@@ -48,8 +49,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.jboss.logging.Logger;
 
-@ControllerConfiguration(
-        name = "consensus-capsule",
+@Workflow(
         dependents = {
             @Dependent(name = "sa", type = CapsuleServiceAccount.class),
             @Dependent(type = CapsuleRoleBinding.class, dependsOn = "sa"),
@@ -65,8 +65,8 @@ import org.jboss.logging.Logger;
             @Dependent(type = CapsuleDeployment.class),
             @Dependent(type = CapsulePod.class)
         })
-public class ConsensusCapsuleReconciler
-        implements Cleaner<ConsensusCapsule>, Reconciler<ConsensusCapsule>, ErrorStatusHandler<ConsensusCapsule> {
+@ControllerConfiguration(name = "consensus-capsule")
+public class ConsensusCapsuleReconciler implements Cleaner<ConsensusCapsule>, Reconciler<ConsensusCapsule> {
     public static final Predicate<HasMetadata> HAS_LABEL_SELECTOR_CONSENSUS_NODE =
             hasLabel(Constants.LABEL_APP, Constants.COMPONENT_CONSENSUS_NODE);
     public static final String CONSENSUS_CONTAINER_NAME = "consensus-node";
@@ -91,12 +91,14 @@ public class ConsensusCapsuleReconciler
                     .map(ConsensusCapsuleStatus::getConditions)
                     .orElse(null);
 
-            final ConsensusCapsule desired = capsule.edit()
-                    .editStatus()
-                    .withObservedGeneration(capsule.getMetadata().getGeneration())
-                    .withPhase(phase)
-                    .withConditions(validate(capsule, conditions, validateSecrets(capsule)))
-                    .endStatus()
+            final ConsensusCapsule desired = edit(new ConsensusCapsule())
+                    .with(metadata -> metadata.editMetadata()
+                            .withName(capsule.getMetadata().getName())
+                            .withNamespace(capsule.getMetadata().getNamespace()))
+                    .with(status -> status.editStatus()
+                            .withObservedGeneration(capsule.getMetadata().getGeneration())
+                            .withPhase(phase)
+                            .withConditions(validate(capsule, conditions, validateSecrets(capsule))))
                     .build();
 
             // if possible, avoid updating capsule

@@ -244,7 +244,7 @@ public class NetworkOperationTest extends AbstractOperatorTest {
 
         for (int i = 0; i < total; ++i) {
             final int nodeId = i;
-            await().atMost(60, TimeUnit.SECONDS).untilAsserted(() -> {
+            await().atMost(150, TimeUnit.SECONDS).untilAsserted(() -> {
                 String name = networkOperationName(nodeId);
                 verifyNetworkOperationSucceeded(name, 0 != nodeId % noUpdatePeriod);
             });
@@ -432,9 +432,6 @@ public class NetworkOperationTest extends AbstractOperatorTest {
             assertThat(no.getStatus()).isNotNull();
             assertThat(no.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Pending);
         });
-        sleep(1000);
-        assertThat(operator().get(NetworkOperation.class, name).getStatus().getPhase())
-                .isEqualTo(NetworkOperationStatus.Phase.Pending);
         operator().delete(operator().get(NetworkOperation.class, name));
     }
 

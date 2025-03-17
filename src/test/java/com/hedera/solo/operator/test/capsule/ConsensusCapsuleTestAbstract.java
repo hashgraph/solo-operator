@@ -137,6 +137,21 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .inNamespace(namespace)
                 .delete();
 
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            assertThat(kubernetesClient
+                            .resources(NetworkOperation.class)
+                            .inNamespace(namespace)
+                            .list()
+                            .getItems())
+                    .isEmpty();
+            assertThat(kubernetesClient
+                            .resources(ConsensusCapsule.class)
+                            .inNamespace(namespace)
+                            .list()
+                            .getItems())
+                    .isEmpty();
+        });
+
         Resources.removeByName(kubernetesClient, Orbit.class, namespace);
 
         await().atMost(Duration.ofSeconds(120))

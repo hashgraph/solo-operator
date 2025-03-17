@@ -133,3 +133,12 @@ objectModelGenerator {
     }
     register(sourceSets.componentTest)
 }
+
+// Require JOSDK 5.0.3 until a newer version of quarkus using JOSDK 5.0.3 or later is available.
+configurations.all {
+    resolutionStrategy {
+        force("io.javaoperatorsdk:micrometer-support:${javaoperatorsdkVersion}")
+        force("io.javaoperatorsdk:operator-framework-core:${javaoperatorsdkVersion}")
+        force("io.javaoperatorsdk:operator-framework-junit-5:${javaoperatorsdkVersion}")
+    }
+}

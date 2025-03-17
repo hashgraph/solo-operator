@@ -10,6 +10,7 @@ import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
+import io.javaoperatorsdk.operator.api.config.informer.InformerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
@@ -24,7 +25,9 @@ public class HAProxyConfigMap extends CRUDKubernetesDependentResource<ConfigMap,
     public HAProxyConfigMap() {
         super(ConfigMap.class);
         configureWith(new KubernetesDependentResourceConfigBuilder<ConfigMap>()
-                .withLabelSelector(Constants.LABEL_SELECTOR_HAPROXY_APP)
+                .withKubernetesDependentInformerConfig(InformerConfiguration.builder(ConfigMap.class)
+                        .withLabelSelector(Constants.LABEL_SELECTOR_HAPROXY_APP)
+                        .build())
                 .build());
     }
 

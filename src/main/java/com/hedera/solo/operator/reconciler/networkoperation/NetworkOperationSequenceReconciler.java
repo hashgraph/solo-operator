@@ -32,7 +32,6 @@ import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
-import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusHandler;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
@@ -48,8 +47,7 @@ import org.jboss.logging.Logger;
 
 /** {@code NetworkOperationReconciler} operates on a single CR per namespace at any given time. */
 @ControllerConfiguration(name = "network-operation-v2")
-public class NetworkOperationSequenceReconciler
-        implements ErrorStatusHandler<NetworkOperation>, Reconciler<NetworkOperation>, Cleaner<NetworkOperation> {
+public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOperation>, Cleaner<NetworkOperation> {
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
     private static final Sequencer<NetworkOperation> sequencer =
             new Sequencer<>(NetworkOperationSequenceReconciler::activeResources);
@@ -175,8 +173,13 @@ public class NetworkOperationSequenceReconciler
 
         // process the resource and set the desired status
         final ProcessorResult<NetworkOperationStatus> result = process(resource, context);
-        NetworkOperation desired =
-                edit(resource).with(r -> r.withStatus(result.getStatus())).build();
+        NetworkOperation desired = edit(new NetworkOperation())
+                .with(metadata -> metadata.editMetadata()
+                        .withName(resource.getMetadata().getName())
+                        .withNamespace(resource.getMetadata().getNamespace())
+                        .withUid(resource.getMetadata().getUid()))
+                .with(r -> r.withStatus(result.getStatus()))
+                .build();
         if (isDone(desired)) {
             log.infof(
                     "'%s/%s' [mode: %s, created: %s, uuid: %s]: MARK AS DONE",
@@ -209,7 +212,10 @@ public class NetworkOperationSequenceReconciler
         }
 
         String timestamp = timestamp();
-        return edit(resource)
+        return edit(new NetworkOperation())
+                .with(metadata -> metadata.editMetadata()
+                        .withName(resource.getMetadata().getName())
+                        .withNamespace(resource.getMetadata().getNamespace()))
                 .with(r -> r.withNewStatus() // initializing an empty new status
                         .withConsensusCapsules(capsuleNames)
                         .withPhase(NetworkOperationStatus.Phase.Pending)
