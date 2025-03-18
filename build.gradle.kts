@@ -1,5 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import io.fabric8.crdv2.generator.CRDGenerationInfo
+import io.fabric8.crdv2.generator.CRDGenerator
+import io.fabric8.crd.generator.collector.CustomResourceCollector
+import org.gradle.api.JavaVersion
+import org.gradle.api.tasks.SourceSetContainer
+import java.nio.file.Files
+
 plugins {
     id("com.hedera.solo.operator.conventions")
     id("com.hedera.solo.operator.versioning")
@@ -143,4 +150,54 @@ configurations.all {
         force("io.javaoperatorsdk:operator-framework-core:${javaoperatorsdkVersion}")
         force("io.javaoperatorsdk:operator-framework-junit-5:${javaoperatorsdkVersion}")
     }
+}
+
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath("io.fabric8:crd-generator-api-v2:7.1.0")
+        classpath("io.fabric8:crd-generator-collector:7.1.0")
+    }
+}
+
+tasks.register("generateCrds") {
+    description = "Generate CRDs from compiled custom resource classes"
+    group = "crd"
+
+    val sourceSet = project.extensions.getByName("sourceSets") as SourceSetContainer
+    val mainSourceSet = sourceSet.getByName("main")
+
+    val compileClasspathElements = mainSourceSet.compileClasspath.map { it.absolutePath }
+    val outputClassesDirs = mainSourceSet.output.classesDirs.asFileTree.files
+    val outputClasspathElements = outputClassesDirs.map { it.absolutePath }
+
+    val classpathElements = compileClasspathElements + outputClasspathElements
+    val filesToScan = outputClassesDirs.toList()
+    val outputDir = mainSourceSet.output.resourcesDir
+
+    doLast {
+        Files.createDirectories(outputDir!!.toPath())
+
+        val collector = CustomResourceCollector()
+            .withParentClassLoader(Thread.currentThread().contextClassLoader)
+            .withClasspathElements(classpathElements)
+            .withFilesToScan(filesToScan)
+
+        val crdGenerator = CRDGenerator()
+            .customResourceClasses(collector.findCustomResourceClasses())
+            .inOutputDir(outputDir)
+
+        val crdGenerationInfo: CRDGenerationInfo = crdGenerator.detailedGenerate()
+
+        crdGenerationInfo.crdDetailsPerNameAndVersion.forEach { (crdName, versionToInfo) ->
+            println("Generated CRD $crdName:")
+            versionToInfo.forEach { (version, info) -> println(" $version -> ${info.filePath}") }
+        }
+    }
+}
+
+tasks.named("classes") {
+    finalizedBy("generateCrds")
 }
