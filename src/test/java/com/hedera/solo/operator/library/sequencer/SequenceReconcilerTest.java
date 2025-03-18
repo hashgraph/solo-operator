@@ -45,7 +45,9 @@ class SequenceReconcilerTest {
         // reconcile the network operations
         UpdateControl<NetworkOperation> resp = sequenceReconciler.reconcile(no1, context);
         assertThat(resp.isPatchStatus()).isTrue();
-        assertThat(resp.getResource().getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Succeeded);
+        assertThat(resp.getResource()).isPresent();
+        assertThat(resp.getResource().orElseThrow().getStatus().getPhase())
+                .isEqualTo(NetworkOperationStatus.Phase.Succeeded);
 
         // try to process a resource that is not the first in the queue
         resp = sequenceReconciler.reconcile(no3, context);

@@ -16,7 +16,6 @@ import com.hedera.hashgraph.sdk.PrivateKey;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import org.awaitility.core.ConditionTimeoutException;
 
 public class HederaSdkCheckAddressBook {
 
@@ -63,10 +62,10 @@ public class HederaSdkCheckAddressBook {
         HederaSdkClientFactory sdkClientFactory = new HederaSdkClientFactory(kubernetesClient, namespace);
         for (String nodeName : consensusNodeNames) {
             AssertionError assertion = null;
-            ConditionTimeoutException timeout = null;
+            Exception exception = null;
             for (int attempt = 0; attempt < 10; attempt++) {
                 assertion = null;
-                timeout = null;
+                exception = null;
                 try {
                     checkAddressBook(
                             sdkClientFactory, hederaSdkClientContextFactory, nodeName, expectedAddresses, false);
@@ -74,18 +73,18 @@ public class HederaSdkCheckAddressBook {
                             sdkClientFactory, hederaSdkClientContextFactory, nodeName, expectedAddresses, true);
                 } catch (AssertionError e) {
                     assertion = e;
-                } catch (ConditionTimeoutException e) {
-                    timeout = e;
+                } catch (Exception e) {
+                    exception = e;
                 }
-                if (assertion == null && timeout == null) {
+                if (assertion == null && exception == null) {
                     break;
                 }
             }
             if (assertion != null) {
                 throw assertion;
             }
-            if (timeout != null) {
-                throw timeout;
+            if (exception != null) {
+                throw exception;
             }
         }
     }

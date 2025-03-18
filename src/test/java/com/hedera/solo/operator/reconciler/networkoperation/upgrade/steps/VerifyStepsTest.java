@@ -37,9 +37,8 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.config.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.IndexedResourceCache;
-import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
-import io.javaoperatorsdk.operator.api.reconciler.dependent.managed.ManagedDependentResourceContext;
+import io.javaoperatorsdk.operator.api.reconciler.dependent.managed.ManagedWorkflowAndDependentResourceContext;
 import io.javaoperatorsdk.operator.processing.event.EventSourceRetriever;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
@@ -359,18 +358,12 @@ public class VerifyStepsTest {
         }
 
         @Override
-        public <R> Set<R> getSecondaryResources(final Class<R> aClass) {
+        public <R> Set<R> getSecondaryResources(Class<R> aClass) {
             return Set.of();
         }
 
         @Override
-        public <R> Optional<R> getSecondaryResource(final Class<R> aClass, final String s) {
-            return Optional.empty();
-        }
-
-        @Override
-        public <R> Optional<R> getSecondaryResource(
-                final Class<R> aClass, final ResourceDiscriminator<R, NetworkOperation> resourceDiscriminator) {
+        public <R> Optional<R> getSecondaryResource(Class<R> aClass, String s) {
             return Optional.empty();
         }
 
@@ -380,7 +373,7 @@ public class VerifyStepsTest {
         }
 
         @Override
-        public ManagedDependentResourceContext managedDependentResourceContext() {
+        public ManagedWorkflowAndDependentResourceContext managedWorkflowAndDependentResourceContext() {
             return null;
         }
 
@@ -402,6 +395,11 @@ public class VerifyStepsTest {
         @Override
         public IndexedResourceCache<NetworkOperation> getPrimaryCache() {
             return null;
+        }
+
+        @Override
+        public boolean isNextReconciliationImminent() {
+            return false;
         }
     }
 }

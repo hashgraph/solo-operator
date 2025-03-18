@@ -14,6 +14,7 @@ import io.fabric8.kubernetes.api.model.EnvVar;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.javaoperatorsdk.operator.api.config.informer.InformerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.DependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
@@ -34,8 +35,9 @@ public class HAProxyDeployment extends CRUDKubernetesDependentResource<Deploymen
         super(Deployment.class);
         this.reconciler = reconciler;
         configureWith(new KubernetesDependentResourceConfigBuilder<Deployment>()
-                .withUseSSA(Boolean.FALSE)
-                .withLabelSelector(Constants.LABEL_SELECTOR_HAPROXY_APP)
+                .withKubernetesDependentInformerConfig(InformerConfiguration.builder(Deployment.class)
+                        .withLabelSelector((Constants.LABEL_SELECTOR_HAPROXY_APP))
+                        .build())
                 .build());
     }
 

@@ -10,12 +10,10 @@ import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.rbac.Role;
 import io.fabric8.kubernetes.api.model.rbac.RoleBuilder;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDNoGCKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
-import java.util.Optional;
 
-@KubernetesDependent(resourceDiscriminator = ConsensusCapsuleRole.Discriminator.class)
+@KubernetesDependent
 public class ConsensusCapsuleRole extends CRUDNoGCKubernetesDependentResource<Role, Orbit> {
     public static final String TEMPLATE = "consensus-capsule-role.yaml";
     public static final String NAME = "consensus-capsule-role";
@@ -35,18 +33,5 @@ public class ConsensusCapsuleRole extends CRUDNoGCKubernetesDependentResource<Ro
                 .withNamespace(primary.getMetadata().getName())
                 .endMetadata()
                 .build();
-    }
-
-    public static class Discriminator implements ResourceDiscriminator<Role, Orbit> {
-        @Override
-        public Optional<Role> distinguish(
-                final Class<Role> resource, final Orbit primary, final Context<Orbit> context) {
-            return Optional.ofNullable(context.getClient()
-                    .rbac()
-                    .roles()
-                    .inNamespace(primary.getMetadata().getName())
-                    .withName(NAME)
-                    .get());
-        }
     }
 }

@@ -11,12 +11,10 @@ import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDNoGCKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
-import java.util.Optional;
 
-@KubernetesDependent(resourceDiscriminator = ConsensusConfigMap.Discriminator.class)
+@KubernetesDependent
 public class ConsensusConfigMap extends CRUDNoGCKubernetesDependentResource<ConfigMap, Orbit> {
 
     public static final String TEMPLATE = "consensus-config-cm.yaml";
@@ -50,17 +48,5 @@ public class ConsensusConfigMap extends CRUDNoGCKubernetesDependentResource<Conf
                 .withNamespace(primary.getMetadata().getName())
                 .endMetadata()
                 .build();
-    }
-
-    public static class Discriminator implements ResourceDiscriminator<ConfigMap, Orbit> {
-        @Override
-        public Optional<ConfigMap> distinguish(
-                final Class<ConfigMap> resource, final Orbit primary, final Context<Orbit> context) {
-            return Optional.ofNullable(context.getClient()
-                    .configMaps()
-                    .inNamespace(primary.getMetadata().getName())
-                    .withName(NAME)
-                    .get());
-        }
     }
 }
