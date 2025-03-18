@@ -22,6 +22,7 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
+import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckProcessor;
 import com.hedera.solo.operator.reconciler.networkoperation.genesis.NetworkGenesisProcessor;
 import com.hedera.solo.operator.reconciler.networkoperation.node.NodeOperationProcessor;
@@ -41,6 +42,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import org.jboss.logging.Logger;
@@ -141,7 +143,7 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
                 || resource.getStatus().getConsensusCapsules() == null
                 || resource.getStatus().getConsensusCapsules().isEmpty()) {
             final NetworkOperation initialized = initialize(resource);
-            return UpdateControl.patchStatus(initialized).rescheduleAfter(DEFAULT_RESCHEDULE_DELAY);
+            return UpdateControl.patchResourceAndStatus(initialized).rescheduleAfter(DEFAULT_RESCHEDULE_DELAY);
         }
 
         // is this resource is done, then return
@@ -219,13 +221,18 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
         }
 
         log.infof(
-                "Initializing network operation: %s/%s [ consensus-capsules: %s]",
+                "Initialize network operation: %s/%s [ consensus-capsules: %s]",
                 namespace, resource.getMetadata().getName(), capsuleNames);
+
         String timestamp = timestamp();
         return edit(new NetworkOperation())
                 .with(metadata -> metadata.editMetadata()
                         .withName(resource.getMetadata().getName())
-                        .withNamespace(resource.getMetadata().getNamespace()))
+                        .withNamespace(resource.getMetadata().getNamespace())
+                        .withLabels(Map.of(
+                                Constants.LABEL_K8S_MANAGED_BY,
+                                Constants.SOLO_OPERATOR // force the label during initialization
+                                )))
                 .with(r -> r.withNewStatus() // initializing an empty new status
                         .withConsensusCapsules(capsuleNames)
                         .withPhase(NetworkOperationStatus.Phase.Pending)
