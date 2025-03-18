@@ -24,7 +24,6 @@ val smallryeCertificateGeneratorVersion: String by project
 dependencies {
     annotationProcessor("io.sundr:builder-annotations:${sundrVersion}")
     annotationProcessor("io.fabric8:kubernetes-client:${fabric8Version}")
-    annotationProcessor("io.fabric8:crd-generator-apt:${fabric8Version}")
     annotationProcessor("org.projectlombok:lombok:${lombokVersion}")
     implementation("io.fabric8:generator-annotations:${fabric8Version}")
 
@@ -61,6 +60,9 @@ dependencies {
     testImplementation("io.grpc:grpc-netty")
     testImplementation("com.hedera.fullstack:fullstack-helm-client:0.32.0")
     testImplementation("org.wiremock:wiremock:${wiremockVersion}")
+    testImplementation(
+        "io.smallrye.certs:smallrye-certificate-generator-junit5:${smallryeCertificateGeneratorVersion}"
+    )
     componentTestImplementation(
         "io.javaoperatorsdk:operator-framework-junit-5:${javaoperatorsdkVersion}"
     )
