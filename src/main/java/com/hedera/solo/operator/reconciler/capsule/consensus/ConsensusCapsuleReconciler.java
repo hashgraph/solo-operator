@@ -78,14 +78,14 @@ public class ConsensusCapsuleReconciler
             final ConsensusCapsule capsule, final Context<ConsensusCapsule> context) throws Exception {
         try {
             log.infof(
-                    "Consensus Capsule - Starting Reconciliation [ name = '%s' ]",
-                    capsule.getMetadata().getName());
+                    "Consensus Capsule - Starting Reconciliation [ name = '%s', namespace = '%s' ]",
+                    capsule.getMetadata().getName(), capsule.getMetadata().getNamespace());
 
             final Pod[] pods = context.getSecondaryResources(Pod.class).toArray(Pod[]::new);
             final ConsensusCapsuleStatus.Phase phase = phase(pods);
             log.infof(
-                    "Consensus Capsule - Phase [ name = '%s', phase = '%s' ]",
-                    capsule.getMetadata().getName(), phase);
+                    "Consensus Capsule - Phase [ name = '%s', namespace = '%s', phase = '%s' ]",
+                    capsule.getMetadata().getName(), capsule.getMetadata().getNamespace(), phase);
 
             final List<Condition> conditions = Optional.ofNullable(capsule.getStatus())
                     .map(ConsensusCapsuleStatus::getConditions)
@@ -111,8 +111,8 @@ public class ConsensusCapsuleReconciler
             return UpdateControl.patchStatus(desired);
         } finally {
             log.infof(
-                    "Consensus Capsule - Finished Reconciliation [ name = '%s' ]",
-                    capsule.getMetadata().getName());
+                    "Consensus Capsule - Finished Reconciliation [ name = '%s' namespace = '%s' ]",
+                    capsule.getMetadata().getName(), capsule.getMetadata().getNamespace());
         }
     }
 
