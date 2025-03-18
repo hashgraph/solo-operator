@@ -11,7 +11,7 @@ spec:
         ledgerId: "298"
         externalAddresses: []
     networkSettings:
-      state.mainClassNameOverride: "                   com.hedera.services.ServicesMain"
+      state.mainClassNameOverride: "com.hedera.services.ServicesMain"
     permissionConfiguration:
       appendContent: "0-*"
       approveAllowances: "0-*"

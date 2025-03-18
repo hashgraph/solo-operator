@@ -114,17 +114,6 @@ spec:
               auth:
                 enabled: false
               endpoint: "http://loki.telemetry.svc.cluster.local:3100/loki/api/v1/push"
-    volumes: # mix-n-match volumes: except logs and stats, rest are provisioned as empty dir
-      logs:
-        persistentVolumeClaim:
-          claimName: node2-output-pvc-manual # use a PVC provisioned manually
-  persistentVolumeClaims: # mix-n-match volumes: only one PVC is provisioned by operator
-    stats:
-      accessModes:
-        - ReadWriteOnce
-      resources:
-        requests:
-          storage: 5Gi # 1/10th of production size
   secrets:
     secretResources:
       grpcTlsPrivateKey:
