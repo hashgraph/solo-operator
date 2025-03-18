@@ -61,6 +61,9 @@ dependencies {
     testImplementation("io.grpc:grpc-netty")
     testImplementation("com.hedera.fullstack:fullstack-helm-client:0.32.0")
     testImplementation("org.wiremock:wiremock:${wiremockVersion}")
+    testImplementation(
+        "io.smallrye.certs:smallrye-certificate-generator-junit5:${smallryeCertificateGeneratorVersion}"
+    )
     componentTestImplementation(
         "io.javaoperatorsdk:operator-framework-junit-5:${javaoperatorsdkVersion}"
     )
