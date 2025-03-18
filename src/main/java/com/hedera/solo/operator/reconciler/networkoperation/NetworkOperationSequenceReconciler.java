@@ -130,6 +130,13 @@ public class NetworkOperationSequenceReconciler
     @Override
     public UpdateControl<NetworkOperation> reconcile(
             final NetworkOperation resource, final Context<NetworkOperation> context) throws Exception {
+        log.infof(
+                "'%s/%s' [mode: %s, created: %s, uuid: %s]: Reconciling",
+                resource.getMetadata().getNamespace(),
+                resource.getMetadata().getName(),
+                resource.getSpec().getMode(),
+                resource.getMetadata().getCreationTimestamp(),
+                resource.getMetadata().getUid());
         // if it hasn't been initialized yet, then initialize and reschedule so that initialized resource is persisted.
         // note, it initializes a new status object with consensus capsule names and phase as "Pending"
         if (resource.getStatus() == null
@@ -208,6 +215,9 @@ public class NetworkOperationSequenceReconciler
             capsuleNames.add(capsule.getMetadata().getName());
         }
 
+        log.infof(
+                "Initializing network operation: %s/%s [ consensus-capsules: %s]",
+                namespace, resource.getMetadata().getName(), capsuleNames);
         String timestamp = timestamp();
         return edit(resource)
                 .with(r -> r.withNewStatus() // initializing an empty new status

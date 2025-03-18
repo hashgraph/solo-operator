@@ -61,6 +61,7 @@ import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
 import io.quarkus.runtime.util.StringUtil;
+import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -69,12 +70,14 @@ import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import org.jboss.logging.Logger;
 
 @KubernetesDependent(
         labelSelector =
                 "app.kubernetes.io/managed-by=solo-operator,app.kubernetes.io/part-of=consensus-node,app.kubernetes.io/component=deployment")
 public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deployment, ConsensusCapsule> {
     public static final String NAME_SUFFIX = "-deploy";
+    private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     public static final String ERR_BOTH_HOSTPATH_PVC_NOT_ALLOWED =
             "a volume cannot have both HostPath and PersistentVolumeClaim specification: '%s'";
@@ -109,6 +112,9 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         Objects.requireNonNull(context);
         Objects.requireNonNull(context.getClient());
 
+        log.infof(
+                "Validating input for ConsensusCapsule: %s/%s ",
+                primary.getMetadata().getNamespace(), primary.getMetadata().getName());
         // namespace must match with the orbit name
         final String orbit = primary.getSpec().getOrbit();
         if (!orbit.equals(primary.getMetadata().getNamespace())) {
