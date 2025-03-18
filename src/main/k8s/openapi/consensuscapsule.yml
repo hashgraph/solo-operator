@@ -77,6 +77,17 @@ components:
         - podProperties
         - weight
       properties:
+        deleteMe:
+          type: object
+          not:
+            allOf:
+              - required: [ "apple" ]
+              - required: [ "banana" ]
+          properties:
+            apple:
+              type: object
+            banana:
+              type: object
         secrets:
           type: object
           oneOf:
