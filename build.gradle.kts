@@ -24,7 +24,6 @@ val smallryeCertificateGeneratorVersion: String by project
 dependencies {
     annotationProcessor("io.sundr:builder-annotations:${sundrVersion}")
     annotationProcessor("io.fabric8:kubernetes-client:${fabric8Version}")
-    annotationProcessor("io.fabric8:crd-generator-apt:${fabric8Version}")
     annotationProcessor("org.projectlombok:lombok:${lombokVersion}")
     implementation("io.fabric8:generator-annotations:${fabric8Version}")
 

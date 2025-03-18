@@ -193,11 +193,11 @@ components:
         startTime:
           description: The time at which the `Orbit` was started.
           type: string
-#          format: date-time
+          format: date-time
         expirationTime:
           description: The time at which the `Orbit` will expire.
           type: string
-#          format: date-time
+          format: date-time
         observedGeneration:
           description: The generation observed by the operator.
           type: integer
