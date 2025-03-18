@@ -3,6 +3,9 @@ kind: PersistentVolumeClaim
 metadata:
   name: node2-output-pvc-manual
   namespace: solo-orbit
+  labels:
+    app.kubernetes.io/component: pvc
+    app.kubernetes.io/managed-by: solo-operator
 spec:
   accessModes:
     - ReadWriteOnce

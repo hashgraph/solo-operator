@@ -12,13 +12,13 @@ function setup() {
     helm install \
         --namespace minio-tenant \
         --create-namespace \
-        --values minio-tenant/values.yaml \
+        --values setup/minio-values.yaml \
         minio-tenant minio-operator/tenant
 
     helm install loki grafana/loki-stack \
       --namespace telemetry\
       --create-namespace \
-      --values telemetry/loki-stack.yaml
+      --values setup/loki-stack.yaml
 
     echo ">> Waiting 180s for Loki to be ready..."
     kubectl wait --for=condition=ready pod -l app=loki -n telemetry --timeout 180s || return $?
@@ -28,17 +28,43 @@ function setup() {
 }
 
 function deploy() {
-    kubectl apply -f ./orbit/solo-orbit.yaml
+    # orbit
+    kubectl apply -f common/orbit.yaml
     until kubectl get namespace solo-orbit &> /dev/null; do
         echo ">> Waiting for solo-orbit namespace to be ready..."
         sleep 5
     done
-    kubectl apply -k .
+
+    # common
+    kubectl apply -f common/configs.yaml
+    kubectl apply -f common/secrets.yaml
+
+    # node1
+    kubectl apply -f node1/consensus-capsule.yaml
+    kubectl apply -f node1/secrets.yaml
+
+    # node2
+    kubectl apply -f node2/consensus-capsule.yaml
+    kubectl apply -f node2/secrets.yaml
+    kubectl apply -f node2/pvcs.yaml
+
+    # node3
+    kubectl apply -f node3/consensus-capsule.yaml
+    kubectl apply -f node3/secrets.yaml
 }
 
 function destroy() {
-    kubectl delete -k .
-    kubectl delete -f ./orbit/solo-orbit.yaml
+    kubectl delete -f node3/consensus-capsule.yaml
+    kubectl delete -f node3/secrets.yaml
+    kubectl delete -f node2/consensus-capsule.yaml
+    kubectl delete -f node2/secrets.yaml
+    kubectl delete -f node2/pvcs.yaml
+    kubectl delete -f node1/consensus-capsule.yaml
+    kubectl delete -f node1/secrets.yaml
+    kubectl delete -f common/configs.yaml
+    kubectl delete -f common/secrets.yaml
+    kubectl delete -f common/orbit.yaml
+    kubectl delete namespace solo-orbit
 }
 
 function cleanup() {

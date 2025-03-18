@@ -2,10 +2,15 @@ apiVersion: operator.solo.hedera.com/v1alpha1
 kind: ConsensusCapsule
 metadata:
   name: node2
+  namespace: "solo-orbit"
+  labels:
+    app.kubernetes.io/component: consensus-node
+    app.kubernetes.io/managed-by: solo-operator
 spec:
   orbit: solo-orbit
   nodeId: 1
   accountId: "0.0.4"
+  weight: 1
   podProperties: # FIXME use other pod properties
     containers:
       consensusNode:

@@ -1,11 +1,16 @@
 apiVersion: operator.solo.hedera.com/v1alpha1
 kind: ConsensusCapsule
 metadata:
-  name: node3
+  name: node1
+  namespace: "solo-orbit"
+  labels:
+    app.kubernetes.io/component: consensus-node
+    app.kubernetes.io/managed-by: solo-operator
 spec:
   orbit: solo-orbit
-  nodeId: 2
-  accountId: "0.0.5"
+  nodeId: 0
+  accountId: "0.0.3"
+  weight: 1
   podProperties: # FIXME use other pod properties
     containers:
       consensusNode:
@@ -40,7 +45,6 @@ spec:
           streamExtension: "rcd.gz"
           sigExtension: "rcd_sig"
           bucketName: "solo-streams"
-          bucketPath: "not-set"
           s3:
             enabled: true
             accessKey: solo-operator
@@ -109,31 +113,58 @@ spec:
               auth:
                 enabled: false
               endpoint: "http://loki.telemetry.svc.cluster.local:3100/loki/api/v1/push"
-    volumes: # mix-n-match volumes: except logs and stats, rest are provisioned as empty dir
-      logs:
-        persistentVolumeClaim:
-          claimName: node2-output-pvc-manual # use a PVC provisioned manually
-  persistentVolumeClaims: # mix-n-match volumes: only one PVC is provisioned by operator
+  persistentVolumeClaims:
+    logs:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 5Gi # 1/10th of production size
     stats:
       accessModes:
         - ReadWriteOnce
       resources:
         requests:
           storage: 5Gi # 1/10th of production size
+    states:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 50Gi # 1/10th of production size
+    upgrade:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 200Mi
+    streams:
+      record:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi # 1/10th of production size
+      events:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi # 1/10th of production size
   secrets:
     secretResources:
       grpcTlsPrivateKey:
-        keyName: "hedera-node3.key"
-        secretName: "node3-grpc-tls-keys"
+        keyName: "hedera-node1.key"
+        secretName: "node1-grpc-tls-keys"
       grpcTlsPublicCertificate:
-        keyName: "hedera-node3.crt"
-        secretName: "node3-grpc-tls-keys"
+        keyName: "hedera-node1.crt"
+        secretName: "node1-grpc-tls-keys"
       signingPrivateKey:
-        keyName: "s-private-node3.pem"
-        secretName: "node3-gossip-keys"
+        keyName: "s-private-node1.pem"
+        secretName: "node1-gossip-keys"
       signingPublicCertificate:
-        keyName: "s-public-node3.pem"
-        secretName: "node3-gossip-keys"
+        keyName: "s-public-node1.pem"
+        secretName: "node1-gossip-keys"
   log4j2.xml: "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!-- monitorInterval=\"\
     600\" , if any change to log level will be effective after 10 minute -->\n<Configuration\
     \ status=\"WARN\" monitorInterval=\"600\">\n  <Appenders>\n    <Console name=\"\
