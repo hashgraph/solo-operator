@@ -22,6 +22,7 @@ spec:
         openAPIV3Schema:
           required:
             - spec
+            - status
           properties:
             spec:
               $ref: "../openapi/consensuscapsule.yml#/components/schemas/ConsensusCapsuleSpec"
@@ -29,5 +30,19 @@ spec:
               $ref: "../openapi/consensuscapsule.yml#/components/schemas/ConsensusCapsuleStatus"
       served: true
       storage: true
+      subresources:
+        status: { }
+    - name: v1alpha2
+      schema:
+        openAPIV3Schema:
+          required:
+            - spec
+          properties:
+            spec:
+              $ref: "../openapi/consensuscapsule.yml#/components/schemas/ConsensusCapsuleSpec"
+            status:
+              $ref: "../openapi/consensuscapsule.yml#/components/schemas/ConsensusCapsuleStatus"
+      served: true
+      storage: false
       subresources:
         status: { }

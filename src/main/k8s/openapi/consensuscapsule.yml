@@ -77,6 +77,17 @@ components:
         - podProperties
         - weight
       properties:
+        deleteMe:
+          type: object
+          not:
+            allOf:
+              - required: [ "apple" ]
+              - required: [ "banana" ]
+          properties:
+            apple:
+              type: object
+            banana:
+              type: object
         secrets:
           type: object
           oneOf:
@@ -297,6 +308,7 @@ components:
     ConsensusCapsuleStatus:
       description: The current status of a `ConsensusCapsule`.
       type: object
+      default: {}
       properties:
         phase:
           description: The current phase of the `ConsensusCapsule`.

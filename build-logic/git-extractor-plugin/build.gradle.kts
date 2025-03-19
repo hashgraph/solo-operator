@@ -7,6 +7,7 @@ plugins {
 
 repositories {
     // Use Maven Central for resolving dependencies.
+    mavenLocal()
     mavenCentral()
     maven {
         url = uri("https://artifacts.swirldslabs.io/artifactory/central-maven-snapshot-external/")

@@ -1,3 +1,7 @@
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
+import org.yaml.snakeyaml.Yaml
+
 // SPDX-License-Identifier: Apache-2.0
 
 import io.fabric8.crdv2.generator.CRDGenerationInfo
@@ -70,6 +74,8 @@ dependencies {
     testImplementation(
         "io.smallrye.certs:smallrye-certificate-generator-junit5:${smallryeCertificateGeneratorVersion}"
     )
+    testImplementation("io.fabric8:crd-generator-api-v2:${fabric8Version}")
+    testImplementation("io.fabric8:crd-generator-collector:${fabric8Version}")
     componentTestImplementation(
         "io.javaoperatorsdk:operator-framework-junit-5:${javaoperatorsdkVersion}"
     )
@@ -149,8 +155,75 @@ configurations.all {
         force("io.javaoperatorsdk:micrometer-support:${javaoperatorsdkVersion}")
         force("io.javaoperatorsdk:operator-framework-core:${javaoperatorsdkVersion}")
         force("io.javaoperatorsdk:operator-framework-junit-5:${javaoperatorsdkVersion}")
+        force("io.fabric8:crd-generator-api:${fabric8Version}")
+        force("io.fabric8:crd-generator-api-v2:${fabric8Version}")
+        force("io.fabric8:crd-generator-collector:${fabric8Version}")
+        force("io.fabric8:generator-annotations:${fabric8Version}")
+        force("io.fabric8:knative-client:${fabric8Version}")
+        force("io.fabric8:knative-model:${fabric8Version}")
+        force("io.fabric8:kubernetes-client:${fabric8Version}")
+        force("io.fabric8:kubernetes-client-api:${fabric8Version}")
+        force("io.fabric8:kubernetes-client-bom:${fabric8Version}")
+        force("io.fabric8:kubernetes-httpclient-vertx:${fabric8Version}")
+        force("io.fabric8:kubernetes-model-admissionregistration:${fabric8Version}")
+        force("io.fabric8:kubernetes-model-apiextensions:${fabric8Version}")
+        force("io.fabric8:kubernetes-model-apps:${fabric8Version}")
+        force("io.fabric8:kubernetes-model-autoscaling:${fabric8Version}")
+        force("io.fabric8:kubernetes-model-batch:${fabric8Version}")
+        force("io.fabric8:kubernetes-model-certificates:${fabric8Version}")
+        force("io.fabric8:kubernetes-model-common:${fabric8Version}")
+        force("io.fabric8:kubernetes-model-coordination:${fabric8Version}")
+        force("io.fabric8:kubernetes-model-core:${fabric8Version}")
+        force("io.fabric8:kubernetes-model-discovery:${fabric8Version}")
+        force("io.fabric8:kubernetes-model-events:${fabric8Version}")
+        force("io.fabric8:kubernetes-model-extensions:${fabric8Version}")
+        force("io.fabric8:kubernetes-model-flowcontrol:${fabric8Version}")
+        force("io.fabric8:kubernetes-model-gatewayapi:${fabric8Version}")
+        force("io.fabric8:kubernetes-model-metrics:${fabric8Version}")
+        force("io.fabric8:kubernetes-model-networking:${fabric8Version}")
+        force("io.fabric8:kubernetes-model-node:${fabric8Version}")
+        force("io.fabric8:kubernetes-model-policy:${fabric8Version}")
+        force("io.fabric8:kubernetes-model-rbac:${fabric8Version}")
+        force("io.fabric8:kubernetes-model-resource:${fabric8Version}")
+        force("io.fabric8:kubernetes-model-scheduling:${fabric8Version}")
+        force("io.fabric8:kubernetes-model-storageclass:${fabric8Version}")
+        force("io.fabric8:maven-model-helper:37:${fabric8Version}")
+        force("io.fabric8:openshift-client:${fabric8Version}")
+        force("io.fabric8:openshift-client-api:${fabric8Version}")
+        force("io.fabric8:openshift-model:${fabric8Version}")
+        force("io.fabric8:openshift-model-autoscaling:${fabric8Version}")
+        force("io.fabric8:openshift-model-config:${fabric8Version}")
+        force("io.fabric8:openshift-model-console:${fabric8Version}")
+        force("io.fabric8:openshift-model-hive:${fabric8Version}")
+        force("io.fabric8:openshift-model-installer:${fabric8Version}")
+        force("io.fabric8:openshift-model-machine:${fabric8Version}")
+        force("io.fabric8:openshift-model-machineconfiguration:${fabric8Version}")
+        force("io.fabric8:openshift-model-miscellaneous:${fabric8Version}")
+        force("io.fabric8:openshift-model-monitoring:${fabric8Version}")
+        force("io.fabric8:openshift-model-operator:${fabric8Version}")
+        force("io.fabric8:openshift-model-operatorhub:${fabric8Version}")
+        force("io.fabric8:openshift-model-storageversionmigrator:${fabric8Version}")
+        force("io.fabric8:openshift-model-tuned:${fabric8Version}")
+        force("io.fabric8:openshift-model-whereabouts:${fabric8Version}")
+        force("io.fabric8:zjsonpatch:${fabric8Version}")
     }
 }
+
+tasks.register("modifyCRD") {
+    doLast {
+        var mapper = ObjectMapper(YAMLFactory())
+        var f = project.layout.buildDirectory.dir("kubernetes").get().asFile.listFiles()
+        for (ff in f!!) {
+            var orig = project.layout.buildDirectory.dir("generated/object-model-generator/main/crd").get().file(ff.name).asFile
+            var m1 = mapper.readValue(orig, Map::class.java)
+            var m2 = mapper.readValue(ff, Map::class.java)
+            println(ff.absolutePath)
+        }
+    }
+}
+
+tasks.getByName("build").dependsOn("modifyCRD")
+tasks.getByName("modifyCRD").dependsOn("quarkusBuild")
 
 buildscript {
     repositories {

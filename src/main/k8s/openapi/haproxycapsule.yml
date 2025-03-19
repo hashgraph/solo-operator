@@ -48,6 +48,7 @@ components:
           x-java-type: io.fabric8.kubernetes.api.model.networking.v1.IngressSpec
     HAProxyCapsuleStatus:
       type: object
+      default: {}
       properties:
         phase:
           description: The current phase of the `ConsensusCapsule`.
