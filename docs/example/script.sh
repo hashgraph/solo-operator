@@ -51,9 +51,15 @@ function deploy() {
     # node3
     kubectl apply -f node3/consensus-capsule.yaml
     kubectl apply -f node3/secrets.yaml
+
+    # node4
+    kubectl apply -f node4/consensus-capsule.yaml
+    kubectl apply -f node4/secrets.yaml
 }
 
 function destroy() {
+    kubectl delete -f node4/consensus-capsule.yaml
+    kubectl delete -f node4/secrets.yaml
     kubectl delete -f node3/consensus-capsule.yaml
     kubectl delete -f node3/secrets.yaml
     kubectl delete -f node2/consensus-capsule.yaml
