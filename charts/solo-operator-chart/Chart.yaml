@@ -1,0 +1,5 @@
+---
+name: "solo-operator-chart"
+version: "0.1.5"
+apiVersion: "v2"
+appVersion: "0.1.0"

@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+mkdir -p "/opt/hgcapp"
+mkdir -p "/opt/hgcapp/eventsStreams"
+mkdir -p "/opt/hgcapp/recordStreams"
+mkdir -p "/opt/hgcapp/services-hedera"
+mkdir -p "/opt/hgcapp/services-hedera/HapiApp2.0"
+mkdir -p "/opt/hgcapp/services-hedera/HapiApp2.0/output"
+mkdir -p "/opt/hgcapp/services-hedera/HapiApp2.0/data"
+mkdir -p "/opt/hgcapp/services-hedera/HapiApp2.0/data/apps"
+mkdir -p "/opt/hgcapp/services-hedera/HapiApp2.0/data/config"
+mkdir -p "/opt/hgcapp/services-hedera/HapiApp2.0/data/keys"
+mkdir -p "/opt/hgcapp/services-hedera/HapiApp2.0/data/lib"
+mkdir -p "/opt/hgcapp/services-hedera/HapiApp2.0/data/stats"
+mkdir -p "/opt/hgcapp/services-hedera/HapiApp2.0/data/saved"
+mkdir -p "/opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade"

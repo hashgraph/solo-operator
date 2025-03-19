@@ -1,0 +1,3 @@
+---
+watchNamespaces: "JOSDK_ALL_NAMESPACES"
+image: "ghcr.io/hashgraph/solo-operator/solo-operator:0.1.0"

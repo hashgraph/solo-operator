@@ -1,0 +1,32 @@
+---
+apiVersion: "rbac.authorization.k8s.io/v1"
+kind: "ClusterRole"
+metadata:
+  name: "haproxycapsulereconciler-cluster-role"
+rules:
+- apiGroups:
+  - "operator.solo.hedera.com"
+  resources:
+  - "haproxycapsules"
+  - "haproxycapsules/status"
+  - "haproxycapsules/finalizers"
+  verbs:
+  - "get"
+  - "list"
+  - "watch"
+  - "patch"
+  - "update"
+  - "create"
+  - "delete"
+- apiGroups:
+  - ""
+  resources:
+  - "secrets"
+  verbs:
+  - "create"
+  - "delete"
+  - "get"
+  - "list"
+  - "patch"
+  - "update"
+  - "watch"

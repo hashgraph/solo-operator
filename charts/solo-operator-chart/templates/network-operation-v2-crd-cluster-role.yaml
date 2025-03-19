@@ -1,0 +1,32 @@
+---
+apiVersion: "rbac.authorization.k8s.io/v1"
+kind: "ClusterRole"
+metadata:
+  name: "network-operation-v2-cluster-role"
+rules:
+- apiGroups:
+  - "operator.solo.hedera.com"
+  resources:
+  - "networkoperations"
+  - "networkoperations/status"
+  - "networkoperations/finalizers"
+  verbs:
+  - "get"
+  - "list"
+  - "watch"
+  - "patch"
+  - "update"
+  - "create"
+  - "delete"
+- apiGroups:
+  - ""
+  resources:
+  - "secrets"
+  verbs:
+  - "create"
+  - "delete"
+  - "get"
+  - "list"
+  - "patch"
+  - "update"
+  - "watch"

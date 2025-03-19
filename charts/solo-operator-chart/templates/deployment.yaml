@@ -1,0 +1,84 @@
+---
+apiVersion: "apps/v1"
+kind: "Deployment"
+metadata:
+  annotations:
+    app.quarkus.io/quarkus-version: "3.19.3"
+    app.quarkus.io/commit-id: "7b60d992bd2a7a745d67a3e7526b256a553b34e1"
+    app.quarkus.io/vcs-uri: "https://github.com/hashgraph/solo-operator.git"
+    app.quarkus.io/build-timestamp: "2025-03-19 - 00:19:07 +0000"
+  labels:
+    app.kubernetes.io/name: "solo-operator"
+    app.kubernetes.io/version: "{{ .Chart.AppVersion }}"
+    app.kubernetes.io/managed-by: "quarkus"
+  name: "solo-operator"
+  namespace: "solo-operator"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: "solo-operator"
+  template:
+    metadata:
+      annotations:
+        app.quarkus.io/quarkus-version: "3.19.3"
+        app.quarkus.io/commit-id: "7b60d992bd2a7a745d67a3e7526b256a553b34e1"
+        app.quarkus.io/vcs-uri: "https://github.com/hashgraph/solo-operator.git"
+        app.quarkus.io/build-timestamp: "2025-03-19 - 00:19:07 +0000"
+      labels:
+        app.kubernetes.io/managed-by: "quarkus"
+        app.kubernetes.io/version: "{{ .Chart.AppVersion }}"
+        app.kubernetes.io/name: "solo-operator"
+    spec:
+      containers:
+      - env:
+        - name: "KUBERNETES_NAMESPACE"
+          valueFrom:
+            fieldRef:
+              fieldPath: "metadata.namespace"
+        - name: "QUARKUS_OPERATOR_SDK_CONTROLLERS_CONSENSUS_CAPSULE_NAMESPACES"
+          value: {{ .Values.watchNamespaces }}
+        - name: "QUARKUS_OPERATOR_SDK_CONTROLLERS_NETWORK_OPERATION_V2_NAMESPACES"
+          value: {{ .Values.watchNamespaces }}
+        - name: "QUARKUS_OPERATOR_SDK_CONTROLLERS_ORBIT_NAMESPACES"
+          value: {{ .Values.watchNamespaces }}
+        - name: "QUARKUS_OPERATOR_SDK_CONTROLLERS_HAPROXYCAPSULERECONCILER_NAMESPACES"
+          value: {{ .Values.watchNamespaces }}
+        image: {{ .Values.image }}
+        imagePullPolicy: "Always"
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: "/q/health/live"
+            port: 8080
+            scheme: "HTTP"
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+        name: "solo-operator"
+        ports:
+        - containerPort: 8080
+          name: "http"
+          protocol: "TCP"
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: "/q/health/ready"
+            port: 8080
+            scheme: "HTTP"
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+        startupProbe:
+          failureThreshold: 3
+          httpGet:
+            path: "/q/health/started"
+            port: 8080
+            scheme: "HTTP"
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+      serviceAccountName: {{ .Chart.Name }}
