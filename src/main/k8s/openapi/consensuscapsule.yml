@@ -308,6 +308,7 @@ components:
     ConsensusCapsuleStatus:
       description: The current status of a `ConsensusCapsule`.
       type: object
+      default: {}
       properties:
         phase:
           description: The current phase of the `ConsensusCapsule`.

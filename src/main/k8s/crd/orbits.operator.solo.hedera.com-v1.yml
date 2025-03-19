@@ -20,6 +20,7 @@ spec:
         openAPIV3Schema:
           required:
             - spec
+            - status
           properties:
             spec:
               $ref: "../openapi/orbit.yml#/components/schemas/OrbitSpec"

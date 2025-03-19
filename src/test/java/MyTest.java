@@ -29,10 +29,10 @@ public class MyTest {
             }
             File orig = new File("build/generated/object-model-generator/main/crd/" + file.getName());
             if (orig.exists()) {
-                JsonNode jn1 = mapper.readTree(file);
-                JsonNode jn2 = mapper.readTree(orig);
+                JsonNode in = mapper.readTree(orig);
+                JsonNode out = mapper.readTree(file);
                 // update node, then write it back.
-                update(map(jn1), map(jn2));
+                update(map(in), map(out));
                 int i = 1;
             }
         }
@@ -42,14 +42,14 @@ public class MyTest {
         return StreamSupport.stream(jn.at("/spec/versions").spliterator(), false).collect(Collectors.toMap(e -> e.get("name").asText(), e -> e.at("/schema/openAPIV3Schema")));
     }
 
-    void update(Map<String, JsonNode> out, Map<String, JsonNode> omg) {
+    void update(Map<String, JsonNode> in, Map<String, JsonNode> out) {
         for (String key : out.keySet()) {
-            if (omg.containsKey(key)) {
-                update(out.get(key), omg.get(key));
+            if (in.containsKey(key)) {
+                update(in.get(key), out.get(key));
             }
         }
     }
-    void update(JsonNode out, JsonNode omg) {
+    void update(JsonNode in, JsonNode out) {
         int i = 1;
     }
 }

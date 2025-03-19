@@ -175,6 +175,7 @@ components:
     OrbitStatus:
       description: The current status of an `Orbit`.
       type: object
+      default: {}
       properties:
         phase:
           description: The current phase of the `Orbit`.
