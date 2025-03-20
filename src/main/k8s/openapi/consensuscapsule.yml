@@ -125,6 +125,9 @@ components:
         nodeId:
           type: integer
           format: int64
+        internalAddress:
+          description: Internal FQDN or IP address of the consensus capsule.
+          type: string
         externalAddress:
           description: External FQDN or IP address of the consensus capsule.
           type: string

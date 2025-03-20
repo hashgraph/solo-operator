@@ -96,8 +96,7 @@ public class MultipleOrbitTest {
                             .withNickName(nodeName)
                             .withSelfName(nodeName)
                             .withWeight(1L)
-                            .withInternalHostname("node%s.consensus.multipleorbittest-%s.svc%s"
-                                    .formatted(id + 1, names.get(id), domain != null ? "." + domain : ""))
+                            .withInternalHostname("127.0.0.1")
                             .withInternalPort(50111)
                             .withExternalHostname(nodeName + "-svc.multipleorbittest-" + names.get(id))
                             .withExternalPort(50111)
@@ -288,6 +287,7 @@ public class MultipleOrbitTest {
                         .withAccountId("0.0." + (id + 3))
                         .withWeight(1L)
                         .withNodeId(id)
+                        .withInternalAddress("127.0.0.1")
                         .withExternalAddress(prepareNodeName(id) + "-svc." + namespace))
                 .with(image -> image.editSpec()
                         .editPodProperties()
