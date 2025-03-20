@@ -78,3 +78,16 @@ rules:
   - "patch"
   - "update"
   - "watch"
+- apiGroups:
+  - ""
+  resources:
+  - "events"
+  verbs:
+  - "create"
+  - "delete"
+  - "get"
+  - "list"
+  - "patch"
+  - "update"
+  - "watch"
+  - "deletecollection"

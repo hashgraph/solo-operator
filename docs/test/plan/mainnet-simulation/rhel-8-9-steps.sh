@@ -329,7 +329,7 @@ ipv6:
 # Routing Configuration
 routingMode: native
 autoDirectNodeRoutes: true
-ipv4NativeRoutingCIDR: 10.128.0.0/20
+#ipv4NativeRoutingCIDR: 10.128.0.0/20
 
 # Load Balancer Configuration
 loadBalancer:
@@ -349,6 +349,8 @@ hostPort:
 # BPF & IP Masquerading Support
 ipMasqAgent:
   enabled: true
+  config:
+    nonMasqueradeCIDRs: []
 bpf:
   masquerade: true
   hostLegacyRouting: false
