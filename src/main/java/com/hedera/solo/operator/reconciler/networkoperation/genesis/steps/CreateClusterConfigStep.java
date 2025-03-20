@@ -232,8 +232,10 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
     }
 
     public static String computeNodeInternalAddress(String domain, ConsensusCapsule capsule, String namespace) {
-        return "%s.consensus.%s.svc%s"
-                .formatted(capsule.getMetadata().getName(), namespace, domain != null ? "." + domain : "");
+        return capsule.getSpec().getInternalAddress() != null
+                ? capsule.getSpec().getInternalAddress()
+                : "%s.consensus.%s.svc%s"
+                        .formatted(capsule.getMetadata().getName(), namespace, domain != null ? "." + domain : "");
     }
 
     ConfigMapBuilder preparePodIPs(final ConfigMapBuilder builder, NetworkOperation primary) {
