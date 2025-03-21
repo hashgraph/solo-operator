@@ -32,10 +32,16 @@ public class NetworkGenesisTask extends AbstractProcessorTask<NetworkOperation, 
 
     private final NetworkCheckProcessor deferredProcessor;
 
+    private final NetworkGenesisTaskConfig genesisConfig;
+
     @Inject
-    public NetworkGenesisTask(CustomResourceManager customResourceManager, NetworkCheckProcessor deferredProcessor) {
+    public NetworkGenesisTask(
+            CustomResourceManager customResourceManager,
+            NetworkCheckProcessor deferredProcessor,
+            NetworkGenesisTaskConfig genesisConfig) {
         this.customResourceManager = customResourceManager;
         this.deferredProcessor = deferredProcessor;
+        this.genesisConfig = genesisConfig;
     }
 
     @Override
@@ -43,7 +49,10 @@ public class NetworkGenesisTask extends AbstractProcessorTask<NetworkOperation, 
         return List.of(
                 new CheckConsensusNodeSecretsStep(customResourceManager),
                 new CreatePublicKeysConfigStep(customResourceManager),
-                new RetryStep<>(new CreateClusterConfigStep(customResourceManager), Duration.ofSeconds(2), 150));
+                new RetryStep<>(
+                        new CreateClusterConfigStep(customResourceManager),
+                        Duration.ofSeconds(genesisConfig.retryInterval()),
+                        genesisConfig.maxRetries()));
     }
 
     @Override

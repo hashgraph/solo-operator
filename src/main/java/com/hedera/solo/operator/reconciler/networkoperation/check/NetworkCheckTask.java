@@ -45,9 +45,12 @@ public class NetworkCheckTask extends AbstractProcessorTask<NetworkOperation, Ne
 
     private final CustomResourceManager customResourceManager;
 
+    private final NetworkCheckTaskConfig checkConfig;
+
     @Inject
-    public NetworkCheckTask(CustomResourceManager customResourceManager) {
+    public NetworkCheckTask(CustomResourceManager customResourceManager, NetworkCheckTaskConfig checkConfig) {
         this.customResourceManager = customResourceManager;
+        this.checkConfig = checkConfig;
     }
 
     @Override
@@ -55,7 +58,10 @@ public class NetworkCheckTask extends AbstractProcessorTask<NetworkOperation, Ne
         return List.of(
                 // new CheckOrbitConfigurationStep(customResourceManager),
                 // new CheckConsensusPodConfigurationStep(customResourceManager),
-                new RetryStep<>(new CheckConsensusNodeReadyStep(customResourceManager), Duration.ofSeconds(2), 150));
+                new RetryStep<>(
+                        new CheckConsensusNodeReadyStep(customResourceManager),
+                        Duration.ofSeconds(checkConfig.retryInterval()),
+                        checkConfig.maxRetries()));
     }
 
     @Override
