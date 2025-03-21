@@ -101,7 +101,7 @@ public class MultipleOrbitTest {
                             .withExternalHostname(nodeName + "-svc.multipleorbittest-" + names.get(id))
                             .withExternalPort(50111)
                             .withNodeAccount("0.0." + (id + 3))
-                            .withPublicLedgerKey(publicKey))
+                            .withPublicSigningCertificate(publicKey))
                     .build());
         }
         Map<String, List<AddressBookEntry>> externalAddresses = new HashMap<>();

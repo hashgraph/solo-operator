@@ -153,7 +153,7 @@ public class CreatePublicKeysConfigStep implements ProcessorStep<NetworkOperatio
 
         // add public keys for external addresses
         for (AddressBookEntry entry : addressBook.getExternalAddresses()) {
-            builder.addToData("s-public-" + entry.getSelfName() + ".pem", entry.getPublicLedgerKey());
+            builder.addToData("s-public-" + entry.getSelfName() + ".pem", entry.getPublicSigningCertificate());
         }
 
         return builder;
