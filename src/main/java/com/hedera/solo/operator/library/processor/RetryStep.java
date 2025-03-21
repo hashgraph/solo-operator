@@ -61,8 +61,13 @@ public final class RetryStep<T extends CustomResource<?, S>, S> implements Proce
         int retries = 0;
         while (!step.isSuccessful(resource, updated) && retries++ < maxRetries) {
             log.warnf(
-                    "'%s' failed. Retrying in %s seconds... [%d/%d]",
-                    step.getClass().getSimpleName(), retryInterval.getSeconds(), retries, maxRetries);
+                    "'%s' failed. Retrying in %s seconds (%s/%s)... [%d/%d]",
+                    step.getClass().getSimpleName(),
+                    retryInterval.getSeconds(),
+                    resource.getMetadata().getNamespace(),
+                    resource.getMetadata().getName(),
+                    retries,
+                    maxRetries);
 
             this.applyRetryInterval();
 

@@ -128,7 +128,7 @@ public final class NetworkOperationStepUtil {
      */
     public static NetworkOperationStatus checkLastCondition(final NetworkOperationStatus updated) {
         final Condition c = updated.getConditions().getLast();
-        if (c != null && c.getStatus().equals(ConditionStatus.True)) {
+        if (c != null && !c.getStatus().equals(ConditionStatus.True)) {
             return NetworkOperationStepUtil.prepareStatus(updated, List.of(), NetworkOperationStatus.Phase.Failed);
         }
 

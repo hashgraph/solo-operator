@@ -72,7 +72,7 @@ public class VerifyStepsTest {
         allNotFound(networkOperation, new ExecuteImmediateTask(), 1);
 
         // re-verify
-        allNotFound(networkOperation, new FreezeScheduledTask(), 2);
+        allNotFound(networkOperation, new FreezeScheduledTask(), 1);
 
         // re-verify (with failed status)
         networkOperation.setStatus(new NetworkOperationStatusBuilder()
@@ -92,7 +92,7 @@ public class VerifyStepsTest {
         allUnknown(networkOperation, new ExecuteImmediateTask(), 1);
 
         // re-verify
-        allUnknown(networkOperation, new FreezeScheduledTask(), 2);
+        allUnknown(networkOperation, new FreezeScheduledTask(), 1);
 
         // re-verify (with failed status)
         networkOperation.setStatus(new NetworkOperationStatusBuilder()
@@ -110,7 +110,7 @@ public class VerifyStepsTest {
         allMatch(networkOperation, new ExecuteImmediateTask(), 6);
 
         // re-verify
-        allMatch(networkOperation, new FreezeScheduledTask(), 12);
+        allMatch(networkOperation, new FreezeScheduledTask(), 6);
 
         // re-verify (with empty status)
         networkOperation.setStatus(new NetworkOperationStatusBuilder()
