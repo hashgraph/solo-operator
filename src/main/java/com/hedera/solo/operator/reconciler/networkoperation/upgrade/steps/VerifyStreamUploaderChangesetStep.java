@@ -68,6 +68,10 @@ public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkO
 
     @Override
     public boolean shouldSkip(NetworkOperation resource, NetworkOperationStatus status) {
+        if (!StreamUploaderUtil.hasChangeset(resource, this.containerName)) {
+            return true;
+        }
+
         final String conditionType = computeConditionType(CONDITION_TYPE, containerName);
         return status.getPhase().equals(NetworkOperationStatus.Phase.Failed)
                 || NetworkOperationStepUtil.isSuccessful(status, conditionType);
@@ -81,12 +85,14 @@ public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkO
         try {
             final StreamUploaderChangeset changeset = StreamUploaderUtil.findChangeset(resource, this.containerName);
             if (Objects.isNull(changeset) || Objects.isNull(changeset.getSoftwareVersionSource())) {
-                log.debugf(
-                        "Ignore checking '%s' image as it is not specified in network operation: %s/%s",
-                        this.containerName,
-                        resource.getMetadata().getNamespace(),
-                        resource.getMetadata().getName());
-                return status;
+                if (!StreamUploaderUtil.hasChangeset(resource, this.containerName)) {
+                    log.debugf(
+                            "Ignore checking '%s' image as it is not specified in network operation: %s/%s",
+                            this.containerName,
+                            resource.getMetadata().getNamespace(),
+                            resource.getMetadata().getName());
+                    return status;
+                }
             }
 
             log.infof(

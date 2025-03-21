@@ -320,8 +320,7 @@ public class NetworkOperationTest extends AbstractOperatorTest {
             Condition ready =
                     conditions.get(CheckConsensusNodeReadyStep.CONDITION_TYPE).getFirst();
             assertThat(ready.getStatus()).isEqualTo(ConditionStatus.False);
-            assertThat(ready.getMessage())
-                    .isEqualTo("Failed with capsule phases: {node1=Failed, node2=Failed, node3=Failed}");
+            assertThat(no.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Failed);
         });
     }
 

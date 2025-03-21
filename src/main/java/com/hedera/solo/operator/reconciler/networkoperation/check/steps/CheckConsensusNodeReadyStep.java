@@ -32,8 +32,8 @@ import org.jboss.logging.Logger;
 /** CheckConsensusNodeRunningStep checks if the consensus node is ACTIVE and processing transactions */
 public class CheckConsensusNodeReadyStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final String CONDITION_TYPE = "ConsensusCapsuleReady";
-    public static final String SUCCESS_STATUS_MESSAGE = "Found capsule phases: %s";
-    public static final String FAIL_STATUS_MESSAGE = "Failed with capsule phases: %s";
+    public static final String SUCCESS_STATUS_MESSAGE = "Consensus nodes are ready: %s";
+    public static final String FAIL_STATUS_MESSAGE = "Consensus nodes are not ready: %s";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     private final CustomResourceManager customResourceManager;
@@ -83,12 +83,7 @@ public class CheckConsensusNodeReadyStep implements ProcessorStep<NetworkOperati
                         .withMessage(SUCCESS_STATUS_MESSAGE.formatted(phaseMap))
                         .withLastTransitionTime(timestamp)
                         .build());
-            } else if (Set.of(
-                            ConsensusCapsuleStatus.Phase.Pending,
-                            ConsensusCapsuleStatus.Phase.Running,
-                            ConsensusCapsuleStatus.Phase.Unknown)
-                    .containsAll(phaseSet)) {
-                resultingPhase = NetworkOperationStatus.Phase.Running;
+                log.infof(SUCCESS_STATUS_MESSAGE, phaseMap);
             } else {
                 resultingPhase = NetworkOperationStatus.Phase.Failed;
                 conditions.add(new ConditionBuilder()
@@ -98,9 +93,9 @@ public class CheckConsensusNodeReadyStep implements ProcessorStep<NetworkOperati
                         .withMessage(FAIL_STATUS_MESSAGE.formatted(phaseMap))
                         .withLastTransitionTime(timestamp)
                         .build());
+                log.warnf(FAIL_STATUS_MESSAGE, phaseMap);
             }
 
-            log.infof(SUCCESS_STATUS_MESSAGE, phaseMap);
             return NetworkOperationStepUtil.prepareStatus(status, conditions, resultingPhase);
         } catch (Throwable t) {
             log.errorf(t, FAIL_STATUS_MESSAGE, t.getMessage());

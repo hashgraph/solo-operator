@@ -32,8 +32,24 @@ public class VerifyOtelCollectorStep implements ProcessorStep<NetworkOperation, 
 
     @Override
     public boolean shouldSkip(NetworkOperation resource, NetworkOperationStatus status) {
+        if (!hasChangeset(resource)) {
+            return true;
+        }
+
         return status.getPhase().equals(NetworkOperationStatus.Phase.Failed)
                 || NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
+    }
+
+    private boolean hasChangeset(NetworkOperation resource) {
+        if (Objects.isNull(resource)
+                || Objects.isNull(resource.getSpec())
+                || Objects.isNull(resource.getSpec().getNetworkUpgrade())
+                || Objects.isNull(resource.getSpec().getNetworkUpgrade().getChangesets())) {
+            return false;
+        }
+
+        return Objects.nonNull(
+                resource.getSpec().getNetworkUpgrade().getChangesets().getOtelCollector());
     }
 
     @Override

@@ -58,6 +58,10 @@ public class ReverifyStreamUploaderChangesetStep implements ProcessorStep<Networ
 
     @Override
     public boolean shouldSkip(NetworkOperation resource, NetworkOperationStatus status) {
+        if (!StreamUploaderUtil.hasChangeset(resource, this.containerName)) {
+            return true;
+        }
+
         final String conditionType = computeConditionType(CONDITION_TYPE, containerName);
         return status.getPhase().equals(NetworkOperationStatus.Phase.Failed)
                 || NetworkOperationStepUtil.isSuccessful(status, conditionType);

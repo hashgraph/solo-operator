@@ -30,6 +30,8 @@ import com.hedera.solo.operator.test.utils.TemplateLoader;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.QuarkusTestProfile;
+import io.quarkus.test.junit.TestProfile;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -38,19 +40,27 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
-public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract {
+@TestProfile(NetworkUpgradeOperationTest.class)
+public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract implements QuarkusTestProfile {
+
+    @Override
+    public Map<String, String> getConfigOverrides() {
+        return Map.of(
+                "solo.operator.network-operation.task.check.max-retries", "30",
+                "solo.operator.network-operation.task.check.retry-interval", "2");
+    }
 
     @Override
     @Test
     void testSingleNodeDeployment() throws Exception {
-        super.testSingleNodeDeployment();
+        final List<ConsensusCapsule> consensusCapsules = this.deployNetwork(1);
         triggerNowFrozen(consensusCapsules);
     }
 
     @Override
     @Test
     void testMultiNodeDeployment() throws Exception {
-        super.testMultiNodeDeployment();
+        final List<ConsensusCapsule> consensusCapsules = this.deployNetwork(3);
         triggerNowFrozen(consensusCapsules);
     }
 
@@ -218,52 +228,30 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract {
     }
 
     private void checkStatus(List<ConsensusCapsule> consensusCapsules) {
-        await().atMost(5, TimeUnit.MINUTES)
-                .pollDelay(Duration.ofSeconds(2))
-                .failFast(() -> {
-                    NetworkOperation netOp = kubernetesClient
-                            .resources(NetworkOperation.class)
-                            .inNamespace(namespace)
-                            .withName("network-upgrade")
-                            .get();
-                    assertThat(netOp).isNotNull();
-                    assertThat(netOp.getStatus()).isNotNull();
-                    assertThat(netOp.getStatus().getPhase()).isNotEqualTo(NetworkOperationStatus.Phase.Failed);
-                })
-                .untilAsserted(() -> {
-                    NetworkOperation netOp = kubernetesClient
-                            .resources(NetworkOperation.class)
-                            .inNamespace(namespace)
-                            .withName("network-upgrade")
-                            .get();
-                    assertThat(netOp).isNotNull();
-                    assertThat(netOp.getStatus()).isNotNull();
-                    assertThat(NowFrozenTask.isDone(netOp)).isTrue();
-                    assertThat(netOp.getStatus().getSoftwareSourceStatus()).isNotNull();
-                    assertThat(netOp.getStatus().getSoftwareSourceStatus().getConsensusNode())
-                            .isNotNull();
-                    assertThat(netOp.getStatus().getUpgradedNodes().size()).isEqualTo(consensusCapsules.size());
-                    assertThat(netOp.getStatus().getPhase()).isNotEqualTo(NetworkOperationStatus.Phase.Running);
-
-                    ConfigMap cc = kubernetesClient
-                            .resources(ConfigMap.class)
-                            .inNamespace(namespace)
-                            .withName(Constants.CLUSTER_CONFIG_NAME)
-                            .get();
-                    assertThat(cc).isNotNull();
-                });
-
-        // ensure netOp hasn't failed
-        NetworkOperation netOp = kubernetesClient
-                .resources(NetworkOperation.class)
-                .inNamespace(namespace)
-                .withName("network-upgrade")
-                .get();
-        assertThat(netOp).isNotNull();
-        assertThat(netOp.getStatus()).isNotNull();
-        assertThat(netOp.getStatus().getPhase()).isNotEqualTo(NetworkOperationStatus.Phase.Running);
-
         await().atMost(5, TimeUnit.MINUTES).pollDelay(Duration.ofSeconds(2)).untilAsserted(() -> {
+            NetworkOperation netOp = kubernetesClient
+                    .resources(NetworkOperation.class)
+                    .inNamespace(namespace)
+                    .withName("network-upgrade")
+                    .get();
+            assertThat(netOp).isNotNull();
+            assertThat(netOp.getStatus()).isNotNull();
+            assertThat(NowFrozenTask.isDone(netOp)).isTrue();
+            assertThat(netOp.getStatus().getSoftwareSourceStatus()).isNotNull();
+            assertThat(netOp.getStatus().getSoftwareSourceStatus().getConsensusNode())
+                    .isNotNull();
+            assertThat(netOp.getStatus().getUpgradedNodes().size()).isEqualTo(consensusCapsules.size());
+            assertThat(netOp.getStatus().getPhase()).isNotEqualTo(NetworkOperationStatus.Phase.Running);
+
+            ConfigMap cc = kubernetesClient
+                    .resources(ConfigMap.class)
+                    .inNamespace(namespace)
+                    .withName(Constants.CLUSTER_CONFIG_NAME)
+                    .get();
+            assertThat(cc).isNotNull();
+        });
+
+        await().atMost(2, TimeUnit.MINUTES).pollDelay(Duration.ofSeconds(2)).untilAsserted(() -> {
             for (ConsensusCapsule consensusCapsule : consensusCapsules) {
                 String name = consensusCapsule.getMetadata().getName();
                 ConsensusCapsule capsule =
@@ -282,6 +270,18 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract {
                     assertThat(pod.getStatus().getPodIP()).isNotEmpty();
                 }
             }
+        });
+
+        // wait for it to complete
+        await().atMost(2, TimeUnit.MINUTES).untilAsserted(() -> {
+            NetworkOperation netOp = kubernetesClient
+                    .resources(NetworkOperation.class)
+                    .inNamespace(namespace)
+                    .withName("network-upgrade")
+                    .get();
+            assertThat(netOp).isNotNull();
+            assertThat(netOp.getStatus()).isNotNull();
+            assertThat(netOp.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Failed);
         });
     }
 }

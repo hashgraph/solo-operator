@@ -149,11 +149,12 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
         // is this resource is done, then return
         if (isDone(resource)) {
             log.infof(
-                    "Networkoperation is done: '%s/%s' [created: %s, uuid: %s]",
+                    "Networkoperation is done: '%s/%s' [created: %s, uuid: %s, phase: %s]",
                     resource.getMetadata().getNamespace(),
                     resource.getMetadata().getName(),
                     resource.getMetadata().getCreationTimestamp(),
-                    resource.getMetadata().getUid());
+                    resource.getMetadata().getUid(),
+                    resource.getStatus().getPhase());
             return UpdateControl.noUpdate();
         }
 
@@ -234,6 +235,7 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
                                 Constants.SOLO_OPERATOR // force the label during initialization
                                 )))
                 .with(r -> r.withNewStatus() // initializing an empty new status
+                        .withObservedGeneration(resource.getMetadata().getGeneration())
                         .withConsensusCapsules(capsuleNames)
                         .withPhase(NetworkOperationStatus.Phase.Pending)
                         .withConditions(new Condition(

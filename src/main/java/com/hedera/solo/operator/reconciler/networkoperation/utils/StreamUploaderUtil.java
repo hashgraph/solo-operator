@@ -6,6 +6,7 @@ import com.hedera.solo.operator.model.commonspec.StreamUploaderChangeset;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationspec.networkupgrade.Changesets;
 import com.hedera.solo.operator.reconciler.common.Constants;
+import java.util.Objects;
 
 public final class StreamUploaderUtil {
     public static StreamUploaderChangeset findChangeset(NetworkOperation resource, String name) {
@@ -22,6 +23,11 @@ public final class StreamUploaderUtil {
             case Constants.TPL_VAR_BACKUP_UPLOADER -> changesets.getBackupUploaderChangeset();
             default -> null;
         };
+    }
+
+    public static boolean hasChangeset(NetworkOperation resource, String name) {
+        final StreamUploaderChangeset changeset = findChangeset(resource, name);
+        return Objects.nonNull(changeset) && Objects.nonNull(changeset.getSoftwareVersionSource());
     }
 
     public static String toStreamUploaderType(String containerName) {
