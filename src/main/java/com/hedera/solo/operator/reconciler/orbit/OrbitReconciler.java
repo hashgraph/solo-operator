@@ -3,6 +3,7 @@
 package com.hedera.solo.operator.reconciler.orbit;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
+import static com.hedera.solo.operator.library.reconcile.ReconcileEvent.cleanupEvents;
 
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitStatus;
@@ -13,8 +14,10 @@ import com.hedera.solo.operator.reconciler.orbit.resources.ConsensusConfigMap;
 import com.hedera.solo.operator.reconciler.orbit.resources.ConsensusHeadlessService;
 import com.hedera.solo.operator.reconciler.orbit.resources.OrbitNamespace;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
+import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
+import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
@@ -34,7 +37,7 @@ import org.jboss.logging.Logger;
             @Dependent(type = ConsensusHeadlessService.class, dependsOn = "namespace"),
         })
 @ControllerConfiguration(name = "orbit")
-public class OrbitReconciler implements Reconciler<Orbit> {
+public class OrbitReconciler implements Cleaner<Orbit>, Reconciler<Orbit> {
 
     private final Logger log;
 
@@ -95,5 +98,15 @@ public class OrbitReconciler implements Reconciler<Orbit> {
         builder.withObservedGeneration(orbit.getMetadata().getGeneration());
 
         return builder.build();
+    }
+
+    @Override
+    public DeleteControl cleanup(Orbit resource, Context<Orbit> context) throws Exception {
+        log.info("Deleting the resource: %s/%s "
+                .formatted(
+                        resource.getMetadata().getNamespace(),
+                        resource.getMetadata().getName()));
+        cleanupEvents(resource, context);
+        return DeleteControl.defaultDelete();
     }
 }
