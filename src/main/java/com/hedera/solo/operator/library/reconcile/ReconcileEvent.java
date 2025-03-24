@@ -3,13 +3,16 @@
 package com.hedera.solo.operator.library.reconcile;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
+import static com.hedera.solo.operator.library.generic.Nullable.orEmptyList;
 import static com.hedera.solo.operator.library.time.Timestamp.timestamp;
 
 import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.ObjectReference;
+import io.fabric8.kubernetes.api.model.StatusCause;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.javaoperatorsdk.operator.AggregatedOperatorException;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.util.Arrays;
@@ -24,6 +27,13 @@ public class ReconcileEvent {
         if (exception instanceof AggregatedOperatorException ae) {
             ae.getAggregatedExceptions().values().forEach(ex -> createOrUpdateEvent(resource, context, ex));
             return;
+        }
+        if (exception instanceof KubernetesClientException ke) {
+            if (orEmptyList(() -> ke.getStatus().getDetails().getCauses()).stream()
+                    .map(StatusCause::getReason)
+                    .anyMatch("NamespaceTerminating"::equals)) {
+                return;
+            }
         }
         KubernetesClient client = context.getClient();
         String timestamp = timestamp();
