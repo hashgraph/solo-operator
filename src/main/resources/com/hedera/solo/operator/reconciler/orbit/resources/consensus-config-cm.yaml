@@ -31,8 +31,13 @@ data:
     ln -s ${CONSENSUS_CFG}/application.properties ${APP_DIR}/data/config
     ln -s ${CONSENSUS_CFG}/genesis.properties ${APP_DIR}/data/config
     CLUSTER_CFG=/tmp/volumes/cluster-config
-    ln -s ${CLUSTER_CFG}/config.txt ${APP_DIR}
+    HOSTPATH_CFG=/mnt/config
     ln -s ${APP_DIR}/data/keys/hedera.{crt,key} ${APP_DIR}
+    if [ -f ${HOSTPATH_CFG}/config.txt ]; then
+      ln -s ${HOSTPATH_CFG}/config.txt ${APP_DIR}
+    else
+      ln -s ${CLUSTER_CFG}/config.txt ${APP_DIR}
+    fi
 
     # Wait until consensus service has been initialized, config.txt file is available and podIP is eligible
     SVC_DIR=/run/service/consensus

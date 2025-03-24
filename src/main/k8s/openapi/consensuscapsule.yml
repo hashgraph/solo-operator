@@ -141,6 +141,10 @@ components:
             type: string
         weight:
           type: integer
+        configFolder:
+          description: optional hostPath folder containing config.txt file.
+          type: object
+          x-java-type: io.fabric8.kubernetes.api.model.HostPathVolumeSource
         serviceType:
           description: |
             The type of consensus-node service
