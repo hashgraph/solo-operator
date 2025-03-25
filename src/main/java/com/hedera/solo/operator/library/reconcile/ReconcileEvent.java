@@ -82,9 +82,9 @@ public class ReconcileEvent {
 
     public static <P extends HasMetadata> void cleanupEvents(final P resource, final Context<P> context) {
         ObjectMeta metadata = resource.getMetadata();
-        context.getClient()
-                .resources(Event.class)
-                .inNamespace(resource.getMetadata().getNamespace())
+        (metadata.getNamespace() == null
+                        ? context.getClient().resources(Event.class)
+                        : context.getClient().resources(Event.class).inNamespace(metadata.getNamespace()))
                 .withInvolvedObject(new ObjectReference(
                         resource.getApiVersion(),
                         null,

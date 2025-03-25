@@ -4,6 +4,7 @@ package com.hedera.solo.operator.reconciler.capsule.haproxy;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.library.model.Labels.hasLabel;
+import static com.hedera.solo.operator.library.reconcile.ReconcileEvent.cleanupEvents;
 
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsule;
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsuleStatus;
@@ -17,8 +18,10 @@ import com.hedera.solo.operator.reconciler.capsule.haproxy.resources.HAProxyServ
 import com.hedera.solo.operator.reconciler.common.Constants;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.Pod;
+import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
+import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import io.javaoperatorsdk.operator.api.reconciler.EventSourceContext;
 import io.javaoperatorsdk.operator.api.reconciler.EventSourceUtils;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
@@ -32,7 +35,7 @@ import java.util.function.Predicate;
 import org.jboss.logging.Logger;
 
 @ControllerConfiguration
-public class HAProxyCapsuleReconciler implements Reconciler<HAProxyCapsule> {
+public class HAProxyCapsuleReconciler implements Cleaner<HAProxyCapsule>, Reconciler<HAProxyCapsule> {
     public static final Predicate<HasMetadata> HAS_LABEL_SELECTOR_HAPROXY =
             hasLabel(Constants.LABEL_APP, Constants.COMPONENT_HAPROXY);
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
@@ -93,5 +96,15 @@ public class HAProxyCapsuleReconciler implements Reconciler<HAProxyCapsule> {
     public List<EventSource<?, HAProxyCapsule>> prepareEventSources(final EventSourceContext<HAProxyCapsule> context) {
         eventSourceContext = context;
         return EventSourceUtils.eventSourcesFromWorkflow(context, workflow);
+    }
+
+    @Override
+    public DeleteControl cleanup(HAProxyCapsule resource, Context<HAProxyCapsule> context) throws Exception {
+        log.info("Deleting the resource: %s/%s "
+                .formatted(
+                        resource.getMetadata().getNamespace(),
+                        resource.getMetadata().getName()));
+        cleanupEvents(resource, context);
+        return DeleteControl.defaultDelete();
     }
 }
