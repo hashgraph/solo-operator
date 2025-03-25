@@ -7,14 +7,14 @@ import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-import com.hedera.solo.operator.library.builder.BuilderFunction;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkClientContextFactory;
 import com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkClientFactory;
 import com.hedera.solo.operator.test.utils.TestRecords;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.Pod;
-import io.fabric8.kubernetes.api.model.PodBuilder;
+import io.fabric8.kubernetes.api.model.Volume;
+import io.fabric8.kubernetes.api.model.VolumeBuilder;
 import io.fabric8.kubernetes.api.model.VolumeMount;
 import io.fabric8.kubernetes.api.model.VolumeMountBuilder;
 import io.quarkus.test.junit.QuarkusTest;
@@ -33,6 +33,8 @@ public class SecretHostpathTest extends ConsensusCapsuleTestAbstract {
     List<ConfigMap> configMaps = new ArrayList<>();
     Map<String, byte[]> certificates = new HashMap<>();
     Map<String, String> pubKeys = new HashMap<>();
+    List<Volume> volumes = new ArrayList<>();
+    List<VolumeMount> volumeMounts = new ArrayList<>();
 
     @Override
     @BeforeEach
@@ -40,21 +42,20 @@ public class SecretHostpathTest extends ConsensusCapsuleTestAbstract {
         setup = true;
         try {
             super.setup();
+            ConfigMap configMap = loadYaml(ConfigMap.class, getClass(), "secrethostpath/config.yaml");
+            createConfigMap(configMap);
+            addVolumes("src-config", "dst-config", configMap);
             for (int i = 1; i <= 3; ++i) {
                 String nodeName = "node" + i;
-                ConfigMap configMap = loadYaml(ConfigMap.class, getClass(), "secrethostpath/" + nodeName + "-src.yaml");
+                configMap = loadYaml(ConfigMap.class, getClass(), "secrethostpath/" + nodeName + "-src.yaml");
                 certificates.put(nodeName, configMap.getData().get("hedera.crt").getBytes());
                 pubKeys.put(nodeName, configMap.getData().get("s-public-" + nodeName + ".pem"));
-                configMaps.add(kubernetesClient
-                        .resource(configMap
-                                .edit()
-                                .editMetadata()
-                                .withNamespace(namespace)
-                                .endMetadata()
-                                .build())
-                        .create());
+                createConfigMap(configMap);
+                addVolumes(nodeName + "-src", nodeName + "-dst", configMap);
             }
             runInPod(
+                    volumes,
+                    volumeMounts,
                     "find -L /mnt/src -maxdepth 2 -mindepth 2 -type f -print | sed 's,\\(/mnt/src/\\(.*\\)\\),cp \\1 /mnt/dst/\\2,' | sh");
         } finally {
             setup = false;
@@ -64,7 +65,7 @@ public class SecretHostpathTest extends ConsensusCapsuleTestAbstract {
     @Override
     void cleanup() {
         if (!setup) {
-            runInPod("find /mnt/dst -type f -exec rm {} \\;");
+            runInPod(volumes, volumeMounts, "find /mnt/dst -type f -exec rm {} \\;");
             configMaps.forEach(configMap -> kubernetesClient.resource(configMap).delete());
         }
         super.cleanup();
@@ -86,9 +87,11 @@ public class SecretHostpathTest extends ConsensusCapsuleTestAbstract {
     protected ConsensusCapsule prepareConsensusCapsuleBuilder(final TestRecords.NodeInfo node) {
         return edit(super.prepareConsensusCapsuleBuilder(node))
                 .with(spec -> spec.editSpec()
+                        .withExternalAddress("not-found")
+                        .withNewConfigFolder("/tmp/" + namespace + "/dst-config", "Directory")
                         .editSecrets()
                         .withSecretResources(null)
-                        .withNewHostPath("/tmp/" + namespace + "-" + node.name() + "-dst", "Directory"))
+                        .withNewHostPath("/tmp/" + namespace + "/" + node.name() + "-dst", "Directory"))
                 .build();
     }
 
@@ -98,8 +101,8 @@ public class SecretHostpathTest extends ConsensusCapsuleTestAbstract {
         super.checkAddressBook(HederaSdkClientFactory.directContextCreator(certificates, pubKeys));
     }
 
-    void runInPod(final String command) {
-        Pod pod = createPod(command);
+    void runInPod(final List<Volume> volumes, final List<VolumeMount> volumeMounts, final String command) {
+        Pod pod = createPod(volumes, volumeMounts, command);
         await().atMost(Duration.ofSeconds(150)).untilAsserted(() -> {
             Pod tmpPod = kubernetesClient.resource(pod).get();
             assertThat(tmpPod).isNotNull();
@@ -108,17 +111,12 @@ public class SecretHostpathTest extends ConsensusCapsuleTestAbstract {
         kubernetesClient.resource(pod).delete();
     }
 
-    Pod createPod(final String command) {
+    Pod createPod(final List<Volume> volumes, final List<VolumeMount> volumeMounts, final String command) {
         return operator.getKubernetesClient()
                 .resource(edit(new Pod())
                         .with(metadata ->
                                 metadata.editMetadata().withGenerateName("pod-").withNamespace(namespace))
-                        .with(addConfigMap("node1-src"))
-                        .with(addConfigMap("node2-src"))
-                        .with(addConfigMap("node3-src"))
-                        .with(addHostPath("node1-dst"))
-                        .with(addHostPath("node2-dst"))
-                        .with(addHostPath("node3-dst"))
+                        .with(spec -> spec.editSpec().addAllToVolumes(volumes))
                         .with(container -> container
                                 .editSpec()
                                 .withRestartPolicy("Never")
@@ -126,37 +124,44 @@ public class SecretHostpathTest extends ConsensusCapsuleTestAbstract {
                                 .withName("main")
                                 .withImage("alpine")
                                 .withCommand("sh", "-c", command)
-                                .addAllToVolumeMounts(volumeMounts()))
+                                .addAllToVolumeMounts(volumeMounts))
                         .build())
                 .create();
     }
 
-    BuilderFunction<PodBuilder> addConfigMap(final String name) {
-        return builder ->
-                builder.editSpec().addNewVolume().withName(name).editConfigMap().withName(name);
+    void createConfigMap(final ConfigMap configMap) {
+        configMaps.add(kubernetesClient
+                .resource(configMap
+                        .edit()
+                        .editMetadata()
+                        .withNamespace(namespace)
+                        .endMetadata()
+                        .build())
+                .create());
     }
 
-    BuilderFunction<PodBuilder> addHostPath(final String name) {
-        return builder -> builder.editSpec()
-                .addNewVolume()
-                .withName(name)
+    void addVolumes(final String srcName, final String dstName, final ConfigMap configMap) {
+        String cmName = configMap.getMetadata().getName();
+        volumes.add(new VolumeBuilder()
+                .withName(srcName)
+                .editConfigMap()
+                .withName(cmName)
+                .endConfigMap()
+                .build());
+        volumes.add(new VolumeBuilder()
+                .withName(dstName)
                 .editHostPath()
                 .withType("DirectoryOrCreate")
-                .withPath("/tmp/" + namespace + "-" + name);
-    }
-
-    List<VolumeMount> volumeMounts() {
-        List<VolumeMount> volumeMounts = new ArrayList<>();
-        for (int i = 1; i <= 3; ++i) {
-            volumeMounts.add(new VolumeMountBuilder()
-                    .withName("node" + i + "-src")
-                    .withMountPath("/mnt/src/" + i)
-                    .build());
-            volumeMounts.add(new VolumeMountBuilder()
-                    .withName("node" + i + "-dst")
-                    .withMountPath("/mnt/dst/" + i)
-                    .build());
-        }
-        return volumeMounts;
+                .withPath("/tmp/" + namespace + "/" + dstName)
+                .endHostPath()
+                .build());
+        volumeMounts.add(new VolumeMountBuilder()
+                .withName(srcName)
+                .withMountPath("/mnt/src/" + cmName)
+                .build());
+        volumeMounts.add(new VolumeMountBuilder()
+                .withName(dstName)
+                .withMountPath("/mnt/dst/" + cmName)
+                .build());
     }
 }

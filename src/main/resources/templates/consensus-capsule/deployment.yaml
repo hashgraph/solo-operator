@@ -185,6 +185,10 @@ spec:
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/stats
             - name: hgcapp-upgrade
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade
+            # {#if config}
+            - name: hostpath-config
+              mountPath: /mnt/config
+            # {/if}
             # {#if secrets}
             # {#if secrets.hostPath}
             - name: keys
@@ -565,6 +569,12 @@ spec:
           emptyDir: {}
         - name: hgcapp-otel-file-storage
           emptyDir: {}
+        # {#if config}
+        - name: hostpath-config
+          hostPath:
+            path: {config.path}
+            type: {config.type}
+        # {/if}
         # {#if secrets}
         # {#if secrets.hostPath}
         - name: keys

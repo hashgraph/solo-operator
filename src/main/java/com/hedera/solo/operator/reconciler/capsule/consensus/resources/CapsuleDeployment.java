@@ -13,6 +13,7 @@ import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM
 import static com.hedera.solo.operator.reconciler.common.Constants.SECURITY_CONTEXT_BUILDER;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_ACCOUNT_ID;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_BACKUP_UPLOADER;
+import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_CONFIG;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_CONSENSUS_NODE;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_DEFAULT_MODE;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_EVENT_STREAM_UPLOADER;
@@ -305,6 +306,7 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         tplInstance.data(TPL_VAR_CONSENSUS_NODE, cn);
         tplInstance.data(TPL_VAR_OPEN_TELEMETRY_COLLECTOR, oc.orElse(null));
         tplInstance.data(TPL_VAR_SECRETS, secretsWithDefaultKeyNames(primary));
+        tplInstance.data(TPL_VAR_CONFIG, primary.getSpec().getConfigFolder());
         uploaderMap.forEach((k, v) -> tplInstance.data(k, v.orElse(null)));
 
         // return an instance of Pod
