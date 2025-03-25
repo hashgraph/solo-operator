@@ -21,11 +21,14 @@ import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
+import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Containers;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationspec.NetworkUpgrade;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
+import com.hedera.solo.operator.reconciler.networkoperation.upgrade.tasks.ExecuteImmediateTask;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.tasks.NowFrozenTask;
+import com.hedera.solo.operator.test.fixtures.Resources;
 import com.hedera.solo.operator.test.utils.TemplateLoader;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.Pod;
@@ -37,6 +40,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
@@ -44,9 +48,66 @@ import org.junit.jupiter.api.Test;
 public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract implements QuarkusTestProfile {
 
     @Override
+    void cleanup() {
+        cleanupNetworkOperations();
+        cleanupConsensusCapsules();
+        cleanupOrbit();
+    }
+
+    void cleanupNetworkOperations() {
+        List<NetworkOperation> items = kubernetesClient
+                .resources(NetworkOperation.class)
+                .inNamespace(namespace)
+                .list()
+                .getItems();
+
+        for (NetworkOperation item : items) {
+            // delete the item
+            kubernetesClient.resource(item).delete();
+        }
+
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            assertThat(kubernetesClient
+                            .resources(NetworkOperation.class)
+                            .inNamespace(namespace)
+                            .list()
+                            .getItems())
+                    .isEmpty();
+        });
+    }
+
+    void cleanupConsensusCapsules() {
+        List<ConsensusCapsule> items = kubernetesClient
+                .resources(ConsensusCapsule.class)
+                .inNamespace(namespace)
+                .list()
+                .getItems();
+
+        for (ConsensusCapsule item : items) {
+            // delete the item
+            kubernetesClient.resource(item).delete();
+        }
+
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            assertThat(kubernetesClient
+                            .resources(ConsensusCapsule.class)
+                            .inNamespace(namespace)
+                            .list()
+                            .getItems())
+                    .isEmpty();
+        });
+    }
+
+    void cleanupOrbit() {
+        Resources.removeByName(kubernetesClient, Orbit.class, namespace);
+        await().atMost(Duration.ofSeconds(120))
+                .until(() -> kubernetesClient.namespaces().withName(namespace).get() == null);
+    }
+
+    @Override
     public Map<String, String> getConfigOverrides() {
         return Map.of(
-                "solo.operator.network-operation.task.check.max-retries", "30",
+                "solo.operator.network-operation.task.check.max-retries", "60",
                 "solo.operator.network-operation.task.check.retry-interval", "2");
     }
 
@@ -54,14 +115,16 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
     @Test
     void testSingleNodeDeployment() throws Exception {
         final List<ConsensusCapsule> consensusCapsules = this.deployNetwork(1);
-        triggerNowFrozen(consensusCapsules);
+        final NetworkOperation upgrade = triggerExecuteImmediate(consensusCapsules);
+        triggerNowFrozen(upgrade, consensusCapsules);
     }
 
     @Override
     @Test
     void testMultiNodeDeployment() throws Exception {
         final List<ConsensusCapsule> consensusCapsules = this.deployNetwork(3);
-        triggerNowFrozen(consensusCapsules);
+        final NetworkOperation upgrade = triggerExecuteImmediate(consensusCapsules);
+        triggerNowFrozen(upgrade, consensusCapsules);
     }
 
     @Override
@@ -94,7 +157,7 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
                 .build();
     }
 
-    protected void triggerNowFrozen(List<ConsensusCapsule> consensusCapsules) throws InterruptedException {
+    protected List<AddressBookEntry> prepareAddressBook(List<ConsensusCapsule> consensusCapsules) {
         final List<AddressBookEntry> addressBookEntries = new ArrayList<>();
         for (ConsensusCapsule consensusCapsule : consensusCapsules) {
             ConsensusCapsule capsule =
@@ -123,7 +186,15 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
             addressBookEntries.add(abe);
         }
 
-        NetworkOperation upgrade = edit(new NetworkOperation())
+        return addressBookEntries;
+    }
+
+    protected NetworkOperation prepareNetworkUpgrade(
+            NetworkOperation netOp,
+            final NetworkUpgrade.WorkflowStep workflowStep,
+            List<AddressBookEntry> addressBookEntries) {
+
+        return edit(netOp)
                 .with(metadata -> metadata.editMetadata()
                         .withName("network-upgrade")
                         .withNamespace(orbit)
@@ -132,7 +203,7 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
                         .withMode(NetworkOperationSpec.Mode.NetworkUpgrade)
                         .withOrbit(orbit)
                         .editNetworkUpgrade()
-                        .withWorkflowStep(NetworkUpgrade.WorkflowStep.NowFrozen))
+                        .withWorkflowStep(workflowStep))
                 .with(spec -> spec.editSpec()
                         .editNetworkUpgrade()
                         .editChangesets()
@@ -222,12 +293,10 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
                                 .build()))
                 .with(ab -> ab.editSpec().editNetworkUpgrade().withAddressBook(addressBookEntries))
                 .build();
-
-        kubernetesClient.resource(upgrade).create();
-        checkStatus(consensusCapsules);
     }
 
-    private void checkStatus(List<ConsensusCapsule> consensusCapsules) {
+    protected void checkNowFrozenStatus(
+            List<ConsensusCapsule> consensusCapsules, Function<NetworkOperation, Boolean> isDone) {
         await().atMost(5, TimeUnit.MINUTES).pollDelay(Duration.ofSeconds(2)).untilAsserted(() -> {
             NetworkOperation netOp = kubernetesClient
                     .resources(NetworkOperation.class)
@@ -236,12 +305,12 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
                     .get();
             assertThat(netOp).isNotNull();
             assertThat(netOp.getStatus()).isNotNull();
-            assertThat(NowFrozenTask.isDone(netOp)).isTrue();
+            assertThat(isDone.apply(netOp)).isTrue();
             assertThat(netOp.getStatus().getSoftwareSourceStatus()).isNotNull();
             assertThat(netOp.getStatus().getSoftwareSourceStatus().getConsensusNode())
                     .isNotNull();
             assertThat(netOp.getStatus().getUpgradedNodes().size()).isEqualTo(consensusCapsules.size());
-            assertThat(netOp.getStatus().getPhase()).isNotEqualTo(NetworkOperationStatus.Phase.Running);
+            assertThat(netOp.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Running);
 
             ConfigMap cc = kubernetesClient
                     .resources(ConfigMap.class)
@@ -272,8 +341,25 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
             }
         });
 
-        // wait for it to complete
-        await().atMost(2, TimeUnit.MINUTES).untilAsserted(() -> {
+        // wait for the network operation to complete
+        await().atMost(3, TimeUnit.MINUTES).pollDelay(Duration.ofSeconds(2)).untilAsserted(() -> {
+            NetworkOperation netOp = kubernetesClient
+                    .resources(NetworkOperation.class)
+                    .inNamespace(namespace)
+                    .withName("network-upgrade")
+                    .get();
+            assertThat(netOp).isNotNull();
+            assertThat(netOp.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Failed);
+        });
+    }
+
+    protected NetworkOperation triggerExecuteImmediate(List<ConsensusCapsule> consensusCapsules) {
+        final List<AddressBookEntry> addressBookEntries = prepareAddressBook(consensusCapsules);
+        final NetworkOperation upgrade = prepareNetworkUpgrade(
+                new NetworkOperation(), NetworkUpgrade.WorkflowStep.ExecuteImmediate, addressBookEntries);
+        kubernetesClient.resource(upgrade).create();
+
+        await().atMost(2, TimeUnit.MINUTES).pollDelay(Duration.ofSeconds(2)).untilAsserted(() -> {
             NetworkOperation netOp = kubernetesClient
                     .resources(NetworkOperation.class)
                     .inNamespace(namespace)
@@ -281,7 +367,21 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
                     .get();
             assertThat(netOp).isNotNull();
             assertThat(netOp.getStatus()).isNotNull();
-            assertThat(netOp.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Failed);
+            assertThat(netOp.getStatus().getSoftwareSourceStatus()).isNotNull();
+            assertThat(netOp.getStatus().getSoftwareSourceStatus().getConsensusNode())
+                    .isNotNull();
+            assertThat(netOp.getStatus().getPhase()).isNotEqualTo(NetworkOperationStatus.Phase.Succeeded);
+            assertThat(ExecuteImmediateTask.isDone(netOp)).isTrue();
         });
+
+        return upgrade;
+    }
+
+    protected void triggerNowFrozen(NetworkOperation upgrade, List<ConsensusCapsule> consensusCapsules) {
+        final List<AddressBookEntry> addressBookEntries = prepareAddressBook(consensusCapsules);
+        final NetworkOperation nowFrozen =
+                prepareNetworkUpgrade(upgrade, NetworkUpgrade.WorkflowStep.NowFrozen, addressBookEntries);
+        kubernetesClient.resource(nowFrozen).patch();
+        checkNowFrozenStatus(consensusCapsules, NowFrozenTask::isDone);
     }
 }

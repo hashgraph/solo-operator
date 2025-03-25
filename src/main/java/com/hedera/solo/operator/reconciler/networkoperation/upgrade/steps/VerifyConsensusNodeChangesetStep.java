@@ -122,6 +122,11 @@ public class VerifyConsensusNodeChangesetStep implements ProcessorStep<NetworkOp
                     SoftwareSourceStatus::getConsensusNode,
                     SoftwareSourceStatus::setConsensusNode);
 
+            log.infof(
+                    "Finished verification of 'consensus-node' image for network operation: %s/%s",
+                    resource.getMetadata().getNamespace(),
+                    resource.getMetadata().getName());
+
             return NetworkOperationStepUtil.checkLastCondition(updated);
         } catch (Throwable t) {
             log.errorf(t, FAIL_STATUS_MESSAGE, t.getMessage());

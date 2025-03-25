@@ -93,7 +93,10 @@ public class CheckConsensusNodeReadyStep implements ProcessorStep<NetworkOperati
                         .withMessage(FAIL_STATUS_MESSAGE.formatted(phaseMap))
                         .withLastTransitionTime(timestamp)
                         .build());
-                log.warnf(FAIL_STATUS_MESSAGE, phaseMap);
+                log.warnf(
+                        "%s [mode: %s]",
+                        FAIL_STATUS_MESSAGE.formatted(phaseMap),
+                        resource.getSpec().getMode());
             }
 
             return NetworkOperationStepUtil.prepareStatus(status, conditions, resultingPhase);

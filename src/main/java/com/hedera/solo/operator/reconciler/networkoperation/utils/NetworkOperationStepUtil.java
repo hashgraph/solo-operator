@@ -31,7 +31,7 @@ public final class NetworkOperationStepUtil {
      */
     public static NetworkOperationStatus prepareStatus(
             final NetworkOperationStatus status, List<Condition> conditions) {
-        return prepareStatus(status, conditions, NetworkOperationStatus.Phase.Pending);
+        return prepareStatus(status, conditions, NetworkOperationStatus.Phase.Running);
     }
 
     /**
@@ -129,6 +129,7 @@ public final class NetworkOperationStepUtil {
     public static NetworkOperationStatus checkLastCondition(final NetworkOperationStatus updated) {
         final Condition c = updated.getConditions().getLast();
         if (c != null && !c.getStatus().equals(ConditionStatus.True)) {
+            log.warnf("Last condition is not successful: %s", c.getMessage());
             return NetworkOperationStepUtil.prepareStatus(updated, List.of(), NetworkOperationStatus.Phase.Failed);
         }
 

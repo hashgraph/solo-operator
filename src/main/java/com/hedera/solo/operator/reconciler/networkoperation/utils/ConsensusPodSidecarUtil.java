@@ -8,8 +8,8 @@ import com.hedera.solo.operator.model.v1alpha1.networkoperationspec.networkupgra
 import com.hedera.solo.operator.reconciler.common.Constants;
 import java.util.Objects;
 
-public final class StreamUploaderUtil {
-    public static StreamUploaderChangeset findChangeset(NetworkOperation resource, String name) {
+public final class ConsensusPodSidecarUtil {
+    public static StreamUploaderChangeset findStreamUploaderChangeset(NetworkOperation resource, String name) {
         final Changesets changesets = resource.getSpec().getNetworkUpgrade().getChangesets();
         if (changesets == null) {
             return null;
@@ -25,8 +25,8 @@ public final class StreamUploaderUtil {
         };
     }
 
-    public static boolean hasChangeset(NetworkOperation resource, String name) {
-        final StreamUploaderChangeset changeset = findChangeset(resource, name);
+    public static boolean hasStreamUploaderChangeset(NetworkOperation resource, String name) {
+        final StreamUploaderChangeset changeset = findStreamUploaderChangeset(resource, name);
         return Objects.nonNull(changeset) && Objects.nonNull(changeset.getSoftwareVersionSource());
     }
 
@@ -40,7 +40,19 @@ public final class StreamUploaderUtil {
         };
     }
 
-    public static String computeConditionType(final String conditionType, final String containerName) {
+    public static String computeStreamUploaderConditionType(final String conditionType, final String containerName) {
         return "%s [%s]".formatted(conditionType, toStreamUploaderType(containerName));
+    }
+
+    public static boolean hasOtelChangeset(NetworkOperation resource) {
+        if (Objects.isNull(resource)
+                || Objects.isNull(resource.getSpec())
+                || Objects.isNull(resource.getSpec().getNetworkUpgrade())
+                || Objects.isNull(resource.getSpec().getNetworkUpgrade().getChangesets())) {
+            return false;
+        }
+
+        return Objects.nonNull(
+                resource.getSpec().getNetworkUpgrade().getChangesets().getOtelCollector());
     }
 }

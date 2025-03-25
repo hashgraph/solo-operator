@@ -7,6 +7,7 @@ import static com.hedera.solo.operator.library.model.Labels.hasLabel;
 import static com.hedera.solo.operator.library.reconcile.ReconcileEvent.cleanupEvents;
 import static com.hedera.solo.operator.library.reconcile.ReconcileEvent.createOrUpdateEvent;
 import static com.hedera.solo.operator.library.validate.ManifestValidation.validate;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_NODE_NAME;
 
 import com.hedera.solo.operator.library.generic.Compare;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
@@ -27,6 +28,7 @@ import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.Capsu
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsuleUpgradePvc;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
+import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ContainerState;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
@@ -41,6 +43,8 @@ import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.Workflow;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
+import java.time.ZonedDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -82,7 +86,8 @@ public class ConsensusCapsuleReconciler implements Cleaner<ConsensusCapsule>, Re
                     capsule.getMetadata().getName(), capsule.getMetadata().getNamespace());
 
             final Pod[] pods = context.getSecondaryResources(Pod.class).toArray(Pod[]::new);
-            final ConsensusCapsuleStatus.Phase phase = phase(pods);
+            final ConsensusCapsuleStatus.Phase phase =
+                    phase(findConsensusPod(capsule, context).orElse(null));
             log.infof(
                     "Consensus Capsule - Phase [ name = '%s', namespace = '%s', phase = '%s' ]",
                     capsule.getMetadata().getName(), capsule.getMetadata().getNamespace(), phase);
@@ -118,10 +123,25 @@ public class ConsensusCapsuleReconciler implements Cleaner<ConsensusCapsule>, Re
         }
     }
 
+    /**
+     * Find pod with latest creation timestamp for the consensus capsule
+     *
+     * @param capsule the consensus capsule
+     * @param context the context
+     * @return the latest pod for the consensus capsule
+     */
+    private Optional<Pod> findConsensusPod(ConsensusCapsule capsule, Context<ConsensusCapsule> context) {
+        String nodeName = Metadata.prepareNodeName(capsule.getSpec().getNodeId());
+        return context.getSecondaryResources(Pod.class).stream()
+                .filter(pod -> nodeName.equals(pod.getMetadata().getLabels().get(LABEL_NODE_NAME)))
+                .max(Comparator.comparing(
+                        pod -> ZonedDateTime.parse(pod.getMetadata().getCreationTimestamp())));
+    }
+
     public static ConsensusCapsuleStatus.Phase phase(final Pod... pods) {
         ConsensusCapsuleStatus.Phase phase = ConsensusCapsuleStatus.Phase.Unknown;
 
-        if (1 == pods.length) {
+        if (1 == pods.length && pods[0] != null) {
             final Pod pod = pods[0];
             final ContainerStatus containerStatus = pod.getStatus().getContainerStatuses().stream()
                     .collect(Collectors.toMap(ContainerStatus::getName, Function.identity()))

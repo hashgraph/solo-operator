@@ -3,8 +3,8 @@
 package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
 
 import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.common.VerifyLayerHashes.updateStatus;
-import static com.hedera.solo.operator.reconciler.networkoperation.utils.StreamUploaderUtil.computeConditionType;
-import static com.hedera.solo.operator.reconciler.networkoperation.utils.StreamUploaderUtil.toStreamUploaderType;
+import static com.hedera.solo.operator.reconciler.networkoperation.utils.ConsensusPodSidecarUtil.computeStreamUploaderConditionType;
+import static com.hedera.solo.operator.reconciler.networkoperation.utils.ConsensusPodSidecarUtil.toStreamUploaderType;
 
 import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorStep;
@@ -12,8 +12,8 @@ import com.hedera.solo.operator.model.commonspec.StreamUploaderChangeset;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.common.StreamUploaderVerifier;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.ConsensusPodSidecarUtil;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
-import com.hedera.solo.operator.reconciler.networkoperation.utils.StreamUploaderUtil;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.lang.invoke.MethodHandles;
@@ -68,11 +68,11 @@ public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkO
 
     @Override
     public boolean shouldSkip(NetworkOperation resource, NetworkOperationStatus status) {
-        if (!StreamUploaderUtil.hasChangeset(resource, this.containerName)) {
+        if (!ConsensusPodSidecarUtil.hasStreamUploaderChangeset(resource, this.containerName)) {
             return true;
         }
 
-        final String conditionType = computeConditionType(CONDITION_TYPE, containerName);
+        final String conditionType = computeStreamUploaderConditionType(CONDITION_TYPE, containerName);
         return status.getPhase().equals(NetworkOperationStatus.Phase.Failed)
                 || NetworkOperationStepUtil.isSuccessful(status, conditionType);
     }
@@ -83,9 +83,10 @@ public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkO
             throws ProcessorException {
 
         try {
-            final StreamUploaderChangeset changeset = StreamUploaderUtil.findChangeset(resource, this.containerName);
+            final StreamUploaderChangeset changeset =
+                    ConsensusPodSidecarUtil.findStreamUploaderChangeset(resource, this.containerName);
             if (Objects.isNull(changeset) || Objects.isNull(changeset.getSoftwareVersionSource())) {
-                if (!StreamUploaderUtil.hasChangeset(resource, this.containerName)) {
+                if (!ConsensusPodSidecarUtil.hasStreamUploaderChangeset(resource, this.containerName)) {
                     log.debugf(
                             "Ignore checking '%s' image as it is not specified in network operation: %s/%s",
                             this.containerName,
@@ -110,6 +111,12 @@ public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkO
                     StreamUploaderVerifier.getter(this.containerName),
                     StreamUploaderVerifier.setter(this.containerName));
 
+            log.infof(
+                    "Finished verification of '%s' image for network operation: %s/%s",
+                    toStreamUploaderType(this.containerName),
+                    resource.getMetadata().getNamespace(),
+                    resource.getMetadata().getName());
+
             return NetworkOperationStepUtil.checkLastCondition(updated);
         } catch (Throwable t) {
             log.errorf(t, FAIL_STATUS_MESSAGE, t.getMessage());
@@ -118,13 +125,13 @@ public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkO
     }
 
     Condition createCondition(final NetworkOperationStatus status) {
-        String conditionType = computeConditionType(CONDITION_TYPE, containerName);
+        String conditionType = computeStreamUploaderConditionType(CONDITION_TYPE, containerName);
         return StreamUploaderVerifier.prepareCondition(
                 status, this.containerName, SUCCESS_STATUS_MESSAGE, FAIL_STATUS_MESSAGE, conditionType);
     }
 
     public static boolean isDone(NetworkOperationStatus status, String containerName) {
-        final String conditionType = computeConditionType(CONDITION_TYPE, containerName);
+        final String conditionType = computeStreamUploaderConditionType(CONDITION_TYPE, containerName);
         return NetworkOperationStepUtil.isSuccessful(status, conditionType);
     }
 }

@@ -12,6 +12,7 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationspec.networkupgrade.changesets.OtelCollector;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationstatus.SoftwareSourceStatus;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.ConsensusPodSidecarUtil;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -32,24 +33,12 @@ public class ReverifyOtelCollectorStep implements ProcessorStep<NetworkOperation
 
     @Override
     public boolean shouldSkip(NetworkOperation resource, NetworkOperationStatus status) {
-        if (!hasChangeset(resource)) {
+        if (!ConsensusPodSidecarUtil.hasOtelChangeset(resource)) {
             return true;
         }
 
         return status.getPhase().equals(NetworkOperationStatus.Phase.Failed)
                 || NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
-    }
-
-    private boolean hasChangeset(NetworkOperation resource) {
-        if (Objects.isNull(resource)
-                || Objects.isNull(resource.getSpec())
-                || Objects.isNull(resource.getSpec().getNetworkUpgrade())
-                || Objects.isNull(resource.getSpec().getNetworkUpgrade().getChangesets())) {
-            return false;
-        }
-
-        return Objects.nonNull(
-                resource.getSpec().getNetworkUpgrade().getChangesets().getOtelCollector());
     }
 
     @Override
@@ -80,6 +69,11 @@ public class ReverifyOtelCollectorStep implements ProcessorStep<NetworkOperation
                     this::createCondition,
                     SoftwareSourceStatus::getOtelCollector,
                     SoftwareSourceStatus::setOtelCollector);
+
+            log.infof(
+                    "Finished re-verification of 'otel-collector' image for network operation: %s/%s",
+                    resource.getMetadata().getNamespace(),
+                    resource.getMetadata().getName());
 
             return NetworkOperationStepUtil.checkLastCondition(updated);
         } catch (Throwable t) {

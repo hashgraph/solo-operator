@@ -5,6 +5,7 @@ package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
 import static com.hedera.solo.operator.library.time.Timestamp.timestamp;
 import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.common.VerifyLayerHashes.selectedImage;
 import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.common.VerifyLayerHashes.updateStatus;
+import static com.hedera.solo.operator.reconciler.networkoperation.utils.ConsensusPodSidecarUtil.hasOtelChangeset;
 
 import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
@@ -32,24 +33,12 @@ public class VerifyOtelCollectorStep implements ProcessorStep<NetworkOperation, 
 
     @Override
     public boolean shouldSkip(NetworkOperation resource, NetworkOperationStatus status) {
-        if (!hasChangeset(resource)) {
+        if (!hasOtelChangeset(resource)) {
             return true;
         }
 
         return status.getPhase().equals(NetworkOperationStatus.Phase.Failed)
                 || NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
-    }
-
-    private boolean hasChangeset(NetworkOperation resource) {
-        if (Objects.isNull(resource)
-                || Objects.isNull(resource.getSpec())
-                || Objects.isNull(resource.getSpec().getNetworkUpgrade())
-                || Objects.isNull(resource.getSpec().getNetworkUpgrade().getChangesets())) {
-            return false;
-        }
-
-        return Objects.nonNull(
-                resource.getSpec().getNetworkUpgrade().getChangesets().getOtelCollector());
     }
 
     @Override
@@ -86,6 +75,10 @@ public class VerifyOtelCollectorStep implements ProcessorStep<NetworkOperation, 
                     SoftwareSourceStatus::getOtelCollector,
                     SoftwareSourceStatus::setOtelCollector);
 
+            log.infof(
+                    "Finished verification of otel-collector image for network operation: %s/%s",
+                    resource.getMetadata().getNamespace(),
+                    resource.getMetadata().getName());
             return NetworkOperationStepUtil.checkLastCondition(updated);
         } catch (Throwable t) {
             log.errorf(t, FAIL_STATUS_MESSAGE, t.getMessage());
