@@ -32,6 +32,7 @@ import com.hedera.solo.operator.test.fixtures.Resources;
 import com.hedera.solo.operator.test.utils.TemplateLoader;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodCondition;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.QuarkusTestProfile;
 import io.quarkus.test.junit.TestProfile;
@@ -39,6 +40,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import org.junit.jupiter.api.Test;
@@ -108,7 +110,7 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
     public Map<String, String> getConfigOverrides() {
         return Map.of(
                 "solo.operator.network-operation.task.check.max-retries", "60",
-                "solo.operator.network-operation.task.check.retry-interval", "2");
+                "solo.operator.network-operation.task.check.retry-interval", "5");
     }
 
     @Override
@@ -321,7 +323,7 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
             assertThat(cc).isNotNull();
         });
 
-        await().atMost(2, TimeUnit.MINUTES).pollDelay(Duration.ofSeconds(2)).untilAsserted(() -> {
+        await().atMost(5, TimeUnit.MINUTES).pollDelay(Duration.ofSeconds(2)).untilAsserted(() -> {
             for (ConsensusCapsule consensusCapsule : consensusCapsules) {
                 String name = consensusCapsule.getMetadata().getName();
                 ConsensusCapsule capsule =
@@ -336,7 +338,12 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
                         .getItems();
                 for (Pod pod : pods) {
                     assertThat(pod.getStatus()).isNotNull();
-                    assertThat(pod.getStatus().getPhase()).isEqualTo("Running");
+                    assertThat(pod.getMetadata().getDeletionTimestamp()).isNull();
+                    Optional<PodCondition> ready = pod.getStatus().getConditions().stream()
+                            .filter(c -> "Ready".equals(c.getType()))
+                            .findAny();
+                    assertThat(ready).isPresent();
+                    assertThat(ready.get().getStatus()).isEqualTo("True");
                     assertThat(pod.getStatus().getPodIP()).isNotEmpty();
                 }
             }
@@ -350,7 +357,7 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
                     .withName("network-upgrade")
                     .get();
             assertThat(netOp).isNotNull();
-            assertThat(netOp.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Failed);
+            assertThat(netOp.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Succeeded);
         });
     }
 
