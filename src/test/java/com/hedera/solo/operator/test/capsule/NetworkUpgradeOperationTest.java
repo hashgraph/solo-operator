@@ -123,7 +123,8 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
     @Test
     void testMultiNodeDeployment() throws Exception {
         final List<ConsensusCapsule> consensusCapsules = this.deployNetwork(3);
-        final NetworkOperation upgrade = triggerExecuteImmediate(consensusCapsules);
+        NetworkOperation upgrade = triggerExecuteImmediate(consensusCapsules);
+        upgrade = triggerFreezeScheduled(upgrade, consensusCapsules);
         triggerNowFrozen(upgrade, consensusCapsules);
     }
 
@@ -355,9 +356,9 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
 
     protected NetworkOperation triggerExecuteImmediate(List<ConsensusCapsule> consensusCapsules) {
         final List<AddressBookEntry> addressBookEntries = prepareAddressBook(consensusCapsules);
-        final NetworkOperation upgrade = prepareNetworkUpgrade(
+        final NetworkOperation executeImmediate = prepareNetworkUpgrade(
                 new NetworkOperation(), NetworkUpgrade.WorkflowStep.ExecuteImmediate, addressBookEntries);
-        kubernetesClient.resource(upgrade).create();
+        kubernetesClient.resource(executeImmediate).create();
 
         await().atMost(2, TimeUnit.MINUTES).pollDelay(Duration.ofSeconds(2)).untilAsserted(() -> {
             NetworkOperation netOp = kubernetesClient
@@ -374,7 +375,32 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
             assertThat(ExecuteImmediateTask.isDone(netOp)).isTrue();
         });
 
-        return upgrade;
+        return executeImmediate;
+    }
+
+    protected NetworkOperation triggerFreezeScheduled(
+            final NetworkOperation upgrade, List<ConsensusCapsule> consensusCapsules) {
+        final List<AddressBookEntry> addressBookEntries = prepareAddressBook(consensusCapsules);
+        final NetworkOperation freezeScheduled =
+                prepareNetworkUpgrade(upgrade, NetworkUpgrade.WorkflowStep.FreezeScheduled, addressBookEntries);
+        kubernetesClient.resource(freezeScheduled).patch();
+
+        await().atMost(2, TimeUnit.MINUTES).pollDelay(Duration.ofSeconds(2)).untilAsserted(() -> {
+            NetworkOperation netOp = kubernetesClient
+                    .resources(NetworkOperation.class)
+                    .inNamespace(namespace)
+                    .withName("network-upgrade")
+                    .get();
+            assertThat(netOp).isNotNull();
+            assertThat(netOp.getStatus()).isNotNull();
+            assertThat(netOp.getStatus().getSoftwareSourceStatus()).isNotNull();
+            assertThat(netOp.getStatus().getSoftwareSourceStatus().getConsensusNode())
+                    .isNotNull();
+            assertThat(netOp.getStatus().getPhase()).isNotEqualTo(NetworkOperationStatus.Phase.Succeeded);
+            assertThat(ExecuteImmediateTask.isDone(netOp)).isTrue();
+        });
+
+        return freezeScheduled;
     }
 
     protected void triggerNowFrozen(NetworkOperation upgrade, List<ConsensusCapsule> consensusCapsules) {
