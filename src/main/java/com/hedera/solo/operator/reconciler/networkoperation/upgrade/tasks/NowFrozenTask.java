@@ -10,15 +10,11 @@ import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.library.processor.RetryStep;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
-import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckProcessor;
 import com.hedera.solo.operator.reconciler.networkoperation.genesis.steps.CreateClusterConfigStep;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ApplyConsensusPodChangeStep;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ApplyOrbitConfigurationChangeStep;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.DeleteClusterConfigStep;
-import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ReverifyConsensusNodeChangesetStep;
-import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ReverifyOtelCollectorStep;
-import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ReverifyStreamUploaderChangesetStep;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -72,12 +68,6 @@ public class NowFrozenTask extends AbstractProcessorTask<NetworkOperation, Netwo
     @Override
     public List<ProcessorStep<NetworkOperation, NetworkOperationStatus>> steps() throws ProcessorException {
         return List.of(
-                new ReverifyConsensusNodeChangesetStep(),
-                new ReverifyStreamUploaderChangesetStep(Constants.TPL_VAR_RECORD_STREAM_UPLOADER),
-                new ReverifyStreamUploaderChangesetStep(Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER),
-                new ReverifyStreamUploaderChangesetStep(Constants.TPL_VAR_EVENT_STREAM_UPLOADER),
-                new ReverifyStreamUploaderChangesetStep(Constants.TPL_VAR_BACKUP_UPLOADER),
-                new ReverifyOtelCollectorStep(),
                 new DeleteClusterConfigStep(customResourceManager),
                 new RetryStep<>(new ApplyConsensusPodChangeStep(), Duration.ofSeconds(3), 10),
                 new ApplyOrbitConfigurationChangeStep(),
