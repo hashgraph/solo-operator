@@ -27,7 +27,7 @@ public class FreezeAbortTest {
         assertThat(status).isNotNull();
         assertThat(status.getPhase()).isEqualTo(NetworkOperationStatus.Phase.Succeeded);
         assertThat(status.getConditions().size()).isEqualTo(1);
-        assertThat(status.getConditions()).anyMatch(c -> FreezeAbortStep.TYPE.equals(c.getType()));
+        assertThat(status.getConditions()).anyMatch(c -> FreezeAbortStep.CONDITION_TYPE.equals(c.getType()));
         assertThat(status.getConditions())
                 .anyMatch(c -> resource.getMetadata().getGeneration().equals(c.getObservedGeneration()));
 
@@ -37,7 +37,7 @@ public class FreezeAbortTest {
         assertThat(status).isNotNull();
         assertThat(status.getPhase()).isEqualTo(NetworkOperationStatus.Phase.Succeeded);
         assertThat(status.getConditions().size()).isEqualTo(1);
-        assertThat(status.getConditions()).anyMatch(c -> FreezeAbortStep.TYPE.equals(c.getType()));
+        assertThat(status.getConditions()).anyMatch(c -> FreezeAbortStep.CONDITION_TYPE.equals(c.getType()));
         assertThat(status.getConditions())
                 .anyMatch(c -> resource.getMetadata().getGeneration().equals(c.getObservedGeneration()));
     }
