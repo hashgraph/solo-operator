@@ -87,27 +87,38 @@ public class NowFrozenConsensusCapsules {
                         .editConsensusNode()
                         .withSoftwareVersion(softwareVersion(
                                 consensus, containers.getConsensusNode().getSoftwareVersion())))
-                .with(builder -> builder.editSpec()
-                        .editPodProperties()
-                        .editContainers()
-                        .withBackupUploader(streamUploader(backup, containers.getBackupUploader())))
-                .with(builder -> builder.editSpec()
-                        .editPodProperties()
-                        .editContainers()
-                        .withEventsStreamUploader(streamUploader(events, containers.getEventsStreamUploader())))
-                .with(builder -> builder.editSpec()
-                        .editPodProperties()
-                        .editContainers()
-                        .withRecordStreamSidecarFilesUploader(
-                                streamUploader(recordSidecar, containers.getRecordStreamSidecarFilesUploader())))
-                .with(builder -> builder.editSpec()
-                        .editPodProperties()
-                        .editContainers()
-                        .withRecordStreamUploader(streamUploader(record, containers.getRecordStreamUploader())))
-                .with(builder -> builder.editSpec()
-                        .editPodProperties()
-                        .editContainers()
-                        .withOpenTelemetryCollector(otelCollector(otel, containers.getOpenTelemetryCollector())))
+                .with(builder -> backup == null
+                        ? builder
+                        : builder.editSpec()
+                                .editPodProperties()
+                                .editContainers()
+                                .withBackupUploader(streamUploader(backup, containers.getBackupUploader())))
+                .with(builder -> events == null
+                        ? builder
+                        : builder.editSpec()
+                                .editPodProperties()
+                                .editContainers()
+                                .withEventsStreamUploader(streamUploader(events, containers.getEventsStreamUploader())))
+                .with(builder -> recordSidecar == null
+                        ? builder
+                        : builder.editSpec()
+                                .editPodProperties()
+                                .editContainers()
+                                .withRecordStreamSidecarFilesUploader(streamUploader(
+                                        recordSidecar, containers.getRecordStreamSidecarFilesUploader())))
+                .with(builder -> record == null
+                        ? builder
+                        : builder.editSpec()
+                                .editPodProperties()
+                                .editContainers()
+                                .withRecordStreamUploader(streamUploader(record, containers.getRecordStreamUploader())))
+                .with(builder -> otel == null
+                        ? builder
+                        : builder.editSpec()
+                                .editPodProperties()
+                                .editContainers()
+                                .withOpenTelemetryCollector(
+                                        otelCollector(otel, containers.getOpenTelemetryCollector())))
                 .build();
     }
 
