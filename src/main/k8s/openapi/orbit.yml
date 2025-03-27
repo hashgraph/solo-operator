@@ -145,6 +145,7 @@ components:
                 some properties will be used for both genesis and non-genesis initialization. After DAB Phase 2,
                 these properties will only be used during the genesis initialization process.
               type: object
+              default: {}
               properties:
                 addressBook:
                   description: |
@@ -154,7 +155,16 @@ components:
                     genesis initialization and non-genesis initialization. After DAB Phase 2, this will only be
                     used by the genesis initialization process.
                   type: object
+                  default: {}
                   properties:
+                    realmId:
+                      description: Numeric ID of realm
+                      default: 0
+                      type: integer
+                    shardId:
+                      description: Numeric ID of shard
+                      default: 0
+                      type: integer
                     ledgerId:
                       description: |
                         The ledger ID to use. Equivalent to the `swirld` entry in the Platform SDK `config.txt`
