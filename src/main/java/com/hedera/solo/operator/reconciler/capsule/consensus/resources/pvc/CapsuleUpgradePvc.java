@@ -20,7 +20,7 @@ public class CapsuleUpgradePvc extends CRUDKubernetesDependentResource<Persisten
     }
 
     private static PersistentVolumeClaimSpec getInputPvcSpec(final ConsensusCapsule primary) {
-        if (primary.getSpec().getPersistentVolumeClaims() == null) {
+        if (primary.getSpec() == null || primary.getSpec().getPersistentVolumeClaims() == null) {
             return null;
         }
 

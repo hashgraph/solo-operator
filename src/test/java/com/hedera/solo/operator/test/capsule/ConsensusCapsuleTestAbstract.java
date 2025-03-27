@@ -26,7 +26,6 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PersistentVolumeClaims;
-import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PersistentVolumeClaimsBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PodProperties;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PodPropertiesBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Containers;
@@ -66,7 +65,6 @@ import org.junit.jupiter.api.Test;
 public abstract class ConsensusCapsuleTestAbstract {
     protected final String namespace = getClass().getSimpleName().toLowerCase();
     protected final String orbit = namespace; // for now orbit and namespace are the same
-    protected List<ConsensusCapsule> consensusCapsules;
 
     @Inject
     DefaultConsensusNodeBean defaultConsensusNode;
@@ -212,36 +210,30 @@ public abstract class ConsensusCapsuleTestAbstract {
 
     @Test
     void testSingleNodeDeployment() throws Exception {
-        final List<Long> nodeIds = NodeInfoGenerator.nodeIds(1);
-        final List<TestRecords.NodeInfo> nodes = NodeInfoGenerator.nodes(nodeIds, namespace);
-        this.setupConfigMaps();
-        this.setupSecrets(nodes);
-
-        // create consensus capsule
-        consensusCapsules = createConsensusCapsule(nodes);
-
-        // create network initialization
-        createNetworkOperation(consensusCapsules);
-
-        // test with client
-        checkAddressBook(HederaSdkClientFactory::directContextCreator);
+        this.deployNetwork(1);
     }
 
     @Test
     void testMultiNodeDeployment() throws Exception {
-        final List<Long> nodeIds = NodeInfoGenerator.nodeIds(3);
+        this.deployNetwork(3);
+    }
+
+    protected List<ConsensusCapsule> deployNetwork(int n) throws Exception {
+        final List<Long> nodeIds = NodeInfoGenerator.nodeIds(n);
         final List<TestRecords.NodeInfo> nodes = NodeInfoGenerator.nodes(nodeIds, namespace);
         this.setupConfigMaps();
         this.setupSecrets(nodes);
 
         // create consensus capsule
-        consensusCapsules = createConsensusCapsule(nodes);
+        List<ConsensusCapsule> consensusCapsules = createConsensusCapsule(nodes);
 
         // create network initialization
         createNetworkOperation(consensusCapsules);
 
         // test with client
         checkAddressBook(HederaSdkClientFactory::directContextCreator);
+
+        return consensusCapsules;
     }
 
     void createOrbit() {
@@ -267,7 +259,7 @@ public abstract class ConsensusCapsuleTestAbstract {
     }
 
     protected PersistentVolumeClaims prepareCapsulePVCs(TestRecords.NodeInfo node) {
-        return new PersistentVolumeClaimsBuilder().build();
+        return null;
     }
 
     protected ConsensusCapsule prepareConsensusCapsuleBuilder(final TestRecords.NodeInfo node) {

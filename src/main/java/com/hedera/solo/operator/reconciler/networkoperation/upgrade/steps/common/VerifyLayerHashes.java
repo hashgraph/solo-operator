@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
+package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.common;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus.Validity.Invalid;
@@ -103,7 +103,9 @@ public class VerifyLayerHashes
             final Function<NetworkOperationStatus, Condition> conditionFunction,
             final Function<SoftwareSourceStatus, List<ImageRepositoryStatus>> getStatusList,
             final BiConsumer<SoftwareSourceStatus, List<ImageRepositoryStatus>> setStatusList) {
-        NetworkOperationStatus result = status == null ? new NetworkOperationStatus() : status;
+        NetworkOperationStatus result = status == null
+                ? new NetworkOperationStatus()
+                : edit(status).build(); // make a new copy instead of modifying the input
         if (result.getSoftwareSourceStatus() == null) {
             result.setSoftwareSourceStatus(new SoftwareSourceStatus());
         }

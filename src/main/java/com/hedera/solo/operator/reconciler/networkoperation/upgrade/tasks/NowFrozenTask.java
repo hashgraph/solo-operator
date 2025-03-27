@@ -7,6 +7,7 @@ import com.hedera.solo.operator.library.processor.AbstractProcessorTask;
 import com.hedera.solo.operator.library.processor.Processor;
 import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorStep;
+import com.hedera.solo.operator.library.processor.RetryStep;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
@@ -78,9 +79,9 @@ public class NowFrozenTask extends AbstractProcessorTask<NetworkOperation, Netwo
                 new ReverifyStreamUploaderChangesetStep(Constants.TPL_VAR_BACKUP_UPLOADER),
                 new ReverifyOtelCollectorStep(),
                 new DeleteClusterConfigStep(customResourceManager),
-                new ApplyConsensusPodChangeStep(),
+                new RetryStep<>(new ApplyConsensusPodChangeStep(), Duration.ofSeconds(3), 10),
                 new ApplyOrbitConfigurationChangeStep(),
-                new CreateClusterConfigStep(customResourceManager));
+                new RetryStep<>(new CreateClusterConfigStep(customResourceManager), Duration.ofSeconds(2), 150));
     }
 
     @Override

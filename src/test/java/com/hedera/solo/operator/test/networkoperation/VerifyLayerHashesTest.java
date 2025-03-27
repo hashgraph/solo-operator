@@ -13,7 +13,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlMatching;
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.library.data.AsciiArmor.base64Encode;
 import static com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus.Validity.Valid;
-import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyLayerHashes.selectedImage;
+import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.common.VerifyLayerHashes.selectedImage;
 import static com.hedera.solo.operator.test.fixtures.networkoperation.TestVerifyLayerHashes.updateStatus;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;

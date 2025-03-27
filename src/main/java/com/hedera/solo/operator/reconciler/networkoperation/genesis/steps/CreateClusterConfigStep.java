@@ -4,6 +4,7 @@ package com.hedera.solo.operator.reconciler.networkoperation.genesis.steps;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.library.k8s.KubeletConfig.clusterDomain;
+import static com.hedera.solo.operator.library.time.Timestamp.timestamp;
 import static com.hedera.solo.operator.reconciler.common.Constants.COMPONENT_CONSENSUS_NODE;
 import static com.hedera.solo.operator.reconciler.common.Constants.COMPONENT_DEPLOYMENT;
 import static com.hedera.solo.operator.reconciler.common.Constants.CONFIG_KEY_CONFIG_TXT;
@@ -28,6 +29,7 @@ import com.hedera.solo.operator.model.v1alpha1.orbitspec.consensus.genesis.Addre
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.fabric8.kubernetes.api.model.ConfigMap;
@@ -49,12 +51,15 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import org.jboss.logging.Logger;
 
+/** CreateClusterConfigStep creates the cluster config ConfigMap */
 public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final String TEMPLATE = "cluster-config.yaml";
     public static final String CONDITION_TYPE = "ClusterConfigCreated";
+    public static final String SUCCESS_STATUS_MESSAGE = "Successfully created cluster config: %s/%s";
+    public static final String FAIL_STATUS_MESSAGE = "Failed to create cluster config: %s";
 
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
-    public static final String POD_IPS_NOT_FOUND = "Pod IPs are not found for all consensus nodes";
+    public static final String POD_IPS_NOT_FOUND = "Pod IP not found for consensus node";
 
     private final CustomResourceManager customResourceManager;
 
@@ -63,17 +68,26 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
     }
 
     @Override
+    public boolean isSuccessful(NetworkOperation resource, NetworkOperationStatus status) {
+        return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
+    }
+
+    @Override
+    public boolean shouldSkip(NetworkOperation resource, NetworkOperationStatus status) {
+        return status.getPhase().equals(NetworkOperationStatus.Phase.Failed)
+                || NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
+    }
+
+    @Override
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context) {
-        Objects.requireNonNull(resource, "NetworkOperation resource is required");
-        Objects.requireNonNull(status, "NetworkOperationStatus status is required");
-        Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus phase is required");
-        Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
-        if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed) || isDone(status)) {
-            return status;
-        }
-
         try {
+            Objects.requireNonNull(resource, "NetworkOperation resource is required");
+            Objects.requireNonNull(status, "NetworkOperationStatus status is required");
+            Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus phase is required");
+            Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
+
+            final String timestamp = timestamp();
             final String namespace = resource.getMetadata().getNamespace();
             final Orbit orbit =
                     customResourceManager.orbitByName(resource.getSpec().getOrbit());
@@ -107,38 +121,28 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
             }
 
             // add conditions to the status saying that the configmap has been created
+            log.infof(
+                    "Successfully updated cluster config: %s/%s",
+                    desired.getMetadata().getNamespace(), desired.getMetadata().getName());
             final Condition condition = new ConditionBuilder()
+                    .withObservedGeneration(resource.getMetadata().getGeneration())
                     .withType(CONDITION_TYPE)
                     .withStatus(ConditionStatus.True)
-                    .withLastTransitionTime(Instant.now().toString())
-                    .withMessage("Successfully created config: %s/%s"
-                            .formatted(
-                                    desired.getMetadata().getNamespace(),
-                                    desired.getMetadata().getName()))
+                    .withLastTransitionTime(timestamp)
+                    .withMessage(SUCCESS_STATUS_MESSAGE.formatted(
+                            desired.getMetadata().getNamespace(),
+                            desired.getMetadata().getName()))
                     .build();
-            return edit(status).with(s -> s.addToConditions(condition)).build();
-        } catch (Exception ex) {
-            if (ex instanceof ProcessorException && ex.getMessage().contains(POD_IPS_NOT_FOUND)) {
-                log.warnf(
-                        "%s:%s: pod IPs are not available yet for consensus nodes %s; re-attempting during next reconcile loop"
-                                .formatted(
-                                        resource.getMetadata().getNamespace(),
-                                        resource.getMetadata().getName(),
-                                        resource.getStatus().getConsensusCapsules()),
-                        ex);
-                return status;
+
+            return NetworkOperationStepUtil.prepareStatus(status, List.of(condition));
+        } catch (Throwable t) {
+            if (t.getMessage().contains(POD_IPS_NOT_FOUND)) {
+                log.warn(t.getMessage());
+            } else {
+                log.errorf(t, FAIL_STATUS_MESSAGE, t.getMessage());
             }
 
-            log.error("Failed to create cluster config", ex);
-            return edit(status)
-                    .with(s -> s.addToConditions(new ConditionBuilder()
-                                    .withType(CONDITION_TYPE)
-                                    .withStatus(ConditionStatus.False)
-                                    .withLastTransitionTime(Instant.now().toString())
-                                    .withMessage("Failed to create cluster config: %s".formatted(ex.getMessage()))
-                                    .build())
-                            .withPhase(NetworkOperationStatus.Phase.Failed))
-                    .build();
+            return NetworkOperationStepUtil.prepareFailed(resource, status, t.getMessage(), CONDITION_TYPE);
         }
     }
 
@@ -238,21 +242,14 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
                         .formatted(capsule.getMetadata().getName(), namespace, domain != null ? "." + domain : "");
     }
 
-    ConfigMapBuilder preparePodIPs(final ConfigMapBuilder builder, NetworkOperation primary) {
+    private ConfigMapBuilder preparePodIPs(final ConfigMapBuilder builder, NetworkOperation primary) {
         Map<String, String> labels = Map.of(
                 LABEL_K8S_MANAGED_BY, SOLO_OPERATOR,
                 LABEL_K8S_PART_OF, COMPONENT_CONSENSUS_NODE,
                 LABEL_K8S_COMPONENT, COMPONENT_DEPLOYMENT);
 
         PodList podList = customResourceManager.pods(primary.getMetadata().getNamespace(), labels);
-        List<String> podIps = extractPodIps(podList);
-        if (podIps.isEmpty()
-                || podIps.size() != primary.getStatus().getConsensusCapsules().size()) {
-            throw new ProcessorException(("%s [ labels: %s, consensus capsules: %s")
-                    .formatted(POD_IPS_NOT_FOUND, labels, primary.getStatus().getConsensusCapsules()));
-        }
-
-        String data = String.join("\n", podIps);
+        String data = String.join("\n", extractPodIps(podList));
 
         return builder.addToData(CONFIG_KEY_POD_IPS, data);
     }
@@ -277,11 +274,13 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
             if (pod.getStatus() != null && pod.getStatus().getPodIP() != null) {
                 podIps.add(pod.getStatus().getPodIP());
             } else {
-                // all pods must have an IP, otherwise let's just wait for the next reconcile loop
-                log.warnf(
-                        "Pod IP not found for pod: %s/%s, waiting for next reconcile loop",
-                        pod.getMetadata().getNamespace(), pod.getMetadata().getName());
-                return emptyList();
+                // all pods must have an IP, otherwise we need to wait for the next reconcile loop
+                throw new ProcessorException("%s [nodeId: %s, pod: %s/%s]"
+                        .formatted(
+                                POD_IPS_NOT_FOUND,
+                                pod.getMetadata().getLabels().get(LABEL_NODE_ID),
+                                pod.getMetadata().getNamespace(),
+                                pod.getMetadata().getName()));
             }
         }
 
@@ -289,12 +288,6 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
     }
 
     public static boolean isDone(NetworkOperationStatus status) {
-        if (status == null || status.getConditions() == null) {
-            return false;
-        }
-
-        return status.getConditions().stream()
-                .anyMatch(
-                        c -> c.getType().equals(CONDITION_TYPE) && c.getStatus().equals(ConditionStatus.True));
+        return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }
 }

@@ -12,10 +12,13 @@ import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyConsensusNodeChangesetStep;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyOtelCollectorStep;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyStreamUploaderChangesetStep;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.ConsensusPodSidecarUtil;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import jakarta.enterprise.context.ApplicationScoped;
+import java.lang.invoke.MethodHandles;
 import java.time.Duration;
 import java.util.List;
+import org.jboss.logging.Logger;
 
 /**
  * ExecuteImmediateProcessor performs the actions necessary when the network node emits the "execute-immediate.mf"
@@ -56,7 +59,8 @@ import java.util.List;
  */
 @ApplicationScoped
 public class ExecuteImmediateTask extends AbstractProcessorTask<NetworkOperation, NetworkOperationStatus> {
-    public static final Duration RECONCILE_DELAY = Duration.ofHours(12);
+    public static final Duration RECONCILE_DELAY = Duration.ofHours(1);
+    private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     @Override
     public List<ProcessorStep<NetworkOperation, NetworkOperationStatus>> steps() throws ProcessorException {
@@ -72,14 +76,37 @@ public class ExecuteImmediateTask extends AbstractProcessorTask<NetworkOperation
     @Override
     protected Duration computeReconcileDelay(NetworkOperation resource, NetworkOperationStatus status)
             throws ProcessorException {
-        return RECONCILE_DELAY;
+        if (isDone(resource)) {
+            log.infof("ExecuteImmediate is done, rescheduling after %s", RECONCILE_DELAY);
+            return RECONCILE_DELAY;
+        }
+
+        return Duration.ofSeconds(1);
     }
 
     @Override
     protected Processor<?, ?, ?> computeDeferredProcessor(NetworkOperation resource, Context<NetworkOperation> context)
             throws ProcessorException {
-        // TODO: check status and return NoopProcessor if nothing to do. For example, if the images were checked very
-        // recently, it doesn't need to reverify those.
-        return null;
+        return null; // it does not have any deferred processor
+    }
+
+    public static boolean isDone(NetworkOperation resource) {
+        for (String containerName : List.of(
+                Constants.TPL_VAR_RECORD_STREAM_UPLOADER,
+                Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER,
+                Constants.TPL_VAR_EVENT_STREAM_UPLOADER,
+                Constants.TPL_VAR_BACKUP_UPLOADER)) {
+            if (ConsensusPodSidecarUtil.hasStreamUploaderChangeset(resource, containerName)
+                    && !VerifyStreamUploaderChangesetStep.isDone(resource.getStatus(), containerName)) {
+                return false;
+            }
+        }
+
+        if (ConsensusPodSidecarUtil.hasOtelChangeset(resource)
+                && !VerifyOtelCollectorStep.isDone(resource.getStatus())) {
+            return false;
+        }
+
+        return VerifyConsensusNodeChangesetStep.isDone(resource.getStatus());
     }
 }

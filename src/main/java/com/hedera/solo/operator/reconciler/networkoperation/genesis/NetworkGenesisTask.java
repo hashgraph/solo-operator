@@ -7,6 +7,7 @@ import com.hedera.solo.operator.library.processor.AbstractProcessorTask;
 import com.hedera.solo.operator.library.processor.Processor;
 import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorStep;
+import com.hedera.solo.operator.library.processor.RetryStep;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckProcessor;
@@ -31,18 +32,27 @@ public class NetworkGenesisTask extends AbstractProcessorTask<NetworkOperation, 
 
     private final NetworkCheckProcessor deferredProcessor;
 
+    private final NetworkGenesisTaskConfig genesisConfig;
+
     @Inject
-    public NetworkGenesisTask(CustomResourceManager customResourceManager, NetworkCheckProcessor deferredProcessor) {
+    public NetworkGenesisTask(
+            CustomResourceManager customResourceManager,
+            NetworkCheckProcessor deferredProcessor,
+            NetworkGenesisTaskConfig genesisConfig) {
         this.customResourceManager = customResourceManager;
         this.deferredProcessor = deferredProcessor;
+        this.genesisConfig = genesisConfig;
     }
 
     @Override
     public List<ProcessorStep<NetworkOperation, NetworkOperationStatus>> steps() throws ProcessorException {
         return List.of(
                 new CheckConsensusNodeSecretsStep(customResourceManager),
-                new CreateClusterConfigStep(customResourceManager),
-                new CreatePublicKeysConfigStep(customResourceManager));
+                new CreatePublicKeysConfigStep(customResourceManager),
+                new RetryStep<>(
+                        new CreateClusterConfigStep(customResourceManager),
+                        Duration.ofSeconds(genesisConfig.retryInterval()),
+                        genesisConfig.maxRetries()));
     }
 
     @Override

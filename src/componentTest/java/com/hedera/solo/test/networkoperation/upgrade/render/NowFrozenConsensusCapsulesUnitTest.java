@@ -26,7 +26,7 @@ import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podpropertie
 import com.hedera.solo.operator.model.v1alpha1.networkoperationspec.NetworkUpgrade;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationspec.networkupgrade.Changesets;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationstatus.SoftwareSourceStatus;
-import com.hedera.solo.operator.reconciler.networkoperation.render.NowFrozenConsensusCapsules;
+import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.render.NowFrozenConsensusCapsules;
 import com.hedera.solo.operator.test.fixtures.fuzz.BeanFactory;
 import com.hedera.solo.operator.test.fixtures.fuzz.KubernetesResourceFactory;
 import java.lang.reflect.Type;

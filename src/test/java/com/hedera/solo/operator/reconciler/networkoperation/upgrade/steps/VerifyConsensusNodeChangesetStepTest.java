@@ -10,6 +10,7 @@ import com.hedera.solo.operator.model.commonspec.ImageRepository;
 import com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatusBuilder;
 import com.hedera.solo.operator.test.utils.TemplateLoader;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.util.ArrayList;
@@ -76,16 +77,15 @@ public class VerifyConsensusNodeChangesetStepTest {
                 .removeLast(); // remove the valid entry at the end
         NetworkOperationStatus status = executeStep(networkOperation);
 
-        // no valid repository should be found
-        validateFailureConditions(networkOperation, status);
-
         // validate the status messages
         validateFailureConditions(networkOperation, status);
     }
 
     private NetworkOperationStatus executeStep(NetworkOperation networkOperation) {
         ProcessorStep<NetworkOperation, NetworkOperationStatus> step = new VerifyConsensusNodeChangesetStep();
-        NetworkOperationStatus status = new NetworkOperationStatus();
+        NetworkOperationStatus status = new NetworkOperationStatusBuilder()
+                .withPhase(NetworkOperationStatus.Phase.Pending)
+                .build();
 
         @SuppressWarnings("unchecked")
         Context<NetworkOperation> context = Mockito.mock(Context.class);
