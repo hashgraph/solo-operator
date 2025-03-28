@@ -50,16 +50,18 @@ public class ReverifyOtelCollectorStep implements ProcessorStep<NetworkOperation
 
             if (Objects.isNull(otelCollector) || Objects.isNull(otelCollector.getSoftwareVersionSource())) {
                 log.debugf(
-                        "Ignore checking 'otel-collector' image as it is not specified in network operation: %s/%s",
+                        "Ignore checking 'otel-collector' image as it is not specified in network operation: %s/%s [ %s ]",
                         resource.getMetadata().getNamespace(),
-                        resource.getMetadata().getName());
+                        resource.getMetadata().getName(),
+                        resource.getSpec().getNetworkUpgrade().getWorkflowStep());
                 return status;
             }
 
             log.infof(
-                    "Re-verifying 'otel-collector' image for network operation: %s/%s",
+                    "Re-verifying 'otel-collector' image for network operation: %s/%s [ %s ]",
                     resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName());
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getNetworkUpgrade().getWorkflowStep());
 
             final NetworkOperationStatus updated = updateStatus(
                     resource,
@@ -71,9 +73,10 @@ public class ReverifyOtelCollectorStep implements ProcessorStep<NetworkOperation
                     SoftwareSourceStatus::setOtelCollector);
 
             log.infof(
-                    "Finished re-verification of 'otel-collector' image for network operation: %s/%s",
+                    "Finished re-verification of 'otel-collector' image for network operation: %s/%s [ %s ]",
                     resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName());
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getNetworkUpgrade().getWorkflowStep());
 
             return NetworkOperationStepUtil.checkLastCondition(updated);
         } catch (Throwable t) {

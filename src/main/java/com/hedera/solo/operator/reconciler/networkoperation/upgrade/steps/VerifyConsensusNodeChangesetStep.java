@@ -109,9 +109,10 @@ public class VerifyConsensusNodeChangesetStep implements ProcessorStep<NetworkOp
             Objects.requireNonNull(context, "Context must not be null");
 
             log.infof(
-                    "Verifying 'consensus-node' image for network operation: %s/%s",
+                    "Verifying 'consensus-node' image for network operation: %s/%s [ %s]",
                     resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName());
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getNetworkUpgrade().getWorkflowStep());
 
             final NetworkOperationStatus updated = updateStatus(
                     resource,
@@ -123,9 +124,10 @@ public class VerifyConsensusNodeChangesetStep implements ProcessorStep<NetworkOp
                     SoftwareSourceStatus::setConsensusNode);
 
             log.infof(
-                    "Finished verification of 'consensus-node' image for network operation: %s/%s",
+                    "Finished verification of 'consensus-node' image for network operation: %s/%s [ %s ]",
                     resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName());
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getNetworkUpgrade().getWorkflowStep());
 
             return NetworkOperationStepUtil.checkLastCondition(updated);
         } catch (Throwable t) {

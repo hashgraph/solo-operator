@@ -97,10 +97,11 @@ public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkO
             }
 
             log.infof(
-                    "Verifying '%s' image for network operation: %s/%s",
+                    "Verifying '%s' image for network operation: %s/%s [ %s ]",
                     toStreamUploaderType(this.containerName),
                     resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName());
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getNetworkUpgrade().getWorkflowStep());
 
             final NetworkOperationStatus updated = updateStatus(
                     resource,
@@ -112,10 +113,11 @@ public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkO
                     StreamUploaderVerifier.setter(this.containerName));
 
             log.infof(
-                    "Finished verification of '%s' image for network operation: %s/%s",
+                    "Finished verification of '%s' image for network operation: %s/%s [ %s ]",
                     toStreamUploaderType(this.containerName),
                     resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName());
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getNetworkUpgrade().getWorkflowStep());
 
             return NetworkOperationStepUtil.checkLastCondition(updated);
         } catch (Throwable t) {

@@ -67,15 +67,20 @@ public class ApplyOrbitConfigurationChangeStep implements ProcessorStep<NetworkO
             NowFrozenOrbit nowFrozen = new NowFrozenOrbit(resource);
 
             log.infof(
-                    "Applying orbit change for network operation: %s/%s",
+                    "Applying orbit change for network operation: %s/%s [ %s]",
                     resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName());
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getNetworkUpgrade().getWorkflowStep());
 
             client.resources(Orbit.class)
                     .withName(resource.getSpec().getOrbit())
                     .edit(nowFrozen::update);
 
-            log.infof("Successfully updated orbit: %s", resource.getMetadata().getName());
+            log.infof(
+                    "Successfully updated orbit: %s [ %s ] ",
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getNetworkUpgrade().getWorkflowStep());
+
             final Condition condition = new ConditionBuilder()
                     .withObservedGeneration(resource.getMetadata().getGeneration())
                     .withType(CONDITION_TYPE)

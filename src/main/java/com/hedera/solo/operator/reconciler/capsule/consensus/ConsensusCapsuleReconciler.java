@@ -212,7 +212,7 @@ public class ConsensusCapsuleReconciler implements Cleaner<ConsensusCapsule>, Re
 
     @Override
     public DeleteControl cleanup(final ConsensusCapsule resource, final Context<ConsensusCapsule> context) {
-        log.info("Deleting the resource: %s/%s "
+        log.info("Deleting consensus capsule: %s/%s "
                 .formatted(
                         resource.getMetadata().getNamespace(),
                         resource.getMetadata().getName()));

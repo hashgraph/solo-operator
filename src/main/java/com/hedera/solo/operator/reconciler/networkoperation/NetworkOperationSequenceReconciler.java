@@ -384,7 +384,7 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
     @Override
     public DeleteControl cleanup(NetworkOperation resource, Context<NetworkOperation> context) {
         log.infof(
-                "Deleting the resource: %s/%s [mode = %s] ",
+                "Deleting network-operation: %s/%s [mode = %s] ",
                 resource.getMetadata().getNamespace(),
                 resource.getMetadata().getName(),
                 resource.getSpec().getMode());

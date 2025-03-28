@@ -81,18 +81,20 @@ public class ReverifyStreamUploaderChangesetStep implements ProcessorStep<Networ
                     ConsensusPodSidecarUtil.findStreamUploaderChangeset(resource, this.containerName);
             if (Objects.isNull(changeset) || Objects.isNull(changeset.getSoftwareVersionSource())) {
                 log.debugf(
-                        "Ignore checking '%s' image as it is not specified in network operation: %s/%s",
+                        "Ignore checking '%s' image as it is not specified in network operation: %s/%s [ %s ]",
                         this.containerName,
                         resource.getMetadata().getNamespace(),
-                        resource.getMetadata().getName());
+                        resource.getMetadata().getName(),
+                        resource.getSpec().getNetworkUpgrade().getWorkflowStep());
                 return status; // no-op
             }
 
             log.infof(
-                    "Re-verifying '%s' image for network operation: %s/%s",
+                    "Re-verifying '%s' image for network operation: %s/%s [ %s ]",
                     toStreamUploaderType(this.containerName),
                     resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName());
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getNetworkUpgrade().getWorkflowStep());
 
             final NetworkOperationStatus updated = updateStatus(
                     resource,
@@ -104,10 +106,12 @@ public class ReverifyStreamUploaderChangesetStep implements ProcessorStep<Networ
                     StreamUploaderVerifier.setter(this.containerName));
 
             log.infof(
-                    "Finished re-verification of '%s' image for network operation: %s/%s",
+                    "Finished re-verification of '%s' image for network operation: %s/%s [ %s ]",
                     toStreamUploaderType(this.containerName),
                     resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName());
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getNetworkUpgrade().getWorkflowStep());
+
             return NetworkOperationStepUtil.checkLastCondition(updated);
         } catch (Throwable t) {
             log.errorf(t, FAIL_STATUS_MESSAGE, t.getMessage());

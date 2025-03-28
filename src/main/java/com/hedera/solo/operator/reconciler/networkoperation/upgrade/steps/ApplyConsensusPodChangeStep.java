@@ -82,9 +82,10 @@ public class ApplyConsensusPodChangeStep implements ProcessorStep<NetworkOperati
 
         try {
             log.infof(
-                    "Applying consensus node update for network operation: %s/%s",
+                    "Applying consensus node update for network operation: %s/%s [ %s ]",
                     resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName());
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getNetworkUpgrade().getWorkflowStep());
 
             KubernetesClient client = context.getClient();
             String namespace = resource.getMetadata().getNamespace();
@@ -102,7 +103,10 @@ public class ApplyConsensusPodChangeStep implements ProcessorStep<NetworkOperati
                         .build();
             }
 
-            log.infof("Successfully upgraded all consensus nodes [updated = %s]", upgradedNodes);
+            log.infof(
+                    "Successfully upgraded consensus nodes: %s [%s]",
+                    upgradedNodes, resource.getSpec().getNetworkUpgrade().getWorkflowStep());
+
             final Condition condition = new ConditionBuilder()
                     .withObservedGeneration(resource.getMetadata().getGeneration())
                     .withType(CONDITION_TYPE)

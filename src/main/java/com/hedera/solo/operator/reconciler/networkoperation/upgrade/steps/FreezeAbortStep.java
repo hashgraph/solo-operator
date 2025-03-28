@@ -48,6 +48,12 @@ public class FreezeAbortStep implements ProcessorStep<NetworkOperation, NetworkO
             Objects.requireNonNull(status, "NetworkOperationStatus status is required");
             Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
 
+            log.infof(
+                    "Aborting network operation: %s/%s [ %s ]",
+                    resource.getMetadata().getNamespace(),
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getNetworkUpgrade().getWorkflowStep());
+
             List<Condition> conditions = new ArrayList<>(orEmptyList(() -> status.getConditions()));
             int index = IntStream.range(0, conditions.size())
                     .filter(i -> CONDITION_TYPE.equals(conditions.get(i).getType()))
@@ -67,15 +73,22 @@ public class FreezeAbortStep implements ProcessorStep<NetworkOperation, NetworkO
             }
 
             log.infof(
-                    SUCCESS_STATUS_MESSAGE,
+                    "Successfully aborted network operation: %s/%s [ %s ]",
                     resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName());
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getNetworkUpgrade().getWorkflowStep());
+
             return status.edit()
                     .withPhase(NetworkOperationStatus.Phase.Succeeded)
                     .withConditions(conditions)
                     .build();
         } catch (Throwable t) {
-            log.errorf(t, FAIL_STATUS_MESSAGE, t.getMessage());
+            log.errorf(
+                    t,
+                    FAIL_STATUS_MESSAGE.formatted(
+                            resource.getMetadata().getNamespace(),
+                            resource.getMetadata().getName()),
+                    t.getMessage());
             return NetworkOperationStepUtil.prepareFailed(resource, status, t.getMessage(), CONDITION_TYPE);
         }
     }
