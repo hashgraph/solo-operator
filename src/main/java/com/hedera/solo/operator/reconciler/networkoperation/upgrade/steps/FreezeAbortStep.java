@@ -44,9 +44,11 @@ public class FreezeAbortStep implements ProcessorStep<NetworkOperation, NetworkO
             final Context<NetworkOperation> context) {
 
         try {
-            Objects.requireNonNull(resource, "NetworkOperation resource is required");
-            Objects.requireNonNull(status, "NetworkOperationStatus status is required");
-            Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
+            Objects.requireNonNull(resource, "NetworkOperation is required");
+            Objects.requireNonNull(resource.getSpec(), "NetworkOperationSpec is required");
+            Objects.requireNonNull(resource.getSpec().getNetworkUpgrade(), "NetworkUpgrade is required");
+            Objects.requireNonNull(status, "NetworkOperationStatus is required");
+            Objects.requireNonNull(context, "Context<NetworkOperation> is required");
 
             log.infof(
                     "Aborting network operation: %s/%s [ %s ]",

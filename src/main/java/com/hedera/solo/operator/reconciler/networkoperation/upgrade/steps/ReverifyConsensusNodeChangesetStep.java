@@ -74,10 +74,12 @@ public class ReverifyConsensusNodeChangesetStep implements ProcessorStep<Network
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context)
             throws ProcessorException {
         try {
-            Objects.requireNonNull(resource, "NetworkOperation resource is required");
-            Objects.requireNonNull(status, "NetworkOperationStatus status is required");
-            Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus phase is required");
-            Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
+            Objects.requireNonNull(resource, "NetworkOperation is required");
+            Objects.requireNonNull(resource.getSpec(), "NetworkOperationSpec is required");
+            Objects.requireNonNull(resource.getSpec().getNetworkUpgrade(), "NetworkUpgrade is required");
+            Objects.requireNonNull(status, "NetworkOperationStatus is required");
+            Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus is required");
+            Objects.requireNonNull(context, "Context<NetworkOperation> is required");
 
             log.infof(
                     "Re-verifying consensus node image for network operation: %s/%s [ %s ]",

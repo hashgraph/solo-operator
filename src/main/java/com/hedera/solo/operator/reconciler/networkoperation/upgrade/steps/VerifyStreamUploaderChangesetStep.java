@@ -83,6 +83,13 @@ public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkO
             throws ProcessorException {
 
         try {
+            Objects.requireNonNull(resource, "NetworkOperation resource is required");
+            Objects.requireNonNull(resource.getSpec(), "NetworkOperationSpec spec is required");
+            Objects.requireNonNull(resource.getSpec().getNetworkUpgrade(), "NetworkUpgrade networkUpgrade is required");
+            Objects.requireNonNull(status, "NetworkOperationStatus is required");
+            Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus is required");
+            Objects.requireNonNull(context, "Context<NetworkOperation> is required");
+
             final StreamUploaderChangeset changeset =
                     ConsensusPodSidecarUtil.findStreamUploaderChangeset(resource, this.containerName);
             if (Objects.isNull(changeset) || Objects.isNull(changeset.getSoftwareVersionSource())) {
