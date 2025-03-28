@@ -58,24 +58,31 @@ public class ApplyOrbitConfigurationChangeStep implements ProcessorStep<NetworkO
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context)
             throws ProcessorException {
         try {
-            Objects.requireNonNull(resource, "NetworkOperation resource is required");
-            Objects.requireNonNull(status, "NetworkOperationStatus status is required");
-            Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus phase is required");
-            Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
+            Objects.requireNonNull(resource, "NetworkOperation is required");
+            Objects.requireNonNull(resource.getSpec(), "NetworkOperationSpec is required");
+            Objects.requireNonNull(resource.getSpec().getNetworkUpgrade(), "NetworkUpgrade is required");
+            Objects.requireNonNull(status, "NetworkOperationStatus is required");
+            Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus is required");
+            Objects.requireNonNull(context, "Context<NetworkOperation> is required");
 
             KubernetesClient client = context.getClient();
             NowFrozenOrbit nowFrozen = new NowFrozenOrbit(resource);
 
             log.infof(
-                    "Applying orbit change for network operation: %s/%s",
+                    "Applying orbit change for network operation: %s/%s [ %s]",
                     resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName());
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getNetworkUpgrade().getWorkflowStep());
 
             client.resources(Orbit.class)
                     .withName(resource.getSpec().getOrbit())
                     .edit(nowFrozen::update);
 
-            log.infof("Successfully updated orbit: %s", resource.getMetadata().getName());
+            log.infof(
+                    "Successfully updated orbit: %s [ %s ] ",
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getNetworkUpgrade().getWorkflowStep());
+
             final Condition condition = new ConditionBuilder()
                     .withObservedGeneration(resource.getMetadata().getGeneration())
                     .withType(CONDITION_TYPE)

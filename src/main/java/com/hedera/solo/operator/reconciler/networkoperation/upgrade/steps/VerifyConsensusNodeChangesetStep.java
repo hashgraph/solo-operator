@@ -105,13 +105,16 @@ public class VerifyConsensusNodeChangesetStep implements ProcessorStep<NetworkOp
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context) {
         try {
-            Objects.requireNonNull(resource, "NetworkOperation must not be null");
-            Objects.requireNonNull(context, "Context must not be null");
+            Objects.requireNonNull(resource, "NetworkOperation is required");
+            Objects.requireNonNull(resource.getSpec(), "NetworkOperationSpec is required");
+            Objects.requireNonNull(resource.getSpec().getNetworkUpgrade(), "NetworkUpgrade is required");
+            Objects.requireNonNull(context, "Context<NetworkOperation> is required");
 
             log.infof(
-                    "Verifying 'consensus-node' image for network operation: %s/%s",
+                    "Verifying 'consensus-node' image for network operation: %s/%s [ %s]",
                     resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName());
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getNetworkUpgrade().getWorkflowStep());
 
             final NetworkOperationStatus updated = updateStatus(
                     resource,
@@ -123,9 +126,10 @@ public class VerifyConsensusNodeChangesetStep implements ProcessorStep<NetworkOp
                     SoftwareSourceStatus::setConsensusNode);
 
             log.infof(
-                    "Finished verification of 'consensus-node' image for network operation: %s/%s",
+                    "Finished verification of 'consensus-node' image for network operation: %s/%s [ %s ]",
                     resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName());
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getNetworkUpgrade().getWorkflowStep());
 
             return NetworkOperationStepUtil.checkLastCondition(updated);
         } catch (Throwable t) {

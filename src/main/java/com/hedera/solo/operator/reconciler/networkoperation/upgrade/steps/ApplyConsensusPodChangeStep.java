@@ -69,11 +69,13 @@ public class ApplyConsensusPodChangeStep implements ProcessorStep<NetworkOperati
             final NetworkOperationStatus status,
             final Context<NetworkOperation> context)
             throws ProcessorException {
-        Objects.requireNonNull(resource, "NetworkOperation resource is required");
+        Objects.requireNonNull(resource, "NetworkOperation is required");
+        Objects.requireNonNull(resource.getSpec(), "NetworkOperationSpec is required");
+        Objects.requireNonNull(resource.getSpec().getNetworkUpgrade(), "NetworkUpgrade is required");
         Objects.requireNonNull(resource.getSpec().getNetworkUpgrade().getAddressBook(), "AddressBook is required");
-        Objects.requireNonNull(status, "NetworkOperationStatus status is required");
-        Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus phase is required");
-        Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
+        Objects.requireNonNull(status, "NetworkOperationStatus is required");
+        Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus is required");
+        Objects.requireNonNull(context, "Context<NetworkOperation> is required");
 
         Set<Long> excludeNodes = new HashSet<>(resource.getStatus().getUpgradedNodes());
         Set<Long> includeNodes = resource.getSpec().getNetworkUpgrade().getAddressBook().stream()
@@ -82,9 +84,10 @@ public class ApplyConsensusPodChangeStep implements ProcessorStep<NetworkOperati
 
         try {
             log.infof(
-                    "Applying consensus node update for network operation: %s/%s",
+                    "Applying consensus node update for network operation: %s/%s [ %s ]",
                     resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName());
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getNetworkUpgrade().getWorkflowStep());
 
             KubernetesClient client = context.getClient();
             String namespace = resource.getMetadata().getNamespace();
@@ -102,7 +105,10 @@ public class ApplyConsensusPodChangeStep implements ProcessorStep<NetworkOperati
                         .build();
             }
 
-            log.infof("Successfully upgraded all consensus nodes [updated = %s]", upgradedNodes);
+            log.infof(
+                    "Successfully upgraded consensus nodes: %s [%s]",
+                    upgradedNodes, resource.getSpec().getNetworkUpgrade().getWorkflowStep());
+
             final Condition condition = new ConditionBuilder()
                     .withObservedGeneration(resource.getMetadata().getGeneration())
                     .withType(CONDITION_TYPE)

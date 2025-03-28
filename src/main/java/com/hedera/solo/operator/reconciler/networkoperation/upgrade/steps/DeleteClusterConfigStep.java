@@ -48,10 +48,12 @@ public class DeleteClusterConfigStep implements ProcessorStep<NetworkOperation, 
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context) {
 
         try {
-            Objects.requireNonNull(resource, "NetworkOperation resource is required");
-            Objects.requireNonNull(status, "NetworkOperationStatus status is required");
-            Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus phase is required");
-            Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
+            Objects.requireNonNull(resource, "NetworkOperation is required");
+            Objects.requireNonNull(resource.getSpec(), "NetworkOperationSpec is required");
+            Objects.requireNonNull(resource.getSpec().getNetworkUpgrade(), "NetworkUpgrade is required");
+            Objects.requireNonNull(status, "NetworkOperationStatus is required");
+            Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus is required");
+            Objects.requireNonNull(context, "Context<NetworkOperation> is required");
 
             if (status.getPhase().equals(NetworkOperationStatus.Phase.Failed) || isDone(status)) {
                 log.debugf(
@@ -68,18 +70,20 @@ public class DeleteClusterConfigStep implements ProcessorStep<NetworkOperation, 
             final ConfigMap existing = customResourceManager.configMapByName(namespace, Constants.CLUSTER_CONFIG_NAME);
             if (existing != null) {
                 log.debugf(
-                        "Deleting '%s' for network operation: %s/%s",
+                        "Deleting '%s' for network operation: %s/%s [ %s ]",
                         Constants.CLUSTER_CONFIG_NAME,
                         resource.getMetadata().getNamespace(),
-                        resource.getMetadata().getName());
+                        resource.getMetadata().getName(),
+                        resource.getSpec().getNetworkUpgrade().getWorkflowStep());
 
                 customResourceManager.getKubernetesClient().resource(existing).delete();
 
                 log.debugf(
-                        "Successfully deleted '%s' for network operation: %s/%s",
+                        "Successfully deleted '%s' for network operation: %s/%s [ %s ]",
                         Constants.CLUSTER_CONFIG_NAME,
                         resource.getMetadata().getNamespace(),
-                        resource.getMetadata().getName());
+                        resource.getMetadata().getName(),
+                        resource.getSpec().getNetworkUpgrade().getWorkflowStep());
             } else {
                 log.warnf(
                         "'%s/%s' doesn't exist. Nothing to delete, continuing to next step...",

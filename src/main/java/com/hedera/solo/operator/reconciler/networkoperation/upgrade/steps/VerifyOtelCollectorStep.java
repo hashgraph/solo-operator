@@ -45,10 +45,12 @@ public class VerifyOtelCollectorStep implements ProcessorStep<NetworkOperation, 
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context) {
         try {
-            Objects.requireNonNull(resource, "NetworkOperation resource is required");
-            Objects.requireNonNull(status, "NetworkOperationStatus status is required");
-            Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus phase is required");
-            Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
+            Objects.requireNonNull(resource, "NetworkOperation is required");
+            Objects.requireNonNull(resource.getSpec(), "NetworkOperationSpec is required");
+            Objects.requireNonNull(resource.getSpec().getNetworkUpgrade(), "NetworkUpgrade is required");
+            Objects.requireNonNull(status, "NetworkOperationStatus is required");
+            Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus is required");
+            Objects.requireNonNull(context, "Context<NetworkOperation> is required");
 
             OtelCollector otelCollector =
                     resource.getSpec().getNetworkUpgrade().getChangesets().getOtelCollector();
@@ -57,14 +59,16 @@ public class VerifyOtelCollectorStep implements ProcessorStep<NetworkOperation, 
                 log.debugf(
                         "Ignore checking 'otel-collector' image as it is not specified in network operation: %s/%s",
                         resource.getMetadata().getNamespace(),
-                        resource.getMetadata().getName());
+                        resource.getMetadata().getName(),
+                        resource.getSpec().getNetworkUpgrade().getWorkflowStep());
                 return status;
             }
 
             log.infof(
-                    "Verifying otel-collector image for network operation: %s/%s",
+                    "Verifying otel-collector image for network operation: %s/%s [ %s ]",
                     resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName());
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getNetworkUpgrade().getWorkflowStep());
 
             final NetworkOperationStatus updated = updateStatus(
                     resource,
@@ -79,6 +83,7 @@ public class VerifyOtelCollectorStep implements ProcessorStep<NetworkOperation, 
                     "Finished verification of otel-collector image for network operation: %s/%s",
                     resource.getMetadata().getNamespace(),
                     resource.getMetadata().getName());
+
             return NetworkOperationStepUtil.checkLastCondition(updated);
         } catch (Throwable t) {
             log.errorf(t, FAIL_STATUS_MESSAGE, t.getMessage());

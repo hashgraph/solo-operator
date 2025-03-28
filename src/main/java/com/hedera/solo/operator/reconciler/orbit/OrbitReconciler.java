@@ -102,10 +102,7 @@ public class OrbitReconciler implements Cleaner<Orbit>, Reconciler<Orbit> {
 
     @Override
     public DeleteControl cleanup(Orbit resource, Context<Orbit> context) throws Exception {
-        log.info("Deleting the resource: %s/%s "
-                .formatted(
-                        resource.getMetadata().getNamespace(),
-                        resource.getMetadata().getName()));
+        log.info("Deleting orbit: %s ".formatted(resource.getMetadata().getName()));
         cleanupEvents(resource, context);
         return DeleteControl.defaultDelete();
     }

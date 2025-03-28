@@ -83,6 +83,13 @@ public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkO
             throws ProcessorException {
 
         try {
+            Objects.requireNonNull(resource, "NetworkOperation resource is required");
+            Objects.requireNonNull(resource.getSpec(), "NetworkOperationSpec spec is required");
+            Objects.requireNonNull(resource.getSpec().getNetworkUpgrade(), "NetworkUpgrade networkUpgrade is required");
+            Objects.requireNonNull(status, "NetworkOperationStatus is required");
+            Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus is required");
+            Objects.requireNonNull(context, "Context<NetworkOperation> is required");
+
             final StreamUploaderChangeset changeset =
                     ConsensusPodSidecarUtil.findStreamUploaderChangeset(resource, this.containerName);
             if (Objects.isNull(changeset) || Objects.isNull(changeset.getSoftwareVersionSource())) {
@@ -97,10 +104,11 @@ public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkO
             }
 
             log.infof(
-                    "Verifying '%s' image for network operation: %s/%s",
+                    "Verifying '%s' image for network operation: %s/%s [ %s ]",
                     toStreamUploaderType(this.containerName),
                     resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName());
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getNetworkUpgrade().getWorkflowStep());
 
             final NetworkOperationStatus updated = updateStatus(
                     resource,
@@ -112,10 +120,11 @@ public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkO
                     StreamUploaderVerifier.setter(this.containerName));
 
             log.infof(
-                    "Finished verification of '%s' image for network operation: %s/%s",
+                    "Finished verification of '%s' image for network operation: %s/%s [ %s ]",
                     toStreamUploaderType(this.containerName),
                     resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName());
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getNetworkUpgrade().getWorkflowStep());
 
             return NetworkOperationStepUtil.checkLastCondition(updated);
         } catch (Throwable t) {

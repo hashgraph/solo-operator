@@ -7,7 +7,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
+import com.hedera.solo.operator.model.v1alpha1.networkoperationspec.NetworkUpgrade;
+import com.hedera.solo.operator.model.v1alpha1.networkoperationspec.NetworkUpgradeBuilder;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.FreezeAbortStep;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.Test;
@@ -16,7 +19,15 @@ public class FreezeAbortTest {
     @Test
     public void test() {
         NetworkOperation resource = edit(new NetworkOperation())
-                .with(metadata -> metadata.editMetadata().withGeneration(0L))
+                .with(metadata -> metadata.editMetadata()
+                        .withNamespace("test")
+                        .withName("network-upgrade")
+                        .withGeneration(0L))
+                .with(spec -> spec.editSpec()
+                        .withMode(NetworkOperationSpec.Mode.NetworkUpgrade)
+                        .withNetworkUpgrade(new NetworkUpgradeBuilder()
+                                .withWorkflowStep(NetworkUpgrade.WorkflowStep.FreezeAbort)
+                                .build()))
                 .build();
         FreezeAbortStep step = new FreezeAbortStep();
         Context context = mock(Context.class);
