@@ -11,9 +11,11 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationstatus.SoftwareSourceStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.common.ConsensusVerifier;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.StepConditionType;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.lang.invoke.MethodHandles;
+import java.util.List;
 import java.util.Objects;
 import org.jboss.logging.Logger;
 
@@ -84,7 +86,7 @@ import org.jboss.logging.Logger;
  * <p>If a valid image source is found, add a condition to the status indicating the success and the selected source URL
  */
 public class VerifyConsensusNodeChangesetStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
-    public static final String CONDITION_TYPE = "ImageVerified: ConsensusNode";
+    public static final StepConditionType CONDITION_TYPE = new StepConditionType("ImageVerified", "ConsensusNode");
     public static final String SUCCESS_STATUS_MESSAGE =
             "Image verification succeeded for 'consensus-node'. Selected for deployment: %s";
     public static final String FAIL_STATUS_MESSAGE = "Image verification failed for 'consensus-node'";
@@ -125,13 +127,22 @@ public class VerifyConsensusNodeChangesetStep implements ProcessorStep<NetworkOp
                     SoftwareSourceStatus::getConsensusNode,
                     SoftwareSourceStatus::setConsensusNode);
 
+            if (!isDone(updated)) {
+                log.warnf(
+                        "Failed to verify consensus node image for network operation: %s/%s [ %s ]",
+                        resource.getMetadata().getNamespace(),
+                        resource.getMetadata().getName(),
+                        resource.getSpec().getNetworkUpgrade().getWorkflowStep());
+                return NetworkOperationStepUtil.prepareStatus(updated, List.of(), NetworkOperationStatus.Phase.Failed);
+            }
+
             log.infof(
-                    "Finished verification of 'consensus-node' image for network operation: %s/%s [ %s ]",
+                    "Successfully verified consensus node image for network operation: %s/%s [ %s ]",
                     resource.getMetadata().getNamespace(),
                     resource.getMetadata().getName(),
                     resource.getSpec().getNetworkUpgrade().getWorkflowStep());
 
-            return NetworkOperationStepUtil.checkLastCondition(updated);
+            return NetworkOperationStepUtil.prepareStatus(updated, List.of());
         } catch (Throwable t) {
             log.errorf(t, FAIL_STATUS_MESSAGE, t.getMessage());
             return NetworkOperationStepUtil.prepareFailed(resource, status, t.getMessage(), CONDITION_TYPE);

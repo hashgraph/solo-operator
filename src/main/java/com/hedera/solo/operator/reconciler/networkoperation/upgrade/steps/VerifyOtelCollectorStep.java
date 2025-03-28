@@ -2,8 +2,6 @@
 
 package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
 
-import static com.hedera.solo.operator.library.time.Timestamp.timestamp;
-import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.common.VerifyLayerHashes.selectedImage;
 import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.common.VerifyLayerHashes.updateStatus;
 import static com.hedera.solo.operator.reconciler.networkoperation.utils.ConsensusPodSidecarUtil.hasOtelChangeset;
 
@@ -12,16 +10,18 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationspec.networkupgrade.changesets.OtelCollector;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationstatus.SoftwareSourceStatus;
-import com.hedera.solo.operator.reconciler.common.ConditionStatus;
+import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.common.OtelCollectorVerifier;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.StepConditionType;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.lang.invoke.MethodHandles;
+import java.util.List;
 import java.util.Objects;
 import org.jboss.logging.Logger;
 
 public class VerifyOtelCollectorStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
-    public static final String CONDITION_TYPE = "ImageVerified: OtelCollector";
+    public static final StepConditionType CONDITION_TYPE = new StepConditionType("ImageVerified", "OtelCollector");
     public static final String SUCCESS_STATUS_MESSAGE = "Image verification succeeded for 'otel-collector': %s";
     public static final String FAIL_STATUS_MESSAGE = "Image verification failed for 'otel-collector'";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
@@ -79,12 +79,23 @@ public class VerifyOtelCollectorStep implements ProcessorStep<NetworkOperation, 
                     SoftwareSourceStatus::getOtelCollector,
                     SoftwareSourceStatus::setOtelCollector);
 
-            log.infof(
-                    "Finished verification of otel-collector image for network operation: %s/%s",
-                    resource.getMetadata().getNamespace(),
-                    resource.getMetadata().getName());
+            if (!isDone(updated)) {
+                log.warnf(
+                        "Failed to verify otel-collector image for network operation: %s/%s [ %s ]",
+                        resource.getMetadata().getNamespace(),
+                        resource.getMetadata().getName(),
+                        resource.getSpec().getNetworkUpgrade().getWorkflowStep());
 
-            return NetworkOperationStepUtil.checkLastCondition(updated);
+                return NetworkOperationStepUtil.prepareStatus(updated, List.of(), NetworkOperationStatus.Phase.Failed);
+            }
+
+            log.infof(
+                    "Successfully verified 'otel-collector' image for network operation: %s/%s [ %s ]",
+                    resource.getMetadata().getNamespace(),
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getNetworkUpgrade().getWorkflowStep());
+
+            return NetworkOperationStepUtil.prepareStatus(updated, List.of());
         } catch (Throwable t) {
             log.errorf(t, FAIL_STATUS_MESSAGE, t.getMessage());
             return NetworkOperationStepUtil.prepareFailed(resource, status, t.getMessage(), CONDITION_TYPE);
@@ -92,17 +103,8 @@ public class VerifyOtelCollectorStep implements ProcessorStep<NetworkOperation, 
     }
 
     Condition createCondition(final NetworkOperationStatus status) {
-        String image = selectedImage(status.getSoftwareSourceStatus().getOtelCollector());
-        String timestamp = timestamp();
-        return image == null
-                ? new Condition(timestamp, FAIL_STATUS_MESSAGE, null, null, ConditionStatus.False, CONDITION_TYPE)
-                : new Condition(
-                        null,
-                        SUCCESS_STATUS_MESSAGE.formatted(image),
-                        null,
-                        null,
-                        ConditionStatus.True,
-                        CONDITION_TYPE);
+        return OtelCollectorVerifier.createCondition(
+                status, SUCCESS_STATUS_MESSAGE, FAIL_STATUS_MESSAGE, CONDITION_TYPE);
     }
 
     public static boolean isDone(NetworkOperationStatus status) {

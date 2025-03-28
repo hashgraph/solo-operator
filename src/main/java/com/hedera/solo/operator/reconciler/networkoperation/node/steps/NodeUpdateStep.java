@@ -7,10 +7,11 @@ import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.StepConditionType;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 
 public class NodeUpdateStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
-    public static final String CONDITION_TYPE = "NodeUpdate";
+    public static final StepConditionType CONDITION_TYPE = new StepConditionType("NodeOperation", "NodeUpdate");
     public static final String SUCCESS_STATUS_MESSAGE = "Successfully updated consensus node: %s";
     public static final String FAIL_STATUS_MESSAGE = "Failed to updated consensus node: %s";
 

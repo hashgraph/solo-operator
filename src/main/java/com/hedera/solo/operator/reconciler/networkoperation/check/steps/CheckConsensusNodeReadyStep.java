@@ -14,6 +14,7 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.StepConditionType;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -31,7 +32,7 @@ import org.jboss.logging.Logger;
 
 /** CheckConsensusNodeRunningStep checks if the consensus node is ACTIVE and processing transactions */
 public class CheckConsensusNodeReadyStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
-    public static final String CONDITION_TYPE = "ConsensusCapsuleReady";
+    public static final StepConditionType CONDITION_TYPE = new StepConditionType("VerifyReady", "ConsensusCapsule");
     public static final String SUCCESS_STATUS_MESSAGE = "Consensus nodes are ready: %s";
     public static final String FAIL_STATUS_MESSAGE = "Consensus nodes are not ready: %s";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
@@ -78,7 +79,8 @@ public class CheckConsensusNodeReadyStep implements ProcessorStep<NetworkOperati
                 resultingPhase = NetworkOperationStatus.Phase.Succeeded;
                 conditions.add(new ConditionBuilder()
                         .withObservedGeneration(resource.getMetadata().getGeneration())
-                        .withType(CONDITION_TYPE)
+                        .withType(CONDITION_TYPE.type())
+                        .withReason(CONDITION_TYPE.reason())
                         .withStatus(ConditionStatus.True)
                         .withMessage(SUCCESS_STATUS_MESSAGE.formatted(phaseMap))
                         .withLastTransitionTime(timestamp)
@@ -88,7 +90,8 @@ public class CheckConsensusNodeReadyStep implements ProcessorStep<NetworkOperati
                 resultingPhase = NetworkOperationStatus.Phase.Failed;
                 conditions.add(new ConditionBuilder()
                         .withObservedGeneration(resource.getMetadata().getGeneration())
-                        .withType(CONDITION_TYPE)
+                        .withType(CONDITION_TYPE.type())
+                        .withReason(CONDITION_TYPE.reason())
                         .withStatus(ConditionStatus.False)
                         .withMessage(FAIL_STATUS_MESSAGE.formatted(phaseMap))
                         .withLastTransitionTime(timestamp)

@@ -3,7 +3,6 @@
 package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
 
 import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.common.VerifyLayerHashes.updateStatus;
-import static com.hedera.solo.operator.reconciler.networkoperation.utils.ConsensusPodSidecarUtil.computeStreamUploaderConditionType;
 import static com.hedera.solo.operator.reconciler.networkoperation.utils.ConsensusPodSidecarUtil.toStreamUploaderType;
 
 import com.hedera.solo.operator.library.processor.ProcessorException;
@@ -14,9 +13,11 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.common.StreamUploaderVerifier;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.ConsensusPodSidecarUtil;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.StepConditionType;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.lang.invoke.MethodHandles;
+import java.util.List;
 import java.util.Objects;
 import org.jboss.logging.Logger;
 
@@ -50,7 +51,7 @@ import org.jboss.logging.Logger;
  * <p>If a valid image source is found, add a condition to the status indicating the success and the selected source URL
  */
 public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
-    public static final String CONDITION_TYPE = "ImageVerified: StreamUploader";
+    public static final String CONDITION_TYPE = "ImageVerified";
     public static final String SUCCESS_STATUS_MESSAGE =
             "Image verification succeeded for '%s'. Selected for deployment: %s";
     public static final String FAIL_STATUS_MESSAGE = "Image verification failed for '%s'";
@@ -72,7 +73,7 @@ public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkO
             return true;
         }
 
-        final String conditionType = computeStreamUploaderConditionType(CONDITION_TYPE, containerName);
+        final StepConditionType conditionType = new StepConditionType(CONDITION_TYPE, containerName);
         return status.getPhase().equals(NetworkOperationStatus.Phase.Failed)
                 || NetworkOperationStepUtil.isSuccessful(status, conditionType);
     }
@@ -119,28 +120,40 @@ public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkO
                     StreamUploaderVerifier.getter(this.containerName),
                     StreamUploaderVerifier.setter(this.containerName));
 
+            if (!isDone(updated, containerName)) {
+                log.warnf(
+                        "Failed to verify '%s' image for network operation: %s/%s [ %s ]",
+                        toStreamUploaderType(this.containerName),
+                        resource.getMetadata().getNamespace(),
+                        resource.getMetadata().getName(),
+                        resource.getSpec().getNetworkUpgrade().getWorkflowStep());
+
+                return NetworkOperationStepUtil.prepareStatus(updated, List.of(), NetworkOperationStatus.Phase.Failed);
+            }
+
             log.infof(
-                    "Finished verification of '%s' image for network operation: %s/%s [ %s ]",
+                    "Successfully verified '%s' image for network operation: %s/%s [ %s ]",
                     toStreamUploaderType(this.containerName),
                     resource.getMetadata().getNamespace(),
                     resource.getMetadata().getName(),
                     resource.getSpec().getNetworkUpgrade().getWorkflowStep());
 
-            return NetworkOperationStepUtil.checkLastCondition(updated);
+            return NetworkOperationStepUtil.prepareStatus(updated, List.of());
         } catch (Throwable t) {
             log.errorf(t, FAIL_STATUS_MESSAGE, t.getMessage());
-            return NetworkOperationStepUtil.prepareFailed(resource, status, t.getMessage(), CONDITION_TYPE);
+            final StepConditionType conditionType = new StepConditionType(CONDITION_TYPE, containerName);
+            return NetworkOperationStepUtil.prepareFailed(resource, status, t.getMessage(), conditionType);
         }
     }
 
     Condition createCondition(final NetworkOperationStatus status) {
-        String conditionType = computeStreamUploaderConditionType(CONDITION_TYPE, containerName);
+        final StepConditionType conditionType = new StepConditionType(CONDITION_TYPE, this.containerName);
         return StreamUploaderVerifier.prepareCondition(
                 status, this.containerName, SUCCESS_STATUS_MESSAGE, FAIL_STATUS_MESSAGE, conditionType);
     }
 
     public static boolean isDone(NetworkOperationStatus status, String containerName) {
-        final String conditionType = computeStreamUploaderConditionType(CONDITION_TYPE, containerName);
+        final StepConditionType conditionType = new StepConditionType(CONDITION_TYPE, containerName);
         return NetworkOperationStepUtil.isSuccessful(status, conditionType);
     }
 }
