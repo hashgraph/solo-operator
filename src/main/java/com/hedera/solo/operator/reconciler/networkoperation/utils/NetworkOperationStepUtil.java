@@ -47,19 +47,19 @@ public final class NetworkOperationStepUtil {
             NetworkOperation resource,
             NetworkOperationStatus status,
             final String message,
-            final String conditionType) {
+            final StepConditionType conditionType) {
 
         Objects.requireNonNull(resource, "NetworkOperation resource is required");
         Objects.requireNonNull(status, "NetworkOperationStatus status is required");
-        Objects.requireNonNull(message, "Failed message is required");
         Objects.requireNonNull(conditionType, "Condition type is required");
 
         final Condition condition = new ConditionBuilder()
                 .withObservedGeneration(resource.getMetadata().getGeneration())
-                .withType(conditionType)
+                .withType(conditionType.type())
+                .withReason(conditionType.reason())
                 .withStatus(ConditionStatus.False)
                 .withLastTransitionTime(timestamp())
-                .withMessage(message)
+                .withMessage(message != null ? message : "Network operation failed")
                 .build();
 
         return prepareStatus(status, List.of(condition), NetworkOperationStatus.Phase.Failed);
@@ -85,7 +85,7 @@ public final class NetworkOperationStepUtil {
         for (final Condition condition : conditions) {
             boolean found = false;
             for (final Condition c : finalConditions) {
-                if (c.getType().equals(condition.getType())) {
+                if (c.getType().equals(condition.getType()) && c.getReason().equals(condition.getReason())) {
                     log.debugf("Condition %s already exists, updating", condition.getType());
                     c.setObservedGeneration(condition.getObservedGeneration());
                     c.setLastTransitionTime(condition.getLastTransitionTime());
@@ -107,7 +107,7 @@ public final class NetworkOperationStepUtil {
                 .build();
     }
 
-    public static boolean isSuccessful(final NetworkOperationStatus status, final String conditionType) {
+    public static boolean isSuccessful(final NetworkOperationStatus status, final StepConditionType conditionType) {
         if (status == null
                 || status.getConditions() == null
                 || status.getConditions().isEmpty()
@@ -116,23 +116,8 @@ public final class NetworkOperationStepUtil {
         }
 
         return status.getConditions().stream()
-                .anyMatch(
-                        c -> c.getType().equals(conditionType) && c.getStatus().equals(ConditionStatus.True));
-    }
-
-    /**
-     * Return a status with Failed or Succeeded phase based on the last condition
-     *
-     * @param updated network operation status
-     * @return network operation status with correct phase
-     */
-    public static NetworkOperationStatus checkLastCondition(final NetworkOperationStatus updated) {
-        final Condition c = updated.getConditions().getLast();
-        if (c != null && !c.getStatus().equals(ConditionStatus.True)) {
-            log.warnf("Last condition is not successful: %s", c.getMessage());
-            return NetworkOperationStepUtil.prepareStatus(updated, List.of(), NetworkOperationStatus.Phase.Failed);
-        }
-
-        return prepareStatus(updated, List.of());
+                .anyMatch(c -> c.getType().equals(conditionType.type())
+                        && c.getReason().equals(conditionType.reason())
+                        && c.getStatus().equals(ConditionStatus.True));
     }
 }

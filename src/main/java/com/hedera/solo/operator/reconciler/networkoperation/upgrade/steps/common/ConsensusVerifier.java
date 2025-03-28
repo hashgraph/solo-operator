@@ -10,6 +10,7 @@ import com.hedera.solo.operator.model.commonspec.SoftwareVersionSource;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.StepConditionType;
 import io.fabric8.kubernetes.api.model.Condition;
 import java.util.Objects;
 
@@ -31,17 +32,23 @@ public final class ConsensusVerifier {
             final NetworkOperationStatus status,
             final String successMessageTemplate,
             final String failMessageTemplate,
-            final String conditionType) {
+            final StepConditionType conditionType) {
         String image = selectedImage(status.getSoftwareSourceStatus().getConsensusNode());
         String timestamp = timestamp();
         return image == null
-                ? new Condition(null, failMessageTemplate, null, null, ConditionStatus.False, conditionType)
+                ? new Condition(
+                        timestamp,
+                        failMessageTemplate,
+                        null,
+                        conditionType.reason(),
+                        ConditionStatus.False,
+                        conditionType.type())
                 : new Condition(
                         timestamp,
                         successMessageTemplate.formatted(image),
                         null,
-                        null,
+                        conditionType.reason(),
                         ConditionStatus.True,
-                        conditionType);
+                        conditionType.type());
     }
 }

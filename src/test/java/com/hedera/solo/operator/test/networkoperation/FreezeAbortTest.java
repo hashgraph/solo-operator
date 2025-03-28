@@ -30,7 +30,9 @@ public class FreezeAbortTest {
                                 .build()))
                 .build();
         FreezeAbortStep step = new FreezeAbortStep();
-        Context context = mock(Context.class);
+
+        @SuppressWarnings("unchecked")
+        Context<NetworkOperation> context = mock(Context.class);
 
         // test with empty status
         NetworkOperationStatus status = new NetworkOperationStatus();
@@ -38,7 +40,9 @@ public class FreezeAbortTest {
         assertThat(status).isNotNull();
         assertThat(status.getPhase()).isEqualTo(NetworkOperationStatus.Phase.Succeeded);
         assertThat(status.getConditions().size()).isEqualTo(1);
-        assertThat(status.getConditions()).anyMatch(c -> FreezeAbortStep.CONDITION_TYPE.equals(c.getType()));
+        assertThat(status.getConditions())
+                .anyMatch(c -> FreezeAbortStep.CONDITION_TYPE.type().equals(c.getType())
+                        && FreezeAbortStep.CONDITION_TYPE.reason().equals(c.getReason()));
         assertThat(status.getConditions())
                 .anyMatch(c -> resource.getMetadata().getGeneration().equals(c.getObservedGeneration()));
 
@@ -48,7 +52,9 @@ public class FreezeAbortTest {
         assertThat(status).isNotNull();
         assertThat(status.getPhase()).isEqualTo(NetworkOperationStatus.Phase.Succeeded);
         assertThat(status.getConditions().size()).isEqualTo(1);
-        assertThat(status.getConditions()).anyMatch(c -> FreezeAbortStep.CONDITION_TYPE.equals(c.getType()));
+        assertThat(status.getConditions())
+                .anyMatch(c -> FreezeAbortStep.CONDITION_TYPE.type().equals(c.getType())
+                        && FreezeAbortStep.CONDITION_TYPE.reason().equals(c.getReason()));
         assertThat(status.getConditions())
                 .anyMatch(c -> resource.getMetadata().getGeneration().equals(c.getObservedGeneration()));
     }

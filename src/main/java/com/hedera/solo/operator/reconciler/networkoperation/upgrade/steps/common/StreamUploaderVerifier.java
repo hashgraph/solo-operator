@@ -11,6 +11,7 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationstatus.SoftwareSourceStatus;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.StepConditionType;
 import io.fabric8.kubernetes.api.model.Condition;
 import java.util.List;
 import java.util.function.BiConsumer;
@@ -44,11 +45,12 @@ public final class StreamUploaderVerifier {
             final String containerName,
             final String successMessageTemplate,
             final String failedMessageTemplate,
-            final String conditionType) {
+            final StepConditionType conditionType) {
         final String image = selectedImage(getter(containerName).apply(status.getSoftwareSourceStatus()));
         final String timestamp = timestamp();
         return edit(new Condition())
-                .with(builder -> builder.withType(conditionType)
+                .with(builder -> builder.withType(conditionType.type())
+                        .withReason(conditionType.reason())
                         .withLastTransitionTime(timestamp)
                         .withMessage(
                                 image == null

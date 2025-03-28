@@ -7,6 +7,7 @@ import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.StepConditionType;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.lang.invoke.MethodHandles;
 import java.util.List;
@@ -19,7 +20,7 @@ import org.jboss.logging.Logger;
  * <p>It needs to inspect the CR and performs the necessary checks to ensure that the orbit configuration is deployed.
  */
 public class CheckOrbitConfigurationStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
-    public static final String CONDITION_TYPE = "OrbitUpdated";
+    public static final StepConditionType CONDITION_TYPE = new StepConditionType("ConfigurationVerified", "Orbit");
     public static final String SUCCESS_STATUS_MESSAGE = "Successfully verified orbit configuration: %s";
     public static final String FAIL_STATUS_MESSAGE = "Failed to verify orbit configuration: %s";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());

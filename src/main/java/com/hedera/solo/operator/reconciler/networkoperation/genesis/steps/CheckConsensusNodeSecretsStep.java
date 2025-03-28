@@ -19,6 +19,7 @@ import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.StepConditionType;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.fabric8.kubernetes.api.model.Secret;
@@ -55,7 +56,8 @@ public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOpera
     public static final String LEDGER_ENCRYPTION_KEY = "LedgerEncryptionKey";
     public static final String LEDGER_SIGNING_KEY = "LedgerSigningKey";
 
-    public static final String CONDITION_TYPE = "CheckConsensusNodeSecrets";
+    public static final StepConditionType CONDITION_TYPE =
+            new StepConditionType("VerifySecrets", "ConsensusNodeSecrets");
     public static final String SUCCESS_STATUS_MESSAGE = "Successfully validated consensus node secrets";
     public static final String FAIL_STATUS_MESSAGE = "Failed to validate consensus node secrets'";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
@@ -100,7 +102,8 @@ public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOpera
                     // fail fast as soon as secrets are invalid for a consensus node
                     createOrUpdateEvent(resource, context, new IllegalArgumentException(FAIL_STATUS_MESSAGE));
                     conditions.add(new ConditionBuilder()
-                            .withType(CONDITION_TYPE)
+                            .withType(CONDITION_TYPE.type())
+                            .withReason(CONDITION_TYPE.reason())
                             .withObservedGeneration(resource.getMetadata().getGeneration())
                             .withStatus(ConditionStatus.False)
                             .withLastTransitionTime(timestamp)
@@ -111,9 +114,17 @@ public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOpera
                 }
             }
 
-            log.infof("%s: %s", SUCCESS_STATUS_MESSAGE, consensusCapsules);
+            log.infof(
+                    "%s: %s/%s %s",
+                    SUCCESS_STATUS_MESSAGE,
+                    resource.getMetadata().getNamespace(),
+                    resource.getMetadata().getName(),
+                    consensusCapsules.stream()
+                            .map(c -> Metadata.prepareNodeName(c.getSpec().getNodeId()))
+                            .toList());
             final Condition condition = new ConditionBuilder()
-                    .withType(CONDITION_TYPE)
+                    .withType(CONDITION_TYPE.type())
+                    .withReason(CONDITION_TYPE.reason())
                     .withObservedGeneration(resource.getMetadata().getGeneration())
                     .withStatus(ConditionStatus.True)
                     .withLastTransitionTime(timestamp)
@@ -185,9 +196,9 @@ public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOpera
     private Condition secretInvalidCondition(
             NetworkOperation resource, NetworkOperationStatus status, ConsensusCapsule capsule, String keyType) {
         final String nodeName = Metadata.prepareNodeName(capsule.getSpec().getNodeId());
-        final String conditionType = "%s-%s".formatted(nodeName, keyType);
         return new ConditionBuilder()
-                .withType(conditionType)
+                .withType("KeyValidation")
+                .withReason(keyType)
                 .withObservedGeneration(resource.getMetadata().getGeneration())
                 .withLastTransitionTime(timestamp())
                 .withStatus(ConditionStatus.False)
