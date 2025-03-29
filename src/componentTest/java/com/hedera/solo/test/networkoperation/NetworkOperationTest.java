@@ -42,6 +42,7 @@ import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.api.model.ObjectReference;
 import io.fabric8.kubernetes.api.model.PodBuilder;
+import io.fabric8.kubernetes.api.model.PodConditionBuilder;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -168,6 +169,10 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                                         .withNewStatus()
                                         .withPhase("Running")
                                         .withPodIP("10.0.0.%d".formatted(nodeId + 1))
+                                        .withConditions(new PodConditionBuilder()
+                                                .withType("Ready")
+                                                .withStatus("False")
+                                                .build())
                                         .endStatus()
                                         .build());
                     }

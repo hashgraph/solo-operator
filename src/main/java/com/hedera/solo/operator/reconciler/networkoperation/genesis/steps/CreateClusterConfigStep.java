@@ -12,7 +12,6 @@ import static com.hedera.solo.operator.reconciler.common.Constants.CONFIG_KEY_PO
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_COMPONENT;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_MANAGED_BY;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_PART_OF;
-import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_NODE_ID;
 import static com.hedera.solo.operator.reconciler.common.Constants.SOLO_OPERATOR;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static java.util.Collections.emptyList;
@@ -36,19 +35,14 @@ import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodList;
+import io.fabric8.kubernetes.api.model.PodStatus;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.lang.invoke.MethodHandles;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.SortedSet;
 import java.util.TreeMap;
-import java.util.TreeSet;
 import org.jboss.logging.Logger;
 
 /** CreateClusterConfigStep creates the cluster config ConfigMap */
@@ -165,7 +159,7 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
 
         return edit(config)
                 .with(builder -> prepareConfigTxt(builder, addressBook, nodeAddresses))
-                .with(builder -> preparePodIPs(builder, resource))
+                .with(builder -> preparePodIPs(builder, resource, consensusCapsules.size()))
                 .with(builder -> Metadata.applyStandardLabels(
                                 builder.editMetadata(),
                                 Constants.CLUSTER_CONFIG_NAME,
@@ -242,49 +236,40 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
                         .formatted(capsule.getMetadata().getName(), namespace, domain != null ? "." + domain : "");
     }
 
-    private ConfigMapBuilder preparePodIPs(final ConfigMapBuilder builder, NetworkOperation primary) {
+    private ConfigMapBuilder preparePodIPs(
+            final ConfigMapBuilder builder, final NetworkOperation primary, final int expected) {
         Map<String, String> labels = Map.of(
                 LABEL_K8S_MANAGED_BY, SOLO_OPERATOR,
                 LABEL_K8S_PART_OF, COMPONENT_CONSENSUS_NODE,
                 LABEL_K8S_COMPONENT, COMPONENT_DEPLOYMENT);
 
         PodList podList = customResourceManager.pods(primary.getMetadata().getNamespace(), labels);
-        String data = String.join("\n", extractPodIps(podList));
+        List<String> podIPs = extractPodIps(podList);
+        if (podIPs.size() != expected) {
+            throw new ProcessorException("%s [found %s of %s for %s/%s]"
+                    .formatted(
+                            POD_IPS_NOT_FOUND,
+                            podIPs.size(),
+                            expected,
+                            primary.getMetadata().getNamespace(),
+                            primary.getMetadata().getName()));
+        }
+        String data = String.join("\n", podIPs);
 
         return builder.addToData(CONFIG_KEY_POD_IPS, data);
     }
 
     private static List<String> extractPodIps(PodList podList) {
-        // create a map of node id to the list of pods sorted by creation timestamp
-        Map<String, SortedSet<Pod>> podMap = new HashMap<>();
-        for (Pod pod : podList.getItems()) {
-            if (pod.getMetadata().getCreationTimestamp() != null) {
-                podMap.computeIfAbsent(
-                                pod.getMetadata().getLabels().get(LABEL_NODE_ID),
-                                k -> new TreeSet<Pod>(Comparator.comparing(
-                                        p -> Instant.parse(p.getMetadata().getCreationTimestamp()))))
-                        .add(pod);
-            }
-        }
-
-        // extract the pod IPs from the last pod in the sorted set
-        List<String> podIps = new ArrayList<>();
-        for (SortedSet<Pod> pods : podMap.values()) {
-            final Pod pod = pods.last();
-            if (pod.getStatus() != null && pod.getStatus().getPodIP() != null) {
-                podIps.add(pod.getStatus().getPodIP());
-            } else {
-                // all pods must have an IP, otherwise we need to wait for the next reconcile loop
-                throw new ProcessorException("%s [nodeId: %s, pod: %s/%s]"
-                        .formatted(
-                                POD_IPS_NOT_FOUND,
-                                pod.getMetadata().getLabels().get(LABEL_NODE_ID),
-                                pod.getMetadata().getNamespace(),
-                                pod.getMetadata().getName()));
-            }
-        }
-
-        return podIps;
+        return podList.getItems().stream()
+                .filter(pod -> pod.getMetadata().getDeletionTimestamp() == null)
+                .map(Pod::getStatus)
+                .filter(Objects::nonNull)
+                .filter(status -> "Running".equals(status.getPhase()))
+                .filter(status -> status.getConditions().stream()
+                        .anyMatch(c -> "Ready".equals(c.getType()) && "False".equals(c.getStatus())))
+                .map(PodStatus::getPodIP)
+                .filter(Objects::nonNull)
+                .toList();
     }
 
     public static boolean isDone(NetworkOperationStatus status) {
