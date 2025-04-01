@@ -267,7 +267,7 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         templateInstance.data(TPL_VAR_NODE_ID, nodeId);
         templateInstance.data(TPL_VAR_NODE_NAME, nodeName);
         templateInstance.data(TPL_VAR_ACCOUNT_ID, accountId);
-        templateInstance.data(TPL_VAR_HOST_EXTERNAL_IP, "NOT_SET"); // FIXME: should be node's external IP
+        templateInstance.data(TPL_VAR_HOST_EXTERNAL_IP, primary.getSpec().getExternalAddress());
         templateInstance.data(TPL_VAR_DEFAULT_MODE, DEFAULT_FILE_MODE);
 
         return templateInstance;
