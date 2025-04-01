@@ -6,6 +6,7 @@ import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.library.time.Timestamp.timestamp;
 
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import io.fabric8.kubernetes.api.model.Condition;
@@ -119,5 +120,13 @@ public final class NetworkOperationStepUtil {
                 .anyMatch(c -> c.getType().equals(conditionType.type())
                         && c.getReason().equals(conditionType.reason())
                         && c.getStatus().equals(ConditionStatus.True));
+    }
+
+    public static boolean isNetworkUpgrade(final NetworkOperation resource) {
+        return resource != null
+                && resource.getSpec() != null
+                && resource.getSpec().getMode() != null
+                && resource.getSpec().getMode().equals(NetworkOperationSpec.Mode.NetworkUpgrade)
+                && resource.getSpec().getNetworkUpgrade() != null;
     }
 }
