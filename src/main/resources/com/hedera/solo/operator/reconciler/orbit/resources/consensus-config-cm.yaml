@@ -1,0 +1,99 @@
+# SPDX-License-Identifier: Apache-2.0
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: consensus-config
+  namespace: bogus-namespace
+data:
+  empty: ""
+  s6-start-consensus-finish: |
+    #! /command/with-contenv bash
+
+    if [ "${1}" == 256 ]; then
+      echo "Consensus startup service killed by uncaught signal: $(kill -l ${2})(${2})"
+    fi
+  s6-start-consensus-run: |
+    #! /command/with-contenv bash
+
+    # Do not restart
+    s6-svc -O .
+
+    # Kill children on exit
+    trap "kill 0" EXIT
+
+    # Create symlinks
+    APP_DIR=/opt/hgcapp/services-hedera/HapiApp2.0
+    CONSENSUS_CFG=/mnt/cm/consensus-config
+    ln -s ${CONSENSUS_CFG}/settings.txt ${APP_DIR}
+    ln -s ${CONSENSUS_CFG}/api-permission.properties ${APP_DIR}/data/config
+    ln -s ${CONSENSUS_CFG}/application.properties ${APP_DIR}/data/config
+    ln -s ${CONSENSUS_CFG}/genesis.properties ${APP_DIR}/data/config
+    CLUSTER_CFG=/tmp/volumes/cluster-config
+    HOSTPATH_CFG=/mnt/config
+    ln -s ${APP_DIR}/data/keys/hedera.{crt,key} ${APP_DIR}
+    if [ -f ${HOSTPATH_CFG}/config.txt ]; then
+      ln -s ${HOSTPATH_CFG}/config.txt ${APP_DIR}
+    else
+      ln -s ${CLUSTER_CFG}/config.txt ${APP_DIR}
+    fi
+
+    # Wait until consensus service has been initialized, config.txt file is available and podIP is eligible
+    SVC_DIR=/run/service/consensus
+    while true; do
+      if [ "$(s6-svstat -o up,wantedup ${SVC_DIR})" = "false false" \
+           -a -s ${APP_DIR}/config.txt \
+           -a -s ${CLUSTER_CFG}/podIps ] \
+           && grep -qFx $(hostname -i) ${CLUSTER_CFG}/podIps; then
+        # If using secret resources, additionally require all expected public keys are available
+        if [ -d /mnt/keys/public-keys ]; then
+          if [ $(grep ^address ${APP_DIR}/config.txt | wc -l) -eq $(ls /mnt/keys/public-keys/s-public-*.pem | wc -l) ]; then
+            ln -s $(find -L /mnt/keys -mindepth 2 -maxdepth 2 -type f) ${APP_DIR}/data/keys
+            break
+          fi
+        else
+          break
+        fi
+      fi
+      sleep 1
+    done
+
+    # Start consensus service
+    s6-svc -o ${SVC_DIR}
+  s6-type-longrun: |
+    longrun
+  is-consensus-active: |
+    import java.net.http.*;
+    int rc = 1;
+    try {
+      URI uri = URI.create("http://localhost:9999");
+      HttpRequest request = HttpRequest.newBuilder().uri(uri).GET().build();
+      HttpClient client = HttpClient.newHttpClient();
+      HttpResponse response = client.send(request, HttpResponse.BodyHandlers.ofString());
+      if (200 == response.statusCode()) {
+        String body = response.body().toString();
+        String help = "";
+        int status = -1;
+        for (String line : body.lines().toList()) {
+          // # HELP platform_PlatformStatus 0=NO_VALUE 1=STARTING_UP 2=ACTIVE ...
+          if (line.startsWith("# HELP platform_PlatformStatus ")) {
+            help = line;
+          }
+          // platform_PlatformStatus{node="0",} 2.0
+          if (line.startsWith("platform_PlatformStatus{")) {
+            String[] fields = line.split("\\s+");
+            status = Double.valueOf(fields[fields.length - 1]).intValue();
+          }
+        }
+        String statusString = help.replaceFirst(".*\\s+" + status + "=(\\S+)\\s+.*", "$1");
+        if ("ACTIVE".equals(statusString)) {
+          rc = 0;
+        } else {
+          System.out.println(statusString);
+        }
+      }
+    } catch (Exception e) {
+      System.out.println(e);
+    }
+    /exit rc

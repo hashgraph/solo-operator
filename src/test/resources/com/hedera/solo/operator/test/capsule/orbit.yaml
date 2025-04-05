@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+
+---
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: Orbit
+metadata:
+  name: solo-orbit
+spec:
+  consensus:
+    genesis:
+      addressBook:
+        ledgerId: "298"
+        externalAddresses: []

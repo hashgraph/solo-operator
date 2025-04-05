@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: Apache-2.0
+
+---
+name: "PR Checks"
+on:
+  workflow_dispatch:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: pr-checks-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Code
+    uses: ./.github/workflows/zxc-compile-code.yaml
+
+  code-style:
+    name: Code Style
+    uses: ./.github/workflows/zxc-compile-code.yaml
+    needs:
+      - build
+    with:
+      custom-job-label: Check
+      enable-spotless-check: true
+
+  unit-tests:
+    name: Unit Tests
+    uses: ./.github/workflows/zxc-compile-code.yaml
+    needs:
+      - build
+    with:
+      custom-job-label: Standard
+      enable-unit-tests: true
+
+  codecov:
+    name: CodeCov
+    uses: ./.github/workflows/zxc-code-analysis.yaml
+    needs:
+      - unit-tests
+    if: ${{ github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name }}
+    with:
+      custom-job-label: Standard
+      enable-codecov-analysis: true
+    secrets:
+      codecov-token: ${{ secrets.CODECOV_TOKEN }}
+
+##### Codacy Coverage cannot be enabled until the repository is made public.
+
+#  codacy-coverage:
+#    name: Codacy
+#    uses: ./.github/workflows/zxc-code-analysis.yaml
+#    needs:
+#      - unit-tests
+#    if: ${{ github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name }}
+#    with:
+#      custom-job-label: Coverage
+#      enable-codacy-coverage: true
+#      enable-e2e-coverage-report: true
+#    secrets:
+#      codacy-project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
+
+  snyk:
+    name: Snyk Scan
+    uses: ./.github/workflows/zxc-code-analysis.yaml
+    needs:
+      - build
+    if: ${{ github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name }}
+    with:
+      custom-job-label: Standard
+      enable-snyk-scan: true
+      snyk-org-identifier: ${{ vars.SNYK_ORG_IDENTIFIER }}
+    secrets:
+      snyk-token: ${{ secrets.SNYK_TOKEN }}

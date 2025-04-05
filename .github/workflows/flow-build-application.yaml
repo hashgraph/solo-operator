@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: Apache-2.0
+
+---
+name: "Build Application"
+on:
+  workflow_dispatch:
+    inputs:
+      enable-unit-tests:
+        description: "Unit Testing Enabled"
+        type: boolean
+        required: false
+        default: true
+      enable-e2e-tests:
+        description: "E2E Testing Enabled"
+        type: boolean
+        required: false
+        default: false
+      enable-snyk-scan:
+        description: "Snyk Scan Enabled"
+        type: boolean
+        required: false
+        default: false
+  push:
+    branches:
+      - main
+      - 'release/*'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  code:
+    name: Code
+    uses: ./.github/workflows/zxc-compile-code.yaml
+
+  code-style:
+    name: Code Style
+    uses: ./.github/workflows/zxc-compile-code.yaml
+    needs:
+      - code
+    with:
+      custom-job-label: Check
+      enable-spotless-check: true
+
+  unit-tests:
+    name: Unit Tests
+    uses: ./.github/workflows/zxc-compile-code.yaml
+    needs:
+      - code-style
+    if: ${{ github.event_name == 'push' || github.event.inputs.enable-unit-tests == 'true' }}
+    with:
+      custom-job-label: Standard
+      enable-unit-tests: true
+
+  analyze:
+    name: Analyze
+    uses: ./.github/workflows/zxc-code-analysis.yaml
+    needs:
+      - unit-tests
+    if: ${{ (github.event_name == 'push' || github.event.inputs.enable-unit-tests == 'true') && !failure() && !cancelled() }}
+    with:
+      custom-job-label: Source Code
+      enable-snyk-scan: true
+      enable-codecov-analysis: true
+      enable-codacy-coverage: false
+      snyk-org-identifier: ${{ vars.SNYK_ORG_IDENTIFIER }}
+    secrets:
+      snyk-token: ${{ secrets.SNYK_TOKEN }}
+      codecov-token: ${{ secrets.CODECOV_TOKEN }}
+      #codacy-project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}

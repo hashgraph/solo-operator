@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: consensus
+  labels:
+    app: consensus-node
+spec:
+  clusterIP: None
+  clusterIPs:
+    - None
+  selector:
+    app: consensus-node
+  publishNotReadyAddresses: true

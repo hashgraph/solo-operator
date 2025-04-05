@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: orbits.operator.solo.hedera.com
+spec:
+  group: operator.solo.hedera.com
+  names:
+    kind: Orbit
+    plural: orbits
+    singular: orbit
+    shortNames:
+      - orb
+  scope: Cluster
+  versions:
+    - name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          properties:
+            spec:
+              $ref: "../openapi/orbit.yml#/components/schemas/OrbitSpec"
+            status:
+              $ref: "../openapi/orbit.yml#/components/schemas/OrbitStatus"
+      served: true
+      storage: true
+      subresources:
+        status: { }

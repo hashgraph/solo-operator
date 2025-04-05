@@ -1,0 +1,120 @@
+# SPDX-License-Identifier: Apache-2.0
+
+---
+name: "ZXC: Compile Code"
+# The purpose of this reusable workflow is to compile the code and run the unit tests on every PR and commit.
+# This reusable component is called by the following workflows:
+# - .github/workflows/flow-pull-request-checks.yaml
+# - .github/workflows/flow-build-application.yaml
+
+on:
+  workflow_call:
+    inputs:
+      enable-unit-tests:
+        description: "Unit Testing Enabled"
+        type: boolean
+        required: false
+        default: false
+      enable-spotless-check:
+        description: "Spotless Check Enabled"
+        type: boolean
+        required: false
+        default: false
+      custom-job-label:
+        description: "Custom Job Label:"
+        type: string
+        required: false
+        default: "Compiles"
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  id-token: write
+  contents: read
+  actions: read
+  pull-requests: write
+  checks: write
+  statuses: write
+
+
+jobs:
+  compile:
+    name: ${{ inputs.custom-job-label || 'Compiles' }}
+    runs-on: solo-linux-medium
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@4d991eb9b905ef189e4c376166672c3f2f230481 # v2.11.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: ${{ inputs.enable-spotless-check && '0' || '' }}
+
+      - name: Setup Java
+        uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4.7.0
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@ac2d340dc04d9e1113182899e983b5400c17cda1 # v3.5.0
+        with:
+          gradle-version: wrapper
+          cache-read-only: false
+
+      - name: Compile Code
+        run: ./gradlew clean assemble --scan
+
+      - name: Spotless Check
+        if: ${{ inputs.enable-spotless-check && !cancelled() && !failure() }}
+        run: ./gradlew spotlessCheck --scan
+
+      - name: Unit Tests
+        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
+        run: ./gradlew check --scan
+
+      - name: Publish Unit Test Report
+        uses: EnricoMi/publish-unit-test-result-action@170bf24d20d201b842d7a52403b73ed297e6645b # v2.18.0
+        if: ${{ inputs.enable-unit-tests && !cancelled() }}
+        with:
+          check_name: "Unit Test Results"
+          files: "**/build/test-results/test/TEST-*.xml"
+
+      - name: Publish Unit Test Coverage Reports
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ inputs.enable-unit-tests && !cancelled() }}
+        with:
+          name: Unit Test Coverage Reports
+          path: "**/jacoco*.xml"
+
+      - name: Publish Test Reports
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ inputs.enable-unit-tests && !cancelled() }}
+        with:
+          name: Test Reports
+          path: "**/build/test-results/test/TEST-*.xml"
+
+      - name: Archive Test Snapshots
+        if: ${{ inputs.enable-unit-tests && !cancelled() }}
+        run: |
+          (cd build; zip -qr snapshots.zip snapshots) || :
+
+      - name: Publish Test Snapshots
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ inputs.enable-unit-tests && !cancelled() }}
+        with:
+          name: Test Snapshots
+          path: build/snapshots.zip
+          if-no-files-found: ignore
+
+      - name: Publish Heap Dumps
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ inputs.enable-unit-tests && !cancelled() }}
+        with:
+          name: Test Heap Dumps
+          path: "java_*.hprof"
+          if-no-files-found: ignore

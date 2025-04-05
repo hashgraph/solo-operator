@@ -1,0 +1,382 @@
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: ConsensusCapsule
+metadata:
+  name: node2
+  namespace: "solo-orbit"
+  labels:
+    app.kubernetes.io/component: consensus-node
+    app.kubernetes.io/managed-by: solo-operator
+spec:
+  orbit: solo-orbit
+  nodeId: 1
+  accountId: "0.0.4"
+  weight: 1
+  podProperties: # FIXME use other pod properties
+    containers:
+      consensusNode:
+        name: "consensus-node"
+        softwareVersion:
+          repository: "swirldslabs.jfrog.io/consensus-node-docker-dev"
+          imageName: "consensus-node"
+          imageTag: "0.59.0-main.xebbbf0d"
+          imagePullPolicy: IfNotPresent
+      recordStreamUploader:
+        enabled: true
+        name: "record-stream-uploader"
+        softwareVersion:
+          repository: "gcr.io/hedera-registry"
+          imageName: "uploader-mirror"
+          imageTag: "1.3.0"
+          imagePullPolicy: IfNotPresent
+        config:
+          debug: true
+          enableCompression: true
+          enableSidecarFiles: true
+          reaper:
+            enabled: true
+            minKeep: 1
+            interval: 1
+            defaultBackoff: 1
+          signature:
+            require: true
+            prioritize: true
+          streamFileExtension: "rcd"
+          streamSigExtension: "rcd_sig"
+          streamExtension: "rcd.gz"
+          sigExtension: "rcd_sig"
+          bucketName: "solo-streams"
+          bucketPath: "not-set"
+          s3:
+            enabled: true
+            accessKey: solo-operator
+            url: "http://minio-tenant-hl.minio-tenant.svc.cluster.local:9000"
+          gcs:
+            enabled: false
+          envFromSecret: "uploader-secrets"
+      eventsStreamUploader:
+        enabled: true
+        name: "events-stream-uploader"
+        softwareVersion:
+          repository: "gcr.io/hedera-registry"
+          imageName: "uploader-mirror"
+          imageTag: "1.3.0"
+          imagePullPolicy: IfNotPresent
+        config:
+          debug: true
+          reaper:
+            enabled: true
+            minKeep: 1
+            interval: 1
+            defaultBackoff: 1
+          signature:
+            require: true
+            prioritize: true
+          streamFileExtension: "evts"
+          streamSigExtension: "evts_sig"
+          streamExtension: "evts"
+          sigExtension: "evts_sig"
+          bucketName: "solo-streams"
+          s3:
+            enabled: true
+            accessKey: solo-operator
+            url: "http://minio-tenant-hl.minio-tenant.svc.cluster.local:9000"
+          gcs:
+            enabled: false
+          envFromSecret: "uploader-secrets"
+      backupUploader:
+        enabled: true
+        name: "backup-uploader"
+        softwareVersion:
+          repository: "gcr.io/hedera-registry"
+          imageName: "hedera-backups"
+          imageTag: "0.6.0"
+          imagePullPolicy: IfNotPresent
+        config:
+          bucketName: "solo-backups"
+          s3:
+            enabled: true
+            accessKey: solo-operator
+            url: "http://minio-tenant-hl.minio-tenant.svc.cluster.local:9000"
+          gcs:
+            enabled: false
+          envFromSecret: "uploader-secrets"
+      openTelemetryCollector:
+        enabled: true
+        name: "open-telemetry-collector"
+        softwareVersion:
+          repository: "docker.io/otel"
+          imageName: "opentelemetry-collector-contrib"
+          imageTag: "0.72.0"
+        config:
+          exporters:
+            loki:
+              enabled: true
+              auth:
+                enabled: false
+              endpoint: "http://loki.telemetry.svc.cluster.local:3100/loki/api/v1/push"
+    volumes:
+      logs:
+        hostPath:
+          path: /tmp/node1/hgcapp/output
+      stats:
+        hostPath:
+          path: /tmp/node1/hgcapp/stats
+      states:
+        emptyDir: {} # use empty dir so that it does not try to load old states during demo
+      upgrade:
+        hostPath:
+          path: /tmp/node1/hgcapp/upgrade
+      streams:
+        record:
+          hostPath:
+            path: /tmp/node1/hgcapp/recordStream
+        events:
+          hostPath:
+            path: /tmp/node1/hgcapp/eventsStream
+  secrets:
+    secretResources:
+      grpcTlsPrivateKey:
+        keyName: "hedera-node2.key"
+        secretName: "node2-grpc-tls-keys"
+      grpcTlsPublicCertificate:
+        keyName: "hedera-node2.crt"
+        secretName: "node2-grpc-tls-keys"
+      signingPrivateKey:
+        keyName: "s-private-node2.pem"
+        secretName: "node2-gossip-keys"
+      signingPublicCertificate:
+        keyName: "s-public-node2.pem"
+        secretName: "node2-gossip-keys"
+  log4j2.xml: "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!-- monitorInterval=\"\
+    600\" , if any change to log level will be effective after 10 minute -->\n<Configuration\
+    \ status=\"WARN\" monitorInterval=\"600\">\n  <Appenders>\n    <Console name=\"\
+    Console\" target=\"SYSTEM_OUT\">\n      <PatternLayout pattern=\"%d{yyyy-MM-dd\
+    \ HH:mm:ss.SSS} %-5p %-4L %c{1} - %m{nolookups}%n\"/>\n    </Console>\n\n    <RollingFile\
+    \ name=\"RollingFile\" fileName=\"output/hgcaa.log\"\n      filePattern=\"output/hgcaa-%i.log\"\
+    >\n      <PatternLayout>\n        <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5p %-4L\
+    \ %c{1} - %m{nolookups}%n</pattern>\n      </PatternLayout>\n      <Policies>\n\
+    \        <SizeBasedTriggeringPolicy size=\"100 MB\"/>\n      </Policies>\n   \
+    \   <DefaultRolloverStrategy max=\"10\"/>\n    </RollingFile>\n\n    <RollingFile\
+    \ name=\"QueriesRollingFile\" fileName=\"output/queries.log\"\n      filePattern=\"\
+    output/queries-%i.log\">\n      <BurstFilter level=\"INFO\" rate=\"50\" maxBurst=\"\
+    500\"/>\n      <PatternLayout>\n        <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5p\
+    \ %-4L %c{1} - %m{nolookups}%n</pattern>\n      </PatternLayout>\n      <Policies>\n\
+    \        <SizeBasedTriggeringPolicy size=\"100 MB\"/>\n      </Policies>\n   \
+    \   <DefaultRolloverStrategy max=\"10\"/>\n    </RollingFile>\n\n    <RollingFile\
+    \ name=\"fileLog\" fileName=\"output/swirlds.log\"\n      filePattern=\"output/swirlds-sdk-%i.log\"\
+    >\n      <PatternLayout>\n        <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-8sn %-5p\
+    \ %-16marker &lt;%t&gt; %c{1}: %msg{nolookups}%n</pattern>\n      </PatternLayout>\n\
+    \      <Policies>\n        <SizeBasedTriggeringPolicy size=\"100 MB\"/>\n    \
+    \  </Policies>\n      <DefaultRolloverStrategy max=\"10\"/>\n    </RollingFile>\n\
+    \n    <RollingFile name=\"vMapLog\" fileName=\"output/swirlds-vmap.log\"\n   \
+    \   filePattern=\"output/swirlds-vmap-%i.log\">\n      <PatternLayout>\n     \
+    \   <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-8sn %-5p %-16marker &lt;%t&gt; %c{1}:\
+    \ %msg{nolookups}%n</pattern>\n      </PatternLayout>\n      <Policies>\n    \
+    \    <SizeBasedTriggeringPolicy size=\"100 MB\"/>\n      </Policies>\n      <DefaultRolloverStrategy\
+    \ max=\"10\"/>\n    </RollingFile>\n\n    <!-- Platform hash stream logs -->\n\
+    \    <RollingFile name=\"swirldsHashStream\" fileName=\"output/swirlds-hashstream/swirlds-hashstream.log\"\
+    \n      filePattern=\"output/swirlds-hashstream/swirlds-hashstream-%i.log\">\n\
+    \      <PatternLayout>\n        <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-8sn %-5p\
+    \ %-16marker &lt;%t&gt; %c{1}: %msg{nolookups}%n</pattern>\n      </PatternLayout>\n\
+    \      <Policies>\n        <SizeBasedTriggeringPolicy size=\"100 MB\"/>\n    \
+    \  </Policies>\n      <DefaultRolloverStrategy max=\"10\"/>\n    </RollingFile>\n\
+    \n    <!-- Transaction state logs -->\n    <RollingFile name=\"TransactionStateLogs\"\
+    \n                 fileName=\"output/transaction-state/state-changes.log\"\n \
+    \                filePattern=\"output/transaction-state/state-changes-%i.log\"\
+    >\n      <PatternLayout>\n        <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} - %m{nolookups}%n</pattern>\n\
+    \      </PatternLayout>\n      <SizeBasedTriggeringPolicy size=\"50 MB\" />\n\
+    \      <DefaultRolloverStrategy max=\"10\"/>\n    </RollingFile>\n\n    <RollingFile\
+    \ name=\"StateLogs\"\n                 fileName=\"output/state/state-changes.log\"\
+    \n                 filePattern=\"output/state/state-changes-%i.log\">\n      <PatternLayout>\n\
+    \        <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} - %m{nolookups}%n</pattern>\n  \
+    \    </PatternLayout>\n      <SizeBasedTriggeringPolicy size=\"50 MB\" />\n  \
+    \    <DefaultRolloverStrategy max=\"10\"/>\n    </RollingFile>\n\n  </Appenders>\n\
+    \  <Loggers>\n    <Root level=\"FATAL\">\n      <!-- <AppenderRef ref=\"Console\"\
+    /> -->\n      <AppenderRef ref=\"fileLog\"/>\n    </Root>\n\n    <Logger name=\"\
+    com.swirlds\" level=\"INFO\" additivity=\"false\">\n      <AppenderRef ref=\"\
+    fileLog\">\n        <Filters>\n          <!-- MerkleDb & Virtual Merkle -->\n\
+    \          <MarkerFilter marker=\"MERKLE_DB\"              onMatch=\"DENY\" onMismatch=\"\
+    NEUTRAL\"/>\n          <MarkerFilter marker=\"VIRTUAL_MERKLE_STATS\"   onMatch=\"\
+    DENY\" onMismatch=\"NEUTRAL\"/>\n          <MarkerFilter marker=\"STATE_HASH\"\
+    \             onMatch=\"DENY\" onMismatch=\"NEUTRAL\"/>\n        </Filters>\n\
+    \      </AppenderRef>\n\n      <AppenderRef ref=\"vMapLog\">\n        <Filters>\n\
+    \          <!-- MerkleDb & Virtual Merkle -->\n          <MarkerFilter marker=\"\
+    MERKLE_DB\"              onMatch=\"ACCEPT\" onMismatch=\"NEUTRAL\"/>\n       \
+    \   <MarkerFilter marker=\"VIRTUAL_MERKLE_STATS\"   onMatch=\"ACCEPT\" onMismatch=\"\
+    NEUTRAL\"/>\n          <MarkerFilter marker=\"DISABLED\"               onMatch=\"\
+    DENY\"   onMismatch=\"DENY\" />\n        </Filters>\n      </AppenderRef>\n\n\
+    \      <AppenderRef ref=\"swirldsHashStream\">\n        <Filters>\n          <!--\
+    \ Hash stream log -->\n          <MarkerFilter marker=\"STATE_HASH\"         \
+    \    onMatch=\"ACCEPT\"  onMismatch=\"NEUTRAL\"/>\n          <MarkerFilter marker=\"\
+    DISABLED\"               onMatch=\"DENY\"    onMismatch=\"DENY\" />\n        </Filters>\n\
+    \      </AppenderRef>\n\n      <!--\n\t  Due to known log4j2 issues with how Markers\
+    \ and LogLevels are evaluated there must be a top level <Filter> element\n\t \
+    \ to ensure that the root logger does not execute all the lambda arguments erroneously.\
+    \ Potential work around in the\n\t  future is to use a top-level <Filter> and\
+    \ <Logger> specific filters in combination to achieve the desired\n\t  multi-logger\
+    \ setup for diagnostic logging.\n\t  -->\n      <Filters>\n        <!-- Filter\
+    \ out levels above INFO (ex: DEBUG & TRACE) -->\n        <!-- Intentionally left\
+    \ disabled by default -->\n        <!-- <ThresholdFilter level=\"INFO\"      \
+    \           onMatch=\"NEUTRAL\" onMismatch=\"DENY\" />-->\n\n        <!-- In the\
+    \ following, enable a marker with onMatch=\"ACCEPT\" and disable with onMatch=\"\
+    DENY\". -->\n        <!-- More markers can be added, but ensure that every onMismatch=\"\
+    NEUTRAL\", except the last is \"DENY\". -->\n\n        <!-- Exceptions -->\n \
+    \       <MarkerFilter marker=\"EXCEPTION\"              onMatch=\"ACCEPT\" onMismatch=\"\
+    NEUTRAL\"/>\n        <MarkerFilter marker=\"TESTING_EXCEPTIONS\"     onMatch=\"\
+    ACCEPT\" onMismatch=\"NEUTRAL\"/>\n        <MarkerFilter marker=\"SOCKET_EXCEPTIONS\"\
+    \      onMatch=\"ACCEPT\" onMismatch=\"NEUTRAL\"/>\n        <MarkerFilter marker=\"\
+    TCP_CONNECT_EXCEPTIONS\" onMatch=\"DENY\"   onMismatch=\"NEUTRAL\"/>\n\n     \
+    \   <!-- Errors -->\n        <MarkerFilter marker=\"INVALID_EVENT_ERROR\"    onMatch=\"\
+    ACCEPT\" onMismatch=\"NEUTRAL\"/>\n\n        <!-- Synchronization/Gossip (Debug)\
+    \ -->\n        <MarkerFilter marker=\"SYNC_START\"             onMatch=\"DENY\"\
+    \   onMismatch=\"NEUTRAL\"/>\n        <MarkerFilter marker=\"SYNC_DONE\"     \
+    \         onMatch=\"DENY\"   onMismatch=\"NEUTRAL\"/>\n        <MarkerFilter marker=\"\
+    SYNC_ERROR\"             onMatch=\"DENY\"   onMismatch=\"NEUTRAL\"/>\n       \
+    \ <MarkerFilter marker=\"SYNC\"                   onMatch=\"DENY\"   onMismatch=\"\
+    NEUTRAL\"/>\n        <MarkerFilter marker=\"HEARTBEAT\"              onMatch=\"\
+    DENY\"   onMismatch=\"NEUTRAL\"/>\n\n        <!-- Platform Events (Debug) -->\n\
+    \        <MarkerFilter marker=\"CREATE_EVENT\"           onMatch=\"DENY\"   onMismatch=\"\
+    NEUTRAL\"/>\n        <MarkerFilter marker=\"INTAKE_EVENT\"           onMatch=\"\
+    DENY\"   onMismatch=\"NEUTRAL\"/>\n        <MarkerFilter marker=\"WATCH_EVENTS_SEND_REC\"\
+    \  onMatch=\"DENY\"   onMismatch=\"NEUTRAL\"/>\n        <MarkerFilter marker=\"\
+    EVENT_SIG\"              onMatch=\"DENY\"   onMismatch=\"NEUTRAL\"/>\n       \
+    \ <MarkerFilter marker=\"EVENT_STREAM\"           onMatch=\"DENY\"   onMismatch=\"\
+    NEUTRAL\"/>\n        <MarkerFilter marker=\"EVENT_RESTART\"          onMatch=\"\
+    DENY\"   onMismatch=\"NEUTRAL\"/>\n        <MarkerFilter marker=\"STALE_EVENTS\"\
+    \           onMatch=\"DENY\"   onMismatch=\"NEUTRAL\"/>\n        <MarkerFilter\
+    \ marker=\"EVENT_PARSER\"           onMatch=\"DENY\"   onMismatch=\"NEUTRAL\"\
+    />\n        <MarkerFilter marker=\"EVENT_CONTENT\"          onMatch=\"DENY\" \
+    \  onMismatch=\"NEUTRAL\"/>\n\n        <!-- Queues/Certificates/Utilities -->\n\
+    \        <MarkerFilter marker=\"QUEUES\"                 onMatch=\"DENY\"   onMismatch=\"\
+    NEUTRAL\"/>\n        <MarkerFilter marker=\"CERTIFICATES\"           onMatch=\"\
+    DENY\"   onMismatch=\"NEUTRAL\"/>\n        <MarkerFilter marker=\"LOCKS\"    \
+    \              onMatch=\"DENY\"   onMismatch=\"NEUTRAL\"/>\n        <MarkerFilter\
+    \ marker=\"TIME_MEASURE\"           onMatch=\"DENY\"   onMismatch=\"NEUTRAL\"\
+    />\n        <MarkerFilter marker=\"THREADS\"                onMatch=\"ACCEPT\"\
+    \   onMismatch=\"NEUTRAL\"/>\n\n        <!-- Signed State Signatures -->\n   \
+    \     <MarkerFilter marker=\"STATE_SIG_DIST\"         onMatch=\"DENY\"   onMismatch=\"\
+    NEUTRAL\"/>\n        <MarkerFilter marker=\"STATE_DELETER\"          onMatch=\"\
+    DENY\"   onMismatch=\"NEUTRAL\"/>\n        <MarkerFilter marker=\"OBJECT_STREAM_DETAIL\"\
+    \   onMatch=\"DENY\"   onMismatch=\"NEUTRAL\"/>\n\n        <!-- Cryptography -->\n\
+    \        <MarkerFilter marker=\"OPENCL_INIT_EXCEPTIONS\" onMatch=\"DENY\"   onMismatch=\"\
+    NEUTRAL\"/>\n        <MarkerFilter marker=\"ADV_CRYPTO_SYSTEM\"      onMatch=\"\
+    DENY\"   onMismatch=\"NEUTRAL\"/>\n\n        <!-- Startup/Restart/Reconnect -->\n\
+    \        <MarkerFilter marker=\"STARTUP\"                onMatch=\"ACCEPT\" onMismatch=\"\
+    NEUTRAL\"/>\n        <MarkerFilter marker=\"PLATFORM_STATUS\"        onMatch=\"\
+    ACCEPT\" onMismatch=\"NEUTRAL\"/>\n        <MarkerFilter marker=\"RECONNECT\"\
+    \              onMatch=\"ACCEPT\" onMismatch=\"NEUTRAL\"/>\n        <MarkerFilter\
+    \ marker=\"FREEZE\"                 onMatch=\"ACCEPT\" onMismatch=\"NEUTRAL\"\
+    />\n\n        <!-- Saved States -->\n        <MarkerFilter marker=\"SNAPSHOT_MANAGER\"\
+    \       onMatch=\"ACCEPT\" onMismatch=\"NEUTRAL\"/>\n        <MarkerFilter marker=\"\
+    STATE_TO_DISK\"          onMatch=\"ACCEPT\" onMismatch=\"NEUTRAL\"/>\n       \
+    \ <MarkerFilter marker=\"STATE_HASH\"             onMatch=\"ACCEPT\" onMismatch=\"\
+    NEUTRAL\"/>\n\n        <!-- Beta Mirror -->\n        <MarkerFilter marker=\"BETA_MIRROR_NODE\"\
+    \       onMatch=\"ACCEPT\" onMismatch=\"NEUTRAL\"/>\n\n        <!-- FCMap -->\n\
+    \        <MarkerFilter marker=\"FCM_COPY\"               onMatch=\"DENY\"   onMismatch=\"\
+    NEUTRAL\"/>\n        <MarkerFilter marker=\"FCM_COPY_FROM\"          onMatch=\"\
+    DENY\"   onMismatch=\"NEUTRAL\"/>\n        <MarkerFilter marker=\"FCM_COPY_TO\"\
+    \            onMatch=\"DENY\"   onMismatch=\"NEUTRAL\"/>\n        <MarkerFilter\
+    \ marker=\"FCM_DEMO\"               onMatch=\"DENY\"   onMismatch=\"NEUTRAL\"\
+    />\n        <MarkerFilter marker=\"FCM_COPY_FROM_DIFF\"     onMatch=\"DENY\" \
+    \  onMismatch=\"NEUTRAL\"/>\n        <MarkerFilter marker=\"FCM_COPY_TO_DIFF\"\
+    \       onMatch=\"DENY\"   onMismatch=\"NEUTRAL\"/>\n        <MarkerFilter marker=\"\
+    FC_SERIALIZATION\"       onMatch=\"DENY\"   onMismatch=\"NEUTRAL\"/>\n\n     \
+    \   <!-- Merkle Trees & Hashing -->\n        <MarkerFilter marker=\"MERKLE_FORCE_FLUSH\"\
+    \     onMatch=\"DENY\"   onMismatch=\"NEUTRAL\"/>\n        <MarkerFilter marker=\"\
+    MERKLE_HASHING\"         onMatch=\"DENY\"   onMismatch=\"NEUTRAL\"/>\n       \
+    \ <MarkerFilter marker=\"MERKLE_GENERATION\"      onMatch=\"DENY\"   onMismatch=\"\
+    NEUTRAL\"/>\n        <MarkerFilter marker=\"MERKLE_LOCKS\"           onMatch=\"\
+    DENY\"   onMismatch=\"NEUTRAL\"/>\n\n        <!-- MerkleDb & Virtual Merkle -->\n\
+    \        <MarkerFilter marker=\"MERKLE_DB\"              onMatch=\"ACCEPT\" onMismatch=\"\
+    NEUTRAL\"/>\n        <MarkerFilter marker=\"VIRTUAL_MERKLE_STATS\"   onMatch=\"\
+    ACCEPT\" onMismatch=\"NEUTRAL\"/>\n\n        <MarkerFilter marker=\"DISABLED\"\
+    \               onMatch=\"DENY\"   onMismatch=\"DENY\" />\n      </Filters>\n\
+    \    </Logger>\n\n    <!-- Send transaction state logs to their own appender \
+    \  -->\n    <Logger name=\"com.hedera.node.app.state.logging.TransactionStateLogger\"\
+    \ level=\"info\" additivity=\"false\">\n      <AppenderRef ref=\"TransactionStateLogs\"\
+    />\n    </Logger>\n\n    <!-- Send state logs to their own appender   -->\n  \
+    \  <Logger name=\"com.swirlds.state.merkle.logging.StateLogger\" level=\"info\"\
+    \ additivity=\"false\">\n      <AppenderRef ref=\"StateLogs\"/>\n    </Logger>\n\
+    \n\n    <Logger name=\"com.hedera\" level=\"info\" additivity=\"false\">\n   \
+    \   <AppenderRef ref=\"Console\"/>\n      <AppenderRef ref=\"RollingFile\"/>\n\
+    \    </Logger>\n    <Logger name=\"com.hedera.services.sigs\" level=\"error\"\
+    \ additivity=\"false\">\n      <AppenderRef ref=\"Console\"/>\n      <AppenderRef\
+    \ ref=\"RollingFile\"/>\n    </Logger>\n    <Logger name=\"com.hedera.services.queries.answering\"\
+    \ level=\"warn\" additivity=\"false\">\n      <AppenderRef ref=\"QueriesRollingFile\"\
+    />\n    </Logger>\n\n    <Logger name=\"com.hedera.services.legacy\" level=\"\
+    warn\" additivity=\"false\">\n      <!-- <AppenderRef ref=\"Console\"/> -->\n\
+    \      <AppenderRef ref=\"RollingFile\"/>\n    </Logger>\n    <Logger name=\"\
+    com.hedera.services.legacy.netty\" level=\"info\" additivity=\"false\">\n    \
+    \  <!-- <AppenderRef ref=\"Console\"/> -->\n      <AppenderRef ref=\"RollingFile\"\
+    />\n    </Logger>\n    <Logger name=\"com.hedera.services.legacy.service\" level=\"\
+    warn\" additivity=\"false\">\n      <!-- <AppenderRef ref=\"Console\"/> -->\n\
+    \      <AppenderRef ref=\"RollingFile\"/>\n    </Logger>\n    <Logger name=\"\
+    com.hedera.services.legacy.services\" level=\"warn\" additivity=\"false\">\n \
+    \     <!-- <AppenderRef ref=\"Console\"/> -->\n      <AppenderRef ref=\"RollingFile\"\
+    />\n    </Logger>\n    <Logger name=\"com.hedera.services.legacy.handler\" level=\"\
+    warn\" additivity=\"false\">\n      <!-- <AppenderRef ref=\"Console\"/> -->\n\
+    \      <AppenderRef ref=\"RollingFile\"/>\n    </Logger>\n    <Logger name=\"\
+    com.hedera.services.utils.UnzipUtility\" level=\"info\" additivity=\"false\">\n\
+    \      <!-- <AppenderRef ref=\"Console\"/> -->\n      <AppenderRef ref=\"RollingFile\"\
+    />\n    </Logger>\n    <Logger name=\"com.hedera.services.legacy.utils\" level=\"\
+    warn\" additivity=\"false\">\n      <!-- <AppenderRef ref=\"Console\"/> -->\n\
+    \      <AppenderRef ref=\"RollingFile\"/>\n    </Logger>\n    <Logger name=\"\
+    com.hedera.services.legacy.hgcca.core\" level=\"warn\" additivity=\"false\">\n\
+    \      <!-- <AppenderRef ref=\"Console\"/> -->\n      <AppenderRef ref=\"RollingFile\"\
+    />\n    </Logger>\n    <Logger name=\"com.hedera.services.legacy.evm\" level=\"\
+    warn\" additivity=\"false\">\n      <!-- <AppenderRef ref=\"Console\"/> -->\n\
+    \      <AppenderRef ref=\"RollingFile\"/>\n    </Logger>\n    <Logger name=\"\
+    com.hedera.services.legacy.initialization\" level=\"warn\" additivity=\"false\"\
+    >\n      <!-- <AppenderRef ref=\"Console\"/> -->\n      <AppenderRef ref=\"RollingFile\"\
+    />\n    </Logger>\n  \t<Logger name=\"com.hedera.services.legacy.config\" level=\"\
+    info\" additivity=\"false\">\n      <AppenderRef ref=\"RollingFile\"/>\n     \
+    \ <AppenderRef ref=\"Console\"/>\n    </Logger>\n\n\n    <Logger name=\"org.springframework\"\
+    \ level=\"ERROR\" additivity=\"false\">\n      <!-- <AppenderRef ref=\"Console\"\
+    /> -->\n      <AppenderRef ref=\"RollingFile\"/>\n    </Logger>\n    <Logger name=\"\
+    state\" level=\"WARN\" additivity=\"false\">\n      <!-- <AppenderRef ref=\"Console\"\
+    /> -->\n      <AppenderRef ref=\"RollingFile\"/>\n    </Logger>\n    <Logger name=\"\
+    trie\" level=\"WARN\" additivity=\"false\">\n      <!-- <AppenderRef ref=\"Console\"\
+    /> -->\n      <AppenderRef ref=\"RollingFile\"/>\n    </Logger>\n    <Logger name=\"\
+    net\" level=\"WARN\" additivity=\"false\">\n      <!-- <AppenderRef ref=\"Console\"\
+    /> -->\n      <AppenderRef ref=\"RollingFile\"/>\n    </Logger>\n    <Logger name=\"\
+    execute\" level=\"ERROR\" additivity=\"false\">\n      <!-- <AppenderRef ref=\"\
+    Console\"/> -->\n      <AppenderRef ref=\"RollingFile\"/>\n    </Logger>\n   \
+    \ <Logger name=\"VM\" level=\"ERROR\" additivity=\"false\">\n      <!-- <AppenderRef\
+    \ ref=\"Console\"/> -->\n      <AppenderRef ref=\"RollingFile\"/>\n    </Logger>\n\
+    \    <Logger name=\"pending\" level=\"WARN\" additivity=\"false\">\n      <!--\
+    \ <AppenderRef ref=\"Console\"/> -->\n      <AppenderRef ref=\"RollingFile\"/>\n\
+    \    </Logger>\n    <Logger name=\"sync\" level=\"WARN\" additivity=\"false\"\
+    >\n      <!-- <AppenderRef ref=\"Console\"/> -->\n      <AppenderRef ref=\"RollingFile\"\
+    />\n    </Logger>\n    <Logger name=\"wire\" level=\"ERROR\" additivity=\"false\"\
+    >\n      <!-- <AppenderRef ref=\"Console\"/> -->\n      <AppenderRef ref=\"RollingFile\"\
+    />\n    </Logger>\n    <Logger name=\"db\" level=\"WARN\" additivity=\"false\"\
+    >\n      <!-- <AppenderRef ref=\"Console\"/> -->\n      <AppenderRef ref=\"RollingFile\"\
+    />\n    </Logger>\n    <Logger name=\"general\" level=\"WARN\" additivity=\"false\"\
+    >\n      <!-- <AppenderRef ref=\"Console\"/> -->\n      <AppenderRef ref=\"RollingFile\"\
+    />\n    </Logger>\n    <Logger name=\"TCK-Test\" level=\"ERROR\" additivity=\"\
+    false\">\n      <!-- <AppenderRef ref=\"Console\"/> -->\n      <AppenderRef ref=\"\
+    RollingFile\"/>\n    </Logger>\n    <Logger name=\"org.hibernate\" level=\"ERROR\"\
+    \ additivity=\"false\">\n      <!-- <AppenderRef ref=\"Console\"/> -->\n     \
+    \ <AppenderRef ref=\"RollingFile\"/>\n    </Logger>\n    <Logger name=\"repository\"\
+    \ level=\"WARN\" additivity=\"false\">\n      <!-- <AppenderRef ref=\"Console\"\
+    /> -->\n      <AppenderRef ref=\"RollingFile\"/>\n    </Logger>\n    <Logger name=\"\
+    blockchain\" level=\"WARN\" additivity=\"false\">\n      <!-- <AppenderRef ref=\"\
+    Console\"/> -->\n      <AppenderRef ref=\"RollingFile\"/>\n    </Logger>\n   \
+    \ <Logger name=\"mine\" level=\"WARN\" additivity=\"false\">\n      <!-- <AppenderRef\
+    \ ref=\"Console\"/> -->\n      <AppenderRef ref=\"RollingFile\"/>\n    </Logger>\n\
+    \    <Logger name=\"blockqueue\" level=\"WARN\" additivity=\"false\">\n      <!--\
+    \ <AppenderRef ref=\"Console\"/> -->\n      <AppenderRef ref=\"RollingFile\"/>\n\
+    \    </Logger>\n    <Logger name=\"rlp\" level=\"ERROR\" additivity=\"false\"\
+    >\n      <!-- <AppenderRef ref=\"Console\"/> -->\n      <AppenderRef ref=\"RollingFile\"\
+    />\n    </Logger>\n    <Logger name=\"java.nio\" level=\"ERROR\" additivity=\"\
+    false\">\n      <!-- <AppenderRef ref=\"Console\"/> -->\n      <AppenderRef ref=\"\
+    RollingFile\"/>\n    </Logger>\n    <Logger name=\"io.netty\" level=\"ERROR\"\
+    \ additivity=\"false\">\n      <!-- <AppenderRef ref=\"Console\"/> -->\n     \
+    \ <AppenderRef ref=\"RollingFile\"/>\n    </Logger>\n    <Logger name=\"io.grpc\"\
+    \ level=\"ERROR\" additivity=\"false\">\n      <!-- <AppenderRef ref=\"Console\"\
+    /> -->\n      <AppenderRef ref=\"RollingFile\"/>\n    </Logger>\n    <Logger name=\"\
+    discover\" level=\"WARN\" additivity=\"false\">\n      <!-- <AppenderRef ref=\"\
+    Console\"/> -->\n      <AppenderRef ref=\"RollingFile\"/>\n    </Logger>\n   \
+    \ <Logger name=\"hsqldb.db\" level=\"ERROR\" additivity=\"false\">\n      <!--\
+    \ <AppenderRef ref=\"Console\"/> -->\n      <AppenderRef ref=\"RollingFile\"/>\n\
+    \    </Logger>\n  </Loggers>\n</Configuration>\n"
