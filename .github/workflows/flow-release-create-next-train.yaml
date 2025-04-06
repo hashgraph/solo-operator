@@ -153,7 +153,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-#          ref: main
+          ref: alpha/00580-ci-support-for-container-image-and-helm-chart # main
           token: ${{ secrets.GH_ACCESS_TOKEN }}
           fetch-depth: 0
 
