@@ -21,7 +21,7 @@ plugins:
         helm package build/helm
       publishCmd: |
         ./gradlew build -Dquarkus.container-image.push=true
-        helm push solo-operator-chart-${nextRelease.version}.tgz oci://ghcr.io/matteriben/practice-actions-with-helm-and-k8s/solo-operator
+        helm push solo-operator-chart-${nextRelease.version}.tgz oci://ghcr.io/hashgraph/solo-operator
 branches:
   - name: main
   - name: release/([0-9]+).([0-9]+)

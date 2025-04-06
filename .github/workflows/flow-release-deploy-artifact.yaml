@@ -24,10 +24,9 @@ permissions:
 # ./gradlew build -Dquarkus.container-image.build=true
 # ./gradlew build -Dquarkus.container-image.push=true
 
-# cd ./build/helm && helm package .
 # sed -i 's,name: "solo-operator",name: "solo-operator-chart",' build/helm/Chart.yaml
 # helm package build/helm
-# helm push solo-operator-chart-0.1.0.tgz oci://ghcr.io/matteriben/practice-actions-with-helm-and-k8s/solo-operator
+# helm push solo-operator-chart-0.1.0.tgz oci://ghcr.io/hashgraph/solo-operator
 
 jobs:
   publish-release:
