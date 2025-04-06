@@ -84,7 +84,7 @@ jobs:
         run: |
           VERSION_MAJOR="$(semver get major "${{ steps.current.outputs.version }}" | tr -d '[:space:]')"
           VERSION_MINOR="$(semver get minor "${{ steps.current.outputs.version }}" | tr -d '[:space:]')"
-          BRANCH_NAME="release/${VERSION_MAJOR}.${VERSION_MINOR}"
+          BRANCH_NAME="alpha/release-${VERSION_MAJOR}.${VERSION_MINOR}"
           BRANCH_EXISTS="false"
           if git rev-list "${BRANCH_NAME}" >/dev/null 2>&1; then
             BRANCH_EXISTS="true"
@@ -153,7 +153,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: main
+#          ref: main
           token: ${{ secrets.GH_ACCESS_TOKEN }}
           fetch-depth: 0
 

@@ -22,9 +22,6 @@ val wiremockVersion: String by project
 val smallryeCertificateGeneratorVersion: String by project
 
 dependencies {
-//    implementation("io.quarkiverse.helm:quarkus-helm:1.2.6")
-//    implementation("io.quarkus:quarkus-kubernetes:3.7.0")
-    implementation("io.quarkus:quarkus-container-image-podman")
     annotationProcessor("io.sundr:builder-annotations:${sundrVersion}")
     annotationProcessor("io.fabric8:kubernetes-client:${fabric8Version}")
     annotationProcessor("io.fabric8:crd-generator-apt:${fabric8Version}")
@@ -43,7 +40,7 @@ dependencies {
     )
 
     implementation("io.quarkus:quarkus-arc")
-//    implementation("io.quarkus:quarkus-container-image-docker")
+    implementation("io.quarkus:quarkus-container-image-docker")
     implementation("io.quarkus:quarkus-kubernetes")
     implementation("io.quarkus:quarkus-kubernetes-client")
     implementation("io.quarkus:quarkus-security")
