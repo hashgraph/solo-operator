@@ -18,8 +18,8 @@ defaults:
 permissions:
   contents: read
   packages: read
-  pages: read
-  id-token: read
+#  pages: write
+#  id-token: write
 
 # ./gradlew build -Dquarkus.container-image.build=true
 # ./gradlew build -Dquarkus.container-image.push=true
