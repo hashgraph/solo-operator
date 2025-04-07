@@ -55,6 +55,7 @@ jobs:
       - name: Extract Current Version
         id: current
         run: |
+          set -x
           CURRENT_TAG="$(git describe --tags --abbrev=0 | tr -d '[:space:]')"
           [[ -z "${CURRENT_TAG}" ]] && CURRENT_TAG="v0.0.0"
 
@@ -74,6 +75,7 @@ jobs:
       - name: Next Version
         id: next
         run: |
+          set -x
           NEXT_VERSION="$(semver bump minor "${{ steps.current.outputs.version }}" | tr -d '[:space:]')"
           NEXT_SNAPSHOT_VERSION="$(semver bump prerel SNAPSHOT "${NEXT_VERSION}" | tr -d '[:space:]')"
           echo "version=${NEXT_VERSION}" >> ${GITHUB_OUTPUT}
@@ -82,6 +84,7 @@ jobs:
       - name: Check for Existing Release Branch
         id: release-branch
         run: |
+          set -x
           VERSION_MAJOR="$(semver get major "${{ steps.current.outputs.version }}" | tr -d '[:space:]')"
           VERSION_MINOR="$(semver get minor "${{ steps.current.outputs.version }}" | tr -d '[:space:]')"
           BRANCH_NAME="alpha/release-${VERSION_MAJOR}.${VERSION_MINOR}"
@@ -136,8 +139,9 @@ jobs:
       - name: Create Release Branch
         if: ${{ github.event.inputs.dry-run-enabled != 'true' && needs.prepare-release-train.outputs.release-branch-exists != 'true' }}
         run: |
-          git checkout -b "${{ needs.prepare-release-train.outputs.release-branch }}"
-          git push -u origin "${{ needs.prepare-release-train.outputs.release-branch }}"
+          set -x
+          echo git checkout -b "${{ needs.prepare-release-train.outputs.release-branch }}"
+          echo git push -u origin "${{ needs.prepare-release-train.outputs.release-branch }}"
 
   finalize-release-train:
     name: Release Train / Finalize
@@ -198,7 +202,7 @@ jobs:
         uses: EndBug/add-and-commit@a94899bca583c204427a224a7af87c02f9b325d5 # v9.1.4
         if: ${{ github.event.inputs.dry-run-enabled != 'true' && needs.prepare-release-train.outputs.release-branch-exists != 'true' }}
         with:
-          push: true
+          push: false
           add: "gradle.properties"
           author_name: ${{ secrets.GIT_USER_NAME }}
           author_email: ${{ secrets.GIT_USER_EMAIL }}
