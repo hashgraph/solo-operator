@@ -11,6 +11,9 @@ on:
         required: false
         default: false
 
+env:
+  ACTIONS_STEP_DEBUG: true
+
 defaults:
   run:
     shell: bash
