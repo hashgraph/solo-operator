@@ -11,9 +11,6 @@ on:
         required: false
         default: false
 
-env:
-  ACTIONS_STEP_DEBUG: true
-
 defaults:
   run:
     shell: bash
@@ -102,7 +99,6 @@ jobs:
   create-release-branch:
     name: Release Train / Branch
     runs-on: solo-linux-medium
-    if: ${{ github.event.inputs.dry-run-enabled != 'true' && needs.prepare-release-train.outputs.release-branch-exists != 'true' }}
     needs:
       - prepare-release-train
     steps:

@@ -16,10 +16,10 @@ defaults:
     shell: bash
 
 permissions:
-  contents: write
-  packages: write
-  pages: write
-  id-token: write
+  contents: read
+  packages: read
+  pages: read
+  id-token: read
 
 # ./gradlew build -Dquarkus.container-image.build=true
 # ./gradlew build -Dquarkus.container-image.push=true
@@ -100,27 +100,29 @@ jobs:
       - name: Show Docker Info
         run: docker info
 
-      - name: Setup JFrog CLI
-        uses: jfrog/setup-jfrog-cli@f748a0599171a192a2668afee8d0497f7c1069df # v4.5.6
-        env:
-          JF_URL: ${{ vars.JF_URL }}
-          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
-
-      - name: Show JFrog Config
-        run: jfrog config show
-
-      - name: Verify JFrog Connectivity
-        run: jfrog rt ping
+#      - name: Setup JFrog CLI
+#        uses: jfrog/setup-jfrog-cli@f748a0599171a192a2668afee8d0497f7c1069df # v4.5.6
+#        env:
+#          JF_URL: ${{ vars.JF_URL }}
+#          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+#
+#      - name: Show JFrog Config
+#        run: jfrog config show
+#
+#      - name: Verify JFrog Connectivity
+#        run: jfrog rt ping
 
       - name: Docker Login
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
-          registry: ${{ vars.JF_HELM_REGISTRY }}
-          username: ${{ vars.JF_USERNAME }}
-          password: ${{ secrets.JF_ACCESS_TOKEN }}
+          registry: ghcr.io # ${{ vars.JF_HELM_REGISTRY }}
+          username: ${{ github.actor }} # ${{ vars.JF_USERNAME }}
+          password: ${{ secrets.GITHUB_TOKEN }} # ${{ secrets.JF_ACCESS_TOKEN }}
 
       - name: Helm Registry Login
-        run: helm registry login ${{ vars.JF_HELM_REGISTRY }} -u ${{ vars.JF_USERNAME }} -p "${{ secrets.JF_ACCESS_TOKEN }}"
+        run: |
+          helm registry login ghcr.io -u ${{ github.actor }} -p "${{ secrets.GITHUB_TOKEN }}"
+#          helm registry login ${{ vars.JF_HELM_REGISTRY }} -u ${{ vars.JF_USERNAME }} -p "${{ secrets.JF_ACCESS_TOKEN }}"
 
       - name: Install Semantic Release
         run: |
