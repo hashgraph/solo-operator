@@ -18,6 +18,7 @@ plugins:
         ./gradlew versionAsSpecified -PnewVersion=${nextRelease.version}
         ./gradlew githubVersionSummary
         ./gradlew clean assemble --no-build-cache -Dquarkus.container-image.build=true
+        cat build/helm/Chart.yaml
         sed -i \
           -e "s,^name: .*,name: \"solo-operator-chart\"," \
           build/helm/Chart.yaml
