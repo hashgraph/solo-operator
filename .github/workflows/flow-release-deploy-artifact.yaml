@@ -137,6 +137,7 @@ jobs:
           GIT_AUTHOR_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
           GIT_COMMITTER_NAME: ${{ secrets.GIT_USER_NAME }}
           GIT_COMMITTER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
+          EDITOR: 'sh -c "echo chore: auto tag > ${1}"'
         if: ${{ !cancelled() && !failure() }}
         run: |
           set -x
