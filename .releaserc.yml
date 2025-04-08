@@ -17,7 +17,9 @@ plugins:
         set -x
         ./gradlew versionAsSpecified -PnewVersion=${nextRelease.version}
         ./gradlew githubVersionSummary
-        ./gradlew clean assemble --no-build-cache -Dquarkus.container-image.build=true
+        docker images
+        ./gradlew clean build --no-build-cache -Dquarkus.container-image.build=true -x componentTest -x test --console plain -i
+        docker images
         cat build/helm/Chart.yaml
         sed -i \
           -e "s,^name: .*,name: \"solo-operator-chart\"," \
@@ -28,7 +30,7 @@ plugins:
 #          -e "s,^version: ,name: \"${nextRelease.version}\"," \
       publishCmd: |
         set -x
-        ./gradlew build -Dquarkus.container-image.push=true -x componentTest -x test --console plain
+        ./gradlew build -Dquarkus.container-image.push=true -x componentTest -x test --console plain -i
         helm push solo-operator-chart-${nextRelease.version}.tgz oci://ghcr.io/hashgraph/solo-operator
 branches:
   - name: main

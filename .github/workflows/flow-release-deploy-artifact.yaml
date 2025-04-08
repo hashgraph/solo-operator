@@ -15,9 +15,9 @@ defaults:
   run:
     shell: bash
 
-permissions:
-  contents: write
-  packages: write
+permissions: write-all
+#  contents: write
+#  packages: write
 #  pages: write
 #  id-token: write
 
