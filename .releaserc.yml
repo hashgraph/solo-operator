@@ -26,6 +26,7 @@ plugins:
         ls -ltr
 #          -e "s,^version: ,name: \"${nextRelease.version}\"," \
       publishCmd: |
+        set -x
         ./gradlew build -Dquarkus.container-image.push=true -x componentTest -x test --console plain
         helm push solo-operator-chart-${nextRelease.version}.tgz oci://ghcr.io/hashgraph/solo-operator
 branches:
