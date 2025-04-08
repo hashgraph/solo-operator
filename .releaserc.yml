@@ -17,8 +17,8 @@ plugins:
         ./gradlew versionAsSpecified -PnewVersion=${nextRelease.version}
         ./gradlew githubVersionSummary
         ./gradlew clean assemble --no-build-cache -Dquarkus.container-image.build=true
-#        sed -i 's,name: "solo-operator",name: "solo-operator-chart",' build/helm/Chart.yaml
         helm package build/helm
+#        sed -i 's,name: "solo-operator",name: "solo-operator-chart",' build/helm/Chart.yaml
       publishCmd: |
         ./gradlew build -Dquarkus.container-image.push=true -x componentTest -x test
         helm push solo-operator-${nextRelease.version}.tgz oci://ghcr.io/hashgraph/solo-operator/solo-operator-chart
