@@ -27,15 +27,15 @@ branches:
   - name: release/([0-9]+).([0-9]+)
     channel: ${name.replace(/release\//g, '').split('.')[0]}.${name.replace(/release\//g, '').split('.')[1]}.x
     range: ${name.replace(/release\//g, '').split('.')[0]}.${name.replace(/release\//g, '').split('.')[1]}.x
-  - name: alpha/release-([0-9]+).([0-9]+)
-    prerelease: true
+  - name: alpha/*
+    prerelease: alpha
     channel: alpha
   - name: ci/*
-    prerelease: true
+    prerelease: alpha
     channel: alpha
   - name: beta/*
-    prerelease: true
+    prerelease: beta
     channel: beta
   - name: rc/*
-    prerelease: true
+    prerelease: rc
     channel: rc
