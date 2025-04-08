@@ -31,8 +31,8 @@ branches:
     prerelease: alpha
     channel: alpha
   - name: ci/*
-    prerelease: alpha
-    channel: alpha
+    prerelease: ci
+    channel: ci
   - name: beta/*
     prerelease: beta
     channel: beta
