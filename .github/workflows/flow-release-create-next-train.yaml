@@ -202,7 +202,7 @@ jobs:
         uses: EndBug/add-and-commit@a94899bca583c204427a224a7af87c02f9b325d5 # v9.1.4
         if: ${{ github.event.inputs.dry-run-enabled != 'true' && needs.prepare-release-train.outputs.release-branch-exists != 'true' }}
         with:
-          push: false
+          push: true
           add: "gradle.properties"
           author_name: ${{ secrets.GIT_USER_NAME }}
           author_email: ${{ secrets.GIT_USER_EMAIL }}
