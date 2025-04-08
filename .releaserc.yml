@@ -14,13 +14,17 @@ plugins:
     - generateNotesCmd: echo ${nextRelease.version} > nextRelease.version
       verifyReleaseCmd: echo verify
       prepareCmd: |
+        set -x
         ./gradlew versionAsSpecified -PnewVersion=${nextRelease.version}
         ./gradlew githubVersionSummary
         ./gradlew clean assemble --no-build-cache -Dquarkus.container-image.build=true
-        sed -i 's,name: "solo-operator",name: "solo-operator-chart",' build/helm/Chart.yaml
+        sed -i \
+          -e "s,^name: ,name: \"solo-operator-chart\"," \
+          build/helm/Chart.yaml
         helm package build/helm
+#          -e "s,^version: ,name: \"${nextRelease.version}\"," \
       publishCmd: |
-        ./gradlew build -Dquarkus.container-image.push=true -x componentTest -x test
+        ./gradlew build -Dquarkus.container-image.push=true -x componentTest -x test --console plain
         helm push solo-operator-chart-${nextRelease.version}.tgz oci://ghcr.io/hashgraph/solo-operator
 branches:
   - name: main
