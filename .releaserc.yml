@@ -30,6 +30,9 @@ plugins:
 #          -e "s,^version: ,name: \"${nextRelease.version}\"," \
       publishCmd: |
         set -x
+        pwd
+        docker buildx build -f src/main/docker/Dockerfile.jvm -t ghcr.io/hashgraph/solo-operator/solo-operator:${nextRelease.version} --platform linux/amd64,linux/arm64 .
+        docker buildx build -f src/main/docker/Dockerfile.jvm -t ghcr.io/hashgraph/solo-operator/solo-operator:${nextRelease.version} --platform linux/amd64,linux/arm64 --push .
         ./gradlew clean build --no-build-cache -Dquarkus.container-image.build=true -Dquarkus.container-image.push=true -x componentTest -x test --console plain -i
         helm push solo-operator-chart-${nextRelease.version}.tgz oci://ghcr.io/hashgraph/solo-operator
 branches:
