@@ -142,4 +142,6 @@ jobs:
           set -x
           git version
           git config --list
+          git tag v0.0.1-alpha.1 @
+          git tag -d v0.0.1-alpha.1
           npx semantic-release --debug ${{ github.event.inputs.dry-run-enabled == 'true' && '--dry-run' || '' }}
