@@ -18,7 +18,7 @@ plugins:
         ./gradlew versionAsSpecified -PnewVersion=${nextRelease.version}
         ./gradlew githubVersionSummary
         docker images
-        ./gradlew clean build --no-build-cache -Dquarkus.container-image.build=true -x componentTest -x test --console plain -i
+        ./gradlew clean build --no-build-cache -Dquarkus.container-image.build=true -x componentTest -x test
         docker images
         cat build/helm/Chart.yaml
         sed -i \
@@ -30,11 +30,11 @@ plugins:
 #          -e "s,^version: ,name: \"${nextRelease.version}\"," \
       publishCmd: |
         set -x
-        pwd
-        docker buildx build -f src/main/docker/Dockerfile.jvm -t ghcr.io/hashgraph/solo-operator/solo-operator:${nextRelease.version} --platform linux/amd64,linux/arm64 .
-        docker buildx build -f src/main/docker/Dockerfile.jvm -t ghcr.io/hashgraph/solo-operator/solo-operator:${nextRelease.version} --platform linux/amd64,linux/arm64 --push .
-        ./gradlew clean build --no-build-cache -Dquarkus.container-image.build=true -Dquarkus.container-image.push=true -x componentTest -x test --console plain -i
+        ./gradlew clean build --no-build-cache -Dquarkus.container-image.build=true -Dquarkus.container-image.push=true -x componentTest -x test
         helm push solo-operator-chart-${nextRelease.version}.tgz oci://ghcr.io/hashgraph/solo-operator
+#        pwd
+#        docker buildx build -f src/main/docker/Dockerfile.jvm -t ghcr.io/hashgraph/solo-operator/solo-operator:${nextRelease.version} --platform linux/amd64,linux/arm64 .
+#        docker buildx build -f src/main/docker/Dockerfile.jvm -t ghcr.io/hashgraph/solo-operator/solo-operator:${nextRelease.version} --platform linux/amd64,linux/arm64 --push .
 branches:
   - name: main
   - name: release/([0-9]+).([0-9]+)
