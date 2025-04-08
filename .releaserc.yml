@@ -30,7 +30,7 @@ plugins:
 #          -e "s,^version: ,name: \"${nextRelease.version}\"," \
       publishCmd: |
         set -x
-        ./gradlew build -Dquarkus.container-image.push=true -x componentTest -x test --console plain -i
+        ./gradlew clean build --no-build-cache -Dquarkus.container-image.build=true -Dquarkus.container-image.push=true -x componentTest -x test --console plain -i
         helm push solo-operator-chart-${nextRelease.version}.tgz oci://ghcr.io/hashgraph/solo-operator
 branches:
   - name: main
