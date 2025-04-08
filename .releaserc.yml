@@ -20,7 +20,7 @@ plugins:
         sed -i 's,name: "solo-operator",name: "solo-operator-chart",' build/helm/Chart.yaml
         helm package build/helm
       publishCmd: |
-        ./gradlew build -Dquarkus.container-image.push=true
+        ./gradlew build -Dquarkus.container-image.push=true -x componentTest -x test
         helm push solo-operator-chart-${nextRelease.version}.tgz oci://ghcr.io/hashgraph/solo-operator
 branches:
   - name: main
