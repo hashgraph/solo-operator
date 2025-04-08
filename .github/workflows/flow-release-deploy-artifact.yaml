@@ -141,5 +141,5 @@ jobs:
         run: |
           set -x
           echo ${{ github.event.inputs.dry-run-enabled }}
-          echo ${{ !github.event.inputs.dry-run-enabled && '--dry-run' || '' }}
+          echo ${{ github.event.inputs.dry-run-enabled && '--dry-run' || '' }}
 #          npx semantic-release ${{ github.event.inputs.dry-run-enabled && '--dry-run' || '' }}
