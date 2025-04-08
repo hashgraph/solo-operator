@@ -139,4 +139,4 @@ jobs:
           GIT_COMMITTER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
         if: ${{ !cancelled() && !failure() }}
         run: |
-          npx semantic-release ${{ github.event.inputs.dry-run-enabled != 'false' && '--dry-run' || '' }}
+          npx semantic-release ${{ github.event.inputs.dry-run-enabled && '--dry-run' || '' }}
