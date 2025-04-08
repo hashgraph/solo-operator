@@ -19,9 +19,11 @@ plugins:
         ./gradlew githubVersionSummary
         ./gradlew clean assemble --no-build-cache -Dquarkus.container-image.build=true
         sed -i \
-          -e "s,^name: ,name: \"solo-operator-chart\"," \
+          -e "s,^name: .*,name: \"solo-operator-chart\"," \
           build/helm/Chart.yaml
         helm package build/helm
+        cat build/helm/Chart.yaml
+        ls -ltr
 #          -e "s,^version: ,name: \"${nextRelease.version}\"," \
       publishCmd: |
         ./gradlew build -Dquarkus.container-image.push=true -x componentTest -x test --console plain
