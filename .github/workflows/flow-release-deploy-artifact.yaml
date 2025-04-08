@@ -9,7 +9,7 @@ on:
         description: "Perform Dry Run"
         type: boolean
         required: false
-        default: true
+        default: false
 
 defaults:
   run:
