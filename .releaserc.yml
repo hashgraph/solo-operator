@@ -28,7 +28,7 @@ branches:
     channel: ${name.replace(/release\//g, '').split('.')[0]}.${name.replace(/release\//g, '').split('.')[1]}.x
     range: ${name.replace(/release\//g, '').split('.')[0]}.${name.replace(/release\//g, '').split('.')[1]}.x
   - name: alpha/*
-    prerelease: true
+    prerelease: 'true'
     channel: alpha
   - name: ci/*
     prerelease: alpha
