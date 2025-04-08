@@ -140,8 +140,8 @@ jobs:
         if: ${{ github.event.inputs.dry-run-enabled != 'true' && needs.prepare-release-train.outputs.release-branch-exists != 'true' }}
         run: |
           set -x
-          echo git checkout -b "${{ needs.prepare-release-train.outputs.release-branch }}"
-          echo git push -u origin "${{ needs.prepare-release-train.outputs.release-branch }}"
+          git checkout -b "${{ needs.prepare-release-train.outputs.release-branch }}"
+          git push -u origin "${{ needs.prepare-release-train.outputs.release-branch }}"
 
   finalize-release-train:
     name: Release Train / Finalize
