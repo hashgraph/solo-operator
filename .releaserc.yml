@@ -11,16 +11,16 @@ plugins:
         - build/kubernetes/*
         - solo-operator-chart-*.tgz
   - - '@semantic-release/exec'
-    - generateNotesCmd: echo ${nextRelease.version} > nextRelease.version
-      verifyReleaseCmd: echo verify
-      prepareCmd: |
+    - prepareCmd: |
+        set -e
+        false
         ./gradlew versionAsSpecified -PnewVersion=${nextRelease.version}
         ./gradlew githubVersionSummary
         ./gradlew clean build --no-build-cache -Dquarkus.container-image.build=true -x componentTest -x test
         sed -i "s,^name: .*,name: \"solo-operator-chart\"," build/helm/Chart.yaml
         helm package build/helm
       publishCmd: |
-        ./gradlew clean build --no-build-cache -Dquarkus.container-image.push=true -x componentTest -x test
+        ./gradlew clean build --no-build-cache -Dquarkus.container-image.build=true -Dquarkus.container-image.push=true -x componentTest -x test
         helm push solo-operator-chart-${nextRelease.version}.tgz ${process.env.HELM_REMOTE}
 branches:
   - name: main
