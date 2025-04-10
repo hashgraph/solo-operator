@@ -29,12 +29,21 @@ import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.processing.dependent.workflow.Workflow;
 import io.javaoperatorsdk.operator.processing.dependent.workflow.WorkflowBuilder;
 import io.javaoperatorsdk.operator.processing.event.source.EventSource;
+import io.quarkiverse.operatorsdk.annotations.RBACRule;
 import java.lang.invoke.MethodHandles;
 import java.util.List;
 import java.util.function.Predicate;
 import org.jboss.logging.Logger;
 
 @ControllerConfiguration
+@RBACRule(
+        apiGroups = {""},
+        resources = {"secrets"},
+        verbs = {"create", "delete", "get", "list", "patch", "update", "watch"})
+@RBACRule(
+        apiGroups = {""},
+        resources = {"events"},
+        verbs = {"create", "delete", "get", "list", "patch", "update", "watch", "deletecollection"})
 public class HAProxyCapsuleReconciler implements Cleaner<HAProxyCapsule>, Reconciler<HAProxyCapsule> {
     public static final Predicate<HasMetadata> HAS_LABEL_SELECTOR_HAPROXY =
             hasLabel(Constants.LABEL_APP, Constants.COMPONENT_HAPROXY);
