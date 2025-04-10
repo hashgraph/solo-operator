@@ -14,27 +14,14 @@ plugins:
     - generateNotesCmd: echo ${nextRelease.version} > nextRelease.version
       verifyReleaseCmd: echo verify
       prepareCmd: |
-        set -x
         ./gradlew versionAsSpecified -PnewVersion=${nextRelease.version}
         ./gradlew githubVersionSummary
-        docker images
         ./gradlew clean build --no-build-cache -Dquarkus.container-image.build=true -x componentTest -x test
-        docker images
-        cat build/helm/Chart.yaml
-        sed -i \
-          -e "s,^name: .*,name: \"solo-operator-chart\"," \
-          build/helm/Chart.yaml
+        sed -i "s,^name: .*,name: \"solo-operator-chart\"," build/helm/Chart.yaml
         helm package build/helm
-        cat build/helm/Chart.yaml
-        ls -ltr
-#          -e "s,^version: ,name: \"${nextRelease.version}\"," \
       publishCmd: |
-        set -x
-        ./gradlew clean build --no-build-cache -Dquarkus.container-image.build=true -Dquarkus.container-image.push=true -x componentTest -x test
-        helm push solo-operator-chart-${nextRelease.version}.tgz oci://ghcr.io/hashgraph/solo-operator
-#        pwd
-#        docker buildx build -f src/main/docker/Dockerfile.jvm -t ghcr.io/hashgraph/solo-operator/solo-operator:${nextRelease.version} --platform linux/amd64,linux/arm64 .
-#        docker buildx build -f src/main/docker/Dockerfile.jvm -t ghcr.io/hashgraph/solo-operator/solo-operator:${nextRelease.version} --platform linux/amd64,linux/arm64 --push .
+        ./gradlew clean build --no-build-cache -Dquarkus.container-image.push=true -x componentTest -x test
+        helm push solo-operator-chart-${nextRelease.version}.tgz ${process.env.HELM_REMOTE}
 branches:
   - name: main
   - name: release/([0-9]+).([0-9]+)
