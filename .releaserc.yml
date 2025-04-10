@@ -3,9 +3,6 @@
 ---
 plugins:
   - '@semantic-release/release-notes-generator'
-  - - '@semantic-release/git'
-    - assets:
-        - gradle.properties
   - - '@semantic-release/commit-analyzer'
     - preset: conventionalcommits
   - - '@semantic-release/github'
@@ -27,6 +24,9 @@ plugins:
         set -e
         ./gradlew clean build --no-build-cache -Dquarkus.container-image.build=true -Dquarkus.container-image.push=true -x componentTest -x test
         helm push solo-operator-chart-${nextRelease.version}.tgz ${process.env.HELM_REMOTE}
+  - - '@semantic-release/git'
+    - assets:
+        - gradle.properties
 branches:
   - name: main
   - name: release/([0-9]+).([0-9]+)
