@@ -30,8 +30,9 @@ publish:
   - - '@semantic-release/exec'
     - cmd: |
         set -e
-        ./gradlew clean assemble --no-build-cache -Dquarkus.container-image.build=true -Dquarkus.container-image.push=true -x componentTest -x test
+        ./gradlew clean assemble --no-build-cache -Dquarkus.container-image.build=true -Dquarkus.container-image.push=true
         helm push solo-operator-chart-${nextRelease.version}.tgz ${process.env.HELM_REMOTE}
+  - - '@semantic-release/github'
 branches:
   - name: main
   - name: release/([0-9]+).([0-9]+)
