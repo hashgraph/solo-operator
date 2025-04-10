@@ -2,31 +2,14 @@
 
 ---
 plugins:
-  - - '@semantic-release/commit-analyzer'
+  - '@semantic-release/commit-analyzer'
+  - - '@semantic-release/release-notes-generator'
     - preset: conventionalcommits
-  - '@semantic-release/release-notes-generator'
+  - '@semantic-release/git'
   - - '@semantic-release/github'
     - assets:
         - build/kubernetes/*
         - solo-operator-chart-*.tgz
-  - - '@semantic-release/exec'
-#    - verifyConditionsCmd: |
-#        set -e
-#        ./gradlew clean build --no-build-cache -x componentTest -x test
-#      prepareCmd: |
-#        set -e
-#        ./gradlew versionAsSpecified -PnewVersion=${nextRelease.version}
-#        ./gradlew githubVersionSummary
-#        ./gradlew clean assemble --no-build-cache
-#        sed -i "s,^name: .*,name: \"solo-operator-chart\"," build/helm/Chart.yaml
-#        helm package build/helm
-#      publishCmd: |
-#        set -e
-#        ./gradlew clean build --no-build-cache -Dquarkus.container-image.build=true -Dquarkus.container-image.push=true -x componentTest -x test
-#        helm push solo-operator-chart-${nextRelease.version}.tgz ${process.env.HELM_REMOTE}
-  - - '@semantic-release/git'
-#    - assets:
-#        - gradle.properties
 verifyConditions:
   - - '@semantic-release/exec'
     - cmd: ./gradlew clean build --no-build-cache -x componentTest -x test
