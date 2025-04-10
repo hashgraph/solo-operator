@@ -2,30 +2,30 @@
 
 ---
 plugins:
-  - - '@semantic-release/commit-analyzer'
-    - preset: conventionalcommits
+  - '@semantic-release/commit-analyzer'
   - - '@semantic-release/release-notes-generator'
     - preset: conventionalcommits
-  - '@semantic-release/git'
+  - - '@semantic-release/git'
+    - assets:
+        - gradle.properties
   - - '@semantic-release/github'
     - assets:
         - build/kubernetes/*
         - solo-operator-chart-*.tgz
-verifyConditions:
   - - '@semantic-release/exec'
-    - cmd: ./gradlew clean build --no-build-cache -x componentTest -x test
-prepare:
-  - - '@semantic-release/exec'
-    - cmd: |
+    - prepareCmd: |
         set -e
         ./gradlew versionAsSpecified -PnewVersion=${nextRelease.version}
         ./gradlew githubVersionSummary
         ./gradlew clean assemble --no-build-cache
         sed -i "s,^name: .*,name: \"solo-operator-chart\"," build/helm/Chart.yaml
         helm package build/helm
-  - - '@semantic-release/git'
-    - assets:
-      - gradle.properties
+verifyConditions:
+  - - '@semantic-release/exec'
+    - cmd: ./gradlew clean build --no-build-cache -x componentTest -x test
+prepare:
+  - '@semantic-release/exec'
+  - '@semantic-release/git'
 publish:
   - - '@semantic-release/exec'
     - cmd: |
