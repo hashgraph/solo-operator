@@ -13,7 +13,6 @@ plugins:
   - - '@semantic-release/exec'
     - prepareCmd: |
         set -e
-        false
         ./gradlew versionAsSpecified -PnewVersion=${nextRelease.version}
         ./gradlew githubVersionSummary
         ./gradlew clean build --no-build-cache -Dquarkus.container-image.build=true -x componentTest -x test
