@@ -3,7 +3,9 @@
 ---
 plugins:
   - '@semantic-release/release-notes-generator'
-  - '@semantic-release/git'
+  - - '@semantic-release/git'
+    - assets:
+        - gradle.properties
   - - '@semantic-release/commit-analyzer'
     - preset: conventionalcommits
   - - '@semantic-release/github'

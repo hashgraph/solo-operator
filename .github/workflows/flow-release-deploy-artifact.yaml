@@ -115,4 +115,4 @@ jobs:
           HELM_REMOTE: oci://ghcr.io/hashgraph/solo-operator
         if: ${{ !cancelled() && !failure() }}
         run: |
-          npx semantic-release --debug ${{ github.event.inputs.dry-run-enabled == 'true' && '--dry-run' || '' }}
+          npx semantic-release ${{ github.event.inputs.dry-run-enabled == 'true' && '--dry-run' || '' }}
