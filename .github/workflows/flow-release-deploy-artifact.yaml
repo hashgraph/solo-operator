@@ -15,9 +15,6 @@ defaults:
   run:
     shell: bash
 
-#permissions:
-#  contents: read
-#  packages: write
 #  pages: write
 #  id-token: write
 
@@ -31,6 +28,9 @@ defaults:
 jobs:
   publish-release:
     name: Release / Publish
+    permissions:
+      contents: read
+      packages: write
     runs-on: solo-linux-medium
     steps:
       - name: Harden Runner
