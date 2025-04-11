@@ -115,7 +115,7 @@ components:
                   type: object
                   additionalProperties:
                     type: string
-                apiPermissions:
+                permissionConfiguration:
                   description: |
                     The application configuration for the `Orbit`. This is equivalent to the
                     `data/config/api-permissions.properties` file.

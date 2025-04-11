@@ -51,7 +51,7 @@ public class NowFrozenOrbitUnitTest {
         match(updatedConsensus.getNetworkSettings(), files.getNetworkSettings(), initialConsensus.getNetworkSettings());
         match(
                 updatedConsensus.getPermissionConfiguration(),
-                files.getApiPermissions(),
+                files.getPermissionConfiguration(),
                 initialConsensus.getPermissionConfiguration());
         match(networkOperation, updatedOrbit);
     }

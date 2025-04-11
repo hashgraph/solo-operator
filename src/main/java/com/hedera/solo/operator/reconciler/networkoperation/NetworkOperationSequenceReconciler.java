@@ -366,9 +366,11 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
                 .with(r -> r.editStatus()
                         .withPhase(NetworkOperationStatus.Phase.Failed)
                         .addToConditions(new ConditionBuilder()
+                                .withLastTransitionTime(timestamp())
+                                .withObservedGeneration(resource.getMetadata().getGeneration())
                                 .withType("Error")
-                                .withStatus(ConditionStatus.True)
                                 .withReason("Exception")
+                                .withStatus(ConditionStatus.True)
                                 .withMessage(e.getMessage())
                                 .build()))
                 .build();
