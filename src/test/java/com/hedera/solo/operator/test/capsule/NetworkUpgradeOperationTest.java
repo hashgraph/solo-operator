@@ -38,6 +38,7 @@ import io.quarkus.test.junit.QuarkusTestProfile;
 import io.quarkus.test.junit.TestProfile;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -197,14 +198,14 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
             final NetworkUpgrade.WorkflowStep workflowStep,
             List<AddressBookEntry> addressBookEntries) {
 
-        return edit(netOp)
+        final NetworkOperation updated = edit(netOp)
                 .with(metadata -> metadata.editMetadata()
                         .withName("network-upgrade")
-                        .withNamespace(orbit)
+                        .withNamespace(namespace)
                         .withLabels(Map.of(LABEL_K8S_MANAGED_BY, SOLO_OPERATOR)))
                 .with(spec -> spec.editSpec()
                         .withMode(NetworkOperationSpec.Mode.NetworkUpgrade)
-                        .withOrbit(orbit)
+                        .withOrbit(namespace)
                         .editNetworkUpgrade()
                         .withWorkflowStep(workflowStep))
                 .with(spec -> spec.editSpec()
@@ -296,6 +297,53 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
                                 .build()))
                 .with(ab -> ab.editSpec().editNetworkUpgrade().withAddressBook(addressBookEntries))
                 .build();
+
+        // only add it once during ExecuteImmediate
+        if (workflowStep.equals(NetworkUpgrade.WorkflowStep.ExecuteImmediate)) {
+            final Orbit orbit = kubernetesClient
+                    .resources(Orbit.class)
+                    .inNamespace(namespace)
+                    .list()
+                    .getItems()
+                    .getFirst();
+            assertThat(orbit).isNotNull();
+
+            final Map<String, String> newNetworkSettings = new HashMap<>();
+            if (orbit.getSpec().getConsensus().getNetworkSettings() != null) {
+                newNetworkSettings.putAll(orbit.getSpec().getConsensus().getNetworkSettings());
+            }
+            newNetworkSettings.put("test1", "1");
+
+            final Map<String, String> newGenesisProperty = new HashMap<>();
+            if (orbit.getSpec().getConsensus().getGenesisProperties() != null) {
+                newGenesisProperty.putAll(orbit.getSpec().getConsensus().getGenesisProperties());
+            }
+            newGenesisProperty.put("test2", "2");
+
+            final Map<String, String> newApiPermission = new HashMap<>();
+            if (orbit.getSpec().getConsensus().getPermissionConfiguration() != null) {
+                newApiPermission.putAll(orbit.getSpec().getConsensus().getPermissionConfiguration());
+            }
+            newApiPermission.put("test3", "3");
+
+            final Map<String, String> newApplicationProperties = new HashMap<>();
+            if (orbit.getSpec().getConsensus().getApplicationConfiguration() != null) {
+                newApplicationProperties.putAll(orbit.getSpec().getConsensus().getApplicationConfiguration());
+            }
+            newApplicationProperties.put("test4", "4");
+            return edit(updated)
+                    .with(s -> s.editSpec()
+                            .editNetworkUpgrade()
+                            .editConfigurationFiles()
+                            .withNetworkSettings(newNetworkSettings)
+                            .withGenesisProperties(newGenesisProperty)
+                            .withApplicationProperties(newApplicationProperties)
+                            .withPermissionConfiguration(newApiPermission)
+                            .endConfigurationFiles())
+                    .build();
+        }
+
+        return updated;
     }
 
     protected void checkNowFrozenStatus(

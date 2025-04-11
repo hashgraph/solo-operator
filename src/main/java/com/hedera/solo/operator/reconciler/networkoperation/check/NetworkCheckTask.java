@@ -11,6 +11,7 @@ import com.hedera.solo.operator.library.processor.RetryStep;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.check.steps.CheckConsensusNodeReadyStep;
+import com.hedera.solo.operator.reconciler.networkoperation.check.steps.CheckOrbitConfigurationStep;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -56,7 +57,7 @@ public class NetworkCheckTask extends AbstractProcessorTask<NetworkOperation, Ne
     @Override
     public List<ProcessorStep<NetworkOperation, NetworkOperationStatus>> steps() throws ProcessorException {
         return List.of(
-                // new CheckOrbitConfigurationStep(customResourceManager),
+                new CheckOrbitConfigurationStep(customResourceManager),
                 // new CheckConsensusPodConfigurationStep(customResourceManager),
                 new RetryStep<>(
                         new CheckConsensusNodeReadyStep(customResourceManager),
