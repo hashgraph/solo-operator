@@ -87,14 +87,40 @@ public final class NetworkOperationStepUtil {
             boolean found = false;
             for (final Condition c : finalConditions) {
                 if (c.getType().equals(condition.getType()) && c.getReason().equals(condition.getReason())) {
-                    log.debugf("Condition %s already exists, updating", condition.getType());
-                    c.setObservedGeneration(condition.getObservedGeneration());
-                    c.setLastTransitionTime(condition.getLastTransitionTime());
-                    c.setMessage(condition.getMessage());
-                    c.setReason(condition.getReason());
-                    c.setStatus(condition.getStatus());
-                    c.setType(condition.getType());
                     found = true;
+
+                    log.debugf(
+                            "Found existing condition '%s-%s'  [ status: %s ] ",
+                            c.getType(), c.getReason(), c.getStatus());
+
+                    boolean isChanged = false;
+                    if (Objects.nonNull(condition.getStatus())
+                            && !condition.getStatus().equals(c.getStatus())) {
+                        c.setStatus(condition.getStatus());
+                        isChanged = true;
+                    }
+
+                    if (Objects.nonNull(condition.getMessage())
+                            && !condition.getMessage().equals(c.getMessage())) {
+                        c.setMessage(condition.getMessage());
+                        isChanged = true;
+                    }
+
+                    if (Objects.nonNull(condition.getObservedGeneration())
+                            && !condition.getObservedGeneration().equals(c.getObservedGeneration())) {
+                        c.setObservedGeneration(condition.getObservedGeneration());
+                        isChanged = true;
+                    }
+
+                    if (isChanged) {
+                        log.debugf(
+                                "Updated condition '%s-%s' [ status: %s ] ", c.getType(), c.getReason(), c.getStatus());
+                        if (Objects.nonNull(condition.getLastTransitionTime())) {
+                            c.setLastTransitionTime(condition.getLastTransitionTime());
+                        } else {
+                            c.setLastTransitionTime(timestamp());
+                        }
+                    }
                 }
             }
 
