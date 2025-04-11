@@ -81,251 +81,7 @@ public class CheckConsensusCapsuleConfigurationStep implements ProcessorStep<Net
             }
 
             for (ConsensusCapsule consensusCapsule : consensusCapsules) {
-                final String nodeName = Metadata.prepareNodeName(consensusCapsule);
-
-                // check consensus capsule configuration
-                Optional<ImageRepositoryStatus> selectedVersion =
-                        resource.getStatus().getSoftwareSourceStatus().getConsensusNode().stream()
-                                .filter(ImageRepositoryStatus::getSelectedForDeployment)
-                                .findFirst();
-
-                if (selectedVersion.isEmpty()) {
-                    throw new ProcessorException(
-                            "Consensus capsule software version not selected for consensus node: %s"
-                                    .formatted(nodeName));
-                }
-
-                if (!matchImageVersion(
-                        selectedVersion.get(),
-                        consensusCapsule
-                                .getSpec()
-                                .getPodProperties()
-                                .getContainers()
-                                .getConsensusNode()
-                                .getSoftwareVersion())) {
-                    throw new ProcessorException(
-                            "Consensus capsule software version mismatch for consensus node: %s".formatted(nodeName));
-                }
-
-                log.infof(
-                        "Consensus capsule software version matched for consensus node: %s [ version: %s]",
-                        nodeName, toImageVersion(selectedVersion.get()));
-
-                // check node properties changeset configuration
-                if (resource.getSpec()
-                                .getNetworkUpgrade()
-                                .getChangesets()
-                                .getConsensusNodeChangeset()
-                                .getNodeProperties()
-                        != null) {
-
-                    for (NodeProperties prop : resource.getSpec()
-                            .getNetworkUpgrade()
-                            .getChangesets()
-                            .getConsensusNodeChangeset()
-                            .getNodeProperties()) {
-
-                        if (Objects.equals(
-                                prop.getNodeId(), consensusCapsule.getSpec().getNodeId())) {
-                            final Map<String, String> nodeProperties = prop.getConfiguration();
-                            if (!nodeProperties.equals(
-                                    consensusCapsule.getSpec().getNodeProperties())) {
-                                throw new ProcessorException(
-                                        "Node properties configuration mismatch for consensus node: %s"
-                                                .formatted(nodeName));
-                            }
-
-                            log.infof(
-                                    "Node properties configuration matched for consensus node: %s [ properties: %s]",
-                                    nodeName, nodeProperties);
-
-                            break;
-                        }
-                    }
-                }
-
-                // check logging configuration
-                if (resource.getSpec()
-                                .getNetworkUpgrade()
-                                .getChangesets()
-                                .getConsensusNodeChangeset()
-                                .getLogging()
-                        != null) {
-
-                    for (NodeLoggingConfiguration conf : resource.getSpec()
-                            .getNetworkUpgrade()
-                            .getChangesets()
-                            .getConsensusNodeChangeset()
-                            .getLogging()) {
-
-                        if (Objects.equals(
-                                conf.getNodeId(), consensusCapsule.getSpec().getNodeId())) {
-                            final String loggingProperties = conf.getConfiguration();
-                            if (!loggingProperties.equals(
-                                    consensusCapsule.getSpec().getLog4j2_xml())) {
-                                throw new ProcessorException(
-                                        "Logging configuration mismatch for consensus node: %s".formatted(nodeName));
-                            }
-
-                            log.infof("Logging configuration matched for consensus node: %s", nodeName);
-
-                            break;
-                        }
-                    }
-                }
-
-                // check record-stream-uploader changeset configuration
-                if (ConsensusPodSidecarUtil.hasStreamUploaderChangeset(
-                        resource, Constants.TPL_VAR_RECORD_STREAM_UPLOADER)) {
-                    selectedVersion = resource.getStatus().getSoftwareSourceStatus().getRecordStreamUploader().stream()
-                            .filter(ImageRepositoryStatus::getSelectedForDeployment)
-                            .findFirst();
-
-                    if (selectedVersion.isEmpty()) {
-                        throw new ProcessorException(
-                                "Record stream uploader software version not selected for consensus node: %s"
-                                        .formatted(nodeName));
-                    }
-
-                    if (!matchImageVersion(
-                            selectedVersion.get(),
-                            consensusCapsule
-                                    .getSpec()
-                                    .getPodProperties()
-                                    .getContainers()
-                                    .getRecordStreamUploader()
-                                    .getSoftwareVersion())) {
-                        throw new ProcessorException(
-                                "Record stream uploader software version mismatch for consensus node: %s"
-                                        .formatted(nodeName));
-                    }
-
-                    log.infof(
-                            "Record stream uploader software version matched for consensus node: %s [ version: %s]",
-                            nodeName, toImageVersion(selectedVersion.get()));
-                }
-
-                // check event-stream-uploader changeset configuration
-                if (ConsensusPodSidecarUtil.hasStreamUploaderChangeset(
-                        resource, Constants.TPL_VAR_EVENT_STREAM_UPLOADER)) {
-                    selectedVersion = resource.getStatus().getSoftwareSourceStatus().getEventsStreamUploader().stream()
-                            .filter(ImageRepositoryStatus::getSelectedForDeployment)
-                            .findFirst();
-
-                    if (selectedVersion.isEmpty()) {
-                        throw new ProcessorException(
-                                "Events stream uploader software version not selected for consensus node: %s"
-                                        .formatted(nodeName));
-                    }
-
-                    if (!matchImageVersion(
-                            selectedVersion.get(),
-                            consensusCapsule
-                                    .getSpec()
-                                    .getPodProperties()
-                                    .getContainers()
-                                    .getEventsStreamUploader()
-                                    .getSoftwareVersion())) {
-                        throw new ProcessorException(
-                                "Events stream uploader software version mismatch for consensus node: %s"
-                                        .formatted(nodeName));
-                    }
-
-                    log.infof(
-                            "Events stream uploader software version matched for consensus node: %s [ version: %s]",
-                            nodeName, toImageVersion(selectedVersion.get()));
-                }
-
-                // check backup-uploader changeset configuration
-                if (ConsensusPodSidecarUtil.hasStreamUploaderChangeset(resource, Constants.TPL_VAR_BACKUP_UPLOADER)) {
-                    selectedVersion = resource.getStatus().getSoftwareSourceStatus().getBackupUploader().stream()
-                            .filter(ImageRepositoryStatus::getSelectedForDeployment)
-                            .findFirst();
-
-                    if (selectedVersion.isEmpty()) {
-                        throw new ProcessorException(
-                                "Backup uploader software version not selected for consensus node: %s"
-                                        .formatted(nodeName));
-                    }
-
-                    if (!matchImageVersion(
-                            selectedVersion.get(),
-                            consensusCapsule
-                                    .getSpec()
-                                    .getPodProperties()
-                                    .getContainers()
-                                    .getBackupUploader()
-                                    .getSoftwareVersion())) {
-                        throw new ProcessorException(
-                                "Backup uploader software version mismatch for consensus node: %s".formatted(nodeName));
-                    }
-
-                    log.infof(
-                            "Backup uploader software version matched for consensus node: %s [ version: %s]",
-                            nodeName, toImageVersion(selectedVersion.get()));
-                }
-
-                // check record-stream-sidecar changeset configuration
-                if (ConsensusPodSidecarUtil.hasStreamUploaderChangeset(
-                        resource, Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER)) {
-                    selectedVersion =
-                            resource.getStatus().getSoftwareSourceStatus().getRecordStreamSidecarUploader().stream()
-                                    .filter(ImageRepositoryStatus::getSelectedForDeployment)
-                                    .findFirst();
-
-                    if (selectedVersion.isEmpty()) {
-                        throw new ProcessorException(
-                                "Record stream sidecar uploader software version not selected for consensus node: %s"
-                                        .formatted(nodeName));
-                    }
-
-                    if (!matchImageVersion(
-                            selectedVersion.get(),
-                            consensusCapsule
-                                    .getSpec()
-                                    .getPodProperties()
-                                    .getContainers()
-                                    .getRecordStreamSidecarFilesUploader()
-                                    .getSoftwareVersion())) {
-                        throw new ProcessorException(
-                                "Record stream sidecar uploader software version mismatch for consensus node: %s"
-                                        .formatted(nodeName));
-                    }
-
-                    log.infof(
-                            "Record stream sidecar uploader software version matched for consensus node: %s [ version: %s]",
-                            nodeName, toImageVersion(selectedVersion.get()));
-                }
-
-                // check otel-collector changeset configuration
-                if (ConsensusPodSidecarUtil.hasOtelChangeset(resource)) {
-                    selectedVersion = resource.getStatus().getSoftwareSourceStatus().getOtelCollector().stream()
-                            .filter(ImageRepositoryStatus::getSelectedForDeployment)
-                            .findFirst();
-
-                    if (selectedVersion.isEmpty()) {
-                        throw new ProcessorException(
-                                "Otel collector sidecar software version not selected for consensus node: %s"
-                                        .formatted(nodeName));
-                    }
-
-                    if (!matchImageVersion(
-                            selectedVersion.get(),
-                            consensusCapsule
-                                    .getSpec()
-                                    .getPodProperties()
-                                    .getContainers()
-                                    .getOpenTelemetryCollector()
-                                    .getSoftwareVersion())) {
-                        throw new ProcessorException(
-                                "Open telemetry collector software version mismatch for consensus node: %s"
-                                        .formatted(nodeName));
-                    }
-
-                    log.infof(
-                            "Open telemetry sidecar software version matched for consensus node: %s [ version: %s]",
-                            nodeName, toImageVersion(selectedVersion.get()));
-                }
+                checkConsensusCapsuleConfiguration(resource, consensusCapsule);
             }
 
             log.infof(
@@ -348,6 +104,242 @@ public class CheckConsensusCapsuleConfigurationStep implements ProcessorStep<Net
             final String failedMessage = String.format(FAIL_STATUS_MESSAGE, t.getMessage());
             log.errorf(t, failedMessage);
             return NetworkOperationStepUtil.prepareFailed(resource, status, failedMessage, CONDITION_TYPE);
+        }
+    }
+
+    private static void checkConsensusCapsuleConfiguration(
+            final NetworkOperation resource, final ConsensusCapsule consensusCapsule) {
+        final String nodeName = Metadata.prepareNodeName(consensusCapsule);
+
+        // check consensus capsule configuration
+        Optional<ImageRepositoryStatus> selectedVersion =
+                resource.getStatus().getSoftwareSourceStatus().getConsensusNode().stream()
+                        .filter(ImageRepositoryStatus::getSelectedForDeployment)
+                        .findFirst();
+
+        if (selectedVersion.isEmpty()) {
+            throw new ProcessorException(
+                    "Consensus capsule software version not selected for consensus node: %s".formatted(nodeName));
+        }
+
+        if (!matchImageVersion(
+                selectedVersion.get(),
+                consensusCapsule
+                        .getSpec()
+                        .getPodProperties()
+                        .getContainers()
+                        .getConsensusNode()
+                        .getSoftwareVersion())) {
+            throw new ProcessorException(
+                    "Consensus capsule software version mismatch for consensus node: %s".formatted(nodeName));
+        }
+
+        log.infof(
+                "Consensus capsule software version matched for consensus node: %s [ version: %s]",
+                nodeName, toImageVersion(selectedVersion.get()));
+
+        // check node properties changeset configuration
+        if (resource.getSpec()
+                        .getNetworkUpgrade()
+                        .getChangesets()
+                        .getConsensusNodeChangeset()
+                        .getNodeProperties()
+                != null) {
+
+            for (NodeProperties prop : resource.getSpec()
+                    .getNetworkUpgrade()
+                    .getChangesets()
+                    .getConsensusNodeChangeset()
+                    .getNodeProperties()) {
+
+                if (Objects.equals(prop.getNodeId(), consensusCapsule.getSpec().getNodeId())) {
+                    final Map<String, String> nodeProperties = prop.getConfiguration();
+                    if (!nodeProperties.equals(consensusCapsule.getSpec().getNodeProperties())) {
+                        throw new ProcessorException(
+                                "Node properties configuration mismatch for consensus node: %s".formatted(nodeName));
+                    }
+
+                    log.infof(
+                            "Node properties configuration matched for consensus node: %s [ properties: %s]",
+                            nodeName, nodeProperties);
+
+                    break;
+                }
+            }
+        }
+
+        // check logging configuration
+        if (resource.getSpec()
+                        .getNetworkUpgrade()
+                        .getChangesets()
+                        .getConsensusNodeChangeset()
+                        .getLogging()
+                != null) {
+
+            for (NodeLoggingConfiguration conf : resource.getSpec()
+                    .getNetworkUpgrade()
+                    .getChangesets()
+                    .getConsensusNodeChangeset()
+                    .getLogging()) {
+
+                if (Objects.equals(conf.getNodeId(), consensusCapsule.getSpec().getNodeId())) {
+                    final String loggingProperties = conf.getConfiguration();
+                    if (!loggingProperties.equals(consensusCapsule.getSpec().getLog4j2_xml())) {
+                        throw new ProcessorException(
+                                "Logging configuration mismatch for consensus node: %s".formatted(nodeName));
+                    }
+
+                    log.infof("Logging configuration matched for consensus node: %s", nodeName);
+
+                    break;
+                }
+            }
+        }
+
+        // check record-stream-uploader changeset configuration
+        if (ConsensusPodSidecarUtil.hasStreamUploaderChangeset(resource, Constants.TPL_VAR_RECORD_STREAM_UPLOADER)) {
+            selectedVersion = resource.getStatus().getSoftwareSourceStatus().getRecordStreamUploader().stream()
+                    .filter(ImageRepositoryStatus::getSelectedForDeployment)
+                    .findFirst();
+
+            if (selectedVersion.isEmpty()) {
+                throw new ProcessorException(
+                        "Record stream uploader software version not selected for consensus node: %s"
+                                .formatted(nodeName));
+            }
+
+            if (!matchImageVersion(
+                    selectedVersion.get(),
+                    consensusCapsule
+                            .getSpec()
+                            .getPodProperties()
+                            .getContainers()
+                            .getRecordStreamUploader()
+                            .getSoftwareVersion())) {
+                throw new ProcessorException(
+                        "Record stream uploader software version mismatch for consensus node: %s".formatted(nodeName));
+            }
+
+            log.infof(
+                    "Record stream uploader software version matched for consensus node: %s [ version: %s]",
+                    nodeName, toImageVersion(selectedVersion.get()));
+        }
+
+        // check event-stream-uploader changeset configuration
+        if (ConsensusPodSidecarUtil.hasStreamUploaderChangeset(resource, Constants.TPL_VAR_EVENT_STREAM_UPLOADER)) {
+            selectedVersion = resource.getStatus().getSoftwareSourceStatus().getEventsStreamUploader().stream()
+                    .filter(ImageRepositoryStatus::getSelectedForDeployment)
+                    .findFirst();
+
+            if (selectedVersion.isEmpty()) {
+                throw new ProcessorException(
+                        "Events stream uploader software version not selected for consensus node: %s"
+                                .formatted(nodeName));
+            }
+
+            if (!matchImageVersion(
+                    selectedVersion.get(),
+                    consensusCapsule
+                            .getSpec()
+                            .getPodProperties()
+                            .getContainers()
+                            .getEventsStreamUploader()
+                            .getSoftwareVersion())) {
+                throw new ProcessorException(
+                        "Events stream uploader software version mismatch for consensus node: %s".formatted(nodeName));
+            }
+
+            log.infof(
+                    "Events stream uploader software version matched for consensus node: %s [ version: %s]",
+                    nodeName, toImageVersion(selectedVersion.get()));
+        }
+
+        // check backup-uploader changeset configuration
+        if (ConsensusPodSidecarUtil.hasStreamUploaderChangeset(resource, Constants.TPL_VAR_BACKUP_UPLOADER)) {
+            selectedVersion = resource.getStatus().getSoftwareSourceStatus().getBackupUploader().stream()
+                    .filter(ImageRepositoryStatus::getSelectedForDeployment)
+                    .findFirst();
+
+            if (selectedVersion.isEmpty()) {
+                throw new ProcessorException(
+                        "Backup uploader software version not selected for consensus node: %s".formatted(nodeName));
+            }
+
+            if (!matchImageVersion(
+                    selectedVersion.get(),
+                    consensusCapsule
+                            .getSpec()
+                            .getPodProperties()
+                            .getContainers()
+                            .getBackupUploader()
+                            .getSoftwareVersion())) {
+                throw new ProcessorException(
+                        "Backup uploader software version mismatch for consensus node: %s".formatted(nodeName));
+            }
+
+            log.infof(
+                    "Backup uploader software version matched for consensus node: %s [ version: %s]",
+                    nodeName, toImageVersion(selectedVersion.get()));
+        }
+
+        // check record-stream-sidecar changeset configuration
+        if (ConsensusPodSidecarUtil.hasStreamUploaderChangeset(
+                resource, Constants.TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER)) {
+            selectedVersion = resource.getStatus().getSoftwareSourceStatus().getRecordStreamSidecarUploader().stream()
+                    .filter(ImageRepositoryStatus::getSelectedForDeployment)
+                    .findFirst();
+
+            if (selectedVersion.isEmpty()) {
+                throw new ProcessorException(
+                        "Record stream sidecar uploader software version not selected for consensus node: %s"
+                                .formatted(nodeName));
+            }
+
+            if (!matchImageVersion(
+                    selectedVersion.get(),
+                    consensusCapsule
+                            .getSpec()
+                            .getPodProperties()
+                            .getContainers()
+                            .getRecordStreamSidecarFilesUploader()
+                            .getSoftwareVersion())) {
+                throw new ProcessorException(
+                        "Record stream sidecar uploader software version mismatch for consensus node: %s"
+                                .formatted(nodeName));
+            }
+
+            log.infof(
+                    "Record stream sidecar uploader software version matched for consensus node: %s [ version: %s]",
+                    nodeName, toImageVersion(selectedVersion.get()));
+        }
+
+        // check otel-collector changeset configuration
+        if (ConsensusPodSidecarUtil.hasOtelChangeset(resource)) {
+            selectedVersion = resource.getStatus().getSoftwareSourceStatus().getOtelCollector().stream()
+                    .filter(ImageRepositoryStatus::getSelectedForDeployment)
+                    .findFirst();
+
+            if (selectedVersion.isEmpty()) {
+                throw new ProcessorException(
+                        "Otel collector sidecar software version not selected for consensus node: %s"
+                                .formatted(nodeName));
+            }
+
+            if (!matchImageVersion(
+                    selectedVersion.get(),
+                    consensusCapsule
+                            .getSpec()
+                            .getPodProperties()
+                            .getContainers()
+                            .getOpenTelemetryCollector()
+                            .getSoftwareVersion())) {
+                throw new ProcessorException("Open telemetry collector software version mismatch for consensus node: %s"
+                        .formatted(nodeName));
+            }
+
+            log.infof(
+                    "Open telemetry sidecar software version matched for consensus node: %s [ version: %s]",
+                    nodeName, toImageVersion(selectedVersion.get()));
         }
     }
 

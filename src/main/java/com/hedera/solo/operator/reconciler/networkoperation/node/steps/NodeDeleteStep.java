@@ -13,7 +13,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 public class NodeDeleteStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final StepConditionType CONDITION_TYPE = new StepConditionType("NodeOperation", "NodeDelete");
     public static final String SUCCESS_STATUS_MESSAGE = "Successfully deleted consensus node: %s";
-    public static final String FAIL_STATUS_MESSAGE = "Failed to deleted consensus node: %s";
+    public static final String FAIL_STATUS_MESSAGE = "Failed to delete consensus node: %s";
 
     @Override
     public boolean isSuccessful(NetworkOperation resource, NetworkOperationStatus status) {

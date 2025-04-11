@@ -82,7 +82,6 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
             Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus phase is required");
             Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
 
-            final String timestamp = timestamp();
             final String namespace = resource.getMetadata().getNamespace();
             final Orbit orbit =
                     customResourceManager.orbitByName(resource.getSpec().getOrbit());
@@ -124,7 +123,7 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
                     .withType(CONDITION_TYPE.type())
                     .withReason(CONDITION_TYPE.reason())
                     .withStatus(ConditionStatus.True)
-                    .withLastTransitionTime(timestamp)
+                    .withLastTransitionTime(timestamp())
                     .withMessage(SUCCESS_STATUS_MESSAGE.formatted(
                             desired.getMetadata().getNamespace(),
                             desired.getMetadata().getName()))

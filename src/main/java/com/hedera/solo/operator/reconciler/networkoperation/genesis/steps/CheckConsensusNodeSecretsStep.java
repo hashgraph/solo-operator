@@ -58,9 +58,12 @@ public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOpera
 
     public static final StepConditionType CONDITION_TYPE =
             new StepConditionType("VerifySecrets", "ConsensusNodeSecrets");
+    public static final StepConditionType VALIDATION_CONDITIOIN_TYPE =
+            new StepConditionType("VerifySecrets", "ConsensusNodeSecrets");
     public static final String SUCCESS_STATUS_MESSAGE = "Successfully validated consensus node secrets";
     public static final String FAIL_STATUS_MESSAGE = "Failed to validate consensus node secrets'";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
+    public static final String KEY_VALIDATION_TYPE = "KeyValidation";
 
     private final CustomResourceManager customResourceManager;
 
@@ -151,29 +154,38 @@ public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOpera
         final List<Condition> conditions = new ArrayList<>();
 
         if (secrets.getGrpcTlsPrivateKey() != null && !isValidSecret(namespace, secrets.getGrpcTlsPrivateKey())) {
-            conditions.add(secretInvalidCondition(resource, status, capsule, GRPC_TLS_PRIVATE_KEY));
+            conditions.add(secretInvalidCondition(
+                    resource, status, capsule, new StepConditionType(KEY_VALIDATION_TYPE, GRPC_TLS_PRIVATE_KEY)));
         }
 
         if (secrets.getGrpcTlsPublicCertificate() != null
                 && !isValidSecret(namespace, secrets.getGrpcTlsPublicCertificate())) {
-            conditions.add(secretInvalidCondition(resource, status, capsule, GRPC_TLS_PUBLIC_CERTIFICATE));
+            conditions.add(secretInvalidCondition(
+                    resource,
+                    status,
+                    capsule,
+                    new StepConditionType(KEY_VALIDATION_TYPE, GRPC_TLS_PUBLIC_CERTIFICATE)));
         }
 
         if (secrets.getSigningPrivateKey() != null && !isValidSecret(namespace, secrets.getSigningPrivateKey())) {
-            conditions.add(secretInvalidCondition(resource, status, capsule, SIGNING_PRIVATE_KEY));
+            conditions.add(secretInvalidCondition(
+                    resource, status, capsule, new StepConditionType(KEY_VALIDATION_TYPE, SIGNING_PRIVATE_KEY)));
         }
 
         if (secrets.getSigningPublicCertificate() != null
                 && !isValidSecret(namespace, secrets.getSigningPublicCertificate())) {
-            conditions.add(secretInvalidCondition(resource, status, capsule, SIGNING_PUBLIC_CERTIFICATE));
+            conditions.add(secretInvalidCondition(
+                    resource, status, capsule, new StepConditionType(KEY_VALIDATION_TYPE, SIGNING_PUBLIC_CERTIFICATE)));
         }
 
         if (secrets.getLedgerEncryptionKey() != null && !isValidSecret(namespace, secrets.getLedgerEncryptionKey())) {
-            conditions.add(secretInvalidCondition(resource, status, capsule, LEDGER_ENCRYPTION_KEY));
+            conditions.add(secretInvalidCondition(
+                    resource, status, capsule, new StepConditionType(KEY_VALIDATION_TYPE, LEDGER_ENCRYPTION_KEY)));
         }
 
         if (secrets.getLedgerSigningKey() != null && !isValidSecret(namespace, secrets.getLedgerSigningKey())) {
-            conditions.add(secretInvalidCondition(resource, status, capsule, LEDGER_SIGNING_KEY));
+            conditions.add(secretInvalidCondition(
+                    resource, status, capsule, new StepConditionType(KEY_VALIDATION_TYPE, LEDGER_SIGNING_KEY)));
         }
 
         return conditions;
@@ -190,19 +202,23 @@ public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOpera
      * @param resource - the network operation resource
      * @param status - the network operation status
      * @param capsule - the consensus capsule
-     * @param keyType - the key type
+     * @param conditionType - the condition type
      * @return the condition for the key type
      */
     private Condition secretInvalidCondition(
-            NetworkOperation resource, NetworkOperationStatus status, ConsensusCapsule capsule, String keyType) {
+            NetworkOperation resource,
+            NetworkOperationStatus status,
+            ConsensusCapsule capsule,
+            StepConditionType conditionType) {
         final String nodeName = Metadata.prepareNodeName(capsule.getSpec().getNodeId());
         return new ConditionBuilder()
-                .withType("KeyValidation")
-                .withReason(keyType)
+                .withType(conditionType.type())
+                .withReason(conditionType.reason())
                 .withObservedGeneration(resource.getMetadata().getGeneration())
                 .withLastTransitionTime(timestamp())
                 .withStatus(ConditionStatus.False)
-                .withMessage("%s is not valid for consensus node: %s ".formatted(keyType, nodeName))
+                .withMessage("%s-%s is not valid for consensus node: %s"
+                        .formatted(conditionType.type(), conditionType.reason(), nodeName))
                 .build();
     }
 
