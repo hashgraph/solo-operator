@@ -40,13 +40,13 @@ public class CheckOrbitConfigurationStep implements ProcessorStep<NetworkOperati
 
     @Override
     public boolean isSuccessful(NetworkOperation resource, NetworkOperationStatus status) {
-        return resource.getSpec().getNetworkUpgrade() == null
+        return !NetworkOperationStepUtil.isNetworkUpgrade(resource)
                 || NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }
 
     @Override
     public boolean shouldSkip(NetworkOperation resource, NetworkOperationStatus status) {
-        return resource.getSpec().getNetworkUpgrade() == null
+        return !NetworkOperationStepUtil.isNetworkUpgrade(resource)
                 || !ApplyOrbitConfigurationChangeStep.isDone(status)
                 || status.getPhase().equals(NetworkOperationStatus.Phase.Failed)
                 || NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
@@ -119,6 +119,12 @@ public class CheckOrbitConfigurationStep implements ProcessorStep<NetworkOperati
             }
 
             // TODO check logging configuration #592
+
+            log.infof(
+                    "Orbit configuration check was successful for '%s/%s' [ %s ]",
+                    resource.getMetadata().getNamespace(),
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getMode());
 
             return NetworkOperationStepUtil.prepareStatus(
                     status,
