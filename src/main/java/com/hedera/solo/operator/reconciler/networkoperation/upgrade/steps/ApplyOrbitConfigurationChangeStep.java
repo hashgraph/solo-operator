@@ -13,6 +13,7 @@ import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckProcessor;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.render.NowFrozenOrbit;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.StepConditionType;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -37,7 +38,7 @@ import org.jboss.logging.Logger;
  * <p>If this step is re-invoked, the changes in orbit CR should be idempotent.
  */
 public class ApplyOrbitConfigurationChangeStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
-    public static final String CONDITION_TYPE = "OrbitUpdated";
+    public static final StepConditionType CONDITION_TYPE = new StepConditionType("ResourceUpdated", "Orbit");
     public static final String SUCCESS_STATUS_MESSAGE = "Successfully updated orbit '%s'";
     public static final String FAIL_STATUS_MESSAGE = "Failed to update orbit '%s': %s";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
@@ -85,7 +86,8 @@ public class ApplyOrbitConfigurationChangeStep implements ProcessorStep<NetworkO
 
             final Condition condition = new ConditionBuilder()
                     .withObservedGeneration(resource.getMetadata().getGeneration())
-                    .withType(CONDITION_TYPE)
+                    .withType(CONDITION_TYPE.type())
+                    .withReason(CONDITION_TYPE.reason())
                     .withStatus(ConditionStatus.True)
                     .withLastTransitionTime(timestamp())
                     .withMessage(

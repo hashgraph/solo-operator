@@ -15,6 +15,7 @@ import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckProcessor;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.render.NowFrozenConsensusCapsules;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.StepConditionType;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.fabric8.kubernetes.api.model.HasMetadata;
@@ -47,7 +48,7 @@ import org.jboss.logging.Logger;
  * <p>If this step is re-invoked, the changes in consensus-capsule CR should be idempotent.
  */
 public class ApplyConsensusPodChangeStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
-    public static final String CONDITION_TYPE = "ConsensusCapsuleUpdated";
+    public static final StepConditionType CONDITION_TYPE = new StepConditionType("ResourceUpdated", "ConsensusCapsule");
     public static final String SUCCESS_STATUS_MESSAGE = "Successfully updated consensus capsules";
     public static final String FAIL_STATUS_MESSAGE = "Failed to update consensus capsules:'%s'";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
@@ -111,7 +112,8 @@ public class ApplyConsensusPodChangeStep implements ProcessorStep<NetworkOperati
 
             final Condition condition = new ConditionBuilder()
                     .withObservedGeneration(resource.getMetadata().getGeneration())
-                    .withType(CONDITION_TYPE)
+                    .withType(CONDITION_TYPE.type())
+                    .withReason(CONDITION_TYPE.reason())
                     .withStatus(ConditionStatus.True)
                     .withLastTransitionTime(timestamp())
                     .withMessage(SUCCESS_STATUS_MESSAGE)

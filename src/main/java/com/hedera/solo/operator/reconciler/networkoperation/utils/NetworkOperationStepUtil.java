@@ -6,6 +6,7 @@ import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.library.time.Timestamp.timestamp;
 
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
+import com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import io.fabric8.kubernetes.api.model.Condition;
@@ -47,19 +48,19 @@ public final class NetworkOperationStepUtil {
             NetworkOperation resource,
             NetworkOperationStatus status,
             final String message,
-            final String conditionType) {
+            final StepConditionType conditionType) {
 
         Objects.requireNonNull(resource, "NetworkOperation resource is required");
         Objects.requireNonNull(status, "NetworkOperationStatus status is required");
-        Objects.requireNonNull(message, "Failed message is required");
         Objects.requireNonNull(conditionType, "Condition type is required");
 
         final Condition condition = new ConditionBuilder()
                 .withObservedGeneration(resource.getMetadata().getGeneration())
-                .withType(conditionType)
+                .withType(conditionType.type())
+                .withReason(conditionType.reason())
                 .withStatus(ConditionStatus.False)
                 .withLastTransitionTime(timestamp())
-                .withMessage(message)
+                .withMessage(message != null ? message : "Network operation failed")
                 .build();
 
         return prepareStatus(status, List.of(condition), NetworkOperationStatus.Phase.Failed);
@@ -85,15 +86,41 @@ public final class NetworkOperationStepUtil {
         for (final Condition condition : conditions) {
             boolean found = false;
             for (final Condition c : finalConditions) {
-                if (c.getType().equals(condition.getType())) {
-                    log.debugf("Condition %s already exists, updating", condition.getType());
-                    c.setObservedGeneration(condition.getObservedGeneration());
-                    c.setLastTransitionTime(condition.getLastTransitionTime());
-                    c.setMessage(condition.getMessage());
-                    c.setReason(condition.getReason());
-                    c.setStatus(condition.getStatus());
-                    c.setType(condition.getType());
+                if (c.getType().equals(condition.getType()) && c.getReason().equals(condition.getReason())) {
                     found = true;
+
+                    log.debugf(
+                            "Found existing condition '%s-%s'  [ status: %s ] ",
+                            c.getType(), c.getReason(), c.getStatus());
+
+                    boolean isChanged = false;
+                    if (Objects.nonNull(condition.getStatus())
+                            && !condition.getStatus().equals(c.getStatus())) {
+                        c.setStatus(condition.getStatus());
+                        isChanged = true;
+                    }
+
+                    if (Objects.nonNull(condition.getMessage())
+                            && !condition.getMessage().equals(c.getMessage())) {
+                        c.setMessage(condition.getMessage());
+                        isChanged = true;
+                    }
+
+                    if (Objects.nonNull(condition.getObservedGeneration())
+                            && !condition.getObservedGeneration().equals(c.getObservedGeneration())) {
+                        c.setObservedGeneration(condition.getObservedGeneration());
+                        isChanged = true;
+                    }
+
+                    if (isChanged) {
+                        log.debugf(
+                                "Updated condition '%s-%s' [ status: %s ] ", c.getType(), c.getReason(), c.getStatus());
+                        if (Objects.nonNull(condition.getLastTransitionTime())) {
+                            c.setLastTransitionTime(condition.getLastTransitionTime());
+                        } else {
+                            c.setLastTransitionTime(timestamp());
+                        }
+                    }
                 }
             }
 
@@ -107,7 +134,7 @@ public final class NetworkOperationStepUtil {
                 .build();
     }
 
-    public static boolean isSuccessful(final NetworkOperationStatus status, final String conditionType) {
+    public static boolean isSuccessful(final NetworkOperationStatus status, final StepConditionType conditionType) {
         if (status == null
                 || status.getConditions() == null
                 || status.getConditions().isEmpty()
@@ -116,23 +143,16 @@ public final class NetworkOperationStepUtil {
         }
 
         return status.getConditions().stream()
-                .anyMatch(
-                        c -> c.getType().equals(conditionType) && c.getStatus().equals(ConditionStatus.True));
+                .anyMatch(c -> c.getType().equals(conditionType.type())
+                        && c.getReason().equals(conditionType.reason())
+                        && c.getStatus().equals(ConditionStatus.True));
     }
 
-    /**
-     * Return a status with Failed or Succeeded phase based on the last condition
-     *
-     * @param updated network operation status
-     * @return network operation status with correct phase
-     */
-    public static NetworkOperationStatus checkLastCondition(final NetworkOperationStatus updated) {
-        final Condition c = updated.getConditions().getLast();
-        if (c != null && !c.getStatus().equals(ConditionStatus.True)) {
-            log.warnf("Last condition is not successful: %s", c.getMessage());
-            return NetworkOperationStepUtil.prepareStatus(updated, List.of(), NetworkOperationStatus.Phase.Failed);
-        }
-
-        return prepareStatus(updated, List.of());
+    public static boolean isNetworkUpgrade(final NetworkOperation resource) {
+        return resource != null
+                && resource.getSpec() != null
+                && resource.getSpec().getMode() != null
+                && resource.getSpec().getMode().equals(NetworkOperationSpec.Mode.NetworkUpgrade)
+                && resource.getSpec().getNetworkUpgrade() != null;
     }
 }

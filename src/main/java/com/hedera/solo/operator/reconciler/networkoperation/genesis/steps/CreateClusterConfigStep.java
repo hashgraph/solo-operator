@@ -29,6 +29,7 @@ import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.StepConditionType;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.fabric8.kubernetes.api.model.ConfigMap;
@@ -48,7 +49,7 @@ import org.jboss.logging.Logger;
 /** CreateClusterConfigStep creates the cluster config ConfigMap */
 public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final String TEMPLATE = "cluster-config.yaml";
-    public static final String CONDITION_TYPE = "ClusterConfigCreated";
+    public static final StepConditionType CONDITION_TYPE = new StepConditionType("ConfigCreated", "ClusterConfig");
     public static final String SUCCESS_STATUS_MESSAGE = "Successfully created cluster config: %s/%s";
     public static final String FAIL_STATUS_MESSAGE = "Failed to create cluster config: %s";
 
@@ -81,7 +82,6 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
             Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus phase is required");
             Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
 
-            final String timestamp = timestamp();
             final String namespace = resource.getMetadata().getNamespace();
             final Orbit orbit =
                     customResourceManager.orbitByName(resource.getSpec().getOrbit());
@@ -120,9 +120,10 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
                     desired.getMetadata().getNamespace(), desired.getMetadata().getName());
             final Condition condition = new ConditionBuilder()
                     .withObservedGeneration(resource.getMetadata().getGeneration())
-                    .withType(CONDITION_TYPE)
+                    .withType(CONDITION_TYPE.type())
+                    .withReason(CONDITION_TYPE.reason())
                     .withStatus(ConditionStatus.True)
-                    .withLastTransitionTime(timestamp)
+                    .withLastTransitionTime(timestamp())
                     .withMessage(SUCCESS_STATUS_MESSAGE.formatted(
                             desired.getMetadata().getNamespace(),
                             desired.getMetadata().getName()))

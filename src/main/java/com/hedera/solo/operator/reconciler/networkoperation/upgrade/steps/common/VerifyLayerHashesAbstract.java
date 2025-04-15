@@ -74,7 +74,8 @@ public abstract class VerifyLayerHashesAbstract<Spec, Status, Repository> {
             final HasMetadata resource, final List<Condition> conditions, final Condition newCondition) {
         List<Condition> list = new ArrayList<>(conditions == null ? emptyList() : conditions);
         int index = IntStream.range(0, list.size())
-                .filter(i -> Objects.equals(list.get(i).getType(), newCondition.getType()))
+                .filter(i -> Objects.equals(list.get(i).getType(), newCondition.getType())
+                        && Objects.equals(list.get(i).getReason(), newCondition.getReason()))
                 .findFirst()
                 .orElse(-1);
         if (index != -1) {

@@ -50,7 +50,7 @@ public class NowFrozenOrbit {
                         .withGenesisProperties(or(config.getGenesisProperties(), current.getGenesisProperties()))
                         .withNetworkSettings(or(config.getNetworkSettings(), current.getNetworkSettings()))
                         .withPermissionConfiguration(
-                                or(config.getApiPermissions(), current.getPermissionConfiguration()));
+                                or(config.getPermissionConfiguration(), current.getPermissionConfiguration()));
     }
 
     <T> T or(final T a, final T b) {
