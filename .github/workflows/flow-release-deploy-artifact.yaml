@@ -103,7 +103,7 @@ jobs:
           sudo rm -rvf /usr/local/bin/*lima* || true
 
       - name: Setup Containerd Support
-        uses: crazy-max/ghaction-setup-containerd@b1962824078138dddccdf925db7402a9428c4aca # v3.2.0
+        uses: step-security/ghaction-setup-containerd@57c4e474caa10176130075d262f18ac415d0ed8e # v3.2.0
         with:
           containerd-version: v1.7.2
 
