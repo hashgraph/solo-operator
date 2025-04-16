@@ -18,6 +18,7 @@ defaults:
 env:
   QUARKUS_CONTAINER_IMAGE_REGISTRY: ghcr.io
   QUARKUS_CONTAINER_IMAGE_GROUP: hashgraph/solo-operator
+  QUARKUS_DOCKER_BUILDX_PLATFORM: linux/amd64,linux/arm64
 
 permissions:
   contents: read
