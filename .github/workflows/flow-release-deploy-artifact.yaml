@@ -17,9 +17,9 @@ defaults:
 
 env:
   REGISTRY: ghcr.io
-  QUARKUS_CONTAINER_IMAGE_REGISTRY: ${{ env.REGISTRY }}
+  QUARKUS_CONTAINER_IMAGE_REGISTRY: ghcr.io # ${{ env.REGISTRY }}
   QUARKUS_CONTAINER_IMAGE_GROUP: hashgraph/solo-operator
-  HELM_REMOTE: oci://${{ env.REGISTRY }}/${{ env.QUARKS_CONTAINER_IMAGE_GROUP }}
+  HELM_REMOTE: oci://ghcr.io/hashgraph/solo-operator # ${{ env.REGISTRY }}/${{ env.QUARKS_CONTAINER_IMAGE_GROUP }}
 
 permissions:
   contents: read
