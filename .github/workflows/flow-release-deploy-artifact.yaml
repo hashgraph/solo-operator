@@ -16,10 +16,8 @@ defaults:
     shell: bash
 
 env:
-  REGISTRY: ghcr.io
-  QUARKUS_CONTAINER_IMAGE_REGISTRY: ghcr.io # ${{ env.REGISTRY }}
+  QUARKUS_CONTAINER_IMAGE_REGISTRY: ghcr.io
   QUARKUS_CONTAINER_IMAGE_GROUP: hashgraph/solo-operator
-  HELM_REMOTE: oci://ghcr.io/hashgraph/solo-operator # ${{ env.REGISTRY }}/${{ env.QUARKS_CONTAINER_IMAGE_GROUP }}
 
 permissions:
   contents: read
@@ -100,12 +98,12 @@ jobs:
       - name: Docker Login
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ${{ env.QUARKUS_CONTAINER_IMAGE_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Helm Registry Login
-        run: helm registry login ${{ env.REGISTRY }} -u ${{ github.actor }} -p "${{ secrets.GITHUB_TOKEN }}"
+        run: helm registry login ${{ env.QUARKUS_CONTAINER_IMAGE_REGISTRY }} -u ${{ github.actor }} -p "${{ secrets.GITHUB_TOKEN }}"
 
       - name: Install Semantic Release
         run: |
@@ -121,5 +119,6 @@ jobs:
           GIT_AUTHOR_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
           GIT_COMMITTER_NAME: ${{ secrets.GIT_USER_NAME }}
           GIT_COMMITTER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
+          HELM_REMOTE: oci://${{ env.QUARKUS_CONTAINER_IMAGE_REGISTRY }}/${{ env.QUARKUS_CONTAINER_IMAGE_GROUP }}
         if: ${{ !cancelled() && !failure() }}
         run: npx semantic-release ${{ github.event.inputs.dry-run-enabled == 'true' && '--dry-run' || '' }}
