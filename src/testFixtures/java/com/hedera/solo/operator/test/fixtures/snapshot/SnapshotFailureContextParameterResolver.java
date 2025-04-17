@@ -2,10 +2,11 @@
 
 package com.hedera.solo.operator.test.fixtures.snapshot;
 
-import static com.hedera.solo.operator.test.fixtures.Environment.isSnapshotEnabled;
 import static com.hedera.solo.operator.test.fixtures.snapshot.DefaultSnapshot.snapshot;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
+import org.eclipse.microprofile.config.Config;
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.ParameterContext;
@@ -34,5 +35,10 @@ public class SnapshotFailureContextParameterResolver implements ParameterResolve
             };
         }
         return null;
+    }
+
+    boolean isSnapshotEnabled() {
+        Config config = ConfigProvider.getConfig();
+        return "true".equals(config.getConfigValue("solo.test.snapshot.enabled").getValue());
     }
 }

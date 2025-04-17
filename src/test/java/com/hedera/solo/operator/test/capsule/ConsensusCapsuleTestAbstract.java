@@ -10,7 +10,6 @@ import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_APP;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_COMPONENT;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_MANAGED_BY;
 import static com.hedera.solo.operator.reconciler.common.Constants.SOLO_OPERATOR;
-import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
 import static com.hedera.solo.operator.test.fixtures.coredns.ConfigureCoredns.configureCoredns;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -83,9 +82,6 @@ public abstract class ConsensusCapsuleTestAbstract {
     void setup() {
         clusterSetupManager.check();
         configureCoredns(kubernetesClient);
-        if (isTestUsingGradleOrIntelliJ()) {
-            operator.start();
-        }
 
         cleanup();
 
