@@ -12,6 +12,7 @@ prepare:
   - - '@semantic-release/exec'
     - cmd: |
         set -e
+        env
         ./gradlew versionAsSpecified -PnewVersion=${nextRelease.version}
         ./gradlew githubVersionSummary
         ./gradlew clean assemble --no-build-cache
