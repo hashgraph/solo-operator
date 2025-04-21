@@ -24,8 +24,10 @@ publish:
   - - '@semantic-release/exec'
     - cmd: |
         set -e
-        ./gradlew clean assemble --no-build-cache -Dquarkus.container-image.build=true -Dquarkus.container-image.push=true
-        helm push solo-operator-chart-${nextRelease.version}.tgz ${process.env.HELM_REMOTE}
+        ./gradlew clean assemble --no-build-cache -Dquarkus.container-image.build=true -Dquarkus.container-image.push=true -Dquarkus.container-image.registry="${GH_OCI_REGISTRY}" -Dquarkus.container-image.group="${GH_OCI_GROUP}"
+        helm push solo-operator-chart-${nextRelease.version}.tgz "oci://${GH_OCI_REGISTRY}/${GH_HELM_GROUP}"
+        ./gradlew clean assemble --no-build-cache -Dquarkus.container-image.build=true -Dquarkus.container-image.push=true -Dquarkus.container-image.registry="${JF_OCI_REGISTRY}" -Dquarkus.container-image.group="${JF_OCI_GROUP}"
+        helm push solo-operator-chart-${nextRelease.version}.tgz "oci://${JF_OCI_REGISTRY}/${JF_HELM_GROUP}"
   - - '@semantic-release/github'
     - assets:
         - build/kubernetes/*

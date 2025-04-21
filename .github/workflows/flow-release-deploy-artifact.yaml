@@ -16,8 +16,12 @@ defaults:
     shell: bash
 
 env:
-  QUARKUS_CONTAINER_IMAGE_REGISTRY: ghcr.io
-  QUARKUS_CONTAINER_IMAGE_GROUP: hashgraph/solo-operator
+  GH_OCI_REGISTRY: ghcr.io
+  GH_OCI_GROUP: hashgraph/solo-operator
+  GH_HELM_GROUP: hashgraph/solo-operator
+  JF_OCI_REGISTRY: ${{ vars.JF_HELM_REGISTRY }}
+  JF_OCI_GROUP: solo-operator-docker-release
+  JF_HELM_GROUP: solo-operator-helm-release
   QUARKUS_DOCKER_BUILDX_PLATFORM: linux/amd64,linux/arm64
 
 permissions:
@@ -99,12 +103,22 @@ jobs:
       - name: Docker Login
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
-          registry: ${{ env.QUARKUS_CONTAINER_IMAGE_REGISTRY }}
+          registry: ${{ env.GH_OCI_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Helm Registry Login
-        run: helm registry login ${{ env.QUARKUS_CONTAINER_IMAGE_REGISTRY }} -u ${{ github.actor }} -p "${{ secrets.GITHUB_TOKEN }}"
+        run: helm registry login ${{ env.GH_OCI_REGISTRY }} -u ${{ github.actor }} -p "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Docker Login
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          registry: ${{ vars.JF_HELM_REGISTRY }}
+          username: ${{ vars.JF_USERNAME }}
+          password: ${{ secrets.JF_ACCESS_TOKEN }}
+
+      - name: Helm Registry Login
+        run: helm registry login ${{ vars.JF_HELM_REGISTRY }} -u ${{ vars.JF_USERNAME }} -p "${{ secrets.JF_ACCESS_TOKEN }}"
 
       - name: Install Semantic Release
         run: |
@@ -120,6 +134,5 @@ jobs:
           GIT_AUTHOR_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
           GIT_COMMITTER_NAME: ${{ secrets.GIT_USER_NAME }}
           GIT_COMMITTER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
-          HELM_REMOTE: oci://${{ env.QUARKUS_CONTAINER_IMAGE_REGISTRY }}/${{ env.QUARKUS_CONTAINER_IMAGE_GROUP }}
         if: ${{ !cancelled() && !failure() }}
         run: npx semantic-release ${{ github.event.inputs.dry-run-enabled == 'true' && '--dry-run' || '' }}
