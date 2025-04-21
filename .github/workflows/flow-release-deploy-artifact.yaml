@@ -113,12 +113,12 @@ jobs:
       - name: Docker Login
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
-          registry: ${{ vars.JF_HELM_REGISTRY }}
+          registry: ${{ env.JF_OCI_REGISTRY }}
           username: ${{ vars.JF_USERNAME }}
           password: ${{ secrets.JF_ACCESS_TOKEN }}
 
       - name: Helm Registry Login
-        run: helm registry login ${{ vars.JF_HELM_REGISTRY }} -u ${{ vars.JF_USERNAME }} -p "${{ secrets.JF_ACCESS_TOKEN }}"
+        run: helm registry login ${{ env.JF_OCI_REGISTRY }} -u ${{ vars.JF_USERNAME }} -p "${{ secrets.JF_ACCESS_TOKEN }}"
 
       - name: Install Semantic Release
         run: |
