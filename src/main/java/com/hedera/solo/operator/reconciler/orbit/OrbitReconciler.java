@@ -23,6 +23,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.Workflow;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
+import io.quarkiverse.operatorsdk.annotations.RBACRule;
 import jakarta.inject.Inject;
 import java.time.Duration;
 import java.time.Instant;
@@ -37,6 +38,14 @@ import org.jboss.logging.Logger;
             @Dependent(type = ConsensusHeadlessService.class, dependsOn = "namespace"),
         })
 @ControllerConfiguration(name = "orbit")
+@RBACRule(
+        apiGroups = {""},
+        resources = {"secrets"},
+        verbs = {"create", "delete", "get", "list", "patch", "update", "watch"})
+@RBACRule(
+        apiGroups = {""},
+        resources = {"events"},
+        verbs = {"create", "delete", "get", "list", "patch", "update", "watch", "deletecollection"})
 public class OrbitReconciler implements Cleaner<Orbit>, Reconciler<Orbit> {
 
     private final Logger log;

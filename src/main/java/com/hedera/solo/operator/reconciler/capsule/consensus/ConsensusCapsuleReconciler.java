@@ -43,6 +43,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.Workflow;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
+import io.quarkiverse.operatorsdk.annotations.RBACRule;
 import java.time.ZonedDateTime;
 import java.util.Comparator;
 import java.util.List;
@@ -70,6 +71,18 @@ import org.jboss.logging.Logger;
             @Dependent(type = CapsulePod.class)
         })
 @ControllerConfiguration(name = "consensus-capsule")
+@RBACRule(
+        apiGroups = {""},
+        resources = {"secrets"},
+        verbs = {"create", "delete", "get", "list", "patch", "update", "watch"})
+@RBACRule(
+        apiGroups = {""},
+        resources = {"persistentvolumes"},
+        verbs = {"list", "get"})
+@RBACRule(
+        apiGroups = {""},
+        resources = {"events"},
+        verbs = {"create", "delete", "get", "list", "patch", "update", "watch", "deletecollection"})
 public class ConsensusCapsuleReconciler implements Cleaner<ConsensusCapsule>, Reconciler<ConsensusCapsule> {
     public static final Predicate<HasMetadata> HAS_LABEL_SELECTOR_CONSENSUS_NODE =
             hasLabel(Constants.LABEL_APP, Constants.COMPONENT_CONSENSUS_NODE);

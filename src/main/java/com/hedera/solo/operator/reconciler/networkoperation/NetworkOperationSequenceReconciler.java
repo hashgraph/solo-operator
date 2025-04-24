@@ -36,6 +36,7 @@ import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
+import io.quarkiverse.operatorsdk.annotations.RBACRule;
 import jakarta.inject.Inject;
 import java.lang.invoke.MethodHandles;
 import java.time.Duration;
@@ -49,6 +50,14 @@ import org.jboss.logging.Logger;
 
 /** {@code NetworkOperationReconciler} operates on a single CR per namespace at any given time. */
 @ControllerConfiguration(name = "network-operation-v2")
+@RBACRule(
+        apiGroups = {""},
+        resources = {"secrets"},
+        verbs = {"create", "delete", "get", "list", "patch", "update", "watch"})
+@RBACRule(
+        apiGroups = {""},
+        resources = {"events"},
+        verbs = {"create", "delete", "get", "list", "patch", "update", "watch", "deletecollection"})
 public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOperation>, Cleaner<NetworkOperation> {
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
     private static final Sequencer<NetworkOperation> sequencer =
