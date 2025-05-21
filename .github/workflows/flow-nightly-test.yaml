@@ -1,0 +1,126 @@
+# SPDX-License-Identifier: Apache-2.0
+
+---
+name: Nightly Test
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+  id-token: write
+
+env:
+  CACHE_DIR: cache_dir
+  CACHE_KEY: nightly-test
+  HOSTNAME_PREFIX: github-
+  MACHINE: n4-highmem-4
+  VERSION: 0.0.0-${{ github.sha }}
+  VERSION_A: 0.59.0
+  VERSION_B: 0.59.5
+  ZONE: us-central1-a
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: solo-linux-medium
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          token: ${{ secrets.GH_ACCESS_TOKEN }}
+
+      - name: Authenticate to Google Cloud
+        id: google-auth
+        uses: google-github-actions/auth@71f986410dfbc7added4569d411d040a91dc6935 # v2.1.8
+        with:
+          workload_identity_provider: projects/970521953460/locations/global/workloadIdentityPools/solo-op-automation-pool/providers/gh-provider
+          service_account: gh-solo-test-driver@solo-operator-automated-tests.iam.gserviceaccount.com
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@6189d56e4096ee891640bb02ac264be376592d6a # v2.1.2
+
+      - name: Setup Java
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@ac2d340dc04d9e1113182899e983b5400c17cda1 # v3.5.0
+        with:
+          gradle-version: wrapper
+          cache-read-only: false
+
+      - name: Install tools
+        run: |
+          curl https://baltocdn.com/helm/signing.asc | gpg --dearmor | sudo tee /usr/share/keyrings/helm.gpg > /dev/null
+          sudo apt-get install apt-transport-https --yes
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/helm.gpg] https://baltocdn.com/helm/stable/debian/ all main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
+          sudo apt-get -qq update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y gettext helm moreutils parallel
+
+      - name: Try restoring cache
+        id: restore
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ${{ env.CACHE_DIR }}.tar
+          key: ${{ env.CACHE_KEY }}
+
+      - name: Run nightly test
+        id: nightly_test
+        run: |
+          :
+          cache_dir_hash() {
+            find "${CACHE_DIR}" -type f -exec sha1sum {} + | sort | sha1sum | cut -d ' ' -f1
+          }
+          test -f "${CACHE_DIR}.tar" && tar -xf "${CACHE_DIR}.tar"
+          mkdir -p "${CACHE_DIR}"
+          hash_a=$(cache_dir_hash)
+          ./test/nightly/scripts/main.sh
+          find "${CACHE_DIR}" -name "*.yaml" -exec rm {} \;
+          hardlink -cq "${CACHE_DIR}"
+          hash_b=$(cache_dir_hash)
+          tar -cf "${CACHE_DIR}.tar" "${CACHE_DIR}"
+          echo "refresh_cache=$([ "${hash_a}" != "${hash_b}" ] && echo true || echo false)" >> "${GITHUB_OUTPUT}"
+
+      - name: Publish test logs
+        if: ${{ always() && !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: Test Logs
+          path: "logs"
+
+      - name: Delete old cache (if refresh requested)
+        if: ${{ steps.nightly_test.outcome == 'success' && steps.nightly_test.outputs.refresh_cache == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Deleting existing cache with key '${{ env.CACHE_KEY }}'"
+          curl -X DELETE \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/caches?key=${{ env.CACHE_KEY }}"
+
+      - name: Save new cache
+        if: ${{ steps.nightly_test.outcome == 'success' && steps.nightly_test.outputs.refresh_cache == 'true' }}
+        uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ${{ env.CACHE_DIR }}.tar
+          key: ${{ env.CACHE_KEY }}
+
+      - name: Delete VMs
+        if: ${{ always() }}
+        run: |
+          gcloud compute instances list --format='value(name)' | grep "^${HOSTNAME_PREFIX}" | xargs gcloud compute instances delete --quiet --zone="${ZONE}" || true
