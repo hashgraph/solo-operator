@@ -3,7 +3,6 @@
 package com.hedera.solo.operator.test.capsule;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
-import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
 import static com.hedera.solo.operator.test.fixtures.coredns.ConfigureCoredns.configureCoredns;
 import static java.util.Collections.emptyMap;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -50,9 +49,6 @@ public class CapsuleSecretsValidationTest {
     @BeforeEach
     public void setup() {
         configureCoredns(kubernetesClient);
-        if (isTestUsingGradleOrIntelliJ()) {
-            operator.start();
-        }
         Orbit orbit = kubernetesClient
                 .resource(edit(new Orbit())
                         .with(metadata -> metadata.editMetadata()
