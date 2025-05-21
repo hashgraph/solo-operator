@@ -98,14 +98,6 @@ public class ApplyConsensusPodChangeStep implements ProcessorStep<NetworkOperati
                     cc -> update(client, nowFrozen, cc, includeNodes, excludeNodes));
 
             final List<Long> upgradedNodes = excludeNodes.stream().sorted().toList();
-            if (upgradedNodes.size() != includeNodes.size()) {
-                final NetworkOperationStatus updated = NetworkOperationStepUtil.prepareFailed(
-                        resource, status, FAIL_STATUS_MESSAGE.formatted(includeNodes), CONDITION_TYPE);
-                return edit(updated)
-                        .with(s -> s.withUpgradedNodes(upgradedNodes))
-                        .build();
-            }
-
             log.infof(
                     "Successfully upgraded consensus nodes: %s [%s]",
                     upgradedNodes, resource.getSpec().getNetworkUpgrade().getWorkflowStep());
