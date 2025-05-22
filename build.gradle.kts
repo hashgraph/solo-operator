@@ -133,6 +133,7 @@ objectModelGenerator {
                 file("com/hedera/solo/operator/model/Common.java"),
                 file("com/hedera/solo/operator/model/CommonSpec.java"),
             )
+        targetCrd = layout.buildDirectory.dir("helm/crds").get().asFile
     }
     register(sourceSets.componentTest)
 }
@@ -144,4 +145,18 @@ configurations.all {
         force("io.javaoperatorsdk:operator-framework-core:${javaoperatorsdkVersion}")
         force("io.javaoperatorsdk:operator-framework-junit-5:${javaoperatorsdkVersion}")
     }
+}
+
+tasks.register<Copy>("prepareCrdsForQuarkus") {
+    from(layout.buildDirectory.dir("generated/crds"))
+    into(layout.buildDirectory.dir("classes/java/main/kubernetes"))
+}
+
+tasks.register<Copy>("prepareCrdsForHelm") {
+    from(layout.buildDirectory.dir("generated/crds"))
+    into(layout.buildDirectory.dir("helm/crds"))
+}
+
+tasks.named("processResources") {
+    dependsOn("prepareCrdsForQuarkus", "prepareCrdsForHelm")
 }
