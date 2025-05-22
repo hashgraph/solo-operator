@@ -16,13 +16,18 @@ import com.hedera.solo.operator.test.fixtures.snapshot.SnapshotFailureContext;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.Namespace;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientBuilder;
 import io.javaoperatorsdk.operator.Operator;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+import java.io.File;
+import java.io.FileInputStream;
 import java.time.Duration;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import org.jboss.logging.Logger;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -47,6 +52,20 @@ class OrbitTest {
     @Inject
     protected Logger log;
 
+//    @BeforeAll
+//    static void initialize() {
+//        try {
+//            File crdDir = new File("build/kubernetes");
+//            for (File file : Objects.requireNonNull(crdDir.listFiles((d, name) -> name.endsWith("v1.yml")))) {
+//                Process process = new ProcessBuilder("kubectl", "apply", "-f", file.getAbsolutePath()).inheritIO().start();
+//                if (process.waitFor() != 0) {
+//                    throw new RuntimeException("Failed to apply CRDs");
+//                }
+//            }
+//        } catch (Exception e) {
+//            throw new RuntimeException(e);
+//        }
+//    }
     @BeforeEach
     void setup() {
         cleanup();

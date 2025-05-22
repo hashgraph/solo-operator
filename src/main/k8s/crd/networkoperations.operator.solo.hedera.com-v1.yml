@@ -4,7 +4,7 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: networkoperation.operator.solo.hedera.com
+  name: networkoperations.operator.solo.hedera.com
 spec:
   group: operator.solo.hedera.com
   names:
@@ -12,13 +12,14 @@ spec:
     plural: networkoperations
     singular: networkoperation
     shortNames:
-      - no
+      - "no"
       - netop
   scope: Namespaced
   versions:
     - name: v1alpha1
       schema:
         openAPIV3Schema:
+          type: object
           properties:
             spec:
               $ref: "../openapi/networkoperation.yml#/components/schemas/NetworkOperationSpec"

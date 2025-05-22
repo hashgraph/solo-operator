@@ -11,7 +11,7 @@ import java.lang.invoke.MethodHandles;
 import javax.annotation.Priority;
 import org.jboss.logging.Logger;
 
-@ApplicationScoped
+//@ApplicationScoped
 public class ClusterSetupManager {
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
     private static boolean setupDone = false;

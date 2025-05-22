@@ -24,7 +24,7 @@ val smallryeCertificateGeneratorVersion: String by project
 dependencies {
     annotationProcessor("io.sundr:builder-annotations:${sundrVersion}")
     annotationProcessor("io.fabric8:kubernetes-client:${fabric8Version}")
-    annotationProcessor("io.fabric8:crd-generator-apt:${fabric8Version}")
+//    annotationProcessor("io.fabric8:crd-generator-apt:${fabric8Version}")
     annotationProcessor("org.projectlombok:lombok:${lombokVersion}")
     implementation("io.fabric8:generator-annotations:${fabric8Version}")
 
@@ -133,7 +133,7 @@ objectModelGenerator {
                 file("com/hedera/solo/operator/model/Common.java"),
                 file("com/hedera/solo/operator/model/CommonSpec.java"),
             )
-        targetCrd = layout.buildDirectory.dir("helm/crds").get().asFile
+//        targetCrd = layout.buildDirectory.dir("helm/crds").get().asFile
     }
     register(sourceSets.componentTest)
 }
@@ -155,6 +155,11 @@ tasks.register<Copy>("prepareCrdsForQuarkus") {
 tasks.register<Copy>("prepareCrdsForHelm") {
     from(layout.buildDirectory.dir("generated/crds"))
     into(layout.buildDirectory.dir("helm/crds"))
+}
+
+tasks.register<Copy>("prepareCrdsForComponentTest") {
+    from(layout.buildDirectory.dir("generated/object-model-generator/componentTest/crd"))
+    into(layout.buildDirectory.dir("classes/java/componentTest/META-INF/fabric8"))
 }
 
 tasks.named("processResources") {
