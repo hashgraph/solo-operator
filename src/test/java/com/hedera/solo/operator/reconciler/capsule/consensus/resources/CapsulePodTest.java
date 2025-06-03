@@ -2,7 +2,6 @@
 
 package com.hedera.solo.operator.reconciler.capsule.consensus.resources;
 
-import com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector;
 import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsuleSpec;
@@ -12,6 +11,7 @@ import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.persistentvo
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Containers;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.ContainersBuilder;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Volumes;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.OpenTelemetryCollector;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.volumes.StreamsBuilder;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.test.utils.TemplateLoader;

@@ -5,11 +5,11 @@ package com.hedera.solo.operator.reconciler.capsule.consensus.resources;
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector;
 import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PodProperties;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Containers;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.ConsensusNode;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.OpenTelemetryCollector;
 import com.hedera.solo.operator.test.fixtures.fuzz.BeanFactory;
 import io.fabric8.kubernetes.api.model.Affinity;
 import io.fabric8.kubernetes.api.model.AffinityBuilder;

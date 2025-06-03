@@ -35,12 +35,12 @@ import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_STATS_
 import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_UPGRADE_NAME_SUFFIX;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 
-import com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector;
 import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PodProperties;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Containers;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.ConsensusNode;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.OpenTelemetryCollector;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsulePvcUtil;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
