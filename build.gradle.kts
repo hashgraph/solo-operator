@@ -117,7 +117,7 @@ objectModelGenerator {
     register(sourceSets.main) {
         configBuilderOverrides =
             mapOf(
-                "common.operator.solo.hedera.com-v1.yml" to
+                "commons.operator.solo.hedera.com-v1.yml" to
                     defaultConfigBuilder
                         .build()
                         .toBuilder()

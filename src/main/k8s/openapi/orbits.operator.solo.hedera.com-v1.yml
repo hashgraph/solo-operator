@@ -30,7 +30,6 @@ components:
             management of these operations.
           * Many of these concerns also apply to single K8S cluster modes of operation when adding new consensus nodes.
       type: object
-      default: {}
       required:
         - consensus
       properties:

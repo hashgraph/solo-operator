@@ -4,7 +4,7 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: example.test.operator.solo.hedera.com
+  name: examples.test.operator.solo.hedera.com
 spec:
   group: test.operator.solo.hedera.com
   names:
@@ -16,11 +16,12 @@ spec:
     - name: v1alpha1
       schema:
         openAPIV3Schema:
+          type: object
           properties:
             spec:
-              $ref: "../openapi/example.yml#/components/schemas/Spec"
+              $ref: "../openapi/examples.test.operator.solo.hedera.com-v1.yml#/components/schemas/Spec"
             status:
-              $ref: "../openapi/example.yml#/components/schemas/Status"
+              $ref: "../openapi/examples.test.operator.solo.hedera.com-v1.yml#/components/schemas/Status"
       served: true
       storage: true
       subresources:
