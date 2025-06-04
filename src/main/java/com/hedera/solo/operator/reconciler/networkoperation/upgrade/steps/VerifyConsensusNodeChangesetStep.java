@@ -42,8 +42,10 @@ import org.jboss.logging.Logger;
  * <p>It is important to review the following sources and objects to understand the context of this step:
  *
  * <ol>
- *   <li>'src/main/k8s/openapi/common.yml' - The common spec objects such as ImageRepository, ImageRepositoryStatus,
- *   <li>'src/main/k8s/openapi/networkoperation.yml' - The CRD object that represents the network operation
+ *   <li>'src/main/k8s/openapi/commons.operator.solo.hedera.com-v1.yml' - The common spec objects such as
+ *       ImageRepository, ImageRepositoryStatus,
+ *   <li>'src/main/k8s/openapi/networkoperations.operator.solo.hedera.com-v1.yml' - The CRD object that represents the
+ *       network operation
  *   <li>'src/test/resources/templates/network-operation/network-upgrade.yaml' - An example network operation CR
  *   <li>{@link NetworkOperation} - The CRD object that represents the network operation
  *   <li>{@link NetworkOperationStatus} - The status object that represents the status of the network operation

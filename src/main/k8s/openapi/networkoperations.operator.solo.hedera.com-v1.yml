@@ -1,0 +1,226 @@
+# SPDX-License-Identifier: Apache-2.0
+
+---
+openapi: 3.0.3
+info:
+  title: OpenAPI Schema
+  version: 1.0.0
+paths: { }
+components:
+  schemas:
+    NetworkOperationSpec:
+      type: object
+      required:
+        - orbit
+        - mode
+      properties:
+        orbit:
+          description: |
+            Name of the orbit where this network operation should take effect.
+          type: string
+        mode:
+          description: The mode of the `NetworkOperation`.
+          type: string
+          enum:
+            - FirstInitialization # use NetworkGenesis instead
+            - NetworkGenesis
+            - NetworkCheck # check if network is in valid state and try to self-heal (need more design thinking).
+            - NetworkUpgrade # upgrade the network with new version of the consensus-node and other components
+            - NodeAdd
+            - NodeDelete # not need for MVP
+            - NodeUpdate # not need for MVP
+            - ProxyUpgrade # not need for MVP
+        networkUpgrade:
+          type: object
+          required:
+            - changesets
+            - workflowStep
+          properties:
+            changesets:
+              type: object
+              required:
+                - consensusNodeChangeset
+              properties:
+                consensusNodeChangeset:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.ConsensusNodeChangeset
+                recordStreamUploaderChangeset:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploaderChangeset
+                recordStreamSidecarUploaderChangeset:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploaderChangeset
+                eventsStreamUploaderChangeset:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploaderChangeset
+                backupUploaderChangeset:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.StreamUploaderChangeset
+                otelCollector:
+                  type: object
+                  required:
+                    - softwareVersionSource
+                  properties:
+                    softwareVersionSource:
+                      type: object
+                      x-java-type: com.hedera.solo.operator.model.commonspec.SoftwareVersionSource
+            workflowStep: # can we find a better name for it?
+              description: |
+                Workflow step is handled as below:
+                # ExecuteImmediate (T = 0) # the build.zip file will contain manifest and other configuration files so that the "solo | solo-provisioner-bridge | ?" can use it to create the CR
+                  1. validate image (ensure we can pull the image from specified registries and validate the layer hashes, we may use HEAD request instead of downloading the image) # most likely the registries will be public, but solo-provisioner may inject k8s secrets for permissioned registries.
+                    1a. store the resolved manifest hashes (?), registry details as well as their validation status in the status field (e.g. probably need a new object e.g. SoftwareVersionStatus datamodel with status)
+                    1b. select a valid registry randomly and store the selected registry in the status field
+                    1c. add a condition to the status field explaining the validation status
+                  2. potentially deploy firewall rule changes (TBD)
+                # FreezeScheduled (T + 2 days)
+                  3. check that selected registry still has image and hashes match (e.g. use HEAD request)
+                    3a. iff registry doesn't have a valid image anymore, lookup other registries in sequence softwareVersionSource and pick the first valid one
+                      - update the status with this valid registry information.
+                      - update the old one with failed status
+                    3b. if no valid registry is found, emit error and abort. We mark the NI as failed.
+                    3c. add a condition to the status field explaining the validation status
+                # FreezeAbort
+                  4. rollback firewall rule changes (potentially)
+                    4a. add a condition to the status field explaining the validation status
+                # NowFrozen ( T + 3 days)
+                  5. check that selected registry still has image and hashes match (see 3)
+                  6. rollout config file bundle (patch the orbit CR)
+                      6a. orbit reconciler will creates config-map: settings.txt, application.properties, api-permission.properties...
+                      6b. network-operation reconciler creates config.txt
+                  7. single atomic patch to consensus-capsule CR
+                    7a. apply consensus-node changeset
+                    7b. apply streamUploader changesets (e.g recordStreamUploader, backUploader etc.)
+                  8. Ensure everything is up or emit error (NI already does this check)
+                  9. add a condition to the status field explaining the validation status
+              type: string
+              enum:
+                - ExecuteImmediate
+                - FreezeScheduled
+                - NowFrozen
+                - FreezeAbort
+            configurationFiles:
+              type: object
+              properties:
+                networkSettings:
+                  description: |
+                    The network settings for the `Orbit`. This is equivalent to the Platform SDK `settings.txt` file.
+                  type: object
+                  additionalProperties:
+                    type: string
+                applicationProperties:
+                  description: |
+                    The application configuration for the `Orbit`. This is equivalent to the
+                    `data/config/application.properties` file.
+                  type: object
+                  additionalProperties:
+                    type: string
+                permissionConfiguration:
+                  description: |
+                    The application configuration for the `Orbit`. This is equivalent to the
+                    `data/config/api-permissions.properties` file.
+                  type: object
+                  additionalProperties:
+                    type: string
+                genesisProperties:
+                  description: |
+                    The application configuration for the `Orbit`. This is equivalent to the
+                    `data/config/genesis.properties` file.
+                  type: object
+                  additionalProperties:
+                    type: string
+                logging: # if it is specified, we'll apply to all the nodes if node specific logging is not specified
+                  description: |
+                    The application configuration for the `Orbit`. This is equivalent to the
+                    `log4j2.xml` file.
+                  type: string
+            addressBook:
+              description: |
+                Updated address book
+              type: array
+              default: []
+              items:
+                type: object
+                x-java-type: com.hedera.solo.operator.model.commonspec.AddressBookEntry
+        proxyUpgrade:
+          type: object
+          properties:
+            changesets:
+              type: object
+              properties:
+                haproxyChangeset:
+                  type: object
+                  x-java-type: com.hedera.solo.operator.model.commonspec.HaproxyChangeset
+    #                envoyproxyChangeset: # need to define
+    #                  type: object
+    #                  x-java-type: com.hedera.solo.operator.model.commonspec.EnvoyproxyChangeset # need to define
+    NetworkOperationStatus:
+      type: object
+      properties:
+        phase:
+          description: The current phase of the `ConsensusCapsule`.
+          type: string
+          enum:
+            - Pending
+            - Running
+            - Succeeded
+            - Failed
+            - Unknown
+        conditions: # we should add relevant conditions and messages to explain the lifecycle events
+          items:
+            type: object
+            x-java-type: io.fabric8.kubernetes.api.model.Condition
+          type: array
+        observedGeneration:
+          description: The generation observed by the operator.
+          type: integer
+        consensusCapsules: # is this only for network-init?
+          description: Names of consensus-capsules to initialize
+          type: array
+          items:
+            type:
+              string
+        sequenceNumber:
+          description: Used as secondary key to order reconciliation
+          type: integer
+        softwareSourceStatus:
+          description: The status of the source `SoftwareVersionSource`.
+          type: object
+          properties:
+            consensusNode:
+              type: array
+              items:
+                type: object
+                x-java-type: com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus
+            recordStreamUploader:
+              type: array
+              items:
+                type: object
+                x-java-type: com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus
+            recordStreamSidecarUploader:
+              type: array
+              items:
+                type: object
+                x-java-type: com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus
+            eventsStreamUploader:
+              type: array
+              items:
+                type: object
+                x-java-type: com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus
+            backupUploader:
+              type: array
+              items:
+                type: object
+                x-java-type: com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus
+            otelCollector:
+              type: array
+              items:
+                type: object
+                x-java-type: com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus
+        upgradedNodes:
+          description: Node IDs that have been upgraded
+          type: array
+          default: []
+          items:
+            type: integer
+            format: int64

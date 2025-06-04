@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import com.hedera.solo.operator.shared.SharedCrdPostProcessor
+
 plugins {
     id("com.hedera.solo.operator.conventions")
     id("com.hedera.solo.operator.versioning")
     id("io.quarkus")
     id("com.hedera.solo.operator.buildlogic.objectModelGenerator")
     id("com.hedera.solo.operator.buildlogic.gitExtractor")
+    id("com.hedera.solo.operator.buildlogic.crdGenerator")
 }
 
 val quarkusPlatformGroupId: String by project
@@ -13,7 +16,7 @@ val quarkusPlatformArtifactId: String by project
 val quarkusPlatformVersion: String by project
 val assertjVersion: String by project
 val sundrVersion: String by project
-val fabric8Version: String by project
+val fabric8Version = libs.versions.fabric8.get()
 val lombokVersion: String by project
 val hederaSdkVersion: String by project
 val javaoperatorsdkVersion: String by project
@@ -24,9 +27,10 @@ val smallryeCertificateGeneratorVersion: String by project
 dependencies {
     annotationProcessor("io.sundr:builder-annotations:${sundrVersion}")
     annotationProcessor("io.fabric8:kubernetes-client:${fabric8Version}")
-    annotationProcessor("io.fabric8:crd-generator-apt:${fabric8Version}")
     annotationProcessor("org.projectlombok:lombok:${lombokVersion}")
     implementation("io.fabric8:generator-annotations:${fabric8Version}")
+
+    implementation("com.hedera.solo.operator:shared-lib")
 
     implementation(
         enforcedPlatform(
@@ -94,6 +98,15 @@ dependencies {
     testFixturesImplementation("org.wiremock:wiremock:${wiremockVersion}")
 }
 
+configurations.all {
+    resolutionStrategy.eachDependency {
+        if (requested.group == "io.fabric8" && requested.name != "maven-model-helper") {
+            useVersion(fabric8Version)
+            because("CRDPostProcessor added in 7.2.0")
+        }
+    }
+}
+
 gitExtractor {
     register(sourceSets.test) {
         addResources(
@@ -117,7 +130,7 @@ objectModelGenerator {
     register(sourceSets.main) {
         configBuilderOverrides =
             mapOf(
-                "common.operator.solo.hedera.com-v1.yml" to
+                "commons.operator.solo.hedera.com-v1.yml" to
                     defaultConfigBuilder
                         .build()
                         .toBuilder()
@@ -137,11 +150,36 @@ objectModelGenerator {
     register(sourceSets.componentTest)
 }
 
-// Require JOSDK 5.0.3 until a newer version of quarkus using JOSDK 5.0.3 or later is available.
-configurations.all {
-    resolutionStrategy {
-        force("io.javaoperatorsdk:micrometer-support:${javaoperatorsdkVersion}")
-        force("io.javaoperatorsdk:operator-framework-core:${javaoperatorsdkVersion}")
-        force("io.javaoperatorsdk:operator-framework-junit-5:${javaoperatorsdkVersion}")
+crdGenerator {
+    register(sourceSets.componentTest) {
+        sourceSet.resources { srcDirs(outputDir) }
+        outputDir = File(outputDir, "META-INF/fabric8")
+        postProcessor =
+            SharedCrdPostProcessor(
+                layout.buildDirectory
+                    .dir("generated/object-model-generator/${sourceSet.name}/crd")
+                    .get()
+                    .asFile
+                    .toPath()
+            )
     }
+}
+
+tasks.register<Copy>("copyAdditionalComponentTestCrdResources") {
+    dependsOn("quarkusBuild")
+    dependsOn("generateComponentTestCrd")
+    from(layout.buildDirectory.dir("kubernetes"))
+    into(layout.buildDirectory.dir("generated/crd-generator/componentTest/META-INF/fabric8"))
+}
+
+tasks.named("processComponentTestResources") {
+    dependsOn("copyAdditionalComponentTestCrdResources")
+}
+
+quarkus {
+    quarkusBuildProperties.apply { set("project.root.dir", rootProject.projectDir.absolutePath) }
+}
+
+tasks.withType<Test>().configureEach {
+    systemProperty("quarkus.project.root.dir", rootProject.projectDir.absolutePath)
 }

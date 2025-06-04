@@ -10,7 +10,7 @@ repositories {
     maven { url = uri("https://artifacts.swirldslabs.io/artifactory/central-maven-external/") }
 }
 
-val fabric8Version: String by project
+val fabric8Version = libs.versions.fabric8.get()
 
 dependencies {
     // Use JUnit Jupiter for testing.

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
+includeBuild("crd-generator-plugin")
+
 includeBuild("git-extractor-plugin")
 
 includeBuild("object-model-generator-plugin")
