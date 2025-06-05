@@ -111,7 +111,7 @@ jobs:
           QUARKUS_DOCKER_BUILDX_PLATFORM: linux/amd64,linux/arm64
           ORG_GRADLE_PROJECT_version: 0.0.0-${{ github.sha }}
         run: |
-          ./gradlew assemble
+          ./gradlew clean assemble
           helm package build/helm
           helm upgrade solo-operator solo-operator-${ORG_GRADLE_PROJECT_version}.tgz -i -n solo-operator --create-namespace
 
