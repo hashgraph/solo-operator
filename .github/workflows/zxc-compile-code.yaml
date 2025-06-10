@@ -125,7 +125,7 @@ jobs:
           kubectl -n solo-operator logs -l app.kubernetes.io/name=solo-operator --tail -1 --timestamps > operator.log
 
       - name: Publish Unit Test Report
-        uses: step-security/publish-unit-test-result-action@b495e9a82021fc8f34737416de688298581b847d # v2.19.0
+        uses: step-security/publish-unit-test-result-action@e88bfc6c0dffc68a1067d63526c80c81f248da11 # v2.20.0
         if: ${{ inputs.enable-unit-tests && !cancelled() }}
         with:
           check_name: "Unit Test Results"
