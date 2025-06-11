@@ -7,7 +7,7 @@ plugins {
 
 repositories {
     // Use Maven Central for resolving dependencies.
-    maven { url = uri("https://artifacts.swirldslabs.io/artifactory/central-maven-external/") }
+    maven { url = uri("https://artifacts.hashgraph.io/artifactory/central-maven-external/") }
 }
 
 val fabric8Version = libs.versions.fabric8.get()

@@ -12,7 +12,6 @@ spec:
     plural: networkoperations
     singular: networkoperation
     shortNames:
-      - "no"
       - netop
   scope: Namespaced
   versions:
