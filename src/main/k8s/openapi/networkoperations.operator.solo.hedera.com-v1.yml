@@ -156,7 +156,6 @@ components:
     #                  x-java-type: com.hedera.solo.operator.model.commonspec.EnvoyproxyChangeset # need to define
     NetworkOperationStatus:
       type: object
-      default: {}
       properties:
         phase:
           description: The current phase of the `ConsensusCapsule`.
