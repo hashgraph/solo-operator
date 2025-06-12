@@ -408,6 +408,11 @@ public class VerifyStepsTest {
         }
 
         @Override
+        public NetworkOperation getPrimaryResource() {
+            return null;
+        }
+
+        @Override
         public IndexedResourceCache<NetworkOperation> getPrimaryCache() {
             return null;
         }
