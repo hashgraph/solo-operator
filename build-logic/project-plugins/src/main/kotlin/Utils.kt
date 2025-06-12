@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 import org.gradle.api.file.Directory
 import org.gradle.api.file.RegularFile
 import java.io.File

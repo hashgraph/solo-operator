@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package com.hedera.solo.operator.shared;
+package com.hedera.solo.operator.buildlogic.sharedlib;
 
 import static io.fabric8.crdv2.generator.CRDGenerator.getOutputName;
 
@@ -25,10 +25,10 @@ import java.util.stream.StreamSupport;
 public class SharedCrdPostProcessor implements CRDPostProcessor {
     ObjectMapper objectMapper = new ObjectMapper(new YAMLFactory());
     KubernetesSerialization kubernetesSerialization = new KubernetesSerialization();
-    final Path inOutputDir;
+    final Path restoreFromDir;
 
-    public SharedCrdPostProcessor(Path inOutputDir) {
-        this.inOutputDir = inOutputDir;
+    public SharedCrdPostProcessor(Path restoreFromDir) {
+        this.restoreFromDir = restoreFromDir;
     }
 
     @Override
@@ -38,7 +38,7 @@ public class SharedCrdPostProcessor implements CRDPostProcessor {
         String outputName = getOutputName(crdName, version);
         File source = null;
         for (String ext : List.of("yml", "yaml")) {
-            source = inOutputDir.resolve(outputName + "." + ext).toFile();
+            source = restoreFromDir.resolve(outputName + "." + ext).toFile();
             if (source.exists()) {
                 break;
             }
@@ -56,8 +56,8 @@ public class SharedCrdPostProcessor implements CRDPostProcessor {
         return objectMapper.writeValueAsString(out);
     }
 
-    protected Map<String, JsonNode> map(JsonNode jn) {
-        return StreamSupport.stream(jn.at("/spec/versions").spliterator(), false)
+    protected Map<String, JsonNode> map(JsonNode jsonNode) {
+        return StreamSupport.stream(jsonNode.at("/spec/versions").spliterator(), false)
                 .collect(Collectors.toMap(e -> e.get("name").asText(), e -> e.at("/schema/openAPIV3Schema")));
     }
 

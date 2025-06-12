@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import com.hedera.solo.operator.shared.SharedCrdPostProcessor
+import com.hedera.solo.operator.buildlogic.sharedlib.SharedCrdPostProcessor
 
 plugins {
     id("com.hedera.solo.operator.conventions")
@@ -9,20 +9,21 @@ plugins {
     id("com.hedera.solo.operator.buildlogic.objectModelGenerator")
     id("com.hedera.solo.operator.buildlogic.gitExtractor")
     id("com.hedera.solo.operator.buildlogic.crdGenerator")
+    id("com.hedera.solo.operator.buildlogic.sharedLib")
 }
 
 val quarkusPlatformGroupId: String by project
 val quarkusPlatformArtifactId: String by project
 val quarkusPlatformVersion: String by project
-val assertjVersion: String by project
-val sundrVersion: String by project
+val assertjVersion = libs.versions.assertj.get()
+val sundrVersion = libs.versions.sundr.get()
 val fabric8Version = libs.versions.fabric8.get()
-val lombokVersion: String by project
-val hederaSdkVersion: String by project
-val javaoperatorsdkVersion: String by project
-val spotbugsVersion: String by project
-val wiremockVersion: String by project
-val smallryeCertificateGeneratorVersion: String by project
+val lombokVersion = libs.versions.lombok.get()
+val hederaSdkVersion = libs.versions.hedera.sdk.get()
+val javaoperatorsdkVersion = libs.versions.javaoperatorsdk.get()
+val spotbugsVersion = libs.versions.spotbugs.get()
+val wiremockVersion = libs.versions.wiremock.get()
+val smallryeCertificateGeneratorVersion = libs.versions.smallrye.certificate.generator.get()
 
 dependencies {
     annotationProcessor("io.sundr:builder-annotations:${sundrVersion}")
@@ -30,7 +31,7 @@ dependencies {
     annotationProcessor("org.projectlombok:lombok:${lombokVersion}")
     implementation("io.fabric8:generator-annotations:${fabric8Version}")
 
-    implementation("com.hedera.solo.operator:shared-lib")
+    implementation("com.hedera.solo.operator.buildlogic:shared-lib")
 
     implementation(
         enforcedPlatform(
@@ -96,15 +97,6 @@ dependencies {
         "io.smallrye.certs:smallrye-certificate-generator-junit5:${smallryeCertificateGeneratorVersion}"
     )
     testFixturesImplementation("org.wiremock:wiremock:${wiremockVersion}")
-}
-
-configurations.all {
-    resolutionStrategy.eachDependency {
-        if (requested.group == "io.fabric8" && requested.name != "maven-model-helper") {
-            useVersion(fabric8Version)
-            because("CRDPostProcessor added in 7.2.0")
-        }
-    }
 }
 
 gitExtractor {

@@ -5,9 +5,11 @@ plugins {
     `java-gradle-plugin`
 }
 
+group = "com.hedera.solo.operator.buildlogic"
+
 repositories {
     // Use Maven Central for resolving dependencies.
-    maven { url = uri("https://artifacts.swirldslabs.io/artifactory/central-maven-external/") }
+    maven { url = uri("https://artifacts.hashgraph.io/artifactory/central-maven-external/") }
 }
 
 val fabric8Version = libs.versions.fabric8.get()
@@ -18,7 +20,7 @@ dependencies {
 
     implementation("io.fabric8:kubernetes-model-core:${fabric8Version}")
     implementation("io.fabric8:crd-generator-collector:${fabric8Version}")
-    implementation("com.hedera.solo.operator:shared-lib")
+    implementation(libs.fabric8.crd.generator.api.v2)
 
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
@@ -27,9 +29,8 @@ gradlePlugin {
     // Define the plugin
     val crdGenerator by
         plugins.creating {
-            id = "com.hedera.solo.operator.buildlogic.crdGenerator"
-            implementationClass =
-                "com.hedera.solo.operator.buildlogic.crdgenerator.CrdGeneratorPlugin"
+            id = "${group}.crdGenerator"
+            implementationClass = "${group}.crdgenerator.CrdGeneratorPlugin"
         }
 }
 

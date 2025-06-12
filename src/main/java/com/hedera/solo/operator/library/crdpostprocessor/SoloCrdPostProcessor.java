@@ -2,7 +2,7 @@
 
 package com.hedera.solo.operator.library.crdpostprocessor;
 
-import com.hedera.solo.operator.shared.SharedCrdPostProcessor;
+import com.hedera.solo.operator.buildlogic.sharedlib.SharedCrdPostProcessor;
 import java.nio.file.Path;
 import org.eclipse.microprofile.config.ConfigProvider;
 
