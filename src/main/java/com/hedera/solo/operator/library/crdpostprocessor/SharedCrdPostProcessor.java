@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package com.hedera.solo.operator.buildlogic.sharedlib;
+package com.hedera.solo.operator.library.crdpostprocessor;
 
 import static io.fabric8.crdv2.generator.CRDGenerator.getOutputName;
 

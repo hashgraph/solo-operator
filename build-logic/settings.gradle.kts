@@ -9,5 +9,3 @@ includeBuild("object-model-generator-plugin")
 includeBuild("project-plugins")
 
 includeBuild("settings-plugins")
-
-includeBuild("shared-lib")

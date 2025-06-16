@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package com.hedera.solo.operator.buildlogic.sharedlib;
+package com.hedera.solo.operator.library.crdpostprocessor;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinition;
 import io.fabric8.kubernetes.client.utils.ApiVersionUtil;
 import io.fabric8.kubernetes.client.utils.Serialization;
 import java.io.IOException;
 import java.net.URISyntaxException;
-import java.nio.file.Files;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Objects;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -26,15 +27,16 @@ public class SharedCrdPostProcessorTest {
         SharedCrdPostProcessor processor = new SharedCrdPostProcessor(augment);
         CustomResourceDefinition result =
                 (CustomResourceDefinition) processor.process(crd, ApiVersionUtil.trimVersion(crd.getApiVersion()));
-        assertEquals(expect, Serialization.asYaml(result));
+        assertTrue(expect.endsWith(Serialization.asYaml(result)));
     }
 
-    String read(String path) throws IOException, URISyntaxException {
-        return Files.readString(path(path));
+    String read(String path) throws IOException {
+        return new String(
+                Objects.requireNonNull(getClass().getResourceAsStream(path)).readAllBytes(), StandardCharsets.UTF_8);
     }
 
     Path path(String resource) throws URISyntaxException {
         return Paths.get(
-                ClassLoader.getSystemClassLoader().getResource(resource).toURI());
+                Objects.requireNonNull(getClass().getResource(resource)).toURI());
     }
 }

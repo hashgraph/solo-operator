@@ -9,9 +9,12 @@ import org.gradle.api.tasks.SourceSet
 import java.io.File
 
 open class CrdGeneratorExtension(val project: Project, val sourceSet: SourceSet) {
-    var filesToScan: FileCollection = project.files(sourceSet.java.classesDirectory)
+    var classPathElements: FileCollection = project.files(sourceSet.java.classesDirectory)
+    var filesToScan: FileCollection = classPathElements
     var outputDir: File = project.layout.buildDirectory.dir("generated/crd-generator/${sourceSet.name}").get().asFile
-    var postProcessor: CRDPostProcessor = CRDPostProcessor.nullProcessor
     var parentClassLoader: ClassLoader = Thread.currentThread().getContextClassLoader()
-    var classPathElements: FileCollection = filesToScan
+    var postProcessorClassName: String? = null
+    var postProcessorClassPath: FileCollection = project.files()
+    var postProcessorNewInstance: ((Class<out CRDPostProcessor>) -> CRDPostProcessor) =
+        { clazz -> clazz.getConstructor().newInstance() }
 }

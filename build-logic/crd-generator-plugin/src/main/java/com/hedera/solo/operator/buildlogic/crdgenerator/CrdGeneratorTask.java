@@ -6,8 +6,13 @@ import io.fabric8.crd.generator.collector.CustomResourceCollector;
 import io.fabric8.crdv2.generator.CRDGenerationInfo;
 import io.fabric8.crdv2.generator.CRDGenerator;
 import io.fabric8.crdv2.generator.CRDInfo;
+import io.fabric8.crdv2.generator.CRDPostProcessor;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import java.io.File;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -31,6 +36,10 @@ public class CrdGeneratorTask extends DefaultTask {
     @PathSensitive(PathSensitivity.RELATIVE)
     FileCollection classPathElements;
 
+    @InputFiles
+    @PathSensitive(PathSensitivity.RELATIVE)
+    FileCollection postProcessorClassPath;
+
     @OutputDirectory
     final File outputDirectory;
 
@@ -41,11 +50,23 @@ public class CrdGeneratorTask extends DefaultTask {
         filesToScan = extension.getFilesToScan();
         outputDirectory = extension.getOutputDir();
         classPathElements = extension.getClassPathElements();
+        postProcessorClassPath = extension.getPostProcessorClassPath();
         this.extension = extension;
     }
 
     @TaskAction
     public void crdGenerate() throws Exception {
+        CRDPostProcessor postProcessor = CRDPostProcessor.nullProcessor;
+        if (extension.getPostProcessorClassName() != null) {
+            try (URLClassLoader classLoader = new URLClassLoader(
+                    urls(extension.getPostProcessorClassPath()), getClass().getClassLoader())) {
+                postProcessor = extension
+                        .getPostProcessorNewInstance()
+                        .invoke(classLoader
+                                .loadClass(extension.getPostProcessorClassName())
+                                .asSubclass(CRDPostProcessor.class));
+            }
+        }
         CustomResourceCollector customResourceCollector = new CustomResourceCollector()
                 .withClasspathElements(classPathElements.getFiles().stream()
                         .map(File::getAbsolutePath)
@@ -58,12 +79,20 @@ public class CrdGeneratorTask extends DefaultTask {
         CRDGenerator crdGenerator = new CRDGenerator()
                 .customResourceClasses(customResourceClasses)
                 .inOutputDir(outputDirectory)
-                .withPostProcessor(extension.getPostProcessor());
+                .withPostProcessor(postProcessor);
 
         CRDGenerationInfo crdGenerationInfo = crdGenerator.detailedGenerate();
 
         Map<String, Map<String, CRDInfo>> details = crdGenerationInfo.getCRDDetailsPerNameAndVersion();
         details.keySet().forEach(name -> getLogger().info("Generating CRD {}", name));
+    }
+
+    URL[] urls(FileCollection classPath) throws MalformedURLException {
+        List<URL> urls = new ArrayList<>();
+        for (File file : classPath.getFiles()) {
+            urls.add(file.toURI().toURL());
+        }
+        return urls.toArray(URL[]::new);
     }
 
     public FileCollection getFilesToScan() {
@@ -72,6 +101,10 @@ public class CrdGeneratorTask extends DefaultTask {
 
     public FileCollection getClassPathElements() {
         return classPathElements;
+    }
+
+    public FileCollection getPostProcessorClassPath() {
+        return postProcessorClassPath;
     }
 
     public File getOutputDirectory() {

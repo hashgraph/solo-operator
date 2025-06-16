@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import com.hedera.solo.operator.buildlogic.sharedlib.SharedCrdPostProcessor
+import java.nio.file.Path
 
 plugins {
     id("com.hedera.solo.operator.conventions")
@@ -9,7 +9,6 @@ plugins {
     id("com.hedera.solo.operator.buildlogic.objectModelGenerator")
     id("com.hedera.solo.operator.buildlogic.gitExtractor")
     id("com.hedera.solo.operator.buildlogic.crdGenerator")
-    id("com.hedera.solo.operator.buildlogic.sharedLib")
 }
 
 val quarkusPlatformGroupId: String by project
@@ -30,8 +29,7 @@ dependencies {
     annotationProcessor("io.fabric8:kubernetes-client:${fabric8Version}")
     annotationProcessor("org.projectlombok:lombok:${lombokVersion}")
     implementation("io.fabric8:generator-annotations:${fabric8Version}")
-
-    implementation("com.hedera.solo.operator.buildlogic:shared-lib")
+    implementation(libs.fabric8.crd.generator.api.v2)
 
     implementation(
         enforcedPlatform(
@@ -146,14 +144,20 @@ crdGenerator {
     register(sourceSets.componentTest) {
         sourceSet.resources { srcDirs(outputDir) }
         outputDir = File(outputDir, "META-INF/fabric8")
-        postProcessor =
-            SharedCrdPostProcessor(
-                layout.buildDirectory
-                    .dir("generated/object-model-generator/${sourceSet.name}/crd")
-                    .get()
-                    .asFile
-                    .toPath()
-            )
+        postProcessorClassName =
+            "com.hedera.solo.operator.library.crdpostprocessor.SharedCrdPostProcessor"
+        postProcessorClassPath = sourceSets.main.get().runtimeClasspath
+        postProcessorNewInstance = { clazz ->
+            clazz
+                .getConstructor(Path::class.java)
+                .newInstance(
+                    layout.buildDirectory
+                        .dir("generated/object-model-generator/${sourceSet.name}/crd")
+                        .get()
+                        .asFile
+                        .toPath()
+                )
+        }
     }
 }
 
@@ -166,12 +170,4 @@ tasks.register<Copy>("copyAdditionalComponentTestCrdResources") {
 
 tasks.named("processComponentTestResources") {
     dependsOn("copyAdditionalComponentTestCrdResources")
-}
-
-quarkus {
-    quarkusBuildProperties.apply { set("project.root.dir", rootProject.projectDir.absolutePath) }
-}
-
-tasks.withType<Test>().configureEach {
-    systemProperty("quarkus.project.root.dir", rootProject.projectDir.absolutePath)
 }
