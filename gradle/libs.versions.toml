@@ -7,7 +7,7 @@ lombok = "1.18.36"
 hedera-sdk = "2.46.0"
 javaoperatorsdk = "5.1.1"
 spotbugs = "4.9.0"
-wiremock = "3.13.0"
+wiremock = "3.13.1"
 smallrye-certificate-generator = "0.9.2"
 
 [libraries]
