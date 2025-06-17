@@ -46,10 +46,17 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import org.junit.jupiter.api.Test;
 
+/**
+ * This class represents a test for the network upgrade operation in the solo-operator project. It extends the abstract
+ * class ConsensusCapsuleTestAbstract and implements the QuarkusTestProfile interface.
+ */
 @QuarkusTest
 @TestProfile(NetworkUpgradeOperationTest.class)
 public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract implements QuarkusTestProfile {
 
+    /**
+     * Cleans up any resources that were created during the test, including network operations and consensus capsules.
+     */
     @Override
     void cleanup() {
         cleanupNetworkOperations();
@@ -57,6 +64,7 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
         cleanupOrbit();
     }
 
+    /** Deletes all NetworkOperation resources in the specified namespace. */
     void cleanupNetworkOperations() {
         List<NetworkOperation> items = kubernetesClient
                 .resources(NetworkOperation.class)
@@ -79,6 +87,7 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
         });
     }
 
+    /** Deletes all ConsensusCapsule resources in the specified namespace. */
     void cleanupConsensusCapsules() {
         List<ConsensusCapsule> items = kubernetesClient
                 .resources(ConsensusCapsule.class)
@@ -101,12 +110,14 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
         });
     }
 
+    /** Removes the Orbit resource from the specified namespace. */
     void cleanupOrbit() {
         Resources.removeByName(kubernetesClient, Orbit.class, namespace);
         await().atMost(Duration.ofSeconds(120))
                 .until(() -> kubernetesClient.namespaces().withName(namespace).get() == null);
     }
 
+    /** Returns the configuration overrides for the test. */
     @Override
     public Map<String, String> getConfigOverrides() {
         return Map.of(
@@ -114,6 +125,7 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
                 "solo.operator.network-operation.task.check.retry-interval", "5");
     }
 
+    /** Tests the deployment of a single consensus capsule node. */
     @Override
     @Test
     void testSingleNodeDeployment() throws Exception {
@@ -122,6 +134,7 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
         triggerNowFrozen(upgrade, consensusCapsules);
     }
 
+    /** Tests the deployment of multiple consensus capsule nodes. */
     @Override
     @Test
     void testMultiNodeDeployment() throws Exception {
@@ -131,6 +144,7 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
         triggerNowFrozen(upgrade, consensusCapsules);
     }
 
+    /** Prepares the container properties for a consensus capsule. */
     @Override
     protected Containers prepareConsensusPodContainers() {
         final StreamUploader rsu =
@@ -161,6 +175,12 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
                 .build();
     }
 
+    /**
+     * Prepares the address book entries for consensus capsule nodes.
+     *
+     * @param consensusCapsules The list of consensus capsules to prepare address book entries for.
+     * @return A list of AddressBookEntry objects representing the address book entries for the consensus capsules.
+     */
     protected List<AddressBookEntry> prepareAddressBook(List<ConsensusCapsule> consensusCapsules) {
         final List<AddressBookEntry> addressBookEntries = new ArrayList<>();
         for (ConsensusCapsule consensusCapsule : consensusCapsules) {
@@ -193,6 +213,14 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
         return addressBookEntries;
     }
 
+    /**
+     * Prepares the network upgrade for a given workflow step and address book entries.
+     *
+     * @param netOp The NetworkOperation to be prepared.
+     * @param workflowStep The workflow step for the network upgrade.
+     * @param addressBookEntries The list of address book entries for the network upgrade.
+     * @return The prepared NetworkOperation with the specified workflow step and address book entries.
+     */
     protected NetworkOperation prepareNetworkUpgrade(
             NetworkOperation netOp,
             final NetworkUpgrade.WorkflowStep workflowStep,
@@ -346,6 +374,12 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
         return updated;
     }
 
+    /**
+     * Checks the status of the network operation to ensure it is now frozen.
+     *
+     * @param consensusCapsules The list of consensus capsules involved in the upgrade.
+     * @param isDone A function to check if the network operation is done.
+     */
     protected void checkNowFrozenStatus(
             List<ConsensusCapsule> consensusCapsules, Function<NetworkOperation, Boolean> isDone) {
         await().atMost(5, TimeUnit.MINUTES).pollDelay(Duration.ofSeconds(2)).untilAsserted(() -> {
@@ -409,6 +443,12 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
         });
     }
 
+    /**
+     * Triggers the execute-immediate task for network upgrade.
+     *
+     * @param consensusCapsules The list of consensus capsules involved in the upgrade.
+     * @return The NetworkOperation that was triggered for immediate execution.
+     */
     protected NetworkOperation triggerExecuteImmediate(List<ConsensusCapsule> consensusCapsules) {
         final List<AddressBookEntry> addressBookEntries = prepareAddressBook(consensusCapsules);
         final NetworkOperation executeImmediate = prepareNetworkUpgrade(
@@ -433,6 +473,13 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
         return executeImmediate;
     }
 
+    /**
+     * Triggers the scheduling of a freeze task for network upgrade.
+     *
+     * @param upgrade The network operation to be upgraded.
+     * @param consensusCapsules The list of consensus capsules involved in the upgrade.
+     * @return The updated NetworkOperation after scheduling the freeze.
+     */
     protected NetworkOperation triggerFreezeScheduled(
             final NetworkOperation upgrade, List<ConsensusCapsule> consensusCapsules) {
         final List<AddressBookEntry> addressBookEntries = prepareAddressBook(consensusCapsules);
@@ -458,6 +505,12 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
         return freezeScheduled;
     }
 
+    /**
+     * Triggers the now-frozen task for network upgrade and then waits for it to complete.
+     *
+     * @param upgrade The network operation to be upgraded.
+     * @param consensusCapsules The list of consensus capsules involved in the upgrade.
+     */
     protected void triggerNowFrozen(NetworkOperation upgrade, List<ConsensusCapsule> consensusCapsules) {
         final List<AddressBookEntry> addressBookEntries = prepareAddressBook(consensusCapsules);
         final NetworkOperation nowFrozen =
