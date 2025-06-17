@@ -20,14 +20,14 @@ public class SharedCrdPostProcessorTest {
     @ParameterizedTest
     @ValueSource(strings = {"crontabs.stable.example.com-v1.yaml", "examples.stable.example.com-v1.yaml"})
     public void test(String name) throws URISyntaxException, IOException {
-        String expect = read("test/expect/" + name);
+        String output = read("test/output/" + name);
         String input = read("test/input/" + name);
-        Path augment = path("test/augment");
+        Path extra = path("test/extra");
         CustomResourceDefinition crd = Serialization.unmarshal(input, CustomResourceDefinition.class);
-        SharedCrdPostProcessor processor = new SharedCrdPostProcessor(augment);
+        SharedCrdPostProcessor processor = new SharedCrdPostProcessor(extra);
         CustomResourceDefinition result =
                 (CustomResourceDefinition) processor.process(crd, ApiVersionUtil.trimVersion(crd.getApiVersion()));
-        assertTrue(expect.endsWith(Serialization.asYaml(result)));
+        assertTrue(output.endsWith(Serialization.asYaml(result)));
     }
 
     String read(String path) throws IOException {
