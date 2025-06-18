@@ -11,15 +11,15 @@ plugins {
 val quarkusPlatformGroupId: String by project
 val quarkusPlatformArtifactId: String by project
 val quarkusPlatformVersion: String by project
-val assertjVersion: String by project
-val sundrVersion: String by project
-val fabric8Version: String by project
-val lombokVersion: String by project
-val hederaSdkVersion: String by project
-val javaoperatorsdkVersion: String by project
-val spotbugsVersion: String by project
-val wiremockVersion: String by project
-val smallryeCertificateGeneratorVersion: String by project
+val assertjVersion = libs.versions.assertj.get()
+val sundrVersion = libs.versions.sundr.get()
+val fabric8Version = libs.versions.fabric8.get()
+val lombokVersion = libs.versions.lombok.get()
+val hederaSdkVersion = libs.versions.hedera.sdk.get()
+val javaoperatorsdkVersion = libs.versions.javaoperatorsdk.get()
+val spotbugsVersion = libs.versions.spotbugs.get()
+val wiremockVersion = libs.versions.wiremock.get()
+val smallryeCertificateGeneratorVersion = libs.versions.smallrye.certificate.generator.get()
 
 dependencies {
     annotationProcessor("io.sundr:builder-annotations:${sundrVersion}")
@@ -117,7 +117,7 @@ objectModelGenerator {
     register(sourceSets.main) {
         configBuilderOverrides =
             mapOf(
-                "common.operator.solo.hedera.com-v1.yml" to
+                "commons.operator.solo.hedera.com-v1.yml" to
                     defaultConfigBuilder
                         .build()
                         .toBuilder()
@@ -135,13 +135,4 @@ objectModelGenerator {
             )
     }
     register(sourceSets.componentTest)
-}
-
-// Require JOSDK 5.0.3 until a newer version of quarkus using JOSDK 5.0.3 or later is available.
-configurations.all {
-    resolutionStrategy {
-        force("io.javaoperatorsdk:micrometer-support:${javaoperatorsdkVersion}")
-        force("io.javaoperatorsdk:operator-framework-core:${javaoperatorsdkVersion}")
-        force("io.javaoperatorsdk:operator-framework-junit-5:${javaoperatorsdkVersion}")
-    }
 }

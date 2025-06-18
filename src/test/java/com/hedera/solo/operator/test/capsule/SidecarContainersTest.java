@@ -12,9 +12,9 @@ import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-import com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector;
 import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Containers;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.OpenTelemetryCollector;
 import com.hedera.solo.operator.test.utils.TemplateLoader;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.EnvVar;
@@ -76,7 +76,11 @@ public class SidecarContainersTest extends ConsensusCapsuleTestAbstract {
                 for (Container c : p.getSpec().getContainers()) {
                     Map<String, String> envMap = new HashMap<>();
                     for (EnvVar env : c.getEnv()) {
-                        envMap.put(env.getName(), env.getValue());
+                        String value = env.getValue();
+                        if (value == null || value.isEmpty()) {
+                            value = env.getValueFrom().getFieldRef().getFieldPath();
+                        }
+                        envMap.put(env.getName(), value);
                     }
 
                     switch (c.getName()) {
