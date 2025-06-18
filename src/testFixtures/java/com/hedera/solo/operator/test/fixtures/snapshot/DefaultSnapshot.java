@@ -31,18 +31,38 @@ import java.util.Set;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
 
+/** The DefaultSnapshot class provides methods to capture Kubernetes resources and logs for debugging purposes. */
 public class DefaultSnapshot extends Snapshot {
     private final SnapshotWriter writer;
 
+    /**
+     * Constructs a new DefaultSnapshot instance with the given writer and Kubernetes client.
+     *
+     * @param writer The writer used to save captured resources and logs.
+     * @param client The Kubernetes client for interacting with the cluster.
+     */
     public DefaultSnapshot(final SnapshotWriter writer, final KubernetesClient client) {
         super(client);
         this.writer = writer;
     }
 
+    /**
+     * Creates a new DefaultSnapshot instance using the default snapshot writer and caller method information.
+     *
+     * @param client The Kubernetes client for interacting with the cluster.
+     * @return A new DefaultSnapshot instance
+     */
     public static DefaultSnapshot snapshot(final KubernetesClient client) {
         return new DefaultSnapshot(new DefaultSnapshotWriter(calledFrom()), client);
     }
 
+    /**
+     * Creates a new DefaultSnapshot instance using the provided method and caller information.
+     *
+     * @param method The method from which this call is made, used for logging purposes.
+     * @param client The Kubernetes client for interacting with the cluster.
+     * @return A new DefaultSnapshot instance
+     */
     public static DefaultSnapshot snapshot(final Method method, final KubernetesClient client) {
         return new DefaultSnapshot(new DefaultSnapshotWriter(method), client);
     }
@@ -65,6 +85,7 @@ public class DefaultSnapshot extends Snapshot {
                     }
                 }
             } catch (KubernetesClientException ignored) {
+                // Ignore exceptions for group versions that cannot be accessed
             }
         }
         return this;
@@ -81,6 +102,7 @@ public class DefaultSnapshot extends Snapshot {
                     }
                 }
             } catch (KubernetesClientException ignored) {
+                // Ignore exceptions for pods that cannot be accessed
             }
         }
         return this;
@@ -109,9 +131,11 @@ public class DefaultSnapshot extends Snapshot {
                                     result, "exec", namespace, pod.getMetadata().getName(), container, name);
                         }
                     } catch (KubernetesClientException ignored) {
+                        // Ignore exceptions for pods that cannot be accessed
                     }
                 }
             } catch (KubernetesClientException ignored) {
+                // Ignore exceptions for pods that cannot be accessed
             }
         }
         return this;
@@ -137,17 +161,27 @@ public class DefaultSnapshot extends Snapshot {
                                                 container,
                                                 path));
                             } catch (KubernetesClientException ignored) {
+                                // Ignore exceptions for files that cannot be copied
                             }
                         }
                     } catch (KubernetesClientException ignored) {
+                        // Ignore exceptions for pods that cannot be accessed
                     }
                 }
             } catch (KubernetesClientException ignored) {
+                // Ignore exceptions for pods that cannot be accessed
             }
         }
         return this;
     }
 
+    /**
+     * Logs the output of a container from a pod that matches the accept predicate.
+     *
+     * @param accept A predicate to determine which pods and containers' logs to capture.
+     * @param pod The Kubernetes Pod object.
+     * @param container The Kubernetes Container object.
+     */
     private void logs(final BiPredicate<Pod, Container> accept, final Pod pod, final Container container) {
         if (!accept.test(pod, container)) {
             return;
@@ -161,9 +195,16 @@ public class DefaultSnapshot extends Snapshot {
             writer.write(loggable.getLog(), "logs", namespace, podName, containerName, "live");
             writer.write(loggable.terminated().getLog(), "logs", namespace, podName, containerName, "dead");
         } catch (KubernetesClientException ignored) {
+            // Ignore exceptions for pods or containers that cannot be accessed or logged
         }
     }
 
+    /**
+     * Retrieves a PodResource object for the given pod.
+     *
+     * @param pod The Kubernetes Pod object.
+     * @return A PodResource object for the specified pod
+     */
     private PodResource podResource(final Pod pod) {
         return (PodResource) client.pods()
                 .inNamespace(pod.getMetadata().getNamespace())
@@ -171,6 +212,11 @@ public class DefaultSnapshot extends Snapshot {
                 .usingListener(((code, reason) -> {}));
     }
 
+    /**
+     * Retrieves the list of supported group versions from the Kubernetes cluster.
+     *
+     * @return An array of group version strings
+     */
     private String[] groupVersions() {
         List<String> groupVersions = new ArrayList<>(List.of("v1"));
         try {
@@ -180,21 +226,50 @@ public class DefaultSnapshot extends Snapshot {
                     .map(GroupVersionForDiscovery::getGroupVersion)
                     .forEach(groupVersions::add);
         } catch (KubernetesClientException ignored) {
+            // If the API groups cannot be retrieved, we ignore the exception.
         }
         return groupVersions.toArray(new String[0]);
     }
 
+    /**
+     * Retrieves a generic Kubernetes resource list from the specified namespace.
+     *
+     * @param client The Kubernetes client for interacting with the cluster.
+     * @param namespace The namespace in which to list the resources (or null for non-namespaced resources).
+     * @param <T> The type of the resource.
+     * @param <L> The type of the list operation.
+     * @param <R> The type of the resource operation.
+     * @return A list of GenericKubernetesResource objects
+     */
     private static <T, L, R extends Resource<T>> AnyNamespaceOperation<T, L, R> inNamespace(
             final MixedOperation<T, L, R> client, final String namespace) {
         return null == namespace ? client.inAnyNamespace() : client.inNamespace(namespace);
     }
 
+    /**
+     * A helper method to retrieve a generic Kubernetes resource list from the specified API group version and kind,
+     * with optional namespacing.
+     *
+     * @param client The Kubernetes client for interacting with the cluster.
+     * @param function A function to apply to the MixedOperation for retrieving resources.
+     * @param <T> The type of the resource.
+     * @param <L> The type of the list operation.
+     * @param <R> The type of the resource operation.
+     * @return An AnyNamespaceOperation object based on the applied function
+     */
     private static <T, L, R extends Resource<T>> AnyNamespaceOperation<T, L, R> inNamespace(
             final MixedOperation<T, L, R> client,
             final Function<MixedOperation<T, L, R>, AnyNamespaceOperation<T, L, R>> function) {
         return function.apply(client);
     }
 
+    /**
+     * Captures and writes a Kubernetes resource to the writer based on its group version, kind, namespace, and name.
+     *
+     * @param groupVersion The API group version of the resource.
+     * @param resource The Kubernetes APIResource object representing the type of resource to list.
+     * @param namespace The namespace in which the resource resides (or null for non-namespaced resources).
+     */
     private void resource(final String groupVersion, final APIResource resource, final String namespace) {
         try {
             List<GenericKubernetesResource> list = inNamespace(
@@ -213,6 +288,7 @@ public class DefaultSnapshot extends Snapshot {
                         object.getMetadata().getName());
             }
         } catch (KubernetesClientException ignored) {
+            // Ignore exceptions for resources that cannot be listed or accessed
         }
     }
 }
