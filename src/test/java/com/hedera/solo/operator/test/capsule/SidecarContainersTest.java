@@ -26,8 +26,14 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
+/** This class contains tests for sidecar containers in a consensus capsule deployment. */
 @QuarkusTest
 public class SidecarContainersTest extends ConsensusCapsuleTestAbstract {
+    /**
+     * Tests the deployment of a single node and checks the sidecar containers.
+     *
+     * @throws Exception if an error occurs during the test.
+     */
     @Override
     @Test
     void testSingleNodeDeployment() throws Exception {
@@ -35,6 +41,11 @@ public class SidecarContainersTest extends ConsensusCapsuleTestAbstract {
         this.checkSidecarContainers(1);
     }
 
+    /**
+     * Tests the deployment of multiple nodes and checks the sidecar containers.
+     *
+     * @throws Exception if an error occurs during the test.
+     */
     @Override
     @Test
     void testMultiNodeDeployment() throws Exception {
@@ -42,6 +53,11 @@ public class SidecarContainersTest extends ConsensusCapsuleTestAbstract {
         this.checkSidecarContainers(3);
     }
 
+    /**
+     * Prepares the containers for a consensus pod based on templates.
+     *
+     * @return Containers object containing sidecar containers.
+     */
     @Override
     protected Containers prepareConsensusPodContainers() {
         final StreamUploader rsu =
@@ -62,6 +78,11 @@ public class SidecarContainersTest extends ConsensusCapsuleTestAbstract {
                 .build();
     }
 
+    /**
+     * Checks the sidecar containers in a consensus pod.
+     *
+     * @param total The number of pods expected.
+     */
     private void checkSidecarContainers(final int total) {
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
             List<Pod> consensusPods = fetchConsensusPods();

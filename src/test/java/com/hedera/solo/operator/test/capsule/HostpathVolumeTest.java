@@ -28,9 +28,11 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+/** This test class is designed to verify the functionality of hostpath volumes in a consensus capsule setup. */
 @QuarkusTest
 public class HostpathVolumeTest extends ConsensusCapsuleTestAbstract {
 
+    // Map containing paths for different volume suffixes.
     protected static final Map<String, String> hostPaths = Map.of(
             VOLUME_LOGS_NAME_SUFFIX, "/tmp/%s/volumes/output",
             VOLUME_STATS_NAME_SUFFIX, "/tmp/%s/volumes/stats",
@@ -38,6 +40,13 @@ public class HostpathVolumeTest extends ConsensusCapsuleTestAbstract {
             VOLUME_RECORD_STREAM_NAME_SUFFIX, "/tmp/%s/volumes/recordStreams",
             VOLUME_EVENTS_STREAM_NAME_SUFFIX, "/tmp/%s/volumes/eventsStreams");
 
+    /**
+     * Prepares a volume with a hostpath source for the given node and suffix.
+     *
+     * @param node - Node information including name.
+     * @param volSuffix - Suffix of the volume (e.g., logs, stats).
+     * @return Volume object configured with a hostpath source.
+     */
     protected Volume prepareVolumeWithHostpathSource(TestRecords.NodeInfo node, String volSuffix) {
         final HostPathVolumeSource hs = new HostPathVolumeSourceBuilder()
                 .withPath(hostPaths.get(volSuffix).formatted(node.name()))
@@ -47,6 +56,12 @@ public class HostpathVolumeTest extends ConsensusCapsuleTestAbstract {
         return new VolumeBuilder().withHostPath(hs).build();
     }
 
+    /**
+     * Prepares the volumes for a consensus capsule pod based on node information.
+     *
+     * @param node - Node information including name.
+     * @return Volumes object containing prepared volumes.
+     */
     @Override
     protected Volumes prepareCapsulePodVolumes(TestRecords.NodeInfo node) {
         // note: do not specify states volume since the directory may exist with old data and causes the test to fail as
@@ -62,6 +77,11 @@ public class HostpathVolumeTest extends ConsensusCapsuleTestAbstract {
                 .build();
     }
 
+    /**
+     * Test to verify the deployment of a single-node network with hostpath volumes.
+     *
+     * @throws Exception if the deployment fails.
+     */
     @Test
     @DisplayName("volume with hostpath should succeed for a single-node network")
     void testSingleNodeDeployment() throws Exception {
@@ -69,6 +89,11 @@ public class HostpathVolumeTest extends ConsensusCapsuleTestAbstract {
         this.check(1);
     }
 
+    /**
+     * Test to verify the deployment of a multi-node network with hostpath volumes.
+     *
+     * @throws Exception if the deployment fails.
+     */
     @Test
     @DisplayName("volume with hostpath should succeed for a multi-node network")
     void testMultiNodeDeployment() throws Exception {
@@ -76,6 +101,11 @@ public class HostpathVolumeTest extends ConsensusCapsuleTestAbstract {
         this.check(3);
     }
 
+    /**
+     * Private method to check the consistency of volumes in consensus pods.
+     *
+     * @param count - Expected number of consensus pods.
+     */
     private void check(int count) {
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
             List<Pod> consensusPods = fetchConsensusPods();
