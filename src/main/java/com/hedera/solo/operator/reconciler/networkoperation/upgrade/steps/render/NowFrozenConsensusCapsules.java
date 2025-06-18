@@ -22,6 +22,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * The `NowFrozenConsensusCapsules` class is responsible for updating the specifications of consensus capsules based on
+ * the network operation and status.
+ */
 public class NowFrozenConsensusCapsules {
     final NetworkOperation networkOperation;
     final Map<Long, String> logging = new HashMap<>();
@@ -35,10 +39,21 @@ public class NowFrozenConsensusCapsules {
     final ImageRepositoryStatus record;
     final ImageRepositoryStatus otel;
 
+    /**
+     * Constructs a new `NowFrozenConsensusCapsules` instance with the given network operation and status.
+     *
+     * @param networkOperation The network operation containing the specifications to be updated.
+     * @param status The current status of the network operation.
+     */
     public NowFrozenConsensusCapsules(final NetworkOperation networkOperation, final NetworkOperationStatus status) {
         this(networkOperation.edit().withStatus(status).build());
     }
 
+    /**
+     * Constructs a new `NowFrozenConsensusCapsules` instance with the given network operation.
+     *
+     * @param networkOperation The network operation containing the specifications to be updated.
+     */
     public NowFrozenConsensusCapsules(final NetworkOperation networkOperation) {
         this.networkOperation = networkOperation;
         orEmptyList(() -> networkOperation.getSpec().getNetworkUpgrade().getAddressBook())
@@ -65,6 +80,12 @@ public class NowFrozenConsensusCapsules {
         otel = orNull(() -> selected(sourceStatus.getOtelCollector()));
     }
 
+    /**
+     * Updates the given consensus capsule with the specified changes based on the network operation and status.
+     *
+     * @param consensusCapsule The consensus capsule to be updated.
+     * @return The updated consensus capsule
+     */
     public ConsensusCapsule update(final ConsensusCapsule consensusCapsule) {
         AddressBookEntry addressBookEntry =
                 addressBook.get(consensusCapsule.getSpec().getNodeId());
@@ -122,6 +143,12 @@ public class NowFrozenConsensusCapsules {
                 .build();
     }
 
+    /**
+     * Gets the selected image repository status from a list of image repository statuses.
+     *
+     * @param list The list of image repository statuses to select from.
+     * @return The selected image repository status
+     */
     ImageRepositoryStatus selected(final List<ImageRepositoryStatus> list) {
         return list.stream()
                 .filter(ImageRepositoryStatus::getSelectedForDeployment)
@@ -129,6 +156,13 @@ public class NowFrozenConsensusCapsules {
                 .orElseThrow();
     }
 
+    /**
+     * Updates the OpenTelemetry collector specifications based on the given status and existing configuration.
+     *
+     * @param status The image repository status containing the software version information.
+     * @param otelCollector The existing OpenTelemetry collector configuration to be updated.
+     * @return The updated OpenTelemetry collector configuration
+     */
     OpenTelemetryCollector otelCollector(
             final ImageRepositoryStatus status, final OpenTelemetryCollector otelCollector) {
         if (status == null || otelCollector == null) {
@@ -140,6 +174,13 @@ public class NowFrozenConsensusCapsules {
                 .build();
     }
 
+    /**
+     * Updates the stream uploader specifications based on the given status and existing configuration.
+     *
+     * @param status The image repository status containing the software version information.
+     * @param uploader The existing stream uploader configuration to be updated.
+     * @return The updated stream uploader configuration
+     */
     StreamUploader streamUploader(final ImageRepositoryStatus status, final StreamUploader uploader) {
         if (status == null || uploader == null) {
             return null;
@@ -149,6 +190,13 @@ public class NowFrozenConsensusCapsules {
                 .build();
     }
 
+    /**
+     * Updates the software version specifications based on the given status and existing configuration.
+     *
+     * @param status The image repository status containing the software version information.
+     * @param softwareVersion The existing software version configuration to be updated.
+     * @return The updated software version configuration
+     */
     SoftwareVersion softwareVersion(final ImageRepositoryStatus status, final SoftwareVersion softwareVersion) {
         return edit(softwareVersion)
                 .with(builder -> builder.withRepository(status.getRepository())
@@ -162,6 +210,12 @@ public class NowFrozenConsensusCapsules {
                 .build();
     }
 
+    /**
+     * Retrieves the logging configuration for the specified consensus capsule or uses the default logging if not set.
+     *
+     * @param consensusCapsule The consensus capsule to get the logging configuration for.
+     * @return The logging configuration as a string
+     */
     String logging(final ConsensusCapsule consensusCapsule) {
         return logging.getOrDefault(
                 consensusCapsule.getSpec().getNodeId(),
@@ -170,6 +224,13 @@ public class NowFrozenConsensusCapsules {
                         : consensusCapsule.getSpec().getLog4j2_xml());
     }
 
+    /**
+     * Retrieves the node properties configuration for the specified consensus capsule or uses the default properties if
+     * not set.
+     *
+     * @param consensusCapsule The consensus capsule to get the node properties for.
+     * @return A map of node properties
+     */
     Map<String, String> nodeProperties(final ConsensusCapsule consensusCapsule) {
         return nodeProperties.getOrDefault(
                 consensusCapsule.getSpec().getNodeId(),
