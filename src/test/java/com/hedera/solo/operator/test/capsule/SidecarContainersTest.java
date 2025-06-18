@@ -97,7 +97,11 @@ public class SidecarContainersTest extends ConsensusCapsuleTestAbstract {
                 for (Container c : p.getSpec().getContainers()) {
                     Map<String, String> envMap = new HashMap<>();
                     for (EnvVar env : c.getEnv()) {
-                        envMap.put(env.getName(), env.getValue());
+                        String value = env.getValue();
+                        if (value == null || value.isEmpty()) {
+                            value = env.getValueFrom().getFieldRef().getFieldPath();
+                        }
+                        envMap.put(env.getName(), value);
                     }
 
                     switch (c.getName()) {
