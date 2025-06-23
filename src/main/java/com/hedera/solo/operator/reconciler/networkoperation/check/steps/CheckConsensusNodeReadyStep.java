@@ -14,6 +14,7 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.StepConditionType;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -29,15 +30,21 @@ import java.util.Objects;
 import java.util.Set;
 import org.jboss.logging.Logger;
 
-/** CheckConsensusNodeRunningStep checks if the consensus node is ACTIVE and processing transactions */
+/** CheckConsensusNodeRunningStep checks if the consensus node is ACTIVE and processing transactions. */
 public class CheckConsensusNodeReadyStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
-    public static final String CONDITION_TYPE = "ConsensusCapsuleReady";
+    public static final StepConditionType CONDITION_TYPE = new StepConditionType("VerifyReady", "ConsensusCapsule");
     public static final String SUCCESS_STATUS_MESSAGE = "Consensus nodes are ready: %s";
     public static final String FAIL_STATUS_MESSAGE = "Consensus nodes are not ready: %s";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     private final CustomResourceManager customResourceManager;
 
+    /**
+     * Constructor for CheckConsensusNodeReadyStep that initializes the CustomResourceManager.
+     *
+     * @param customResourceManager The CustomResourceManager instance used to manage Kubernetes resources for consensus
+     *     capsules.
+     */
     public CheckConsensusNodeReadyStep(CustomResourceManager customResourceManager) {
         this.customResourceManager = customResourceManager;
     }
@@ -78,7 +85,8 @@ public class CheckConsensusNodeReadyStep implements ProcessorStep<NetworkOperati
                 resultingPhase = NetworkOperationStatus.Phase.Succeeded;
                 conditions.add(new ConditionBuilder()
                         .withObservedGeneration(resource.getMetadata().getGeneration())
-                        .withType(CONDITION_TYPE)
+                        .withType(CONDITION_TYPE.type())
+                        .withReason(CONDITION_TYPE.reason())
                         .withStatus(ConditionStatus.True)
                         .withMessage(SUCCESS_STATUS_MESSAGE.formatted(phaseMap))
                         .withLastTransitionTime(timestamp)
@@ -88,7 +96,8 @@ public class CheckConsensusNodeReadyStep implements ProcessorStep<NetworkOperati
                 resultingPhase = NetworkOperationStatus.Phase.Failed;
                 conditions.add(new ConditionBuilder()
                         .withObservedGeneration(resource.getMetadata().getGeneration())
-                        .withType(CONDITION_TYPE)
+                        .withType(CONDITION_TYPE.type())
+                        .withReason(CONDITION_TYPE.reason())
                         .withStatus(ConditionStatus.False)
                         .withMessage(FAIL_STATUS_MESSAGE.formatted(phaseMap))
                         .withLastTransitionTime(timestamp)
@@ -106,6 +115,12 @@ public class CheckConsensusNodeReadyStep implements ProcessorStep<NetworkOperati
         }
     }
 
+    /**
+     * Converts a collection of ConsensusCapsule objects to a set of their phases.
+     *
+     * @param capsules The collection of ConsensusCapsule objects.
+     * @return A set of ConsensusCapsuleStatus.Phase representing the phases of the consensus capsules
+     */
     private Set<ConsensusCapsuleStatus.Phase> toPhaseSet(Collection<ConsensusCapsule> capsules) {
         Set<ConsensusCapsuleStatus.Phase> phases = new HashSet<>();
         for (ConsensusCapsule capsule : capsules) {
@@ -117,6 +132,12 @@ public class CheckConsensusNodeReadyStep implements ProcessorStep<NetworkOperati
         return phases;
     }
 
+    /**
+     * Converts a collection of ConsensusCapsule objects to a map with their names as keys and phases as values.
+     *
+     * @param capsules The collection of ConsensusCapsule objects.
+     * @return A map where the key is the name of the consensus capsule and the value is its phase
+     */
     private Map<String, ConsensusCapsuleStatus.Phase> toPhaseMap(Collection<ConsensusCapsule> capsules) {
         Map<String, ConsensusCapsuleStatus.Phase> phaseMap = new LinkedHashMap<>();
         List<ConsensusCapsule> sortedCapsules = new ArrayList<>(capsules);
@@ -134,6 +155,12 @@ public class CheckConsensusNodeReadyStep implements ProcessorStep<NetworkOperati
         return phaseMap;
     }
 
+    /**
+     * Checks if the NetworkOperationStatus indicates that the consensus nodes are ready.
+     *
+     * @param status The current status of the NetworkOperation.
+     * @return True if the status indicates readiness; otherwise, false
+     */
     public static boolean isDone(NetworkOperationStatus status) {
         return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }

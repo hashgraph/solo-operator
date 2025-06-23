@@ -19,6 +19,7 @@ import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.StepConditionType;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.fabric8.kubernetes.api.model.Secret;
@@ -55,13 +56,22 @@ public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOpera
     public static final String LEDGER_ENCRYPTION_KEY = "LedgerEncryptionKey";
     public static final String LEDGER_SIGNING_KEY = "LedgerSigningKey";
 
-    public static final String CONDITION_TYPE = "CheckConsensusNodeSecrets";
+    public static final StepConditionType CONDITION_TYPE =
+            new StepConditionType("VerifySecrets", "ConsensusNodeSecrets");
+    public static final StepConditionType VALIDATION_CONDITIOIN_TYPE =
+            new StepConditionType("VerifySecrets", "ConsensusNodeSecrets");
     public static final String SUCCESS_STATUS_MESSAGE = "Successfully validated consensus node secrets";
     public static final String FAIL_STATUS_MESSAGE = "Failed to validate consensus node secrets'";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
+    public static final String KEY_VALIDATION_TYPE = "KeyValidation";
 
     private final CustomResourceManager customResourceManager;
 
+    /**
+     * Constructs a new instance of CheckConsensusNodeSecretsStep.
+     *
+     * @param customResourceManager the custom resource manager used for Kubernetes operations
+     */
     public CheckConsensusNodeSecretsStep(CustomResourceManager customResourceManager) {
         this.customResourceManager = customResourceManager;
     }
@@ -100,7 +110,8 @@ public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOpera
                     // fail fast as soon as secrets are invalid for a consensus node
                     createOrUpdateEvent(resource, context, new IllegalArgumentException(FAIL_STATUS_MESSAGE));
                     conditions.add(new ConditionBuilder()
-                            .withType(CONDITION_TYPE)
+                            .withType(CONDITION_TYPE.type())
+                            .withReason(CONDITION_TYPE.reason())
                             .withObservedGeneration(resource.getMetadata().getGeneration())
                             .withStatus(ConditionStatus.False)
                             .withLastTransitionTime(timestamp)
@@ -111,9 +122,17 @@ public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOpera
                 }
             }
 
-            log.infof("%s: %s", SUCCESS_STATUS_MESSAGE, consensusCapsules);
+            log.infof(
+                    "%s: %s/%s %s",
+                    SUCCESS_STATUS_MESSAGE,
+                    resource.getMetadata().getNamespace(),
+                    resource.getMetadata().getName(),
+                    consensusCapsules.stream()
+                            .map(c -> Metadata.prepareNodeName(c.getSpec().getNodeId()))
+                            .toList());
             final Condition condition = new ConditionBuilder()
-                    .withType(CONDITION_TYPE)
+                    .withType(CONDITION_TYPE.type())
+                    .withReason(CONDITION_TYPE.reason())
                     .withObservedGeneration(resource.getMetadata().getGeneration())
                     .withStatus(ConditionStatus.True)
                     .withLastTransitionTime(timestamp)
@@ -126,6 +145,14 @@ public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOpera
         }
     }
 
+    /**
+     * Validates the secrets of a given consensus capsule for a network operation.
+     *
+     * @param resource The {@link NetworkOperation} to which the consensus capsule belongs.
+     * @param status The current status of the {@link NetworkOperation}.
+     * @param capsule The {@link ConsensusCapsule} whose secrets need to be validated.
+     * @return A list of conditions indicating whether each secret is valid or not
+     */
     private List<Condition> validateSecretsOfConsensusCapsule(
             NetworkOperation resource, NetworkOperationStatus status, ConsensusCapsule capsule) {
         final SecretResources secrets = Optional.ofNullable(secretsWithDefaultKeyNames(capsule))
@@ -140,61 +167,87 @@ public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOpera
         final List<Condition> conditions = new ArrayList<>();
 
         if (secrets.getGrpcTlsPrivateKey() != null && !isValidSecret(namespace, secrets.getGrpcTlsPrivateKey())) {
-            conditions.add(secretInvalidCondition(resource, status, capsule, GRPC_TLS_PRIVATE_KEY));
+            conditions.add(secretInvalidCondition(
+                    resource, status, capsule, new StepConditionType(KEY_VALIDATION_TYPE, GRPC_TLS_PRIVATE_KEY)));
         }
 
         if (secrets.getGrpcTlsPublicCertificate() != null
                 && !isValidSecret(namespace, secrets.getGrpcTlsPublicCertificate())) {
-            conditions.add(secretInvalidCondition(resource, status, capsule, GRPC_TLS_PUBLIC_CERTIFICATE));
+            conditions.add(secretInvalidCondition(
+                    resource,
+                    status,
+                    capsule,
+                    new StepConditionType(KEY_VALIDATION_TYPE, GRPC_TLS_PUBLIC_CERTIFICATE)));
         }
 
         if (secrets.getSigningPrivateKey() != null && !isValidSecret(namespace, secrets.getSigningPrivateKey())) {
-            conditions.add(secretInvalidCondition(resource, status, capsule, SIGNING_PRIVATE_KEY));
+            conditions.add(secretInvalidCondition(
+                    resource, status, capsule, new StepConditionType(KEY_VALIDATION_TYPE, SIGNING_PRIVATE_KEY)));
         }
 
         if (secrets.getSigningPublicCertificate() != null
                 && !isValidSecret(namespace, secrets.getSigningPublicCertificate())) {
-            conditions.add(secretInvalidCondition(resource, status, capsule, SIGNING_PUBLIC_CERTIFICATE));
+            conditions.add(secretInvalidCondition(
+                    resource, status, capsule, new StepConditionType(KEY_VALIDATION_TYPE, SIGNING_PUBLIC_CERTIFICATE)));
         }
 
         if (secrets.getLedgerEncryptionKey() != null && !isValidSecret(namespace, secrets.getLedgerEncryptionKey())) {
-            conditions.add(secretInvalidCondition(resource, status, capsule, LEDGER_ENCRYPTION_KEY));
+            conditions.add(secretInvalidCondition(
+                    resource, status, capsule, new StepConditionType(KEY_VALIDATION_TYPE, LEDGER_ENCRYPTION_KEY)));
         }
 
         if (secrets.getLedgerSigningKey() != null && !isValidSecret(namespace, secrets.getLedgerSigningKey())) {
-            conditions.add(secretInvalidCondition(resource, status, capsule, LEDGER_SIGNING_KEY));
+            conditions.add(secretInvalidCondition(
+                    resource, status, capsule, new StepConditionType(KEY_VALIDATION_TYPE, LEDGER_SIGNING_KEY)));
         }
 
         return conditions;
     }
 
+    /**
+     * Checks if a secret with the given namespace and name exists.
+     *
+     * @param namespace The Kubernetes namespace where the secret is located.
+     * @param keyRef A {@link KeyReference} representing the secret to check.
+     * @return True if the secret exists and contains the specified key, otherwise false
+     */
     private boolean isValidSecret(String namespace, KeyReference keyRef) {
         Secret secret = customResourceManager.secretByName(namespace, keyRef.getSecretName());
         return secret != null && secret.getData().containsKey(keyRef.getKeyName());
     }
 
     /**
-     * Create a condition for the validation of a specific key type
+     * Creates a condition indicating that a specific type of secret is invalid for a consensus node.
      *
-     * @param resource - the network operation resource
-     * @param status - the network operation status
-     * @param capsule - the consensus capsule
-     * @param keyType - the key type
-     * @return the condition for the key type
+     * @param resource The {@link NetworkOperation} being reconciled.
+     * @param status The current status of the network operation.
+     * @param capsule The {@link ConsensusCapsule} whose secrets are being validated.
+     * @param conditionType A {@link StepConditionType} specifying the type and reason of the validation failure.
+     * @return A new {@link Condition} indicating that the secret is invalid
      */
     private Condition secretInvalidCondition(
-            NetworkOperation resource, NetworkOperationStatus status, ConsensusCapsule capsule, String keyType) {
+            NetworkOperation resource,
+            NetworkOperationStatus status,
+            ConsensusCapsule capsule,
+            StepConditionType conditionType) {
         final String nodeName = Metadata.prepareNodeName(capsule.getSpec().getNodeId());
-        final String conditionType = "%s-%s".formatted(nodeName, keyType);
         return new ConditionBuilder()
-                .withType(conditionType)
+                .withType(conditionType.type())
+                .withReason(conditionType.reason())
                 .withObservedGeneration(resource.getMetadata().getGeneration())
                 .withLastTransitionTime(timestamp())
                 .withStatus(ConditionStatus.False)
-                .withMessage("%s is not valid for consensus node: %s ".formatted(keyType, nodeName))
+                .withMessage("%s-%s is not valid for consensus node: %s"
+                        .formatted(conditionType.type(), conditionType.reason(), nodeName))
                 .build();
     }
 
+    /**
+     * Determines if the validation of consensus node secrets has been completed and successful.
+     *
+     * @param status The current status of the network operation.
+     * @return True if the validation was successful, otherwise false
+     */
     public static boolean isDone(NetworkOperationStatus status) {
         return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }

@@ -19,6 +19,10 @@ import java.util.Comparator;
 import java.util.Optional;
 import java.util.Set;
 
+/**
+ * The CapsulePod class is a KubernetesDependentResource that maps secondary Pod resources to their corresponding
+ * primary ConsensusCapsule resource.
+ */
 @KubernetesDependent(
         informer =
                 @Informer(
@@ -26,6 +30,7 @@ import java.util.Set;
                                 "app.kubernetes.io/managed-by=solo-operator,app.kubernetes.io/part-of=consensus-node,app.kubernetes.io/component=deployment"))
 public class CapsulePod extends KubernetesDependentResource<Pod, ConsensusCapsule>
         implements SecondaryToPrimaryMapper<Pod> {
+    /** Default constructor for the CapsulePod class. Initializes the resource type to Pod. */
     public CapsulePod() {
         super(Pod.class);
     }

@@ -22,11 +22,11 @@ public final class RetryStep<T extends CustomResource<?, S>, S> implements Proce
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     /**
-     * Create a new RetryStep with defaults
+     * Create a new RetryStep with defaults.
      *
      * @param step the step to retry
      */
-    public RetryStep(ProcessorStep<T, S> step) {
+    public RetryStep(final ProcessorStep<T, S> step) {
         this(step, Duration.ofSeconds(2), 30); // default retry for 1 minutes
     }
 
@@ -36,8 +36,10 @@ public final class RetryStep<T extends CustomResource<?, S>, S> implements Proce
      * @param step the step to retry
      * @param retryInterval the interval between retries
      * @param maxRetries the maximum number of retries
+     * @throws IllegalArgumentException if step is null, retryInterval is null or not greater than 0, or maxRetries is
+     *     not greater than 0
      */
-    public RetryStep(ProcessorStep<T, S> step, Duration retryInterval, int maxRetries) {
+    public RetryStep(final ProcessorStep<T, S> step, final Duration retryInterval, final int maxRetries) {
         Objects.requireNonNull(step, "retryable step must not be null");
         Objects.requireNonNull(retryInterval, "retryInterval must not be null");
 
@@ -55,7 +57,7 @@ public final class RetryStep<T extends CustomResource<?, S>, S> implements Proce
     }
 
     @Override
-    public S run(T resource, S status, Context<T> context) {
+    public S run(final T resource, final S status, final Context<T> context) {
         S updated = step.run(resource, status, context);
 
         int retries = 0;
@@ -80,15 +82,16 @@ public final class RetryStep<T extends CustomResource<?, S>, S> implements Proce
     }
 
     @Override
-    public boolean isSuccessful(T resource, S status) {
+    public boolean isSuccessful(final T resource, final S status) {
         return step.isSuccessful(resource, status);
     }
 
     @Override
-    public boolean shouldSkip(T resource, S status) {
+    public boolean shouldSkip(final T resource, final S status) {
         return step.shouldSkip(resource, status);
     }
 
+    /** Applies the retry interval by sleeping for the specified duration. */
     private void applyRetryInterval() {
         try {
             Thread.sleep(retryInterval.toMillis());

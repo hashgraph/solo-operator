@@ -3,11 +3,11 @@
 package com.hedera.solo.operator.test.capsule;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
-import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
 import static com.hedera.solo.operator.test.fixtures.coredns.ConfigureCoredns.configureCoredns;
 import static java.util.Collections.emptyMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.hedera.solo.operator.beans.DefaultConsensusNodeBean;
 import com.hedera.solo.operator.library.builder.BuilderFunction;
@@ -23,6 +23,7 @@ import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
 import com.hedera.solo.operator.test.fixtures.snapshot.SnapshotFailureContext;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.javaoperatorsdk.operator.Operator;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -33,6 +34,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+/** This class contains tests for the validation of secrets in a ConsensusCapsule. */
 @QuarkusTest
 @SoloTest
 public class CapsuleSecretsValidationTest {
@@ -47,12 +49,10 @@ public class CapsuleSecretsValidationTest {
 
     String namespace;
 
+    /** Set up the test environment before each test. */
     @BeforeEach
     public void setup() {
         configureCoredns(kubernetesClient);
-        if (isTestUsingGradleOrIntelliJ()) {
-            operator.start();
-        }
         Orbit orbit = kubernetesClient
                 .resource(edit(new Orbit())
                         .with(metadata -> metadata.editMetadata()
@@ -72,6 +72,11 @@ public class CapsuleSecretsValidationTest {
         });
     }
 
+    /**
+     * Clean up the test environment after each test.
+     *
+     * @param snapshot - The context for snapshot failure handling.
+     */
     @AfterEach
     void afterEach(final SnapshotFailureContext snapshot) {
         kubernetesClient
@@ -85,26 +90,39 @@ public class CapsuleSecretsValidationTest {
                 .until(() -> kubernetesClient.namespaces().withName(namespace).get() == null);
     }
 
+    /** Test the validation of secrets when they are valid. */
     @Test
     void testGenerateSecretsValid() {
         ConsensusCapsule capsule = createConsensusCapsule();
         test(capsule, condition -> assertThat(condition.getStatus()).isEqualTo(ConditionStatus.True));
     }
 
+    /** Test the validation of secrets when they are invalid. */
     @Test
     void testSecretResourcesAndHostPathInvalid() {
-        ConsensusCapsule capsule =
-                createConsensusCapsule(secret -> secret.editSpec().editSecrets().withNewHostPath("path", ""));
-        test(capsule, condition -> {
-            assertThat(condition.getReason()).isEqualTo("SpecSecrets");
-            assertThat(condition.getStatus()).isEqualTo(ConditionStatus.False);
-        });
+        KubernetesClientException exception = assertThrows(
+                KubernetesClientException.class,
+                () -> createConsensusCapsule(
+                        secret -> secret.editSpec().editSecrets().withNewHostPath("path", "")));
+        assertThat(exception.getMessage())
+                .contains("must validate one and only one schema (oneOf). Found 2 valid alternatives");
     }
 
+    /**
+     * Create a ConsensusCapsule with default secret specifications.
+     *
+     * @return - The created ConsensusCapsule.
+     */
     ConsensusCapsule createConsensusCapsule() {
         return createConsensusCapsule(builder -> builder);
     }
 
+    /**
+     * Create a ConsensusCapsule with custom secret specifications provided by the BuilderFunction.
+     *
+     * @param builder - A function to build custom secret specifications.
+     * @return - The created ConsensusCapsule.
+     */
     ConsensusCapsule createConsensusCapsule(final BuilderFunction<ConsensusCapsuleBuilder> builder) {
         KeyReference keyReference = edit(new KeyReference())
                 .with(secret -> secret.withSecretName("secret").withKeyName("key"))
@@ -142,6 +160,12 @@ public class CapsuleSecretsValidationTest {
                 .create();
     }
 
+    /**
+     * Test the conditions of a ConsensusCapsule and assert the condition based on the consumer function.
+     *
+     * @param consensusCapsule - The ConsensusCapsule to be tested.
+     * @param consumer - A consumer function to process and verify the condition.
+     */
     void test(final ConsensusCapsule consensusCapsule, final Consumer<Condition> consumer) {
         await().atMost(Duration.ofSeconds(90)).untilAsserted(() -> {
             ConsensusCapsule capsule =

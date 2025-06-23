@@ -29,6 +29,7 @@ import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.StepConditionType;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.fabric8.kubernetes.api.model.ConfigMap;
@@ -45,10 +46,10 @@ import java.util.Optional;
 import java.util.TreeMap;
 import org.jboss.logging.Logger;
 
-/** CreateClusterConfigStep creates the cluster config ConfigMap */
+/** The CreateClusterConfigStep class is responsible for creating the cluster configuration ConfigMap. */
 public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final String TEMPLATE = "cluster-config.yaml";
-    public static final String CONDITION_TYPE = "ClusterConfigCreated";
+    public static final StepConditionType CONDITION_TYPE = new StepConditionType("ConfigCreated", "ClusterConfig");
     public static final String SUCCESS_STATUS_MESSAGE = "Successfully created cluster config: %s/%s";
     public static final String FAIL_STATUS_MESSAGE = "Failed to create cluster config: %s";
 
@@ -57,6 +58,11 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
 
     private final CustomResourceManager customResourceManager;
 
+    /**
+     * Constructor for CreateClusterConfigStep.
+     *
+     * @param customResourceManager The CustomResourceManager to manage Kubernetes resources.
+     */
     public CreateClusterConfigStep(CustomResourceManager customResourceManager) {
         this.customResourceManager = customResourceManager;
     }
@@ -81,7 +87,6 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
             Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus phase is required");
             Objects.requireNonNull(context, "Context<NetworkOperation> context is required");
 
-            final String timestamp = timestamp();
             final String namespace = resource.getMetadata().getNamespace();
             final Orbit orbit =
                     customResourceManager.orbitByName(resource.getSpec().getOrbit());
@@ -120,9 +125,10 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
                     desired.getMetadata().getNamespace(), desired.getMetadata().getName());
             final Condition condition = new ConditionBuilder()
                     .withObservedGeneration(resource.getMetadata().getGeneration())
-                    .withType(CONDITION_TYPE)
+                    .withType(CONDITION_TYPE.type())
+                    .withReason(CONDITION_TYPE.reason())
                     .withStatus(ConditionStatus.True)
-                    .withLastTransitionTime(timestamp)
+                    .withLastTransitionTime(timestamp())
                     .withMessage(SUCCESS_STATUS_MESSAGE.formatted(
                             desired.getMetadata().getNamespace(),
                             desired.getMetadata().getName()))
@@ -140,6 +146,16 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
         }
     }
 
+    /**
+     * Prepares the desired ConfigMap for the cluster configuration based on the provided parameters.
+     *
+     * @param resource The NetworkOperation resource being reconciled.
+     * @param context The Context object providing access to the Kubernetes client and other runtime information.
+     * @param orbit The Orbit associated with the network operation.
+     * @param consensusCapsules List of ConsensusCapsule objects representing the consensus nodes.
+     * @param config Existing ConfigMap (can be null if creating a new one).
+     * @return The desired ConfigMap to be created or updated
+     */
     ConfigMap prepareDesiredConfigMap(
             final NetworkOperation resource,
             final Context<NetworkOperation> context,
@@ -172,6 +188,14 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
                 .build();
     }
 
+    /**
+     * Prepares the ConfigMap data for the config.txt key based on the provided address book and node addresses.
+     *
+     * @param builder The ConfigMapBuilder instance to which the data is added.
+     * @param addressBook The AddressBook containing information about the nodes.
+     * @param nodeAddressMap Map of node IDs to their respective addresses.
+     * @return The updated ConfigMapBuilder with the config.txt data added
+     */
     ConfigMapBuilder prepareConfigTxt(
             final ConfigMapBuilder builder, final AddressBook addressBook, final Map<Long, String> nodeAddressMap) {
         StringBuilder sb = new StringBuilder();
@@ -181,6 +205,14 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
         return builder.addToData(CONFIG_KEY_CONFIG_TXT, sb.toString());
     }
 
+    /**
+     * Prepares a map of node IDs to their respective addresses based on the provided domain and consensus capsules.
+     *
+     * @param domain The cluster domain string.
+     * @param consensusCapsules List of ConsensusCapsule objects representing the consensus nodes.
+     * @param addressBook The AddressBook containing information about the nodes (optional).
+     * @return A map of node IDs to their respective addresses
+     */
     Map<Long, String> prepareNodeAddressMap(
             final String domain, final List<ConsensusCapsule> consensusCapsules, final AddressBook addressBook) {
         Map<Long, String> addresses = new TreeMap<>();
@@ -201,8 +233,6 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
         }
 
         // override with external addresses from the address book
-        // Note address book may have the full list of nodes or just the external addresses
-        // during network upgrade, we expect the address book to have the full list of nodes
         for (AddressBookEntry entry :
                 Optional.ofNullable(addressBook.getExternalAddresses()).orElse(emptyList())) {
             addresses.put(
@@ -223,12 +253,28 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
         return addresses;
     }
 
+    /**
+     * Computes the external address for a consensus node based on the provided capsule and name information.
+     *
+     * @param capsule The ConsensusCapsule object representing the node.
+     * @param name The name of the node.
+     * @param namespace The Kubernetes namespace of the node.
+     * @return The computed external address for the consensus node
+     */
     public static String computeNodeExternalAddress(ConsensusCapsule capsule, String name, String namespace) {
         return capsule.getSpec().getExternalAddress() != null
                 ? capsule.getSpec().getExternalAddress()
                 : name + "-svc." + namespace;
     }
 
+    /**
+     * Computes the internal address for a consensus node based on the provided domain and capsule information.
+     *
+     * @param domain The cluster domain string.
+     * @param capsule The ConsensusCapsule object representing the node.
+     * @param namespace The Kubernetes namespace of the node.
+     * @return The computed internal address for the consensus node
+     */
     public static String computeNodeInternalAddress(String domain, ConsensusCapsule capsule, String namespace) {
         return capsule.getSpec().getInternalAddress() != null
                 ? capsule.getSpec().getInternalAddress()
@@ -236,6 +282,17 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
                         .formatted(capsule.getMetadata().getName(), namespace, domain != null ? "." + domain : "");
     }
 
+    /**
+     * Prepares a ConfigMapBuilder by adding pod IPs to its data section based on the given primary
+     * {@code NetworkOperation} and expected count.
+     *
+     * @param builder The ConfigMapBuilder instance to which pod IPs will be added.
+     * @param primary The primary network operation containing namespace and other metadata.
+     * @param expected The expected number of pod IPs that should be present in the specified namespace with the given
+     *     labels.
+     * @return The updated ConfigMapBuilder with pod IPs data
+     * @throws ProcessorException If the number of pod IPs found does not match the expected count.
+     */
     private ConfigMapBuilder preparePodIPs(
             final ConfigMapBuilder builder, final NetworkOperation primary, final int expected) {
         Map<String, String> labels = Map.of(
@@ -259,6 +316,12 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
         return builder.addToData(CONFIG_KEY_POD_IPS, data);
     }
 
+    /**
+     * Extracts the IP addresses of pods that match the specified labels and are in a running state.
+     *
+     * @param podList The list of Pod objects from which to extract IP addresses.
+     * @return A list of strings representing the IP addresses of the pods
+     */
     private static List<String> extractPodIps(PodList podList) {
         return podList.getItems().stream()
                 .filter(pod -> pod.getMetadata().getDeletionTimestamp() == null)
@@ -272,6 +335,13 @@ public class CreateClusterConfigStep implements ProcessorStep<NetworkOperation, 
                 .toList();
     }
 
+    /**
+     * Checks if the given {@code NetworkOperationStatus} indicates that the network operation is complete or successful
+     * based on a specific condition type.
+     *
+     * @param status The status of the network operation to check.
+     * @return True if the network operation is considered done, false otherwise
+     */
     public static boolean isDone(NetworkOperationStatus status) {
         return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }

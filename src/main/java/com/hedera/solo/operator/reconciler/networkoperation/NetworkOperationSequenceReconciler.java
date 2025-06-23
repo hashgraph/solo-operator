@@ -36,6 +36,7 @@ import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
+import io.quarkiverse.operatorsdk.annotations.RBACRule;
 import jakarta.inject.Inject;
 import java.lang.invoke.MethodHandles;
 import java.time.Duration;
@@ -49,6 +50,14 @@ import org.jboss.logging.Logger;
 
 /** {@code NetworkOperationReconciler} operates on a single CR per namespace at any given time. */
 @ControllerConfiguration(name = "network-operation-v2")
+@RBACRule(
+        apiGroups = {""},
+        resources = {"secrets"},
+        verbs = {"create", "delete", "get", "list", "patch", "update", "watch"})
+@RBACRule(
+        apiGroups = {""},
+        resources = {"events"},
+        verbs = {"create", "delete", "get", "list", "patch", "update", "watch", "deletecollection"})
 public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOperation>, Cleaner<NetworkOperation> {
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
     private static final Sequencer<NetworkOperation> sequencer =
@@ -94,7 +103,7 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
     public ProcessorResult<NetworkOperationStatus> process(
             final NetworkOperation resource, final Context<NetworkOperation> context) throws Exception {
         log.infof(
-                "Processing network operation mode '%s/%s' [upgrade-step: %s, created: %s, uuid: %s, phase: %s, mode: %s]",
+                "Processing network operation '%s/%s' [upgrade-step: %s, created_at: %s, uuid: %s, phase: %s, mode: %s]",
                 resource.getMetadata().getNamespace(),
                 resource.getMetadata().getName(),
                 resource.getSpec().getNetworkUpgrade() != null
@@ -139,7 +148,7 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
         Objects.requireNonNull(context, "Network operation context cannot be null");
 
         log.infof(
-                "Reconciling network operation '%s/%s' [ created: %s, uuid: %s, mode: %s]",
+                "Reconciling network operation '%s/%s' [ created_at: %s, uuid: %s, mode: %s]",
                 resource.getMetadata().getNamespace(),
                 resource.getMetadata().getName(),
                 resource.getMetadata().getCreationTimestamp(),
@@ -158,7 +167,7 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
         // is this resource is done, then return
         if (isDone(resource)) {
             log.infof(
-                    "Networkoperation is done: '%s/%s' [created: %s, uuid: %s, phase: %s]",
+                    "Networkoperation is done: '%s/%s' [created_at: %s, uuid: %s, phase: %s]",
                     resource.getMetadata().getNamespace(),
                     resource.getMetadata().getName(),
                     resource.getMetadata().getCreationTimestamp(),
@@ -177,7 +186,7 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
             }
 
             log.infof(
-                    "Not first in queue: '%s/%s' [created: %s, uuid: %s, queue: %s]",
+                    "Not first in queue: '%s/%s' [created_at: %s, uuid: %s, queue: %s]",
                     resource.getMetadata().getNamespace(),
                     resource.getMetadata().getName(),
                     resource.getMetadata().getCreationTimestamp(),
@@ -209,12 +218,13 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
                 .build();
         if (isDone(desired)) {
             log.infof(
-                    "Marking as done: '%s/%s' [mode: %s, created: %s, uuid: %s]",
+                    "Processed network-operation resource: '%s/%s' [mode: %s, created_at: %s, uuid: %s, phase: %s]",
                     resource.getMetadata().getNamespace(),
                     resource.getMetadata().getName(),
                     resource.getSpec().getMode(),
                     resource.getMetadata().getCreationTimestamp(),
-                    resource.getMetadata().getUid());
+                    resource.getMetadata().getUid(),
+                    resource.getStatus().getPhase());
             sequencer.markAsCompleted(new SequencerRequest<>(desired));
             return UpdateControl.patchStatus(desired).rescheduleAfter(DEFAULT_RESCHEDULE_DELAY);
         }
@@ -222,7 +232,7 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
         final Duration delay = sequencer.computeReconcileDelay(
                 new SequencerRequest<>(desired, result.getReconcileDelay(), result.getProcessingTime()));
         log.infof(
-                "Finished reconciling: '%s/%s' [mode: %s, created: %s, uuid: %s, reconcile-delay: %s]",
+                "Finished reconciling: '%s/%s' [mode: %s, created_at: %s, uuid: %s, reconcile-delay: %s]",
                 resource.getMetadata().getNamespace(),
                 resource.getMetadata().getName(),
                 resource.getSpec().getMode(),
@@ -268,7 +278,7 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
                                 timestamp,
                                 "Network operation initialized",
                                 null,
-                                null,
+                                "Initialized",
                                 ConditionStatus.True,
                                 "Initialized")))
                 .build();
@@ -365,9 +375,11 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
                 .with(r -> r.editStatus()
                         .withPhase(NetworkOperationStatus.Phase.Failed)
                         .addToConditions(new ConditionBuilder()
+                                .withLastTransitionTime(timestamp())
+                                .withObservedGeneration(resource.getMetadata().getGeneration())
                                 .withType("Error")
-                                .withStatus(ConditionStatus.True)
                                 .withReason("Exception")
+                                .withStatus(ConditionStatus.True)
                                 .withMessage(e.getMessage())
                                 .build()))
                 .build();

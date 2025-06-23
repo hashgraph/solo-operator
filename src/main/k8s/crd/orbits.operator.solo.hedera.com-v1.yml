@@ -18,11 +18,14 @@ spec:
     - name: v1alpha1
       schema:
         openAPIV3Schema:
+          type: object
+          required:
+            - spec
           properties:
             spec:
-              $ref: "../openapi/orbit.yml#/components/schemas/OrbitSpec"
+              $ref: "../openapi/orbits.operator.solo.hedera.com-v1.yml#/components/schemas/OrbitSpec"
             status:
-              $ref: "../openapi/orbit.yml#/components/schemas/OrbitStatus"
+              $ref: "../openapi/orbits.operator.solo.hedera.com-v1.yml#/components/schemas/OrbitStatus"
       served: true
       storage: true
       subresources:

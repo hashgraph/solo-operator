@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Utility class to generate classname remapping for CRD annotated with x-java-type
+ * Utility class to generate classname remapping for CRD annotated with x-java-type.
  */
 public class JavaTypes {
     /**
@@ -23,7 +23,6 @@ public class JavaTypes {
      *
      * @param config any overrides configured for the generated package names
      * @param crd    the CRD
-     * @return
      */
     public static void update(Config config, JsonNode crd) {
         config.getExistingJavaTypes().putAll(new JavaTypes(config.getPackageOverrides()).process(crd));
@@ -33,10 +32,21 @@ public class JavaTypes {
     private final Map<String, String> config = new HashMap<>();
     private final Map<String, String> packageOverrides;
 
+    /**
+     * Constructor for JavaTypes that initializes the package overrides.
+     *
+     * @param packageOverrides a map of package name overrides
+     */
     private JavaTypes(Map<String, String> packageOverrides) {
         this.packageOverrides = packageOverrides;
     }
 
+    /**
+     * Processes the CRD to extract and update classname mappings.
+     *
+     * @param node the JsonNode representing the CRD
+     * @return a map of classname remappings
+     */
     private Map<String, String> process(JsonNode node) {
         String basePackage = Arrays.stream(node.at("/spec/group").asText().replace('-', '_').split("\\.")).reduce((a, b) -> b + "." + a).orElse("");
         String kind = node.at("/spec/names/kind").asText();
@@ -51,10 +61,23 @@ public class JavaTypes {
         return config;
     }
 
+    /**
+     * Retrieves a JsonNode by its name from the given node.
+     *
+     * @param node the root JsonNode to search within
+     * @param name the name of the JsonNode to retrieve
+     * @return an Optional containing the JsonNode if found, or empty if not
+     */
     private Optional<JsonNode> get(JsonNode node, String name) {
         return Optional.ofNullable(node.get(name));
     }
 
+    /**
+     * Recursively processes the properties of a JSON schema to extract and update classname mappings.
+     *
+     * @param node the JsonNode representing the schema properties
+     * @param name the base name for the current path in the schema hierarchy
+     */
     private void process(JsonNode node, String name) {
         if (null != node) {
             String type = get(node, "type").map(JsonNode::asText).orElse(null);

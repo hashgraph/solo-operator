@@ -11,9 +11,11 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationstatus.SoftwareSourceStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.common.ConsensusVerifier;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.StepConditionType;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.lang.invoke.MethodHandles;
+import java.util.List;
 import java.util.Objects;
 import org.jboss.logging.Logger;
 
@@ -40,8 +42,10 @@ import org.jboss.logging.Logger;
  * <p>It is important to review the following sources and objects to understand the context of this step:
  *
  * <ol>
- *   <li>'src/main/k8s/openapi/common.yml' - The common spec objects such as ImageRepository, ImageRepositoryStatus,
- *   <li>'src/main/k8s/openapi/networkoperation.yml' - The CRD object that represents the network operation
+ *   <li>'src/main/k8s/openapi/commons.operator.solo.hedera.com-v1.yml' - The common spec objects such as
+ *       ImageRepository, ImageRepositoryStatus,
+ *   <li>'src/main/k8s/openapi/networkoperations.operator.solo.hedera.com-v1.yml' - The CRD object that represents the
+ *       network operation
  *   <li>'src/test/resources/templates/network-operation/network-upgrade.yaml' - An example network operation CR
  *   <li>{@link NetworkOperation} - The CRD object that represents the network operation
  *   <li>{@link NetworkOperationStatus} - The status object that represents the status of the network operation
@@ -84,7 +88,7 @@ import org.jboss.logging.Logger;
  * <p>If a valid image source is found, add a condition to the status indicating the success and the selected source URL
  */
 public class VerifyConsensusNodeChangesetStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
-    public static final String CONDITION_TYPE = "ImageVerified: ConsensusNode";
+    public static final StepConditionType CONDITION_TYPE = new StepConditionType("ImageVerified", "ConsensusNode");
     public static final String SUCCESS_STATUS_MESSAGE =
             "Image verification succeeded for 'consensus-node'. Selected for deployment: %s";
     public static final String FAIL_STATUS_MESSAGE = "Image verification failed for 'consensus-node'";
@@ -125,23 +129,45 @@ public class VerifyConsensusNodeChangesetStep implements ProcessorStep<NetworkOp
                     SoftwareSourceStatus::getConsensusNode,
                     SoftwareSourceStatus::setConsensusNode);
 
+            if (!isDone(updated)) {
+                log.warnf(
+                        "Failed to verify consensus node image for network operation: %s/%s [ %s ]",
+                        resource.getMetadata().getNamespace(),
+                        resource.getMetadata().getName(),
+                        resource.getSpec().getNetworkUpgrade().getWorkflowStep());
+                return NetworkOperationStepUtil.prepareStatus(updated, List.of(), NetworkOperationStatus.Phase.Failed);
+            }
+
             log.infof(
-                    "Finished verification of 'consensus-node' image for network operation: %s/%s [ %s ]",
+                    "Successfully verified consensus node image for network operation: %s/%s [ %s ]",
                     resource.getMetadata().getNamespace(),
                     resource.getMetadata().getName(),
                     resource.getSpec().getNetworkUpgrade().getWorkflowStep());
 
-            return NetworkOperationStepUtil.checkLastCondition(updated);
+            return NetworkOperationStepUtil.prepareStatus(updated, List.of());
         } catch (Throwable t) {
             log.errorf(t, FAIL_STATUS_MESSAGE, t.getMessage());
             return NetworkOperationStepUtil.prepareFailed(resource, status, t.getMessage(), CONDITION_TYPE);
         }
     }
 
+    /**
+     * Creates a condition to be added to the {@link NetworkOperationStatus} when an image verification event occurs.
+     *
+     * @param status The current status of the network operation.
+     * @return A Condition object representing the state of the image verification
+     */
     private Condition createCondition(final NetworkOperationStatus status) {
         return ConsensusVerifier.createCondition(status, SUCCESS_STATUS_MESSAGE, FAIL_STATUS_MESSAGE, CONDITION_TYPE);
     }
 
+    /**
+     * Checks if the image verification for 'consensus-node' is done based on the current status of the network
+     * operation.
+     *
+     * @param status The current status of the network operation.
+     * @return True if the image verification is done and successful, false otherwise
+     */
     public static boolean isDone(NetworkOperationStatus status) {
         return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }

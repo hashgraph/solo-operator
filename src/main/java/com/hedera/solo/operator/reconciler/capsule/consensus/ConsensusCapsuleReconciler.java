@@ -43,6 +43,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.Workflow;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
+import io.quarkiverse.operatorsdk.annotations.RBACRule;
 import java.time.ZonedDateTime;
 import java.util.Comparator;
 import java.util.List;
@@ -53,6 +54,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.jboss.logging.Logger;
 
+/** The main class responsible for reconciling and managing consensus capsule resources in a Kubernetes cluster. */
 @Workflow(
         dependents = {
             @Dependent(name = "sa", type = CapsuleServiceAccount.class),
@@ -70,6 +72,18 @@ import org.jboss.logging.Logger;
             @Dependent(type = CapsulePod.class)
         })
 @ControllerConfiguration(name = "consensus-capsule")
+@RBACRule(
+        apiGroups = {""},
+        resources = {"secrets"},
+        verbs = {"create", "delete", "get", "list", "patch", "update", "watch"})
+@RBACRule(
+        apiGroups = {""},
+        resources = {"persistentvolumes"},
+        verbs = {"list", "get"})
+@RBACRule(
+        apiGroups = {""},
+        resources = {"events"},
+        verbs = {"create", "delete", "get", "list", "patch", "update", "watch", "deletecollection"})
 public class ConsensusCapsuleReconciler implements Cleaner<ConsensusCapsule>, Reconciler<ConsensusCapsule> {
     public static final Predicate<HasMetadata> HAS_LABEL_SELECTOR_CONSENSUS_NODE =
             hasLabel(Constants.LABEL_APP, Constants.COMPONENT_CONSENSUS_NODE);
@@ -124,7 +138,7 @@ public class ConsensusCapsuleReconciler implements Cleaner<ConsensusCapsule>, Re
     }
 
     /**
-     * Find pod with latest creation timestamp for the consensus capsule
+     * Find pod with latest creation timestamp for the consensus capsule.
      *
      * @param capsule the consensus capsule
      * @param context the context
@@ -138,6 +152,12 @@ public class ConsensusCapsuleReconciler implements Cleaner<ConsensusCapsule>, Re
                         pod -> ZonedDateTime.parse(pod.getMetadata().getCreationTimestamp())));
     }
 
+    /**
+     * Determines the phase of a consensus capsule based on its pods.
+     *
+     * @param pods The array of pods to evaluate.
+     * @return The ConsensusCapsuleStatus.Phase determined from the pods
+     */
     public static ConsensusCapsuleStatus.Phase phase(final Pod... pods) {
         ConsensusCapsuleStatus.Phase phase = ConsensusCapsuleStatus.Phase.Unknown;
 
@@ -185,6 +205,12 @@ public class ConsensusCapsuleReconciler implements Cleaner<ConsensusCapsule>, Re
         return phase;
     }
 
+    /**
+     * Validates the secrets configuration for the consensus capsule spec and sets conditions accordingly.
+     *
+     * @param capsule The consensus capsule resource.
+     * @return A consumer that applies validation logic to a condition
+     */
     Consumer<Condition> validateSecrets(final ConsensusCapsule capsule) {
         return condition -> {
             Secrets secrets = capsule.getSpec().getSecrets();

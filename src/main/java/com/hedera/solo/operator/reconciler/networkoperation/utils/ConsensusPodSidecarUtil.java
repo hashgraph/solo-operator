@@ -40,10 +40,6 @@ public final class ConsensusPodSidecarUtil {
         };
     }
 
-    public static String computeStreamUploaderConditionType(final String conditionType, final String containerName) {
-        return "%s [%s]".formatted(conditionType, toStreamUploaderType(containerName));
-    }
-
     public static boolean hasOtelChangeset(NetworkOperation resource) {
         if (Objects.isNull(resource)
                 || Objects.isNull(resource.getSpec())

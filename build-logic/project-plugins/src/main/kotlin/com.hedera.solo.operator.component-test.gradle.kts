@@ -19,7 +19,11 @@ configurations.named("componentTestImplementation").configure {
     extendsFrom(configurations.named("testImplementation").get())
 }
 
-tasks.named("assemble") { dependsOn(tasks.named("compileComponentTestJava")) }
+tasks.register("assembleComponentTest") {
+    dependsOn("compileComponentTestJava", "processComponentTestResources")
+}
+
+tasks.named("assemble") { dependsOn("assembleComponentTest") }
 
 tasks.named("check") { dependsOn(testing.suites.named("componentTest")) }
 

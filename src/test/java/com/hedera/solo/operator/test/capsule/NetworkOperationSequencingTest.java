@@ -21,21 +21,44 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
+/**
+ * The NetworkOperationSequencingTest class is a test suite designed to verify the sequencing of network operations,
+ * specifically focusing on the creation and progression of NetworkOperation CRs during the deployment process.
+ */
 @QuarkusTest
 public class NetworkOperationSequencingTest extends ConsensusCapsuleTestAbstract {
 
+    /**
+     * This method tests the single-node deployment scenario by calling the superclass method for
+     * testSingleNodeDeployment().
+     *
+     * @throws Exception if an error occurs during the test execution.
+     */
     @Override
     @Test
     void testSingleNodeDeployment() throws Exception {
         super.testSingleNodeDeployment();
     }
 
+    /**
+     * This method tests the multi-node deployment scenario by calling the superclass method for
+     * testMultiNodeDeployment().
+     *
+     * @throws Exception if an error occurs during the test execution.
+     */
     @Override
     @Test
     void testMultiNodeDeployment() throws Exception {
         super.testMultiNodeDeployment();
     }
 
+    /**
+     * Creates a NetworkOperation CR for network initialization and checks its status against expected conditions. Also,
+     * creates multiple NetworkCheck CRs to ensure they run sequentially after the network-genesis operation completes.
+     *
+     * @param consensusCapsules list of ConsensusCapsule instances representing the nodes in the network.
+     * @throws InterruptedException if the thread is interrupted while waiting for operations to complete.
+     */
     @Override
     protected void createNetworkOperation(List<ConsensusCapsule> consensusCapsules) throws InterruptedException {
         for (ConsensusCapsule consensusCapsule : consensusCapsules) {

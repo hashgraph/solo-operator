@@ -11,7 +11,6 @@ import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_COM
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_MANAGED_BY;
 import static com.hedera.solo.operator.reconciler.common.Constants.SOLO_OPERATOR;
 import static com.hedera.solo.operator.reconciler.common.Metadata.prepareNodeName;
-import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
 import static com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkCheckAddressBook.checkAddressBook;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -73,9 +72,6 @@ public class MultipleOrbitTest {
 
     @BeforeEach
     void setUp() {
-        if (isTestUsingGradleOrIntelliJ()) {
-            operator.start();
-        }
         cleanup();
 
         List<String> names = List.of("alpha", "beta", "gamma");

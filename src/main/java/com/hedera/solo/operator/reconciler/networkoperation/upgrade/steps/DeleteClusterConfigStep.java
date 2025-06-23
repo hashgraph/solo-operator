@@ -11,6 +11,7 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.StepConditionType;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.fabric8.kubernetes.api.model.ConfigMap;
@@ -20,14 +21,23 @@ import java.util.List;
 import java.util.Objects;
 import org.jboss.logging.Logger;
 
+/**
+ * This class defines the step for deleting the cluster configuration in a Kubernetes environment as part of a network
+ * upgrade operation.
+ */
 public class DeleteClusterConfigStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
-    public static final String CONDITION_TYPE = "ClusterConfigDeleted";
+    public static final StepConditionType CONDITION_TYPE = new StepConditionType("ConfigDeleted", "ClusterConfig");
     public static final String SUCCESS_STATUS_MESSAGE = "Successfully deleted '%s'";
     public static final String FAIL_STATUS_MESSAGE = "Failed to delete '%s':'%s'";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     private final CustomResourceManager customResourceManager;
 
+    /**
+     * Constructor for DeleteClusterConfigStep, initializing the custom resource manager.
+     *
+     * @param customResourceManager The CustomResourceManager instance to manage Kubernetes resources.
+     */
     public DeleteClusterConfigStep(CustomResourceManager customResourceManager) {
         this.customResourceManager = customResourceManager;
     }
@@ -92,11 +102,13 @@ public class DeleteClusterConfigStep implements ProcessorStep<NetworkOperation, 
 
             final Condition condition = new ConditionBuilder()
                     .withObservedGeneration(resource.getMetadata().getGeneration())
-                    .withType(CONDITION_TYPE)
+                    .withType(CONDITION_TYPE.type())
+                    .withReason(CONDITION_TYPE.reason())
                     .withStatus(ConditionStatus.True)
                     .withLastTransitionTime(timestamp())
                     .withMessage(SUCCESS_STATUS_MESSAGE.formatted(Constants.CLUSTER_CONFIG_NAME))
                     .build();
+
             return NetworkOperationStepUtil.prepareStatus(status, List.of(condition));
         } catch (Throwable t) {
             log.errorf(t, FAIL_STATUS_MESSAGE, t.getMessage());
@@ -104,6 +116,12 @@ public class DeleteClusterConfigStep implements ProcessorStep<NetworkOperation, 
         }
     }
 
+    /**
+     * Checks if the deletion of the cluster configuration is done based on the given condition type.
+     *
+     * @param status The NetworkOperationStatus instance to check for completion.
+     * @return true if done, false otherwise
+     */
     public static boolean isDone(NetworkOperationStatus status) {
         return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }

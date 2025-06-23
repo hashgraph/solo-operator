@@ -2,7 +2,7 @@
 
 package com.hedera.solo.operator.buildlogic.gitextractor;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import org.gradle.api.Project;
 import org.gradle.api.plugins.JavaPluginExtension;
@@ -10,7 +10,9 @@ import org.gradle.api.tasks.SourceSet;
 import org.gradle.testfixtures.ProjectBuilder;
 import org.junit.jupiter.api.Test;
 
-/** A simple unit test for the 'com.hedera.solo.operator.buildlogic.gitExtractor' plugin. */
+/**
+ * A simple unit test for the 'com.hedera.solo.operator.buildlogic.gitExtractor' plugin.
+ */
 class GitExtractorPluginTest {
     @Test
     void pluginRegistersATask() {

@@ -10,7 +10,9 @@ import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.library.processor.RetryStep;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
+import com.hedera.solo.operator.reconciler.networkoperation.check.steps.CheckConsensusCapsuleConfigurationStep;
 import com.hedera.solo.operator.reconciler.networkoperation.check.steps.CheckConsensusNodeReadyStep;
+import com.hedera.solo.operator.reconciler.networkoperation.check.steps.CheckOrbitConfigurationStep;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -18,16 +20,16 @@ import java.time.Duration;
 import java.util.List;
 
 /**
- * NetworkCheckTask checks that network is in valid state
+ * NetworkCheckTask checks that network is in valid state.
  *
- * <p>A valid network state check be defined by the following:
+ * <p>A valid network state check can be defined by the following:
  *
  * <ol>
  *   <li>Verify that actual version updates are applied to the pods based on the CR and mode of operation (e.g.
  *       NetworkGenesis, NetworkUpgrade etc.)
  *   <li>Verify that all configuration are applied correctly based on the CR and mode of operation
- *   <li>consensus nodes are in ACTIVE state and processing transactions.
- *   <li>stream uploaders are running and uploading files
+ *   <li>Consensus nodes are in ACTIVE state and processing transactions.
+ *   <li>Stream uploaders are running and uploading files
  *   <li>Other auxiliary components (if deployed) are running (no need for phase-1 (MVP) release)
  *       <ol>
  *         <li>HAProxy
@@ -47,6 +49,12 @@ public class NetworkCheckTask extends AbstractProcessorTask<NetworkOperation, Ne
 
     private final NetworkCheckTaskConfig checkConfig;
 
+    /**
+     * Constructor for NetworkCheckTask.
+     *
+     * @param customResourceManager The {@link CustomResourceManager} to manage custom resources.
+     * @param checkConfig The configuration for network check task.
+     */
     @Inject
     public NetworkCheckTask(CustomResourceManager customResourceManager, NetworkCheckTaskConfig checkConfig) {
         this.customResourceManager = customResourceManager;
@@ -56,8 +64,8 @@ public class NetworkCheckTask extends AbstractProcessorTask<NetworkOperation, Ne
     @Override
     public List<ProcessorStep<NetworkOperation, NetworkOperationStatus>> steps() throws ProcessorException {
         return List.of(
-                // new CheckOrbitConfigurationStep(customResourceManager),
-                // new CheckConsensusPodConfigurationStep(customResourceManager),
+                new CheckOrbitConfigurationStep(customResourceManager),
+                new CheckConsensusCapsuleConfigurationStep(customResourceManager),
                 new RetryStep<>(
                         new CheckConsensusNodeReadyStep(customResourceManager),
                         Duration.ofSeconds(checkConfig.retryInterval()),
@@ -76,6 +84,12 @@ public class NetworkCheckTask extends AbstractProcessorTask<NetworkOperation, Ne
         return null; // it does not have any deferred processor
     }
 
+    /**
+     * Checks if the network check task is done based on the given status.
+     *
+     * @param status The current {@link NetworkOperationStatus}.
+     * @return True if the task is done, otherwise false
+     */
     public static boolean isDone(NetworkOperationStatus status) {
         return CheckConsensusNodeReadyStep.isDone(status);
     }

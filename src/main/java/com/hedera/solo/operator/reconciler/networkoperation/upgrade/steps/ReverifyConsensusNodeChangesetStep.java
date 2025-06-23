@@ -11,15 +11,18 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationstatus.SoftwareSourceStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.common.ConsensusVerifier;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.StepConditionType;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.lang.invoke.MethodHandles;
+import java.util.List;
 import java.util.Objects;
 import org.jboss.logging.Logger;
 
 /**
  * ReverifyConsensusNodeChangesetStep re-verifies the consensus node changeset and selects a new image if the original
- * selection is no longer available.
+ * selection is no longer available. It uses {@link ConsensusVerifier} to check the validity of the selected registry,
+ * updates the status with the result, and handles the case where no valid registry is found.
  *
  * <p>Refer to
  * {@link com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyConsensusNodeChangesetStep} to
@@ -52,7 +55,7 @@ import org.jboss.logging.Logger;
  * </ol>
  */
 public class ReverifyConsensusNodeChangesetStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
-    public static final String CONDITION_TYPE = "ImageReVerified: ConsensusNode";
+    public static final StepConditionType CONDITION_TYPE = new StepConditionType("ImageReverified", "ConsensusNode");
     public static final String SUCCESS_STATUS_MESSAGE =
             "Image re-verification succeeded for 'consensus-node'. Selected for deployment: %s";
     public static final String FAIL_STATUS_MESSAGE = "Image re-verification failed for 'consensus-node'";
@@ -82,7 +85,7 @@ public class ReverifyConsensusNodeChangesetStep implements ProcessorStep<Network
             Objects.requireNonNull(context, "Context<NetworkOperation> is required");
 
             log.infof(
-                    "Re-verifying consensus node image for network operation: %s/%s [ %s ]",
+                    "Reverifying consensus node image for network operation: %s/%s [ %s ]",
                     resource.getMetadata().getNamespace(),
                     resource.getMetadata().getName(),
                     resource.getSpec().getNetworkUpgrade().getWorkflowStep());
@@ -96,23 +99,44 @@ public class ReverifyConsensusNodeChangesetStep implements ProcessorStep<Network
                     SoftwareSourceStatus::getConsensusNode,
                     SoftwareSourceStatus::setConsensusNode);
 
+            if (!isDone(updated)) {
+                log.warnf(
+                        "Failed to re-verify consensus node image for network operation: %s/%s [ %s ]",
+                        resource.getMetadata().getNamespace(),
+                        resource.getMetadata().getName(),
+                        resource.getSpec().getNetworkUpgrade().getWorkflowStep());
+                return NetworkOperationStepUtil.prepareStatus(updated, List.of(), NetworkOperationStatus.Phase.Failed);
+            }
+
             log.infof(
-                    "Finished re-verification of consensus node image for network operation: %s/%s [ %s ]",
+                    "Successfully re-verified consensus node image for network operation: %s/%s [ %s ]",
                     resource.getMetadata().getNamespace(),
                     resource.getMetadata().getName(),
                     resource.getSpec().getNetworkUpgrade().getWorkflowStep());
 
-            return NetworkOperationStepUtil.checkLastCondition(updated);
+            return NetworkOperationStepUtil.prepareStatus(updated, List.of());
         } catch (Throwable t) {
             log.errorf(t, FAIL_STATUS_MESSAGE, t.getMessage());
             return NetworkOperationStepUtil.prepareFailed(resource, status, t.getMessage(), CONDITION_TYPE);
         }
     }
 
+    /**
+     * Creates a condition for the validation of the consensus node image based on the status message.
+     *
+     * @param status The current NetworkOperationStatus to create the condition for
+     * @return A Condition object representing the status of the consensus node image re-verification
+     */
     private Condition createCondition(final NetworkOperationStatus status) {
         return ConsensusVerifier.createCondition(status, SUCCESS_STATUS_MESSAGE, FAIL_STATUS_MESSAGE, CONDITION_TYPE);
     }
 
+    /**
+     * Checks if the image re-verification process is done by checking the condition type in the status.
+     *
+     * @param status The current NetworkOperationStatus to check
+     * @return true if the image re-verification is done, false otherwise
+     */
     public static boolean isDone(NetworkOperationStatus status) {
         return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }

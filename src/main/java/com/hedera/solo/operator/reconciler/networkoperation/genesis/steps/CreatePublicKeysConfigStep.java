@@ -23,6 +23,7 @@ import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.StepConditionType;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import io.fabric8.kubernetes.api.model.ConfigMap;
@@ -43,11 +44,16 @@ import org.jboss.logging.Logger;
  */
 public class CreatePublicKeysConfigStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     private final CustomResourceManager customResourceManager;
-    public static final String CONDITION_TYPE = "PublicKeyConfigCreated";
+    public static final StepConditionType CONDITION_TYPE = new StepConditionType("ConfigCreated", "PublicKeyConfig");
     public static final String SUCCESS_STATUS_MESSAGE = "Successfully created public key secret: %s/%s";
     public static final String FAIL_STATUS_MESSAGE = "Failed to create public key secret: %s";
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
+    /**
+     * Constructor for CreatePublicKeysConfigStep.
+     *
+     * @param customResourceManager CustomResourceManager instance for managing Kubernetes resources.
+     */
     public CreatePublicKeysConfigStep(CustomResourceManager customResourceManager) {
         this.customResourceManager = customResourceManager;
     }
@@ -114,7 +120,8 @@ public class CreatePublicKeysConfigStep implements ProcessorStep<NetworkOperatio
 
             final Condition condition = new ConditionBuilder()
                     .withObservedGeneration(resource.getMetadata().getGeneration())
-                    .withType(CONDITION_TYPE)
+                    .withType(CONDITION_TYPE.type())
+                    .withReason(CONDITION_TYPE.reason())
                     .withStatus(ConditionStatus.True)
                     .withLastTransitionTime(timestamp())
                     .withMessage(SUCCESS_STATUS_MESSAGE.formatted(
@@ -128,6 +135,16 @@ public class CreatePublicKeysConfigStep implements ProcessorStep<NetworkOperatio
         }
     }
 
+    /**
+     * Prepares the desired configmap for public keys based on the provided resource and other inputs.
+     *
+     * @param primary NetworkOperation resource being processed.
+     * @param context Context containing information about the Kubernetes client and other runtime data.
+     * @param orbit Orbit specification to retrieve address book details.
+     * @param consensusCapsules List of ConsensusCapsule instances to extract public keys from.
+     * @param existing Existing configmap if it exists, or null if a new one is being created.
+     * @return ConfigMapBuilder instance representing the desired state of the configmap
+     */
     private ConfigMap prepareDesiredConfigMap(
             final NetworkOperation primary,
             final Context<NetworkOperation> context,
@@ -154,6 +171,16 @@ public class CreatePublicKeysConfigStep implements ProcessorStep<NetworkOperatio
                 .build();
     }
 
+    /**
+     * Adds public keys to the configmap builder from consensus capsules and address book entries.
+     *
+     * @param builder ConfigMapBuilder instance to which public keys are added.
+     * @param namespace Kubernetes namespace where the configmap is being created/updated.
+     * @param consensusCapsules List of ConsensusCapsule instances to extract public keys from.
+     * @param addressBook AddressBook specification containing external addresses with public keys.
+     * @return ConfigMapBuilder instance with added public keys
+     * @throws ProcessorException if a required secret is not found.
+     */
     private ConfigMapBuilder publicKeys(
             final ConfigMapBuilder builder,
             final String namespace,
@@ -192,6 +219,12 @@ public class CreatePublicKeysConfigStep implements ProcessorStep<NetworkOperatio
         return builder;
     }
 
+    /**
+     * Checks if the step is done based on the current status of the network operation.
+     *
+     * @param status NetworkOperationStatus representing the current state of the network operation.
+     * @return true if the step is successful, otherwise false
+     */
     public static boolean isDone(NetworkOperationStatus status) {
         return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }

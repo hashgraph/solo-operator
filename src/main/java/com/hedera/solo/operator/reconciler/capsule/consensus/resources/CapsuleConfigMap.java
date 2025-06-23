@@ -14,10 +14,15 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 
+/**
+ * The {@code CapsuleConfigMap} class is a Kubernetes dependent resource that manages ConfigMap resources for
+ * ConsensusCapsule objects.
+ */
 @KubernetesDependent(informer = @Informer(labelSelector = "app=consensus-node"))
 public class CapsuleConfigMap extends CRUDKubernetesDependentResource<ConfigMap, ConsensusCapsule> {
     public static final String NAME_SUFFIX = "-cm";
 
+    /** Constructs a new {@code CapsuleConfigMap} object. */
     public CapsuleConfigMap() {
         super(ConfigMap.class);
     }

@@ -45,7 +45,7 @@ jobs:
     runs-on: solo-linux-medium
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@c6295a65d1254861815972266d5933fd6e532bdf # v2.11.1
+        uses: step-security/harden-runner@002fdce3c6a235733a90a27c80493a3241e56863 # v2.12.1
         with:
           egress-policy: audit
 
@@ -73,16 +73,70 @@ jobs:
         if: ${{ inputs.enable-spotless-check && !cancelled() && !failure() }}
         run: ./gradlew spotlessCheck --scan
 
+      - name: Component Tests
+        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
+        run: ./gradlew componentTest --scan
+
+      - name: Kubernetes KinD Cluster
+        id: kind
+        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
+        uses: helm/kind-action@d730aaf5682e7d9c25245c74b8a105b96decb21a
+        with:
+          registry: true
+
+      - name: Set up QEMU
+        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+
+      - name: Set up Docker Buildx
+        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+        with:
+          buildkitd-config-inline: |
+            [registry."kind-registry:5000"]
+              http = true
+          driver-opts: |
+            network=container:kind-registry
+
+      - name: Set up Helm
+        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
+
+      - name: Publish to registry
+        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
+        env:
+          QUARKUS_CONTAINER_IMAGE_BUILD: true
+          QUARKUS_CONTAINER_IMAGE_PUSH: true
+          QUARKUS_CONTAINER_IMAGE_REGISTRY: ${{ steps.kind.outputs.LOCAL_REGISTRY }}
+          QUARKUS_DOCKER_BUILDX_PLATFORM: linux/amd64,linux/arm64
+          ORG_GRADLE_PROJECT_version: 0.0.0-${{ github.sha }}
+        run: |
+          ./gradlew clean assemble
+          helm package build/helm
+          helm upgrade solo-operator solo-operator-${ORG_GRADLE_PROJECT_version}.tgz -i -n solo-operator --create-namespace
+
       - name: Unit Tests
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
-        run: ./gradlew check --scan
+        env:
+          SOLO_OPERATOR_TEST_USING_EXTERNAL_OPERATOR_INSTANCE: true
+          QUARKUS_KUBERNETES_CLIENT_DEVSERVICES_OVERRIDE_KUBECONFIG: false
+        run: |
+          ./gradlew test --scan -x componentTest
+          kubectl -n solo-operator logs -l app.kubernetes.io/name=solo-operator --tail -1 --timestamps > operator.log
 
       - name: Publish Unit Test Report
-        uses: step-security/publish-unit-test-result-action@cc82caac074385ae176d39d2d143ad05e1130b2d # v2.18.0
+        uses: step-security/publish-unit-test-result-action@b495e9a82021fc8f34737416de688298581b847d # v2.19.0
         if: ${{ inputs.enable-unit-tests && !cancelled() }}
         with:
           check_name: "Unit Test Results"
           files: "**/build/test-results/test/TEST-*.xml"
+
+      - name: Publish Operator Log
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ inputs.enable-unit-tests && !cancelled() }}
+        with:
+          name: "Operator Log"
+          path: "operator.log"
 
       - name: Publish Unit Test Coverage Reports
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

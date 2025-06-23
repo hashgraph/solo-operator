@@ -24,6 +24,9 @@ import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.TaskAction;
 
+/**
+ * The ObjectModelGeneratorTask class is a Gradle task that generates object model from YAML CRD (Custom Resource Definition) files and OpenAPI specifications.
+ */
 @CacheableTask
 public class ObjectModelGeneratorTask extends DefaultTask {
     YAMLFactory yamlFactory = new YAMLFactory();
@@ -40,6 +43,11 @@ public class ObjectModelGeneratorTask extends DefaultTask {
     @OutputDirectory
     Path targetJava;
 
+    /**
+     * Constructs a new ObjectModelGeneratorTask with the given extension.
+     *
+     * @param extension The extension containing configuration for the task.
+     */
     @Inject
     public ObjectModelGeneratorTask(ObjectModelGeneratorExtension extension) {
         this.extension = extension;
@@ -49,38 +57,83 @@ public class ObjectModelGeneratorTask extends DefaultTask {
         this.targetJava = extension.targetJava.toPath();
     }
 
+    /**
+     * Gets the source CRD directory path.
+     *
+     * @return The path to the source CRD directory
+     */
     public Path getSourceCrd() {
         return sourceCrd;
     }
 
+    /**
+     * Sets the source CRD directory path.
+     *
+     * @param sourceCrd The new path for the source CRD directory.
+     */
     public void setSourceCrd(Path sourceCrd) {
         this.sourceCrd = sourceCrd;
     }
 
+    /**
+     * Gets the source OpenAPI directory path.
+     *
+     * @return The path to the source OpenAPI directory
+     */
     public Path getSourceOpenAPI() {
         return sourceOpenAPI;
     }
 
+    /**
+     * Sets the source OpenAPI directory path.
+     *
+     * @param sourceOpenAPI The new path for the source OpenAPI directory.
+     */
     public void setSourceOpenAPI(Path sourceOpenAPI) {
         this.sourceOpenAPI = sourceOpenAPI;
     }
 
+    /**
+     * Gets the target CRD directory path.
+     *
+     * @return The path to the target CRD directory
+     */
     public Path getTargetCrd() {
         return targetCrd;
     }
 
+    /**
+     * Sets the target CRD directory path.
+     *
+     * @param targetCrd The new path for the target CRD directory.
+     */
     public void setTargetCrd(Path targetCrd) {
         this.targetCrd = targetCrd;
     }
 
+    /**
+     * Gets the target Java directory path.
+     *
+     * @return The path to the target Java directory
+     */
     public Path getTargetJava() {
         return targetJava;
     }
 
+    /**
+     * Sets the target Java directory path.
+     *
+     * @param targetJava The new path for the target Java directory.
+     */
     public void setTargetJava(Path targetJava) {
         this.targetJava = targetJava;
     }
 
+    /**
+     * Generates the object model by processing CRD files and OpenAPI specifications.
+     *
+     * @throws IOException If an I/O error occurs.
+     */
     @TaskAction
     public void generateObjectModel() throws IOException {
         targetCrd.toFile().mkdirs();
@@ -93,6 +146,12 @@ public class ObjectModelGeneratorTask extends DefaultTask {
         }
     }
 
+    /**
+     * Processes a CRD file to generate the corresponding Java model files.
+     *
+     * @param file The path to the CRD file.
+     * @throws RuntimeException If an error occurs during processing.
+     */
     void process(Path file) {
         Config config = extension.configBuilderOverrides.getOrDefault(file.getFileName().toString(), extension.defaultConfigBuilder).build();
         if (config.getFilesSuffixes().stream().noneMatch(suffix -> file.getFileName().toString().endsWith(suffix))) {
