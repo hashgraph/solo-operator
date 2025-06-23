@@ -13,12 +13,26 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernete
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import io.javaoperatorsdk.operator.processing.dependent.workflow.Condition;
 
+/**
+ * The `CapsuleStatsPvc` class is responsible for managing the desired state of a PersistentVolumeClaim (PVC) for
+ * statistics data in a Kubernetes cluster.
+ *
+ * <p>The primary purpose of this class is to ensure that the desired state of the PVC matches the specifications
+ * defined in the `ConsensusCapsule` resource. It also provides a condition to check if the PVC is ready.
+ */
 @KubernetesDependent
 public class CapsuleStatsPvc extends CRUDKubernetesDependentResource<PersistentVolumeClaim, ConsensusCapsule> {
+    /** Constructs a new instance of `CapsuleStatsPvc`, initializing it to manage PersistentVolumeClaim resources. */
     public CapsuleStatsPvc() {
         super(PersistentVolumeClaim.class);
     }
 
+    /**
+     * Retrieves the specification for the persistent volume claim from the primary resource's spec, if available.
+     *
+     * @param primary The `ConsensusCapsule` resource which serves as the primary resource for this dependent resource.
+     * @return The specification of the PVC, or null if not specified
+     */
     private static PersistentVolumeClaimSpec getInputPvcSpec(final ConsensusCapsule primary) {
         if (primary.getSpec().getPersistentVolumeClaims() == null) {
             return null;
@@ -33,6 +47,10 @@ public class CapsuleStatsPvc extends CRUDKubernetesDependentResource<PersistentV
         return CapsulePvcUtil.prepareDesired(primary, getInputPvcSpec(primary), VOLUME_STATS_NAME_SUFFIX);
     }
 
+    /**
+     * Defines a condition to check if the PVC is ready based on whether it has been specified in the `ConsensusCapsule`
+     * resource.
+     */
     public static class Ready implements Condition<PersistentVolumeClaim, ConsensusCapsule> {
         @Override
         public boolean isMet(
