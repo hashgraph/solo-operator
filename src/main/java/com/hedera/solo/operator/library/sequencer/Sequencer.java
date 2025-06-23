@@ -35,6 +35,11 @@ public final class Sequencer<T extends HasMetadata> {
 
     private static final Duration MAX_REFRESH_INTERVAL = Duration.ofMinutes(1);
 
+    /**
+     * Constructs a Sequencer with the supplier of active resources.
+     *
+     * @param activeResources supplier of active resources
+     */
     public Sequencer(final Supplier<List<T>> activeResources) {
         Objects.requireNonNull(activeResources, "activeResources parameter cannot be null");
         this.activeResources = activeResources;
@@ -65,6 +70,7 @@ public final class Sequencer<T extends HasMetadata> {
      * either the item is found in the cache or it is refreshed again if not found
      *
      * @param resource custom resource
+     * @return the sequenced item if found, or null if not found after refresh
      */
     public synchronized Sequenced findOrRefresh(final T resource) {
         Objects.requireNonNull(resource, "resource cannot be null");
@@ -100,7 +106,7 @@ public final class Sequencer<T extends HasMetadata> {
      * @param resource custom resource
      * @param recommendedDelay recommended delay
      * @param estimatedProcessingTime estimated processing time
-     * @return the reconcile delay based on the items in the queue and recommended metadata.
+     * @return the reconcile delay based on the items in the queue and recommended metadata
      */
     private synchronized Duration computeReconcileDelay(
             final T resource, final Duration recommendedDelay, final Duration estimatedProcessingTime) {
@@ -147,7 +153,7 @@ public final class Sequencer<T extends HasMetadata> {
      * Compute the reconcile delay based on the recommended delay, estimated processing time and the items in the queue.
      *
      * @param request request including the resource, recommended delay and estimated processing time
-     * @return the reconcile delay based on the items in the queue and recommended metadata.
+     * @return the reconcile delay based on the items in the queue and recommended metadata
      */
     public synchronized Duration computeReconcileDelay(final SequencerRequest<T> request) {
         return computeReconcileDelay(request.resource(), request.reconcileDelay(), request.processingTime());
@@ -184,7 +190,7 @@ public final class Sequencer<T extends HasMetadata> {
     }
 
     /**
-     * Mark the resource as processed and perform any cleanup
+     * Mark the resource as processed and perform any cleanup.
      *
      * <p>Reconciler must call this after it has reconciled the resource successfully. It removes the resource from the
      * cache if it was the first in the queue.
@@ -221,7 +227,7 @@ public final class Sequencer<T extends HasMetadata> {
     }
 
     /**
-     * Mark the resource as deleted and perform any cleanup
+     * Mark the resource as deleted and perform any cleanup.
      *
      * <p>Reconciler must call this if it detects a resource is deleted. Metadata about the deleted resource is removed
      * from the cache.
@@ -239,7 +245,7 @@ public final class Sequencer<T extends HasMetadata> {
     }
 
     /**
-     * Get the sequence of items in the cache for a given namespace
+     * Get the sequence of items in the cache for a given namespace.
      *
      * @param namespace the namespace
      * @return the list of items in the cache

@@ -22,7 +22,7 @@ public final class RetryStep<T extends CustomResource<?, S>, S> implements Proce
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     /**
-     * Create a new RetryStep with defaults
+     * Create a new RetryStep with defaults.
      *
      * @param step the step to retry
      */
@@ -36,6 +36,8 @@ public final class RetryStep<T extends CustomResource<?, S>, S> implements Proce
      * @param step the step to retry
      * @param retryInterval the interval between retries
      * @param maxRetries the maximum number of retries
+     * @throws IllegalArgumentException if step is null, retryInterval is null or not greater than 0, or maxRetries is
+     *     not greater than 0
      */
     public RetryStep(final ProcessorStep<T, S> step, final Duration retryInterval, final int maxRetries) {
         Objects.requireNonNull(step, "retryable step must not be null");
@@ -89,6 +91,7 @@ public final class RetryStep<T extends CustomResource<?, S>, S> implements Proce
         return step.shouldSkip(resource, status);
     }
 
+    /** Applies the retry interval by sleeping for the specified duration. */
     private void applyRetryInterval() {
         try {
             Thread.sleep(retryInterval.toMillis());

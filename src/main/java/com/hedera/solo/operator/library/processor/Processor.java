@@ -10,6 +10,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
  * Processor encapsulates the data and logic to execute a single step of business process.
  *
  * @param <T> the type of the resource
+ * @param <S> the type of the resource status
  * @param <R> the type of the result
  */
 public interface Processor<T extends HasMetadata, S extends KubernetesResource, R extends ProcessorResult<S>> {
