@@ -22,6 +22,10 @@ import io.quarkus.qute.TemplateInstance;
 import java.util.Objects;
 import java.util.Optional;
 
+/**
+ * The CapsuleTelemetryConfig class is a Kubernetes dependent resource that manages the ConfigMap for OpenTelemetry
+ * collector configuration.
+ */
 @KubernetesDependent
 public class CapsuleTelemetryConfig extends CRUDKubernetesDependentResource<ConfigMap, ConsensusCapsule> {
 
@@ -30,10 +34,17 @@ public class CapsuleTelemetryConfig extends CRUDKubernetesDependentResource<Conf
 
     public static final String NAME_SUFFIX = "otel-collector-config";
 
+    /** Constructor for CapsuleTelemetryConfig class, initializes the dependent resource with ConfigMap type. */
     public CapsuleTelemetryConfig() {
         super(ConfigMap.class);
     }
 
+    /**
+     * Generates a valid ConfigMap name based on the ConsensusCapsule primary resource.
+     *
+     * @param primary The ConsensusCapsule primary resource.
+     * @return A string representing the valid ConfigMap name
+     */
     private static String validConfigMapName(final ConsensusCapsule primary) {
         return "%s-%s".formatted(Metadata.prepareNodeName(primary), NAME_SUFFIX);
     }
@@ -58,6 +69,12 @@ public class CapsuleTelemetryConfig extends CRUDKubernetesDependentResource<Conf
                 .build();
     }
 
+    /**
+     * Retrieves the input OpenTelemetryCollector specification from the ConsensusCapsule primary resource.
+     *
+     * @param primary The ConsensusCapsule primary resource.
+     * @return An Optional containing the OpenTelemetryCollector if present, otherwise empty
+     */
     private static Optional<OpenTelemetryCollector> getInputOtelCollector(final ConsensusCapsule primary) {
         if (primary.getSpec().getPodProperties() == null) {
             return Optional.empty();
@@ -67,6 +84,13 @@ public class CapsuleTelemetryConfig extends CRUDKubernetesDependentResource<Conf
                 primary.getSpec().getPodProperties().getContainers().getOpenTelemetryCollector());
     }
 
+    /**
+     * Renders the Qute template to generate a ConfigMap for OpenTelemetry collector configuration.
+     *
+     * @param primary The ConsensusCapsule primary resource.
+     * @param context The operator context.
+     * @return A ConfigMap instance rendered from the Qute template
+     */
     protected ConfigMap renderTemplate(ConsensusCapsule primary, Context<ConsensusCapsule> context) {
         final String orbitName = primary.getMetadata().getName();
         final Optional<OpenTelemetryCollector> oc = getInputOtelCollector(primary);
@@ -78,6 +102,10 @@ public class CapsuleTelemetryConfig extends CRUDKubernetesDependentResource<Conf
         return Serialization.unmarshal(templateInstance.render(), ConfigMap.class);
     }
 
+    /**
+     * Condition class to check if the desired ConfigMap is ready for use in the ConsensusCapsule reconciliation
+     * process.
+     */
     public static class Ready implements Condition<ConfigMap, ConsensusCapsule> {
         @Override
         public boolean isMet(

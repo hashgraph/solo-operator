@@ -74,6 +74,10 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import org.jboss.logging.Logger;
 
+/**
+ * CapsuleDeployment is a Kubernetes dependent resource that manages the deployment of a ConsensusCapsule. It handles
+ * the creation, update, and deletion of the deployment based on the ConsensusCapsule specification.
+ */
 @KubernetesDependent(
         informer =
                 @Informer(
@@ -91,12 +95,13 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
     @Location("consensus-capsule/deployment.yaml")
     Template tpl;
 
+    /** Constructor for CapsuleDeployment. */
     public CapsuleDeployment() {
         super(Deployment.class);
     }
 
     /**
-     * Validate the input
+     * Validate the input.
      *
      * @param primary ConsensusCapsule instance
      * @param context An instance of context
@@ -127,6 +132,12 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         }
     }
 
+    /**
+     * Prepare labels for the ConsensusCapsule.
+     *
+     * @param primary ConsensusCapsule instance
+     * @return Map of labels for the ConsensusCapsule
+     */
     static Map<String, String> prepareLabels(ConsensusCapsule primary) {
         return Metadata.prepareConsensusNodeLabels(
                 primary.getSpec().getNodeId(), primary.getSpec().getAccountId());
@@ -187,6 +198,13 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         return deploymentBuilder.build();
     }
 
+    /**
+     * Sets the desired pod specification on the provided {@link DeploymentBuilder} using the properties from the given
+     * {@link ConsensusCapsule} instance.
+     *
+     * @param primary the {@link ConsensusCapsule} containing the desired pod properties (must not be null)
+     * @param deploymentBuilder the {@link DeploymentBuilder} to update (must not be null)
+     */
     private void setDesiredPodSpec(ConsensusCapsule primary, DeploymentBuilder deploymentBuilder) {
         copyPodProperties(primary.getSpec().getPodProperties(), deploymentBuilder);
 
@@ -205,6 +223,14 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
     }
 
     // FIXME: check property is set before using it
+    /**
+     * Copies the properties from the given {@link PodProperties} to the provided {@link DeploymentBuilder}.
+     *
+     * @param props the {@link PodProperties} containing the desired pod configuration (must not be null)
+     * @param builder the {@link DeploymentBuilder} to apply the properties to
+     * @return the updated {@link DeploymentBuilder}
+     * @throws NullPointerException if {@code props} is null
+     */
     DeploymentBuilder copyPodProperties(@NonNull final PodProperties props, final DeploymentBuilder builder) {
         Objects.requireNonNull(props);
         var spec = builder.editSpec().editTemplate().editSpec();
@@ -252,6 +278,13 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         return spec.endSpec().endTemplate().endSpec();
     }
 
+    /**
+     * Get template with default values filled in.
+     *
+     * @param primary ConsensusCapsule instance
+     * @param context An instance of context
+     * @return template instance with default values
+     */
     private TemplateInstance getTemplateWithDefaults(ConsensusCapsule primary, Context<ConsensusCapsule> context) {
         final Long nodeId = primary.getSpec().getNodeId();
         final String nodeName = Metadata.prepareNodeName(primary);
@@ -273,6 +306,12 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         return templateInstance;
     }
 
+    /**
+     * Get the stream uploader containers for the ConsensusCapsule.
+     *
+     * @param primary ConsensusCapsule instance
+     * @return Map of Optional StreamUploader instances
+     */
     protected Map<String, Optional<StreamUploader>> prepareStreamUploaderContainers(ConsensusCapsule primary) {
         final Optional<StreamUploader> rsu = this.prepareRecordStreamUploader(primary);
         final Optional<StreamUploader> esu = this.prepareEventStreamUploader(primary);
@@ -286,6 +325,13 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
                 TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER, rssu);
     }
 
+    /**
+     * Render the deployment template for the ConsensusCapsule.
+     *
+     * @param primary ConsensusCapsule instance
+     * @param context An instance of context
+     * @return Deployment instance
+     */
     protected Deployment renderDeploymentTemplate(ConsensusCapsule primary, Context<ConsensusCapsule> context) {
 
         // fetch public keys configmap
@@ -313,6 +359,12 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         return Serialization.unmarshal(tplInstance.render(), Deployment.class);
     }
 
+    /**
+     * Prepare RecordStreamUploader if it is defined in the ConsensusCapsule.
+     *
+     * @param primary ConsensusCapsule instance
+     * @return Optional of StreamUploader for record stream
+     */
     private Optional<StreamUploader> prepareRecordStreamUploader(ConsensusCapsule primary) {
         final Optional<StreamUploader> rsu = this.setStreamFileExtensions(
                 primary.getSpec().getPodProperties().getContainers().getRecordStreamUploader(),
@@ -332,6 +384,12 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         return rsu;
     }
 
+    /**
+     * Prepare RecordStreamSidecarFilesUploader if it is defined in the ConsensusCapsule.
+     *
+     * @param primary ConsensusCapsule instance
+     * @return Optional of StreamUploader for record stream sidecar files
+     */
     private Optional<StreamUploader> prepareRecordStreamSidecarFilesUploader(ConsensusCapsule primary) {
         final Optional<StreamUploader> rssu = this.setStreamFileExtensions(
                 primary.getSpec().getPodProperties().getContainers().getRecordStreamSidecarFilesUploader(),
@@ -355,6 +413,12 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         return rssu;
     }
 
+    /**
+     * Prepare EventStreamUploader if it is defined in the ConsensusCapsule.
+     *
+     * @param primary ConsensusCapsule instance
+     * @return Optional of StreamUploader for event stream
+     */
     private Optional<StreamUploader> prepareEventStreamUploader(ConsensusCapsule primary) {
         final Optional<StreamUploader> esu = this.setStreamFileExtensions(
                 primary.getSpec().getPodProperties().getContainers().getEventsStreamUploader(),
@@ -368,6 +432,12 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         return esu;
     }
 
+    /**
+     * Prepare BackupUploader if it is defined in the ConsensusCapsule.
+     *
+     * @param primary ConsensusCapsule instance
+     * @return Optional of StreamUploader for backup
+     */
     private Optional<StreamUploader> prepareBackupUploader(ConsensusCapsule primary) {
         final StreamUploader bu =
                 primary.getSpec().getPodProperties().getContainers().getBackupUploader();
@@ -384,6 +454,12 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         return Optional.of(bu);
     }
 
+    /**
+     * Prepare OpenTelemetryCollector if it is defined in the ConsensusCapsule.
+     *
+     * @param primary ConsensusCapsule instance
+     * @return Optional of OpenTelemetryCollector
+     */
     protected Optional<OpenTelemetryCollector> prepareOpenTelemetryCollector(ConsensusCapsule primary) {
         final OpenTelemetryCollector oc =
                 primary.getSpec().getPodProperties().getContainers().getOpenTelemetryCollector();
@@ -391,6 +467,14 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         return Optional.ofNullable(oc);
     }
 
+    /**
+     * Set the file extensions for the stream uploader.
+     *
+     * @param uploader StreamUploader instance
+     * @param streamExtension The file extension for the stream
+     * @param streamSigExtension The file extension for the signature
+     * @return Optional of StreamUploader with updated file extensions
+     */
     protected Optional<StreamUploader> setStreamFileExtensions(
             final StreamUploader uploader, final String streamExtension, String streamSigExtension) {
 
@@ -420,6 +504,14 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         return Optional.of(uploader);
     }
 
+    /**
+     * Get the input PersistentVolumeClaimSpec based on the volume name suffix.
+     *
+     * @param primary ConsensusCapsule instance
+     * @param volNameSuffix Suffix of the volume name
+     * @return Optional of PersistentVolumeClaimSpec
+     * @throws IllegalArgumentException if the volNameSuffix is invalid
+     */
     protected Optional<PersistentVolumeClaimSpec> getInputPvc(ConsensusCapsule primary, String volNameSuffix) {
         if (!VOLUME_MOUNT_NAMES.containsKey(volNameSuffix)) {
             throw new IllegalArgumentException("invalid volName suffix in: " + volNameSuffix);
@@ -470,6 +562,14 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         return Optional.ofNullable(inputPvc);
     }
 
+    /**
+     * Get the input volume based on the volume name suffix.
+     *
+     * @param primary ConsensusCapsule instance
+     * @param volNameSuffix Suffix of the volume name
+     * @return Optional of Volume
+     * @throws IllegalArgumentException if the volNameSuffix is invalid
+     */
     protected Optional<Volume> getInputVol(ConsensusCapsule primary, String volNameSuffix) {
         if (!VOLUME_MOUNT_NAMES.containsKey(volNameSuffix)) {
             throw new IllegalArgumentException("invalid volName suffix in: " + volNameSuffix);
@@ -522,6 +622,15 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         return Optional.ofNullable(inputVol);
     }
 
+    /**
+     * Get the volume builder based on the input volume.
+     *
+     * @param primary ConsensusCapsule instance
+     * @param inputVol Input Volume
+     * @param volName Name of the volume
+     * @return Optional of VolumeBuilder
+     * @throws NullPointerException if primary is null
+     */
     protected Optional<VolumeBuilder> getVolumeBuilder(ConsensusCapsule primary, Volume inputVol, String volName) {
         Objects.requireNonNull(primary);
         VolumeBuilder builder = new VolumeBuilder().withName(volName);
@@ -549,6 +658,12 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         return Optional.of(builder);
     }
 
+    /**
+     * Get the desired volumes for the pod.
+     *
+     * @param primary ConsensusCapsule instance
+     * @return List of volumes
+     */
     protected List<Volume> getDesiredPodVolumes(ConsensusCapsule primary) {
         final List<Volume> volumes = new ArrayList<>();
         VOLUME_MOUNT_NAMES.forEach((volNameSuffix, volName) -> {

@@ -13,12 +13,17 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 
+/**
+ * This class represents a Kubernetes dependent resource for managing RoleBinding objects, specifically for
+ * ConsensusCapsule resources.
+ */
 @KubernetesDependent
 public class CapsuleRoleBinding extends CRUDKubernetesDependentResource<RoleBinding, ConsensusCapsule> {
 
     public static final String TEMPLATE = "role-binding.yaml";
     public static final String NAME_SUFFIX = "-rb";
 
+    /** Constructor for CapsuleRoleBinding class. Initializes the dependent resource with RoleBinding type. */
     public CapsuleRoleBinding() {
         super(RoleBinding.class);
     }
