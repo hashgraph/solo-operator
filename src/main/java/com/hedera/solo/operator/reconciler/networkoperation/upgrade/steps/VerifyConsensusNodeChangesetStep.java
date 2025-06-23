@@ -151,10 +151,23 @@ public class VerifyConsensusNodeChangesetStep implements ProcessorStep<NetworkOp
         }
     }
 
+    /**
+     * Creates a condition to be added to the {@link NetworkOperationStatus} when an image verification event occurs.
+     *
+     * @param status The current status of the network operation.
+     * @return A Condition object representing the state of the image verification
+     */
     private Condition createCondition(final NetworkOperationStatus status) {
         return ConsensusVerifier.createCondition(status, SUCCESS_STATUS_MESSAGE, FAIL_STATUS_MESSAGE, CONDITION_TYPE);
     }
 
+    /**
+     * Checks if the image verification for 'consensus-node' is done based on the current status of the network
+     * operation.
+     *
+     * @param status The current status of the network operation.
+     * @return True if the image verification is done and successful, false otherwise
+     */
     public static boolean isDone(NetworkOperationStatus status) {
         return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }
