@@ -28,10 +28,10 @@ import org.jboss.logging.Logger;
  * <p>Check {@link ReverifyConsensusNodeChangesetStep} for consensus node changeset re-verification and apply similar
  * logic for stream uploader changeset denoted by the containerName field.
  *
- * <p>The {@link NetworkOperationStatus} contains the image source status in the form of *
- * {@link com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus} in the *
+ * <p>The {@link NetworkOperationStatus} contains the image source status in the form of
+ * {@link com.hedera.solo.operator.model.commonspec.ImageRepositoryStatus} in the
  * 'NetworkOperationStatus.softwareSourceStatus.streamUploader' field. The selected image source is marked as "Valid"
- * and * "selectedForDeployment" is set to true.
+ * and "selectedForDeployment" is set to true.
  *
  * <p>If the specified image is same for all stream uploader containers, then re-reverification is not required for all
  * stream uploader changesets.
@@ -48,6 +48,11 @@ public class ReverifyStreamUploaderChangesetStep implements ProcessorStep<Networ
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
     private final String containerName;
 
+    /**
+     * Constructor to initialize the ReverifyStreamUploaderChangesetStep with a specific container name.
+     *
+     * @param containerName The name of the stream uploader container whose changeset needs to be re-verified.
+     */
     public ReverifyStreamUploaderChangesetStep(String containerName) {
         this.containerName = containerName;
     }
@@ -134,12 +139,25 @@ public class ReverifyStreamUploaderChangesetStep implements ProcessorStep<Networ
         }
     }
 
+    /**
+     * Creates a condition for the image re-verification process.
+     *
+     * @param status The current status of the NetworkOperation.
+     * @return A Condition object representing the status of the image re-verification
+     */
     Condition createCondition(final NetworkOperationStatus status) {
         final StepConditionType conditionType = new StepConditionType(CONDITION_TYPE, containerName);
         return StreamUploaderVerifier.prepareCondition(
                 status, this.containerName, SUCCESS_STATUS_MESSAGE, FAIL_STATUS_MESSAGE, conditionType);
     }
 
+    /**
+     * Checks if the image re-verification is done based on the given NetworkOperationStatus and container name.
+     *
+     * @param status The current status of the NetworkOperation.
+     * @param containerName The name of the stream uploader container whose changeset was re-verified.
+     * @return true if the image re-verification is successful, false otherwise
+     */
     public static boolean isDone(NetworkOperationStatus status, String containerName) {
         final StepConditionType conditionType = new StepConditionType(CONDITION_TYPE, containerName);
         return NetworkOperationStepUtil.isSuccessful(status, conditionType);

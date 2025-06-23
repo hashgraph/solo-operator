@@ -17,7 +17,16 @@ import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
+/** This class provides utility methods for handling stream uploaders in the network operation upgrade steps. */
 public final class StreamUploaderVerifier {
+
+    /**
+     * Returns a getter function based on the container name.
+     *
+     * @param containerName The name of the container whose status is to be retrieved.
+     * @return A Function that retrieves the SoftwareSourceStatus for the specified container
+     * @throws IllegalStateException if the container name is unrecognized.
+     */
     public static Function<SoftwareSourceStatus, List<ImageRepositoryStatus>> getter(String containerName) {
         return switch (containerName) {
             case Constants.TPL_VAR_BACKUP_UPLOADER -> SoftwareSourceStatus::getBackupUploader;
@@ -29,6 +38,13 @@ public final class StreamUploaderVerifier {
         };
     }
 
+    /**
+     * Returns a setter function based on the container name.
+     *
+     * @param containerName The name of the container whose status is to be set.
+     * @return A BiConsumer that sets the SoftwareSourceStatus for the specified container
+     * @throws IllegalStateException if the container name is unrecognized.
+     */
     public static BiConsumer<SoftwareSourceStatus, List<ImageRepositoryStatus>> setter(String containerName) {
         return switch (containerName) {
             case Constants.TPL_VAR_BACKUP_UPLOADER -> SoftwareSourceStatus::setBackupUploader;
@@ -40,6 +56,16 @@ public final class StreamUploaderVerifier {
         };
     }
 
+    /**
+     * Prepares a condition object based on the status and container name provided.
+     *
+     * @param status The NetworkOperationStatus containing the software source status.
+     * @param containerName The name of the container whose verification is being performed.
+     * @param successMessageTemplate Template for the success message.
+     * @param failedMessageTemplate Template for the failure message.
+     * @param conditionType The StepConditionType representing the type and reason of the condition.
+     * @return A Condition object with appropriate status, message, and timestamp based on the verification result
+     */
     public static Condition prepareCondition(
             final NetworkOperationStatus status,
             final String containerName,
