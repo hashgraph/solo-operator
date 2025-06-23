@@ -20,7 +20,7 @@ public abstract class AbstractProcessorTask<T extends CustomResource<?, S>, S ex
     /**
      * Return the list of steps to execute
      *
-     * <p>
+     * <p>This method should be overridden by subclasses to provide specific logic for processing steps.
      *
      * @return the list of steps
      * @throws ProcessorException if getting the steps fails
@@ -30,7 +30,8 @@ public abstract class AbstractProcessorTask<T extends CustomResource<?, S>, S ex
     /**
      * Compute the recommended delay before the next reconciliation
      *
-     * <p>A default implementation is provided that returns 5 second
+     * <p>A default implementation is provided that returns 5 seconds. This method can be overridden by subclasses to
+     * provide custom delay computation.
      *
      * @param resource the custom resource
      * @param status the current status
@@ -43,7 +44,8 @@ public abstract class AbstractProcessorTask<T extends CustomResource<?, S>, S ex
     /**
      * Compute the estimated processing time
      *
-     * <p>A default implementation is provided that returns 30 seconds
+     * <p>A default implementation is provided that returns 30 seconds. This method can be overridden by subclasses to
+     * provide custom estimation of processing time.
      *
      * @param resource the custom resource
      * @param status the current status
@@ -56,6 +58,8 @@ public abstract class AbstractProcessorTask<T extends CustomResource<?, S>, S ex
     /**
      * Check if the task should be deferred to another processor
      *
+     * <p>This method should be overridden by subclasses to provide logic for determining which processor to defer to.
+     *
      * @param resource the custom resource
      * @param context the context
      * @return the processor to defer to, or null if it should not be deferred
@@ -66,9 +70,12 @@ public abstract class AbstractProcessorTask<T extends CustomResource<?, S>, S ex
     /**
      * Execute the task
      *
-     * <p>
+     * <p>This method orchestrates the execution of steps and determines the new status based on the results.
      *
-     * @return the desired custom resource status
+     * @param resource the custom resource
+     * @param context the context
+     * @return a ProcessorResult containing the current status, delay, estimated processing time, and deferred processor
+     *     (if any)
      * @throws ProcessorException if executing the task fails
      */
     public ProcessorResult<S> execute(final T resource, final Context<T> context) {

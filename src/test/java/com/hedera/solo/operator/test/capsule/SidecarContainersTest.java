@@ -12,9 +12,9 @@ import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-import com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector;
 import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Containers;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.OpenTelemetryCollector;
 import com.hedera.solo.operator.test.utils.TemplateLoader;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.EnvVar;
@@ -26,8 +26,14 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
+/** This class contains tests for sidecar containers in a consensus capsule deployment. */
 @QuarkusTest
 public class SidecarContainersTest extends ConsensusCapsuleTestAbstract {
+    /**
+     * Tests the deployment of a single node and checks the sidecar containers.
+     *
+     * @throws Exception if an error occurs during the test.
+     */
     @Override
     @Test
     void testSingleNodeDeployment() throws Exception {
@@ -35,6 +41,11 @@ public class SidecarContainersTest extends ConsensusCapsuleTestAbstract {
         this.checkSidecarContainers(1);
     }
 
+    /**
+     * Tests the deployment of multiple nodes and checks the sidecar containers.
+     *
+     * @throws Exception if an error occurs during the test.
+     */
     @Override
     @Test
     void testMultiNodeDeployment() throws Exception {
@@ -42,6 +53,11 @@ public class SidecarContainersTest extends ConsensusCapsuleTestAbstract {
         this.checkSidecarContainers(3);
     }
 
+    /**
+     * Prepares the containers for a consensus pod based on templates.
+     *
+     * @return Containers object containing sidecar containers.
+     */
     @Override
     protected Containers prepareConsensusPodContainers() {
         final StreamUploader rsu =
@@ -62,6 +78,11 @@ public class SidecarContainersTest extends ConsensusCapsuleTestAbstract {
                 .build();
     }
 
+    /**
+     * Checks the sidecar containers in a consensus pod.
+     *
+     * @param total The number of pods expected.
+     */
     private void checkSidecarContainers(final int total) {
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
             List<Pod> consensusPods = fetchConsensusPods();
@@ -76,7 +97,11 @@ public class SidecarContainersTest extends ConsensusCapsuleTestAbstract {
                 for (Container c : p.getSpec().getContainers()) {
                     Map<String, String> envMap = new HashMap<>();
                     for (EnvVar env : c.getEnv()) {
-                        envMap.put(env.getName(), env.getValue());
+                        String value = env.getValue();
+                        if (value == null || value.isEmpty()) {
+                            value = env.getValueFrom().getFieldRef().getFieldPath();
+                        }
+                        envMap.put(env.getName(), value);
                     }
 
                     switch (c.getName()) {

@@ -67,6 +67,11 @@ public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOpera
 
     private final CustomResourceManager customResourceManager;
 
+    /**
+     * Constructs a new instance of CheckConsensusNodeSecretsStep.
+     *
+     * @param customResourceManager the custom resource manager used for Kubernetes operations
+     */
     public CheckConsensusNodeSecretsStep(CustomResourceManager customResourceManager) {
         this.customResourceManager = customResourceManager;
     }
@@ -140,6 +145,14 @@ public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOpera
         }
     }
 
+    /**
+     * Validates the secrets of a given consensus capsule for a network operation.
+     *
+     * @param resource The {@link NetworkOperation} to which the consensus capsule belongs.
+     * @param status The current status of the {@link NetworkOperation}.
+     * @param capsule The {@link ConsensusCapsule} whose secrets need to be validated.
+     * @return A list of conditions indicating whether each secret is valid or not
+     */
     private List<Condition> validateSecretsOfConsensusCapsule(
             NetworkOperation resource, NetworkOperationStatus status, ConsensusCapsule capsule) {
         final SecretResources secrets = Optional.ofNullable(secretsWithDefaultKeyNames(capsule))
@@ -191,19 +204,26 @@ public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOpera
         return conditions;
     }
 
+    /**
+     * Checks if a secret with the given namespace and name exists.
+     *
+     * @param namespace The Kubernetes namespace where the secret is located.
+     * @param keyRef A {@link KeyReference} representing the secret to check.
+     * @return True if the secret exists and contains the specified key, otherwise false
+     */
     private boolean isValidSecret(String namespace, KeyReference keyRef) {
         Secret secret = customResourceManager.secretByName(namespace, keyRef.getSecretName());
         return secret != null && secret.getData().containsKey(keyRef.getKeyName());
     }
 
     /**
-     * Create a condition for the validation of a specific key type
+     * Creates a condition indicating that a specific type of secret is invalid for a consensus node.
      *
-     * @param resource - the network operation resource
-     * @param status - the network operation status
-     * @param capsule - the consensus capsule
-     * @param conditionType - the condition type
-     * @return the condition for the key type
+     * @param resource The {@link NetworkOperation} being reconciled.
+     * @param status The current status of the network operation.
+     * @param capsule The {@link ConsensusCapsule} whose secrets are being validated.
+     * @param conditionType A {@link StepConditionType} specifying the type and reason of the validation failure.
+     * @return A new {@link Condition} indicating that the secret is invalid
      */
     private Condition secretInvalidCondition(
             NetworkOperation resource,
@@ -222,6 +242,12 @@ public class CheckConsensusNodeSecretsStep implements ProcessorStep<NetworkOpera
                 .build();
     }
 
+    /**
+     * Determines if the validation of consensus node secrets has been completed and successful.
+     *
+     * @param status The current status of the network operation.
+     * @return True if the validation was successful, otherwise false
+     */
     public static boolean isDone(NetworkOperationStatus status) {
         return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }

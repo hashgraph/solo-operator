@@ -59,6 +59,12 @@ public class NowFrozenTask extends AbstractProcessorTask<NetworkOperation, Netwo
 
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
+    /**
+     * Constructor for NowFrozenTask.
+     *
+     * @param customResourceManager The {@link CustomResourceManager} to manage custom resources.
+     * @param deferredProcessor The {@link NetworkCheckProcessor} to be executed after the current steps.
+     */
     @Inject
     public NowFrozenTask(CustomResourceManager customResourceManager, NetworkCheckProcessor deferredProcessor) {
         this.customResourceManager = customResourceManager;
@@ -91,6 +97,12 @@ public class NowFrozenTask extends AbstractProcessorTask<NetworkOperation, Netwo
         return null;
     }
 
+    /**
+     * Checks if the {@link NetworkOperation} has completed all its upgrade steps.
+     *
+     * @param resource The {@link NetworkOperation} resource being checked.
+     * @return true if all upgrade steps are complete, otherwise false
+     */
     public static boolean isDone(NetworkOperation resource) {
         return DeleteClusterConfigStep.isDone(resource.getStatus())
                 && ApplyConsensusPodChangeStep.isDone(resource.getStatus())

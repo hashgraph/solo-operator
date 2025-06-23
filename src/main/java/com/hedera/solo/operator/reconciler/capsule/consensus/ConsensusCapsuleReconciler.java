@@ -54,6 +54,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.jboss.logging.Logger;
 
+/** The main class responsible for reconciling and managing consensus capsule resources in a Kubernetes cluster. */
 @Workflow(
         dependents = {
             @Dependent(name = "sa", type = CapsuleServiceAccount.class),
@@ -137,7 +138,7 @@ public class ConsensusCapsuleReconciler implements Cleaner<ConsensusCapsule>, Re
     }
 
     /**
-     * Find pod with latest creation timestamp for the consensus capsule
+     * Find pod with latest creation timestamp for the consensus capsule.
      *
      * @param capsule the consensus capsule
      * @param context the context
@@ -151,6 +152,12 @@ public class ConsensusCapsuleReconciler implements Cleaner<ConsensusCapsule>, Re
                         pod -> ZonedDateTime.parse(pod.getMetadata().getCreationTimestamp())));
     }
 
+    /**
+     * Determines the phase of a consensus capsule based on its pods.
+     *
+     * @param pods The array of pods to evaluate.
+     * @return The ConsensusCapsuleStatus.Phase determined from the pods
+     */
     public static ConsensusCapsuleStatus.Phase phase(final Pod... pods) {
         ConsensusCapsuleStatus.Phase phase = ConsensusCapsuleStatus.Phase.Unknown;
 
@@ -198,6 +205,12 @@ public class ConsensusCapsuleReconciler implements Cleaner<ConsensusCapsule>, Re
         return phase;
     }
 
+    /**
+     * Validates the secrets configuration for the consensus capsule spec and sets conditions accordingly.
+     *
+     * @param capsule The consensus capsule resource.
+     * @return A consumer that applies validation logic to a condition
+     */
     Consumer<Condition> validateSecrets(final ConsensusCapsule capsule) {
         return condition -> {
             Secrets secrets = capsule.getSpec().getSecrets();

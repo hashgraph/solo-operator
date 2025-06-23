@@ -27,14 +27,31 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+/**
+ * The PersistentVolumeTest class is a test suite for verifying the persistent volume claims (PVCs) of consensus
+ * capsules in a Kubernetes cluster.
+ */
 @QuarkusTest
 public class PersistentVolumeTest extends ConsensusCapsuleTestAbstract {
+
+    /**
+     * Prepares the PVC specification based on the suffix of the volume.
+     *
+     * @param volSuffix The suffix identifier for the volume type (e.g., logs, stats, states, upgrade, streams).
+     * @return PersistentVolumeClaimSpec The specification for the persistent volume claim.
+     */
     protected PersistentVolumeClaimSpec preparePvcSpec(String volSuffix) {
         PersistentVolumeClaim pvc =
                 loadYaml(PersistentVolumeClaim.class, getClass(), "pvc/%s-pvc.yaml".formatted(volSuffix));
         return pvc.getSpec();
     }
 
+    /**
+     * Prepares the persistent volume claims for a consensus capsule based on node information.
+     *
+     * @param node The node information containing details required to configure PVCs.
+     * @return PersistentVolumeClaims The builder object for configuring persistent volume claims.
+     */
     @Override
     protected PersistentVolumeClaims prepareCapsulePVCs(TestRecords.NodeInfo node) {
         return new PersistentVolumeClaimsBuilder()
@@ -51,6 +68,11 @@ public class PersistentVolumeTest extends ConsensusCapsuleTestAbstract {
                 .build();
     }
 
+    /**
+     * Tests the deployment of a single-node network and checks if the volumes are set up correctly.
+     *
+     * @throws Exception If an error occurs during the deployment or verification.
+     */
     @Test
     @DisplayName("volume with PVC should succeed for a single-node network")
     void testSingleNodeDeployment() throws Exception {
@@ -58,6 +80,11 @@ public class PersistentVolumeTest extends ConsensusCapsuleTestAbstract {
         this.check(1);
     }
 
+    /**
+     * Tests the deployment of a multi-node network and checks if the volumes are set up correctly.
+     *
+     * @throws Exception If an error occurs during the deployment or verification.
+     */
     @Test
     @DisplayName("volume with PVC should succeed for a multi-node network")
     void testMultiNodeDeployment() throws Exception {
@@ -65,6 +92,12 @@ public class PersistentVolumeTest extends ConsensusCapsuleTestAbstract {
         this.check(3);
     }
 
+    /**
+     * Checks the deployment by asserting that the expected number of consensus pods are present and their volumes are
+     * configured correctly.
+     *
+     * @param count The expected number of consensus pods.
+     */
     private void check(int count) {
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
             List<Pod> consensusPods = fetchConsensusPods();

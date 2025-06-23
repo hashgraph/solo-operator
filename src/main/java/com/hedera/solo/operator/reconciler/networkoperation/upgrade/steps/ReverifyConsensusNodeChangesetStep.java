@@ -21,7 +21,8 @@ import org.jboss.logging.Logger;
 
 /**
  * ReverifyConsensusNodeChangesetStep re-verifies the consensus node changeset and selects a new image if the original
- * selection is no longer available.
+ * selection is no longer available. It uses {@link ConsensusVerifier} to check the validity of the selected registry,
+ * updates the status with the result, and handles the case where no valid registry is found.
  *
  * <p>Refer to
  * {@link com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyConsensusNodeChangesetStep} to
@@ -120,10 +121,22 @@ public class ReverifyConsensusNodeChangesetStep implements ProcessorStep<Network
         }
     }
 
+    /**
+     * Creates a condition for the validation of the consensus node image based on the status message.
+     *
+     * @param status The current NetworkOperationStatus to create the condition for
+     * @return A Condition object representing the status of the consensus node image re-verification
+     */
     private Condition createCondition(final NetworkOperationStatus status) {
         return ConsensusVerifier.createCondition(status, SUCCESS_STATUS_MESSAGE, FAIL_STATUS_MESSAGE, CONDITION_TYPE);
     }
 
+    /**
+     * Checks if the image re-verification process is done by checking the condition type in the status.
+     *
+     * @param status The current NetworkOperationStatus to check
+     * @return true if the image re-verification is done, false otherwise
+     */
     public static boolean isDone(NetworkOperationStatus status) {
         return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }

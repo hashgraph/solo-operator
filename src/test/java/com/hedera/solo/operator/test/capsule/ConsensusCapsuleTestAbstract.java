@@ -10,7 +10,6 @@ import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_APP;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_COMPONENT;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_MANAGED_BY;
 import static com.hedera.solo.operator.reconciler.common.Constants.SOLO_OPERATOR;
-import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
 import static com.hedera.solo.operator.test.fixtures.coredns.ConfigureCoredns.configureCoredns;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -61,6 +60,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+/** Abstract class for testing ConsensusCapsule functionality. */
 @SoloTest
 public abstract class ConsensusCapsuleTestAbstract {
     protected final String namespace = getClass().getSimpleName().toLowerCase();
@@ -79,13 +79,11 @@ public abstract class ConsensusCapsuleTestAbstract {
     @Inject
     Operator operator;
 
+    /** Set up the test environment before each test. */
     @BeforeEach
     void setup() {
         clusterSetupManager.check();
         configureCoredns(kubernetesClient);
-        if (isTestUsingGradleOrIntelliJ()) {
-            operator.start();
-        }
 
         cleanup();
 
@@ -93,6 +91,11 @@ public abstract class ConsensusCapsuleTestAbstract {
         createOrbit();
     }
 
+    /**
+     * Clean up the test environment after each test.
+     *
+     * @param snapshot The snapshot context for the test.
+     */
     @AfterEach
     void afterEach(final SnapshotFailureContext snapshot) {
         snapshot.client(kubernetesClient)
@@ -124,6 +127,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         cleanup();
     }
 
+    /** Clean up the Kubernetes resources. */
     void cleanup() {
         kubernetesClient
                 .resources(NetworkOperation.class)
@@ -204,6 +208,12 @@ public abstract class ConsensusCapsuleTestAbstract {
         }
     }
 
+    /**
+     * Prepares the pod volumes for a consensus capsule.
+     *
+     * @param node The node information for which the volumes are prepared.
+     * @return A Volumes object containing the prepared volumes.
+     */
     protected Volumes prepareCapsulePodVolumes(TestRecords.NodeInfo node) {
         return new VolumesBuilder().build(); // default with no volume spec will use empty volumes
     }

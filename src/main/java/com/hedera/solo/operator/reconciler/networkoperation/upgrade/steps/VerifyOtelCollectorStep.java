@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Objects;
 import org.jboss.logging.Logger;
 
+/** This class handles the verification of the OtelCollector image for a network operation. */
 public class VerifyOtelCollectorStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final StepConditionType CONDITION_TYPE = new StepConditionType("ImageVerified", "OtelCollector");
     public static final String SUCCESS_STATUS_MESSAGE = "Image verification succeeded for 'otel-collector': %s";
@@ -102,11 +103,23 @@ public class VerifyOtelCollectorStep implements ProcessorStep<NetworkOperation, 
         }
     }
 
+    /**
+     * Creates a condition for the verification of the OtelCollector image.
+     *
+     * @param status The current status of the NetworkOperation.
+     * @return A Condition object representing the condition of the verification process
+     */
     Condition createCondition(final NetworkOperationStatus status) {
         return OtelCollectorVerifier.createCondition(
                 status, SUCCESS_STATUS_MESSAGE, FAIL_STATUS_MESSAGE, CONDITION_TYPE);
     }
 
+    /**
+     * Checks if the verification of the OtelCollector image is done by checking the status condition type.
+     *
+     * @param status The current status of the NetworkOperation.
+     * @return true if the verification is done, false otherwise
+     */
     public static boolean isDone(NetworkOperationStatus status) {
         return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }
