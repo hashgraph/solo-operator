@@ -18,6 +18,7 @@ import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/** Represents the coordinates of an image, including its protocol, registry, name, tag, and digest. */
 public class ImageCoordinates {
     private static final Pattern imagePattern =
             Pattern.compile("(?<registry>.*?)/(?<name>.*?)(:(?<tag>.*?))?(@(?<digest>.*))?");
@@ -31,6 +32,16 @@ public class ImageCoordinates {
     public final String digest;
     public final Collection<String> auths;
 
+    /**
+     * Constructs an ImageCoordinates object with specified protocol, registry, name, tag, and digest.
+     *
+     * @param protocol The protocol used to access the image registry.
+     * @param registry The registry where the image is stored.
+     * @param name The name of the image.
+     * @param tag The tag associated with the image version (default: "latest").
+     * @param digest The digest of the image for immutable references.
+     * @param auths Authorization tokens for accessing private registries.
+     */
     protected ImageCoordinates(
             final String protocol,
             final String registry,
@@ -46,10 +57,26 @@ public class ImageCoordinates {
         this.auths = auths == null ? emptySet() : auths;
     }
 
+    /**
+     * Creates an ImageCoordinates object from a given image string and optional JSON configuration.
+     *
+     * @param image The image string containing registry, name, tag, and digest information.
+     * @param json Optional JSON configuration for authentication details.
+     * @return An ImageCoordinates object initialized from the provided image string
+     */
     public static ImageCoordinates https(final String image, final String... json) {
         return from("https", image, json);
     }
 
+    /**
+     * Creates an ImageCoordinates object from a given protocol, image string, and optional JSON configuration.
+     *
+     * @param protocol The protocol used to access the image registry.
+     * @param image The image string containing registry, name, tag, and digest information.
+     * @param json Optional JSON configuration for authentication details.
+     * @return An ImageCoordinates object initialized from the provided image string and protocol
+     * @throws IllegalArgumentException if the image string does not match the expected format.
+     */
     public static ImageCoordinates from(final String protocol, final String image, final String... json) {
         final Matcher matcher = imagePattern.matcher(image);
         if (!matcher.matches()) {
@@ -77,32 +104,61 @@ public class ImageCoordinates {
         return new ImageCoordinates(protocol, registry, name, tag, digest, auths);
     }
 
+    /**
+     * Returns the reference string of the image, which can be either the tag or the digest.
+     *
+     * @return The reference string of the image
+     */
     public String reference() {
         return digest == null || digest.isBlank() ? tag : digest;
     }
 
+    /**
+     * Creates a new ImageCoordinates object with a different digest.
+     *
+     * @param digest The new digest for the image.
+     * @return A new ImageCoordinates object with the specified digest
+     */
     public ImageCoordinates digest(final String digest) {
         return new ImageCoordinates(protocol, registry, name, tag, digest, auths);
     }
 
+    /**
+     * Returns the URI to access the v2 API of the image registry.
+     *
+     * @return The URI to the v2 API of the image registry
+     */
     public URI v2uri() {
         return URI.create(protocol + "://" + registry + "/v2/");
     }
 
+    /**
+     * Returns the URI to access a specific endpoint in the v2 API of the image registry.
+     *
+     * @param endpoint The specific endpoint within the v2 API.
+     * @return The URI to the specified endpoint in the v2 API
+     */
     public URI v2uri(final String endpoint) {
         return v2uri().resolve("./" + name + "/" + endpoint);
     }
 
+    /** A configuration class for parsing JSON authentication details. */
     private static class Config {
         public Map<String, Auth> auths;
     }
 
+    /** Represents authentication details for accessing private registries. */
     private static class Auth {
         public String username;
         public String password;
         public String email;
         public String auth;
 
+        /**
+         * Returns the base64-encoded authentication string.
+         *
+         * @return The base64-encoded authentication string
+         */
         public String auth() {
             if (auth != null) {
                 return auth;
@@ -114,6 +170,11 @@ public class ImageCoordinates {
         }
     }
 
+    /**
+     * Initializes the map of default registries with case-insensitive keys.
+     *
+     * @return A map containing default registry mappings
+     */
     private static Map<String, String> registries() {
         final Map<String, String> registries = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         registries.put("docker.io", "registry-1.docker.io");
