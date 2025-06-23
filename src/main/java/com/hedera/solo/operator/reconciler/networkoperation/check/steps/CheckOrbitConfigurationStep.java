@@ -10,6 +10,7 @@ import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
+import com.hedera.solo.operator.model.v1alpha1.networkoperationspec.networkupgrade.ConfigurationFiles;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.ApplyOrbitConfigurationChangeStep;
 import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
@@ -34,6 +35,11 @@ public class CheckOrbitConfigurationStep implements ProcessorStep<NetworkOperati
 
     private final CustomResourceManager customResourceManager;
 
+    /**
+     * Constructs a new CheckOrbitConfigurationStep with the given CustomResourceManager.
+     *
+     * @param customResourceManager The resource manager for custom Kubernetes resources.
+     */
     public CheckOrbitConfigurationStep(CustomResourceManager customResourceManager) {
         this.customResourceManager = customResourceManager;
     }
@@ -83,42 +89,44 @@ public class CheckOrbitConfigurationStep implements ProcessorStep<NetworkOperati
                 }
             }
 
-            // check settings.txt
-            if (resource.getSpec().getNetworkUpgrade().getConfigurationFiles().getNetworkSettings() != null) {
-                if (!resource.getSpec()
-                        .getNetworkUpgrade()
-                        .getConfigurationFiles()
-                        .getNetworkSettings()
-                        .equals(orbit.getSpec().getConsensus().getNetworkSettings())) {
-                    throw new ProcessorException("Network settings (settings.txt) has not been updated");
+            ConfigurationFiles configurationFiles =
+                    resource.getSpec().getNetworkUpgrade().getConfigurationFiles();
+            if (configurationFiles != null) {
+                // check settings.txt
+                if (configurationFiles.getNetworkSettings() != null) {
+                    if (!resource.getSpec()
+                            .getNetworkUpgrade()
+                            .getConfigurationFiles()
+                            .getNetworkSettings()
+                            .equals(orbit.getSpec().getConsensus().getNetworkSettings())) {
+                        throw new ProcessorException("Network settings (settings.txt) has not been updated");
+                    }
+                }
+
+                // check application.properties
+                if (configurationFiles.getApplicationProperties() != null) {
+                    if (!resource.getSpec()
+                            .getNetworkUpgrade()
+                            .getConfigurationFiles()
+                            .getApplicationProperties()
+                            .equals(orbit.getSpec().getConsensus().getApplicationConfiguration())) {
+                        throw new ProcessorException(
+                                "Application properties (application.properties) has not been updated");
+                    }
+                }
+
+                // check api-permission.properties
+                if (configurationFiles.getPermissionConfiguration() != null) {
+                    if (!resource.getSpec()
+                            .getNetworkUpgrade()
+                            .getConfigurationFiles()
+                            .getPermissionConfiguration()
+                            .equals(orbit.getSpec().getConsensus().getPermissionConfiguration())) {
+                        throw new ProcessorException(
+                                "API permission properties (api-permission.properties) has not been updated");
+                    }
                 }
             }
-
-            // check application.properties
-            if (resource.getSpec().getNetworkUpgrade().getConfigurationFiles().getApplicationProperties() != null) {
-                if (!resource.getSpec()
-                        .getNetworkUpgrade()
-                        .getConfigurationFiles()
-                        .getApplicationProperties()
-                        .equals(orbit.getSpec().getConsensus().getApplicationConfiguration())) {
-                    throw new ProcessorException(
-                            "Application properties (application.properties) has not been updated");
-                }
-            }
-
-            // check api-permission.properties
-            if (resource.getSpec().getNetworkUpgrade().getConfigurationFiles().getPermissionConfiguration() != null) {
-                if (!resource.getSpec()
-                        .getNetworkUpgrade()
-                        .getConfigurationFiles()
-                        .getPermissionConfiguration()
-                        .equals(orbit.getSpec().getConsensus().getPermissionConfiguration())) {
-                    throw new ProcessorException(
-                            "API permission properties (api-permission.properties) has not been updated");
-                }
-            }
-
-            // TODO check logging configuration #592
 
             log.infof(
                     "Orbit configuration check was successful for '%s/%s' [ %s ]",

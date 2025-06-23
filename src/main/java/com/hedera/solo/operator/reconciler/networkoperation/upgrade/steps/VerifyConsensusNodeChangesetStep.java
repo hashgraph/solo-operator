@@ -42,8 +42,10 @@ import org.jboss.logging.Logger;
  * <p>It is important to review the following sources and objects to understand the context of this step:
  *
  * <ol>
- *   <li>'src/main/k8s/openapi/common.yml' - The common spec objects such as ImageRepository, ImageRepositoryStatus,
- *   <li>'src/main/k8s/openapi/networkoperation.yml' - The CRD object that represents the network operation
+ *   <li>'src/main/k8s/openapi/commons.operator.solo.hedera.com-v1.yml' - The common spec objects such as
+ *       ImageRepository, ImageRepositoryStatus,
+ *   <li>'src/main/k8s/openapi/networkoperations.operator.solo.hedera.com-v1.yml' - The CRD object that represents the
+ *       network operation
  *   <li>'src/test/resources/templates/network-operation/network-upgrade.yaml' - An example network operation CR
  *   <li>{@link NetworkOperation} - The CRD object that represents the network operation
  *   <li>{@link NetworkOperationStatus} - The status object that represents the status of the network operation
@@ -149,10 +151,23 @@ public class VerifyConsensusNodeChangesetStep implements ProcessorStep<NetworkOp
         }
     }
 
+    /**
+     * Creates a condition to be added to the {@link NetworkOperationStatus} when an image verification event occurs.
+     *
+     * @param status The current status of the network operation.
+     * @return A Condition object representing the state of the image verification
+     */
     private Condition createCondition(final NetworkOperationStatus status) {
         return ConsensusVerifier.createCondition(status, SUCCESS_STATUS_MESSAGE, FAIL_STATUS_MESSAGE, CONDITION_TYPE);
     }
 
+    /**
+     * Checks if the image verification for 'consensus-node' is done based on the current status of the network
+     * operation.
+     *
+     * @param status The current status of the network operation.
+     * @return True if the image verification is done and successful, false otherwise
+     */
     public static boolean isDone(NetworkOperationStatus status) {
         return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }

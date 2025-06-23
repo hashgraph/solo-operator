@@ -24,7 +24,8 @@ import java.util.Objects;
 import org.jboss.logging.Logger;
 
 /**
- * ApplyOrbitConfigurationChangeStep is a step that applies the orbit level configuration changes
+ * ApplyOrbitConfigurationChangeStep is a step that applies the orbit level configuration changes for a network
+ * operation.
  *
  * <p>It rolls out config file bundle as specified in "configurationFiles" field and patch the orbit CR by making direct
  * API call to Kubernetes API server. The effect of the orbit CR changes will be the following that
@@ -100,6 +101,12 @@ public class ApplyOrbitConfigurationChangeStep implements ProcessorStep<NetworkO
         }
     }
 
+    /**
+     * Checks if the step is done based on the current status of the network operation.
+     *
+     * @param status The current status of the NetworkOperation.
+     * @return True if the step is done, false otherwise
+     */
     public static boolean isDone(NetworkOperationStatus status) {
         return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }

@@ -13,12 +13,23 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernete
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import io.javaoperatorsdk.operator.processing.dependent.workflow.Condition;
 
+/**
+ * The {@code CapsuleStatesPvc} class represents a Kubernetes dependent resource for managing the persistent volume
+ * claim (PVC) of consensus capsule states.
+ */
 @KubernetesDependent
 public class CapsuleStatesPvc extends CRUDKubernetesDependentResource<PersistentVolumeClaim, ConsensusCapsule> {
+    /** Constructs a new {@code CapsuleStatesPvc} instance. */
     public CapsuleStatesPvc() {
         super(PersistentVolumeClaim.class);
     }
 
+    /**
+     * Retrieves the desired PVC specification from the primary consensus capsule resource.
+     *
+     * @param primary The primary ConsensusCapsule resource.
+     * @return The PVC specification or null if not present
+     */
     private static PersistentVolumeClaimSpec getInputPvcSpec(final ConsensusCapsule primary) {
         if (primary.getSpec().getPersistentVolumeClaims() == null) {
             return null;
@@ -33,6 +44,7 @@ public class CapsuleStatesPvc extends CRUDKubernetesDependentResource<Persistent
         return CapsulePvcUtil.prepareDesired(primary, getInputPvcSpec(primary), VOLUME_STATES_NAME_SUFFIX);
     }
 
+    /** Condition class to check if the PVC for capsule states is ready. */
     public static class Ready implements Condition<PersistentVolumeClaim, ConsensusCapsule> {
         @Override
         public boolean isMet(

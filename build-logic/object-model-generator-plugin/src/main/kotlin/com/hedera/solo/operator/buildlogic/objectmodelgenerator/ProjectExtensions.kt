@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 import com.hedera.solo.operator.buildlogic.objectmodelgenerator.ObjectModelGenerator
 import org.gradle.api.Project
 

@@ -21,6 +21,10 @@ import java.util.List;
 import java.util.Objects;
 import org.jboss.logging.Logger;
 
+/**
+ * This class defines the step for deleting the cluster configuration in a Kubernetes environment as part of a network
+ * upgrade operation.
+ */
 public class DeleteClusterConfigStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final StepConditionType CONDITION_TYPE = new StepConditionType("ConfigDeleted", "ClusterConfig");
     public static final String SUCCESS_STATUS_MESSAGE = "Successfully deleted '%s'";
@@ -29,6 +33,11 @@ public class DeleteClusterConfigStep implements ProcessorStep<NetworkOperation, 
 
     private final CustomResourceManager customResourceManager;
 
+    /**
+     * Constructor for DeleteClusterConfigStep, initializing the custom resource manager.
+     *
+     * @param customResourceManager The CustomResourceManager instance to manage Kubernetes resources.
+     */
     public DeleteClusterConfigStep(CustomResourceManager customResourceManager) {
         this.customResourceManager = customResourceManager;
     }
@@ -107,6 +116,12 @@ public class DeleteClusterConfigStep implements ProcessorStep<NetworkOperation, 
         }
     }
 
+    /**
+     * Checks if the deletion of the cluster configuration is done based on the given condition type.
+     *
+     * @param status The NetworkOperationStatus instance to check for completion.
+     * @return true if done, false otherwise
+     */
     public static boolean isDone(NetworkOperationStatus status) {
         return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }
