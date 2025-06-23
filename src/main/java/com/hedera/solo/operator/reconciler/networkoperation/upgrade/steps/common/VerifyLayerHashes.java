@@ -32,6 +32,7 @@ import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/** This class provides methods to verify layer hashes for image repositories and update the status accordingly. */
 public class VerifyLayerHashes
         extends VerifyLayerHashesAbstract<ImageVerificationSpec, ImageRepositoryStatus, ImageRepository> {
     private static final Logger log =
@@ -42,11 +43,11 @@ public class VerifyLayerHashes
     protected SoftwareVersionSource softwareVersionSource;
 
     /**
-     * Main entry point to perform status update
+     * Main entry point to perform status update.
      *
      * @param resource containing status to update
      * @param status to update
-     * @param kubernetesClient a kubernetes client
+     * @param kubernetesClient a Kubernetes client for interacting with the cluster
      * @param softwareVersionSource contains the layer hashes to verify
      * @param conditionFunction provides a new condition
      * @param getStatusList provides the repository status list to update
@@ -67,7 +68,7 @@ public class VerifyLayerHashes
     }
 
     /**
-     * The selected image
+     * Gets the selected image from the list of repository statuses.
      *
      * @param list of repository status
      * @return selected image string if one exists, otherwise null
@@ -77,10 +78,11 @@ public class VerifyLayerHashes
     }
 
     /**
-     * Constructor
+     * Constructor for VerifyLayerHashes.
      *
-     * @see VerifyLayerHashes#updateStatus(HasMetadata, NetworkOperationStatus, KubernetesClient, SoftwareVersionSource,
-     *     Function, Function, BiConsumer)
+     * @param kubernetesClient a Kubernetes client for interacting with the cluster
+     * @param namespace the Kubernetes namespace
+     * @param softwareVersionSource contains the layer hashes to verify
      */
     public VerifyLayerHashes(
             final KubernetesClient kubernetesClient,
@@ -92,10 +94,14 @@ public class VerifyLayerHashes
     }
 
     /**
-     * Update status
+     * Updates the status of the resource.
      *
-     * @see VerifyLayerHashes#updateStatus(HasMetadata, NetworkOperationStatus, KubernetesClient, SoftwareVersionSource,
-     *     Function, Function, BiConsumer)
+     * @param resource containing status to update
+     * @param status to update
+     * @param conditionFunction provides a new condition
+     * @param getStatusList provides the repository status list to update
+     * @param setStatusList updates the repository status list
+     * @return updated status
      */
     public NetworkOperationStatus updateStatus(
             final HasMetadata resource,
@@ -132,6 +138,13 @@ public class VerifyLayerHashes
                         .toArray(String[]::new));
     }
 
+    /**
+     * Constructs an ImageCoordinates object for the given image and JSON data.
+     *
+     * @param image the image string in the format "repository/imageName:tag"
+     * @param json optional JSON data, can be empty
+     * @return an ImageCoordinates object with the specified image and JSON data
+     */
     protected ImageCoordinates coordinates(final String image, final String... json) {
         return ImageCoordinates.https(image, json);
     }
@@ -142,6 +155,14 @@ public class VerifyLayerHashes
         return imageRepositoryStatus(repository, null, Unknown);
     }
 
+    /**
+     * Constructs an ImageRepositoryStatus object with the given parameters.
+     *
+     * @param repository the image repository
+     * @param spec the image verification specification
+     * @param validity the validity status of the image repository
+     * @return a new ImageRepositoryStatus object
+     */
     protected ImageRepositoryStatus imageRepositoryStatus(
             final ImageRepository repository,
             final ImageVerificationSpec spec,
@@ -149,6 +170,15 @@ public class VerifyLayerHashes
         return imageRepositoryStatus(repository, spec, validity, null);
     }
 
+    /**
+     * Constructs an ImageRepositoryStatus object with the given parameters.
+     *
+     * @param repository the image repository
+     * @param spec the image verification specification
+     * @param validity the validity status of the image repository
+     * @param digest the manifest hash digest, can be null
+     * @return a new ImageRepositoryStatus object
+     */
     protected ImageRepositoryStatus imageRepositoryStatus(
             final ImageRepository repository,
             final ImageVerificationSpec spec,
@@ -194,6 +224,12 @@ public class VerifyLayerHashes
         return softwareVersionSource.getImageRepositories();
     }
 
+    /**
+     * Returns a list of image repository statuses, ensuring one is selected for deployment.
+     *
+     * @param last the last known list of image repository statuses
+     * @return a list of image repository statuses with one selected for deployment
+     */
     protected List<ImageRepositoryStatus> statusList(final List<ImageRepositoryStatus> last) {
         List<ImageRepositoryStatus> list = super.statusList();
         ImageRepositoryStatus selected = selected(last);
@@ -227,6 +263,13 @@ public class VerifyLayerHashes
                 Arrays.stream(manifest.layers).map(layer -> layer.digest).toList());
     }
 
+    /**
+     * Selects the image repository status for deployment.
+     *
+     * @param selected the image repository status to select
+     * @param list the list of image repository statuses
+     * @return true if the selection was successful, false otherwise
+     */
     protected boolean select(final ImageRepositoryStatus selected, final List<ImageRepositoryStatus> list) {
         ImageRepositoryStatus match = edit(selected)
                 .with(builder -> builder.withSelectedForDeployment(false))
@@ -240,6 +283,12 @@ public class VerifyLayerHashes
         return false;
     }
 
+    /**
+     * Gets the selected image repository status from the list.
+     *
+     * @param list of image repository statuses
+     * @return the selected image repository status or null if none is selected
+     */
     protected static ImageRepositoryStatus selected(final List<ImageRepositoryStatus> list) {
         return list == null
                 ? null
@@ -249,6 +298,12 @@ public class VerifyLayerHashes
                         .orElse(null);
     }
 
+    /**
+     * Constructs an image string from the repository status.
+     *
+     * @param status the image repository status
+     * @return the image string in the format "repository/imageName:manifestHash" or null if status is null
+     */
     protected static String image(final ImageRepositoryStatus status) {
         return status == null
                 ? null
