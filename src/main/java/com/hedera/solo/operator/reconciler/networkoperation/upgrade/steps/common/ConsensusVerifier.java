@@ -14,7 +14,17 @@ import com.hedera.solo.operator.reconciler.networkoperation.utils.StepConditionT
 import io.fabric8.kubernetes.api.model.Condition;
 import java.util.Objects;
 
+/**
+ * The {@code ConsensusVerifier} class provides utility methods to retrieve and manipulate software version source from
+ * a NetworkOperation object, as well as creating conditions for the network operation status.
+ */
 public final class ConsensusVerifier {
+    /**
+     * Retrieves the SoftwareVersionSource from the consensus-node changeset within the NetworkOperation specification.
+     *
+     * @param resource The NetworkOperation object containing the spec for the network upgrade.
+     * @return The SoftwareVersionSource associated with the consensus-node changeset
+     */
     public static SoftwareVersionSource getSoftwareVersionSource(final NetworkOperation resource) {
         Objects.requireNonNull(resource, "NetworkOperation must not be null");
         Objects.requireNonNull(resource.getSpec(), "NetworkOperation spec must not be null");
@@ -28,6 +38,16 @@ public final class ConsensusVerifier {
         return changeset.getSoftwareVersionSource();
     }
 
+    /**
+     * Creates a condition object for the NetworkOperationStatus, based on whether the selected image is available or
+     * not.
+     *
+     * @param status The current status of the NetworkOperation.
+     * @param successMessageTemplate A template string for the success message.
+     * @param failMessageTemplate A template string for the failure message.
+     * @param conditionType An instance of StepConditionType representing the type and reason of the condition.
+     * @return A Condition object, either successful or failed based on the availability of the selected image
+     */
     public static Condition createCondition(
             final NetworkOperationStatus status,
             final String successMessageTemplate,

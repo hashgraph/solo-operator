@@ -7,7 +7,16 @@ import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import java.util.function.BiPredicate;
 
+/**
+ * The {@code NoOpSnapshot} class is a specific implementation of the {@link Snapshot} abstract class, which provides
+ * no-op (no operation) functionality for snapshot operations.
+ */
 public class NoOpSnapshot extends Snapshot {
+    /**
+     * Constructs a new {@code NoOpSnapshot} instance with the provided Kubernetes client.
+     *
+     * @param client The Kubernetes client used to interact with the cluster.
+     */
     protected NoOpSnapshot(final KubernetesClient client) {
         super(client);
     }
