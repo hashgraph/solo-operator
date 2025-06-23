@@ -2,7 +2,9 @@
 
 package com.hedera.solo.operator.reconciler.capsule.haproxy;
 
+import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.library.model.Labels.hasLabel;
+import static com.hedera.solo.operator.library.reconcile.ReconcileEvent.cleanupEvents;
 
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsule;
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsuleStatus;
@@ -16,22 +18,33 @@ import com.hedera.solo.operator.reconciler.capsule.haproxy.resources.HAProxyServ
 import com.hedera.solo.operator.reconciler.common.Constants;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.Pod;
+import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
+import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import io.javaoperatorsdk.operator.api.reconciler.EventSourceContext;
-import io.javaoperatorsdk.operator.api.reconciler.EventSourceInitializer;
+import io.javaoperatorsdk.operator.api.reconciler.EventSourceUtils;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.processing.dependent.workflow.Workflow;
 import io.javaoperatorsdk.operator.processing.dependent.workflow.WorkflowBuilder;
 import io.javaoperatorsdk.operator.processing.event.source.EventSource;
+import io.quarkiverse.operatorsdk.annotations.RBACRule;
 import java.lang.invoke.MethodHandles;
-import java.util.Map;
+import java.util.List;
 import java.util.function.Predicate;
 import org.jboss.logging.Logger;
 
 @ControllerConfiguration
-public class HAProxyCapsuleReconciler implements Reconciler<HAProxyCapsule>, EventSourceInitializer<HAProxyCapsule> {
+@RBACRule(
+        apiGroups = {""},
+        resources = {"secrets"},
+        verbs = {"create", "delete", "get", "list", "patch", "update", "watch"})
+@RBACRule(
+        apiGroups = {""},
+        resources = {"events"},
+        verbs = {"create", "delete", "get", "list", "patch", "update", "watch", "deletecollection"})
+public class HAProxyCapsuleReconciler implements Cleaner<HAProxyCapsule>, Reconciler<HAProxyCapsule> {
     public static final Predicate<HasMetadata> HAS_LABEL_SELECTOR_HAPROXY =
             hasLabel(Constants.LABEL_APP, Constants.COMPONENT_HAPROXY);
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
@@ -50,7 +63,7 @@ public class HAProxyCapsuleReconciler implements Reconciler<HAProxyCapsule>, Eve
             .addDependentResource(haProxyPod)
             .addDependentResource(haProxySecret)
             .addDependentResource(haProxyService)
-            .addDependentResource(haProxyDeployment)
+            .addDependentResourceAndConfigure(haProxyDeployment)
             .dependsOn(haProxyConfigMap, haProxySecret)
             .withReconcilePrecondition(new HAProxyDeployment.Ready(this))
             .build();
@@ -68,17 +81,18 @@ public class HAProxyCapsuleReconciler implements Reconciler<HAProxyCapsule>, Eve
                     resource.getMetadata().getName());
             workflow.reconcile(resource, context);
 
-            HAProxyCapsuleStatus.Phase phase = HAProxyCapsuleStatus.Phase.Unknown;
             Pod[] pods = context.getSecondaryResources(Pod.class).toArray(Pod[]::new);
-            if (1 == pods.length) {
-                phase = HAProxyCapsuleStatus.Phase.valueOf(pods[0].getStatus().getPhase());
-            }
+            HAProxyCapsuleStatus.Phase phase = pods.length != 1
+                    ? HAProxyCapsuleStatus.Phase.Unknown
+                    : HAProxyCapsuleStatus.Phase.valueOf(pods[0].getStatus().getPhase());
 
-            return UpdateControl.patchStatus(resource.edit()
-                    .editStatus()
-                    .withObservedGeneration(resource.getMetadata().getGeneration())
-                    .withPhase(phase)
-                    .endStatus()
+            return UpdateControl.patchStatus(edit(new HAProxyCapsule())
+                    .with(metadata -> metadata.editMetadata()
+                            .withName(resource.getMetadata().getName())
+                            .withNamespace(resource.getMetadata().getNamespace()))
+                    .with(status -> status.editStatus()
+                            .withObservedGeneration(resource.getMetadata().getGeneration())
+                            .withPhase(phase))
                     .build());
         } finally {
             log.infof(
@@ -88,8 +102,18 @@ public class HAProxyCapsuleReconciler implements Reconciler<HAProxyCapsule>, Eve
     }
 
     @Override
-    public Map<String, EventSource> prepareEventSources(final EventSourceContext<HAProxyCapsule> context) {
+    public List<EventSource<?, HAProxyCapsule>> prepareEventSources(final EventSourceContext<HAProxyCapsule> context) {
         eventSourceContext = context;
-        return EventSourceInitializer.eventSourcesFromWorkflow(context, workflow);
+        return EventSourceUtils.eventSourcesFromWorkflow(context, workflow);
+    }
+
+    @Override
+    public DeleteControl cleanup(HAProxyCapsule resource, Context<HAProxyCapsule> context) throws Exception {
+        log.info("Deleting the resource: %s/%s "
+                .formatted(
+                        resource.getMetadata().getNamespace(),
+                        resource.getMetadata().getName()));
+        cleanupEvents(resource, context);
+        return DeleteControl.defaultDelete();
     }
 }

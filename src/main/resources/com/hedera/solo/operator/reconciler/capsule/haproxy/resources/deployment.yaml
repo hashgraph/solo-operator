@@ -45,4 +45,5 @@ spec:
       - name: haproxy-secret
         secret:
           secretName: haproxy-secret
-  strategy: {}
+  strategy:
+    type: RollingUpdate

@@ -3,7 +3,6 @@
 package com.hedera.solo.operator.test.orbit;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
-import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -50,9 +49,6 @@ class OrbitTest {
 
     @BeforeEach
     void setup() {
-        if (isTestUsingGradleOrIntelliJ()) {
-            operator.start();
-        }
         cleanup();
     }
 

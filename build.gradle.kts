@@ -11,15 +11,15 @@ plugins {
 val quarkusPlatformGroupId: String by project
 val quarkusPlatformArtifactId: String by project
 val quarkusPlatformVersion: String by project
-val assertjVersion: String by project
-val sundrVersion: String by project
-val fabric8Version: String by project
-val lombokVersion: String by project
-val hederaSdkVersion: String by project
-val javaoperatorsdkVersion: String by project
-val spotbugsVersion: String by project
-val wiremockVersion: String by project
-val smallryeCertificateGeneratorVersion: String by project
+val assertjVersion = libs.versions.assertj.get()
+val sundrVersion = libs.versions.sundr.get()
+val fabric8Version = libs.versions.fabric8.get()
+val lombokVersion = libs.versions.lombok.get()
+val hederaSdkVersion = libs.versions.hedera.sdk.get()
+val javaoperatorsdkVersion = libs.versions.javaoperatorsdk.get()
+val spotbugsVersion = libs.versions.spotbugs.get()
+val wiremockVersion = libs.versions.wiremock.get()
+val smallryeCertificateGeneratorVersion = libs.versions.smallrye.certificate.generator.get()
 
 dependencies {
     annotationProcessor("io.sundr:builder-annotations:${sundrVersion}")
@@ -61,6 +61,9 @@ dependencies {
     testImplementation("io.grpc:grpc-netty")
     testImplementation("com.hedera.fullstack:fullstack-helm-client:0.32.0")
     testImplementation("org.wiremock:wiremock:${wiremockVersion}")
+    testImplementation(
+        "io.smallrye.certs:smallrye-certificate-generator-junit5:${smallryeCertificateGeneratorVersion}"
+    )
     componentTestImplementation(
         "io.javaoperatorsdk:operator-framework-junit-5:${javaoperatorsdkVersion}"
     )
@@ -114,7 +117,7 @@ objectModelGenerator {
     register(sourceSets.main) {
         configBuilderOverrides =
             mapOf(
-                "common.operator.solo.hedera.com-v1.yml" to
+                "commons.operator.solo.hedera.com-v1.yml" to
                     defaultConfigBuilder
                         .build()
                         .toBuilder()

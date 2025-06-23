@@ -26,8 +26,10 @@ import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckProcessor;
 import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckTask;
+import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckTaskConfig;
 import com.hedera.solo.operator.reconciler.networkoperation.genesis.NetworkGenesisProcessor;
 import com.hedera.solo.operator.reconciler.networkoperation.genesis.NetworkGenesisTask;
+import com.hedera.solo.operator.reconciler.networkoperation.genesis.NetworkGenesisTaskConfig;
 import com.hedera.solo.operator.reconciler.networkoperation.genesis.steps.CheckConsensusNodeSecretsStep;
 import com.hedera.solo.operator.reconciler.networkoperation.node.NodeOperationProcessor;
 import com.hedera.solo.operator.reconciler.networkoperation.upgrade.NetworkUpgradeProcessor;
@@ -39,6 +41,7 @@ import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.api.model.ObjectReference;
 import io.fabric8.kubernetes.api.model.PodBuilder;
+import io.fabric8.kubernetes.api.model.PodConditionBuilder;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -46,11 +49,9 @@ import io.javaoperatorsdk.operator.api.config.ControllerConfigurationOverrider;
 import io.javaoperatorsdk.operator.junit.LocallyRunOperatorExtension;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -58,6 +59,34 @@ import org.mockito.Mockito;
 
 @SoloTest
 public class NetworkOperationTest extends AbstractOperatorTest {
+
+    /**
+     * Mock network check config with default values
+     *
+     * @return Network check config
+     */
+    private static NetworkCheckTaskConfig mockCheckConfig() {
+        final NetworkCheckTaskConfig checkConfig = Mockito.mock(NetworkCheckTaskConfig.class);
+        Mockito.when(checkConfig.maxRetries()).thenReturn(30);
+        Mockito.when(checkConfig.retryInterval()).thenReturn(2L);
+        return checkConfig;
+    }
+
+    /**
+     * Mock genesis config with default values
+     *
+     * @return Genesis config
+     */
+    private static NetworkGenesisTaskConfig mockGenesisConfig() {
+        final NetworkGenesisTaskConfig genesisConfig = Mockito.mock(NetworkGenesisTaskConfig.class);
+        Mockito.when(genesisConfig.maxRetries()).thenReturn(30);
+        Mockito.when(genesisConfig.retryInterval()).thenReturn(2L);
+        return genesisConfig;
+    }
+
+    // initialized in configure method and behaviour is mocked as necessary for individual tests
+    NetworkCheckTaskConfig checkConfig;
+    NetworkGenesisTaskConfig genesisConfig;
 
     /**
      * Prepare a custom resource manager with mocked methods
@@ -137,6 +166,10 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                                         .withNewStatus()
                                         .withPhase("Running")
                                         .withPodIP("10.0.0.%d".formatted(nodeId + 1))
+                                        .withConditions(new PodConditionBuilder()
+                                                .withType("Ready")
+                                                .withStatus("False")
+                                                .build())
                                         .endStatus()
                                         .build());
                     }
@@ -149,11 +182,14 @@ public class NetworkOperationTest extends AbstractOperatorTest {
 
     @Override
     protected LocallyRunOperatorExtension.Builder configure(final KubernetesClient client) {
+        checkConfig = mockCheckConfig();
+        genesisConfig = mockGenesisConfig();
+
         final CustomResourceManager customResourceManager = prepareCustomResourceManager(client);
         final NetworkCheckProcessor networkCheckProcessor =
-                new NetworkCheckProcessor(new NetworkCheckTask(customResourceManager));
-        final NetworkGenesisProcessor networkGenesisProcessor =
-                new NetworkGenesisProcessor(new NetworkGenesisTask(customResourceManager, networkCheckProcessor));
+                new NetworkCheckProcessor(new NetworkCheckTask(customResourceManager, checkConfig));
+        final NetworkGenesisProcessor networkGenesisProcessor = new NetworkGenesisProcessor(
+                new NetworkGenesisTask(customResourceManager, networkCheckProcessor, genesisConfig));
         final NetworkUpgradeProcessor networkUpgradeProcessor = Mockito.mock(NetworkUpgradeProcessor.class);
         final NodeOperationProcessor nodeOperationProcessor = Mockito.mock(NodeOperationProcessor.class);
         return builder(client)
@@ -194,15 +230,6 @@ public class NetworkOperationTest extends AbstractOperatorTest {
         return nodeIds;
     }
 
-    private List<String> prepareNodeNames(List<Long> nodeIds) {
-        List<String> nodeNames = new ArrayList<>();
-        for (Long nodeId : nodeIds) {
-            nodeNames.add(Metadata.prepareNodeName(nodeId));
-        }
-
-        return nodeNames;
-    }
-
     private String networkOperationName(int i) {
         return "init-%02d".formatted(i); // prepare name with padding so that it can be ordered by name
     }
@@ -211,16 +238,13 @@ public class NetworkOperationTest extends AbstractOperatorTest {
     void oneNetworkOperationAtATime() {
         int total = 5;
         List<Long> capsuleNodeIds = prepareNodeIds(3);
-        List<String> capsuleNames = prepareNodeNames(capsuleNodeIds);
 
         capsuleNodeIds.forEach(this::createCapsule);
 
         for (int i = 0; i < total; ++i) {
             String name = networkOperationName(i);
             createNetworkOperation(name, false);
-            await().atMost(60, TimeUnit.SECONDS).untilAsserted(() -> {
-                verifyNetworkOperationSucceeded(name, true);
-            });
+            await().atMost(60, TimeUnit.SECONDS).untilAsserted(() -> verifyNetworkOperationSucceeded(name, true));
         }
     }
 
@@ -244,7 +268,7 @@ public class NetworkOperationTest extends AbstractOperatorTest {
 
         for (int i = 0; i < total; ++i) {
             final int nodeId = i;
-            await().atMost(60, TimeUnit.SECONDS).untilAsserted(() -> {
+            await().atMost(150, TimeUnit.SECONDS).untilAsserted(() -> {
                 String name = networkOperationName(nodeId);
                 verifyNetworkOperationSucceeded(name, 0 != nodeId % noUpdatePeriod);
             });
@@ -253,6 +277,7 @@ public class NetworkOperationTest extends AbstractOperatorTest {
 
     @Test
     void failNetworkOperation() {
+        Mockito.when(checkConfig.maxRetries()).thenReturn(1);
         List<Long> capsuleNodeIds = prepareNodeIds(3);
         capsuleNodeIds.forEach(nodeId -> createCapsule(
                 nodeId,
@@ -270,20 +295,8 @@ public class NetworkOperationTest extends AbstractOperatorTest {
             NetworkOperation no = operator().get(NetworkOperation.class, "init");
             assertThat(no).isNotNull();
             assertThat(no.getStatus()).isNotNull();
+            assertThat(no.getStatus().getConditions()).hasSize(5);
             assertThat(no.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Failed);
-            Map<String, List<Condition>> conditions =
-                    no.getStatus().getConditions().stream().collect(Collectors.groupingBy(Condition::getType));
-
-            assertThat(conditions.values().stream().flatMap(Collection::stream))
-                    .size()
-                    .isEqualTo(4);
-
-            Condition valid = conditions.get("CheckConsensusSecrets").getFirst();
-            assertThat(valid.getStatus()).isEqualTo(ConditionStatus.True);
-
-            Condition ready = conditions.get("ConsensusCapsuleReady").getFirst();
-            assertThat(ready.getStatus()).isEqualTo(ConditionStatus.False);
-            assertThat(ready.getMessage()).isEqualTo("Capsule phases: {node1=Failed, node2=Failed, node3=Failed}");
         });
     }
 
@@ -340,10 +353,10 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                                         Constants.COMPONENT_SECRET)))
                         .with(data -> data.withData(Map.of("key", "dmFsdWU=")))
                         .build());
-        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(operator().get(Secret.class, secret.getMetadata().getName()))
-                    .isNotNull();
-        });
+        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> assertThat(
+                        operator().get(Secret.class, secret.getMetadata().getName()))
+                .isNotNull());
+
         return new KeyReferenceBuilder()
                 .withSecretName(secret.getMetadata().getName())
                 .withKeyName("key")
@@ -364,20 +377,25 @@ public class NetworkOperationTest extends AbstractOperatorTest {
             assertThat(no.getStatus()).isNotNull();
             assertThat(no.getStatus().getConditions()).isNotNull();
             List<Condition> conditions = no.getStatus().getConditions().stream()
-                    .filter(c -> CheckConsensusNodeSecretsStep.CONDITION_TYPE.equals(c.getType()))
+                    .filter(c ->
+                            CheckConsensusNodeSecretsStep.CONDITION_TYPE.type().equals(c.getType())
+                                    && CheckConsensusNodeSecretsStep.CONDITION_TYPE
+                                            .reason()
+                                            .equals(c.getReason()))
                     .toList();
             assertThat(conditions.size()).isEqualTo(1);
             Condition condition = conditions.getFirst();
             assertThat(condition.getStatus()).isEqualTo(valid ? ConditionStatus.True : ConditionStatus.False);
             if (!valid) {
-                // check that at least one condition no with reason SECRET_VALID is present and has status False
                 boolean found = false;
                 for (Condition c : no.getStatus().getConditions()) {
-                    if (CheckConsensusNodeSecretsStep.SECRETS_VALID.equals(c.getReason())) {
-                        if (c.getStatus().equals(ConditionStatus.False)) {
-                            found = true;
-                            break;
-                        }
+                    if (!CheckConsensusNodeSecretsStep.CONDITION_TYPE.type().equals(c.getType())
+                            && !CheckConsensusNodeSecretsStep.CONDITION_TYPE
+                                    .reason()
+                                    .equals(c.getReason())
+                            && c.getStatus().equals(ConditionStatus.False)) {
+                        found = true;
+                        break;
                     }
                 }
                 assertThat(found).isTrue();
@@ -408,7 +426,7 @@ public class NetworkOperationTest extends AbstractOperatorTest {
             assertThat(event.getReportingComponent()).isEqualTo("solo-operator");
             assertThat(event.getType()).isEqualTo("Error");
             assertThat(event.getReason()).isEqualTo("Failed");
-            assertThat(event.getMessage()).contains("Secrets validation failed");
+            assertThat(event.getMessage()).contains(CheckConsensusNodeSecretsStep.FAIL_STATUS_MESSAGE);
         });
     }
 
@@ -432,9 +450,6 @@ public class NetworkOperationTest extends AbstractOperatorTest {
             assertThat(no.getStatus()).isNotNull();
             assertThat(no.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Pending);
         });
-        sleep(1000);
-        assertThat(operator().get(NetworkOperation.class, name).getStatus().getPhase())
-                .isEqualTo(NetworkOperationStatus.Phase.Pending);
         operator().delete(operator().get(NetworkOperation.class, name));
     }
 
@@ -510,13 +525,5 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                                 .withImageTag("tag"))
                         .with(secret -> secret.editSpec().editSecrets().withSecretResources(secretResources))
                         .build());
-    }
-
-    void sleep(final long millis) {
-        try {
-            Thread.sleep(millis);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
     }
 }

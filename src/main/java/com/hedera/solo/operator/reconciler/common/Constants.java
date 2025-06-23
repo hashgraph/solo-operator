@@ -68,6 +68,7 @@ public final class Constants {
     public static final String TPL_VAR_RECORD_STREAM_SIDECAR_FILES_UPLOADER = "rssu";
     public static final String TPL_VAR_OPEN_TELEMETRY_COLLECTOR = "oc";
     public static final String TPL_VAR_SECRETS = "secrets";
+    public static final String TPL_VAR_CONFIG = "config";
     public static final String TPL_VAR_HOST_EXTERNAL_IP = "hostIp";
 
     // Sidecars

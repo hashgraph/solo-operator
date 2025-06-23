@@ -8,6 +8,7 @@ import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
+import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.FreezeAbortStep;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.time.Duration;
@@ -25,7 +26,7 @@ public class FreezeAbortTask extends AbstractProcessorTask<NetworkOperation, Net
 
     @Override
     public List<ProcessorStep<NetworkOperation, NetworkOperationStatus>> steps() throws ProcessorException {
-        return List.of(); // define a lambda or step to encapsulate the logic
+        return List.of(new FreezeAbortStep()); // define a lambda or step to encapsulate the logic
     }
 
     @Override

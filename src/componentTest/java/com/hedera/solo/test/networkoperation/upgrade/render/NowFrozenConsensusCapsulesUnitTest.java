@@ -26,7 +26,7 @@ import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podpropertie
 import com.hedera.solo.operator.model.v1alpha1.networkoperationspec.NetworkUpgrade;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationspec.networkupgrade.Changesets;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationstatus.SoftwareSourceStatus;
-import com.hedera.solo.operator.reconciler.networkoperation.render.NowFrozenConsensusCapsules;
+import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.render.NowFrozenConsensusCapsules;
 import com.hedera.solo.operator.test.fixtures.fuzz.BeanFactory;
 import com.hedera.solo.operator.test.fixtures.fuzz.KubernetesResourceFactory;
 import java.lang.reflect.Type;
@@ -121,7 +121,11 @@ public class NowFrozenConsensusCapsulesUnitTest {
                         Containers::getRecordStreamUploader);
                 maybeMatch(
                         networkOperation.getStatus().getSoftwareSourceStatus().getOtelCollector(),
-                        initial.getSpec().getPodProperties().getContainers().getOpenTelemetryCollector(),
+                        orNull(() -> initial.getSpec()
+                                .getPodProperties()
+                                .getContainers()
+                                .getOpenTelemetryCollector()
+                                .getSoftwareVersion()),
                         orNull(() -> updated.getSpec()
                                 .getPodProperties()
                                 .getContainers()
@@ -160,15 +164,20 @@ public class NowFrozenConsensusCapsulesUnitTest {
             final Function<Containers, StreamUploader> getContainer) {
         maybeMatch(
                 getStatus.apply(networkOperation.getStatus().getSoftwareSourceStatus()),
-                getContainer.apply(initial.getSpec().getPodProperties().getContainers()),
+                orNull(() -> getContainer
+                        .apply(initial.getSpec().getPodProperties().getContainers())
+                        .getSoftwareVersion()),
                 orNull(() -> getContainer
                         .apply(updated.getSpec().getPodProperties().getContainers())
                         .getSoftwareVersion()));
     }
 
-    void maybeMatch(final List<ImageRepositoryStatus> list, final Object initial, final SoftwareVersion actual) {
+    void maybeMatch(
+            final List<ImageRepositoryStatus> list, final SoftwareVersion initial, final SoftwareVersion actual) {
         if (list != null && initial != null) {
             match(list, actual);
+        } else {
+            assertThat(actual).isEqualTo(initial);
         }
     }
 

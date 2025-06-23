@@ -2,6 +2,9 @@
 
 package com.hedera.solo.operator.reconciler.orbit;
 
+import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
+import static com.hedera.solo.operator.library.reconcile.ReconcileEvent.cleanupEvents;
+
 import com.hedera.solo.operator.model.v1alpha1.Orbit;
 import com.hedera.solo.operator.model.v1alpha1.OrbitStatus;
 import com.hedera.solo.operator.model.v1alpha1.OrbitStatusBuilder;
@@ -11,28 +14,39 @@ import com.hedera.solo.operator.reconciler.orbit.resources.ConsensusConfigMap;
 import com.hedera.solo.operator.reconciler.orbit.resources.ConsensusHeadlessService;
 import com.hedera.solo.operator.reconciler.orbit.resources.OrbitNamespace;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
+import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
-import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusHandler;
+import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
+import io.javaoperatorsdk.operator.api.reconciler.Workflow;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
+import io.quarkiverse.operatorsdk.annotations.RBACRule;
 import jakarta.inject.Inject;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import org.jboss.logging.Logger;
 
-@ControllerConfiguration(
-        name = "orbit",
+@Workflow(
         dependents = {
             @Dependent(name = "namespace", type = OrbitNamespace.class),
             @Dependent(type = ConsensusConfigMap.class, dependsOn = "namespace"),
             @Dependent(type = ConsensusCapsuleRole.class, dependsOn = "namespace"),
             @Dependent(type = ConsensusHeadlessService.class, dependsOn = "namespace"),
         })
-public class OrbitReconciler implements Reconciler<Orbit>, ErrorStatusHandler<Orbit> {
+@ControllerConfiguration(name = "orbit")
+@RBACRule(
+        apiGroups = {""},
+        resources = {"secrets"},
+        verbs = {"create", "delete", "get", "list", "patch", "update", "watch"})
+@RBACRule(
+        apiGroups = {""},
+        resources = {"events"},
+        verbs = {"create", "delete", "get", "list", "patch", "update", "watch", "deletecollection"})
+public class OrbitReconciler implements Cleaner<Orbit>, Reconciler<Orbit> {
 
     private final Logger log;
 
@@ -47,8 +61,12 @@ public class OrbitReconciler implements Reconciler<Orbit>, ErrorStatusHandler<Or
             log.infof(
                     "Orbit - Starting Reconciliation [ name = '%s' ]",
                     orbit.getMetadata().getName());
-            createOrUpdateStatus(orbit);
-            return UpdateControl.patchStatus(orbit);
+            return UpdateControl.patchStatus(edit(new Orbit())
+                    .with(metadata -> metadata.editMetadata()
+                            .withName(orbit.getMetadata().getName())
+                            .withNamespace(orbit.getMetadata().getNamespace()))
+                    .with(status -> status.withStatus(createOrUpdateStatus(orbit)))
+                    .build());
         } finally {
             log.infof(
                     "Orbit - Finished Reconciliation [ name = '%s' ]",
@@ -62,7 +80,7 @@ public class OrbitReconciler implements Reconciler<Orbit>, ErrorStatusHandler<Or
         return ErrorStatusUpdateControl.patchStatus(orbit);
     }
 
-    private void createOrUpdateStatus(final Orbit orbit) {
+    private OrbitStatus createOrUpdateStatus(final Orbit orbit) {
         final OrbitStatusBuilder builder =
                 orbit.getStatus() != null ? orbit.getStatus().edit() : new OrbitStatusBuilder();
         final Instant now = Instant.now();
@@ -88,6 +106,13 @@ public class OrbitReconciler implements Reconciler<Orbit>, ErrorStatusHandler<Or
 
         builder.withObservedGeneration(orbit.getMetadata().getGeneration());
 
-        orbit.setStatus(builder.build());
+        return builder.build();
+    }
+
+    @Override
+    public DeleteControl cleanup(Orbit resource, Context<Orbit> context) throws Exception {
+        log.info("Deleting orbit: %s ".formatted(resource.getMetadata().getName()));
+        cleanupEvents(resource, context);
+        return DeleteControl.defaultDelete();
     }
 }

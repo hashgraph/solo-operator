@@ -22,6 +22,7 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
+import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.networkoperation.check.NetworkCheckProcessor;
 import com.hedera.solo.operator.reconciler.networkoperation.genesis.NetworkGenesisProcessor;
 import com.hedera.solo.operator.reconciler.networkoperation.node.NodeOperationProcessor;
@@ -32,24 +33,32 @@ import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
-import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusHandler;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
+import io.quarkiverse.operatorsdk.annotations.RBACRule;
 import jakarta.inject.Inject;
 import java.lang.invoke.MethodHandles;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import org.jboss.logging.Logger;
 
 /** {@code NetworkOperationReconciler} operates on a single CR per namespace at any given time. */
 @ControllerConfiguration(name = "network-operation-v2")
-public class NetworkOperationSequenceReconciler
-        implements ErrorStatusHandler<NetworkOperation>, Reconciler<NetworkOperation>, Cleaner<NetworkOperation> {
+@RBACRule(
+        apiGroups = {""},
+        resources = {"secrets"},
+        verbs = {"create", "delete", "get", "list", "patch", "update", "watch"})
+@RBACRule(
+        apiGroups = {""},
+        resources = {"events"},
+        verbs = {"create", "delete", "get", "list", "patch", "update", "watch", "deletecollection"})
+public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOperation>, Cleaner<NetworkOperation> {
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
     private static final Sequencer<NetworkOperation> sequencer =
             new Sequencer<>(NetworkOperationSequenceReconciler::activeResources);
@@ -94,13 +103,16 @@ public class NetworkOperationSequenceReconciler
     public ProcessorResult<NetworkOperationStatus> process(
             final NetworkOperation resource, final Context<NetworkOperation> context) throws Exception {
         log.infof(
-                "'%s/%s' [mode: %s, created: %s, uuid: %s, phase: %s]: PROCESSING",
+                "Processing network operation '%s/%s' [upgrade-step: %s, created_at: %s, uuid: %s, phase: %s, mode: %s]",
                 resource.getMetadata().getNamespace(),
                 resource.getMetadata().getName(),
-                resource.getSpec().getMode(),
+                resource.getSpec().getNetworkUpgrade() != null
+                        ? resource.getSpec().getNetworkUpgrade().getWorkflowStep()
+                        : "N/A",
                 resource.getMetadata().getCreationTimestamp(),
                 resource.getMetadata().getUid(),
-                resource.getStatus().getPhase());
+                resource.getStatus().getPhase(),
+                resource.getSpec().getMode());
 
         ProcessorResult<NetworkOperationStatus> result =
                 processorFromMode(resource).process(resource, context);
@@ -130,23 +142,37 @@ public class NetworkOperationSequenceReconciler
     @Override
     public UpdateControl<NetworkOperation> reconcile(
             final NetworkOperation resource, final Context<NetworkOperation> context) throws Exception {
+        Objects.requireNonNull(resource, "Network operation resource cannot be null");
+        Objects.requireNonNull(resource.getSpec(), "Network operation spec cannot be null");
+        Objects.requireNonNull(resource.getMetadata(), "Network operation metadata cannot be null");
+        Objects.requireNonNull(context, "Network operation context cannot be null");
+
+        log.infof(
+                "Reconciling network operation '%s/%s' [ created_at: %s, uuid: %s, mode: %s]",
+                resource.getMetadata().getNamespace(),
+                resource.getMetadata().getName(),
+                resource.getMetadata().getCreationTimestamp(),
+                resource.getMetadata().getUid(),
+                resource.getSpec().getMode());
+
         // if it hasn't been initialized yet, then initialize and reschedule so that initialized resource is persisted.
         // note, it initializes a new status object with consensus capsule names and phase as "Pending"
         if (resource.getStatus() == null
                 || resource.getStatus().getConsensusCapsules() == null
                 || resource.getStatus().getConsensusCapsules().isEmpty()) {
             final NetworkOperation initialized = initialize(resource);
-            return UpdateControl.patchStatus(initialized).rescheduleAfter(DEFAULT_RESCHEDULE_DELAY);
+            return UpdateControl.patchResourceAndStatus(initialized).rescheduleAfter(DEFAULT_RESCHEDULE_DELAY);
         }
 
         // is this resource is done, then return
         if (isDone(resource)) {
             log.infof(
-                    "'%s/%s' [created: %s, uuid: %s]: DONE",
+                    "Networkoperation is done: '%s/%s' [created_at: %s, uuid: %s, phase: %s]",
                     resource.getMetadata().getNamespace(),
                     resource.getMetadata().getName(),
                     resource.getMetadata().getCreationTimestamp(),
-                    resource.getMetadata().getUid());
+                    resource.getMetadata().getUid(),
+                    resource.getStatus().getPhase());
             return UpdateControl.noUpdate();
         }
 
@@ -160,7 +186,7 @@ public class NetworkOperationSequenceReconciler
             }
 
             log.infof(
-                    "'%s/%s' [created: %s, uuid: %s, queue: %s]: NOT FIRST IN QUEUE",
+                    "Not first in queue: '%s/%s' [created_at: %s, uuid: %s, queue: %s]",
                     resource.getMetadata().getNamespace(),
                     resource.getMetadata().getName(),
                     resource.getMetadata().getCreationTimestamp(),
@@ -173,24 +199,47 @@ public class NetworkOperationSequenceReconciler
             return UpdateControl.noUpdate();
         }
 
+        if (!NetworkOperationStatus.Phase.Running.equals(resource.getStatus().getPhase())) {
+            // persist the resource with the Running phase
+            final NetworkOperation running = edit(resource)
+                    .with(r -> r.editStatus().withPhase(NetworkOperationStatus.Phase.Running))
+                    .build();
+            return UpdateControl.patchStatus(running).rescheduleAfter(DEFAULT_RESCHEDULE_DELAY);
+        }
+
         // process the resource and set the desired status
         final ProcessorResult<NetworkOperationStatus> result = process(resource, context);
-        NetworkOperation desired =
-                edit(resource).with(r -> r.withStatus(result.getStatus())).build();
+        NetworkOperation desired = edit(new NetworkOperation())
+                .with(metadata -> metadata.editMetadata()
+                        .withName(resource.getMetadata().getName())
+                        .withNamespace(resource.getMetadata().getNamespace())
+                        .withUid(resource.getMetadata().getUid()))
+                .with(r -> r.withStatus(result.getStatus()))
+                .build();
         if (isDone(desired)) {
             log.infof(
-                    "'%s/%s' [mode: %s, created: %s, uuid: %s]: MARK AS DONE",
+                    "Processed network-operation resource: '%s/%s' [mode: %s, created_at: %s, uuid: %s, phase: %s]",
                     resource.getMetadata().getNamespace(),
                     resource.getMetadata().getName(),
                     resource.getSpec().getMode(),
                     resource.getMetadata().getCreationTimestamp(),
-                    resource.getMetadata().getUid());
+                    resource.getMetadata().getUid(),
+                    resource.getStatus().getPhase());
             sequencer.markAsCompleted(new SequencerRequest<>(desired));
             return UpdateControl.patchStatus(desired).rescheduleAfter(DEFAULT_RESCHEDULE_DELAY);
         }
 
         final Duration delay = sequencer.computeReconcileDelay(
                 new SequencerRequest<>(desired, result.getReconcileDelay(), result.getProcessingTime()));
+        log.infof(
+                "Finished reconciling: '%s/%s' [mode: %s, created_at: %s, uuid: %s, reconcile-delay: %s]",
+                resource.getMetadata().getNamespace(),
+                resource.getMetadata().getName(),
+                resource.getSpec().getMode(),
+                resource.getMetadata().getCreationTimestamp(),
+                resource.getMetadata().getUid(),
+                delay);
+
         return UpdateControl.patchStatus(desired).rescheduleAfter(delay);
     }
 
@@ -208,16 +257,28 @@ public class NetworkOperationSequenceReconciler
             capsuleNames.add(capsule.getMetadata().getName());
         }
 
+        log.infof(
+                "Initialize network operation: %s/%s [ consensus-capsules: %s]",
+                namespace, resource.getMetadata().getName(), capsuleNames);
+
         String timestamp = timestamp();
-        return edit(resource)
+        return edit(new NetworkOperation())
+                .with(metadata -> metadata.editMetadata()
+                        .withName(resource.getMetadata().getName())
+                        .withNamespace(resource.getMetadata().getNamespace())
+                        .withLabels(Map.of(
+                                Constants.LABEL_K8S_MANAGED_BY,
+                                Constants.SOLO_OPERATOR // force the label during initialization
+                                )))
                 .with(r -> r.withNewStatus() // initializing an empty new status
+                        .withObservedGeneration(resource.getMetadata().getGeneration())
                         .withConsensusCapsules(capsuleNames)
                         .withPhase(NetworkOperationStatus.Phase.Pending)
                         .withConditions(new Condition(
                                 timestamp,
                                 "Network operation initialized",
                                 null,
-                                null,
+                                "Initialized",
                                 ConditionStatus.True,
                                 "Initialized")))
                 .build();
@@ -253,7 +314,7 @@ public class NetworkOperationSequenceReconciler
 
     /** Prepare and return the list of active resources that needs to be considered for sequencing. */
     public static List<NetworkOperation> activeResources() {
-        // FIXME: should we fetch all network-operation CRs or only in the current namespace?
+        // fetch all network-operation CRs
         List<NetworkOperation> items = customResourceManager.networkOperations();
         List<NetworkOperation> active = new ArrayList<>();
         for (NetworkOperation item : items) {
@@ -314,9 +375,11 @@ public class NetworkOperationSequenceReconciler
                 .with(r -> r.editStatus()
                         .withPhase(NetworkOperationStatus.Phase.Failed)
                         .addToConditions(new ConditionBuilder()
+                                .withLastTransitionTime(timestamp())
+                                .withObservedGeneration(resource.getMetadata().getGeneration())
                                 .withType("Error")
-                                .withStatus(ConditionStatus.True)
                                 .withReason("Exception")
+                                .withStatus(ConditionStatus.True)
                                 .withMessage(e.getMessage())
                                 .build()))
                 .build();
@@ -332,10 +395,11 @@ public class NetworkOperationSequenceReconciler
      */
     @Override
     public DeleteControl cleanup(NetworkOperation resource, Context<NetworkOperation> context) {
-        log.info("Deleting the resource: %s/%s "
-                .formatted(
-                        resource.getMetadata().getNamespace(),
-                        resource.getMetadata().getName()));
+        log.infof(
+                "Deleting network-operation: %s/%s [mode = %s] ",
+                resource.getMetadata().getNamespace(),
+                resource.getMetadata().getName(),
+                resource.getSpec().getMode());
         sequencer.markAsDeleted(new SequencerRequest<>(resource));
         cleanupEvents(resource, context);
         return DeleteControl.defaultDelete();

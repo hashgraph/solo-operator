@@ -13,7 +13,7 @@
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader rssu}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader esu}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader bu}
-# {@com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector oc}
+# {@com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.OpenTelemetryCollector oc}
 # {@com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Secrets secrets}
 kind: Deployment
 apiVersion: apps/v1
@@ -28,6 +28,8 @@ spec:
       app.kubernetes.io/managed-by: solo-operator
       app.kubernetes.io/part-of: consensus-node
       app.kubernetes.io/component: deployment
+  strategy:
+    type: Recreate
   template:
     metadata:
       labels:
@@ -142,11 +144,21 @@ spec:
             - name: JAVA_OPTS
               value: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"
           readinessProbe:
-            timeoutSeconds: 5
+            timeoutSeconds: 30
+            periodSeconds: 45
             exec:
               command:
-                - jshell
-                - /mnt/cm/consensus-config/is-consensus-active
+                - sh
+                - -c
+                - |
+                  # jshell communicates with a java process over tcp using dynamic ports. The use of dynamic tcp ports can
+                  # conflict with the ability of consensus service to bind to listening ports. To avoid a conflict wait
+                  # until all required ports are listening.
+                  if [ "$(netstat -nlt | egrep ':::(9999|50111|50211|50212)' | wc -l)" -ne 4 ]; then
+                    echo service not ready
+                    exit 1
+                  fi
+                  jshell /mnt/cm/consensus-config/is-consensus-active
           volumeMounts:
             - name: s6-start-consensus
               mountPath: /etc/s6-overlay/s6-rc.d/start-consensus
@@ -176,6 +188,10 @@ spec:
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/stats
             - name: hgcapp-upgrade
               mountPath: /opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade
+            # {#if config}
+            - name: hostpath-config
+              mountPath: /mnt/config
+            # {/if}
             # {#if secrets}
             # {#if secrets.hostPath}
             - name: keys
@@ -453,7 +469,13 @@ spec:
             - name: OTEL_ACCOUNT_ID
               value: "{accountId}"
             - name: OTEL_HOST_IP
+              #{#if hostIp == null || hostIp == ""}
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+              #{#else}
               value: "{hostIp}"
+              #{/if}
             - name: OTEL_LOG_LEVEL
               value: "{oc.config.logLevel}"
             - name: OTEL_ENVIRONMENT
@@ -556,6 +578,12 @@ spec:
           emptyDir: {}
         - name: hgcapp-otel-file-storage
           emptyDir: {}
+        # {#if config}
+        - name: hostpath-config
+          hostPath:
+            path: {config.path}
+            type: {config.type}
+        # {/if}
         # {#if secrets}
         # {#if secrets.hostPath}
         - name: keys

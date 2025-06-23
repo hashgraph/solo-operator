@@ -1,0 +1,15 @@
+// SPDX-License-Identifier: Apache-2.0
+
+package com.hedera.solo.operator.reconciler.networkoperation.check;
+
+import io.smallrye.config.ConfigMapping;
+import io.smallrye.config.WithDefault;
+
+@ConfigMapping(prefix = "solo.operator.network-operation.task.check")
+public interface NetworkCheckTaskConfig {
+    @WithDefault("150")
+    int maxRetries();
+
+    @WithDefault("2")
+    long retryInterval();
+}

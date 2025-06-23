@@ -8,9 +8,11 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
+import io.javaoperatorsdk.operator.api.reconciler.Workflow;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
 
-@ControllerConfiguration(dependents = {@Dependent(type = CapsuleService.class)})
+@Workflow(dependents = {@Dependent(type = CapsuleService.class)})
+@ControllerConfiguration
 public class ConsensusCapsuleServiceReconciler implements Reconciler<ConsensusCapsule> {
     @Override
     public UpdateControl<ConsensusCapsule> reconcile(

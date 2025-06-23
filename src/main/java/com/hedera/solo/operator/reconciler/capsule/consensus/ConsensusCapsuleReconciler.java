@@ -2,10 +2,12 @@
 
 package com.hedera.solo.operator.reconciler.capsule.consensus;
 
+import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
 import static com.hedera.solo.operator.library.model.Labels.hasLabel;
 import static com.hedera.solo.operator.library.reconcile.ReconcileEvent.cleanupEvents;
 import static com.hedera.solo.operator.library.reconcile.ReconcileEvent.createOrUpdateEvent;
 import static com.hedera.solo.operator.library.validate.ManifestValidation.validate;
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_NODE_NAME;
 
 import com.hedera.solo.operator.library.generic.Compare;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
@@ -26,6 +28,7 @@ import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.Capsu
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsuleUpgradePvc;
 import com.hedera.solo.operator.reconciler.common.ConditionStatus;
 import com.hedera.solo.operator.reconciler.common.Constants;
+import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ContainerState;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
@@ -35,11 +38,14 @@ import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
-import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusHandler;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
+import io.javaoperatorsdk.operator.api.reconciler.Workflow;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
+import io.quarkiverse.operatorsdk.annotations.RBACRule;
+import java.time.ZonedDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -48,8 +54,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.jboss.logging.Logger;
 
-@ControllerConfiguration(
-        name = "consensus-capsule",
+@Workflow(
         dependents = {
             @Dependent(name = "sa", type = CapsuleServiceAccount.class),
             @Dependent(type = CapsuleRoleBinding.class, dependsOn = "sa"),
@@ -65,8 +70,20 @@ import org.jboss.logging.Logger;
             @Dependent(type = CapsuleDeployment.class),
             @Dependent(type = CapsulePod.class)
         })
-public class ConsensusCapsuleReconciler
-        implements Cleaner<ConsensusCapsule>, Reconciler<ConsensusCapsule>, ErrorStatusHandler<ConsensusCapsule> {
+@ControllerConfiguration(name = "consensus-capsule")
+@RBACRule(
+        apiGroups = {""},
+        resources = {"secrets"},
+        verbs = {"create", "delete", "get", "list", "patch", "update", "watch"})
+@RBACRule(
+        apiGroups = {""},
+        resources = {"persistentvolumes"},
+        verbs = {"list", "get"})
+@RBACRule(
+        apiGroups = {""},
+        resources = {"events"},
+        verbs = {"create", "delete", "get", "list", "patch", "update", "watch", "deletecollection"})
+public class ConsensusCapsuleReconciler implements Cleaner<ConsensusCapsule>, Reconciler<ConsensusCapsule> {
     public static final Predicate<HasMetadata> HAS_LABEL_SELECTOR_CONSENSUS_NODE =
             hasLabel(Constants.LABEL_APP, Constants.COMPONENT_CONSENSUS_NODE);
     public static final String CONSENSUS_CONTAINER_NAME = "consensus-node";
@@ -78,25 +95,28 @@ public class ConsensusCapsuleReconciler
             final ConsensusCapsule capsule, final Context<ConsensusCapsule> context) throws Exception {
         try {
             log.infof(
-                    "Consensus Capsule - Starting Reconciliation [ name = '%s' ]",
-                    capsule.getMetadata().getName());
+                    "Consensus Capsule - Starting Reconciliation [ name = '%s', namespace = '%s' ]",
+                    capsule.getMetadata().getName(), capsule.getMetadata().getNamespace());
 
             final Pod[] pods = context.getSecondaryResources(Pod.class).toArray(Pod[]::new);
-            final ConsensusCapsuleStatus.Phase phase = phase(pods);
+            final ConsensusCapsuleStatus.Phase phase =
+                    phase(findConsensusPod(capsule, context).orElse(null));
             log.infof(
-                    "Consensus Capsule - Phase [ name = '%s', phase = '%s' ]",
-                    capsule.getMetadata().getName(), phase);
+                    "Consensus Capsule - Phase [ name = '%s', namespace = '%s', phase = '%s' ]",
+                    capsule.getMetadata().getName(), capsule.getMetadata().getNamespace(), phase);
 
             final List<Condition> conditions = Optional.ofNullable(capsule.getStatus())
                     .map(ConsensusCapsuleStatus::getConditions)
                     .orElse(null);
 
-            final ConsensusCapsule desired = capsule.edit()
-                    .editStatus()
-                    .withObservedGeneration(capsule.getMetadata().getGeneration())
-                    .withPhase(phase)
-                    .withConditions(validate(capsule, conditions, validateSecrets(capsule)))
-                    .endStatus()
+            final ConsensusCapsule desired = edit(new ConsensusCapsule())
+                    .with(metadata -> metadata.editMetadata()
+                            .withName(capsule.getMetadata().getName())
+                            .withNamespace(capsule.getMetadata().getNamespace()))
+                    .with(status -> status.editStatus()
+                            .withObservedGeneration(capsule.getMetadata().getGeneration())
+                            .withPhase(phase)
+                            .withConditions(validate(capsule, conditions, validateSecrets(capsule))))
                     .build();
 
             // if possible, avoid updating capsule
@@ -111,15 +131,30 @@ public class ConsensusCapsuleReconciler
             return UpdateControl.patchStatus(desired);
         } finally {
             log.infof(
-                    "Consensus Capsule - Finished Reconciliation [ name = '%s' ]",
-                    capsule.getMetadata().getName());
+                    "Consensus Capsule - Finished Reconciliation [ name = '%s' namespace = '%s' ]",
+                    capsule.getMetadata().getName(), capsule.getMetadata().getNamespace());
         }
+    }
+
+    /**
+     * Find pod with latest creation timestamp for the consensus capsule
+     *
+     * @param capsule the consensus capsule
+     * @param context the context
+     * @return the latest pod for the consensus capsule
+     */
+    private Optional<Pod> findConsensusPod(ConsensusCapsule capsule, Context<ConsensusCapsule> context) {
+        String nodeName = Metadata.prepareNodeName(capsule.getSpec().getNodeId());
+        return context.getSecondaryResources(Pod.class).stream()
+                .filter(pod -> nodeName.equals(pod.getMetadata().getLabels().get(LABEL_NODE_NAME)))
+                .max(Comparator.comparing(
+                        pod -> ZonedDateTime.parse(pod.getMetadata().getCreationTimestamp())));
     }
 
     public static ConsensusCapsuleStatus.Phase phase(final Pod... pods) {
         ConsensusCapsuleStatus.Phase phase = ConsensusCapsuleStatus.Phase.Unknown;
 
-        if (1 == pods.length) {
+        if (1 == pods.length && pods[0] != null) {
             final Pod pod = pods[0];
             final ContainerStatus containerStatus = pod.getStatus().getContainerStatuses().stream()
                     .collect(Collectors.toMap(ContainerStatus::getName, Function.identity()))
@@ -190,6 +225,10 @@ public class ConsensusCapsuleReconciler
 
     @Override
     public DeleteControl cleanup(final ConsensusCapsule resource, final Context<ConsensusCapsule> context) {
+        log.info("Deleting consensus capsule: %s/%s "
+                .formatted(
+                        resource.getMetadata().getNamespace(),
+                        resource.getMetadata().getName()));
         cleanupEvents(resource, context);
         return DeleteControl.defaultDelete();
     }

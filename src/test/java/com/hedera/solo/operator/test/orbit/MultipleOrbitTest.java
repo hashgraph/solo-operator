@@ -11,7 +11,6 @@ import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_COM
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_MANAGED_BY;
 import static com.hedera.solo.operator.reconciler.common.Constants.SOLO_OPERATOR;
 import static com.hedera.solo.operator.reconciler.common.Metadata.prepareNodeName;
-import static com.hedera.solo.operator.test.fixtures.Environment.isTestUsingGradleOrIntelliJ;
 import static com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkCheckAddressBook.checkAddressBook;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -73,9 +72,6 @@ public class MultipleOrbitTest {
 
     @BeforeEach
     void setUp() {
-        if (isTestUsingGradleOrIntelliJ()) {
-            operator.start();
-        }
         cleanup();
 
         List<String> names = List.of("alpha", "beta", "gamma");
@@ -96,13 +92,12 @@ public class MultipleOrbitTest {
                             .withNickName(nodeName)
                             .withSelfName(nodeName)
                             .withWeight(1L)
-                            .withInternalHostname("node%s.consensus.multipleorbittest-%s.svc%s"
-                                    .formatted(id + 1, names.get(id), domain != null ? "." + domain : ""))
+                            .withInternalHostname("127.0.0.1")
                             .withInternalPort(50111)
                             .withExternalHostname(nodeName + "-svc.multipleorbittest-" + names.get(id))
                             .withExternalPort(50111)
                             .withNodeAccount("0.0." + (id + 3))
-                            .withPublicLedgerKey(publicKey))
+                            .withPublicSigningCertificate(publicKey))
                     .build());
         }
         Map<String, List<AddressBookEntry>> externalAddresses = new HashMap<>();
@@ -288,6 +283,7 @@ public class MultipleOrbitTest {
                         .withAccountId("0.0." + (id + 3))
                         .withWeight(1L)
                         .withNodeId(id)
+                        .withInternalAddress("127.0.0.1")
                         .withExternalAddress(prepareNodeName(id) + "-svc." + namespace))
                 .with(image -> image.editSpec()
                         .editPodProperties()

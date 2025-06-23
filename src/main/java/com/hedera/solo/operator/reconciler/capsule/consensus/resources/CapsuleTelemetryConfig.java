@@ -5,14 +5,13 @@ package com.hedera.solo.operator.reconciler.capsule.consensus.resources;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_OPEN_TELEMETRY_COLLECTOR;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_ORBIT_NAME;
 
-import com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.OpenTelemetryCollector;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.client.utils.Serialization;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.DependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
@@ -23,7 +22,7 @@ import io.quarkus.qute.TemplateInstance;
 import java.util.Objects;
 import java.util.Optional;
 
-@KubernetesDependent(resourceDiscriminator = CapsuleTelemetryConfig.Discriminator.class)
+@KubernetesDependent
 public class CapsuleTelemetryConfig extends CRUDKubernetesDependentResource<ConfigMap, ConsensusCapsule> {
 
     @Location("telemetry/otel-collector-config.yaml")
@@ -74,9 +73,7 @@ public class CapsuleTelemetryConfig extends CRUDKubernetesDependentResource<Conf
 
         final TemplateInstance templateInstance = tpl.instance();
         templateInstance.data(TPL_VAR_ORBIT_NAME, orbitName);
-        templateInstance.data(TPL_VAR_OPEN_TELEMETRY_COLLECTOR, null);
-
-        oc.ifPresent(o -> templateInstance.data(TPL_VAR_OPEN_TELEMETRY_COLLECTOR, o));
+        templateInstance.data(TPL_VAR_OPEN_TELEMETRY_COLLECTOR, oc.orElse(new OpenTelemetryCollector()));
 
         return Serialization.unmarshal(templateInstance.render(), ConfigMap.class);
     }
@@ -89,21 +86,6 @@ public class CapsuleTelemetryConfig extends CRUDKubernetesDependentResource<Conf
                 Context<ConsensusCapsule> context) {
             final Optional<OpenTelemetryCollector> oc = getInputOtelCollector(primary);
             return oc.isPresent() && oc.get().getEnabled();
-        }
-    }
-
-    public static class Discriminator implements ResourceDiscriminator<ConfigMap, ConsensusCapsule> {
-        @Override
-        public Optional<ConfigMap> distinguish(
-                final Class<ConfigMap> resource,
-                final ConsensusCapsule primary,
-                final Context<ConsensusCapsule> context) {
-            final String namespace = primary.getMetadata().getNamespace();
-            final String validName = validConfigMapName(primary);
-            return context.getSecondaryResources(resource).stream()
-                    .filter((r) -> Objects.equals(r.getMetadata().getName(), validName)
-                            && Objects.equals(r.getMetadata().getNamespace(), namespace))
-                    .findAny();
         }
     }
 }

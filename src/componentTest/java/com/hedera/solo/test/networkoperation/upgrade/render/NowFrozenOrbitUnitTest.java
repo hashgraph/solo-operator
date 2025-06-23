@@ -14,7 +14,7 @@ import com.hedera.solo.operator.model.v1alpha1.OrbitSpec;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationspec.NetworkUpgrade;
 import com.hedera.solo.operator.model.v1alpha1.networkoperationspec.networkupgrade.ConfigurationFiles;
 import com.hedera.solo.operator.model.v1alpha1.orbitspec.Consensus;
-import com.hedera.solo.operator.reconciler.networkoperation.render.NowFrozenOrbit;
+import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.render.NowFrozenOrbit;
 import com.hedera.solo.operator.test.fixtures.fuzz.BeanFactory;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -51,7 +51,7 @@ public class NowFrozenOrbitUnitTest {
         match(updatedConsensus.getNetworkSettings(), files.getNetworkSettings(), initialConsensus.getNetworkSettings());
         match(
                 updatedConsensus.getPermissionConfiguration(),
-                files.getApiPermissions(),
+                files.getPermissionConfiguration(),
                 initialConsensus.getPermissionConfiguration());
         match(networkOperation, updatedOrbit);
     }

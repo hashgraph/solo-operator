@@ -2,15 +2,24 @@
 
 package com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps;
 
-import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.VerifyLayerHashes.updateStatus;
+import static com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.common.VerifyLayerHashes.updateStatus;
+import static com.hedera.solo.operator.reconciler.networkoperation.utils.ConsensusPodSidecarUtil.toStreamUploaderType;
 
 import com.hedera.solo.operator.library.processor.ProcessorException;
 import com.hedera.solo.operator.library.processor.ProcessorStep;
 import com.hedera.solo.operator.model.commonspec.StreamUploaderChangeset;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperation;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
-import com.hedera.solo.operator.reconciler.networkoperation.upgrade.utils.StreamUploaderUtil;
+import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.common.StreamUploaderVerifier;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.ConsensusPodSidecarUtil;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperationStepUtil;
+import com.hedera.solo.operator.reconciler.networkoperation.utils.StepConditionType;
+import io.fabric8.kubernetes.api.model.Condition;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import java.lang.invoke.MethodHandles;
+import java.util.List;
+import java.util.Objects;
+import org.jboss.logging.Logger;
 
 /**
  * VerifyStreamUploaderChangesetStep verifies the changeset for StreamUploader
@@ -41,28 +50,110 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
  *
  * <p>If a valid image source is found, add a condition to the status indicating the success and the selected source URL
  */
-public class VerifyStreamUploaderChangesetStep extends StreamUploaderVerifier
-        implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
+public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
+    public static final String CONDITION_TYPE = "ImageVerified";
+    public static final String SUCCESS_STATUS_MESSAGE =
+            "Image verification succeeded for '%s'. Selected for deployment: %s";
+    public static final String FAIL_STATUS_MESSAGE = "Image verification failed for '%s'";
+    private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
+    private final String containerName;
+
     public VerifyStreamUploaderChangesetStep(String name) {
-        super(name);
+        this.containerName = name;
+    }
+
+    @Override
+    public boolean isSuccessful(NetworkOperation resource, NetworkOperationStatus status) {
+        return isDone(status, containerName);
+    }
+
+    @Override
+    public boolean shouldSkip(NetworkOperation resource, NetworkOperationStatus status) {
+        if (!ConsensusPodSidecarUtil.hasStreamUploaderChangeset(resource, this.containerName)) {
+            return true;
+        }
+
+        final StepConditionType conditionType = new StepConditionType(CONDITION_TYPE, containerName);
+        return status.getPhase().equals(NetworkOperationStatus.Phase.Failed)
+                || NetworkOperationStepUtil.isSuccessful(status, conditionType);
     }
 
     @Override
     public NetworkOperationStatus run(
             NetworkOperation resource, NetworkOperationStatus status, Context<NetworkOperation> context)
             throws ProcessorException {
-        final StreamUploaderChangeset changeset = StreamUploaderUtil.findChangeset(resource, this.containerName);
-        if (changeset == null || changeset.getSoftwareVersionSource() == null) {
-            return status;
-        }
 
-        return updateStatus(
-                resource,
-                status,
-                context.getClient(),
-                changeset.getSoftwareVersionSource(),
-                this::createCondition,
-                getter(),
-                setter());
+        try {
+            Objects.requireNonNull(resource, "NetworkOperation resource is required");
+            Objects.requireNonNull(resource.getSpec(), "NetworkOperationSpec spec is required");
+            Objects.requireNonNull(resource.getSpec().getNetworkUpgrade(), "NetworkUpgrade networkUpgrade is required");
+            Objects.requireNonNull(status, "NetworkOperationStatus is required");
+            Objects.requireNonNull(status.getPhase(), "NetworkOperationStatus is required");
+            Objects.requireNonNull(context, "Context<NetworkOperation> is required");
+
+            final StreamUploaderChangeset changeset =
+                    ConsensusPodSidecarUtil.findStreamUploaderChangeset(resource, this.containerName);
+            if (Objects.isNull(changeset) || Objects.isNull(changeset.getSoftwareVersionSource())) {
+                if (!ConsensusPodSidecarUtil.hasStreamUploaderChangeset(resource, this.containerName)) {
+                    log.debugf(
+                            "Ignore checking '%s' image as it is not specified in network operation: %s/%s",
+                            this.containerName,
+                            resource.getMetadata().getNamespace(),
+                            resource.getMetadata().getName());
+                    return status;
+                }
+            }
+
+            log.infof(
+                    "Verifying '%s' image for network operation: %s/%s [ %s ]",
+                    toStreamUploaderType(this.containerName),
+                    resource.getMetadata().getNamespace(),
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getNetworkUpgrade().getWorkflowStep());
+
+            final NetworkOperationStatus updated = updateStatus(
+                    resource,
+                    status,
+                    context.getClient(),
+                    changeset.getSoftwareVersionSource(),
+                    this::createCondition,
+                    StreamUploaderVerifier.getter(this.containerName),
+                    StreamUploaderVerifier.setter(this.containerName));
+
+            if (!isDone(updated, containerName)) {
+                log.warnf(
+                        "Failed to verify '%s' image for network operation: %s/%s [ %s ]",
+                        toStreamUploaderType(this.containerName),
+                        resource.getMetadata().getNamespace(),
+                        resource.getMetadata().getName(),
+                        resource.getSpec().getNetworkUpgrade().getWorkflowStep());
+
+                return NetworkOperationStepUtil.prepareStatus(updated, List.of(), NetworkOperationStatus.Phase.Failed);
+            }
+
+            log.infof(
+                    "Successfully verified '%s' image for network operation: %s/%s [ %s ]",
+                    toStreamUploaderType(this.containerName),
+                    resource.getMetadata().getNamespace(),
+                    resource.getMetadata().getName(),
+                    resource.getSpec().getNetworkUpgrade().getWorkflowStep());
+
+            return NetworkOperationStepUtil.prepareStatus(updated, List.of());
+        } catch (Throwable t) {
+            log.errorf(t, FAIL_STATUS_MESSAGE, t.getMessage());
+            final StepConditionType conditionType = new StepConditionType(CONDITION_TYPE, containerName);
+            return NetworkOperationStepUtil.prepareFailed(resource, status, t.getMessage(), conditionType);
+        }
+    }
+
+    Condition createCondition(final NetworkOperationStatus status) {
+        final StepConditionType conditionType = new StepConditionType(CONDITION_TYPE, this.containerName);
+        return StreamUploaderVerifier.prepareCondition(
+                status, this.containerName, SUCCESS_STATUS_MESSAGE, FAIL_STATUS_MESSAGE, conditionType);
+    }
+
+    public static boolean isDone(NetworkOperationStatus status, String containerName) {
+        final StepConditionType conditionType = new StepConditionType(CONDITION_TYPE, containerName);
+        return NetworkOperationStepUtil.isSuccessful(status, conditionType);
     }
 }

@@ -15,7 +15,7 @@ plugins {
 
 repositories {
     // Source Maven Central Artifacts from JFrog Artifactory
-    maven { url = uri("https://artifacts.swirldslabs.io/artifactory/central-maven-external/") }
+    maven { url = uri("https://artifacts.hashgraph.io/artifactory/central-maven-external/") }
 }
 
 java {
@@ -49,7 +49,7 @@ tasks.withType<Javadoc>().configureEach {
     (options as StandardJavadocDocletOptions).tags(
         "apiNote:a:API Note:",
         "implSpec:a:Implementation Requirements:",
-        "implNote:a:Implementation Note:"
+        "implNote:a:Implementation Note:",
     )
 }
 

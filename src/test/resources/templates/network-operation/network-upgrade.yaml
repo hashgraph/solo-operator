@@ -5,6 +5,7 @@ apiVersion: operator.solo.hedera.com/v1alpha1
 kind: NetworkOperation
 metadata:
   name: "network-upgrade"
+  namespace: "test"
   labels:
     "app.kubernetes.io/managed-by": "solo-operator"
 spec:

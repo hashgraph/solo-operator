@@ -50,7 +50,11 @@ public class SequenceReconcilerMock implements Cleaner<NetworkOperation> {
         Thread.sleep(100);
 
         // set status succeeded and return resource
-        return edit(resource)
+        return edit(new NetworkOperation())
+                .with(metadata -> metadata.editMetadata()
+                        .withName(resource.getMetadata().getName())
+                        .withNamespace(resource.getMetadata().getNamespace())
+                        .withUid(resource.getMetadata().getUid()))
                 .with(r -> r.editStatus()
                         .withPhase(NetworkOperationStatus.Phase.Succeeded)
                         .endStatus())

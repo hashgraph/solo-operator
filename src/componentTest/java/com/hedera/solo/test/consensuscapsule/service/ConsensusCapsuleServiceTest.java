@@ -44,6 +44,20 @@ public class ConsensusCapsuleServiceTest extends AbstractOperatorTest {
         snapshot.client(operator().getKubernetesClient())
                 .namespaces(operator().getNamespace())
                 .namespacedResources();
+        operator()
+                .getKubernetesClient()
+                .resources(ConsensusCapsule.class)
+                .inNamespace(operator().getNamespace())
+                .delete();
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            assertThat(operator()
+                            .getKubernetesClient()
+                            .resources(ConsensusCapsule.class)
+                            .inNamespace(operator().getNamespace())
+                            .list()
+                            .getItems())
+                    .isEmpty();
+        });
     }
 
     @Test

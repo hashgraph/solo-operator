@@ -7,6 +7,7 @@ import static com.hedera.solo.test.framework.KubernetesDevServiceExecutionListen
 import static com.hedera.solo.test.networkoperation.upgrade.render.SystemTestUtils.create;
 import static com.hedera.solo.test.networkoperation.upgrade.render.SystemTestUtils.createNamespace;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -22,6 +23,7 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.junit.AbstractOperatorExtension;
 import io.javaoperatorsdk.operator.junit.LocallyRunOperatorExtension;
+import java.time.Duration;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -66,6 +68,11 @@ public class NowFrozenConsensusCapsulesSystemTest extends NowFrozenConsensusCaps
     public void cleanup() {
         kubernetesClient.namespaces().withName(namespace).delete();
         kubernetesClient.namespaces().withName(namespaceInitial).delete();
+        await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
+            assertThat(kubernetesClient.namespaces().withName(namespace).get()).isNull();
+            assertThat(kubernetesClient.namespaces().withName(namespaceInitial).get())
+                    .isNull();
+        });
     }
 
     @Test

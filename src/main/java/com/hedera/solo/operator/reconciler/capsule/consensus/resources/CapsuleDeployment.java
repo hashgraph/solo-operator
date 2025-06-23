@@ -13,6 +13,7 @@ import static com.hedera.solo.operator.reconciler.common.Constants.RECORD_STREAM
 import static com.hedera.solo.operator.reconciler.common.Constants.SECURITY_CONTEXT_BUILDER;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_ACCOUNT_ID;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_BACKUP_UPLOADER;
+import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_CONFIG;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_CONSENSUS_NODE;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_DEFAULT_MODE;
 import static com.hedera.solo.operator.reconciler.common.Constants.TPL_VAR_EVENT_STREAM_UPLOADER;
@@ -34,12 +35,12 @@ import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_STATS_
 import static com.hedera.solo.operator.reconciler.common.Constants.VOLUME_UPGRADE_NAME_SUFFIX;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 
-import com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector;
 import com.hedera.solo.operator.model.commonspec.StreamUploader;
 import com.hedera.solo.operator.model.v1alpha1.ConsensusCapsule;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.PodProperties;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.Containers;
 import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.ConsensusNode;
+import com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.OpenTelemetryCollector;
 import com.hedera.solo.operator.reconciler.capsule.consensus.resources.pvc.CapsulePvcUtil;
 import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
@@ -54,6 +55,7 @@ import io.fabric8.kubernetes.api.model.VolumeBuilder;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
 import io.fabric8.kubernetes.client.utils.Serialization;
+import io.javaoperatorsdk.operator.api.config.informer.Informer;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
@@ -61,6 +63,7 @@ import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
 import io.quarkus.runtime.util.StringUtil;
+import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -69,12 +72,16 @@ import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import org.jboss.logging.Logger;
 
 @KubernetesDependent(
-        labelSelector =
-                "app.kubernetes.io/managed-by=solo-operator,app.kubernetes.io/part-of=consensus-node,app.kubernetes.io/component=deployment")
+        informer =
+                @Informer(
+                        labelSelector =
+                                "app.kubernetes.io/managed-by=solo-operator,app.kubernetes.io/part-of=consensus-node,app.kubernetes.io/component=deployment"))
 public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deployment, ConsensusCapsule> {
     public static final String NAME_SUFFIX = "-deploy";
+    private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     public static final String ERR_BOTH_HOSTPATH_PVC_NOT_ALLOWED =
             "a volume cannot have both HostPath and PersistentVolumeClaim specification: '%s'";
@@ -109,6 +116,9 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         Objects.requireNonNull(context);
         Objects.requireNonNull(context.getClient());
 
+        log.infof(
+                "Validating input for ConsensusCapsule: %s/%s ",
+                primary.getMetadata().getNamespace(), primary.getMetadata().getName());
         // namespace must match with the orbit name
         final String orbit = primary.getSpec().getOrbit();
         if (!orbit.equals(primary.getMetadata().getNamespace())) {
@@ -257,7 +267,7 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         templateInstance.data(TPL_VAR_NODE_ID, nodeId);
         templateInstance.data(TPL_VAR_NODE_NAME, nodeName);
         templateInstance.data(TPL_VAR_ACCOUNT_ID, accountId);
-        templateInstance.data(TPL_VAR_HOST_EXTERNAL_IP, "NOT_SET"); // FIXME: should be node's external IP
+        templateInstance.data(TPL_VAR_HOST_EXTERNAL_IP, primary.getSpec().getExternalAddress());
         templateInstance.data(TPL_VAR_DEFAULT_MODE, DEFAULT_FILE_MODE);
 
         return templateInstance;
@@ -296,6 +306,7 @@ public class CapsuleDeployment extends CRUDKubernetesDependentResource<Deploymen
         tplInstance.data(TPL_VAR_CONSENSUS_NODE, cn);
         tplInstance.data(TPL_VAR_OPEN_TELEMETRY_COLLECTOR, oc.orElse(null));
         tplInstance.data(TPL_VAR_SECRETS, secretsWithDefaultKeyNames(primary));
+        tplInstance.data(TPL_VAR_CONFIG, primary.getSpec().getConfigFolder());
         uploaderMap.forEach((k, v) -> tplInstance.data(k, v.orElse(null)));
 
         // return an instance of Pod

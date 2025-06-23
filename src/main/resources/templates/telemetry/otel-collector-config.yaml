@@ -3,7 +3,7 @@
 ---
 # {@String environment}
 # {@String orbitName}
-# {@com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector oc}
+# {@com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.OpenTelemetryCollector oc}
 
 apiVersion: v1
 kind: ConfigMap

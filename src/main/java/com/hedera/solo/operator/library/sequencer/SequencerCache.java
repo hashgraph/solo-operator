@@ -94,7 +94,8 @@ class SequencerCache<T extends HasMetadata> {
     boolean isFirstInQueue(T resource) {
         Sequenced first = findFirst(resource.getMetadata().getNamespace());
 
-        // this solves the race condition where we have two resources crated at the same time but one is being processed
+        // this solves the race condition where we have two resources created at the same time but one is being
+        // processed
         // first
         final String namespace = resource.getMetadata().getNamespace();
         if (currentlyExecuting.get(namespace) != null

@@ -9,17 +9,13 @@ import com.hedera.solo.operator.reconciler.common.Constants;
 import com.hedera.solo.operator.reconciler.common.Metadata;
 import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.api.model.ServiceBuilder;
+import io.javaoperatorsdk.operator.api.config.informer.Informer;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDNoGCKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
-import java.util.Optional;
 
-@KubernetesDependent(
-        labelSelector = Constants.LABEL_SELECTOR_CONSENSUS_NODE_APP,
-        resourceDiscriminator = ConsensusHeadlessService.class)
-public class ConsensusHeadlessService extends CRUDNoGCKubernetesDependentResource<Service, Orbit>
-        implements ResourceDiscriminator<Service, Orbit> {
+@KubernetesDependent(informer = @Informer(labelSelector = Constants.LABEL_SELECTOR_CONSENSUS_NODE_APP))
+public class ConsensusHeadlessService extends CRUDNoGCKubernetesDependentResource<Service, Orbit> {
     public static final String TEMPLATE = "headless-service.yaml";
     public static final String NAME = "consensus";
 
@@ -43,12 +39,5 @@ public class ConsensusHeadlessService extends CRUDNoGCKubernetesDependentResourc
                 .withNamespace(primary.getMetadata().getName())
                 .endMetadata()
                 .build();
-    }
-
-    @Override
-    public Optional<Service> distinguish(Class<Service> resource, Orbit primary, Context<Orbit> context) {
-        return context.getSecondaryResources(Service.class).stream()
-                .filter(service -> "None".equalsIgnoreCase(service.getSpec().getClusterIP()))
-                .findAny();
     }
 }

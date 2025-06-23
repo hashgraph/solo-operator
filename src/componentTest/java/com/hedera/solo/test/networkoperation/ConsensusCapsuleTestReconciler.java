@@ -23,7 +23,10 @@ public class ConsensusCapsuleTestReconciler implements Reconciler<ConsensusCapsu
         } else {
             phase = ConsensusCapsuleStatus.Phase.Running;
         }
-        return UpdateControl.patchStatus(edit(resource)
+        return UpdateControl.patchStatus(edit(new ConsensusCapsule())
+                .with(metadata -> metadata.editMetadata()
+                        .withName(resource.getMetadata().getName())
+                        .withNamespace(resource.getMetadata().getNamespace()))
                 .with(status -> status.editStatus().withPhase(phase))
                 .build());
     }

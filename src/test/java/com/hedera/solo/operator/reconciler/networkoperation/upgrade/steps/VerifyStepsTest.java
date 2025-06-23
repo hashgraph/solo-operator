@@ -37,9 +37,8 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.config.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.IndexedResourceCache;
-import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
-import io.javaoperatorsdk.operator.api.reconciler.dependent.managed.ManagedDependentResourceContext;
+import io.javaoperatorsdk.operator.api.reconciler.dependent.managed.ManagedWorkflowAndDependentResourceContext;
 import io.javaoperatorsdk.operator.processing.event.EventSourceRetriever;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
@@ -70,12 +69,12 @@ public class VerifyStepsTest {
         wm.stubFor(get(urlMatching("/v2/.*")).willReturn(notFound()));
 
         // verify
-        allNotFound(networkOperation, new ExecuteImmediateTask(), 6);
+        allNotFound(networkOperation, new ExecuteImmediateTask(), 1);
 
         // re-verify
-        allNotFound(networkOperation, new FreezeScheduledTask(), 6);
+        allNotFound(networkOperation, new FreezeScheduledTask(), 1);
 
-        // re-verify (with empty status)
+        // re-verify (with failed status)
         networkOperation.setStatus(new NetworkOperationStatusBuilder()
                 .withPhase(NetworkOperationStatus.Phase.Failed)
                 .build());
@@ -90,12 +89,12 @@ public class VerifyStepsTest {
                         .withBody("{}")));
 
         // verify
-        allUnknown(networkOperation, new ExecuteImmediateTask(), 6);
+        allUnknown(networkOperation, new ExecuteImmediateTask(), 1);
 
         // re-verify
-        allUnknown(networkOperation, new FreezeScheduledTask(), 6);
+        allUnknown(networkOperation, new FreezeScheduledTask(), 1);
 
-        // re-verify (with empty status)
+        // re-verify (with failed status)
         networkOperation.setStatus(new NetworkOperationStatusBuilder()
                 .withPhase(NetworkOperationStatus.Phase.Failed)
                 .build());
@@ -276,26 +275,41 @@ public class VerifyStepsTest {
                 validity,
                 sourceStatus.getConsensusNode(),
                 specChangesets.getConsensusNodeChangeset().getSoftwareVersionSource());
-        match(
-                validity,
-                sourceStatus.getBackupUploader(),
-                specChangesets.getBackupUploaderChangeset().getSoftwareVersionSource());
-        match(
-                validity,
-                sourceStatus.getEventsStreamUploader(),
-                specChangesets.getEventsStreamUploaderChangeset().getSoftwareVersionSource());
-        match(
-                validity,
-                sourceStatus.getRecordStreamSidecarUploader(),
-                specChangesets.getRecordStreamSidecarUploaderChangeset().getSoftwareVersionSource());
-        match(
-                validity,
-                sourceStatus.getRecordStreamUploader(),
-                specChangesets.getRecordStreamUploaderChangeset().getSoftwareVersionSource());
-        match(
-                validity,
-                sourceStatus.getOtelCollector(),
-                specChangesets.getOtelCollector().getSoftwareVersionSource());
+
+        if (sourceStatus.getBackupUploader() != null) {
+            match(
+                    validity,
+                    sourceStatus.getBackupUploader(),
+                    specChangesets.getBackupUploaderChangeset().getSoftwareVersionSource());
+        }
+
+        if (sourceStatus.getEventsStreamUploader() != null) {
+            match(
+                    validity,
+                    sourceStatus.getEventsStreamUploader(),
+                    specChangesets.getEventsStreamUploaderChangeset().getSoftwareVersionSource());
+        }
+
+        if (sourceStatus.getRecordStreamSidecarUploader() != null) {
+            match(
+                    validity,
+                    sourceStatus.getRecordStreamSidecarUploader(),
+                    specChangesets.getRecordStreamSidecarUploaderChangeset().getSoftwareVersionSource());
+        }
+
+        if (sourceStatus.getRecordStreamUploader() != null) {
+            match(
+                    validity,
+                    sourceStatus.getRecordStreamUploader(),
+                    specChangesets.getRecordStreamUploaderChangeset().getSoftwareVersionSource());
+        }
+
+        if (sourceStatus.getOtelCollector() != null) {
+            match(
+                    validity,
+                    sourceStatus.getOtelCollector(),
+                    specChangesets.getOtelCollector().getSoftwareVersionSource());
+        }
     }
 
     void match(
@@ -359,18 +373,12 @@ public class VerifyStepsTest {
         }
 
         @Override
-        public <R> Set<R> getSecondaryResources(final Class<R> aClass) {
+        public <R> Set<R> getSecondaryResources(Class<R> aClass) {
             return Set.of();
         }
 
         @Override
-        public <R> Optional<R> getSecondaryResource(final Class<R> aClass, final String s) {
-            return Optional.empty();
-        }
-
-        @Override
-        public <R> Optional<R> getSecondaryResource(
-                final Class<R> aClass, final ResourceDiscriminator<R, NetworkOperation> resourceDiscriminator) {
+        public <R> Optional<R> getSecondaryResource(Class<R> aClass, String s) {
             return Optional.empty();
         }
 
@@ -380,7 +388,7 @@ public class VerifyStepsTest {
         }
 
         @Override
-        public ManagedDependentResourceContext managedDependentResourceContext() {
+        public ManagedWorkflowAndDependentResourceContext managedWorkflowAndDependentResourceContext() {
             return null;
         }
 
@@ -400,8 +408,18 @@ public class VerifyStepsTest {
         }
 
         @Override
+        public NetworkOperation getPrimaryResource() {
+            return null;
+        }
+
+        @Override
         public IndexedResourceCache<NetworkOperation> getPrimaryCache() {
             return null;
+        }
+
+        @Override
+        public boolean isNextReconciliationImminent() {
+            return false;
         }
     }
 }
