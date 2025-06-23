@@ -27,6 +27,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
+/** This class contains tests for the SecretHostpath functionality in ConsensusCapsule. */
 @QuarkusTest
 public class SecretHostpathTest extends ConsensusCapsuleTestAbstract {
     boolean setup;
@@ -36,6 +37,7 @@ public class SecretHostpathTest extends ConsensusCapsuleTestAbstract {
     List<Volume> volumes = new ArrayList<>();
     List<VolumeMount> volumeMounts = new ArrayList<>();
 
+    /** Sets up the test environment. */
     @Override
     @BeforeEach
     void setup() {
@@ -62,6 +64,7 @@ public class SecretHostpathTest extends ConsensusCapsuleTestAbstract {
         }
     }
 
+    /** Cleans up the test environment. */
     @Override
     void cleanup() {
         if (!setup) {
@@ -71,18 +74,26 @@ public class SecretHostpathTest extends ConsensusCapsuleTestAbstract {
         super.cleanup();
     }
 
+    /** Tests the deployment of a single node. */
     @Override
     @Disabled("not required")
     void testSingleNodeDeployment() throws Exception {
         super.testSingleNodeDeployment();
     }
 
+    /** Tests the deployment of multiple nodes. */
     @Override
     @Test
     void testMultiNodeDeployment() throws Exception {
         super.testMultiNodeDeployment();
     }
 
+    /**
+     * Prepares a builder for a consensus capsule with specific configurations for secret hostpath.
+     *
+     * @param node the node information
+     * @return the prepared ConsensusCapsule builder
+     */
     @Override
     protected ConsensusCapsule prepareConsensusCapsuleBuilder(final TestRecords.NodeInfo node) {
         return edit(super.prepareConsensusCapsuleBuilder(node))
@@ -95,12 +106,26 @@ public class SecretHostpathTest extends ConsensusCapsuleTestAbstract {
                 .build();
     }
 
+    /**
+     * Checks the address book using Hedera SDK client context factory.
+     *
+     * @param hederaSdkClientContextFactory the Hedera SDK client context factory
+     * @throws AssertionError if assertion fails
+     * @throws Exception if an error occurs
+     */
     @Override
     protected void checkAddressBook(final HederaSdkClientContextFactory hederaSdkClientContextFactory)
             throws AssertionError, Exception {
         super.checkAddressBook(HederaSdkClientFactory.directContextCreator(certificates, pubKeys));
     }
 
+    /**
+     * Runs a command in a pod with specified volumes and volume mounts.
+     *
+     * @param volumes the list of volumes
+     * @param volumeMounts the list of volume mounts
+     * @param command the command to run
+     */
     void runInPod(final List<Volume> volumes, final List<VolumeMount> volumeMounts, final String command) {
         Pod pod = createPod(volumes, volumeMounts, command);
         await().atMost(Duration.ofSeconds(150)).untilAsserted(() -> {
@@ -111,6 +136,14 @@ public class SecretHostpathTest extends ConsensusCapsuleTestAbstract {
         kubernetesClient.resource(pod).delete();
     }
 
+    /**
+     * Creates a pod with specified volumes, volume mounts, and run specified command in it.
+     *
+     * @param volumes the list of volumes
+     * @param volumeMounts the list of volume mounts
+     * @param command the command to run
+     * @return the created Pod object
+     */
     Pod createPod(final List<Volume> volumes, final List<VolumeMount> volumeMounts, final String command) {
         return operator.getKubernetesClient()
                 .resource(edit(new Pod())
@@ -129,6 +162,11 @@ public class SecretHostpathTest extends ConsensusCapsuleTestAbstract {
                 .create();
     }
 
+    /**
+     * Creates a ConfigMap in the Kubernetes cluster.
+     *
+     * @param configMap the ConfigMap to create
+     */
     void createConfigMap(final ConfigMap configMap) {
         configMaps.add(kubernetesClient
                 .resource(configMap
@@ -140,6 +178,13 @@ public class SecretHostpathTest extends ConsensusCapsuleTestAbstract {
                 .create());
     }
 
+    /**
+     * Adds volumes and volume mounts for a ConfigMap.
+     *
+     * @param srcName the source volume name
+     * @param dstName the destination volume name
+     * @param configMap the ConfigMap to add volumes and volume mounts for
+     */
     void addVolumes(final String srcName, final String dstName, final ConfigMap configMap) {
         String cmName = configMap.getMetadata().getName();
         volumes.add(new VolumeBuilder()

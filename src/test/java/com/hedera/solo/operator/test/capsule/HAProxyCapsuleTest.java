@@ -29,8 +29,10 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 
+/** This class contains tests for the HAProxyCapsule custom resource. */
 @QuarkusTest
 public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
+    /** Cleans up any remaining resources after test execution. */
     @Override
     void cleanup() {
         kubernetesClient.resources(HAProxyCapsule.class).inNamespace(namespace).delete();
@@ -45,6 +47,7 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
         super.cleanup();
     }
 
+    /** Tests the deployment of a single HAProxy capsule. */
     @Override
     @Test
     void testSingleNodeDeployment() throws Exception {
@@ -53,6 +56,7 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
         simulateCertificateUpdate(consensusNodeIds);
     }
 
+    /** Tests the deployment of multiple HAProxy capsules. */
     @Override
     @Test
     void testMultiNodeDeployment() throws Exception {
@@ -61,6 +65,12 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
         simulateCertificateUpdate(consensusNodeIds);
     }
 
+    /**
+     * Creates HAProxy capsules based on the specified consensus node IDs.
+     *
+     * @return Array of consensus node IDs for which HAProxy capsules are created.
+     * @throws Exception if an error occurs while creating the capsules.
+     */
     Long[] createHAProxyCapsule() throws Exception {
         Long[] consensusNodeIds = consensusNodeIds();
         for (Long nodeId : consensusNodeIds) {
@@ -80,6 +90,12 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
         return consensusNodeIds;
     }
 
+    /**
+     * Waits for the HAProxy capsules to be deployed and verifies their status.
+     *
+     * @param consensusNodeIds Array of consensus node IDs for which the capsules are expected to be deployed.
+     * @throws Exception if an error occurs while waiting for the capsules.
+     */
     void waitForCapsules(final Long[] consensusNodeIds) throws Exception {
         await().atMost(150, TimeUnit.SECONDS).untilAsserted(() -> {
             List<HAProxyCapsule> proxies = kubernetesClient
@@ -104,6 +120,13 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
         checkAddressBook(HederaSdkClientFactory::haproxyContextCreator);
     }
 
+    /**
+     * Simulates an update to the consensus secret's hedera.crt field and verifies the HAProxy deployments are updated
+     * accordingly.
+     *
+     * @param consensusNodeIds Array of consensus node IDs for which the certificate update is simulated.
+     * @throws Exception if an error occurs during the update simulation.
+     */
     void simulateCertificateUpdate(final Long[] consensusNodeIds) throws Exception {
         Supplier<Map<String, String>> checksums = () -> kubernetesClient
                 .resources(Deployment.class)

@@ -13,7 +13,7 @@
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader rssu}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader esu}
 # {@com.hedera.solo.operator.model.commonspec.StreamUploader bu}
-# {@com.hedera.solo.operator.model.commonspec.OpenTelemetryCollector oc}
+# {@com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.podproperties.containers.OpenTelemetryCollector oc}
 # {@com.hedera.solo.operator.model.v1alpha1.consensuscapsulespec.Secrets secrets}
 kind: Deployment
 apiVersion: apps/v1
@@ -469,7 +469,13 @@ spec:
             - name: OTEL_ACCOUNT_ID
               value: "{accountId}"
             - name: OTEL_HOST_IP
+              #{#if hostIp == null || hostIp == ""}
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+              #{#else}
               value: "{hostIp}"
+              #{/if}
             - name: OTEL_LOG_LEVEL
               value: "{oc.config.logLevel}"
             - name: OTEL_ENVIRONMENT
