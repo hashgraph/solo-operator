@@ -239,7 +239,8 @@ public class NetworkOperationTest extends AbstractOperatorTest {
         int total = 5;
         List<Long> capsuleNodeIds = prepareNodeIds(3);
 
-        capsuleNodeIds.forEach(this::createCapsule);
+        SecretResources secretResources = secretResources();
+        capsuleNodeIds.forEach(id -> createCapsule(id, secretResources));
 
         for (int i = 0; i < total; ++i) {
             String name = networkOperationName(i);
@@ -254,7 +255,8 @@ public class NetworkOperationTest extends AbstractOperatorTest {
         int noUpdatePeriod = 3;
         List<Long> capsuleNodeIds = prepareNodeIds(3);
 
-        capsuleNodeIds.forEach(this::createCapsule);
+        SecretResources secretResources = secretResources();
+        capsuleNodeIds.forEach(id -> createCapsule(id, secretResources));
 
         for (int i = 0; i < total; ++i) {
             String name = networkOperationName(i);
@@ -279,6 +281,7 @@ public class NetworkOperationTest extends AbstractOperatorTest {
     void failNetworkOperation() {
         Mockito.when(checkConfig.maxRetries()).thenReturn(1);
         List<Long> capsuleNodeIds = prepareNodeIds(3);
+        SecretResources secretResources = secretResources();
         capsuleNodeIds.forEach(nodeId -> createCapsule(
                 nodeId,
                 Map.of(
@@ -288,7 +291,7 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                         Constants.COMPONENT_CONSENSUS_NODE,
                         "fail",
                         "true"),
-                null));
+                secretResources));
 
         createNetworkOperation("init", false);
         await().atMost(60, TimeUnit.SECONDS).untilAsserted(() -> {
@@ -302,15 +305,7 @@ public class NetworkOperationTest extends AbstractOperatorTest {
 
     @Test
     void validSecretResources() {
-        KeyReference keyReference = createSecret();
-        SecretResources secretResources = new SecretResourcesBuilder()
-                .withGrpcTlsPrivateKey(keyReference)
-                .withGrpcTlsPublicCertificate(keyReference)
-                .withSigningPrivateKey(keyReference)
-                .withSigningPublicCertificate(keyReference)
-                .build();
-
-        secretsValid(secretResources, true);
+        secretsValid(secretResources(), true);
     }
 
     @Test
@@ -494,10 +489,6 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                         .build());
     }
 
-    void createCapsule(final Long nodeId) {
-        createCapsule(nodeId, null);
-    }
-
     void createCapsule(final Long nodeId, final SecretResources secretResources) {
         createCapsule(
                 nodeId,
@@ -525,5 +516,15 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                                 .withImageTag("tag"))
                         .with(secret -> secret.editSpec().editSecrets().withSecretResources(secretResources))
                         .build());
+    }
+
+    SecretResources secretResources() {
+        KeyReference keyReference = createSecret();
+        return new SecretResourcesBuilder()
+                .withGrpcTlsPrivateKey(keyReference)
+                .withGrpcTlsPublicCertificate(keyReference)
+                .withSigningPrivateKey(keyReference)
+                .withSigningPublicCertificate(keyReference)
+                .build();
     }
 }
