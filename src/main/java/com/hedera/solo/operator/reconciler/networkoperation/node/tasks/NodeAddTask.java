@@ -13,6 +13,10 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.time.Duration;
 import java.util.List;
 
+/**
+ * The NodeAddTask class is responsible for adding nodes to a network operation. It extends the AbstractProcessorTask
+ * class and implements the necessary methods for processing NetworkOperation and its status.
+ */
 public class NodeAddTask extends AbstractProcessorTask<NetworkOperation, NetworkOperationStatus> {
     public static final Duration RECONCILE_DELAY = Duration.ofSeconds(1);
 
