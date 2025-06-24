@@ -22,13 +22,17 @@ public interface ProcessorStep<T extends CustomResource<?, S>, S> {
      *
      * <p>This method must never throw exception.
      *
+     * @param resource the custom resource to process
+     * @param status the custom resource status to update
+     * @param context the context
      * @return updated custom resource status
      */
     S run(final T resource, final S status, Context<T> context);
 
     /**
-     * Check if the step is successful
+     * Check if the step is successful.
      *
+     * @param resource the custom resource
      * @param status the custom resource status
      * @return true if the step is successful, false otherwise
      */

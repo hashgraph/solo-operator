@@ -22,6 +22,10 @@ import java.time.Duration;
 import java.util.List;
 import org.jboss.logging.Logger;
 
+/**
+ * The NetworkGenesisTask class is responsible for orchestrating the generation of a new Hedera network, including
+ * creating cluster configuration and public keys.
+ */
 @ApplicationScoped
 public class NetworkGenesisTask extends AbstractProcessorTask<NetworkOperation, NetworkOperationStatus> {
     public static final Duration RECONCILE_DELAY = Duration.ofSeconds(1);
@@ -34,6 +38,13 @@ public class NetworkGenesisTask extends AbstractProcessorTask<NetworkOperation, 
 
     private final NetworkGenesisTaskConfig genesisConfig;
 
+    /**
+     * Constructor for the NetworkGenesisTask class, injecting dependencies.
+     *
+     * @param customResourceManager Custom resource manager for Kubernetes resources.
+     * @param deferredProcessor Processor for network checks.
+     * @param genesisConfig Configuration settings for the network generation task.
+     */
     @Inject
     public NetworkGenesisTask(
             CustomResourceManager customResourceManager,
@@ -72,6 +83,12 @@ public class NetworkGenesisTask extends AbstractProcessorTask<NetworkOperation, 
         return null;
     }
 
+    /**
+     * Checks if the network generation process is complete by verifying the completion of specific steps.
+     *
+     * @param resource The NetworkOperation resource to be checked.
+     * @return True if the network generation is done, false otherwise
+     */
     public static boolean isDone(NetworkOperation resource) {
         return CheckConsensusNodeSecretsStep.isDone(resource.getStatus())
                 && CreateClusterConfigStep.isDone(resource.getStatus())

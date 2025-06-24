@@ -13,13 +13,28 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernete
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import io.javaoperatorsdk.operator.processing.dependent.workflow.Condition;
 
+/**
+ * The {@code CapsuleEventsStreamPvc} class represents a Kubernetes PersistentVolumeClaim (PVC) for events stream within
+ * a ConsensusCapsule.
+ */
 @KubernetesDependent
 public class CapsuleEventsStreamPvc extends CRUDKubernetesDependentResource<PersistentVolumeClaim, ConsensusCapsule> {
 
+    /**
+     * Constructs a new instance of {@code CapsuleEventsStreamPvc}. It initializes the superclass with the type
+     * {@link PersistentVolumeClaim}.
+     */
     public CapsuleEventsStreamPvc() {
         super(PersistentVolumeClaim.class);
     }
 
+    /**
+     * Retrieves the desired specification for a PersistentVolumeClaim based on the input ConsensusCapsule. This method
+     * checks if the spec is present in the primary resource and returns it accordingly.
+     *
+     * @param primary The {@link ConsensusCapsule} instance representing the primary Kubernetes resource.
+     * @return The {@link PersistentVolumeClaimSpec} for events stream, or null if not specified
+     */
     private static PersistentVolumeClaimSpec getInputPvcSpec(final ConsensusCapsule primary) {
         if (primary.getSpec().getPersistentVolumeClaims() == null
                 || primary.getSpec().getPersistentVolumeClaims().getStreams() == null) {
@@ -35,6 +50,10 @@ public class CapsuleEventsStreamPvc extends CRUDKubernetesDependentResource<Pers
         return CapsulePvcUtil.prepareDesired(primary, getInputPvcSpec(primary), VOLUME_EVENTS_STREAM_NAME_SUFFIX);
     }
 
+    /**
+     * The {@code Ready} class implements the {@link Condition} interface to check if the PVC for events stream is
+     * ready.
+     */
     public static class Ready implements Condition<PersistentVolumeClaim, ConsensusCapsule> {
         @Override
         public boolean isMet(

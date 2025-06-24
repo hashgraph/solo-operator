@@ -60,6 +60,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+/** Abstract class for testing ConsensusCapsule functionality. */
 @SoloTest
 public abstract class ConsensusCapsuleTestAbstract {
     protected final String namespace = getClass().getSimpleName().toLowerCase();
@@ -78,6 +79,7 @@ public abstract class ConsensusCapsuleTestAbstract {
     @Inject
     Operator operator;
 
+    /** Set up the test environment before each test. */
     @BeforeEach
     void setup() {
         clusterSetupManager.check();
@@ -89,6 +91,11 @@ public abstract class ConsensusCapsuleTestAbstract {
         createOrbit();
     }
 
+    /**
+     * Clean up the test environment after each test.
+     *
+     * @param snapshot The snapshot context for the test.
+     */
     @AfterEach
     void afterEach(final SnapshotFailureContext snapshot) {
         snapshot.client(kubernetesClient)
@@ -120,6 +127,7 @@ public abstract class ConsensusCapsuleTestAbstract {
         cleanup();
     }
 
+    /** Clean up the Kubernetes resources. */
     void cleanup() {
         kubernetesClient
                 .resources(NetworkOperation.class)
@@ -200,6 +208,12 @@ public abstract class ConsensusCapsuleTestAbstract {
         }
     }
 
+    /**
+     * Prepares the pod volumes for a consensus capsule.
+     *
+     * @param node The node information for which the volumes are prepared.
+     * @return A Volumes object containing the prepared volumes.
+     */
     protected Volumes prepareCapsulePodVolumes(TestRecords.NodeInfo node) {
         return new VolumesBuilder().build(); // default with no volume spec will use empty volumes
     }

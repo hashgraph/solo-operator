@@ -469,7 +469,13 @@ spec:
             - name: OTEL_ACCOUNT_ID
               value: "{accountId}"
             - name: OTEL_HOST_IP
+              #{#if hostIp == null || hostIp == ""}
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+              #{#else}
               value: "{hostIp}"
+              #{/if}
             - name: OTEL_LOG_LEVEL
               value: "{oc.config.logLevel}"
             - name: OTEL_ENVIRONMENT

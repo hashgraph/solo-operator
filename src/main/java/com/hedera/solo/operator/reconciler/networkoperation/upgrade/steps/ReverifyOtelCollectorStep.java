@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Objects;
 import org.jboss.logging.Logger;
 
+/** This class implements the step to revertify the OtelCollector image for a network operation. */
 public class ReverifyOtelCollectorStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final StepConditionType CONDITION_TYPE = new StepConditionType("ImageReverified", "OtelCollector");
     public static final String SUCCESS_STATUS_MESSAGE = "Image re-verification succeeded for 'otel-collector': %s";
@@ -102,11 +103,23 @@ public class ReverifyOtelCollectorStep implements ProcessorStep<NetworkOperation
         }
     }
 
+    /**
+     * Creates a condition for the re-verified OtelCollector image.
+     *
+     * @param status The current status of the network operation.
+     * @return A Condition object representing the condition of the re-verified OtelCollector image
+     */
     private Condition createCondition(final NetworkOperationStatus status) {
         return OtelCollectorVerifier.createCondition(
                 status, SUCCESS_STATUS_MESSAGE, FAIL_STATUS_MESSAGE, CONDITION_TYPE);
     }
 
+    /**
+     * Checks if the re-verification of the OtelCollector image is done based on the status.
+     *
+     * @param status The NetworkOperationStatus object representing the status of the network operation.
+     * @return true if the re-verification is successful, false otherwise
+     */
     public static boolean isDone(NetworkOperationStatus status) {
         return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }

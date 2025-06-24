@@ -27,6 +27,11 @@ public class NetworkCheckProcessor
 
     private final NetworkCheckTask networkGenesisTask;
 
+    /**
+     * Constructor for NetworkCheckProcessor.
+     *
+     * @param networkGenesisTask The {@link NetworkCheckTask} to be used for processing network operations.
+     */
     @Inject
     public NetworkCheckProcessor(NetworkCheckTask networkGenesisTask) {
         this.networkGenesisTask = networkGenesisTask;

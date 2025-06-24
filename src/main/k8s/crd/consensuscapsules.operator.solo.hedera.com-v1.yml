@@ -20,11 +20,14 @@ spec:
     - name: v1alpha1
       schema:
         openAPIV3Schema:
+          type: object
+          required:
+            - spec
           properties:
             spec:
-              $ref: "../openapi/consensuscapsule.yml#/components/schemas/ConsensusCapsuleSpec"
+              $ref: "../openapi/consensuscapsules.operator.solo.hedera.com-v1.yml#/components/schemas/ConsensusCapsuleSpec"
             status:
-              $ref: "../openapi/consensuscapsule.yml#/components/schemas/ConsensusCapsuleStatus"
+              $ref: "../openapi/consensuscapsules.operator.solo.hedera.com-v1.yml#/components/schemas/ConsensusCapsuleStatus"
       served: true
       storage: true
       subresources:

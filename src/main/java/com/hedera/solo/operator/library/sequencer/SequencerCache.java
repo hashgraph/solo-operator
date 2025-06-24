@@ -12,21 +12,27 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 
+/**
+ * SequencerCache is a thread-safe cache for managing Kubernetes resources that need to be processed in sequence. It
+ * maintains a list of items per namespace, allowing for efficient addition, removal, and retrieval of items.
+ *
+ * @param <T> The type of Kubernetes resource that extends HasMetadata
+ */
 class SequencerCache<T extends HasMetadata> {
-    // cache of items per namespace
+    // Cache of items per namespace
     private final Map<String, List<Sequenced>> namespaceCache = new HashMap<>();
 
-    // currently executing item per namespace
+    // Currently executing item per namespace
     private final Map<String, Sequenced> currentlyExecuting = new HashMap<>();
 
     /**
-     * Add the item to the cache if it does not already exist or if already processed
+     * Adds an item to the cache if it does not already exist or if already processed.
      *
      * <p>It orders the items based on the creation time and then compares the name of the resource.
      *
      * <p>If the item exists in the unprocessed cache or the processed cache, it is ignored.
      *
-     * @param resource custom resource to be added
+     * @param resource The custom Kubernetes resource to be added.
      * @return true if the item is added to the unprocessed cache, false otherwise
      */
     synchronized boolean addItem(T resource) {
@@ -38,7 +44,7 @@ class SequencerCache<T extends HasMetadata> {
 
         final String namespace = resource.getMetadata().getNamespace();
 
-        // if already in the unprocessed cache, ignore the item
+        // If the item already exists in the unprocessed cache, ignore it.
         if (findItem(resource) != null) {
             return false;
         }
@@ -51,9 +57,10 @@ class SequencerCache<T extends HasMetadata> {
     }
 
     /**
-     * Remove the item from the cache even if it is not the first item in the queue
+     * Removes an item from the cache even if it is not the first item in the queue.
      *
-     * @param resource custom resource to be removed
+     * @param resource The custom Kubernetes resource to be removed.
+     * @return The removed Sequenced item, or null if the item was not found
      */
     synchronized Sequenced removeItem(T resource) {
         final String namespace = resource.getMetadata().getNamespace();
@@ -79,6 +86,12 @@ class SequencerCache<T extends HasMetadata> {
         return null;
     }
 
+    /**
+     * Finds the first item in the queue for a given namespace.
+     *
+     * @param namespace The Kubernetes namespace.
+     * @return The first Sequenced item, or null if no items are found
+     */
     Sequenced findFirst(String namespace) {
         if (!namespaceCache.containsKey(namespace)) {
             return null;
@@ -91,12 +104,16 @@ class SequencerCache<T extends HasMetadata> {
         }
     }
 
+    /**
+     * Checks if the given resource is the first item in its queue.
+     *
+     * @param resource The custom Kubernetes resource to check.
+     * @return true if the resource is the first item, false otherwise
+     */
     boolean isFirstInQueue(T resource) {
         Sequenced first = findFirst(resource.getMetadata().getNamespace());
 
-        // this solves the race condition where we have two resources created at the same time but one is being
-        // processed
-        // first
+        // This solves the race condition where two resources are created at the same time but one is processed first.
         final String namespace = resource.getMetadata().getNamespace();
         if (currentlyExecuting.get(namespace) != null
                 && !currentlyExecuting
@@ -109,6 +126,12 @@ class SequencerCache<T extends HasMetadata> {
         return first != null && first.uid().equals(resource.getMetadata().getUid());
     }
 
+    /**
+     * Finds the last item in the queue for a given namespace.
+     *
+     * @param namespace The Kubernetes namespace.
+     * @return The last Sequenced item, or null if no items are found
+     */
     Sequenced findLast(String namespace) {
         if (!namespaceCache.containsKey(namespace)) {
             return null;
@@ -121,6 +144,12 @@ class SequencerCache<T extends HasMetadata> {
         }
     }
 
+    /**
+     * Finds a specific item in the cache based on the resource.
+     *
+     * @param resource The custom Kubernetes resource to find.
+     * @return The found Sequenced item, or null if not found
+     */
     Sequenced findItem(T resource) {
         final String namespace = resource.getMetadata().getNamespace();
         if (!namespaceCache.containsKey(namespace)) {
@@ -136,6 +165,12 @@ class SequencerCache<T extends HasMetadata> {
         return null;
     }
 
+    /**
+     * Gets the index of a specific resource in its namespace's cache list.
+     *
+     * @param resource The custom Kubernetes resource to find the index for.
+     * @return The index of the resource, or -1 if not found
+     */
     int indexOf(T resource) {
         if (resource == null) {
             return -1;
@@ -148,14 +183,21 @@ class SequencerCache<T extends HasMetadata> {
         return items.indexOf(findItem(resource));
     }
 
+    /**
+     * Checks if the cache contains a specific resource.
+     *
+     * @param resource The custom Kubernetes resource to check for existence.
+     * @return true if the resource is in the cache, false otherwise
+     */
     boolean contains(T resource) {
         return findItem(resource) != null;
     }
 
     /**
-     * Get all items in the cache for a given namespace in order
+     * Gets all items in the cache for a given namespace in order.
      *
-     * @return an unmodifiable list of items
+     * @param namespace The Kubernetes namespace.
+     * @return An unmodifiable list of Sequenced items
      */
     List<Sequenced> items(String namespace) {
         if (!namespaceCache.containsKey(namespace)) {
@@ -165,6 +207,12 @@ class SequencerCache<T extends HasMetadata> {
         return Collections.unmodifiableList(namespaceCache.get(namespace));
     }
 
+    /**
+     * Gets the size of the cache for a given namespace.
+     *
+     * @param namespace The Kubernetes namespace.
+     * @return The number of items in the namespace cache
+     */
     long size(String namespace) {
         if (namespaceCache.containsKey(namespace)) {
             return namespaceCache.get(namespace).size();
@@ -173,17 +221,21 @@ class SequencerCache<T extends HasMetadata> {
         return 0;
     }
 
-    /** Remove cached items that are not active anymore */
+    /**
+     * Prunes cached items that are not active anymore.
+     *
+     * @param activeItems The list of currently active items.
+     */
     synchronized void prune(List<T> activeItems) {
         for (String namespace : namespaceCache.keySet()) {
             List<Sequenced> items = namespaceCache.get(namespace);
 
-            // remove items that are not active anymore
+            // Remove items that are not active anymore.
             items.removeIf(item -> activeItems.stream()
                     .noneMatch(active -> active.getMetadata().getUid().equals(item.uid())));
         }
 
-        // if currentlyExecuting is not active anymore, reset it
+        // If currentlyExecuting is not active anymore, reset it.
         for (String namespace : currentlyExecuting.keySet()) {
             if (activeItems.stream().noneMatch(active -> active.getMetadata()
                     .getUid()
@@ -192,10 +244,16 @@ class SequencerCache<T extends HasMetadata> {
             }
         }
 
-        // remove empty namespace cache list
+        // Remove empty namespace cache list entries.
         namespaceCache.entrySet().removeIf(entry -> entry.getValue().isEmpty());
     }
 
+    /**
+     * Marks a resource as being executed.
+     *
+     * @param resource The custom Kubernetes resource to mark as executing.
+     * @throws SequencerException if the resource is already executing in the same namespace.
+     */
     synchronized void markAsExecuting(T resource) {
         final String namespace = resource.getMetadata().getNamespace();
         if (currentlyExecuting.get(namespace) != null) {
@@ -212,15 +270,21 @@ class SequencerCache<T extends HasMetadata> {
         this.currentlyExecuting.put(namespace, Sequenced.from(resource));
     }
 
+    /**
+     * Gets the currently executing resource for a given namespace.
+     *
+     * @param namespace The Kubernetes namespace.
+     * @return The currently executing Sequenced item, or null if none is executing
+     */
     synchronized Sequenced getCurrentlyExecuting(String namespace) {
         return this.currentlyExecuting.get(namespace);
     }
 
     /**
-     * Get the sequence of items for a given namespace
+     * Gets the sequence of items for a given namespace in order.
      *
-     * @param namespace the namespace
-     * @return the sequence of item names
+     * @param namespace The Kubernetes namespace.
+     * @return The sequence of item names
      */
     synchronized List<Sequenced> itemSequence(String namespace) {
         List<Sequenced> sequence = new ArrayList<>();

@@ -11,11 +11,17 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+/** The NetworkGenesisProcessor class is responsible for processing the network genesis operation. */
 @ApplicationScoped
 public class NetworkGenesisProcessor
         implements Processor<NetworkOperation, NetworkOperationStatus, ProcessorResult<NetworkOperationStatus>> {
     private final NetworkGenesisTask networkGenesisTask;
 
+    /**
+     * Constructs a new NetworkGenesisProcessor with the specified NetworkGenesisTask.
+     *
+     * @param networkGenesisTask The task responsible for executing the network genesis operation.
+     */
     @Inject
     public NetworkGenesisProcessor(NetworkGenesisTask networkGenesisTask) {
         this.networkGenesisTask = networkGenesisTask;

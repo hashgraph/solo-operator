@@ -13,7 +13,16 @@ import org.gradle.api.file.Directory;
 import org.gradle.api.file.ProjectLayout;
 import org.gradle.api.tasks.SourceSet;
 
+/**
+ * Extension class for the Object Model Generator, used to configure and manage the generation of Kubernetes object models.
+ */
 public class ObjectModelGeneratorExtension {
+    /**
+     * Constructor for the ObjectModelGeneratorExtension class. Initializes the extension with project and source set information.
+     *
+     * @param project The Gradle project instance.
+     * @param sourceSet The source set containing Kubernetes resources.
+     */
     public ObjectModelGeneratorExtension(Project project, SourceSet sourceSet) {
         ProjectLayout layout = project.getLayout();
         String dirName = sourceSet.getName();
@@ -26,34 +35,40 @@ public class ObjectModelGeneratorExtension {
     }
 
     /**
-     * Builder for the default configuration
+     * Builder for the default configuration of the object model generator.
      */
     public Config.ConfigBuilder defaultConfigBuilder = Config.builder()
             .uppercaseEnums(false)
             .objectExtraAnnotations(true)
             .generatedAnnotations(false);
+
     /**
-     * Source directory for CRDs
+     * Source directory for CRDs (Custom Resource Definitions).
      */
     public File sourceCrd;
+
     /**
-     * Source directory for OpenAPI
+     * Source directory for OpenAPI specifications.
      */
     public File sourceOpenAPI;
+
     /**
-     * Target directory for generated CRDs
+     * Target directory for generated CRDs.
      */
     public File targetCrd;
+
     /**
-     * Target directory for generated Java source
+     * Target directory for the generated Java source files.
      */
     public File targetJava;
+
     /**
-     * Builder override for specific file named by map key
+     * Builder override for specific file named by map key, allowing custom configurations for different files.
      */
     public Map<String, Config.ConfigBuilder> configBuilderOverrides = new HashMap<>();
+
     /**
-     * Optional set of generated files to remove.
+     * Optional set of generated files to remove during the build process.
      */
     public Set<File> removeFiles = new HashSet<>();
 }

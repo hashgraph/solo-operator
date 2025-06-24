@@ -104,6 +104,12 @@ public class NetworkUpgradeProcessor
     @Inject
     FreezeAbortTask freezeAbortTask;
 
+    /**
+     * Validates the provided NetworkOperation resource and context to ensure they are not null.
+     *
+     * @param resource The NetworkOperation resource being validated.
+     * @param context The Context object for the operator.
+     */
     private void validate(NetworkOperation resource, Context<NetworkOperation> context) {
         Objects.requireNonNull(resource, "resource must not be null");
         Objects.requireNonNull(resource.getSpec(), "resource.spec must not be null");
@@ -114,6 +120,14 @@ public class NetworkUpgradeProcessor
         Objects.requireNonNull(context, "context must not be null");
     }
 
+    /**
+     * Maps the workflow step to its corresponding task. This method returns the appropriate task based on the given
+     * NetworkUpgrade.WorkflowStep.
+     *
+     * @param step The workflow step to map to a task.
+     * @return The corresponding ProcessorTask for the provided step
+     * @throws ProcessorException If the provided step is unknown or not handled by this processor.
+     */
     private ProcessorTask<NetworkOperation, NetworkOperationStatus> taskFromStep(NetworkUpgrade.WorkflowStep step) {
         return switch (step) {
             case ExecuteImmediate -> executeImmediateTask;

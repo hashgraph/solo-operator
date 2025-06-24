@@ -17,12 +17,17 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDep
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * The CapsuleService class is a Kubernetes dependent resource that manages the lifecycle of a service for a consensus
+ * capsule.
+ */
 @KubernetesDependent(informer = @Informer(labelSelector = "app=consensus-node"))
 public class CapsuleService extends CRUDKubernetesDependentResource<Service, ConsensusCapsule> {
 
     public static final String TEMPLATE = "service.yaml";
     public static final String NAME_SUFFIX = "-svc";
 
+    /** Default constructor for CapsuleService, initializing it with Service class type. */
     public CapsuleService() {
         super(Service.class);
     }
