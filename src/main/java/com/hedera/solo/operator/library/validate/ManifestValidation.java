@@ -15,11 +15,25 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
 
+/**
+ * The {@code ManifestValidation} class provides a static method for validating Kubernetes resources using custom
+ * conditions.
+ */
 public class ManifestValidation {
     public static final String name = MethodHandles.lookup().lookupClass().getSimpleName();
 
+    /** Private constructor to prevent instantiation of this utility class. */
     private ManifestValidation() {}
 
+    /**
+     * Validates the given resource using multiple validators and updates or adds a condition if necessary.
+     *
+     * @param <T> The type of the Kubernetes resource implementing {@code HasMetadata}.
+     * @param resource The Kubernetes resource to be validated.
+     * @param conditions A list of existing conditions, which may be updated by this method.
+     * @param validators One or more validation functions that implement {@code Consumer<Condition>}.
+     * @return A list of conditions reflecting the result of the validation process
+     */
     @SafeVarargs
     public static <T extends HasMetadata> List<Condition> validate(
             final T resource, final List<Condition> conditions, final Consumer<Condition>... validators) {
