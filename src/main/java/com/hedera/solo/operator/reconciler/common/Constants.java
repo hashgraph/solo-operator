@@ -7,7 +7,12 @@ import com.hedera.hashgraph.sdk.PrivateKey;
 import io.fabric8.kubernetes.api.model.PodSecurityContextBuilder;
 import java.util.Map;
 
+/**
+ * Constants class contains various constants used throughout the application, including names, labels, and other
+ * configurations.
+ */
 public final class Constants {
+    /** Private constructor to prevent instantiation of this utility class. */
     private Constants() {
         throw new UnsupportedOperationException("Utility class");
     }

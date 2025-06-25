@@ -25,7 +25,11 @@ import org.apache.commons.lang3.function.TriConsumer;
 /** Provides a set of constants and utility methods for Kubernetes Metadata. */
 public final class Metadata {
 
-    /** Private constructor to prevent instantiation of this utility class. */
+    /**
+     * Private constructor to prevent instantiation of this utility class.
+     *
+     * @throws UnsupportedOperationException if this constructor is called.
+     */
     private Metadata() {
         throw new UnsupportedOperationException("Utility class");
     }
@@ -44,7 +48,8 @@ public final class Metadata {
 
     /**
      * Copies the selected metadata from the given Orbit object to the target object implementing {@link HasMetadata}.
-     * See {@link #applyOrbitMetaTo(Orbit, ObjectMetaFluent)} for more details.
+     *
+     * <p>See {@link #applyOrbitMetaTo(Orbit, ObjectMetaFluent)} for more details.
      *
      * @param orbit the Orbit object from which the metadata should be copied/
      * @param target the target object implementing {@link HasMetadata} to which the Orbit metadata should be applied/
@@ -71,7 +76,7 @@ public final class Metadata {
      * @param orbit the Orbit object from which the metadata should be copied.
      * @param metadata the fluent builder to which the Orbit metadata should be applied.
      * @param <A> the type of the fluent builder.
-     * @return the fluent builder with the Orbit metadata applied.
+     * @return the fluent builder with the Orbit metadata applied
      * @throws NullPointerException if any of the arguments is {@code null}.
      */
     @NotNull
@@ -105,7 +110,8 @@ public final class Metadata {
      *
      * @param src the source object.
      * @param dst the destination object.
-     * @return the destination fluent builder with the annotations copied.
+     * @param <A> The type of the fluent object (must extend {@code ObjectMetaFluent})
+     * @return the destination fluent builder with the annotations copied
      * @throws NullPointerException if the source object is {@code null}.
      */
     public static <A extends ObjectMetaFluent<A>> A copyAnnotations(
@@ -137,7 +143,8 @@ public final class Metadata {
      * @param src the source object.
      * @param dst the destination object.
      * @param filter the filter to apply to the annotations.
-     * @return the destination fluent builder with the annotations copied.
+     * @param <A> The type of the fluent object (must extend {@code ObjectMetaFluent})
+     * @return the destination fluent builder with the annotations copied
      * @throws NullPointerException if the source object or destination fluent builder is {@code null}.
      */
     public static <A extends ObjectMetaFluent<A>> A copyAnnotations(
@@ -163,7 +170,8 @@ public final class Metadata {
      *
      * @param src the source object.
      * @param dst the destination fluent builder.
-     * @return the destination fluent builder with the labels copied.
+     * @param <A> The type of the fluent object (must extend {@code ObjectMetaFluent})
+     * @return the destination fluent builder with the labels copied
      * @throws NullPointerException if the source object or destination fluent builder is {@code null}.
      */
     @NotNull
@@ -194,7 +202,8 @@ public final class Metadata {
      * @param src the source object.
      * @param dst the destination fluent builder.
      * @param filter the filter to apply to the labels.
-     * @return the destination fluent builder with the labels copied.
+     * @param <A> The type of the fluent object (must extend {@code ObjectMetaFluent})
+     * @return the destination fluent builder with the labels copied
      * @throws NullPointerException if the source object or destination fluent builder is {@code null}.
      */
     @NotNull
@@ -219,6 +228,20 @@ public final class Metadata {
         return finalName + suffix;
     }
 
+    /**
+     * Copies metadata from a source object with {@code HasMetadata} interface to a destination object also with
+     * {@code HasMetadata} interface. The metadata copying is done using custom getter and setter functions, and an
+     * optional filter predicate can be applied to determine which metadata entries should be copied.
+     *
+     * @param src the source object from which metadata will be copied (must not be null)
+     * @param dst the destination object to which metadata will be copied (must not be null)
+     * @param getter a function that takes an {@code ObjectMeta} and returns a map of string keys to string values,
+     *     representing the metadata entries to be copied
+     * @param setter a tri-consumer that accepts an {@code ObjectMetaBuilder}, a key, and a value for setting metadata
+     *     in the builder
+     * @param filter an optional bi-predicate used to determine whether specific metadata entries should be included
+     *     during the copy process; if null, all metadata entries are copied
+     */
     private static void copyMap(
             @NotNull final HasMetadata src,
             @NotNull final HasMetadata dst,
@@ -232,6 +255,22 @@ public final class Metadata {
         dst.setMetadata(metadata.build());
     }
 
+    /**
+     * Copies metadata from a source object with {@code HasMetadata} interface to a destination fluent object of type
+     * {@code A}, which extends {@code ObjectMetaFluent<A>}. The metadata copying is done using custom getter and setter
+     * functions, and an optional filter predicate can be applied to determine which metadata entries should be copied.
+     *
+     * @param src the source object from which metadata will be copied (must not be null)
+     * @param dst the destination fluent object to which metadata will be copied (must not be null)
+     * @param getter a function that takes an {@code ObjectMeta} and returns a map of string keys to string values,
+     *     representing the metadata entries to be copied
+     * @param setter a tri-consumer that accepts a fluent object of type {@code A}, a key, and a value for setting
+     *     metadata in the fluent object
+     * @param filter an optional bi-predicate used to determine whether specific metadata entries should be included
+     *     during the copy process; if null, all metadata entries are copied
+     * @param <A> The type of the fluent object (must extend {@code ObjectMetaFluent<A>})
+     * @return the destination fluent object with updated metadata (of type {@code A})
+     */
     @NotNull
     private static <A extends ObjectMetaFluent<A>> A copyMap(
             @NotNull final HasMetadata src,
@@ -248,6 +287,19 @@ public final class Metadata {
         return setLabels(dst, srcLabels, setter, filter);
     }
 
+    /**
+     * Sets metadata labels on a fluent object of type {@code A} using the given setter function, applying an optional
+     * filter to determine which labels should be set.
+     *
+     * @param dst the destination fluent object to which labels will be set (must not be null)
+     * @param labels a map of string keys to string values representing the labels to be set on the destination object
+     * @param setter a tri-consumer that accepts a fluent object of type {@code A}, a key, and a value for setting
+     *     metadata in the fluent object
+     * @param filter an optional bi-predicate used to determine whether specific labels should be included during the
+     *     setting process; if null, all labels are set
+     * @param <A> The type of the fluent object (must extend {@code ObjectMetaFluent})
+     * @return the destination fluent object with updated labels (of type {@code A})
+     */
     private static <A extends ObjectMetaFluent<A>> A setLabels(
             @NotNull A dst,
             @NotNull Map<String, String> labels,
@@ -262,11 +314,23 @@ public final class Metadata {
         return dst;
     }
 
+    /**
+     * Prepares a node name based on the {@code ConsensusCapsule}'s specification node ID.
+     *
+     * @param cc the {@code ConsensusCapsule} object from which to derive the node name (must not be null)
+     * @return a formatted string representing the node name
+     */
     public static String prepareNodeName(ConsensusCapsule cc) {
         // we are deriving the node name from node-id instead of using the name of the ConsensusCapsule
         return prepareNodeName(cc.getSpec().getNodeId());
     }
 
+    /**
+     * Prepares a node name based on the given node ID, formatted according to {@link Constants#NODE_NAME_FORMAT}.
+     *
+     * @param nodeId the long value representing the node ID (must not be null)
+     * @return a formatted string representing the node name
+     */
     public static String prepareNodeName(Long nodeId) {
         return Constants.NODE_NAME_FORMAT.formatted(nodeId + 1);
     }
@@ -281,7 +345,7 @@ public final class Metadata {
      * @param componentType the component name.
      * @param customLabels the labels to apply.
      * @param <A> the type of the metadata fluent builder.
-     * @return the metadata with the labels applied.
+     * @return the metadata with the labels applied
      */
     @NotNull
     public static <A extends ObjectMetaFluent<A>> A applyStandardLabels(
@@ -310,7 +374,7 @@ public final class Metadata {
      * @param orbitName the namespace.
      * @param parentComponent the parent component name.
      * @param componentType the component name.
-     * @return the labels with the standard labels added.
+     * @return the labels with the standard labels added
      */
     public static Map<String, String> prepareStandardLabels(
             String name,
@@ -337,6 +401,13 @@ public final class Metadata {
         return standardLabels;
     }
 
+    /**
+     * Prepares a map of labels specific to a consensus node using the given node ID and account ID.
+     *
+     * @param nodeId the long value representing the node ID (must not be null)
+     * @param accountId the string representation of the account ID associated with the node (must not be null)
+     * @return an immutable map of strings to strings containing labels for a consensus node
+     */
     public static Map<String, String> prepareConsensusNodeLabels(Long nodeId, String accountId) {
         final Map<String, String> labels = new HashMap<>(); // return a mutable hashmap
         labels.put(Constants.LABEL_APP, Constants.COMPONENT_CONSENSUS_NODE);
@@ -346,6 +417,16 @@ public final class Metadata {
         return labels;
     }
 
+    /**
+     * Prepares a map of labels specific to consensus secrets using the given orbit name, node ID, account ID, and key
+     * type. The map includes both consensus node labels and additional secret-specific labels.
+     *
+     * @param orbitName the string representation of the orbit name (must not be null)
+     * @param nodeId the long value representing the node ID (must not be null)
+     * @param accountId the string representation of the account ID associated with the node (must not be null)
+     * @param keyType the string representation of the key type (must not be null)
+     * @return an immutable map of strings to strings containing labels for consensus secrets
+     */
     public static Map<String, String> prepareConsensusSecretsLabels(
             String orbitName, Long nodeId, String accountId, String keyType) {
         final Map<String, String> labels = Metadata.prepareConsensusNodeLabels(nodeId, accountId);
