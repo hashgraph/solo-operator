@@ -10,6 +10,10 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import jakarta.enterprise.context.ApplicationScoped;
 
+/**
+ * The NodeOperationProcessor class is an implementation of the Processor interface for handling network operations
+ * related to nodes.
+ */
 @ApplicationScoped
 public class NodeOperationProcessor
         implements Processor<NetworkOperation, NetworkOperationStatus, ProcessorResult<NetworkOperationStatus>> {

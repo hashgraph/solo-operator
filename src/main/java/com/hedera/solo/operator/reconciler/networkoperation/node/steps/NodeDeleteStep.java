@@ -10,6 +10,10 @@ import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperati
 import com.hedera.solo.operator.reconciler.networkoperation.utils.StepConditionType;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 
+/**
+ * This class implements the step for deleting a consensus node as part of a network operation. It follows the
+ * ProcessorStep interface to define the contract for processing steps in a network operation.
+ */
 public class NodeDeleteStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final StepConditionType CONDITION_TYPE = new StepConditionType("NodeOperation", "NodeDelete");
     public static final String SUCCESS_STATUS_MESSAGE = "Successfully deleted consensus node: %s";

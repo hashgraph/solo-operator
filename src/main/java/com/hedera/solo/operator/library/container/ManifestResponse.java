@@ -17,6 +17,12 @@ public class ManifestResponse {
     public final String digest;
     protected final Map<String, String> digests = new HashMap<>();
 
+    /**
+     * Constructs a ManifestResponse object with the given ImageCoordinates and HttpResponse.
+     *
+     * @param coordinates The image coordinates including optional digest information.
+     * @param response The HTTP response containing the manifest data.
+     */
     public ManifestResponse(final ImageCoordinates coordinates, final HttpResponse<byte[]> response) {
         this.response = response;
         requireDigest(
@@ -27,11 +33,23 @@ public class ManifestResponse {
                 OCIManifest.from(response.headers().firstValue("Content-Type").orElse(null), response.body());
     }
 
+    /**
+     * Computes a digest for the given algorithm if not already computed.
+     *
+     * @param algorithm The name of the digest algorithm to compute.
+     * @return The computed or retrieved digest string
+     */
     public String digest(final String algorithm) {
         return digests.computeIfAbsent(
                 algorithm, k -> k + ":" + digestAlgorithms.get(algorithm).hexOf(response.body()));
     }
 
+    /**
+     * Ensures the expected digest matches the actual computed digest.
+     *
+     * @param expect The expected digest string.
+     * @throws RuntimeException if the actual digest does not match the expected one.
+     */
     protected void requireDigest(final String expect) {
         String actual = digest(expect.substring(0, 6));
         if (!actual.equalsIgnoreCase(expect)) {
@@ -40,6 +58,11 @@ public class ManifestResponse {
         }
     }
 
+    /**
+     * Initializes the map of digest algorithms supported by the application.
+     *
+     * @return A map of digest algorithm names to their corresponding Digest objects
+     */
     private static Map<String, Digest> digestAlgorithms() {
         Map<String, Digest> digestAlgorithms = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         digestAlgorithms.put("blake3", Digest.BLAKE_3);

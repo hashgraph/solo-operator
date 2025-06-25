@@ -10,6 +10,11 @@ import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperati
 import com.hedera.solo.operator.reconciler.networkoperation.utils.StepConditionType;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 
+/**
+ * The `NodeUpdateStep` class is responsible for updating the consensus nodes in a network operation. It implements the
+ * `ProcessorStep` interface, which defines methods to check if an update was successful, determine whether the step
+ * should be skipped, and run the actual update process.
+ */
 public class NodeUpdateStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final StepConditionType CONDITION_TYPE = new StepConditionType("NodeOperation", "NodeUpdate");
     public static final String SUCCESS_STATUS_MESSAGE = "Successfully updated consensus node: %s";
