@@ -50,7 +50,7 @@ create_vm() {
 create_vms() {
   create_vm node1 rhel-cloud rhel-8
   create_vm node2 rhel-cloud rhel-9
-  create_vm node3 ubuntu-os-cloud ubuntu-2004-lts
+  create_vm node3 ubuntu-os-pro-cloud ubuntu-pro-2004-lts
   create_vm node4 ubuntu-os-cloud ubuntu-2204-lts
 }
 
