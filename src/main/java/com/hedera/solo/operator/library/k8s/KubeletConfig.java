@@ -11,12 +11,20 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.quarkus.logging.Log;
 import java.util.Map;
 
+/** The KubeletConfig class provides utility methods to interact with the Kubernetes kubelet configuration. */
 public class KubeletConfig {
     private static final ObjectReader reader =
             new ObjectMapper(new YAMLFactory()).readerFor(new TypeReference<Map<String, Object>>() {});
 
+    /** Private constructor to prevent instantiation of the class. */
     private KubeletConfig() {}
 
+    /**
+     * Retrieves the cluster domain from the kubelet configuration in the Kubernetes system namespace.
+     *
+     * @param client The KubernetesClient instance used to interact with the Kubernetes API server.
+     * @return A string representing the cluster domain, or null if it cannot be retrieved
+     */
     public static String clusterDomain(final KubernetesClient client) {
         try {
             ConfigMap cm = client.configMaps()

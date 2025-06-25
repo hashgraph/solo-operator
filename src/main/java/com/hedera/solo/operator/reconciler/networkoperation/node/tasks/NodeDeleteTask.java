@@ -13,6 +13,10 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.time.Duration;
 import java.util.List;
 
+/**
+ * The {@code NodeDeleteTask} class represents a task for deleting nodes in a network operation. It extends the
+ * {@link AbstractProcessorTask} abstract class, which is designed to handle processor tasks.
+ */
 public class NodeDeleteTask extends AbstractProcessorTask<NetworkOperation, NetworkOperationStatus> {
     public static final Duration RECONCILE_DELAY = Duration.ofSeconds(1);
 

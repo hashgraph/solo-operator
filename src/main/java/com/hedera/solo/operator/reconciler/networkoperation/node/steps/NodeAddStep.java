@@ -10,6 +10,7 @@ import com.hedera.solo.operator.reconciler.networkoperation.utils.NetworkOperati
 import com.hedera.solo.operator.reconciler.networkoperation.utils.StepConditionType;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 
+/** This class implements the logic for adding a consensus node during network operation. */
 public class NodeAddStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final StepConditionType CONDITION_TYPE = new StepConditionType("NodeOperation", "NodeAdd");
     public static final String SUCCESS_STATUS_MESSAGE = "Successfully added consensus node: %s";
