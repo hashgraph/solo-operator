@@ -4,6 +4,7 @@ plugins {
     id("java")
     id("java-test-fixtures")
     id("com.hedera.solo.operator.component-test")
+    id("com.hedera.solo.operator.checkstyle-conventions")
     id("com.hedera.solo.operator.spotless-conventions")
     id("com.hedera.solo.operator.spotless-java-conventions")
     id("com.hedera.solo.operator.spotless-kotlin-conventions")

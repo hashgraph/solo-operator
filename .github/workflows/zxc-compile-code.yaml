@@ -73,6 +73,10 @@ jobs:
         if: ${{ inputs.enable-spotless-check && !cancelled() && !failure() }}
         run: ./gradlew spotlessCheck --scan
 
+      - name: Checkstyle Check
+        if: ${{ inputs.enable-spotless-check && !cancelled() && !failure() }}
+        run: ./gradlew checkstyleComponentTest checkstyleMain checkstyleTest checkstyleTestFixtures --scan
+
       - name: Component Tests
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
         run: ./gradlew componentTest --scan
