@@ -35,6 +35,10 @@ import java.util.List;
 import java.util.function.Predicate;
 import org.jboss.logging.Logger;
 
+/**
+ * HAProxyCapsuleReconciler is responsible for reconciling the HAProxyCapsule resource. It manages the lifecycle of
+ * HAProxy related resources.
+ */
 @ControllerConfiguration
 @RBACRule(
         apiGroups = {""},
@@ -68,6 +72,11 @@ public class HAProxyCapsuleReconciler implements Cleaner<HAProxyCapsule>, Reconc
             .withReconcilePrecondition(new HAProxyDeployment.Ready(this))
             .build();
 
+    /**
+     * Returns the event source context for the HAProxyCapsule.
+     *
+     * @return {@code EventSourceContext<HAProxyCapsule>}
+     */
     public EventSourceContext<HAProxyCapsule> eventSourceContext() {
         return eventSourceContext;
     }

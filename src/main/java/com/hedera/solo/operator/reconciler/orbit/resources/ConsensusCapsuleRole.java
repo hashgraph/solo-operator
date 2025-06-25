@@ -13,11 +13,16 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDNoGCKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 
+/**
+ * The {@code ConsensusCapsuleRole} class is a Kubernetes dependent resource that manages the creation and update of a
+ * Role for consensus capsules.
+ */
 @KubernetesDependent
 public class ConsensusCapsuleRole extends CRUDNoGCKubernetesDependentResource<Role, Orbit> {
     public static final String TEMPLATE = "consensus-capsule-role.yaml";
     public static final String NAME = "consensus-capsule-role";
 
+    /** Default constructor for {@code ConsensusCapsuleRole}. */
     public ConsensusCapsuleRole() {
         super(Role.class);
     }

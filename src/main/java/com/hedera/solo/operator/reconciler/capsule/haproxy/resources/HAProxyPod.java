@@ -21,9 +21,19 @@ import java.util.Comparator;
 import java.util.Optional;
 import java.util.Set;
 
+/**
+ * The HAProxyPod class is a KubernetesDependentResource that manages the lifecycle of HAProxy pods in a Kubernetes
+ * cluster. It interacts with the HAProxyCapsule resource to ensure that the corresponding pods are correctly created,
+ * updated, and managed.
+ */
 @KubernetesDependent
 public class HAProxyPod extends KubernetesDependentResource<Pod, HAProxyCapsule>
         implements SecondaryToPrimaryMapper<Pod> {
+
+    /**
+     * Constructs a new HAProxyPod instance. Initializes the dependent resource to manage Pod objects and configures the
+     * informer with a label selector for HAProxy pods.
+     */
     public HAProxyPod() {
         super(Pod.class);
         configureWith(new KubernetesDependentResourceConfigBuilder<Pod>()

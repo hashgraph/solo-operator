@@ -22,11 +22,20 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+/**
+ * The HAProxyConsensusSecret class is a KubernetesDependentResource that handles the reconciliation of HAProxy
+ * consensus secrets.
+ */
 @KubernetesDependent
 public class HAProxyConsensusSecret extends KubernetesDependentResource<Secret, HAProxyCapsule>
         implements SecondaryToPrimaryMapper<Secret> {
     private final HAProxyCapsuleReconciler reconciler;
 
+    /**
+     * Constructs a new HAProxyConsensusSecret with the given HAProxyCapsuleReconciler.
+     *
+     * @param reconciler The HAProxyCapsuleReconciler responsible for this resource reconciliation.
+     */
     public HAProxyConsensusSecret(final HAProxyCapsuleReconciler reconciler) {
         super(Secret.class);
         this.reconciler = reconciler;

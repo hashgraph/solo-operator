@@ -23,11 +23,20 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+/**
+ * The HAProxyConsensusService class is responsible for mapping secondary resources (Services) to primary resources
+ * (HAProxyCapsule).
+ */
 @KubernetesDependent
 public class HAProxyConsensusService extends KubernetesDependentResource<Service, HAProxyCapsule>
         implements SecondaryToPrimaryMapper<Service> {
     private final HAProxyCapsuleReconciler reconciler;
 
+    /**
+     * Constructs a new HAProxyConsensusService with the given HAProxyCapsuleReconciler.
+     *
+     * @param reconciler The HAProxyCapsuleReconciler instance for handling HAProxyCapsule resources.
+     */
     public HAProxyConsensusService(final HAProxyCapsuleReconciler reconciler) {
         super(Service.class);
         this.reconciler = reconciler;

@@ -17,11 +17,13 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDep
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResourceConfigBuilder;
 import java.util.Map;
 
+/** The {@code HAProxyConfigMap} class represents a Kubernetes ConfigMap resource for HAProxy capsule configuration. */
 @KubernetesDependent
 public class HAProxyConfigMap extends CRUDKubernetesDependentResource<ConfigMap, HAProxyCapsule> {
     public static final String TEMPLATE = "configmap.yaml";
     public static final String NAME_SUFFIX = "-ha-cm";
 
+    /** Constructs a new {@code HAProxyConfigMap} object. */
     public HAProxyConfigMap() {
         super(ConfigMap.class);
         configureWith(new KubernetesDependentResourceConfigBuilder<ConfigMap>()

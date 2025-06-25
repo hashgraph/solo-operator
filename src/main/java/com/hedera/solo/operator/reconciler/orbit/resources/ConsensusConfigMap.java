@@ -18,12 +18,17 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDep
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * The {@code ConsensusConfigMap} class is a Kubernetes dependent resource that manages the creation and update of
+ * ConfigMaps for consensus configuration in an Orbit CR.
+ */
 @KubernetesDependent
 public class ConsensusConfigMap extends CRUDNoGCKubernetesDependentResource<ConfigMap, Orbit> {
 
     public static final String TEMPLATE = "consensus-config-cm.yaml";
     public static final String NAME = "consensus-config";
 
+    /** Constructs a new {@code ConsensusConfigMap} instance. */
     public ConsensusConfigMap() {
         super(ConfigMap.class);
     }
@@ -53,6 +58,12 @@ public class ConsensusConfigMap extends CRUDNoGCKubernetesDependentResource<Conf
                 .build();
     }
 
+    /**
+     * Generates the application configuration map for the given Orbit resource.
+     *
+     * @param orbit The Orbit resource to extract configuration from.
+     * @return A map containing the application configuration properties
+     */
     Map<String, String> applicationConfiguration(Orbit orbit) {
         Consensus consensus = orbit.getSpec().getConsensus();
         Map<String, String> applicationConfiguration = new LinkedHashMap<>(consensus.getApplicationConfiguration());
