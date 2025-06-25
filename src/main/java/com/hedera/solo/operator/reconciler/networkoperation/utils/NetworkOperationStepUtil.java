@@ -16,11 +16,12 @@ import java.util.List;
 import java.util.Objects;
 import org.jboss.logging.Logger;
 
+/** Utility class providing methods to prepare and check the status of a NetworkOperation. */
 public final class NetworkOperationStepUtil {
     private static final Logger log = Logger.getLogger(NetworkOperationStepUtil.class);
 
     /**
-     * Prepare a status with conditions and phase
+     * Prepare a status with conditions and phase.
      *
      * <p>This method must be used by intermediate steps to return the updated status with Pending status
      *
@@ -36,7 +37,7 @@ public final class NetworkOperationStepUtil {
     }
 
     /**
-     * Prepare failed status
+     * Prepares failed status.
      *
      * @param resource network operation resource
      * @param status network operation status
@@ -67,7 +68,7 @@ public final class NetworkOperationStepUtil {
     }
 
     /**
-     * Clone and update status with specified condition and phase
+     * Clone and update status with specified condition and phase.
      *
      * @param status network operation status
      * @param conditions list of conditions
@@ -134,6 +135,13 @@ public final class NetworkOperationStepUtil {
                 .build();
     }
 
+    /**
+     * Checks if the status is successful based on the given condition type.
+     *
+     * @param status NetworkOperation status
+     * @param conditionType Condition type to check for success
+     * @return True if the status indicates success, false otherwise
+     */
     public static boolean isSuccessful(final NetworkOperationStatus status, final StepConditionType conditionType) {
         if (status == null
                 || status.getConditions() == null
@@ -148,6 +156,12 @@ public final class NetworkOperationStepUtil {
                         && c.getStatus().equals(ConditionStatus.True));
     }
 
+    /**
+     * Checks if the network upgrade mode is enabled for a given NetworkOperation resource.
+     *
+     * @param resource NetworkOperation resource to check
+     * @return True if the mode is NetworkUpgrade, false otherwise
+     */
     public static boolean isNetworkUpgrade(final NetworkOperation resource) {
         return resource != null
                 && resource.getSpec() != null

@@ -19,9 +19,20 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/** Utility class for creating or updating Kubernetes events to track the status of resource reconciliation. */
 public class ReconcileEvent {
+    /** Private constructor to prevent instantiation of this utility class. */
     private ReconcileEvent() {}
 
+    /**
+     * Creates an event for a resource if it does not exist, or updates an existing event if it does. The event is
+     * marked as an error with the reason "Failed" and includes a description of the exception.
+     *
+     * @param <P> The type of the Kubernetes resource being reconciled.
+     * @param resource The Kubernetes resource being reconciled.
+     * @param context The operator context used to interact with the Kubernetes API.
+     * @param exception The exception that occurred during reconciliation, if any.
+     */
     public static <P extends HasMetadata> void createOrUpdateEvent(
             final P resource, final Context<P> context, final Exception exception) {
         if (exception instanceof AggregatedOperatorException ae) {
@@ -80,6 +91,13 @@ public class ReconcileEvent {
         }
     }
 
+    /**
+     * Cleans up events associated with a Kubernetes resource.
+     *
+     * @param <P> The type of the Kubernetes resource.
+     * @param resource The Kubernetes resource to clean up events for.
+     * @param context The operator context used to interact with the Kubernetes API.
+     */
     public static <P extends HasMetadata> void cleanupEvents(final P resource, final Context<P> context) {
         ObjectMeta metadata = resource.getMetadata();
         (metadata.getNamespace() == null
@@ -96,6 +114,12 @@ public class ReconcileEvent {
                 .delete();
     }
 
+    /**
+     * Describes an exception in a human-readable format for logging or event messages.
+     *
+     * @param e The exception to describe.
+     * @return A string representation of the exception including its type and message
+     */
     public static String describe(final Exception e) {
         StringBuilder sb = new StringBuilder(e.getClass().getSimpleName());
         if (sb.isEmpty()) {

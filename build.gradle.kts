@@ -171,3 +171,5 @@ tasks.register<Copy>("copyAdditionalComponentTestCrdResources") {
 tasks.named("processComponentTestResources") {
     dependsOn("copyAdditionalComponentTestCrdResources")
 }
+
+quarkus { buildForkOptions { jvmArgs("-Dproject.root=${rootProject.projectDir.absolutePath}") } }
