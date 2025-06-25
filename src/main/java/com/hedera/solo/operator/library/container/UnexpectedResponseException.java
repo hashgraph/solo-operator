@@ -8,6 +8,11 @@ import java.net.http.HttpResponse;
 public class UnexpectedResponseException extends RuntimeException {
     public final HttpResponse<byte[]> response;
 
+    /**
+     * Constructs a new UnexpectedResponseException with the specified detail message and cause.
+     *
+     * @param response The HTTP response received from the OCI registry.
+     */
     public UnexpectedResponseException(final HttpResponse<byte[]> response) {
         super("Unexpected response code: " + response.statusCode());
         this.response = response;
