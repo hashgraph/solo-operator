@@ -22,7 +22,7 @@ import java.util.Objects;
 import org.jboss.logging.Logger;
 
 /**
- * VerifyStreamUploaderChangesetStep verifies the changeset for StreamUploader
+ * VerifyStreamUploaderChangesetStep verifies the changeset for StreamUploader.
  *
  * <p>The {@link StreamUploaderChangeset} includes the repository sources
  * ({@link com.hedera.solo.operator.model.commonspec.SoftwareVersionSource}) from various node operators (~32 or more).
@@ -58,6 +58,11 @@ public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkO
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
     private final String containerName;
 
+    /**
+     * Constructor for VerifyStreamUploaderChangesetStep.
+     *
+     * @param name The name of the stream uploader container to be verified
+     */
     public VerifyStreamUploaderChangesetStep(String name) {
         this.containerName = name;
     }
@@ -146,12 +151,25 @@ public class VerifyStreamUploaderChangesetStep implements ProcessorStep<NetworkO
         }
     }
 
+    /**
+     * Creates a Condition object based on the verification result.
+     *
+     * @param status The current state of the NetworkOperationStatus to be updated
+     * @return A Condition object indicating the success or failure of the image verification
+     */
     Condition createCondition(final NetworkOperationStatus status) {
         final StepConditionType conditionType = new StepConditionType(CONDITION_TYPE, this.containerName);
         return StreamUploaderVerifier.prepareCondition(
                 status, this.containerName, SUCCESS_STATUS_MESSAGE, FAIL_STATUS_MESSAGE, conditionType);
     }
 
+    /**
+     * Checks if the image verification is done based on the NetworkOperationStatus and container name.
+     *
+     * @param status The current state of the NetworkOperationStatus to be checked
+     * @param containerName The name of the stream uploader container being verified
+     * @return True if the verification is done, false otherwise
+     */
     public static boolean isDone(NetworkOperationStatus status, String containerName) {
         final StepConditionType conditionType = new StepConditionType(CONDITION_TYPE, containerName);
         return NetworkOperationStepUtil.isSuccessful(status, conditionType);

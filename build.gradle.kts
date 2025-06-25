@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import java.nio.file.Path
+
 plugins {
     id("com.hedera.solo.operator.conventions")
     id("com.hedera.solo.operator.versioning")
     id("io.quarkus")
     id("com.hedera.solo.operator.buildlogic.objectModelGenerator")
     id("com.hedera.solo.operator.buildlogic.gitExtractor")
+    id("com.hedera.solo.operator.buildlogic.crdGenerator")
 }
 
 val quarkusPlatformGroupId: String by project
@@ -24,9 +27,9 @@ val smallryeCertificateGeneratorVersion = libs.versions.smallrye.certificate.gen
 dependencies {
     annotationProcessor("io.sundr:builder-annotations:${sundrVersion}")
     annotationProcessor("io.fabric8:kubernetes-client:${fabric8Version}")
-    annotationProcessor("io.fabric8:crd-generator-apt:${fabric8Version}")
     annotationProcessor("org.projectlombok:lombok:${lombokVersion}")
     implementation("io.fabric8:generator-annotations:${fabric8Version}")
+    implementation(libs.fabric8.crd.generator.api.v2)
 
     implementation(
         enforcedPlatform(
@@ -135,4 +138,36 @@ objectModelGenerator {
             )
     }
     register(sourceSets.componentTest)
+}
+
+crdGenerator {
+    register(sourceSets.componentTest) {
+        sourceSet.resources { srcDirs(outputDir) }
+        outputDir = File(outputDir, "META-INF/fabric8")
+        postProcessorClassName =
+            "com.hedera.solo.operator.library.crdpostprocessor.SharedCrdPostProcessor"
+        postProcessorClassPath = sourceSets.main.get().runtimeClasspath
+        postProcessorNewInstance = { clazz ->
+            clazz
+                .getConstructor(Path::class.java)
+                .newInstance(
+                    layout.buildDirectory
+                        .dir("generated/object-model-generator/${sourceSet.name}/crd")
+                        .get()
+                        .asFile
+                        .toPath()
+                )
+        }
+    }
+}
+
+tasks.register<Copy>("copyAdditionalComponentTestCrdResources") {
+    dependsOn("quarkusBuild")
+    dependsOn("generateComponentTestCrd")
+    from(layout.buildDirectory.dir("kubernetes"))
+    into(layout.buildDirectory.dir("generated/crd-generator/componentTest/META-INF/fabric8"))
+}
+
+tasks.named("processComponentTestResources") {
+    dependsOn("copyAdditionalComponentTestCrdResources")
 }
