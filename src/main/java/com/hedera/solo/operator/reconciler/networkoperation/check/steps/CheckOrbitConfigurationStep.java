@@ -35,6 +35,11 @@ public class CheckOrbitConfigurationStep implements ProcessorStep<NetworkOperati
 
     private final CustomResourceManager customResourceManager;
 
+    /**
+     * Constructs a new CheckOrbitConfigurationStep with the given CustomResourceManager.
+     *
+     * @param customResourceManager The resource manager for custom Kubernetes resources.
+     */
     public CheckOrbitConfigurationStep(CustomResourceManager customResourceManager) {
         this.customResourceManager = customResourceManager;
     }
@@ -122,8 +127,6 @@ public class CheckOrbitConfigurationStep implements ProcessorStep<NetworkOperati
                     }
                 }
             }
-
-            // TODO check logging configuration #592
 
             log.infof(
                     "Orbit configuration check was successful for '%s/%s' [ %s ]",

@@ -17,6 +17,10 @@ import java.util.List;
 import java.util.Objects;
 import org.jboss.logging.Logger;
 
+/**
+ * This class implements the step for aborting a network upgrade operation. It handles the process of aborting the
+ * upgrade by logging and updating the status accordingly.
+ */
 public class FreezeAbortStep implements ProcessorStep<NetworkOperation, NetworkOperationStatus> {
     public static final StepConditionType CONDITION_TYPE = new StepConditionType("FreezeAbort", "AbortNetworkUpgrade");
     public static final String SUCCESS_STATUS_MESSAGE = "Successfully aborted '%s/%s'";

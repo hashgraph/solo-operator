@@ -12,11 +12,16 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 
+/**
+ * The {@code CapsuleServiceAccount} class is a Kubernetes dependent resource that manages the creation and update of a
+ * ServiceAccount for a consensus capsule.
+ */
 @KubernetesDependent
 public class CapsuleServiceAccount extends CRUDKubernetesDependentResource<ServiceAccount, ConsensusCapsule> {
     public static final String TEMPLATE = "sa.yaml";
     public static final String NAME_SUFFIX = "-sa";
 
+    /** Constructor for CapsuleServiceAccount class. Initializes the dependent resource with the type ServiceAccount. */
     public CapsuleServiceAccount() {
         super(ServiceAccount.class);
     }
