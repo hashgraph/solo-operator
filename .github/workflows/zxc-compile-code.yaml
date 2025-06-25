@@ -80,7 +80,7 @@ jobs:
       - name: Kubernetes KinD Cluster
         id: kind
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
-        uses: helm/kind-action@d730aaf5682e7d9c25245c74b8a105b96decb21a
+        uses: helm/kind-action@d4887be296b90d45c7a7aaf1379c0ebd88c8aa31
         with:
           registry: true
 
@@ -125,7 +125,7 @@ jobs:
           kubectl -n solo-operator logs -l app.kubernetes.io/name=solo-operator --tail -1 --timestamps > operator.log
 
       - name: Publish Unit Test Report
-        uses: step-security/publish-unit-test-result-action@e88bfc6c0dffc68a1067d63526c80c81f248da11 # v2.20.0
+        uses: step-security/publish-unit-test-result-action@201bbe166c323b2f9dab6dfbf9d6b6c001bd0dce # v2.20.1
         if: ${{ inputs.enable-unit-tests && !cancelled() }}
         with:
           check_name: "Unit Test Results"

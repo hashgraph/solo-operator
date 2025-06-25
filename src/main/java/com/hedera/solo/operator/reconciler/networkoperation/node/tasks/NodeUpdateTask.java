@@ -13,6 +13,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.time.Duration;
 import java.util.List;
 
+/** The {@code NodeUpdateTask} class is responsible for processing network operations related to node updates. */
 public class NodeUpdateTask extends AbstractProcessorTask<NetworkOperation, NetworkOperationStatus> {
     public static final Duration RECONCILE_DELAY = Duration.ofSeconds(1);
 

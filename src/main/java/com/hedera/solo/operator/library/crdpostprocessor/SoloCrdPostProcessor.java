@@ -9,7 +9,7 @@ public class SoloCrdPostProcessor extends SharedCrdPostProcessor {
     public SoloCrdPostProcessor() {
         super(Path.of(
                 ConfigProvider.getConfig()
-                        .getOptionalValue("github.workspace", String.class)
+                        .getOptionalValue("project.root", String.class)
                         .orElseGet(() -> System.getProperty("user.dir")),
                 "build/generated/object-model-generator/main/crd"));
     }
