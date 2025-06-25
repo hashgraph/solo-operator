@@ -26,10 +26,20 @@ class ObjectModelGeneratorPluginFunctionalTest {
     @TempDir
     File sourceOpenAPI;
 
+    /**
+     * Retrieves the build file for the Gradle project.
+     *
+     * @return The build file as a {@link File} object
+     */
     private File getBuildFile() {
         return new File(projectDir, "build.gradle.kts");
     }
 
+    /**
+     * Retrieves the settings file for the Gradle project.
+     *
+     * @return The settings file as a {@link File} object
+     */
     private File getSettingsFile() {
         return new File(projectDir, "settings.gradle");
     }
@@ -62,6 +72,13 @@ class ObjectModelGeneratorPluginFunctionalTest {
         assertEquals(1, result.getTasks().size());
     }
 
+    /**
+     * Writes a string to a file.
+     *
+     * @param file The file to which the string will be written.
+     * @param string The string to write to the file.
+     * @throws IOException If there is an issue with file handling or I/O operations.
+     */
     private void writeString(File file, String string) throws IOException {
         try (Writer writer = new FileWriter(file)) {
             writer.write(string);

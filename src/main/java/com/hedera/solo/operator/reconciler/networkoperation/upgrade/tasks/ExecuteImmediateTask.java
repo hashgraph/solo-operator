@@ -90,6 +90,12 @@ public class ExecuteImmediateTask extends AbstractProcessorTask<NetworkOperation
         return null; // it does not have any deferred processor
     }
 
+    /**
+     * Checks if the execute-immediate process is done based on the NetworkOperation resource status.
+     *
+     * @param resource The NetworkOperation resource being checked.
+     * @return true if all necessary steps are completed, false otherwise
+     */
     public static boolean isDone(NetworkOperation resource) {
         for (String containerName : List.of(
                 Constants.TPL_VAR_RECORD_STREAM_UPLOADER,

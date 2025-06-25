@@ -12,18 +12,46 @@ import io.fabric8.kubernetes.api.model.PersistentVolumeClaimSpecBuilder;
 import io.fabric8.kubernetes.api.model.Quantity;
 import java.util.Objects;
 
+/**
+ * The `CapsulePvcUtil` class provides utility methods for working with PersistentVolumeClaim (PVC) resources in the
+ * context of a ConsensusCapsule.
+ */
 public class CapsulePvcUtil {
+
+    /**
+     * Generates a valid PVC name based on the ConsensusCapsule and volume suffix.
+     *
+     * @param cc The ConsensusCapsule object containing metadata about the capsule.
+     * @param volSuffix The suffix to be appended to the node name in the PVC name.
+     * @return A string representing the valid PVC name
+     */
     public static String validPvcName(ConsensusCapsule cc, String volSuffix) {
         final String nodeName = Metadata.prepareNodeName(cc);
         return "%s-%s".formatted(nodeName, volSuffix);
     }
 
+    /**
+     * Validates the provided ConsensusCapsule object to ensure it is not null and has necessary metadata and
+     * specifications.
+     *
+     * @param primary The ConsensusCapsule object to be validated.
+     */
     public static void validate(ConsensusCapsule primary) {
         Objects.requireNonNull(primary.getMetadata());
         Objects.requireNonNull(primary.getMetadata().getNamespace());
         Objects.requireNonNull(primary.getSpec());
     }
 
+    /**
+     * Creates a desired PersistentVolumeClaim specification based on the provided input, ensuring necessary fields are
+     * not null.
+     *
+     * @param input The initial PersistentVolumeClaim specification to be modified.
+     * @param volSuffix The suffix for the volume, used in naming the PVC.
+     * @return A new PersistentVolumeClaim specification with desired properties
+     * @throws IllegalArgumentException if the input specification is invalid, such as having empty capacity or access
+     *     modes.
+     */
     public static PersistentVolumeClaimSpec desiredPvcSpec(PersistentVolumeClaimSpec input, String volSuffix) {
         Objects.requireNonNull(input);
         Objects.requireNonNull(input.getAccessModes());
@@ -44,6 +72,15 @@ public class CapsulePvcUtil {
                 .build();
     }
 
+    /**
+     * Prepares a desired PersistentVolumeClaim object based on the provided ConsensusCapsule, PVC specification, and
+     * volume suffix.
+     *
+     * @param primary The ConsensusCapsule object containing metadata for naming and namespace.
+     * @param pvcSpec The specification of the PersistentVolumeClaim to be created.
+     * @param volSuffix The suffix used in generating the PVC name.
+     * @return A new PersistentVolumeClaim object with appropriate metadata and specifications
+     */
     public static PersistentVolumeClaim prepareDesired(
             ConsensusCapsule primary, PersistentVolumeClaimSpec pvcSpec, String volSuffix) {
         final PersistentVolumeClaimSpec ps = CapsulePvcUtil.desiredPvcSpec(pvcSpec, volSuffix);
