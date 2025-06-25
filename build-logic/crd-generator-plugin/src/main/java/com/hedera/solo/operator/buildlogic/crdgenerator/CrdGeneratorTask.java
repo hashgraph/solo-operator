@@ -26,6 +26,10 @@ import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.TaskAction;
 
+/**
+ * This task class is designed to generate Custom Resource Definitions (CRDs) using the Fabric8 Kubernetes Client CRD
+ * generator.
+ */
 @CacheableTask
 public class CrdGeneratorTask extends DefaultTask {
     @InputFiles
@@ -45,6 +49,11 @@ public class CrdGeneratorTask extends DefaultTask {
 
     final CrdGeneratorExtension extension;
 
+    /**
+     * Constructor that initializes the task with a provided extension, setting up input and output configurations.
+     *
+     * @param extension The extension containing configuration details for the CRD generation.
+     */
     @Inject
     public CrdGeneratorTask(final CrdGeneratorExtension extension) {
         filesToScan = extension.getFilesToScan();
@@ -54,6 +63,9 @@ public class CrdGeneratorTask extends DefaultTask {
         this.extension = extension;
     }
 
+    /**
+     * Task action method that triggers the CRD generation process.
+     */
     @TaskAction
     public void crdGenerate() throws Exception {
         CRDPostProcessor postProcessor = CRDPostProcessor.nullProcessor;
@@ -87,6 +99,13 @@ public class CrdGeneratorTask extends DefaultTask {
         details.keySet().forEach(name -> getLogger().info("Generating CRD {}", name));
     }
 
+    /**
+     * Utility method to convert a FileCollection of class paths into an array of URLs for classpath loading.
+     *
+     * @param classPath The collection of file paths representing the class path elements.
+     * @return An array of URL objects suitable for use in a ClassLoader
+     * @throws MalformedURLException If there's an issue converting any file to a URL.
+     */
     URL[] urls(FileCollection classPath) throws MalformedURLException {
         List<URL> urls = new ArrayList<>();
         for (File file : classPath.getFiles()) {
@@ -95,18 +114,39 @@ public class CrdGeneratorTask extends DefaultTask {
         return urls.toArray(URL[]::new);
     }
 
+    /**
+     *  Getter method for the files to scan, providing access to the input configuration of this task.
+     *
+     * @return The FileCollection representing the files to be scanned for CRD generation
+     * */
     public FileCollection getFilesToScan() {
         return filesToScan;
     }
 
+    /**
+     *  Getter method for class path elements, used in classpath setup within the task.
+     *
+     * @return The FileCollection representing the classpath elements used for CRD generation
+     * */
     public FileCollection getClassPathElements() {
         return classPathElements;
     }
 
+    /**
+     * Getter method for post processor classpath elements, essential for loading custom processors during CRD
+     * generation.
+     *
+     * @return The FileCollection representing the classpath for post processors
+     */
     public FileCollection getPostProcessorClassPath() {
         return postProcessorClassPath;
     }
 
+    /**
+     *  Getter method for the output directory, indicating where generated CRDs will be stored after task execution.
+     *
+     * @return The output directory where generated CRDs will be placed
+     * */
     public File getOutputDirectory() {
         return outputDirectory;
     }
