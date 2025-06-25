@@ -78,6 +78,15 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
 
     private final NodeOperationProcessor nodeOperationProcessor;
 
+    /**
+     * Constructor for the Network Operation Sequence Reconciler with dependency injection.
+     *
+     * @param customResourceManager The custom resource manager for managing network operations.
+     * @param networkGenesisProcessor The processor for Genesis network operations.
+     * @param networkUpgradeProcessor The processor for Upgrade network operations.
+     * @param networkCheckProcessor The processor for Check network operations.
+     * @param nodeOperationProcessor The processor for Node Operation.
+     */
     @Inject
     public NetworkOperationSequenceReconciler(
             CustomResourceManager customResourceManager,
@@ -93,7 +102,7 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
     }
 
     /**
-     * Process the network operation based on the mode and spec
+     * Process the network operation based on the mode and spec.
      *
      * @param resource the network operation resource
      * @param context the context
@@ -244,7 +253,7 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
     }
 
     /**
-     * Initialize the resource with a new status object with consensus capsule names and phase as "Pending"
+     * Initialize the resource with a new status object with consensus capsule names and phase as "Pending".
      *
      * @param resource the resource to be initialized
      * @return the initialized resource
@@ -285,9 +294,11 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
     }
 
     /**
-     * Return the processor based on the mode of the network operation
+     * Return the processor based on the mode of the network operation.
      *
      * @param resource the network operation resource
+     * @return the processor for the network operation
+     * @throws IllegalArgumentException if the mode is unknown
      */
     private Processor<NetworkOperation, NetworkOperationStatus, ProcessorResult<NetworkOperationStatus>>
             processorFromMode(final NetworkOperation resource) {
@@ -312,7 +323,11 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
         }
     }
 
-    /** Prepare and return the list of active resources that needs to be considered for sequencing. */
+    /**
+     * Prepare and return the list of active resources that needs to be considered for sequencing.
+     *
+     * @return a list of active (not done) NetworkOperation resources
+     */
     public static List<NetworkOperation> activeResources() {
         // fetch all network-operation CRs
         List<NetworkOperation> items = customResourceManager.networkOperations();
@@ -388,7 +403,7 @@ public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOpe
     }
 
     /**
-     * Cleanup the resource by marking it for deletion
+     * Cleanup the resource by marking it for deletion.
      *
      * @param resource the resource that is marked for deletion
      * @param context the context with which the operation is executed
