@@ -13,12 +13,26 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernete
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import io.javaoperatorsdk.operator.processing.dependent.workflow.Condition;
 
+/**
+ * The CapsuleRecordStreamPvc class is a Kubernetes dependent resource that manages the creation and reconciliation of
+ * PersistentVolumeClaim (PVC) resources for record stream volumes in a ConsensusCapsule.
+ */
 @KubernetesDependent
 public class CapsuleRecordStreamPvc extends CRUDKubernetesDependentResource<PersistentVolumeClaim, ConsensusCapsule> {
+    /**
+     * Constructs a new instance of CapsuleRecordStreamPvc with the desired Kubernetes resource type set to
+     * PersistentVolumeClaim.
+     */
     public CapsuleRecordStreamPvc() {
         super(PersistentVolumeClaim.class);
     }
 
+    /**
+     * Retrieves the specification for the PVC based on the input from the primary ConsensusCapsule resource.
+     *
+     * @param primary The primary ConsensusCapsule resource.
+     * @return The PersistentVolumeClaimSpec, or null if not specified
+     */
     private static PersistentVolumeClaimSpec getInputPvcSpec(final ConsensusCapsule primary) {
         if (primary.getSpec().getPersistentVolumeClaims() == null
                 || primary.getSpec().getPersistentVolumeClaims().getStreams() == null) {
@@ -34,6 +48,7 @@ public class CapsuleRecordStreamPvc extends CRUDKubernetesDependentResource<Pers
         return CapsulePvcUtil.prepareDesired(primary, getInputPvcSpec(primary), VOLUME_RECORD_STREAM_NAME_SUFFIX);
     }
 
+    /** A condition class to check if the PVC is ready for use in a ConsensusCapsule. */
     public static class Ready implements Condition<PersistentVolumeClaim, ConsensusCapsule> {
         @Override
         public boolean isMet(

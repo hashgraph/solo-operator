@@ -30,7 +30,8 @@ import java.util.Optional;
 import org.jboss.logging.Logger;
 
 /**
- * CheckConsensusPodConfigurationStep checks that consensus capsule configuration are rolled out during network upgrade.
+ * CheckConsensusCapsuleConfigurationStep checks that consensus capsule configuration are rolled out during network
+ * upgrade.
  *
  * <p>It needs to inspect the CR and performs the necessary checks to ensure that the consensus nodes are running with
  * correct version and configuration files.
@@ -44,6 +45,11 @@ public class CheckConsensusCapsuleConfigurationStep implements ProcessorStep<Net
 
     private final CustomResourceManager customResourceManager;
 
+    /**
+     * Constructs a new CheckConsensusCapsuleConfigurationStep with the given {@link CustomResourceManager}.
+     *
+     * @param customResourceManager the resource manager for custom Kubernetes resources
+     */
     public CheckConsensusCapsuleConfigurationStep(CustomResourceManager customResourceManager) {
         this.customResourceManager = customResourceManager;
     }
@@ -107,6 +113,13 @@ public class CheckConsensusCapsuleConfigurationStep implements ProcessorStep<Net
         }
     }
 
+    /**
+     * Checks the configuration of a single consensus capsule against the network operation specification.
+     *
+     * @param resource the network operation resource
+     * @param consensusCapsule the consensus capsule to check
+     * @throws ProcessorException if the configuration does not match or is invalid
+     */
     private static void checkConsensusCapsuleConfiguration(
             final NetworkOperation resource, final ConsensusCapsule consensusCapsule) {
         final String nodeName = Metadata.prepareNodeName(consensusCapsule);
@@ -343,16 +356,35 @@ public class CheckConsensusCapsuleConfigurationStep implements ProcessorStep<Net
         }
     }
 
+    /**
+     * Determines if the configuration check is done based on the {@link NetworkOperationStatus}.
+     *
+     * @param status the current status of the network operation
+     * @return true if the configuration check is successful, otherwise false
+     */
     public static boolean isDone(NetworkOperationStatus status) {
         return NetworkOperationStepUtil.isSuccessful(status, CONDITION_TYPE);
     }
 
+    /**
+     * Matches two image versions for comparison.
+     *
+     * @param src the source image version
+     * @param dest the destination image version
+     * @return true if they match, otherwise false
+     */
     static boolean matchImageVersion(ImageRepositoryStatus src, SoftwareVersion dest) {
         return dest.getImageName().equals(src.getImageName())
                 && dest.getImageTag().equals(src.getImageTag())
                 && dest.getRepository().equals(src.getRepository());
     }
 
+    /**
+     * Converts an {@link ImageRepositoryStatus} to a string representation of the image version.
+     *
+     * @param status the image repository status
+     * @return the string representation of the image version
+     */
     static String toImageVersion(ImageRepositoryStatus status) {
         return "%s/%s:%s".formatted(status.getRepository(), status.getImageName(), status.getImageTag());
     }

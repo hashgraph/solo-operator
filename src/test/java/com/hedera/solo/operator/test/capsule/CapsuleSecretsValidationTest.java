@@ -7,6 +7,7 @@ import static com.hedera.solo.operator.test.fixtures.coredns.ConfigureCoredns.co
 import static java.util.Collections.emptyMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.hedera.solo.operator.beans.DefaultConsensusNodeBean;
 import com.hedera.solo.operator.library.builder.BuilderFunction;
@@ -22,6 +23,7 @@ import com.hedera.solo.operator.test.fixtures.annotations.SoloTest;
 import com.hedera.solo.operator.test.fixtures.snapshot.SnapshotFailureContext;
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.javaoperatorsdk.operator.Operator;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -98,12 +100,12 @@ public class CapsuleSecretsValidationTest {
     /** Test the validation of secrets when they are invalid. */
     @Test
     void testSecretResourcesAndHostPathInvalid() {
-        ConsensusCapsule capsule =
-                createConsensusCapsule(secret -> secret.editSpec().editSecrets().withNewHostPath("path", ""));
-        test(capsule, condition -> {
-            assertThat(condition.getReason()).isEqualTo("SpecSecrets");
-            assertThat(condition.getStatus()).isEqualTo(ConditionStatus.False);
-        });
+        KubernetesClientException exception = assertThrows(
+                KubernetesClientException.class,
+                () -> createConsensusCapsule(
+                        secret -> secret.editSpec().editSecrets().withNewHostPath("path", "")));
+        assertThat(exception.getMessage())
+                .contains("must validate one and only one schema (oneOf). Found 2 valid alternatives");
     }
 
     /**
