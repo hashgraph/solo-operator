@@ -24,6 +24,10 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
+/**
+ * This class contains system tests for the NowFrozenOrbit functionality, focusing on the upgrade of Orbit
+ * configurations.
+ */
 @Disabled("need to revisit this fuzz test later")
 public class NowFrozenOrbitSystemTest extends NowFrozenOrbitUnitTest {
     Orbit orbit;
@@ -33,6 +37,12 @@ public class NowFrozenOrbitSystemTest extends NowFrozenOrbitUnitTest {
     @RegisterExtension
     private AbstractOperatorExtension operator = initialize(this::configure);
 
+    /**
+     * Configures the operator extension for local testing, including the specified Kubernetes client and reconcilers.
+     *
+     * @param client The Kubernetes client to be used by the operator.
+     * @return A builder for configuring the LocallyRunOperatorExtension
+     */
     protected LocallyRunOperatorExtension.Builder configure(final KubernetesClient client) {
         return LocallyRunOperatorExtension.builder()
                 .withKubernetesClient(client)
@@ -45,12 +55,14 @@ public class NowFrozenOrbitSystemTest extends NowFrozenOrbitUnitTest {
         return new SystemTestBeanFactory();
     }
 
+    /** Sets up the test environment before each test method is executed. */
     @BeforeEach
     public void setup() {
         kubernetesClient = operator.getKubernetesClient();
         namespace = createNamespace(kubernetesClient, getClass());
     }
 
+    /** Cleans up the test environment after each test method is executed. */
     @AfterEach
     public void cleanup() {
         kubernetesClient.resource(orbit).delete();

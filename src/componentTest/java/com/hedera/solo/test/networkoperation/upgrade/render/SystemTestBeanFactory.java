@@ -10,11 +10,21 @@ import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+/**
+ * The {@code SystemTestBeanFactory} class is a specific implementation of {@link KubernetesResourceFactory} designed
+ * for system tests that require the generation of AddressBookEntry objects.
+ */
 public class SystemTestBeanFactory extends KubernetesResourceFactory {
+    /** Constructs a new {@code SystemTestBeanFactory} with no seed provided. */
     public SystemTestBeanFactory() {
         this(null);
     }
 
+    /**
+     * Constructs a new {@code SystemTestBeanFactory} with the specified seed for random number generation.
+     *
+     * @param seed The seed to be used for generating random numbers.
+     */
     public SystemTestBeanFactory(final Long seed) {
         super(seed);
         nullProbability(0.0);
@@ -33,6 +43,13 @@ public class SystemTestBeanFactory extends KubernetesResourceFactory {
         return randomString;
     }
 
+    /**
+     * Generates a list of {@link AddressBookEntry} objects.
+     *
+     * @param beanFactory The factory used to generate beans.
+     * @param type The type reference for the list, specifically {@code List<AddressBookEntry>}.
+     * @return A list of randomly generated or configured {@code AddressBookEntry} objects
+     */
     List<AddressBookEntry> addressBookEntries(final BeanFactory beanFactory, final Type type) {
         List<AddressBookEntry> list = beanFactory
                 .randoms(AddressBookEntry.class)

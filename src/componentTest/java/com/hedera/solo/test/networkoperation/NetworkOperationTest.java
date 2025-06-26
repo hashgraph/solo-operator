@@ -57,11 +57,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+/** This class contains tests for the NetworkOperation functionality in the Solo Operator project. */
 @SoloTest
 public class NetworkOperationTest extends AbstractOperatorTest {
 
     /**
-     * Mock network check config with default values
+     * Mock network check config with default values.
      *
      * @return Network check config
      */
@@ -73,7 +74,7 @@ public class NetworkOperationTest extends AbstractOperatorTest {
     }
 
     /**
-     * Mock genesis config with default values
+     * Mock genesis config with default values.
      *
      * @return Genesis config
      */
@@ -89,7 +90,7 @@ public class NetworkOperationTest extends AbstractOperatorTest {
     NetworkGenesisTaskConfig genesisConfig;
 
     /**
-     * Prepare a custom resource manager with mocked methods
+     * Prepare a custom resource manager with mocked methods.
      *
      * <p>We are mocking methods that are required for example the pods method; otherwise delegating to the actual
      * Kubernetes client
@@ -205,11 +206,21 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                 .withReconciler(new NoOpOrbitReconciler());
     }
 
+    /**
+     * Set up the test environment before each test.
+     *
+     * <p>This method creates an Orbit resource that will be used in the tests.
+     */
     @BeforeEach
     void setup() {
         createOrbit();
     }
 
+    /**
+     * Clean up the snapshot and delete the orbit after each test.
+     *
+     * @param snapshot The snapshot context for cleaning up resources
+     */
     @AfterEach
     void teardown(final SnapshotFailureContext snapshot) {
         snapshot.client(operator().getKubernetesClient())
@@ -222,6 +233,12 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                 .delete();
     }
 
+    /**
+     * Helper method to prepare a list of node IDs for testing purposes.
+     *
+     * @param count The number of node IDs to prepare
+     * @return A list of node IDs from 0 to count - 1
+     */
     private List<Long> prepareNodeIds(int count) {
         List<Long> nodeIds = new ArrayList<>();
         for (int i = 0; i < count; i++) {
@@ -230,6 +247,12 @@ public class NetworkOperationTest extends AbstractOperatorTest {
         return nodeIds;
     }
 
+    /**
+     * Helper method to prepare a network operation name with padding for ordering.
+     *
+     * @param i The index of the network operation
+     * @return A formatted string representing the network operation name
+     */
     private String networkOperationName(int i) {
         return "init-%02d".formatted(i); // prepare name with padding so that it can be ordered by name
     }
@@ -336,6 +359,11 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                 .build());
     }
 
+    /**
+     * Helper method to create a secret for use in SecretResources creation.
+     *
+     * @return KeyReference representing the created secret
+     */
     KeyReference createSecret() {
         Secret secret = operator()
                 .create(edit(new Secret())
@@ -358,6 +386,13 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                 .build();
     }
 
+    /**
+     * Helper method to validate SecretResources for ConsensusCapsule creation.
+     *
+     * @param secretResources The SecretResources to be validated
+     * @param valid Whether the validation should pass or fail
+     * @return The created NetworkOperation if valid, otherwise null
+     */
     NetworkOperation secretsValid(final SecretResources secretResources, final boolean valid) {
         List<Long> capsuleNodeIds = prepareNodeIds(3);
         for (Long nodeId : capsuleNodeIds) {
@@ -399,6 +434,11 @@ public class NetworkOperationTest extends AbstractOperatorTest {
         return networkOperation;
     }
 
+    /**
+     * Helper method to invalidate SecretResources for ConsensusCapsule creation and verify the error event.
+     *
+     * @param secretResources The invalid SecretResources
+     */
     void secretsInvalid(final SecretResources secretResources) {
         NetworkOperation no = secretsValid(secretResources, false);
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
@@ -425,6 +465,13 @@ public class NetworkOperationTest extends AbstractOperatorTest {
         });
     }
 
+    /**
+     * Helper method to create a NetworkOperation with the given name and no-update flag.
+     *
+     * @param name The name of the NetworkOperation
+     * @param noUpdate Whether the NetworkOperation should be marked as not needing updates
+     * @return The created NetworkOperation
+     */
     NetworkOperation createNetworkOperation(final String name, final boolean noUpdate) {
         final String orbitName = operator().getNamespace(); // for now namespace and orbit name are the same
         final Map<String, String> labels = Map.of(LABEL_K8S_MANAGED_BY, SOLO_OPERATOR);
@@ -438,6 +485,11 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                         .build());
     }
 
+    /**
+     * Helper method to delete a NetworkOperation that is stuck in the Pending state.
+     *
+     * @param name The name of the NetworkOperation to be deleted
+     */
     void deleteNetworkOperationStuckInPending(final String name) {
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
             NetworkOperation no = operator().get(NetworkOperation.class, name);
@@ -448,6 +500,12 @@ public class NetworkOperationTest extends AbstractOperatorTest {
         operator().delete(operator().get(NetworkOperation.class, name));
     }
 
+    /**
+     * Helper method to verify the status of a NetworkOperation.
+     *
+     * @param name The name of the NetworkOperation to be verified
+     * @param exists Whether the NetworkOperation should exist in the Kubernetes cluster
+     */
     void verifyNetworkOperationSucceeded(final String name, final boolean exists) {
         NetworkOperation no = operator().get(NetworkOperation.class, name);
         if (!exists) {
@@ -461,6 +519,7 @@ public class NetworkOperationTest extends AbstractOperatorTest {
         }
     }
 
+    /** Helper method to create an Orbit resource for testing purposes. */
     void createOrbit() {
         operator()
                 .getKubernetesClient()
@@ -489,6 +548,12 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                         .build());
     }
 
+    /**
+     * Helper method to create a ConsensusCapsule resource with the given nodeId and SecretResources.
+     *
+     * @param nodeId The ID of the consensus node
+     * @param secretResources The SecretResources for the consensus node
+     */
     void createCapsule(final Long nodeId, final SecretResources secretResources) {
         createCapsule(
                 nodeId,
@@ -496,6 +561,13 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                 secretResources);
     }
 
+    /**
+     * Helper method to create a ConsensusCapsule resource with the given nodeId, labels, and SecretResources.
+     *
+     * @param nodeId The ID of the consensus node
+     * @param labels Additional labels for the ConsensusCapsule
+     * @param secretResources The SecretResources for the consensus node
+     */
     void createCapsule(final Long nodeId, final Map<String, String> labels, final SecretResources secretResources) {
         String name = Metadata.prepareNodeName(nodeId);
         operator()
@@ -518,6 +590,11 @@ public class NetworkOperationTest extends AbstractOperatorTest {
                         .build());
     }
 
+    /**
+     * Helper method to create SecretResources for testing purposes.
+     *
+     * @return A SecretResources object with valid KeyReferences for gRPC TLS and signing certificates
+     */
     SecretResources secretResources() {
         KeyReference keyReference = createSecret();
         return new SecretResourcesBuilder()
