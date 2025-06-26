@@ -15,7 +15,13 @@ import java.time.Duration;
 import java.util.HexFormat;
 import java.util.List;
 
+/** This class provides methods to configure CoreDNS in a Kubernetes cluster. */
 public class ConfigureCoredns {
+    /**
+     * Configures the CoreDNS settings for the given Kubernetes client.
+     *
+     * @param client The Kubernetes client used to interact with the cluster.
+     */
     public static void configureCoredns(final KubernetesClient client) {
         try {
             // update corefile
@@ -54,9 +60,16 @@ public class ConfigureCoredns {
                 assertThat(count).isEqualTo((long) deployment.getSpec().getReplicas());
             });
         } catch (KubernetesClientException | NoSuchAlgorithmException ignored) {
+            // If the CoreDNS configmap or deployment does not exist, we ignore the exception.
         }
     }
 
+    /**
+     * Configures the Corefile content based on the existing corefile.
+     *
+     * @param corefile The existing Corefile configuration as a string.
+     * @return The modified Corefile configuration as a string
+     */
     private static String configureCoredns(final String corefile) {
         String file = corefile;
         List<String> lines = file.lines().toList();

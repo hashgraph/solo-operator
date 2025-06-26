@@ -9,13 +9,27 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+/** Utility class to manage finalizers in Kubernetes resources. */
 public final class Finalizers {
 
-    /** Utility class constructor. */
+    /**
+     * Private constructor to prevent instantiation of utility class.
+     *
+     * @throws UnsupportedOperationException if called.
+     */
     public Finalizers() {
         throw new UnsupportedOperationException("Utility class");
     }
 
+    /**
+     * Removes a Kubernetes resource by name.
+     *
+     * @param client The Kubernetes client. Must not be null.
+     * @param resourceType The type of the Kubernetes resource. Must not be null.
+     * @param name The name of the resource to remove. Must not be null.
+     * @param <T> The type of the Kubernetes resource.
+     * @return The removed resource, or null if the resource was not found
+     */
     public static <T extends HasMetadata> T removeByName(
             final KubernetesClient client, final Class<T> resourceType, final String name) {
         Objects.requireNonNull(client, "client must not be null");
@@ -30,6 +44,14 @@ public final class Finalizers {
         return null;
     }
 
+    /**
+     * Removes a Kubernetes resource.
+     *
+     * @param client The Kubernetes client. Must not be null.
+     * @param resource The Kubernetes resource to remove. Must not be null.
+     * @param <T> The type of the Kubernetes resource.
+     * @return The removed resource
+     */
     public static <T extends HasMetadata> T remove(final KubernetesClient client, final T resource) {
         Objects.requireNonNull(client, "client must not be null");
         Objects.requireNonNull(resource, "resource must not be null");
@@ -43,6 +65,14 @@ public final class Finalizers {
         return resource;
     }
 
+    /**
+     * Removes all resources of a given type from all namespaces.
+     *
+     * @param client The Kubernetes client. Must not be null.
+     * @param resourceType The type of the Kubernetes resources to remove. Must not be null.
+     * @param <T> The type of the Kubernetes resources.
+     * @return A list of updated resources
+     */
     public static <T extends HasMetadata> List<T> removeFromAll(
             final KubernetesClient client, final Class<T> resourceType) {
         Objects.requireNonNull(client, "client must not be null");
@@ -61,6 +91,15 @@ public final class Finalizers {
         return updatedResources;
     }
 
+    /**
+     * Removes all resources of a given type from a specific namespace.
+     *
+     * @param client The Kubernetes client. Must not be null.
+     * @param namespace The namespace to remove resources from. Must not be null.
+     * @param resourceType The type of the Kubernetes resources to remove. Must not be null.
+     * @param <T> The type of the Kubernetes resources.
+     * @return A list of updated resources
+     */
     public static <T extends HasMetadata> List<T> removeInNamespace(
             final KubernetesClient client, final String namespace, final Class<T> resourceType) {
         Objects.requireNonNull(client, "client must not be null");
