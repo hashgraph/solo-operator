@@ -7,7 +7,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.hedera.solo.operator.library.numeric.RolloverComparator;
 import org.junit.jupiter.api.Test;
 
+/** The RolloverComparatorTest class contains tests for the RolloverComparator class. */
 public class RolloverComparatorTest {
+
+    /**
+     * This method compares a value with its adjacent values using the provided RolloverComparator.
+     *
+     * @param cmp The RolloverComparator instance to use for comparison.
+     * @param value The base value to compare against.
+     */
     void compare(final RolloverComparator cmp, final long value) {
         assertThat(cmp.compare(value - 1, value)).isLessThan(0);
         assertThat(cmp.compare(value, value)).isEqualTo(0);

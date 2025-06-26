@@ -25,6 +25,7 @@ import java.util.stream.IntStream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+/** This class contains tests for the ConsensusCapsuleServiceReconciler. */
 @SoloTest
 public class ConsensusCapsuleServiceTest extends AbstractOperatorTest {
     BeanFactory factory = new BeanFactory()
@@ -39,6 +40,11 @@ public class ConsensusCapsuleServiceTest extends AbstractOperatorTest {
         return builder(client).withReconciler(new ConsensusCapsuleServiceReconciler());
     }
 
+    /**
+     * Cleans up the test namespace after each test by taking a snapshot and deleting the consensus capsule resources.
+     *
+     * @param snapshot SnapshotFailureContext object to handle snapshotting and client operations.
+     */
     @AfterEach
     void afterEach(final SnapshotFailureContext snapshot) {
         snapshot.client(operator().getKubernetesClient())
@@ -75,6 +81,13 @@ public class ConsensusCapsuleServiceTest extends AbstractOperatorTest {
         verify(capsule, serviceType, annotations);
     }
 
+    /**
+     * Helper method to create a consensus capsule with optional parameters for service type and annotations.
+     *
+     * @param serviceType Type of the service (optional).
+     * @param annotations Annotations map for the consensus capsule metadata (optional).
+     * @return The created ConsensusCapsule object
+     */
     ConsensusCapsule consensusCapsule(ConsensusCapsuleSpec.ServiceType serviceType, Map<String, String> annotations) {
         return operator()
                 .create(edit(new ConsensusCapsule())
@@ -101,6 +114,13 @@ public class ConsensusCapsuleServiceTest extends AbstractOperatorTest {
                         .build());
     }
 
+    /**
+     * Helper method to verify the properties of a consensus capsule, including its service type and annotations.
+     *
+     * @param capsule The ConsensusCapsule object to be verified.
+     * @param serviceType Type of the expected service.
+     * @param annotations Annotations map for the expected metadata annotations.
+     */
     void verify(
             ConsensusCapsule capsule, ConsensusCapsuleSpec.ServiceType serviceType, Map<String, String> annotations) {
         await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {

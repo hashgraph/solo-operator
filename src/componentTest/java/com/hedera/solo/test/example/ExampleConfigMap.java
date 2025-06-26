@@ -8,8 +8,13 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 
+/**
+ * The ExampleConfigMap class is a Kubernetes dependent resource that manages ConfigMap resources for the Example
+ * operator.
+ */
 @KubernetesDependent
 public class ExampleConfigMap extends CRUDKubernetesDependentResource<ConfigMap, Example> {
+    /** Constructs an instance of ExampleConfigMap with the desired type set to ConfigMap. */
     public ExampleConfigMap() {
         super(ConfigMap.class);
     }
