@@ -19,10 +19,22 @@ import org.jboss.logging.Logger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+/**
+ * The SequencerTest class is a JUnit test class designed to verify the functionality of the Sequencer class, which
+ * manages and processes sequences of items in a queue for reconciliation or other purposes.
+ */
 class SequencerTest {
     private final Logger log = Logger.getLogger(SequencerTest.class.getName());
     Sequencer<NetworkOperation> sequencer;
 
+    /**
+     * Helper method to set the status of a NetworkOperation resource with given phase and conditions.
+     *
+     * @param resource The NetworkOperation resource to update.
+     * @param phase The desired phase for the status, represented as a String.
+     * @param conditions A list of Condition objects to be added to the status.
+     * @return The updated NetworkOperation resource with the new status set
+     */
     private static NetworkOperation setStatus(NetworkOperation resource, String phase, List<Condition> conditions) {
         return edit(resource)
                 .with(r -> r.editStatus()
@@ -32,6 +44,7 @@ class SequencerTest {
                 .build();
     }
 
+    /** Initializes the test environment before each test method is executed. */
     @BeforeEach
     void setUp() {
         sequencer = new Sequencer<>(() -> List.of(no1, no2, no3));

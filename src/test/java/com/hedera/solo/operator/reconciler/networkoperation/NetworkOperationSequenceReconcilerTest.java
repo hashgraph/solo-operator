@@ -30,8 +30,14 @@ import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+/** This class contains unit tests for the NetworkOperationSequenceReconciler. */
 class NetworkOperationSequenceReconcilerTest {
 
+    /**
+     * Creates a mocked KubernetesClient instance for testing purposes.
+     *
+     * @return The mocked KubernetesClient object
+     */
     private static KubernetesClient mockKubernetesClient() {
         final KubernetesClient client = Mockito.mock(KubernetesClient.class);
         Mockito.when(client.getNamespace()).thenReturn("test");
@@ -71,6 +77,11 @@ class NetworkOperationSequenceReconcilerTest {
         return client;
     }
 
+    /**
+     * Prepares the reconciler for testing by setting up mocks and dependencies.
+     *
+     * @return The prepared NetworkOperationSequenceReconciler instance
+     */
     private NetworkOperationSequenceReconciler prepareReconciler() {
         final String namespace = no1.getMetadata().getNamespace();
         final CustomResourceManager customResourceManager = Mockito.mock(CustomResourceManager.class);

@@ -15,6 +15,7 @@ import java.util.List;
 import org.assertj.core.api.AssertionsForClassTypes;
 import org.junit.jupiter.api.Test;
 
+/** A test class for the SequencerCache class which manages a cache of sequenced items. */
 class SequencerCacheTest {
     @Test
     void addItem() {
