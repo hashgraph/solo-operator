@@ -51,12 +51,12 @@ import org.jboss.logging.Logger;
 /** {@code NetworkOperationReconciler} operates on a single CR per namespace at any given time. */
 @ControllerConfiguration(name = "network-operation-v2")
 @RBACRule(
-        apiGroups = {""},
-        resources = {"secrets"},
+        apiGroups = "",
+        resources = "secrets",
         verbs = {"create", "delete", "get", "list", "patch", "update", "watch"})
 @RBACRule(
-        apiGroups = {""},
-        resources = {"events"},
+        apiGroups = "",
+        resources = "events",
         verbs = {"create", "delete", "get", "list", "patch", "update", "watch", "deletecollection"})
 public class NetworkOperationSequenceReconciler implements Reconciler<NetworkOperation>, Cleaner<NetworkOperation> {
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
