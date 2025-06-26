@@ -10,15 +10,12 @@ repositories {
     maven { url = uri("https://artifacts.hashgraph.io/artifactory/central-maven-external/") }
 }
 
-val fabric8Version = libs.versions.fabric8.get()
-
 dependencies {
-    // Use JUnit Jupiter for testing.
+    implementation(libs.java.generator.core)
+
     testImplementation(libs.junit.jupiter)
 
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-
-    implementation("io.fabric8:java-generator-core:${fabric8Version}")
+    testRuntimeOnly(libs.junit.platform.launcher)
 }
 
 gradlePlugin {
