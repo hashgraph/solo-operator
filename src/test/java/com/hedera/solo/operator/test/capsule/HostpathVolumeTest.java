@@ -45,7 +45,7 @@ public class HostpathVolumeTest extends ConsensusCapsuleTestAbstract {
      *
      * @param node - Node information including name.
      * @param volSuffix - Suffix of the volume (e.g., logs, stats).
-     * @return Volume object configured with a hostpath source.
+     * @return Volume object configured with a hostpath source
      */
     protected Volume prepareVolumeWithHostpathSource(TestRecords.NodeInfo node, String volSuffix) {
         final HostPathVolumeSource hs = new HostPathVolumeSourceBuilder()
@@ -60,7 +60,7 @@ public class HostpathVolumeTest extends ConsensusCapsuleTestAbstract {
      * Prepares the volumes for a consensus capsule pod based on node information.
      *
      * @param node - Node information including name.
-     * @return Volumes object containing prepared volumes.
+     * @return Volumes object containing prepared volumes
      */
     @Override
     protected Volumes prepareCapsulePodVolumes(TestRecords.NodeInfo node) {

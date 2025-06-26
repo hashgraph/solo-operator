@@ -16,6 +16,9 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
+/**
+ * This class contains unit tests for the ImageCoordinates class, which handles image coordinates in a Docker registry.
+ */
 public class ImageCoordinatesTest {
     @Test
     void testInvalidImageCoordinates() {
@@ -61,18 +64,35 @@ public class ImageCoordinatesTest {
         checkPasswords(auth, "host/path/name/2", "host", "host/path", "host/path/name");
     }
 
+    /** Represents the configuration for image coordinates, containing a map of authorization entries. */
     static class Config {
         public Map<String, Entry> auths = new LinkedHashMap<>();
     }
 
+    /**
+     * Represents an entry in the authorization configuration, containing a base64 encoded string of the username and
+     * password.
+     */
     static class Entry {
         public String auth;
 
+        /**
+         * Constructs an Entry with the given username and password, encoding them in base64 format.
+         *
+         * @param username the username to be encoded
+         * @param password the password to be encoded
+         */
         Entry(final String username, final String password) {
             this.auth = base64Encode(username + ":" + password);
         }
     }
 
+    /**
+     * Converts a collection of authorization strings to their decoded passwords.
+     *
+     * @param auths the collection of authorization strings in the format "username:password" (base64 encoded)
+     * @return an array of passwords extracted from the authorization strings
+     */
     String[] passwords(final Collection<String> auths) {
         return auths.stream()
                 .map(AsciiArmor::base64Decode)
@@ -80,6 +100,14 @@ public class ImageCoordinatesTest {
                 .toArray(String[]::new);
     }
 
+    /**
+     * Verifies that the passwords are correctly extracted from the given authorization configuration and image
+     * references.
+     *
+     * @param auth the authorization configuration in JSON format
+     * @param image the image reference
+     * @param passwords the expected passwords to be extracted
+     */
     void checkPasswords(final String auth, final String image, final String... passwords) {
         for (String tag : List.of("", ":latest", ":1.0")) {
             assertThat(passwords(ImageCoordinates.https(image + tag, auth).auths))

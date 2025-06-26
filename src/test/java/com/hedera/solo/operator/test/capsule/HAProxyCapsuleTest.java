@@ -68,7 +68,7 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
     /**
      * Creates HAProxy capsules based on the specified consensus node IDs.
      *
-     * @return Array of consensus node IDs for which HAProxy capsules are created.
+     * @return Array of consensus node IDs for which HAProxy capsules are created
      * @throws Exception if an error occurs while creating the capsules.
      */
     Long[] createHAProxyCapsule() throws Exception {

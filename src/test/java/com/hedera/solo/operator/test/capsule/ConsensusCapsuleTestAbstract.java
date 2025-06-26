@@ -160,6 +160,10 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .until(() -> kubernetesClient.namespaces().withName(namespace).get() == null);
     }
 
+    /**
+     * Sets up the ConfigMaps required for the consensus nodes in the Hedera network. This method creates ConfigMaps
+     * from predefined YAML files and applies them to the Kubernetes cluster.
+     */
     private void setupConfigMaps() {
         // create config-maps
         for (String cmFile : List.of("backup-uploader-config.yaml")) {
@@ -174,6 +178,11 @@ public abstract class ConsensusCapsuleTestAbstract {
         }
     }
 
+    /**
+     * Sets up the secrets required for the consensus nodes in the Hedera network.
+     *
+     * @param nodes The list of TestRecords.NodeInfo objects representing the consensus nodes
+     */
     private void setupSecrets(List<TestRecords.NodeInfo> nodes) {
         final ArrayList<String> secretFiles =
                 new ArrayList<>(List.of("secrets/uploader-secrets.yaml", "secrets/mirror-secrets.yaml"));
@@ -212,7 +221,7 @@ public abstract class ConsensusCapsuleTestAbstract {
      * Prepares the pod volumes for a consensus capsule.
      *
      * @param node The node information for which the volumes are prepared.
-     * @return A Volumes object containing the prepared volumes.
+     * @return A Volumes object containing the prepared volumes
      */
     protected Volumes prepareCapsulePodVolumes(TestRecords.NodeInfo node) {
         return new VolumesBuilder().build(); // default with no volume spec will use empty volumes
@@ -228,6 +237,13 @@ public abstract class ConsensusCapsuleTestAbstract {
         this.deployNetwork(3);
     }
 
+    /**
+     * Deploys a Hedera network with the specified number of consensus nodes.
+     *
+     * @param n The number of consensus nodes to deploy in the network
+     * @return A list of ConsensusCapsule objects representing the deployed consensus nodes
+     * @throws Exception If there is an error during the deployment process
+     */
     protected List<ConsensusCapsule> deployNetwork(int n) throws Exception {
         final List<Long> nodeIds = NodeInfoGenerator.nodeIds(n);
         final List<TestRecords.NodeInfo> nodes = NodeInfoGenerator.nodes(nodeIds, namespace);
@@ -246,6 +262,10 @@ public abstract class ConsensusCapsuleTestAbstract {
         return consensusCapsules;
     }
 
+    /**
+     * Creates an Orbit resource in the Kubernetes cluster. This method loads the Orbit configuration from a YAML file,
+     * sets the namespace, and creates the Orbit resource in the cluster.
+     */
     void createOrbit() {
         final Orbit orbit = edit(loadYaml(Orbit.class, getClass(), "orbit.yaml"))
                 .with(metadata -> metadata.editMetadata().withName(namespace))
@@ -259,19 +279,41 @@ public abstract class ConsensusCapsuleTestAbstract {
         });
     }
 
+    /**
+     * Returns a ContainersBuilder with the default consensus node container.
+     *
+     * @return A ContainersBuilder object containing the default consensus node container
+     */
     protected ContainersBuilder getContainersBuilder() {
         // return the builder with the consensus-node container
         return new ContainersBuilder().withConsensusNode(defaultConsensusNode.defaultConsensusNode());
     }
 
+    /**
+     * Prepares the containers for the ConsensusCapsule pod.
+     *
+     * @return A Containers object containing the prepared containers
+     */
     protected Containers prepareConsensusPodContainers() {
         return getContainersBuilder().build();
     }
 
+    /**
+     * Prepares the PersistentVolumeClaims for the ConsensusCapsule.
+     *
+     * @param node The node information for which the PVCs are prepared
+     * @return A PersistentVolumeClaims object containing the prepared PVCs
+     */
     protected PersistentVolumeClaims prepareCapsulePVCs(TestRecords.NodeInfo node) {
         return null;
     }
 
+    /**
+     * Prepares a ConsensusCapsule object for the given node.
+     *
+     * @param node The node information for which the ConsensusCapsule is prepared
+     * @return A ConsensusCapsule object with the specified properties
+     */
     protected ConsensusCapsule prepareConsensusCapsuleBuilder(final TestRecords.NodeInfo node) {
         final PodProperties consensusPod = new PodPropertiesBuilder()
                 .withContainers(this.prepareConsensusPodContainers())
@@ -314,6 +356,11 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .build();
     }
 
+    /**
+     * Fetches the list of consensus pods in the specified namespace.
+     *
+     * @return A list of Pod objects representing the consensus nodes
+     */
     protected List<Pod> fetchConsensusPods() {
         return kubernetesClient
                 .resources(Pod.class)
@@ -323,6 +370,12 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .getItems();
     }
 
+    /**
+     * Creates a list of ConsensusCapsule objects for the given nodes.
+     *
+     * @param nodes The list of TestRecords.NodeInfo objects representing the nodes
+     * @return A list of ConsensusCapsule objects created for each node
+     */
     List<ConsensusCapsule> createConsensusCapsule(List<TestRecords.NodeInfo> nodes) {
         // prepare a list of consensus-capsule for each node
         List<ConsensusCapsule> list = new ArrayList<>();
@@ -361,6 +414,12 @@ public abstract class ConsensusCapsuleTestAbstract {
         return list;
     }
 
+    /**
+     * Creates a network operation for initializing the Hedera network with the provided consensus capsules.
+     *
+     * @param consensusCapsules The list of ConsensusCapsule objects representing the consensus nodes
+     * @throws InterruptedException If the operation is interrupted while waiting for the network initialization
+     */
     protected void createNetworkOperation(List<ConsensusCapsule> consensusCapsules) throws InterruptedException {
         for (ConsensusCapsule consensusCapsule : consensusCapsules) {
             String name = consensusCapsule.getMetadata().getName();
@@ -442,6 +501,11 @@ public abstract class ConsensusCapsuleTestAbstract {
         }
     }
 
+    /**
+     * Retrieves the IDs of the consensus nodes in the Hedera network.
+     *
+     * @return An array of Long representing the node IDs of the consensus nodes
+     */
     Long[] consensusNodeIds() {
         return kubernetesClient.resources(ConsensusCapsule.class).inNamespace(namespace).list().getItems().stream()
                 .map(CustomResource::getSpec)
@@ -449,6 +513,11 @@ public abstract class ConsensusCapsuleTestAbstract {
                 .toArray(Long[]::new);
     }
 
+    /**
+     * Retrieves the names of the consensus nodes in the Hedera network.
+     *
+     * @return A list of names of the consensus nodes
+     */
     List<String> consensusNodeNames() {
         final Long[] nodeIds = consensusNodeIds();
         final List<String> nodeNames = new ArrayList<>();
@@ -459,6 +528,13 @@ public abstract class ConsensusCapsuleTestAbstract {
         return nodeNames;
     }
 
+    /**
+     * Checks the address book for the consensus nodes in the Hedera network.
+     *
+     * @param hederaSdkClientContextFactory The factory to create Hedera SDK client context for the node.
+     * @throws AssertionError If the address book check fails.
+     * @throws Exception If there is an error during the check.
+     */
     protected void checkAddressBook(final HederaSdkClientContextFactory hederaSdkClientContextFactory)
             throws AssertionError, Exception {
         List<String> consensusNodeNames = consensusNodeNames();
