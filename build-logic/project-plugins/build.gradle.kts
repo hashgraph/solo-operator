@@ -1,13 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
-plugins {
-    `kotlin-dsl`
-    kotlin("jvm") version "2.2.0"
-}
+plugins { `kotlin-dsl` }
 
 repositories { gradlePluginPortal() }
 
 dependencies {
-    implementation("com.diffplug.spotless:spotless-plugin-gradle:7.0.4")
-    implementation("net.swiftzer.semver:semver:2.1.0")
+    implementation(libs.spotless.plugin.gradle)
+    implementation(libs.semver)
 }
