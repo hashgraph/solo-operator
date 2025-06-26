@@ -51,6 +51,10 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+/**
+ * This class contains tests for managing multiple orbits in a Hedera Solo operator environment. It sets up multiple
+ * orbits, creates consensus capsules, and verifies that all nodes have the correct address book.
+ */
 @QuarkusTest
 @SoloTest
 public class MultipleOrbitTest {
@@ -64,12 +68,21 @@ public class MultipleOrbitTest {
     Map<String, byte[]> certificates = new HashMap<>();
     Map<String, String> pubKeys = new HashMap<>();
 
+    /**
+     * Helper method to copy a list without a specified element.
+     *
+     * @param <T> The type of the elements in the list
+     * @param list The list from which to remove an element
+     * @param remove The index of the element to be removed
+     * @return A new list with the specified element removed
+     */
     <T> List<T> copyListWithoutElement(List<T> list, int remove) {
         List<T> copy = new ArrayList<>(list);
         copy.remove(remove);
         return copy;
     }
 
+    /** Set up the test environment before each test case is executed. */
     @BeforeEach
     void setUp() {
         cleanup();
@@ -120,6 +133,11 @@ public class MultipleOrbitTest {
         });
     }
 
+    /**
+     * Clean up the test environment after each test case is executed.
+     *
+     * @param snapshot The context for capturing and managing snapshots of the test environment
+     */
     @AfterEach
     void tearDown(final SnapshotFailureContext snapshot) {
         snapshot.client(operator.getKubernetesClient())
@@ -149,6 +167,7 @@ public class MultipleOrbitTest {
         cleanup();
     }
 
+    /** Helper method to clean up the test environment by deleting Orbit and related resources. */
     void cleanup() {
         for (Orbit orbit : orbits) {
             operator.getKubernetesClient()
@@ -206,6 +225,13 @@ public class MultipleOrbitTest {
         }
     }
 
+    /**
+     * Method to create an Orbit resource with specified name and external addresses.
+     *
+     * @param name The name of the orbit
+     * @param externalAddresses List of AddressBookEntry objects for the orbit
+     * @return Created Orbit resource
+     */
     Orbit createOrbit(final String name, final List<AddressBookEntry> externalAddresses) {
         Orbit orbit = edit(new Orbit())
                 .with(metadata -> metadata.editMetadata().withName(name))
@@ -220,6 +246,7 @@ public class MultipleOrbitTest {
         return operator.getKubernetesClient().resource(orbit).create();
     }
 
+    /** Method to set up cryptographic keys for the test environment. */
     void setupKeys() {
         KubernetesClient kubernetesClient = operator.getKubernetesClient();
         Base64.Decoder decoder = Base64.getDecoder();
@@ -262,6 +289,11 @@ public class MultipleOrbitTest {
         }
     }
 
+    /**
+     * Method to create consensus capsules based on the Orbit resources.
+     *
+     * @return List of created ConsensusCapsule objects
+     */
     List<ConsensusCapsule> createCapsules() {
         long[] id = new long[] {0};
         return orbits.stream()
@@ -269,6 +301,14 @@ public class MultipleOrbitTest {
                 .toList();
     }
 
+    /**
+     * Method to create a consensus capsule based on an Orbit resource and specified name and ID.
+     *
+     * @param orbit The Orbit resource for which the capsule is created
+     * @param name The name of the consensus capsule
+     * @param id The unique identifier for the consensus capsule
+     * @return Created ConsensusCapsule object
+     */
     ConsensusCapsule createCapsule(final Orbit orbit, final String name, final long id) {
         String namespace = orbit.getMetadata().getName();
         ConsensusCapsule capsule = edit(new ConsensusCapsule())
@@ -308,6 +348,12 @@ public class MultipleOrbitTest {
         return operator.getKubernetesClient().resource(capsule).create();
     }
 
+    /**
+     * Method to create a NetworkOperation resource for an Orbit.
+     *
+     * @param orbit The Orbit resource for which the network operation is created
+     * @return Created NetworkOperation object
+     */
     NetworkOperation createNetworkOperation(final Orbit orbit) {
         return operator.getKubernetesClient()
                 .resource(edit(new NetworkOperation())

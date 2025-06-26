@@ -47,11 +47,18 @@ class OrbitTest {
     @Inject
     protected Logger log;
 
+    /** Setup method to initialize the test environment before each test. */
     @BeforeEach
     void setup() {
         cleanup();
     }
 
+    /**
+     * Cleanup method to clean up resources after each test, including removing any Orbit and namespace created during
+     * the test.
+     *
+     * @param snapshot SnapshotFailureContext object for capturing client state before test failure.
+     */
     @AfterEach
     void afterEach(final SnapshotFailureContext snapshot) {
         snapshot.client(client)
@@ -61,6 +68,7 @@ class OrbitTest {
         cleanup();
     }
 
+    /** Helper method to remove Orbit and namespace resources if they exist. */
     void cleanup() {
         Resources.removeByName(client, Orbit.class, TEST_ORBIT_NAME);
         await().atMost(Duration.ofSeconds(30))

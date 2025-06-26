@@ -15,6 +15,10 @@ import com.hedera.solo.operator.reconciler.networkoperation.upgrade.steps.Freeze
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.Test;
 
+/**
+ * This class contains tests for the FreezeAbortStep implementation. The FreezeAbortStep is responsible for handling the
+ * freeze abort workflow step in a network operation.
+ */
 public class FreezeAbortTest {
     @Test
     public void test() {
@@ -34,7 +38,7 @@ public class FreezeAbortTest {
         @SuppressWarnings("unchecked")
         Context<NetworkOperation> context = mock(Context.class);
 
-        // test with empty status
+        // Test with an empty status.
         NetworkOperationStatus status = new NetworkOperationStatus();
         status = step.run(resource, status, context);
         assertThat(status).isNotNull();
@@ -46,7 +50,7 @@ public class FreezeAbortTest {
         assertThat(status.getConditions())
                 .anyMatch(c -> resource.getMetadata().getGeneration().equals(c.getObservedGeneration()));
 
-        // test with existing status
+        // Test with an existing status and updated resource generation.
         resource.getMetadata().setGeneration(1L);
         status = step.run(resource, status, context);
         assertThat(status).isNotNull();

@@ -11,6 +11,7 @@ import java.lang.invoke.MethodHandles;
 import javax.annotation.Priority;
 import org.jboss.logging.Logger;
 
+/** Manages the setup and cleanup of cluster services. */
 @ApplicationScoped
 public class ClusterSetupManager {
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
@@ -19,7 +20,7 @@ public class ClusterSetupManager {
     @Inject
     MinioSetupManager minioSetupManager;
 
-    /** Check and installed required services */
+    /** Checks and installs required services. */
     public synchronized void check() {
         if (setupDone) {
             return;
@@ -35,7 +36,7 @@ public class ClusterSetupManager {
     }
 
     /**
-     * Cleanup upon Shutdown event
+     * Cleans up resources upon Shutdown event.
      *
      * @param event Shutdown event
      */
