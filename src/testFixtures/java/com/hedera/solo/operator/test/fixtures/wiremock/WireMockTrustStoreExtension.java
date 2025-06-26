@@ -15,6 +15,10 @@ import org.junit.jupiter.api.extension.ParameterContext;
 import org.junit.jupiter.api.extension.ParameterResolutionException;
 import org.junit.jupiter.api.extension.ParameterResolver;
 
+/**
+ * The WireMockTrustStoreExtension class is a custom JUnit Jupiter extension that provides trust store configuration for
+ * WireMock server.
+ */
 public class WireMockTrustStoreExtension implements AfterAllCallback, BeforeAllCallback, ParameterResolver {
     private ExtendedTrustManager.Resource resource;
 
