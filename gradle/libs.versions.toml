@@ -34,7 +34,7 @@ jgit = { module = "org.eclipse.jgit:org.eclipse.jgit", version.ref = "jgit" }
 jgit-archive = { module = "org.eclipse.jgit:org.eclipse.jgit.archive", version.ref = "jgit" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
 junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit" }
-junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 kindcontainer = { module = "com.dajudge.kindcontainer:kindcontainer" }
 kubernetes-model-core = { module = "io.fabric8:kubernetes-model-core", version.ref = "fabric8" }
 lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
