@@ -17,7 +17,16 @@ import io.fabric8.kubernetes.api.model.PodBuilder;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
+/** This class contains unit tests for determining the phase of a consensus capsule from a pod's container status. */
 public class ConsensusCapsuleContainerStatusTest {
+
+    /**
+     * Creates a running pod with the specified container name and readiness status.
+     *
+     * @param containerName The name of the container in the pod.
+     * @param ready Whether the pod is ready or not.
+     * @return A Pod object representing the pod
+     */
     Pod running(final String containerName, final boolean ready) {
         return new PodBuilder()
                 .withNewMetadata()
@@ -35,6 +44,13 @@ public class ConsensusCapsuleContainerStatusTest {
                 .build();
     }
 
+    /**
+     * Creates a terminated pod with the specified container name and exit code.
+     *
+     * @param containerName The name of the container in the pod.
+     * @param exitCode The exit code of the terminated container.
+     * @return A Pod object representing the pod
+     */
     Pod terminated(final String containerName, final int exitCode) {
         return new PodBuilder()
                 .withNewMetadata()
@@ -53,6 +69,12 @@ public class ConsensusCapsuleContainerStatusTest {
                 .build();
     }
 
+    /**
+     * Creates a pod with the specified container name that is waiting.
+     *
+     * @param containerName The name of the container in the pod.
+     * @return A Pod object representing the pod
+     */
     Pod waiting(final String containerName) {
         return new PodBuilder()
                 .withNewMetadata()
@@ -69,22 +91,52 @@ public class ConsensusCapsuleContainerStatusTest {
                 .build();
     }
 
+    /**
+     * Creates a running pod with the specified container name.
+     *
+     * @param containerName The name of the container in the pod.
+     * @return A Pod object representing the pod
+     */
     Pod running(final String containerName) {
         return running(containerName, true);
     }
 
+    /**
+     * Creates a pending pod with the specified container name.
+     *
+     * @param containerName The name of the container in the pod.
+     * @return A Pod object representing the pod
+     */
     Pod pending(final String containerName) {
         return running(containerName, false);
     }
 
+    /**
+     * Creates a succeeded pod with the specified container name and exit code 0.
+     *
+     * @param containerName The name of the container in the pod.
+     * @return A Pod object representing the pod
+     */
     Pod succeeded(final String containerName) {
         return terminated(containerName, 0);
     }
 
+    /**
+     * Creates a failed pod with the specified container name and exit code 1.
+     *
+     * @param containerName The name of the container in the pod.
+     * @return A Pod object representing the pod
+     */
     Pod failed(final String containerName) {
         return terminated(containerName, 1);
     }
 
+    /**
+     * Creates a map of pods with their corresponding ConsensusCapsuleStatus phase.
+     *
+     * @param containerName The name of the consensus capsule container.
+     * @return A Map containing Pod objects as keys and ConsensusCapsuleStatus phases as values
+     */
     Map<Pod, ConsensusCapsuleStatus.Phase> pods(final String containerName) {
         return Map.of(
                 running(containerName), ConsensusCapsuleStatus.Phase.Running,

@@ -23,6 +23,9 @@ import org.jboss.logging.Logger;
 
 // NOTE: This class shouldn't implement Reconciler<NetworkOperation> interface as it shouldn't be picked up by the
 // operator as a reconciler during test
+/**
+ * This class is a mock implementation of the Cleaner interface for processing NetworkOperation resources in sequence.
+ */
 public class SequenceReconcilerMock implements Cleaner<NetworkOperation> {
     private static final Logger log = Logger.getLogger(SequenceReconcilerMock.class);
     private static final Set<NetworkOperationStatus.Phase> DONE =
@@ -32,11 +35,24 @@ public class SequenceReconcilerMock implements Cleaner<NetworkOperation> {
     private static final Sequencer<NetworkOperation> sequencer =
             new Sequencer<>(SequenceReconcilerMock::activeResources);
 
+    /**
+     * Constructor for SequenceReconcilerMock. Initializes the Kubernetes client and sets up the sequence reconciler.
+     *
+     * @param client The KubernetesClient instance to be used for interacting with the Kubernetes cluster.
+     */
     @Inject
     public SequenceReconcilerMock(KubernetesClient client) {
         SequenceReconcilerMock.client = client;
     }
 
+    /**
+     * Processes a NetworkOperation resource and sets its desired status and phase.
+     *
+     * @param resource The NetworkOperation resource to be processed.
+     * @param context The Context object containing information about the Kubernetes cluster and other relevant data.
+     * @return A new instance of NetworkOperation with updated status and phase set to succeeded
+     * @throws Exception If an error occurs during processing.
+     */
     public NetworkOperation process(final NetworkOperation resource, final Context<NetworkOperation> context)
             throws Exception {
 
@@ -61,6 +77,14 @@ public class SequenceReconcilerMock implements Cleaner<NetworkOperation> {
                 .build();
     }
 
+    /**
+     * Reconciles the NetworkOperation resource by processing it and setting its status based on the sequence response.
+     *
+     * @param resource The NetworkOperation resource to be reconciled.
+     * @param context The Context object containing information about the Kubernetes cluster and other relevant data.
+     * @return An UpdateControl object that can be used to patch or reschedule the reconciliation process
+     * @throws Exception If an error occurs during reconciliation.
+     */
     public UpdateControl<NetworkOperation> reconcile(
             final NetworkOperation resource, final Context<NetworkOperation> context) throws Exception {
         // is this resource done, then return
@@ -97,7 +121,11 @@ public class SequenceReconcilerMock implements Cleaner<NetworkOperation> {
         return UpdateControl.patchStatus(processed).rescheduleAfter(response.reconcileDelay());
     }
 
-    /** Prepare and return the list of active resources that needs to be considered for sequencing. */
+    /**
+     * Prepares and returns a list of active NetworkOperation resources that need to be considered for sequencing.
+     *
+     * @return A List of active NetworkOperation resources
+     */
     public static List<NetworkOperation> activeResources() {
         MixedOperation<NetworkOperation, KubernetesResourceList<NetworkOperation>, Resource<NetworkOperation>>
                 resources = client.resources(NetworkOperation.class);
@@ -113,6 +141,12 @@ public class SequenceReconcilerMock implements Cleaner<NetworkOperation> {
         return activeItems;
     }
 
+    /**
+     * Checks if a NetworkOperation resource is done based on its status.
+     *
+     * @param resource The NetworkOperation resource to check.
+     * @return True if the resource is done, false otherwise
+     */
     private static boolean isDone(NetworkOperation resource) {
         return resource.getStatus() != null
                 && DONE.contains(resource.getStatus().getPhase());

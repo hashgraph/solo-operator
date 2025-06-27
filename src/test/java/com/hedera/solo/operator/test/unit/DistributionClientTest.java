@@ -29,6 +29,10 @@ import java.io.IOException;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
+/**
+ * The `DistributionClientTest` class contains tests for the {@link DistributionRegistryClient} class, which is
+ * responsible for interacting with a container distribution registry to fetch image manifests and layers.
+ */
 @WireMockTest
 public class DistributionClientTest {
 
@@ -75,6 +79,15 @@ public class DistributionClientTest {
         }
     }
 
+    /**
+     * Tests the functionality of fetching and verifying image layers using a provided {@link ImageCoordinates}.
+     *
+     * @param coordinates The image coordinates for which to fetch the manifest.
+     * @return true if all layers in the manifest pass the existence check, otherwise false
+     * @throws IOException if there is an issue with input/output operations.
+     * @throws InterruptedException if the thread is interrupted while waiting.
+     * @throws RuntimeException if the manifest type is unexpected.
+     */
     boolean test(ImageCoordinates coordinates) throws IOException, InterruptedException {
         try (DistributionRegistryClient registry = new DistributionRegistryClient()) {
             ManifestResponse response = registry.fetchManifest(coordinates);
@@ -97,6 +110,11 @@ public class DistributionClientTest {
         }
     }
 
+    /**
+     * Sets up stubs for WireMock to simulate HTTP requests and responses.
+     *
+     * @param wmRuntimeInfo WireMock runtime information containing the HTTP port.
+     */
     void stubs(WireMockRuntimeInfo wmRuntimeInfo) {
         String token = UUID.randomUUID().toString();
         String authenticate = "Bearer realm=\"http://localhost:" + wmRuntimeInfo.getHttpPort() + "/v2/token\"";
@@ -130,6 +148,13 @@ public class DistributionClientTest {
                 .willReturn(ok()));
     }
 
+    /**
+     * Creates an {@link ImageCoordinates} object from the provided image URL and optional JSON.
+     *
+     * @param image The image URL including any necessary placeholders (e.g., {port}).
+     * @param json Optional JSON to include in the request.
+     * @return An {@link ImageCoordinates} object representing the image coordinates
+     */
     ImageCoordinates imageCoordinatesHttp(final String image, final String... json) {
         return ImageCoordinates.from("http", image, json);
     }

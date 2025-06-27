@@ -8,6 +8,10 @@ import com.hedera.solo.operator.library.generic.Iterables;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
+/**
+ * The Iterables class contains utility methods for working with collections, particularly converting between different
+ * types of lists.
+ */
 public class IterablesTest {
     @Test
     public void test() {

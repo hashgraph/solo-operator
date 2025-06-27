@@ -37,6 +37,10 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 
+/**
+ * This class contains unit tests for the PodProperties of a ConsensusCapsule, including testing its properties and
+ * containers.
+ */
 public class ConsensusCapsulePodPropertiesTest {
     BeanFactory factory = new BeanFactory().maxList(5).maxMap(5).nullProbability(0.2);
     CapsuleDeployment capsulePod = new CapsuleDeployment();
@@ -56,6 +60,11 @@ public class ConsensusCapsulePodPropertiesTest {
         factory.randoms(String.class).limit(10).forEach(this::testContainers);
     }
 
+    /**
+     * This method runs a series of tests to verify the properties of PodProperties.
+     *
+     * @param src The source PodProperties object to be tested.
+     */
     void testProperties(final PodProperties src) {
         // copy pod properties to new pod builder and construct pod
         Deployment deployment =
@@ -90,6 +99,11 @@ public class ConsensusCapsulePodPropertiesTest {
                         TopologySpreadConstraintBuilder::build));
     }
 
+    /**
+     * This method runs a series of tests to verify the containers in PodProperties.
+     *
+     * @param suffix A suffix string used to differentiate container names during testing.
+     */
     void testContainers(final String suffix) {
         // construct pod properties with container resources for each container
         PodProperties podProperties = edit(new PodProperties())
@@ -166,6 +180,22 @@ public class ConsensusCapsulePodPropertiesTest {
                 .isEqualTo(rebuild(containers.getOpenTelemetryCollector(), OpenTelemetryCollector::getResources));
     }
 
+    /**
+     * Rebuilds a list by applying optional editing and building functions based on whether each element is null or not.
+     *
+     * <p>If the list is null, it returns null. Otherwise, it applies the provided create function to generate new
+     * elements when needed, followed by the edit function (if applicable), and finally the build function to convert
+     * the result back to the original type.
+     *
+     * @param <T> The type of objects in the list.
+     * @param <E> A intermediate type used for editing before building.
+     * @param list The list to be rebuilt, potentially containing null elements.
+     * @param create A supplier function to generate new elements when a null element is encountered.
+     * @param edit An optional editing function that can transform existing elements.
+     * @param build A function to convert the edited or original elements back into their original type.
+     * @return A rebuilt list with potentially new elements created and modified as per the provided functions, or null
+     *     if the input list was null.
+     */
     <T, E> List<T> rebuild(
             final List<T> list, final Supplier<T> create, final Function<T, E> edit, final Function<E, T> build) {
         return list == null
@@ -175,10 +205,26 @@ public class ConsensusCapsulePodPropertiesTest {
                         .toList();
     }
 
+    /**
+     * Rebuilds a ResourceRequirements object based on the provided function, ensuring null safety by applying
+     * conditional functions if needed.
+     *
+     * @param <T> The type of the object from which the ResourceRequirements are derived.
+     * @param object The input object potentially containing ResourceRequirements data.
+     * @param function A function that extracts and possibly edits a ResourceRequirements from the given object.
+     * @return The rebuilt ResourceRequirements, or null if the input object was null or contained no valid
+     *     ResourceRequirements.
+     */
     <T> ResourceRequirements rebuild(final T object, final Function<T, ResourceRequirements> function) {
         return nullable(object, function, ResourceRequirements::edit, ResourceRequirementsBuilder::build);
     }
 
+    /**
+     * Checks if any of the provided objects are null.
+     *
+     * @param objects The objects to check for null values.
+     * @return true if any object is null, false otherwise
+     */
     public static boolean isNull(final Object... objects) {
         for (Object object : objects) {
             if (object == null) {
@@ -188,14 +234,49 @@ public class ConsensusCapsulePodPropertiesTest {
         return false;
     }
 
+    /**
+     * Applies a function to an input only if it is not null, returning the result or null if the input is null.
+     *
+     * @param <A> The type of the input object.
+     * @param <B> The type of the output object.
+     * @param a The input object.
+     * @param ab A function to apply if the input is not null.
+     * @return The result of applying the function, or null if the input was null
+     */
     public static <A, B> B nullable(final A a, final Function<A, B> ab) {
         return isNull(a, ab) ? null : ab.apply(a);
     }
 
+    /**
+     * Applies a series of functions to an input object in sequence, returning the result or null if any step results in
+     * null.
+     *
+     * @param <A> The type of the input object.
+     * @param <B> The intermediate type after applying the first function.
+     * @param <C> The final type after applying all provided functions.
+     * @param a The input object.
+     * @param ab The first function to apply.
+     * @param bc The second function to apply (optional).
+     * @return The result of applying all functions, or null if any intermediate step results in null
+     */
     public static <A, B, C> C nullable(final A a, final Function<A, B> ab, final Function<B, C> bc) {
         return nullable(nullable(a, ab), bc);
     }
 
+    /**
+     * Applies multiple functions in sequence to an input object, returning the result or null if any step results in
+     * null.
+     *
+     * @param <A> The type of the input object.
+     * @param <B> The intermediate type after applying the first function.
+     * @param <C> The intermediate type after applying the second function.
+     * @param <D> The final type after applying all provided functions.
+     * @param a The input object.
+     * @param ab The first function to apply.
+     * @param bc The second function to apply (optional).
+     * @param cd The third function to apply (optional).
+     * @return The result of applying all functions, or null if any intermediate step results in null
+     */
     public static <A, B, C, D> D nullable(
             final A a, final Function<A, B> ab, final Function<B, C> bc, final Function<C, D> cd) {
         return nullable(nullable(a, ab), bc, cd);

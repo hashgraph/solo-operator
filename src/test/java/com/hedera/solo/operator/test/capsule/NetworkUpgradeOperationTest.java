@@ -179,7 +179,7 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
      * Prepares the address book entries for consensus capsule nodes.
      *
      * @param consensusCapsules The list of consensus capsules to prepare address book entries for.
-     * @return A list of AddressBookEntry objects representing the address book entries for the consensus capsules.
+     * @return A list of AddressBookEntry objects representing the address book entries for the consensus capsules
      */
     protected List<AddressBookEntry> prepareAddressBook(List<ConsensusCapsule> consensusCapsules) {
         final List<AddressBookEntry> addressBookEntries = new ArrayList<>();
@@ -219,7 +219,7 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
      * @param netOp The NetworkOperation to be prepared.
      * @param workflowStep The workflow step for the network upgrade.
      * @param addressBookEntries The list of address book entries for the network upgrade.
-     * @return The prepared NetworkOperation with the specified workflow step and address book entries.
+     * @return The prepared NetworkOperation with the specified workflow step and address book entries
      */
     protected NetworkOperation prepareNetworkUpgrade(
             NetworkOperation netOp,
@@ -447,7 +447,7 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
      * Triggers the execute-immediate task for network upgrade.
      *
      * @param consensusCapsules The list of consensus capsules involved in the upgrade.
-     * @return The NetworkOperation that was triggered for immediate execution.
+     * @return The NetworkOperation that was triggered for immediate execution
      */
     protected NetworkOperation triggerExecuteImmediate(List<ConsensusCapsule> consensusCapsules) {
         final List<AddressBookEntry> addressBookEntries = prepareAddressBook(consensusCapsules);
@@ -478,7 +478,7 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
      *
      * @param upgrade The network operation to be upgraded.
      * @param consensusCapsules The list of consensus capsules involved in the upgrade.
-     * @return The updated NetworkOperation after scheduling the freeze.
+     * @return The updated NetworkOperation after scheduling the freeze
      */
     protected NetworkOperation triggerFreezeScheduled(
             final NetworkOperation upgrade, List<ConsensusCapsule> consensusCapsules) {

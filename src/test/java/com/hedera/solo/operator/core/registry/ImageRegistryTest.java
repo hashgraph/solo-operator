@@ -22,12 +22,20 @@ import com.hedera.solo.operator.library.container.oci.OCIContentDescriptor;
 import com.hedera.solo.operator.library.container.oci.OCIImageIndex;
 import com.hedera.solo.operator.library.container.oci.OCIImageManifest;
 import com.hedera.solo.operator.model.commonspec.ImageVerificationSpec;
-import java.io.IOException;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
+/**
+ * A test class for the {@code ImageRegistry} implementation, focusing on verifying the behavior of image registry
+ * operations using WireMock for HTTP mocking.
+ */
 @WireMockTest
 class ImageRegistryTest {
+    /**
+     * Mocks a response from the server for various HTTP methods to simulate different scenarios.
+     *
+     * @param port The port number used by WireMock for the mock server.
+     */
     private static void mockStubResponse(String port) {
         stubFor(get("/v2/")
                 .willReturn(unauthorized()
@@ -60,21 +68,41 @@ class ImageRegistryTest {
                 .willReturn(ok()));
     }
 
+    /**
+     * Constructs a mock URI string based on the provided port number.
+     *
+     * @param port The port number to be used in the URI.
+     * @return A URI string with the placeholder {port} replaced by the actual port number
+     */
     private static String mockUri(String port) {
         return "localhost:{port}/hedera-registry/consensus-node:0.56.0".replace("{port}", port);
     }
 
+    /**
+     * Constructs a mock URI string for an invalid image based on the provided port number.
+     *
+     * @param port The port number to be used in the URI.
+     * @return A URI string with the placeholder {port} replaced by the actual port number, indicating an invalid
+     *     endpoint.
+     */
     private static String mockInvalidUri(String port) {
         return "localhost:{port}/invalid:0.56.0".replace("{port}", port);
     }
 
+    /**
+     * Constructs a mock authentication JSON string based on the provided port number.
+     *
+     * @param port The port number to be used in the URI placeholder within the JSON string.
+     * @return A JSON string with the placeholder {port} replaced by the actual port number, representing authentication
+     *     details for an image registry.
+     */
     private static String mockAuth(String port) {
         return "{\"auths\":{\"localhost:{port}\":{\"username\":\"user\",\"password\":\"pass\",\"auth\":\"dXNlcjpwYXNz\"}}}"
                 .replace("{port}", port);
     }
 
     @Test
-    void fetchImageIndex(WireMockRuntimeInfo wmRuntimeInfo) throws IOException, InterruptedException {
+    void fetchImageIndex(WireMockRuntimeInfo wmRuntimeInfo) {
         final String port = String.valueOf(wmRuntimeInfo.getHttpPort());
         final String imageUri = mockUri(port);
         final String invalidImageUri = mockInvalidUri(port);
@@ -99,7 +127,7 @@ class ImageRegistryTest {
     }
 
     @Test
-    void fetchImageManifest(WireMockRuntimeInfo wmRuntimeInfo) throws IOException, InterruptedException {
+    void fetchImageManifest(WireMockRuntimeInfo wmRuntimeInfo) {
         final String port = String.valueOf(wmRuntimeInfo.getHttpPort());
         final String imageUri = mockUri(port);
         final String invalidImageUri = mockInvalidUri(port);
@@ -165,6 +193,13 @@ class ImageRegistryTest {
         }
     }
 
+    /**
+     * Helper method to create an {@link ImageCoordinates} object from the provided image URI and JSON data.
+     *
+     * @param image The image URI or path.
+     * @param json A JSON string representing authentication details (e.g., username, password).
+     * @return An {@code ImageCoordinates} instance populated with the given parameters
+     */
     ImageCoordinates imageCoordinatesHttp(final String image, final String json) {
         return ImageCoordinates.from("http", image, json);
     }

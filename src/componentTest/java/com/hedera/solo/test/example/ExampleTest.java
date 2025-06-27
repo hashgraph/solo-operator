@@ -17,6 +17,7 @@ import java.time.Duration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+/** The ExampleTest class is a JUnit test case for testing the ExampleReconciler. */
 @SoloTest
 public class ExampleTest extends AbstractOperatorTest {
     @Override
@@ -24,6 +25,11 @@ public class ExampleTest extends AbstractOperatorTest {
         return builder(client).withReconciler(new ExampleReconciler());
     }
 
+    /**
+     * This method is called after each test to capture a snapshot in the case of test failure.
+     *
+     * @param snapshot The context for capturing the state of the operator's namespace and namespaced resources.
+     */
     @AfterEach
     void afterEach(final SnapshotFailureContext snapshot) {
         snapshot.client(operator().getKubernetesClient())
@@ -44,7 +50,7 @@ public class ExampleTest extends AbstractOperatorTest {
                 .build();
         example = operator().create(example);
 
-        // verify dependent resource was is created as expected
+        // verify dependent resource was created as expected
         await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
             ConfigMap configMap = operator().get(ConfigMap.class, "example");
             assertThat(configMap).hasFieldOrPropertyWithValue("metadata.name", "example");

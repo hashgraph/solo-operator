@@ -12,6 +12,10 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
+/**
+ * BeanFactoryTest is a test class for the BeanFactory class, which contains tests related to creating and manipulating
+ * beans.
+ */
 public class BeanFactoryTest {
     BeanFactory factory = new BeanFactory();
 

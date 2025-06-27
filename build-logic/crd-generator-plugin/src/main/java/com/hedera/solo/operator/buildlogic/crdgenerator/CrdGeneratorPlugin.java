@@ -8,5 +8,6 @@ import org.jetbrains.annotations.NotNull;
 
 /** CRD Generator plugin. */
 public class CrdGeneratorPlugin implements Plugin<Project> {
+    @Override
     public void apply(final @NotNull Project project) {}
 }

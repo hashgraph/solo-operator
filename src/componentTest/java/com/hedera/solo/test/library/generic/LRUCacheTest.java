@@ -8,6 +8,7 @@ import com.hedera.solo.operator.library.generic.LRUCache;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
+/** A test class for the {@code LRUCache} implementation. */
 public class LRUCacheTest {
     @Test
     void test() {

@@ -11,6 +11,10 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+/**
+ * Annotation to configure a WireMock certificate for testing purposes. This annotation integrates with SmallRye
+ * Certificates and JUnit 5 extensions to manage WireMock keystore and truststore configurations.
+ */
 @Target({ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
 @Certificates(

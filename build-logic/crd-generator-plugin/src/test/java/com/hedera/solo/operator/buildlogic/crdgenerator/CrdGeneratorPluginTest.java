@@ -2,7 +2,7 @@
 
 package com.hedera.solo.operator.buildlogic.crdgenerator;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import org.gradle.api.Project;
 import org.gradle.api.plugins.JavaPluginExtension;

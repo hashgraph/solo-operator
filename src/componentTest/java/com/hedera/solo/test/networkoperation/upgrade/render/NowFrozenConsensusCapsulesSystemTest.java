@@ -36,6 +36,7 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
+/** This class contains system tests for the NowFrozenConsensusCapsules feature. */
 @Disabled("need to revisit this fuzz test later")
 public class NowFrozenConsensusCapsulesSystemTest extends NowFrozenConsensusCapsulesUnitTest {
     String namespaceInitial;
@@ -45,6 +46,12 @@ public class NowFrozenConsensusCapsulesSystemTest extends NowFrozenConsensusCaps
     @RegisterExtension
     private AbstractOperatorExtension operator = initialize(this::configure);
 
+    /**
+     * Configures the operator extension for locally running the operator.
+     *
+     * @param client The Kubernetes client to be used by the operator.
+     * @return A builder for the locally run operator extension
+     */
     protected LocallyRunOperatorExtension.Builder configure(final KubernetesClient client) {
         return LocallyRunOperatorExtension.builder()
                 .withKubernetesClient(client)
@@ -57,6 +64,7 @@ public class NowFrozenConsensusCapsulesSystemTest extends NowFrozenConsensusCaps
         return new SystemTestBeanFactory();
     }
 
+    /** Sets up the test environment before each test case runs. */
     @BeforeEach
     public void setup() {
         kubernetesClient = operator.getKubernetesClient();
@@ -64,6 +72,7 @@ public class NowFrozenConsensusCapsulesSystemTest extends NowFrozenConsensusCaps
         namespace = createNamespace(kubernetesClient, getClass());
     }
 
+    /** Cleans up the test environment after each test case runs. */
     @AfterEach
     public void cleanup() {
         kubernetesClient.namespaces().withName(namespace).delete();

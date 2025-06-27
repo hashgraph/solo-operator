@@ -34,6 +34,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+/**
+ * The CapsulePodTest class contains unit tests for the CapsuleDeployment class, which is responsible for managing pod
+ * configurations in a capsule environment.
+ */
 public class CapsulePodTest {
     private final CapsuleDeployment capsulePod = new CapsuleDeployment();
 
@@ -43,6 +47,10 @@ public class CapsulePodTest {
     private final Streams streams = Mockito.mock(Streams.class);
     private final PodProperties podProperties = Mockito.mock(PodProperties.class);
 
+    /**
+     * Sets up the test environment before each test case. It initializes the mocks and sets default behaviors for the
+     * mocked objects.
+     */
     @BeforeEach
     void beforeEach() {
         Mockito.reset(consensusCapsule);

@@ -45,6 +45,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+/** This class contains tests for verifying layer hashes in image repositories. */
 @QuarkusTest
 public class VerifyLayerHashesTest {
     Namespace ns;
@@ -54,6 +55,7 @@ public class VerifyLayerHashesTest {
     @Inject
     KubernetesClient kubernetesClient;
 
+    /** Set up the test environment. */
     @BeforeEach
     public void setup() {
         ns = kubernetesClient
@@ -65,6 +67,7 @@ public class VerifyLayerHashesTest {
         namespace = ns.getMetadata().getName();
     }
 
+    /** Clean up the test environment after each test. */
     @AfterEach
     public void cleanup() {
         kubernetesClient.namespaces().withName(namespace).delete();
@@ -192,6 +195,15 @@ public class VerifyLayerHashesTest {
         condition(status, resource, "re-select");
     }
 
+    /**
+     * Create an image repository with specified parameters.
+     *
+     * @param repository The repository URL.
+     * @param name The name of the image.
+     * @param tag The tag of the image.
+     * @param secrets Optional secrets for image pull.
+     * @return An ImageRepository object with the specified parameters
+     */
     ImageRepository imageRepository(
             final String repository, final String name, final String tag, final Secret... secrets) {
         return edit(new ImageRepository())
@@ -206,6 +218,14 @@ public class VerifyLayerHashesTest {
                 .build();
     }
 
+    /**
+     * Create an image verification specification with specified parameters.
+     *
+     * @param os Operating system for the image.
+     * @param architecture Architecture of the image.
+     * @param layerHashes Hashes of the image layers.
+     * @return An ImageVerificationSpec object with the specified parameters
+     */
     ImageVerificationSpec imageVerificationSpec(
             final String os, final String architecture, final String... layerHashes) {
         ImageVerificationSpec spec = new ImageVerificationSpec();
@@ -219,8 +239,25 @@ public class VerifyLayerHashesTest {
         return spec;
     }
 
+    /**
+     * Represents a specification for image layers.
+     *
+     * @param os The operating system of the image.
+     * @param architecture The architecture of the image.
+     * @param layerHashes The hashes of the image layers.
+     */
     record Spec(String os, String architecture, String... layerHashes) {}
 
+    /**
+     * Set up stubs for WireMock server with specified parameters.
+     *
+     * @param wireMockServer WireMock server instance.
+     * @param index Whether to include index stubs.
+     * @param username Username for authentication.
+     * @param password Password for authentication.
+     * @param specs Specifications for image layers.
+     * @return Configured WireMockServer instance with stubs
+     */
     WireMockServer stubs(
             final WireMockServer wireMockServer,
             final boolean index,
@@ -315,8 +352,22 @@ public class VerifyLayerHashesTest {
     static final int PLAIN_USER_PASS = 1;
     static final int BASE64_USER_PASS = 2;
 
+    /**
+     * Represents an authentication entry.
+     *
+     * @param key The key for the authentication entry.
+     * @param username The username for the authentication entry.
+     * @param password The password for the authentication entry.
+     * @param type The type of authentication (e.g., plain or base64).
+     */
     record AuthEntry(String key, String username, String password, int type) {}
 
+    /**
+     * Create an authentication file in JSON format with the provided authentication entries.
+     *
+     * @param entries The authentication entries to be included in the file.
+     * @return A JSON string representing the authentication file
+     */
     String authfile(final AuthEntry... entries) {
         StringBuilder sb = new StringBuilder("{\"auths\":{");
         boolean first = true;
@@ -347,6 +398,16 @@ public class VerifyLayerHashesTest {
         return sb.toString();
     }
 
+    /**
+     * Verify image repository layers against specified layer hashes.
+     *
+     * @param wm WireMock server instance.
+     * @param source SoftwareVersionSource containing image repositories and verification specs.
+     * @param username Username for authentication.
+     * @param password Password for authentication.
+     * @param totalCount Expected total count of image repository statuses.
+     * @param validCount Expected count of valid image repository statuses.
+     */
     void verify(
             WireMockServer wm,
             SoftwareVersionSource source,
@@ -388,14 +449,32 @@ public class VerifyLayerHashesTest {
         condition(status, resource, message);
     }
 
+    /**
+     * Create a condition function that returns a Condition with the specified message.
+     *
+     * @param message The message to be included in the condition.
+     * @return A Function that takes NetworkOperationStatus and returns a Condition with the specified message
+     */
     Function<NetworkOperationStatus, Condition> condition(String message) {
         return status -> new Condition(null, message, null, "reason", "status", "type");
     }
 
+    /**
+     * Create a Kubernetes secret with the provided authentication entries.
+     *
+     * @param entries The authentication entries to be included in the secret.
+     * @return A Kubernetes Secret object containing the authentication data
+     */
     Secret createSecret(final AuthEntry... entries) {
         return createSecret(authfile(entries));
     }
 
+    /**
+     * Create a Kubernetes secret with the provided authentication file.
+     *
+     * @param authfile The authentication file content in JSON format.
+     * @return A Kubernetes Secret object containing the authentication data
+     */
     Secret createSecret(final String authfile) {
         return kubernetesClient
                 .resource(edit(new Secret())
@@ -407,12 +486,24 @@ public class VerifyLayerHashesTest {
                 .create();
     }
 
+    /**
+     * Create a Kubernetes resource with metadata set to the current namespace and a unique generation.
+     *
+     * @return A HasMetadata resource with updated metadata
+     */
     HasMetadata resource() {
         return edit(ns).with(metadata ->
                         metadata.editMetadata().withNamespace(namespace).withGeneration(System.nanoTime()))
                 .build();
     }
 
+    /**
+     * Assert that the condition in the status matches the expected message and generation of the resource.
+     *
+     * @param status The NetworkOperationStatus containing conditions.
+     * @param resource The resource whose metadata generation is to be checked.
+     * @param message The expected message in the condition.
+     */
     void condition(NetworkOperationStatus status, HasMetadata resource, String message) {
         Condition condition = status.getConditions().stream()
                 .filter(cond -> "type".equals(cond.getType()))

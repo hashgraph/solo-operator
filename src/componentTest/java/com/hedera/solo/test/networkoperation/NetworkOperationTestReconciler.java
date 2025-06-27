@@ -13,8 +13,23 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 
+/**
+ * The NetworkOperationTestReconciler class is a custom reconciler for managing NetworkOperation resources. It extends
+ * the NetworkOperationSequenceReconciler to handle sequence-based processing of network operations.
+ */
 @ControllerConfiguration
 public class NetworkOperationTestReconciler extends NetworkOperationSequenceReconciler {
+
+    /**
+     * Constructs a new NetworkOperationTestReconciler with specified custom resource manager, processors for network
+     * genesis, upgrade, check, and node operation.
+     *
+     * @param customResourceManager the CustomResourceManager to manage Kubernetes resources
+     * @param networkGenesisProcessor the processor for handling network genesis operations
+     * @param networkUpgradeProcessor the processor for handling network upgrade operations
+     * @param networkCheckProcessor the processor for checking network conditions
+     * @param nodeOperationProcessor the processor for managing node operations
+     */
     public NetworkOperationTestReconciler(
             CustomResourceManager customResourceManager,
             NetworkGenesisProcessor networkGenesisProcessor,

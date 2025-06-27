@@ -8,6 +8,10 @@ import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 
+/**
+ * The NoOpConsensusCapsuleReconciler class is a no-operation reconciler for ConsensusCapsule resources. It does not
+ * perform any updates or modifications on the ConsensusCapsule resource during reconciliation.
+ */
 @ControllerConfiguration
 public class NoOpConsensusCapsuleReconciler implements Reconciler<ConsensusCapsule> {
     @Override

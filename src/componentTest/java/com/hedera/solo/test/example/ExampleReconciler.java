@@ -12,6 +12,10 @@ import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.Workflow;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
 
+/**
+ * The ExampleReconciler class is responsible for reconciling the Example resource in a Kubernetes cluster using the
+ * Java Operators SDK.
+ */
 @Workflow(dependents = {@Dependent(type = ExampleConfigMap.class)})
 @ControllerConfiguration
 public class ExampleReconciler implements Reconciler<Example> {

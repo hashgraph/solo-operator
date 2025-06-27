@@ -30,6 +30,7 @@ import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import org.jboss.logging.Logger;
 
+/** The OrbitReconciler class is responsible for reconciling the lifecycle of an Orbit resource. */
 @Workflow(
         dependents = {
             @Dependent(name = "namespace", type = OrbitNamespace.class),
@@ -50,6 +51,11 @@ public class OrbitReconciler implements Cleaner<Orbit>, Reconciler<Orbit> {
 
     private final Logger log;
 
+    /**
+     * Constructor for the OrbitReconciler.
+     *
+     * @param log The logger instance used for logging events.
+     */
     @Inject
     public OrbitReconciler(final Logger log) {
         this.log = log;
@@ -80,6 +86,12 @@ public class OrbitReconciler implements Cleaner<Orbit>, Reconciler<Orbit> {
         return ErrorStatusUpdateControl.patchStatus(orbit);
     }
 
+    /**
+     * Creates or updates the status of the Orbit resource based on its current state.
+     *
+     * @param orbit The Orbit resource whose status is to be created or updated.
+     * @return OrbitStatus The updated Orbit status
+     */
     private OrbitStatus createOrUpdateStatus(final Orbit orbit) {
         final OrbitStatusBuilder builder =
                 orbit.getStatus() != null ? orbit.getStatus().edit() : new OrbitStatusBuilder();

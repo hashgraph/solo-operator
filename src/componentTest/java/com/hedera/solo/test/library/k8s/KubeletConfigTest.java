@@ -7,6 +7,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
+/**
+ * This class contains unit tests for the KubeletConfig utility methods, specifically focusing on the cluster domain
+ * configuration.
+ */
 public class KubeletConfigTest {
     @Test
     void testFailureHandling() {
