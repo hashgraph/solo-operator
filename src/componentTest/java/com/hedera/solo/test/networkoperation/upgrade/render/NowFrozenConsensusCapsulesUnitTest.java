@@ -44,14 +44,24 @@ import java.util.stream.LongStream;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.RepeatedTest;
 
+/**
+ * This class provides unit tests for the NowFrozenConsensusCapsules class. It includes methods to test the update
+ * method and other helper methods used in the reconciliation process.
+ */
 public class NowFrozenConsensusCapsulesUnitTest {
     BeanFactory factory = beanFactory()
             .supplier(new TypeReference<List<ImageRepositoryStatus>>() {}, this::imageRepositoryStatusList);
 
+    /**
+     * Initializes the bean factory used for creating Kubernetes resources.
+     *
+     * @return A BeanFactory instance configured to create Kubernetes resources
+     */
     BeanFactory beanFactory() {
         return new KubernetesResourceFactory();
     }
 
+    /** Repeated test method to verify the functionality of the NowFrozenConsensusCapsules class. */
     @RepeatedTest(10)
     public void test() {
         Set<Long> nodeIds = LongStream.range(0, 15).boxed().collect(Collectors.toSet());
@@ -137,8 +147,22 @@ public class NowFrozenConsensusCapsulesUnitTest {
         }
     }
 
+    /**
+     * Record class to hold the initial and updated ConsensusCapsule instances for comparison.
+     *
+     * @param initial The initial ConsensusCapsule instance.
+     * @param updated The updated ConsensusCapsule instance.
+     */
     record Update(ConsensusCapsule initial, ConsensusCapsule updated) {}
 
+    /**
+     * Generates a stream of update pairs (initial and updated ConsensusCapsule instances).
+     *
+     * @param networkOperation The NetworkOperation instance.
+     * @param capsules A stream of initial ConsensusCapsule instances to be potentially updated.
+     * @return {@code Stream<Update>} A stream of Update records containing the initial and updated ConsensusCapsule
+     *     instances.
+     */
     Stream<Update> update(final NetworkOperation networkOperation, final Stream<ConsensusCapsule> capsules) {
         Set<Long> exclude =
                 new HashSet<>(orEmptyList(() -> networkOperation.getStatus().getUpgradedNodes()));
@@ -155,7 +179,19 @@ public class NowFrozenConsensusCapsulesUnitTest {
                         ? nowFrozen.update(initial)
                         : initial));
     }
-
+    /**
+     * Matches the software versions of containers between an initial and updated ConsensusCapsule based on a network
+     * operation status. This method compares the software versions from image repositories with those specified in the
+     * container properties of the capsules. If there is no matching version, it will be considered unmatched and
+     * handled accordingly.
+     *
+     * @param networkOperation The network operation containing the current state of the consensus node.
+     * @param initial The initial ConsensusCapsule representing the starting point for comparison.
+     * @param updated The updated ConsensusCapsule representing the target state to compare against.
+     * @param getStatus A function that retrieves the status of software sources as a list of ImageRepositoryStatus.
+     * @param getContainer A function that extracts containers from a ConsensusCapsule and provides access to their
+     *     software versions.
+     */
     void maybeMatch(
             final NetworkOperation networkOperation,
             final ConsensusCapsule initial,
@@ -172,6 +208,13 @@ public class NowFrozenConsensusCapsulesUnitTest {
                         .getSoftwareVersion()));
     }
 
+    /**
+     * Matches the software version between a list of ImageRepositoryStatus and the specified SoftwareVersion.
+     *
+     * @param list {@code List<ImageRepositoryStatus>} The list of image repository statuses to match against.
+     * @param initial SoftwareVersion The initial SoftwareVersion to compare with the list.
+     * @param actual SoftwareVersion The actual SoftwareVersion to compare with the list.
+     */
     void maybeMatch(
             final List<ImageRepositoryStatus> list, final SoftwareVersion initial, final SoftwareVersion actual) {
         if (list != null && initial != null) {
@@ -181,6 +224,12 @@ public class NowFrozenConsensusCapsulesUnitTest {
         }
     }
 
+    /**
+     * Matches the software version between a list of ImageRepositoryStatus and the specified SoftwareVersion.
+     *
+     * @param list {@code List<ImageRepositoryStatus>} The list of image repository statuses to match against.
+     * @param actual SoftwareVersion The actual SoftwareVersion to compare with the list.
+     */
     void match(final List<ImageRepositoryStatus> list, final SoftwareVersion actual) {
         ImageRepositoryStatus expected = list.stream()
                 .filter(ImageRepositoryStatus::getSelectedForDeployment)
@@ -200,6 +249,13 @@ public class NowFrozenConsensusCapsulesUnitTest {
         assertThat(expected.getImageVerificationSpec()).isEqualTo(actual.getImageVerificationSpec());
     }
 
+    /**
+     * Creates a ConsensusCapsule instance for the given network operation and node ID.
+     *
+     * @param networkOperation The NetworkOperation instance.
+     * @param nodeId The ID of the consensus node.
+     * @return ConsensusCapsule The created ConsensusCapsule instance
+     */
     ConsensusCapsule consensusCapsule(final NetworkOperation networkOperation, final long nodeId) {
         ConsensusCapsule consensusCapsule = factory.nonNull(ConsensusCapsule.class);
         if (consensusCapsule.getSpec() == null) {
@@ -235,18 +291,35 @@ public class NowFrozenConsensusCapsulesUnitTest {
         return consensusCapsule;
     }
 
+    /**
+     * Sets the stream uploader for a given stream uploader instance.
+     *
+     * @param streamUploader The StreamUploader instance to set.
+     */
     void streamUploader(final StreamUploader streamUploader) {
         if (streamUploader != null) {
             softwareVersion(streamUploader::getSoftwareVersion, streamUploader::setSoftwareVersion);
         }
     }
 
+    /**
+     * Sets the software version for a given getter and setter.
+     *
+     * @param getter The supplier to get the SoftwareVersion instance.
+     * @param setter The consumer to set the SoftwareVersion instance.
+     */
     void softwareVersion(final Supplier<SoftwareVersion> getter, final Consumer<SoftwareVersion> setter) {
         if (getter.get() == null) {
             setter.accept(factory.nonNull(SoftwareVersion.class));
         }
     }
 
+    /**
+     * Creates a NetworkOperation instance for the given set of node IDs.
+     *
+     * @param nodeIds The set of node IDs to include in the network operation.
+     * @return NetworkOperation The created NetworkOperation instance
+     */
     NetworkOperation networkOperation(final Set<Long> nodeIds) {
         NetworkOperation networkOperation = factory.nonNull(NetworkOperation.class);
         if (networkOperation.getSpec() == null) {
@@ -298,6 +371,13 @@ public class NowFrozenConsensusCapsulesUnitTest {
         return networkOperation;
     }
 
+    /**
+     * Creates a list of ImageRepositoryStatus instances for testing, with one selected for deployment.
+     *
+     * @param factory The BeanFactory instance used to create the statuses.
+     * @param type The Type reference for creating the list.
+     * @return {@code List<ImageRepositoryStatus>} A list of image repository statuses configured for testing
+     */
     List<ImageRepositoryStatus> imageRepositoryStatusList(final BeanFactory factory, final Type type) {
         List<ImageRepositoryStatus> list = factory.nonNulls(ImageRepositoryStatus.class)
                 .limit(factory.random().nextInt(1, 8))
@@ -312,12 +392,24 @@ public class NowFrozenConsensusCapsulesUnitTest {
         return list;
     }
 
+    /**
+     * Creates a NodeLoggingConfiguration instance for the given node ID.
+     *
+     * @param nodeId The ID of the node for which to create the logging configuration.
+     * @return NodeLoggingConfiguration The created NodeLoggingConfiguration instance
+     */
     NodeLoggingConfiguration nodeLoggingConfigurations(final long nodeId) {
         return edit(new NodeLoggingConfiguration())
                 .with(builder -> builder.withNodeId(nodeId).withConfiguration(factory.nonNull(String.class)))
                 .build();
     }
 
+    /**
+     * Creates a NodeProperties instance for the given node ID.
+     *
+     * @param nodeId The ID of the node for which to create the properties.
+     * @return NodeProperties The created NodeProperties instance
+     */
     NodeProperties nodeProperties(final long nodeId) {
         return edit(new NodeProperties())
                 .with(builder -> builder.withNodeId(nodeId)

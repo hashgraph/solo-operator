@@ -24,13 +24,23 @@ import java.util.Objects;
 import java.util.Set;
 import org.junit.jupiter.api.RepeatedTest;
 
+/**
+ * This class contains unit tests for the NowFrozenOrbit class, which is responsible for updating an Orbit based on a
+ * NetworkOperation specification.
+ */
 public class NowFrozenOrbitUnitTest {
     BeanFactory factory = beanFactory();
 
+    /**
+     * Initializes a new BeanFactory instance.
+     *
+     * @return A new BeanFactory instance
+     */
     BeanFactory beanFactory() {
         return new BeanFactory();
     }
 
+    /** Repeatedly tests the update method of NowFrozenOrbit with random data to ensure it behaves as expected. */
     @RepeatedTest(10)
     public void test() {
         Orbit initialOrbit = orbit();
@@ -56,6 +66,12 @@ public class NowFrozenOrbitUnitTest {
         match(networkOperation, updatedOrbit);
     }
 
+    /**
+     * Asserts that the network operation and orbit specifications are consistent.
+     *
+     * @param networkOperation The NetworkOperation instance to check against the Orbit specification.
+     * @param orbit The Orbit instance to compare with the NetworkOperation specification.
+     */
     void match(final NetworkOperation networkOperation, final Orbit orbit) {
         List<AddressBookEntry> addressBook =
                 new ArrayList<>(networkOperation.getSpec().getNetworkUpgrade().getAddressBook());
@@ -69,15 +85,35 @@ public class NowFrozenOrbitUnitTest {
                         .getExternalAddresses());
     }
 
+    /**
+     * Updates an Orbit instance based on the specification provided in a NetworkOperation.
+     *
+     * @param networkOperation The NetworkOperation containing the update specifications for the Orbit.
+     * @param initial The initial Orbit to be updated.
+     * @return The updated Orbit
+     */
     Orbit update(final NetworkOperation networkOperation, final Orbit initial) {
         NowFrozenOrbit updater = new NowFrozenOrbit(networkOperation);
         return updater.update(initial);
     }
 
+    /**
+     * Compares two maps of string values and asserts that they are equal.
+     *
+     * @param updated The map to be compared against the update map.
+     * @param update The expected map for the update operation. If null, the initial map is used for comparison.
+     * @param initial The initial map used for comparison if the update map is null.
+     */
     void match(final Map<String, String> updated, final Map<String, String> update, final Map<String, String> initial) {
         assertThat(updated).isEqualTo(update != null ? update : initial);
     }
 
+    /**
+     * Initializes a NetworkOperation instance with default specifications based on an Orbit.
+     *
+     * @param orbit The Orbit to base the NetworkOperation specification on.
+     * @return A new NetworkOperation instance initialized with default specifications
+     */
     NetworkOperation networkOperation(final Orbit orbit) {
         NetworkOperation networkOperation = factory.nonNull(NetworkOperation.class);
         if (networkOperation.getSpec() == null) {
@@ -126,6 +162,11 @@ public class NowFrozenOrbitUnitTest {
         return networkOperation;
     }
 
+    /**
+     * Initializes an Orbit instance with default specifications.
+     *
+     * @return A new Orbit instance initialized with default specifications
+     */
     Orbit orbit() {
         Orbit orbit = factory.nonNull(Orbit.class);
         if (orbit.getSpec() == null) {

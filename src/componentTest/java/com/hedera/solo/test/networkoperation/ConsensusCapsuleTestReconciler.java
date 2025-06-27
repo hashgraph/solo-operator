@@ -12,6 +12,10 @@ import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import java.util.Objects;
 
+/**
+ * This class is a test reconciler for ConsensusCapsule custom resources. It sets the phase of the ConsensusCapsule
+ * based on a label "fail". If the "fail" label is true, it sets the phase to Failed, otherwise it sets it to Running.
+ */
 @ControllerConfiguration
 public class ConsensusCapsuleTestReconciler implements Reconciler<ConsensusCapsule> {
     @Override
