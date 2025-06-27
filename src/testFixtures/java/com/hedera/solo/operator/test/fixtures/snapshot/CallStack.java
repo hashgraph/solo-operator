@@ -4,6 +4,8 @@ package com.hedera.solo.operator.test.fixtures.snapshot;
 
 /** The CallStack class provides a utility method to retrieve the calling method's stack frame. */
 public class CallStack {
+    /** Private constructor to prevent instantiation of this utility class. */
+    private CallStack() {}
 
     /**
      * Retrieves the stack frame of the method that called this method.

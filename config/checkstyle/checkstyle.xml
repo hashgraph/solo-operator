@@ -114,7 +114,7 @@
             <property name="setterCanReturnItsClass" value="true"/>
         </module>
 -->
-<!--        <module name="HideUtilityClassConstructor"/> &lt;!&ndash; Java Coding Guidelines: Private constructors &ndash;&gt;-->
+        <module name="HideUtilityClassConstructor"/> <!-- Java Coding Guidelines: Private constructors -->
         <module name="IllegalImport"> <!-- Java Coding Guidelines: Use JUnit 4-style test classes and assertions -->
             <property name="illegalPkgs" value="junit.framework"/>
             <message key="import.illegal" value="Use JUnit 4-style (org.junit.*) test classes and assertions instead of JUnit 3 (junit.framework.*)."/>

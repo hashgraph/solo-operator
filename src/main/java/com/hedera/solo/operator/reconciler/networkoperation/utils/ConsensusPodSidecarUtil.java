@@ -13,6 +13,9 @@ import java.util.Objects;
  * NetworkOperation.
  */
 public final class ConsensusPodSidecarUtil {
+    /** Private constructor to prevent instantiation of this utility class. */
+    private ConsensusPodSidecarUtil() {}
+
     /**
      * Finds the StreamUploaderChangeset based on the given name.
      *

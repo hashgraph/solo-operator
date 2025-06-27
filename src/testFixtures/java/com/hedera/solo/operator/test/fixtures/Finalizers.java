@@ -11,13 +11,12 @@ import java.util.Objects;
 
 /** Utility class to manage finalizers in Kubernetes resources. */
 public final class Finalizers {
-
     /**
      * Private constructor to prevent instantiation of utility class.
      *
      * @throws UnsupportedOperationException if called.
      */
-    public Finalizers() {
+    private Finalizers() {
         throw new UnsupportedOperationException("Utility class");
     }
 

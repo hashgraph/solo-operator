@@ -19,6 +19,9 @@ import java.util.Objects;
  * a NetworkOperation object, as well as creating conditions for the network operation status.
  */
 public final class ConsensusVerifier {
+    /** Private constructor to prevent instantiation of this utility class. */
+    private ConsensusVerifier() {}
+
     /**
      * Retrieves the SoftwareVersionSource from the consensus-node changeset within the NetworkOperation specification.
      *
