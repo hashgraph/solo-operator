@@ -7,6 +7,9 @@ import com.hedera.solo.operator.model.v1alpha1.NetworkOperationBuilder;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationSpec;
 import com.hedera.solo.operator.model.v1alpha1.NetworkOperationStatus;
 
+/**
+ * This class provides test data for NetworkOperation instances, including predefined instances for various scenarios.
+ */
 public final class SequencerTestData {
     public static final String orbit1 = "orbit-1";
     public static final String orbit2 = "orbit-2";

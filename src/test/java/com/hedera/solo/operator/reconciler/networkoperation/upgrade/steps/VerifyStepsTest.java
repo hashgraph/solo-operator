@@ -51,11 +51,19 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+/** This class contains tests for the verification steps in the network operation upgrade process. */
 @WithWireMockCert
 public class VerifyStepsTest {
     Context<NetworkOperation> context = new Ctx();
     WireMockServer wm;
 
+    /**
+     * Sets up the test by initializing the WireMock server and stubbing endpoints for Docker registry interactions.
+     *
+     * @param wireMockServerFactory The factory to create the WireMock server instance.
+     * @throws GeneralSecurityException If there is an issue with security configuration.
+     * @throws IOException If there is an issue with input/output operations.
+     */
     @BeforeEach
     public void setup(final WireMockServerFactory wireMockServerFactory) throws GeneralSecurityException, IOException {
         wm = wireMockServerFactory.wm();
@@ -119,6 +127,13 @@ public class VerifyStepsTest {
         allMatch(networkOperation, new FreezeScheduledTask(), 0);
     }
 
+    /**
+     * This method sets up stub implementations for various software versions used in different network components as
+     * specified by the given {@code NetworkOperation}.
+     *
+     * @param networkOperation The network operation containing specifications for different components' software
+     *     versions.
+     */
     void stubsFor(final NetworkOperation networkOperation) {
         Changesets changesets = networkOperation.getSpec().getNetworkUpgrade().getChangesets();
         stubsFor(changesets.getConsensusNodeChangeset().getSoftwareVersionSource());
@@ -129,6 +144,11 @@ public class VerifyStepsTest {
         stubsFor(changesets.getOtelCollector().getSoftwareVersionSource());
     }
 
+    /**
+     * Stub endpoints for the specified software version sources in the network operation.
+     *
+     * @param source The software version source containing image repositories and verification specifications.
+     */
     void stubsFor(final SoftwareVersionSource source) {
         for (ImageRepository repository : source.getImageRepositories()) {
             for (ImageVerificationSpec spec : source.getImageVerificationSpec()) {
@@ -137,6 +157,12 @@ public class VerifyStepsTest {
         }
     }
 
+    /**
+     * Stub endpoints for the specified image repository and verification specification.
+     *
+     * @param repository The image repository to stub.
+     * @param spec The image verification specification containing layer hashes.
+     */
     void stubsFor(final ImageRepository repository, final ImageVerificationSpec spec) {
         String body = spec.getLayerHashes().stream()
                 .map(digest ->
@@ -168,6 +194,11 @@ public class VerifyStepsTest {
                                         .formatted(digest, spec.getOs(), spec.getArchitecture()))));
     }
 
+    /**
+     * Creates a default network operation with specified software version sources.
+     *
+     * @return A NetworkOperation object with predefined software version sources for various components
+     */
     NetworkOperation networkOperation() {
         return edit(new NetworkOperation())
                 .with(consensus -> consensus
@@ -212,6 +243,13 @@ public class VerifyStepsTest {
                 .build();
     }
 
+    /**
+     * Asserts that all conditions are not found for the given task and network operation.
+     *
+     * @param networkOperation The network operation being verified.
+     * @param task The processor task to execute for the network operation.
+     * @param totalConditions The total number of conditions expected to match.
+     */
     void allNotFound(
             final NetworkOperation networkOperation,
             final ProcessorTask<NetworkOperation, NetworkOperationStatus> task,
@@ -224,6 +262,13 @@ public class VerifyStepsTest {
                 totalConditions);
     }
 
+    /**
+     * Asserts that all conditions are unknown for the given task and network operation.
+     *
+     * @param networkOperation The network operation being verified.
+     * @param task The processor task to execute for the network operation.
+     * @param totalConditions The total number of conditions expected to match.
+     */
     void allUnknown(
             final NetworkOperation networkOperation,
             final ProcessorTask<NetworkOperation, NetworkOperationStatus> task,
@@ -236,6 +281,13 @@ public class VerifyStepsTest {
                 totalConditions);
     }
 
+    /**
+     * Asserts that all conditions match for the given task and network operation.
+     *
+     * @param networkOperation The network operation being verified.
+     * @param task The processor task to execute for the network operation.
+     * @param totalConditions The total number of conditions expected to match.
+     */
     void allMatch(
             final NetworkOperation networkOperation,
             final ProcessorTask<NetworkOperation, NetworkOperationStatus> task,
@@ -248,6 +300,15 @@ public class VerifyStepsTest {
                 totalConditions);
     }
 
+    /**
+     * Asserts that all conditions match for the given status and network operation.
+     *
+     * @param networkOperation The network operation being verified.
+     * @param status The status of the network operation.
+     * @param conditionStatus The expected status of the conditions.
+     * @param validity The expected validity of the image repository status.
+     * @param totalConditions The total number of conditions expected.
+     */
     void allMatch(
             final NetworkOperation networkOperation,
             final NetworkOperationStatus status,
@@ -312,6 +373,13 @@ public class VerifyStepsTest {
         }
     }
 
+    /**
+     * Matches the image repository status list with the software version source for validation.
+     *
+     * @param validity The expected validity of the image repository status.
+     * @param statusList The list of image repository statuses to validate.
+     * @param source The software version source containing the expected image repositories and verification specs.
+     */
     void match(
             final ImageRepositoryStatus.Validity validity,
             final List<ImageRepositoryStatus> statusList,
@@ -336,6 +404,16 @@ public class VerifyStepsTest {
         }
     }
 
+    /**
+     * Creates a software version source with the specified parameters.
+     *
+     * @param imageName The name of the image.
+     * @param imageTag The tag of the image.
+     * @param os The operating system for the image.
+     * @param architecture The architecture of the image.
+     * @param layerHashes The hashes of the image layers.
+     * @return A SoftwareVersionSource object with the specified parameters
+     */
     SoftwareVersionSource softwareVersionSource(
             final String imageName,
             final String imageTag,
@@ -349,6 +427,14 @@ public class VerifyStepsTest {
         return softwareVersionSource;
     }
 
+    /**
+     * Creates an image repository with the specified parameters.
+     *
+     * @param repository The Docker registry repository URL.
+     * @param imageName The name of the image.
+     * @param imageTag The tag of the image.
+     * @return An ImageRepository object with the specified parameters
+     */
     ImageRepository imageRepository(final String repository, final String imageName, final String imageTag) {
         return edit(new ImageRepository())
                 .with(builder -> builder.withRepository(repository)
@@ -357,6 +443,14 @@ public class VerifyStepsTest {
                 .build();
     }
 
+    /**
+     * Creates an image verification specification with the specified parameters.
+     *
+     * @param os The operating system for the image.
+     * @param architecture The architecture of the image.
+     * @param layerHashes The hashes of the image layers.
+     * @return An ImageVerificationSpec object with the specified parameters
+     */
     ImageVerificationSpec imageVerificationSpec(
             final String os, final String architecture, final String... layerHashes) {
         return edit(new ImageVerificationSpec())
@@ -366,6 +460,7 @@ public class VerifyStepsTest {
                 .build();
     }
 
+    /** Static class implementing the Context interface for network operation context. */
     static class Ctx implements Context<NetworkOperation> {
         @Override
         public Optional<RetryInfo> getRetryInfo() {

@@ -19,6 +19,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+/**
+ * This class defines a test for the VerifyConsensusNodeChangesetStep, which verifies that only valid repositories are
+ * selected for deployment among those specified in the network operation.
+ */
 public class VerifyConsensusNodeChangesetStepTest {
 
     @Test
@@ -81,6 +85,12 @@ public class VerifyConsensusNodeChangesetStepTest {
         validateFailureConditions(networkOperation, status);
     }
 
+    /**
+     * Executes the VerifyConsensusNodeChangesetStep with a given network operation and returns its result status.
+     *
+     * @param networkOperation The NetworkOperation to be processed by the step.
+     * @return The resulting NetworkOperationStatus after executing the step
+     */
     private NetworkOperationStatus executeStep(NetworkOperation networkOperation) {
         ProcessorStep<NetworkOperation, NetworkOperationStatus> step = new VerifyConsensusNodeChangesetStep();
         NetworkOperationStatus status = new NetworkOperationStatusBuilder()
@@ -107,6 +117,12 @@ public class VerifyConsensusNodeChangesetStepTest {
         return resp;
     }
 
+    /**
+     * Validates that the status indicates success with a specific count of valid repositories selected for deployment.
+     *
+     * @param status The NetworkOperationStatus to validate.
+     * @param expectedCount The expected number of valid repositories.
+     */
     private void validateSuccessStatus(final NetworkOperationStatus status, int expectedCount) {
         List<ImageRepositoryStatus> valid = new ArrayList<>();
         ImageRepositoryStatus selected = null;
@@ -129,12 +145,23 @@ public class VerifyConsensusNodeChangesetStepTest {
         assertThat(valid.contains(selected)).isTrue();
     }
 
+    /**
+     * Validates that the conditions in the status indicate success after running the step.
+     *
+     * @param networkOperation The original NetworkOperation used as input to the step.
+     * @param status The resulting NetworkOperationStatus from executing the step.
+     */
     private void validateSuccessConditions(NetworkOperation networkOperation, NetworkOperationStatus status) {
         assertThat(status.getConditions().size()).isEqualTo(1);
         assertThat(status.getConditions().getFirst().getMessage())
                 .startsWith(VerifyConsensusNodeChangesetStep.SUCCESS_STATUS_MESSAGE.formatted(""));
     }
 
+    /**
+     * Validates that the status indicates failure due to no valid image repositories found.
+     *
+     * @param status The NetworkOperationStatus to validate.
+     */
     private void validateFailStatus(final NetworkOperationStatus status) {
         List<ImageRepositoryStatus> valid = new ArrayList<>();
         ImageRepositoryStatus selected = null;
@@ -152,6 +179,12 @@ public class VerifyConsensusNodeChangesetStepTest {
         assertThat(selected).isNull();
     }
 
+    /**
+     * Validates that the conditions in the status indicate failure after running the step without valid repositories.
+     *
+     * @param networkOperation The original NetworkOperation used as input to the step.
+     * @param status The resulting NetworkOperationStatus from executing the step.
+     */
     private void validateFailureConditions(NetworkOperation networkOperation, NetworkOperationStatus status) {
         assertThat(status.getConditions().size()).isEqualTo(1);
         assertThat(status.getConditions().getFirst().getMessage()).isEqualTo(FAIL_STATUS_MESSAGE);
