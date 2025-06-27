@@ -38,7 +38,7 @@ public class PersistentVolumeTest extends ConsensusCapsuleTestAbstract {
      * Prepares the PVC specification based on the suffix of the volume.
      *
      * @param volSuffix The suffix identifier for the volume type (e.g., logs, stats, states, upgrade, streams).
-     * @return PersistentVolumeClaimSpec The specification for the persistent volume claim.
+     * @return PersistentVolumeClaimSpec The specification for the persistent volume claim
      */
     protected PersistentVolumeClaimSpec preparePvcSpec(String volSuffix) {
         PersistentVolumeClaim pvc =
@@ -50,7 +50,7 @@ public class PersistentVolumeTest extends ConsensusCapsuleTestAbstract {
      * Prepares the persistent volume claims for a consensus capsule based on node information.
      *
      * @param node The node information containing details required to configure PVCs.
-     * @return PersistentVolumeClaims The builder object for configuring persistent volume claims.
+     * @return PersistentVolumeClaims The builder object for configuring persistent volume claims
      */
     @Override
     protected PersistentVolumeClaims prepareCapsulePVCs(TestRecords.NodeInfo node) {

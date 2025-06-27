@@ -111,7 +111,7 @@ public class CapsuleSecretsValidationTest {
     /**
      * Create a ConsensusCapsule with default secret specifications.
      *
-     * @return - The created ConsensusCapsule.
+     * @return - The created ConsensusCapsule
      */
     ConsensusCapsule createConsensusCapsule() {
         return createConsensusCapsule(builder -> builder);
@@ -121,7 +121,7 @@ public class CapsuleSecretsValidationTest {
      * Create a ConsensusCapsule with custom secret specifications provided by the BuilderFunction.
      *
      * @param builder - A function to build custom secret specifications.
-     * @return - The created ConsensusCapsule.
+     * @return - The created ConsensusCapsule
      */
     ConsensusCapsule createConsensusCapsule(final BuilderFunction<ConsensusCapsuleBuilder> builder) {
         KeyReference keyReference = edit(new KeyReference())

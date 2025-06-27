@@ -56,7 +56,7 @@ public class SidecarContainersTest extends ConsensusCapsuleTestAbstract {
     /**
      * Prepares the containers for a consensus pod based on templates.
      *
-     * @return Containers object containing sidecar containers.
+     * @return Containers object containing sidecar containers
      */
     @Override
     protected Containers prepareConsensusPodContainers() {
