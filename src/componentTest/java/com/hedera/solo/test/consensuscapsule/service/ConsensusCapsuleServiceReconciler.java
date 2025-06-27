@@ -11,6 +11,10 @@ import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.Workflow;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
 
+/**
+ * The ConsensusCapsuleServiceReconciler class is responsible for reconciling ConsensusCapsule instances by managing
+ * their dependent CapsuleService resources.
+ */
 @Workflow(dependents = {@Dependent(type = CapsuleService.class)})
 @ControllerConfiguration
 public class ConsensusCapsuleServiceReconciler implements Reconciler<ConsensusCapsule> {
