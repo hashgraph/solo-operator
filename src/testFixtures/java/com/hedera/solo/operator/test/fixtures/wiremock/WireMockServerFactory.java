@@ -14,8 +14,14 @@ import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
  * @see WithWireMockCert
  */
 public class WireMockServerFactory {
+    /** Default constructor is protected to prevent instantiation. */
     protected WireMockServerFactory() {}
 
+    /**
+     * Returns a default {@code WireMockConfiguration} object configured for dynamic ports and HTTPS.
+     *
+     * @return A {@code WireMockConfiguration} instance
+     */
     public WireMockConfiguration config() {
         return WireMockConfiguration.wireMockConfig()
                 .dynamicPort()
@@ -24,10 +30,21 @@ public class WireMockServerFactory {
                 .keystorePassword(WM_KS_PASS);
     }
 
+    /**
+     * Creates and starts a {@code WireMockServer} using the default configuration.
+     *
+     * @return A started {@code WireMockServer}
+     */
     public WireMockServer wm() {
         return wm(config());
     }
 
+    /**
+     * Creates and starts a {@code WireMockServer} with a custom {@code WireMockConfiguration}.
+     *
+     * @param config The configuration for the {@code WireMockServer}.
+     * @return A started {@code WireMockServer}
+     */
     public WireMockServer wm(final WireMockConfiguration config) {
         WireMockServer wm = new WireMockServer(config);
         wm.start();
