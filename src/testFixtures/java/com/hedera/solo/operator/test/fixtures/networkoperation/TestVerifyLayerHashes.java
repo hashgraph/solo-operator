@@ -15,7 +15,18 @@ import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
+/**
+ * The TestVerifyLayerHashes class extends the VerifyLayerHashes abstract class. It provides a concrete implementation
+ * of verifying layer hashes for network operations, utilizing KubernetesClient for interacting with the Kubernetes API.
+ */
 public class TestVerifyLayerHashes extends VerifyLayerHashes {
+    /**
+     * Constructs a new TestVerifyLayerHashes instance.
+     *
+     * @param kubernetesClient The Kubernetes client used to interact with the Kubernetes cluster.
+     * @param namespace The Kubernetes namespace where the network operation is deployed.
+     * @param softwareVersionSource The source from which to retrieve software version information.
+     */
     public TestVerifyLayerHashes(
             final KubernetesClient kubernetesClient,
             final String namespace,
@@ -23,6 +34,19 @@ public class TestVerifyLayerHashes extends VerifyLayerHashes {
         super(kubernetesClient, namespace, softwareVersionSource);
     }
 
+    /**
+     * Updates the status of a network operation by verifying layer hashes.
+     *
+     * @param resource The Kubernetes resource (metadata and spec) representing the network operation.
+     * @param status The current status of the network operation which will be updated.
+     * @param kubernetesClient The Kubernetes client used to interact with the Kubernetes cluster.
+     * @param softwareVersionSource The source from which to retrieve software version information.
+     * @param conditionFunction A function that creates a Condition object based on the current status.
+     * @param getStatusList A function that retrieves the list of image repository statuses for the software source
+     *     status.
+     * @param setStatusList A BiConsumer that sets the list of image repository statuses for the software source status.
+     * @return The updated NetworkOperationStatus with the verified conditions
+     */
     public static NetworkOperationStatus updateStatus(
             final HasMetadata resource,
             final NetworkOperationStatus status,
