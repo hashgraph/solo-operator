@@ -32,6 +32,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 import org.jboss.logging.Logger;
 
+/** Manages the setup of MinIO for testing purposes within a Kubernetes cluster. */
 @Lock(time = 5, unit = TimeUnit.MINUTES) // this lock is needed when tests are run in parallel
 @ApplicationScoped
 public class MinioSetupManager {
@@ -47,9 +48,10 @@ public class MinioSetupManager {
     private Path kubeConfigFile = null;
 
     /**
-     * Set up a temporary kubeconfig file This is only needed to support testcontainer
+     * Sets up a temporary kubeconfig file for use with testcontainers.
      *
-     * @return Path to temporary kube configuration file
+     * @return Path to the temporary kube configuration file
+     * @throws RuntimeException if an error occurs while creating or writing to the file.
      */
     private Path setupKubeConfig() {
         if (Objects.nonNull(kubeConfigFile)) {
@@ -102,6 +104,12 @@ public class MinioSetupManager {
         }
     }
 
+    /**
+     * Retrieves a HelmClient instance configured for the specified namespace.
+     *
+     * @param namespace The Kubernetes namespace to use for Helm operations.
+     * @return A HelmClient instance
+     */
     private HelmClient getHelmClient(String namespace) {
         // FIXME currently HelmClient does not let us set namespace for different operations
         // Therefore we need to create new instances for different namespaces.
@@ -113,6 +121,11 @@ public class MinioSetupManager {
                 .build();
     }
 
+    /**
+     * Adds the MinIO repository to the Helm client if it hasn't been added already.
+     *
+     * @param helmClient The Helm client instance to which the repository will be added.
+     */
     private void addMinioRepository(HelmClient helmClient) {
         Objects.requireNonNull(helmClient, "helmClient is null");
 
@@ -132,6 +145,13 @@ public class MinioSetupManager {
         minioRepoAdded = true;
     }
 
+    /**
+     * Checks if a Helm chart is installed under the specified release name.
+     *
+     * @param helmClient The Helm client instance.
+     * @param releaseName The name of the Helm release to check.
+     * @return True if the chart is installed, otherwise false
+     */
     private boolean isChartInstalled(HelmClient helmClient, String releaseName) {
         Objects.requireNonNull(helmClient, "helmClient is null");
 
@@ -145,6 +165,11 @@ public class MinioSetupManager {
         return false;
     }
 
+    /**
+     * Installs the MinIO operator using Helm.
+     *
+     * @param helmClient The Helm client instance for performing operations.
+     */
     private void installMinioOperator(HelmClient helmClient) {
         Objects.requireNonNull(helmClient, "helmClient is null");
 
@@ -172,6 +197,12 @@ public class MinioSetupManager {
         logger.info("MinIO operator is ready");
     }
 
+    /**
+     * Installs the MinIO tenant using Helm.
+     *
+     * @param helmClient The Helm client instance for performing operations.
+     * @throws IllegalArgumentException if the values file for MinIO tenant is not found.
+     */
     private void installMinioTenant(HelmClient helmClient) {
         Objects.requireNonNull(helmClient, "helmClient is null");
 
@@ -207,6 +238,13 @@ public class MinioSetupManager {
         logger.info("MinIO tenant is ready");
     }
 
+    /**
+     * Cleans up the Helm client by deleting the temporary files created during its operation.
+     *
+     * @param helmClient The Helm client instance to clean up.
+     * @throws IllegalAccessException if the field cannot be accessed.
+     * @throws NoSuchFieldException if the field does not exist.
+     */
     // workaround for https://github.com/hashgraph/full-stack-testing/issues/964
     public void cleanup(final HelmClient helmClient) {
         try {
@@ -223,9 +261,11 @@ public class MinioSetupManager {
                 }
             }
         } catch (Exception ignored) {
+            // If we cannot clean up the Helm client, we simply ignore the exception.
         }
     }
 
+    /** Installs the MinIO operator and tenant in their respective namespaces. */
     public void install() {
         if (minioInstalled) {
             return;
@@ -251,6 +291,7 @@ public class MinioSetupManager {
         minioInstalled = true;
     }
 
+    /** Uninstalls the MinIO operator and tenant from their respective namespaces. */
     public void uninstall() {
         if (!minioInstalled) {
             return;
