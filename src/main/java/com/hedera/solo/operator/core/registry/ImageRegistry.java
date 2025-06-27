@@ -40,6 +40,7 @@ public class ImageRegistry extends DistributionRegistryClient {
      * Fetch image index corresponding to image coordinates.
      *
      * @param coordinates to image
+     * @return OCIImageIndex representing the image index for the given coordinates
      */
     public OCIImageIndex fetchImageIndex(@NonNull final ImageCoordinates coordinates) {
         Objects.requireNonNull(coordinates, "coordinates cannot be null");
@@ -54,8 +55,9 @@ public class ImageRegistry extends DistributionRegistryClient {
      * Fetch image manifest corresponding to image coordinates, os and architecture.
      *
      * @param coordinates to image
-     * @param os os os type.
+     * @param os os type.
      * @param architecture architecture type.
+     * @return OCIImageManifest representing the image manifest for the given coordinates and platform
      */
     public OCIImageManifest fetchImageManifest(
             @NonNull final ImageCoordinates coordinates, @NonNull final String os, @NonNull final String architecture) {
@@ -72,6 +74,8 @@ public class ImageRegistry extends DistributionRegistryClient {
      *
      * @param coordinates to image
      * @param platform platform info including os and architecture
+     * @return OCIImageManifest representing the image manifest for the given coordinates and platform
+     * @throws RecordNotFoundException if the manifest index is not found in the registry
      */
     public OCIImageManifest fetchImageManifest(
             @NonNull final ImageCoordinates coordinates, @NonNull final OCIImageIndex.OCIImageIndexPlatform platform) {
@@ -89,6 +93,8 @@ public class ImageRegistry extends DistributionRegistryClient {
      * @param index OCI image index
      * @param coordinates image coordinates
      * @param platform platform info including os and architecture
+     * @return OCIImageManifest representing the image manifest for the given index, coordinates and platform
+     * @throws RecordNotFoundException if the manifest is not found in the index
      */
     public OCIImageManifest fetchImageManifest(
             final OCIImageIndex index,
@@ -115,6 +121,16 @@ public class ImageRegistry extends DistributionRegistryClient {
         throw new RecordNotFoundException("image manifest not found in registry");
     }
 
+    /**
+     * Fetches a resource from the image registry using the given coordinates, endpoint, and media types.
+     *
+     * @param coordinates the image coordinates to fetch from
+     * @param endpoint the registry endpoint to query
+     * @param mediaTypes the accepted media types for the response
+     * @return the HTTP response containing the resource as a byte array
+     * @throws ImageRegistryException if an I/O or unexpected response error occurs
+     * @throws RecordNotFoundException if the resource is not found in the registry
+     */
     public HttpResponse<byte[]> fetch(
             final ImageCoordinates coordinates, final String endpoint, final String... mediaTypes) {
         try {
@@ -133,11 +149,13 @@ public class ImageRegistry extends DistributionRegistryClient {
     }
 
     /**
-     * Validate the manifest contains the expected image layer digests
+     * Validate the manifest contains the expected image layer digests.
      *
+     * @param coordinates image coordinates
      * @param manifest OCIImageManifest containing a list of layers
      * @param layerHashes list of layer hashes from the CR
      * @return true if the layers match the hashes in the same order and exist in the registry
+     * @throws ImageRegistryException if an I/O error occurs while checking layer existence
      */
     public boolean hasValidLayers(ImageCoordinates coordinates, OCIImageManifest manifest, List<String> layerHashes) {
         if (layerHashes.size() != manifest.layers.length) {
