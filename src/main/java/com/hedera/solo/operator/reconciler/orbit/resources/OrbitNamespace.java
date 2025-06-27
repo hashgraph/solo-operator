@@ -13,10 +13,15 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 
+/**
+ * The {@code OrbitNamespace} class represents a Kubernetes Namespace resource that is dependent on an Orbit custom
+ * resource.
+ */
 @KubernetesDependent
 public class OrbitNamespace extends CRUDKubernetesDependentResource<Namespace, Orbit> {
     public static final String TEMPLATE = "namespace.yaml";
 
+    /** Constructs a new instance of {@code OrbitNamespace}. */
     public OrbitNamespace() {
         super(Namespace.class);
     }

@@ -25,12 +25,23 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Stream;
 
+/**
+ * The HAProxyDeployment class is responsible for reconciling the Kubernetes Deployment resource for a HAProxy capsule.
+ *
+ * <p>It configures and manages the HAProxy deployment based on the specifications provided in the HAProxyCapsule custom
+ * resource.
+ */
 @KubernetesDependent
 public class HAProxyDeployment extends CRUDKubernetesDependentResource<Deployment, HAProxyCapsule> {
     public static final String TEMPLATE = "deployment.yaml";
     public static final String NAME_SUFFIX = "-ha-deploy";
     private final HAProxyCapsuleReconciler reconciler;
 
+    /**
+     * Constructs a new HAProxyDeployment instance with the specified HAProxyCapsuleReconciler.
+     *
+     * @param reconciler The HAProxyCapsuleReconciler to be used for managing the HAProxy deployment.
+     */
     public HAProxyDeployment(final HAProxyCapsuleReconciler reconciler) {
         super(Deployment.class);
         this.reconciler = reconciler;
@@ -41,6 +52,12 @@ public class HAProxyDeployment extends CRUDKubernetesDependentResource<Deploymen
                 .build());
     }
 
+    /**
+     * Prepares the labels for the HAProxy deployment based on the primary HAProxyCapsule specification.
+     *
+     * @param primary The primary HAProxyCapsule instance used to extract necessary information.
+     * @return A Map of string labels keyed by label names
+     */
     static Map<String, String> prepareHAProxyLabels(HAProxyCapsule primary) {
         final Map<String, String> labels = new HashMap<>();
         labels.put(Constants.LABEL_APP, Constants.COMPONENT_HAPROXY);
@@ -128,9 +145,18 @@ public class HAProxyDeployment extends CRUDKubernetesDependentResource<Deploymen
                 .build();
     }
 
+    /**
+     * The Ready condition implementation for the HAProxyDeployment. It checks if the HAProxy consensus service is
+     * present in the context.
+     */
     public static class Ready implements Condition<Deployment, HAProxyCapsule> {
         private final HAProxyCapsuleReconciler reconciler;
 
+        /**
+         * Constructs a new Ready instance with the specified HAProxyCapsuleReconciler.
+         *
+         * @param reconciler The HAProxyCapsuleReconciler to be used for checking conditions.
+         */
         public Ready(final HAProxyCapsuleReconciler reconciler) {
             this.reconciler = reconciler;
         }

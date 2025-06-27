@@ -21,6 +21,10 @@ import java.util.Base64;
 import java.util.Map;
 import java.util.function.BiFunction;
 
+/**
+ * The HAProxySecret class is a Kubernetes dependent resource for managing the creation and update of a Secret object
+ * related to HAProxy configuration.
+ */
 @KubernetesDependent
 public class HAProxySecret extends CRUDKubernetesDependentResource<Secret, HAProxyCapsule> {
 
@@ -28,6 +32,11 @@ public class HAProxySecret extends CRUDKubernetesDependentResource<Secret, HAPro
     public static final String NAME_SUFFIX = "-ha-keys";
     private final HAProxyCapsuleReconciler reconciler;
 
+    /**
+     * Constructs a new HAProxySecret with the specified HAProxyCapsuleReconciler.
+     *
+     * @param reconciler The HAProxyCapsuleReconciler instance to be used for managing HAProxy capsules.
+     */
     public HAProxySecret(final HAProxyCapsuleReconciler reconciler) {
         super(Secret.class);
         this.reconciler = reconciler;

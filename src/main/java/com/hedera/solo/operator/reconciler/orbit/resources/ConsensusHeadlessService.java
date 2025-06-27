@@ -14,11 +14,16 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDNoGCKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 
+/**
+ * The `ConsensusHeadlessService` class is a Kubernetes dependent resource that manages the creation and update of a
+ * headless service for consensus nodes in an Orbit CRD.
+ */
 @KubernetesDependent(informer = @Informer(labelSelector = Constants.LABEL_SELECTOR_CONSENSUS_NODE_APP))
 public class ConsensusHeadlessService extends CRUDNoGCKubernetesDependentResource<Service, Orbit> {
     public static final String TEMPLATE = "headless-service.yaml";
     public static final String NAME = "consensus";
 
+    /** Default constructor initializing the resource type to Service. */
     public ConsensusHeadlessService() {
         super(Service.class);
     }

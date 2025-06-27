@@ -17,11 +17,13 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDep
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependentResourceConfigBuilder;
 import java.util.Map;
 
+/** The HAProxyService class is a Kubernetes dependent resource that manages the deployment of a HAProxy service. */
 @KubernetesDependent
 public class HAProxyService extends CRUDKubernetesDependentResource<Service, HAProxyCapsule> {
     public static final String TEMPLATE = "service.yaml";
     public static final String NAME_SUFFIX = "-ha-svc";
 
+    /** Default constructor for HAProxyService, initializes the resource type as Service. */
     public HAProxyService() {
         super(Service.class);
         configureWith(new KubernetesDependentResourceConfigBuilder<Service>()
