@@ -101,7 +101,7 @@ public class ExtendedTrustManager implements X509TrustManager {
          * @param trustManager The X509TrustManager to be checked
          * @throws CertificateException If the trust manager does not trust the certificate
          */
-        void check(final X509TrustManager trustManager) throws CertificateException;
+        void check(X509TrustManager trustManager) throws CertificateException;
     }
 
     /**

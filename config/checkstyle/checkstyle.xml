@@ -235,7 +235,7 @@
 <!--        <module name="ParameterAssignment"/> &lt;!&ndash; Java Coding Guidelines: Final variables and parameters &ndash;&gt;-->
          <!-- Java Style Guide: Horizontal whitespace -->
         <module name="RedundantImport"/> <!-- Java Style Guide: No unused imports -->
-<!--        <module name="RedundantModifier"/> &lt;!&ndash; Java Coding Guidelines: Avoid redundant modifiers &ndash;&gt;-->
+        <module name="RedundantModifier"/> <!-- Java Coding Guidelines: Avoid redundant modifiers -->
         <module name="RegexpSinglelineJava"> <!-- Java Coding Guidelines: Use appropriate assertion methods -->
             <property name="format" value="assertEquals\(false,"/>
             <property name="message" value="Use assertFalse() instead."/>
