@@ -37,10 +37,12 @@
     <module name="BeforeExecutionExclusionFileFilter">
         <property name="fileNamePattern" value="module\-info\.java$"/>
     </module>
-    <module name="LineLength"> <!-- Java Style Guide: No line-wrapping -->
+<!--
+    <module name="LineLength"> &lt;!&ndash; Java Style Guide: No line-wrapping &ndash;&gt;
         <property name="max" value="120"/>
         <property name="ignorePattern" value="^package.*|^import.*|a href|href|http://|https://|ftp://|\{@link|@see.*#.*"/>
     </module>
+-->
     <module name="TreeWalker">
         <module name="SuppressionCommentFilter"/> <!-- baseline-gradle: README.md -->
         <module name="SuppressionCommentFilter">
@@ -48,10 +50,12 @@
             <property name="onCommentFormat" value="CHECKSTYLE.ON\: ([\w\|]+)"/>
             <property name="checkFormat" value="$1"/>
         </module>
-        <module name="AbbreviationAsWordInName"> <!-- Java Style Guide: Camel case : defined -->
+<!--
+        <module name="AbbreviationAsWordInName"> &lt;!&ndash; Java Style Guide: Camel case : defined &ndash;&gt;
             <property name="ignoreFinal" value="false"/>
             <property name="allowedAbbreviationLength" value="1"/>
         </module>
+-->
         <module name="AnnotationLocation"> <!-- Java Style Guide: Annotations -->
             <property name="tokens" value="CLASS_DEF, INTERFACE_DEF, ENUM_DEF, METHOD_DEF, CTOR_DEF"/>
         </module>
@@ -59,9 +63,11 @@
             <property name="tokens" value="VARIABLE_DEF"/>
             <property name="allowSamelineMultipleAnnotations" value="true"/>
         </module>
-        <module name="AnnotationUseStyle"> <!-- Java Style Guide: Annotations -->
+<!--
+        <module name="AnnotationUseStyle"> &lt;!&ndash; Java Style Guide: Annotations &ndash;&gt;
             <property name="trailingArrayComma" value="ignore"/>
         </module>
+-->
         <module name="ArrayTypeStyle"/> <!-- Java Style Guide: No C-style array declarations -->
         <module name="AvoidEscapedUnicodeCharacters"> <!-- Java Style Guide: Non-ASCII characters -->
             <property name="allowEscapesForControlCharacters" value="true"/>
@@ -75,10 +81,12 @@
         <module name="AvoidStaticImport"> <!-- Java Style Guide: No static imports -->
             <property name="excludes" value="com.google.common.base.Preconditions.*, com.palantir.logsafe.Preconditions.*, java.util.Collections.*, java.util.stream.Collectors.*, org.apache.commons.lang3.Validate.*, org.assertj.core.api.Assertions.*, org.mockito.Mockito.*"/>
         </module>
-        <module name="ClassTypeParameterName"> <!-- Java Style Guide: Type variable names -->
+<!--
+        <module name="ClassTypeParameterName"> &lt;!&ndash; Java Style Guide: Type variable names &ndash;&gt;
             <property name="format" value="(^[A-Z][0-9]?)$|([A-Z][a-zA-Z0-9]*[T]$)"/>
             <message key="name.invalidPattern" value="Class type name ''{0}'' must match pattern ''{1}''."/>
         </module>
+-->
         <module name="CovariantEquals"/> <!-- Java Coding Guidelines: Override ``Object#equals`` consistently -->
         <module name="DefaultComesLast"/> <!-- Java Style Guide: The default case is present -->
         <module name="EmptyBlock"> <!-- Java Style Guide: Empty blocks: documented -->
@@ -101,12 +109,14 @@
             <message key="ws.illegalFollow" value="GenericWhitespace ''{0}'' should followed by whitespace."/>
             <message key="ws.notPreceded" value="GenericWhitespace ''{0}'' is not preceded with whitespace."/>
         </module>
-        <module name="HiddenField"> <!-- Java Coding Guide: Avoid shadowing -->
+<!--
+        <module name="HiddenField"> &lt;!&ndash; Java Coding Guide: Avoid shadowing &ndash;&gt;
             <property name="ignoreConstructorParameter" value="true"/>
             <property name="ignoreSetter" value="true"/>
             <property name="setterCanReturnItsClass" value="true"/>
         </module>
-        <module name="HideUtilityClassConstructor"/> <!-- Java Coding Guidelines: Private constructors -->
+-->
+<!--        <module name="HideUtilityClassConstructor"/> &lt;!&ndash; Java Coding Guidelines: Private constructors &ndash;&gt;-->
         <module name="IllegalImport"> <!-- Java Coding Guidelines: Use JUnit 4-style test classes and assertions -->
             <property name="illegalPkgs" value="junit.framework"/>
             <message key="import.illegal" value="Use JUnit 4-style (org.junit.*) test classes and assertions instead of JUnit 3 (junit.framework.*)."/>
@@ -162,9 +172,11 @@
             <property name="format" value="\\u00(08|09|0(a|A)|0(c|C)|0(d|D)|22|27|5(C|c))|\\(0(10|11|12|14|15|42|47)|134)"/>
             <property name="message" value="Avoid using corresponding octal or Unicode escape."/>
         </module>
-        <module name="IllegalType"> <!-- Java Coding Guide: Limit coupling on concrete classes -->
+<!--
+        <module name="IllegalType"> &lt;!&ndash; Java Coding Guide: Limit coupling on concrete classes &ndash;&gt;
             <property name="illegalClassNames" value="java.util.ArrayList, java.util.HashSet, java.util.HashMap, java.util.LinkedList, java.util.LinkedHashMap, java.util.LinkedHashSet, java.util.TreeSet, java.util.TreeMap, com.google.common.collect.ArrayListMultimap, com.google.common.collect.ForwardingListMultimap, com.google.common.collect.ForwardingMultimap, com.google.common.collect.ForwardingSetMultimap, com.google.common.collect.ForwardingSortedSetMultimap, com.google.common.collect.HashMultimap, com.google.common.collect.LinkedHashMultimap, com.google.common.collect.LinkedListMultimap, com.google.common.collect.TreeMultimap"/>
         </module>
+-->
         <module name="IllegalType">
             <property name="id" value="BanGuavaCaches"/>
             <property name="illegalClassNames" value="com.google.common.cache.CacheBuilder, com.google.common.cache.Cache, com.google.common.cache.LoadingCache"/>
@@ -177,21 +189,23 @@
             <property name="sortStaticImportsAlphabetically" value="true"/>
         </module>
 
-        <module name="InnerAssignment"/> <!-- Java Coding Guidelines: Inner assignments: Not used -->
+<!--        <module name="InnerAssignment"/> &lt;!&ndash; Java Coding Guidelines: Inner assignments: Not used &ndash;&gt;-->
          <!-- Java Style Guide: Nonempty blocks: K & R style -->
-        <module name="MemberName"> <!-- Java Style Guide: Non-constant field names -->
+<!--
+        <module name="MemberName"> &lt;!&ndash; Java Style Guide: Non-constant field names &ndash;&gt;
             <property name="format" value="^[a-z][a-zA-Z0-9]+$"/>
             <message key="name.invalidPattern" value="Member name ''{0}'' must match pattern ''{1}''."/>
         </module>
+-->
         <module name="MethodName"> <!-- Java Style Guide: Method names -->
             <property name="format" value="^[a-z][a-zA-Z0-9_]+$"/>
             <message key="name.invalidPattern" value="Method name ''{0}'' must match pattern ''{1}''."/>
         </module>
         <module name="MethodParamPad"/> <!-- Java Style Guide: Horizontal whitespace -->
         <module name="MissingDeprecated"/> <!-- Java Coding Guide: Deprecate per annotation and Javadoc -->
-        <module name="ModifiedControlVariable"/> <!-- Java Coding Guide: For-loop control variables: never modified -->
-        <module name="ModifierOrder"/> <!-- Java Style Guide: Modifiers -->
-        <module name="MultipleVariableDeclarations"/> <!-- Java Style Guide: One variable per declaration -->
+<!--        <module name="ModifiedControlVariable"/> &lt;!&ndash; Java Coding Guide: For-loop control variables: never modified &ndash;&gt;-->
+<!--        <module name="ModifierOrder"/> &lt;!&ndash; Java Style Guide: Modifiers &ndash;&gt;-->
+<!--        <module name="MultipleVariableDeclarations"/> &lt;!&ndash; Java Style Guide: One variable per declaration &ndash;&gt;-->
         <module name="MutableException"/> <!-- Java Coding Guidelines: Exceptions: Always immutable -->
         <module name="NeedBraces"> <!-- Java Style Guide: Braces are used where optional -->
             <property name="allowSingleLineStatement" value="true"/>
@@ -213,17 +227,17 @@
             <property name="tokens" value="BAND, BOR, BSR, BXOR, DIV, EQUAL, GE, GT, LAND, LE, LITERAL_INSTANCEOF, LOR, LT, MINUS, MOD, NOT_EQUAL, PLUS, QUESTION, SL, SR, STAR "/>
         </module>
         <module name="OuterTypeFilename"/> <!-- Java Style Guide: File name -->
-        <module name="OverloadMethodsDeclarationOrder"/> <!-- Java Style Guide: Overloads: never split -->
+<!--        <module name="OverloadMethodsDeclarationOrder"/> &lt;!&ndash; Java Style Guide: Overloads: never split &ndash;&gt;-->
         <module name="PackageAnnotation"/> <!-- Java Style Guide: Package statement -->
         <module name="PackageDeclaration"/> <!-- Java Style Guide: Package statement -->
         <module name="PackageName"> <!-- Java Style Guide: Package names -->
             <property name="format" value="^[a-z]+(\.[a-z][a-z0-9]*)*$"/>
             <message key="name.invalidPattern" value="Package name ''{0}'' must match pattern ''{1}''."/>
         </module>
-        <module name="ParameterAssignment"/> <!-- Java Coding Guidelines: Final variables and parameters -->
+<!--        <module name="ParameterAssignment"/> &lt;!&ndash; Java Coding Guidelines: Final variables and parameters &ndash;&gt;-->
          <!-- Java Style Guide: Horizontal whitespace -->
         <module name="RedundantImport"/> <!-- Java Style Guide: No unused imports -->
-        <module name="RedundantModifier"/> <!-- Java Coding Guidelines: Avoid redundant modifiers -->
+<!--        <module name="RedundantModifier"/> &lt;!&ndash; Java Coding Guidelines: Avoid redundant modifiers &ndash;&gt;-->
         <module name="RegexpSinglelineJava"> <!-- Java Coding Guidelines: Use appropriate assertion methods -->
             <property name="format" value="assertEquals\(false,"/>
             <property name="message" value="Use assertFalse() instead."/>
@@ -309,11 +323,13 @@
             <property name="format" value="\? extends Object\W"/>
             <property name="message" value="Use ? rather than ? extends Object."/>
         </module>
+<!--
         <module name="RegexpSinglelineJava">
             <property name="format" value="(?i)log(ger)?\.(debug|info|warn|error)\(.*%[sd]"/>
             <property name="message" value="SLF4J loggers support '{}' style formatting."/>
             <property name="ignoreComments" value="true"/>
         </module>
+-->
         <module name="RegexpSinglelineJava">
             <property name="format" value="\.printStackTrace\(\)"/>
             <property name="message" value="printStackTrace is not generally allowed."/>
@@ -343,15 +359,26 @@
             <property name="format" value="\bIOUtils\.toString\("/>
             <property name="message" value="Prefer Guava''s [CharStreams,Files,Resources].toString to avoid charset/stream closing issues."/>
         </module>
+<!--
         <module name="RegexpSinglelineJava">
             <property name="format" value="\/\/TODO|\/\/ TODO(?!\([^()\s]+\): )"/>
             <property name="message" value="TODO format: // TODO(#issue): explanation"/>
             <property name="ignoreCase" value="true"/>
         </module>
+-->
+<!--
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="\/\/FIXME|\/\/ FIXME(?!\([^()\s]+\): )"/>
+            <property name="message" value="FIXME format: // FIXME(#issue): explanation"/>
+            <property name="ignoreCase" value="true"/>
+        </module>
+-->
+<!--
         <module name="RegexpSinglelineJava">
             <property name="format" value="(void setUp\(\))|(void setup\(\))|(void setupStatic\(\))|(void setUpStatic\(\))|(void beforeTest\(\))|(void teardown\(\))|(void tearDown\(\))|(void beforeStatic\(\))|(void afterStatic\(\))"/>
             <property name="message" value="Test setup/teardown methods are called before(), beforeClass(), after(), afterClass(), but not setUp, teardown, etc."/>
         </module>
+-->
         <module name="RightCurly"> <!-- Java Style Guide: Nonempty blocks: K & R style -->
             <property name="option" value="same"/>
             <property name="tokens" value="CLASS_DEF, METHOD_DEF, CTOR_DEF, LITERAL_TRY, LITERAL_CATCH, LITERAL_FINALLY, LITERAL_IF, LITERAL_ELSE, LITERAL_DO"/>
@@ -385,8 +412,8 @@
             <property name="processJavadoc" value="true"/>
         </module>
         <module name="UpperEll"/> <!-- Java Style Guide: Numeric Literals -->
-        <module name="VisibilityModifier"/> <!-- Java Coding Guidelines: Minimize mutability -->
-        <module name="WhitespaceAfter"/> <!-- Java Style Guide: Horizontal whitespace -->
+<!--        <module name="VisibilityModifier"/> &lt;!&ndash; Java Coding Guidelines: Minimize mutability &ndash;&gt;-->
+<!--        <module name="WhitespaceAfter"/> &lt;!&ndash; Java Style Guide: Horizontal whitespace &ndash;&gt;-->
 
 
         <!-- Stricter checks begin: delete some or all of the following for faster prototyping, but please restore before pushing to production. -->
@@ -395,44 +422,61 @@
             <property name="tagOrder" value="@param, @return, @throws, @deprecated"/>
             <property name="target" value="CLASS_DEF, INTERFACE_DEF, ENUM_DEF, METHOD_DEF, CTOR_DEF, VARIABLE_DEF"/>
         </module>
-        <module name="CyclomaticComplexity"> <!-- Java Coding Guidelines: Reduce Cyclomatic Complexity -->
+<!--
+        <module name="CyclomaticComplexity"> &lt;!&ndash; Java Coding Guidelines: Reduce Cyclomatic Complexity &ndash;&gt;
             <property name="switchBlockAsSingleDecisionPoint" value="true"/>
             <property name="max" value="20"/>
         </module>
+-->
         <module name="DesignForExtension"> <!-- Java Coding Guidelines: Design for extension -->
             <property name="ignoredAnnotations" value="ParameterizedTest, Test, Before, BeforeEach, After, AfterEach, BeforeClass, BeforeAll, AfterClass, AfterAll"/>
         </module>
         <module name="JavadocMethod"> <!-- Java Style Guide: Where Javadoc is used -->
-            <property name="accessModifiers" value="public"/>
-            <property name="allowMissingParamTags" value="true"/>
-            <property name="allowMissingReturnTag" value="true"/>
             <property name="allowedAnnotations" value="Override, Test"/>
         </module>
-        <module name="JavadocStyle"/> <!-- Java Style Guide: Javadoc -->
+        <module name="MissingJavadocMethod">
+            <property name="allowedAnnotations" value="Override, Test"/>
+            <property name="scope" value="private"/>
+        </module>
+        <module name="JavadocType">
+            <property name="scope" value="private"/>
+        </module>
+        <module name="MissingJavadocType">
+            <property name="scope" value="private"/>
+        </module>
+        <module name="JavadocStyle"> <!-- Java Style Guide: Javadoc -->
+            <property name="scope" value="private"/>
+        </module>
         <module name="JavadocTagContinuationIndentation"> <!-- Java Style Guide: At-clauses -->
             <property name="offset" value="0"/>
         </module>
         <module name="LocalFinalVariableName"/> <!-- Java Style Guide: Local variable names -->
-        <module name="LocalVariableName"> <!-- Java Style Guide: Local variable names -->
+<!--
+        <module name="LocalVariableName"> &lt;!&ndash; Java Style Guide: Local variable names &ndash;&gt;
             <property name="tokens" value="VARIABLE_DEF"/>
             <property name="format" value="^[a-z][a-zA-Z0-9]+$"/>
             <property name="allowOneCharVarInForLoop" value="true"/>
             <message key="name.invalidPattern" value="Local variable name ''{0}'' must match pattern ''{1}''."/>
         </module>
-        <module name="MethodLength"/> <!-- Java Coding Guide: Methods and functions: focused, crisp, concise -->
-        <module name="MethodTypeParameterName"> <!-- Java Style Guide: Type variable names -->
+-->
+<!--        <module name="MethodLength"/> &lt;!&ndash; Java Coding Guide: Methods and functions: focused, crisp, concise &ndash;&gt;-->
+<!--
+        <module name="MethodTypeParameterName"> &lt;!&ndash; Java Style Guide: Type variable names &ndash;&gt;
             <property name="format" value="(^[A-Z][0-9]?)$|([A-Z][a-zA-Z0-9]*[T]$)"/>
             <message key="name.invalidPattern" value="Method type name ''{0}'' must match pattern ''{1}''."/>
         </module>
+-->
         <module name="NestedForDepth">
             <property name="max" value="2"/>
         </module>
-        <module name="NestedTryDepth"/> <!-- Java Coding Guide: Try/catch blocks: never nested -->
+<!--        <module name="NestedTryDepth"/> &lt;!&ndash; Java Coding Guide: Try/catch blocks: never nested &ndash;&gt;-->
         <module name="NonEmptyAtclauseDescription"/> <!-- Java Style Guide: At-clauses -->
-        <module name="ParameterName"> <!-- Java Style Guide: Parameter names -->
+<!--
+        <module name="ParameterName"> &lt;!&ndash; Java Style Guide: Parameter names &ndash;&gt;
             <property name="format" value="^_?[a-z][a-zA-Z0-9]+$"/>
             <message key="name.invalidPattern" value="Parameter name ''{0}'' must match pattern ''{1}''."/>
         </module>
+-->
         <module name="SummaryJavadocCheck"> <!-- Java Coding Guidelines: Javadoc -->
             <property name="forbiddenSummaryFragments" value="^@return the *|^This method returns |^A [{]@code [a-zA-Z0-9]+[}]( is a )"/>
         </module>
