@@ -27,7 +27,7 @@ public interface ProcessorStep<T extends CustomResource<?, S>, S> {
      * @param context the context
      * @return updated custom resource status
      */
-    S run(final T resource, final S status, Context<T> context);
+    S run(T resource, S status, Context<T> context);
 
     /**
      * Check if the step is successful.
@@ -36,7 +36,7 @@ public interface ProcessorStep<T extends CustomResource<?, S>, S> {
      * @param status the custom resource status
      * @return true if the step is successful, false otherwise
      */
-    boolean isSuccessful(final T resource, final S status);
+    boolean isSuccessful(T resource, S status);
 
     /**
      * Check if the step should be skipped
@@ -48,5 +48,5 @@ public interface ProcessorStep<T extends CustomResource<?, S>, S> {
      * @param status the custom resource status
      * @return true if the step should be skipped, false otherwise
      */
-    boolean shouldSkip(final T resource, final S status);
+    boolean shouldSkip(T resource, S status);
 }
