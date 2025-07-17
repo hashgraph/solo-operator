@@ -11,12 +11,12 @@ repositories {
 }
 
 dependencies {
-    // Use JUnit Jupiter for testing.
-    testImplementation(libs.junit.jupiter)
-    implementation("org.eclipse.jgit:org.eclipse.jgit:7.3.0.202506031305-r")
-    implementation("org.eclipse.jgit:org.eclipse.jgit.archive:7.3.0.202506031305-r")
+    implementation(libs.jgit)
+    implementation(libs.jgit.archive)
 
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation(libs.junit.jupiter)
+
+    testRuntimeOnly(libs.junit.platform.launcher)
 }
 
 gradlePlugin {
