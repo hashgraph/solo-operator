@@ -5,96 +5,55 @@ import java.nio.file.Path
 plugins {
     id("com.hedera.solo.operator.conventions")
     id("com.hedera.solo.operator.versioning")
-    id("io.quarkus")
+    alias(libs.plugins.quarkus)
     id("com.hedera.solo.operator.buildlogic.objectModelGenerator")
     id("com.hedera.solo.operator.buildlogic.gitExtractor")
     id("com.hedera.solo.operator.buildlogic.crdGenerator")
 }
 
-val quarkusPlatformGroupId: String by project
-val quarkusPlatformArtifactId: String by project
-val quarkusPlatformVersion: String by project
-val assertjVersion = libs.versions.assertj.get()
-val sundrVersion = libs.versions.sundr.get()
-val fabric8Version = libs.versions.fabric8.get()
-val lombokVersion = libs.versions.lombok.get()
-val hederaSdkVersion = libs.versions.hedera.sdk.get()
-val javaoperatorsdkVersion = libs.versions.javaoperatorsdk.get()
-val spotbugsVersion = libs.versions.spotbugs.get()
-val wiremockVersion = libs.versions.wiremock.get()
-val smallryeCertificateGeneratorVersion = libs.versions.smallrye.certificate.generator.get()
-
 dependencies {
-    annotationProcessor("io.sundr:builder-annotations:${sundrVersion}")
-    annotationProcessor("io.fabric8:kubernetes-client:${fabric8Version}")
-    annotationProcessor("org.projectlombok:lombok:${lombokVersion}")
-    implementation("io.fabric8:generator-annotations:${fabric8Version}")
+    annotationProcessor(libs.sundr.builder.annotations)
+    annotationProcessor(libs.fabric8.kubernetes.client)
+    annotationProcessor(libs.lombok)
+
+    implementation(libs.fabric8.generator.annotations)
     implementation(libs.fabric8.crd.generator.api.v2)
 
-    implementation(
-        enforcedPlatform(
-            "${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}"
-        )
-    )
-    implementation(
-        enforcedPlatform(
-            "${quarkusPlatformGroupId}:quarkus-operator-sdk-bom:${quarkusPlatformVersion}"
-        )
-    )
+    implementation(enforcedPlatform(libs.quarkus.bom))
+    implementation(enforcedPlatform(libs.quarkus.operator.sdk.bom))
 
-    implementation("io.quarkus:quarkus-arc")
-    implementation("io.quarkus:quarkus-container-image-docker")
-    implementation("io.quarkus:quarkus-kubernetes")
-    implementation("io.quarkus:quarkus-kubernetes-client")
-    implementation("io.quarkus:quarkus-security")
-    implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk-bundle-generator")
-    implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk")
-    implementation("io.quarkus:quarkus-resteasy-qute:${quarkusPlatformVersion}")
-    implementation("com.hedera.hashgraph:sdk:${hederaSdkVersion}")
+    implementation(libs.bundles.quarkus.platform)
+    implementation(libs.quarkus.operator.sdk.bundle)
+    implementation(libs.quarkus.operator.sdk)
+    implementation(libs.hedera.sdk)
 
-    compileOnly("io.sundr:builder-annotations:${sundrVersion}")
-    compileOnly("org.projectlombok:lombok:${lombokVersion}")
-    compileOnly("com.github.spotbugs:spotbugs-annotations:${spotbugsVersion}")
+    compileOnly(libs.sundr.builder.annotations)
+    compileOnly(libs.lombok)
+    compileOnly(libs.spotbugs.annotations)
 
-    testImplementation("io.quarkus:quarkus-junit5")
-    testImplementation("io.quarkus:quarkus-junit5-mockito")
-    testImplementation("io.quarkus:quarkus-jacoco")
-    testImplementation("org.awaitility:awaitility")
-    testImplementation("org.assertj:assertj-core:${assertjVersion}")
-    testImplementation("io.grpc:grpc-netty")
-    testImplementation("com.hedera.fullstack:fullstack-helm-client:0.32.0")
-    testImplementation("org.wiremock:wiremock:${wiremockVersion}")
-    testImplementation(
-        "io.smallrye.certs:smallrye-certificate-generator-junit5:${smallryeCertificateGeneratorVersion}"
-    )
-    componentTestImplementation(
-        "io.javaoperatorsdk:operator-framework-junit-5:${javaoperatorsdkVersion}"
-    )
-    componentTestImplementation("org.testcontainers", "junit-jupiter")
-    componentTestImplementation("com.dajudge.kindcontainer", "kindcontainer")
+    testImplementation(libs.bundles.quarkus.junit5.platform)
+    testImplementation(libs.awaitility)
+    testImplementation(libs.assertj.core)
+    testImplementation(libs.grpc.netty)
+    testImplementation(libs.fullstack.helm.client)
+    testImplementation(libs.wiremock)
+    testImplementation(libs.smallrye.cert.junit)
 
-    testFixturesImplementation(
-        enforcedPlatform(
-            "${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}"
-        )
-    )
+    componentTestImplementation(libs.javaoperatorsdk.junit5)
+    componentTestImplementation(libs.testcontainers.junit)
+    componentTestImplementation(libs.kindcontainer)
 
-    testFixturesImplementation(
-        enforcedPlatform(
-            "${quarkusPlatformGroupId}:quarkus-operator-sdk-bom:${quarkusPlatformVersion}"
-        )
-    )
+    testFixturesImplementation(enforcedPlatform(libs.quarkus.bom))
+    testFixturesImplementation(enforcedPlatform(libs.quarkus.operator.sdk.bom))
 
-    testFixturesImplementation("io.fabric8:kubernetes-client")
-    testFixturesImplementation("org.awaitility:awaitility")
-    testFixturesImplementation("org.assertj:assertj-core:${assertjVersion}")
-    testFixturesImplementation("org.junit.jupiter:junit-jupiter-api")
-    testFixturesImplementation("org.eclipse.microprofile.config:microprofile-config-api")
-    testFixturesImplementation("com.hedera.hashgraph:sdk:${hederaSdkVersion}")
-    testFixturesImplementation(
-        "io.smallrye.certs:smallrye-certificate-generator-junit5:${smallryeCertificateGeneratorVersion}"
-    )
-    testFixturesImplementation("org.wiremock:wiremock:${wiremockVersion}")
+    testFixturesImplementation(libs.fabric8.kubernetes.client)
+    testFixturesImplementation(libs.awaitility)
+    testFixturesImplementation(libs.assertj.core)
+    testFixturesImplementation(libs.junit.jupiter.api)
+    testFixturesImplementation(libs.microprofile.config.api)
+    testFixturesImplementation(libs.hedera.sdk)
+    testFixturesImplementation(libs.smallrye.cert.junit)
+    testFixturesImplementation(libs.wiremock)
 }
 
 gitExtractor {

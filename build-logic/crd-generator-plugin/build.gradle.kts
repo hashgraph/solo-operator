@@ -12,17 +12,14 @@ repositories {
     maven { url = uri("https://artifacts.hashgraph.io/artifactory/central-maven-external/") }
 }
 
-val fabric8Version = libs.versions.fabric8.get()
-
 dependencies {
-    // Use JUnit Jupiter for testing.
-    testImplementation(libs.junit.jupiter)
-
-    implementation("io.fabric8:kubernetes-model-core:${fabric8Version}")
-    implementation("io.fabric8:crd-generator-collector:${fabric8Version}")
+    implementation(libs.kubernetes.model.core)
+    implementation(libs.crd.generator.collector)
     implementation(libs.fabric8.crd.generator.api.v2)
 
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation(libs.junit.jupiter)
+
+    testRuntimeOnly(libs.junit.platform.launcher)
 }
 
 gradlePlugin {
