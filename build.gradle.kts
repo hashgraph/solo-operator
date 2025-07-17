@@ -56,6 +56,15 @@ dependencies {
     testFixturesImplementation(libs.wiremock)
 }
 
+configurations.all {
+    resolutionStrategy {
+        // Issues with no direct upgrade or patch:
+        //  https://security.snyk.io/vuln/SNYK-JAVA-ORGAPACHECOMMONS-10734078
+        //  This issue was fixed in versions: 3.18.0
+        force("org.apache.commons:commons-lang3:3.18.0")
+    }
+}
+
 gitExtractor {
     register(sourceSets.test) {
         addResources(
