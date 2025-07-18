@@ -242,16 +242,16 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
                         .editConsensusNodeChangeset()
                         .editSoftwareVersionSource()
                         .withImageRepositories(edit(new ImageRepository())
-                                .with(repo -> repo.withRepository("swirldslabs.jfrog.io/consensus-node-docker-dev")
+                                .with(repo -> repo.withRepository("swirldslabs.jfrog.io/consensus-node-docker-release")
                                         .withImageName("consensus-node")
-                                        .withImageTag("0.59.0-main.x02ba8df"))
+                                        .withImageTag("0.59.0"))
                                 .build())
                         .withImageVerificationSpec(edit(new ImageVerificationSpec())
                                 .with(
                                         ivs -> ivs.withOs(ImageVerificationSpec.Os.linux)
                                                 .withArchitecture(ImageVerificationSpec.Architecture.arm64)
                                                 .withLayerHashes(
-                                                        "sha256:cf3813c609184ac4f804a288f5bf39adebb84b1ace91c9a49445f5fa757b56bc",
+                                                        "sha256:7816200c05e3c0e5ebe862cc69ad7400eb232d50f5673c5b5a6a3b283fbc9de8",
                                                         "sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1"))
                                 .build()))
                 .with(spec -> spec.editSpec()
