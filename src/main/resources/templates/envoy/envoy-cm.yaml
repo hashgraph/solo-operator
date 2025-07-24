@@ -1,0 +1,99 @@
+# SPDX-License-Identifier: Apache-2.0
+
+---
+# {@com.hedera.solo.operator.model.v1alpha1.EnvoyProxy primary}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: {primary.getMetadata().getNamespace()}
+data:
+  probe.pl: |
+    #! /usr/bin/env perl
+    use strict;
+    use warnings;
+    use Errno qw(EAGAIN EWOULDBLOCK);
+    use IO::Socket::UNIX;
+    use IO::Select;
+    use List::Util qw(max);
+    use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
+
+    my $sock_path = '/admin/admin.sock';
+
+    # Print error message and exit with status 2 (failure)
+    sub fail {
+        my ($msg) = @_;
+        warn "$msg\n";
+        exit 2;
+    }
+
+    # Return current uptime in seconds as a floating-point number
+    sub now {
+      open my $fh, '<', '/proc/uptime' or fail("Can't open /proc/uptime: $!");
+      my $line = <$fh>;
+      close $fh;
+      fail("Empty /proc/uptime") unless defined $line;
+      return (split ' ', $line)[0];
+    }
+
+    # Calculate remaining time before timeout expires
+    my $timeout = 1; # timeout in seconds
+    my $start = now();
+    sub remaining { max(0, $timeout - (now() - $start)) }
+
+    # Read endpoint path from command line argument, or fail with usage
+    my $endpoint = shift @ARGV;
+    defined $endpoint or fail("Usage: $0 <endpoint-path>");
+
+    # Create UNIX domain socket connection to Envoy admin socket
+    my $sock = IO::Socket::UNIX->new(Type => SOCK_STREAM(), Peer => $sock_path)
+      or fail("Can't connect to $sock_path: $!");
+
+    # Ensure socket closes cleanly on script exit
+    END {
+      if ($sock) {
+        $sock->close;
+        undef $sock;
+      }
+    }
+
+    # Set socket to non-blocking mode for polling readiness
+    fcntl($sock, F_SETFL, fcntl($sock, F_GETFL, 0) | O_NONBLOCK)
+      or fail("fcntl failed: $!");
+
+    # IO::Select object for waiting on socket readiness
+    my $sel = IO::Select->new($sock);
+
+    # Build HTTP GET request for the requested endpoint
+    my $req = "GET $endpoint HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+
+    # Write the HTTP request non-blocking with timeout
+    my $sent = 0;
+    while ($sent < length($req) && remaining() > 0) {
+      my $n = syswrite($sock, substr($req, $sent));
+      if (defined $n) {
+        $sent += $n;
+      } elsif ($! == EAGAIN || $! == EWOULDBLOCK) {
+        # Wait until socket is ready for writing or timeout
+        $sel->can_write(remaining()) or fail("write would block or timeout");
+      } else {
+        fail("write error: $!");
+      }
+    }
+
+    # Read HTTP response headers non-blocking until double newline or timeout
+    my $resp = '';
+    while (remaining() > 0 && $sel->can_read(remaining())) {
+      my $buf = '';
+      my $n = sysread($sock, $buf, 1024);
+      last if !defined $n || $n == 0;
+      $resp .= $buf;
+      last if $resp =~ /\r?\n\r?\n/;  # End of headers
+    }
+
+    # Parse HTTP status code from response and exit accordingly
+    if ($resp =~ /^HTTP\/\d+\.\d+\s+(\d+)/m) {
+        exit($1 == 200 ? 0 : 1); # 0 if HTTP 200 OK, else 1 (failure)
+    } else {
+        fail("No valid HTTP response received");
+    }
