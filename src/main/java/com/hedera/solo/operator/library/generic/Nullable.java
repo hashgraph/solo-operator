@@ -37,10 +37,14 @@ public class Nullable {
     public static <T> T orElseGet(final Supplier<T> supplier, final Supplier<T> alternate) {
         try {
             T value = supplier.get();
-            return value == null ? alternate.get() : value;
-        } catch (NullPointerException e) {
-            return alternate.get();
+            if (value != null) {
+                return value;
+            }
+        } catch (NullPointerException ignored) {
+            // If the supplier throws a NullPointerException, we treat it as if it returned null.
+            // This is useful for suppliers that may throw exceptions when they are not supposed to.
         }
+        return alternate.get();
     }
 
     /**

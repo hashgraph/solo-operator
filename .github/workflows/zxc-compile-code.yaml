@@ -126,7 +126,6 @@ jobs:
           QUARKUS_KUBERNETES_CLIENT_DEVSERVICES_OVERRIDE_KUBECONFIG: false
         run: |
           ./gradlew test --scan -x componentTest
-          kubectl -n solo-operator logs -l app.kubernetes.io/name=solo-operator --tail -1 --timestamps > operator.log
 
       - name: Publish Unit Test Report
         uses: step-security/publish-unit-test-result-action@43e0c963eea0ace6eca353cb1d814d857fee5c53 # v2.20.2
@@ -134,6 +133,11 @@ jobs:
         with:
           check_name: "Unit Test Results"
           files: "**/build/test-results/test/TEST-*.xml"
+
+      - name: Capture Operator Log
+        if: ${{ inputs.enable-unit-tests && !cancelled() }}
+        run: |
+          kubectl -n solo-operator logs -l app.kubernetes.io/name=solo-operator --tail -1 --timestamps > operator.log
 
       - name: Publish Operator Log
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
