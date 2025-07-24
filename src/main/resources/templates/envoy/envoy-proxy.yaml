@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+
+---
+# {@com.hedera.solo.operator.model.v1alpha1.EnvoyProxy primary}
+
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: {primary.getMetadata().getName()}
+  namespace: {primary.getMetadata().getNamespace()}
+status:
+  observedGeneration: {primary.getMetadata().getGeneration()}
