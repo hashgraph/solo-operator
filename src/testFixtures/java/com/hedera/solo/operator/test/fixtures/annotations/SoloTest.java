@@ -14,7 +14,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
  * extends the functionality provided by JUnit Jupiter's {@code @ExtendWith} annotation to include support for the
  * SnapshotFailureContextParameterResolver.
  */
-@ExtendWith({SnapshotFailureContextParameterResolver.class})
+@ExtendWith(SnapshotFailureContextParameterResolver.class)
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.TYPE})
+@Target(ElementType.TYPE)
 public @interface SoloTest {}
