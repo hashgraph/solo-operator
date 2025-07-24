@@ -18,7 +18,7 @@ public interface BuilderFunction<B extends Builder<?>> {
      * @return The result of applying the function to the builder
      * @throws Exception if an error occurs during the application of the function
      */
-    Object applyChecked(final B builder) throws Exception;
+    Object applyChecked(B builder) throws Exception;
 
     /**
      * Applies the function to the given builder and handles any checked exceptions by wrapping them in a

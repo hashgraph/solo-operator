@@ -12,7 +12,7 @@ public interface SnapshotWriter {
      * @param source The sources used to generate the path.
      * @return A Path object representing the generated path
      */
-    Path path(final String... source);
+    Path path(String... source);
 
     /**
      * Writes an object to the snapshot using the specified sources as part of the path.
@@ -20,5 +20,5 @@ public interface SnapshotWriter {
      * @param object The object to be written to the snapshot.
      * @param source The sources used to generate the path where the object will be written.
      */
-    void write(final Object object, final String... source);
+    void write(Object object, String... source);
 }

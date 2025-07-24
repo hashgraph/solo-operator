@@ -12,6 +12,5 @@ public interface HederaSdkClientContextFactory {
      * @param secure True if the connection should be secure (TLS), false otherwise.
      * @return A new Hedera SDK client context
      */
-    HederaSdkClientFactory.ClientContext create(
-            final HederaSdkClientFactory factory, final String nodeName, final boolean secure);
+    HederaSdkClientFactory.ClientContext create(HederaSdkClientFactory factory, String nodeName, boolean secure);
 }

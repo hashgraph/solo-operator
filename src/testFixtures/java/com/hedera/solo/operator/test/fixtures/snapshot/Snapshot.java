@@ -62,7 +62,7 @@ public abstract class Snapshot {
      * @param groupVersions An array of strings representing the API group and version for the resources to be captured.
      * @return The current {@code Snapshot} instance for method chaining
      */
-    public abstract Snapshot resources(final NonNamespaced nonNamespaced, final String... groupVersions);
+    public abstract Snapshot resources(NonNamespaced nonNamespaced, String... groupVersions);
 
     /**
      * Captures logs from all pods and containers that match the default acceptance criteria.
@@ -79,7 +79,7 @@ public abstract class Snapshot {
      * @param accept A {@code BiPredicate} function that defines the acceptance criteria for pods and containers.
      * @return The current {@code Snapshot} instance for method chaining
      */
-    public abstract Snapshot logs(final BiPredicate<Pod, Container> accept);
+    public abstract Snapshot logs(BiPredicate<Pod, Container> accept);
 
     /**
      * Executes a script in a specific pod and container using 'sh -c'.
@@ -103,8 +103,7 @@ public abstract class Snapshot {
      * @param exec An array of strings representing the command and its arguments to be executed inside the container.
      * @return The current {@code Snapshot} instance for method chaining
      */
-    public abstract Snapshot exec(
-            final String name, final String selector, final String container, final String... exec);
+    public abstract Snapshot exec(String name, String selector, String container, String... exec);
 
     /**
      * Abstract method to capture files from specific pods and containers.
@@ -114,5 +113,5 @@ public abstract class Snapshot {
      * @param paths An array of strings representing the paths of the files to be captured inside the container.
      * @return The current {@code Snapshot} instance for method chaining
      */
-    public abstract Snapshot file(final String selector, final String container, final String... paths);
+    public abstract Snapshot file(String selector, String container, String... paths);
 }

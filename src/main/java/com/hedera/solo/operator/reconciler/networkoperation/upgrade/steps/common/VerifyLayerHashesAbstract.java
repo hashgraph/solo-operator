@@ -34,7 +34,7 @@ public abstract class VerifyLayerHashesAbstract<Spec, Status, Repository> {
      * @param repository the repository containing the image
      * @return ImageCoordinates object representing the image coordinates
      */
-    protected abstract ImageCoordinates coordinates(final Repository repository);
+    protected abstract ImageCoordinates coordinates(Repository repository);
 
     /**
      * Retrieve a list of repositories to check.
@@ -57,7 +57,7 @@ public abstract class VerifyLayerHashesAbstract<Spec, Status, Repository> {
      * @param e the exception to be included in the status
      * @return Status object representing the exception status
      */
-    protected abstract Status exception(final Repository repository, final Exception e);
+    protected abstract Status exception(Repository repository, Exception e);
 
     /**
      * Create a status object indicating an invalid response for the specified repository and manifest response.
@@ -66,7 +66,7 @@ public abstract class VerifyLayerHashesAbstract<Spec, Status, Repository> {
      * @param response the ManifestResponse containing the invalid response
      * @return Status object representing the invalid response status
      */
-    protected abstract Status invalid(final Repository repository, final ManifestResponse response);
+    protected abstract Status invalid(Repository repository, ManifestResponse response);
 
     /**
      * Create a status object indicating an invalid response for the specified repository and digest.
@@ -75,7 +75,7 @@ public abstract class VerifyLayerHashesAbstract<Spec, Status, Repository> {
      * @param digest the digest of the image that caused the invalid response
      * @return Status object representing the invalid response status
      */
-    protected abstract Status invalid(final Repository repository, final String digest);
+    protected abstract Status invalid(Repository repository, String digest);
 
     /**
      * Create a status object indicating an error with the specified status code for the repository.
@@ -84,7 +84,7 @@ public abstract class VerifyLayerHashesAbstract<Spec, Status, Repository> {
      * @param statusCode the HTTP status code that caused the error
      * @return Status object representing the status code error
      */
-    protected abstract Status statusCode(final Repository repository, final int statusCode);
+    protected abstract Status statusCode(Repository repository, int statusCode);
 
     /**
      * Create a status object indicating a valid response for the specified repository and specification.
@@ -94,7 +94,7 @@ public abstract class VerifyLayerHashesAbstract<Spec, Status, Repository> {
      * @param digest the digest of the image that matched the specification
      * @return Status object representing the valid response status
      */
-    protected abstract Status valid(final Repository repository, final Spec spec, final String digest);
+    protected abstract Status valid(Repository repository, Spec spec, String digest);
 
     /**
      * Check if a given specification matches an OCIImageIndexManifest.
@@ -103,7 +103,7 @@ public abstract class VerifyLayerHashesAbstract<Spec, Status, Repository> {
      * @param manifest the OCIImageIndexManifest to compare with
      * @return true if the specification matches the manifest, false otherwise
      */
-    protected abstract boolean match(final Spec spec, final OCIImageIndex.OCIImageIndexManifest manifest);
+    protected abstract boolean match(Spec spec, OCIImageIndex.OCIImageIndexManifest manifest);
 
     /**
      * Check if a given specification matches an OCIImageManifest.
@@ -112,7 +112,7 @@ public abstract class VerifyLayerHashesAbstract<Spec, Status, Repository> {
      * @param manifest the OCIImageManifest to compare with
      * @return true if the specification matches the manifest, false otherwise
      */
-    protected abstract boolean match(final Spec spec, final OCIImageManifest manifest);
+    protected abstract boolean match(Spec spec, OCIImageManifest manifest);
 
     /**
      * Generate a list of status objects for all repositories.
