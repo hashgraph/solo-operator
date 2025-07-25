@@ -60,4 +60,7 @@ public final class SequencerTestData {
             .withMode(NetworkOperationSpec.Mode.NetworkCheck)
             .endSpec()
             .build();
+
+    /** Private constructor to prevent instantiation of utility class. */
+    private SequencerTestData() {}
 }
