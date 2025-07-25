@@ -19,6 +19,8 @@ import java.util.function.Function;
 
 /** This class provides utility methods for handling stream uploaders in the network operation upgrade steps. */
 public final class StreamUploaderVerifier {
+    /** Private constructor to prevent instantiation of this utility class. */
+    private StreamUploaderVerifier() {}
 
     /**
      * Returns a getter function based on the container name.

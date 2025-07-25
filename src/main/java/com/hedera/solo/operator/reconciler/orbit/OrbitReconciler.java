@@ -40,12 +40,12 @@ import org.jboss.logging.Logger;
         })
 @ControllerConfiguration(name = "orbit")
 @RBACRule(
-        apiGroups = {""},
-        resources = {"secrets"},
+        apiGroups = "",
+        resources = "secrets",
         verbs = {"create", "delete", "get", "list", "patch", "update", "watch"})
 @RBACRule(
-        apiGroups = {""},
-        resources = {"events"},
+        apiGroups = "",
+        resources = "events",
         verbs = {"create", "delete", "get", "list", "patch", "update", "watch", "deletecollection"})
 public class OrbitReconciler implements Cleaner<Orbit>, Reconciler<Orbit> {
 

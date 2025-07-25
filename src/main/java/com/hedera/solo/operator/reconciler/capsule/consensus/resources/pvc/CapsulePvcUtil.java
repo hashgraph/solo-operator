@@ -17,6 +17,8 @@ import java.util.Objects;
  * context of a ConsensusCapsule.
  */
 public class CapsulePvcUtil {
+    /** Private constructor to prevent instantiation of this utility class. */
+    private CapsulePvcUtil() {}
 
     /**
      * Generates a valid PVC name based on the ConsensusCapsule and volume suffix.

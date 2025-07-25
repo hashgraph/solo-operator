@@ -65,7 +65,7 @@ public abstract class AbstractProcessorTask<T extends CustomResource<?, S>, S ex
      * @return the processor to defer to, or null if it should not be deferred
      * @throws ProcessorException exception is wrapped in a ProcessorException
      */
-    protected abstract Processor<?, ?, ?> computeDeferredProcessor(final T resource, Context<T> context);
+    protected abstract Processor<?, ?, ?> computeDeferredProcessor(T resource, Context<T> context);
 
     /**
      * Execute the task

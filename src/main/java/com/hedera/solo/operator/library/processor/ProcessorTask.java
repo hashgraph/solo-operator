@@ -23,5 +23,5 @@ public interface ProcessorTask<T extends CustomResource<?, S>, S extends Kuberne
      * @return the desired custom resource status
      * @throws ProcessorException if executing the task fails
      */
-    ProcessorResult<S> execute(final T resource, Context<T> context);
+    ProcessorResult<S> execute(T resource, Context<T> context);
 }

@@ -41,12 +41,12 @@ import org.jboss.logging.Logger;
  */
 @ControllerConfiguration
 @RBACRule(
-        apiGroups = {""},
-        resources = {"secrets"},
+        apiGroups = "",
+        resources = "secrets",
         verbs = {"create", "delete", "get", "list", "patch", "update", "watch"})
 @RBACRule(
-        apiGroups = {""},
-        resources = {"events"},
+        apiGroups = "",
+        resources = "events",
         verbs = {"create", "delete", "get", "list", "patch", "update", "watch", "deletecollection"})
 public class HAProxyCapsuleReconciler implements Cleaner<HAProxyCapsule>, Reconciler<HAProxyCapsule> {
     public static final Predicate<HasMetadata> HAS_LABEL_SELECTOR_HAPROXY =
