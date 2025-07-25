@@ -18,6 +18,9 @@ public class TemplateLoader {
             "/com/hedera/solo/operator/test/capsule/containers/open-telemetry-collector.yaml";
     public static final String TEMPLATE_NETWORK_UPGRADE = "/templates/network-operation/network-upgrade.yaml";
 
+    /** Private constructor to prevent instantiation of this utility class. */
+    private TemplateLoader() {}
+
     /**
      * Loads a YAML template from the specified path and returns it as an object of the given class type.
      *

@@ -19,6 +19,8 @@ import java.util.concurrent.TimeUnit;
 
 /** This class contains utility methods to check the address book using Hedera SDK. */
 public class HederaSdkCheckAddressBook {
+    /** Private constructor to prevent instantiation. */
+    private HederaSdkCheckAddressBook() {}
 
     /**
      * Retrieves the addresses from the Hedera network's address book file.
