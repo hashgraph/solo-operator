@@ -7,6 +7,7 @@ import static java.util.function.Predicate.not;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hedera.solo.operator.model.v1alpha1.EnvoyProxy;
 import com.hedera.solo.operator.test.fixtures.fuzz.BeanFactory;
 import com.hedera.solo.operator.test.fixtures.kubernetes.TempNamespace;
@@ -20,6 +21,8 @@ import java.time.Duration;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Abstract base class for tests involving EnvoyProxy resources in a Kubernetes environment. It sets up a temporary
@@ -27,6 +30,7 @@ import org.junit.jupiter.api.BeforeEach;
  */
 @QuarkusTest
 public abstract class EnvoyTestAbstract {
+    private static final Logger log = LoggerFactory.getLogger(EnvoyTestAbstract.class);
     @Inject
     protected KubernetesClient kubernetesClient;
 
@@ -98,10 +102,11 @@ public abstract class EnvoyTestAbstract {
                         EnvoyProxy.class))
                 .inNamespace(namespace())
                 .create();
-        await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
+        await().atMost(Duration.ofSeconds(60)).pollInterval(Duration.ofSeconds(1)).untilAsserted(() -> {
             EnvoyProxy resource = kubernetesClient.resource(envoyProxy).get();
             assertThat(resource).isNotNull();
             assertThat(resource.getStatus()).isNotNull();
+            log.error("EnvoyProxy status: {}", new ObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(resource.getStatus()));
             assertThat(resource.getStatus().getAvailableReplicas()).isGreaterThanOrEqualTo(1);
         });
         return envoyProxy;

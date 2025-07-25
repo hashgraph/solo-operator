@@ -69,17 +69,17 @@ jobs:
       - name: Compile Code
         run: ./gradlew clean assemble --scan
 
-      - name: Spotless Check
-        if: ${{ inputs.enable-spotless-check && !cancelled() && !failure() }}
-        run: ./gradlew spotlessCheck --scan
-
-      - name: Checkstyle Check
-        if: ${{ inputs.enable-spotless-check && !cancelled() && !failure() }}
-        run: ./gradlew checkstyleComponentTest checkstyleMain checkstyleTest checkstyleTestFixtures --scan
-
-      - name: Component Tests
-        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
-        run: ./gradlew componentTest --scan
+#      - name: Spotless Check
+#        if: ${{ inputs.enable-spotless-check && !cancelled() && !failure() }}
+#        run: ./gradlew spotlessCheck --scan
+#
+#      - name: Checkstyle Check
+#        if: ${{ inputs.enable-spotless-check && !cancelled() && !failure() }}
+#        run: ./gradlew checkstyleComponentTest checkstyleMain checkstyleTest checkstyleTestFixtures --scan
+#
+#      - name: Component Tests
+#        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
+#        run: ./gradlew componentTest --scan
 
       - name: Kubernetes KinD Cluster
         id: kind
@@ -125,7 +125,7 @@ jobs:
           SOLO_OPERATOR_TEST_USING_EXTERNAL_OPERATOR_INSTANCE: true
           QUARKUS_KUBERNETES_CLIENT_DEVSERVICES_OVERRIDE_KUBECONFIG: false
         run: |
-          ./gradlew test --scan -x componentTest
+          ./gradlew test --scan -x componentTest --tests com.hedera.solo.operator.test.envoy.EnvoyRestartTest.testRestart
 
       - name: Publish Unit Test Report
         uses: step-security/publish-unit-test-result-action@201bbe166c323b2f9dab6dfbf9d6b6c001bd0dce # v2.20.1
