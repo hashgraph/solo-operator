@@ -20,6 +20,9 @@ import org.jboss.logging.Logger;
 public final class NetworkOperationStepUtil {
     private static final Logger log = Logger.getLogger(NetworkOperationStepUtil.class);
 
+    /** Private constructor to prevent instantiation of this utility class. */
+    private NetworkOperationStepUtil() {}
+
     /**
      * Prepare a status with conditions and phase.
      *

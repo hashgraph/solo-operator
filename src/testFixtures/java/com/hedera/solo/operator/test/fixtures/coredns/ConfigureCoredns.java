@@ -17,6 +17,9 @@ import java.util.List;
 
 /** This class provides methods to configure CoreDNS in a Kubernetes cluster. */
 public class ConfigureCoredns {
+    /** Private constructor to prevent instantiation. */
+    private ConfigureCoredns() {}
+
     /**
      * Configures the CoreDNS settings for the given Kubernetes client.
      *
