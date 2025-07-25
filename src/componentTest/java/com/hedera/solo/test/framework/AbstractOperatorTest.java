@@ -43,5 +43,5 @@ public abstract class AbstractOperatorTest {
      * @param client The Kubernetes client to be used for configuring the operator extension.
      * @return A builder instance for LocallyRunOperatorExtension
      */
-    protected abstract LocallyRunOperatorExtension.Builder configure(final KubernetesClient client);
+    protected abstract LocallyRunOperatorExtension.Builder configure(KubernetesClient client);
 }

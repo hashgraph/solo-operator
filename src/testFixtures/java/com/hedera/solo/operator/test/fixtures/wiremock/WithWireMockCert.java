@@ -15,14 +15,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
  * Annotation to configure a WireMock certificate for testing purposes. This annotation integrates with SmallRye
  * Certificates and JUnit 5 extensions to manage WireMock keystore and truststore configurations.
  */
-@Target({ElementType.TYPE})
+@Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @Certificates(
         baseDir = WithWireMockCert.WM_KS_DIR,
         certificates =
                 @Certificate(
                         duration = 99999,
-                        formats = {Format.JKS},
+                        formats = Format.JKS,
                         name = WithWireMockCert.WM_KS_NAME,
                         password = WithWireMockCert.WM_KS_PASS))
 @ExtendWith(WireMockTrustStoreExtension.class)

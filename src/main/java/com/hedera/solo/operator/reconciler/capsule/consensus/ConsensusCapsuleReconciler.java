@@ -73,16 +73,16 @@ import org.jboss.logging.Logger;
         })
 @ControllerConfiguration(name = "consensus-capsule")
 @RBACRule(
-        apiGroups = {""},
-        resources = {"secrets"},
+        apiGroups = "",
+        resources = "secrets",
         verbs = {"create", "delete", "get", "list", "patch", "update", "watch"})
 @RBACRule(
-        apiGroups = {""},
-        resources = {"persistentvolumes"},
+        apiGroups = "",
+        resources = "persistentvolumes",
         verbs = {"list", "get"})
 @RBACRule(
-        apiGroups = {""},
-        resources = {"events"},
+        apiGroups = "",
+        resources = "events",
         verbs = {"create", "delete", "get", "list", "patch", "update", "watch", "deletecollection"})
 public class ConsensusCapsuleReconciler implements Cleaner<ConsensusCapsule>, Reconciler<ConsensusCapsule> {
     public static final Predicate<HasMetadata> HAS_LABEL_SELECTOR_CONSENSUS_NODE =

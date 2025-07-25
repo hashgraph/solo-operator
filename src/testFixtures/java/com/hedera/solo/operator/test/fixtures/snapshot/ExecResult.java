@@ -20,7 +20,7 @@ class ExecResult {
      * @param out Standard output from the executed command.
      * @param err Standard error from the executed command.
      */
-    public ExecResult(final String[] exec, final int exitCode, final String out, final String err) {
+    ExecResult(final String[] exec, final int exitCode, final String out, final String err) {
         this.exec = exec;
         this.exitCode = exitCode;
         this.out = out;

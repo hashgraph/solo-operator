@@ -12,6 +12,8 @@ import io.fabric8.kubernetes.api.model.Condition;
 
 /** The OtelCollectorVerifier class provides a method to create a condition based on the status of an OTel collector. */
 public final class OtelCollectorVerifier {
+    /** Private constructor to prevent instantiation of this utility class. */
+    private OtelCollectorVerifier() {}
 
     /**
      * Creates a condition for the OTel collector based on its status.

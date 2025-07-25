@@ -12,5 +12,5 @@ public interface SnapshotFailureContext {
      * @param client The Kubernetes client used to interact with the cluster.
      * @return A snapshot of the current state of the Kubernetes resources
      */
-    Snapshot client(final KubernetesClient client);
+    Snapshot client(KubernetesClient client);
 }

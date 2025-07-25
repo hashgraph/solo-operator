@@ -9,6 +9,9 @@ import java.util.List;
 
 /** Utility class for generating node information used in tests. */
 public class NodeInfoGenerator {
+    /** Private constructor to prevent instantiation of utility class. */
+    private NodeInfoGenerator() {}
+
     /**
      * Generate account ID for a given node ID.
      *
