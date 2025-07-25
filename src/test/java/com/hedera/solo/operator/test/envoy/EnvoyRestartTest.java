@@ -10,6 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.hedera.solo.operator.model.v1alpha1.EnvoyProxy;
+import com.hedera.solo.operator.model.v1alpha1.EnvoyProxySpec;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.quarkus.test.junit.QuarkusTest;
 import java.time.Duration;
@@ -30,11 +31,13 @@ public class EnvoyRestartTest extends EnvoyTestAbstract {
     void testRestart() throws Exception {
         String digest = digest();
 
+        EnvoyProxySpec spec = new EnvoyProxySpec();
+        spec.setEnv(null);
         kubernetesClient
                 .resource(edit(new EnvoyProxy())
                         .with(metadata -> metadata.editMetadata()
                                 .withName(envoyProxy.getMetadata().getName()))
-                        .with(b -> b.editSpec()
+                        .with(b -> b.withNewSpecLike(spec)
                                 .withFiles(envoyProxy.getSpec().getFiles().entrySet().stream()
                                         .collect(Collectors.toMap(
                                                 Map.Entry::getKey, e -> e.getValue() + "\n# " + UUID.randomUUID()))))

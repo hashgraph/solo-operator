@@ -74,7 +74,7 @@ public class QuteUtils {
      * @return a Qute Template instance
      */
     public static Template template(final String name, final Charset charset) {
-        try (InputStream is = ClassLoader.getSystemResourceAsStream("templates/" + name)) {
+        try (InputStream is = QuteUtils.class.getResourceAsStream("/templates/" + name)) {
             return engine.parse(new String(is.readAllBytes(), charset));
         } catch (IOException e) {
             throw new RuntimeException(e);
