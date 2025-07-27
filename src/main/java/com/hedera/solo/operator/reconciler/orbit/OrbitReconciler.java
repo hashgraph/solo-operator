@@ -26,7 +26,8 @@ import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
 import io.quarkiverse.operatorsdk.annotations.RBACRule;
 import jakarta.inject.Inject;
 import java.time.Duration;
-import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import org.jboss.logging.Logger;
 
@@ -95,19 +96,19 @@ public class OrbitReconciler implements Cleaner<Orbit>, Reconciler<Orbit> {
     private OrbitStatus createOrUpdateStatus(final Orbit orbit) {
         final OrbitStatusBuilder builder =
                 orbit.getStatus() != null ? orbit.getStatus().edit() : new OrbitStatusBuilder();
-        final Instant now = Instant.now();
+        final ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
 
         builder.withPhase(OrbitStatus.Phase.Running);
 
         if (!builder.hasStartTime()) {
-            builder.withStartTime(DateTimeFormatter.ISO_INSTANT.format(now));
+            builder.withStartTime(now);
         }
 
         if (!builder.hasExpirationTime()
                 && orbit.getSpec().getLifetime() != null
                 && !orbit.getSpec().getLifetime().isEmpty()) {
             final Duration dur = Duration.parse(orbit.getSpec().getLifetime());
-            builder.withExpirationTime(DateTimeFormatter.ISO_INSTANT.format(dur.addTo(now)));
+            builder.withExpirationTime(now.plus(dur));
         }
 
         builder.addToConditions(new ConditionBuilder()

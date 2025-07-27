@@ -20,6 +20,8 @@ class ObjectModelGenerator(private val project: Project) {
                 defaultConfigBuilder.packageOverrides(
                     mapOf("com.hedera.solo.operator.v1alpha1" to "com.hedera.solo.operator.model.v1alpha1")
                 )
+                defaultConfigBuilder.serDatetimeFormat("yyyy-MM-dd'T'HH:mm:ssXXX")
+                defaultConfigBuilder.deserDatetimeFormat("yyyy-MM-dd'T'HH:mm:ssXXX")
             })
             .apply(initBlock)
         var task = project.tasks.register<ObjectModelGeneratorTask>(taskName, extension).get()
