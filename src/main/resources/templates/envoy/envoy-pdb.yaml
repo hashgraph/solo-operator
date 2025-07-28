@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+
+---
+# {@com.hedera.solo.operator.model.v1alpha1.EnvoyProxy primary}
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  namespace: {primary.getMetadata().getNamespace()}
+spec:
+  maxUnavailable: {primary.getSpec().getReplicas() - 1}

@@ -54,6 +54,7 @@ dependencies {
     testFixturesImplementation(libs.hedera.sdk)
     testFixturesImplementation(libs.smallrye.cert.junit)
     testFixturesImplementation(libs.wiremock)
+    testFixturesImplementation(libs.fullstack.helm.client)
 }
 
 configurations.all {
