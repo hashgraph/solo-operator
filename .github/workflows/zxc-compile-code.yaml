@@ -77,9 +77,43 @@ jobs:
         if: ${{ inputs.enable-spotless-check && !cancelled() && !failure() }}
         run: ./gradlew checkstyleComponentTest checkstyleMain checkstyleTest checkstyleTestFixtures --scan
 
-      - name: Component Tests
+      - name: Unit Tests
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
-        run: ./gradlew componentTest --scan
+        run: ./gradlew check --scan
+
+      - name: Publish Unit Test Report
+        uses: step-security/publish-unit-test-result-action@43e0c963eea0ace6eca353cb1d814d857fee5c53 # v2.20.2
+        if: ${{ inputs.enable-unit-tests && !cancelled() }}
+        with:
+          check_name: "Unit Test Results"
+          files: "**/build/test-results/test/TEST-*.xml"
+
+      - name: Publish Unit Test Coverage Reports
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ inputs.enable-unit-tests && !cancelled() }}
+        with:
+          name: Unit Test Coverage Reports
+          path: "**/jacoco*.xml"
+
+      - name: Publish Test Reports
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ inputs.enable-unit-tests && !cancelled() }}
+        with:
+          name: Test Reports
+          path: "**/build/test-results/test/TEST-*.xml"
+
+      - name: Archive Test Snapshots
+        if: ${{ inputs.enable-unit-tests && !cancelled() }}
+        run: |
+          (cd build; zip -qr snapshots.zip snapshots) || :
+
+      - name: Publish Test Snapshots
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ inputs.enable-unit-tests && !cancelled() }}
+        with:
+          name: Test Snapshots
+          path: build/snapshots.zip
+          if-no-files-found: ignore
 
       - name: Kubernetes KinD Cluster
         id: kind
@@ -119,21 +153,14 @@ jobs:
           helm package build/helm
           helm upgrade solo-operator solo-operator-${ORG_GRADLE_PROJECT_version}.tgz -i -n solo-operator --create-namespace
 
-      - name: Unit Tests
+      - name: Helm Tests
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
         env:
           SOLO_OPERATOR_TEST_USING_EXTERNAL_OPERATOR_INSTANCE: true
           QUARKUS_KUBERNETES_CLIENT_DEVSERVICES_OVERRIDE_KUBECONFIG: false
         run: |
-          ./gradlew test --scan -x componentTest
+          ./gradlew test --scan -Dtags=helm-test
           kubectl -n solo-operator logs -l app.kubernetes.io/name=solo-operator --tail -1 --timestamps > operator.log
-
-      - name: Publish Unit Test Report
-        uses: step-security/publish-unit-test-result-action@43e0c963eea0ace6eca353cb1d814d857fee5c53 # v2.20.2
-        if: ${{ inputs.enable-unit-tests && !cancelled() }}
-        with:
-          check_name: "Unit Test Results"
-          files: "**/build/test-results/test/TEST-*.xml"
 
       - name: Publish Operator Log
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -141,33 +168,6 @@ jobs:
         with:
           name: "Operator Log"
           path: "operator.log"
-
-      - name: Publish Unit Test Coverage Reports
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: ${{ inputs.enable-unit-tests && !cancelled() }}
-        with:
-          name: Unit Test Coverage Reports
-          path: "**/jacoco*.xml"
-
-      - name: Publish Test Reports
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: ${{ inputs.enable-unit-tests && !cancelled() }}
-        with:
-          name: Test Reports
-          path: "**/build/test-results/test/TEST-*.xml"
-
-      - name: Archive Test Snapshots
-        if: ${{ inputs.enable-unit-tests && !cancelled() }}
-        run: |
-          (cd build; zip -qr snapshots.zip snapshots) || :
-
-      - name: Publish Test Snapshots
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: ${{ inputs.enable-unit-tests && !cancelled() }}
-        with:
-          name: Test Snapshots
-          path: build/snapshots.zip
-          if-no-files-found: ignore
 
       - name: Publish Heap Dumps
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

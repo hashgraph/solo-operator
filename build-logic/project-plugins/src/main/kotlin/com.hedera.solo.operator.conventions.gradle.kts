@@ -80,6 +80,12 @@ tasks.withType<Jar>().configureEach {
 
 tasks {
     test {
+        useJUnitPlatform {
+            val tags: String? = System.getProperty("tags")
+            if (!tags.isNullOrBlank()) {
+                includeTags(*tags.split(',').map { it.trim() }.toTypedArray())
+            }
+        }
         finalizedBy(jacocoTestReport)
         configure<JacocoTaskExtension> {
             excludes = listOf("*QuarkusClassLoader")
