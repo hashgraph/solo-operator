@@ -29,10 +29,15 @@ import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.processing.dependent.workflow.Workflow;
 import io.javaoperatorsdk.operator.processing.dependent.workflow.WorkflowBuilder;
 import io.javaoperatorsdk.operator.processing.event.source.EventSource;
+import io.quarkiverse.operatorsdk.annotations.RBACRule;
 import io.quarkus.qute.Template;
 import java.util.List;
 
 /** Reconciler for the EnvoyProxy resource. */
+@RBACRule(
+        apiGroups = "",
+        resources = "poddisruptionbudgets",
+        verbs = {"create", "delete", "get", "list", "patch", "update", "watch"})
 public class EnvoyProxyReconciler implements Cleaner<EnvoyProxy>, Reconciler<EnvoyProxy> {
     Template template = template("envoy/envoy-proxy.yaml");
     EnvoyConfigMap envoyConfigMap = new EnvoyConfigMap();

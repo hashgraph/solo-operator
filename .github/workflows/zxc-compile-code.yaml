@@ -79,7 +79,7 @@ jobs:
 
       - name: Unit Tests
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
-        run: ./gradlew check --scan
+        run: ./gradlew check --scan -Dtags=helm-test
 
       - name: Publish Unit Test Report
         uses: step-security/publish-unit-test-result-action@43e0c963eea0ace6eca353cb1d814d857fee5c53 # v2.20.2
@@ -160,7 +160,6 @@ jobs:
           QUARKUS_KUBERNETES_CLIENT_DEVSERVICES_OVERRIDE_KUBECONFIG: false
         run: |
           ./gradlew test --scan -Dtags=helm-test
-
 
       - name: Capture Operator Log
         if: ${{ inputs.enable-unit-tests && !cancelled() }}
