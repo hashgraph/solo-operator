@@ -146,7 +146,8 @@ public class MicrocksService implements AutoCloseable {
                 .timeout(timeout)
                 .build();
 
-        try (HttpClient httpClient = HttpClient.newBuilder().connectTimeout(timeout).build()) {
+        try (HttpClient httpClient =
+                HttpClient.newBuilder().connectTimeout(timeout).build()) {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 200 && response.statusCode() != 201) {
                 throw new IOException(

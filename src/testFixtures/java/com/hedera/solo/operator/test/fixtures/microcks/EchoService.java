@@ -58,7 +58,8 @@ public class EchoService {
                 .POST(function.apply(request(value)))
                 .build();
 
-        try (HttpClient httpClient = HttpClient.newBuilder().connectTimeout(timeout).build()) {
+        try (HttpClient httpClient =
+                HttpClient.newBuilder().connectTimeout(timeout).build()) {
             HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
             return response.statusCode() == 200 && Arrays.equals(response.body(), response(value));
         }
