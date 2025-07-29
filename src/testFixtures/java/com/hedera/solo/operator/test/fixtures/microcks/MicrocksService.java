@@ -138,14 +138,15 @@ public class MicrocksService implements AutoCloseable {
             writer.printf("--%s--\r\n", boundary);
         }
 
+        Duration timeout = Duration.ofSeconds(30);
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(address.resolve("./artifact/upload?mainArtifact=" + isMainArtifact))
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary)
                 .POST(HttpRequest.BodyPublishers.ofByteArray(baos.toByteArray()))
-                .timeout(Duration.ofSeconds(30))
+                .timeout(timeout)
                 .build();
 
-        try (HttpClient httpClient = HttpClient.newHttpClient()) {
+        try (HttpClient httpClient = HttpClient.newBuilder().connectTimeout(timeout).build()) {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 200 && response.statusCode() != 201) {
                 throw new IOException(

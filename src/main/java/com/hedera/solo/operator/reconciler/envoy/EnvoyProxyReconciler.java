@@ -35,7 +35,7 @@ import java.util.List;
 
 /** Reconciler for the EnvoyProxy resource. */
 @RBACRule(
-        apiGroups = "",
+        apiGroups = "policy",
         resources = "poddisruptionbudgets",
         verbs = {"create", "delete", "get", "list", "patch", "update", "watch"})
 public class EnvoyProxyReconciler implements Cleaner<EnvoyProxy>, Reconciler<EnvoyProxy> {

@@ -49,15 +49,16 @@ public class EchoService {
             final int value,
             final Function<byte[], HttpRequest.BodyPublisher> function)
             throws IOException, InterruptedException {
+        Duration timeout = Duration.ofSeconds(10);
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:" + portForward.getLocalPort() + "/echo.v1.EchoService/Echo"))
                 .header("Content-Type", "application/" + type)
                 .header("X-Grpc-Web", "1")
-                .timeout(Duration.ofSeconds(10))
+                .timeout(timeout)
                 .POST(function.apply(request(value)))
                 .build();
 
-        try (HttpClient httpClient = HttpClient.newHttpClient()) {
+        try (HttpClient httpClient = HttpClient.newBuilder().connectTimeout(timeout).build()) {
             HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
             return response.statusCode() == 200 && Arrays.equals(response.body(), response(value));
         }
