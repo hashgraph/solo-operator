@@ -27,7 +27,13 @@ tasks.named("assemble") { dependsOn("assembleComponentTest") }
 
 tasks.named("check") { dependsOn(testing.suites.named("componentTest")) }
 
-tasks.named("componentTest") {
+tasks.named<Test>("componentTest") {
+    useJUnitPlatform {
+        val tags: String? = System.getProperty("tags")
+        if (!tags.isNullOrBlank()) {
+            includeTags(*tags.split(',').map { it.trim() }.toTypedArray())
+        }
+    }
     finalizedBy(tasks.named("jacocoComponentTestReport"))
     extensions.configure<JacocoTaskExtension> {
         setDestinationFile(
@@ -39,6 +45,8 @@ tasks.named("componentTest") {
 tasks.register("jacocoComponentTestReport", JacocoReport::class) {
     sourceSets(sourceSets.main.get())
     dependsOn(tasks.named("componentTest"))
+    dependsOn("compileQuarkusGeneratedSourcesJava")
+    mustRunAfter("compileQuarkusGeneratedSourcesJava")
     executionData(layout.buildDirectory.file("jacoco/jacoco-component-test.exec").get().asFile)
     reports.xml.required = true
     reports.xml.outputLocation =
