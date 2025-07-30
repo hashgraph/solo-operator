@@ -183,7 +183,7 @@ public abstract class ConsensusCapsuleTestAbstract {
      *
      * @param nodes The list of TestRecords.NodeInfo objects representing the consensus nodes
      */
-    private void setupSecrets(List<TestRecords.NodeInfo> nodes) {
+    void setupSecrets(List<TestRecords.NodeInfo> nodes) {
         final ArrayList<String> secretFiles =
                 new ArrayList<>(List.of("secrets/uploader-secrets.yaml", "secrets/mirror-secrets.yaml"));
 
@@ -215,6 +215,19 @@ public abstract class ConsensusCapsuleTestAbstract {
                         .create();
             }
         }
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            for (final TestRecords.NodeInfo node : nodes) {
+                for (final String keyType : List.of(KEY_TYPE_GOSSIP, KEY_TYPE_GRPC_TLS)) {
+                    final String secretName = "%s-%s-keys".formatted(node.name(), keyType);
+                    Secret secret = kubernetesClient
+                            .secrets()
+                            .inNamespace(namespace)
+                            .withName(secretName)
+                            .get();
+                    assertThat(secret).isNotNull();
+                }
+            }
+        });
     }
 
     /**

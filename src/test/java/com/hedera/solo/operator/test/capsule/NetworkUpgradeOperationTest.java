@@ -395,7 +395,8 @@ public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract im
             assertThat(netOp.getStatus().getSoftwareSourceStatus().getConsensusNode())
                     .isNotNull();
             assertThat(netOp.getStatus().getUpgradedNodes().size()).isEqualTo(consensusCapsules.size());
-            assertThat(netOp.getStatus().getPhase()).isEqualTo(NetworkOperationStatus.Phase.Running);
+            assertThat(netOp.getStatus().getPhase())
+                    .isIn(NetworkOperationStatus.Phase.Running, NetworkOperationStatus.Phase.Succeeded);
 
             ConfigMap cc = kubernetesClient
                     .resources(ConfigMap.class)

@@ -65,35 +65,36 @@ data:
     longrun
   is-consensus-active: |
     import java.net.http.*;
+    import java.time.Duration;
     int rc = 1;
-    try {
-      URI uri = URI.create("http://localhost:9999");
-      HttpRequest request = HttpRequest.newBuilder().uri(uri).GET().build();
-      HttpClient client = HttpClient.newHttpClient();
-      HttpResponse response = client.send(request, HttpResponse.BodyHandlers.ofString());
-      if (200 == response.statusCode()) {
-        String body = response.body().toString();
-        String help = "";
-        int status = -1;
-        for (String line : body.lines().toList()) {
-          // # HELP platform_PlatformStatus 0=NO_VALUE 1=STARTING_UP 2=ACTIVE ...
-          if (line.startsWith("# HELP platform_PlatformStatus ")) {
-            help = line;
-          }
-          // platform_PlatformStatus{node="0",} 2.0
-          if (line.startsWith("platform_PlatformStatus{")) {
-            String[] fields = line.split("\\s+");
-            status = Double.valueOf(fields[fields.length - 1]).intValue();
-          }
+    Duration timeout = Duration.ofSeconds(1);
+    try (HttpClient client = HttpClient.newBuilder().connectTimeout(timeout).build()) {
+        URI uri = URI.create("http://localhost:9999");
+        HttpRequest request = HttpRequest.newBuilder().uri(uri).GET().timeout(timeout).build();
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        if (200 == response.statusCode()) {
+            String body = response.body();
+            String help = "";
+            int status = -1;
+            for (String line : body.lines().toList()) {
+                // # HELP platform_PlatformStatus 0=NO_VALUE 1=STARTING_UP 2=ACTIVE ...
+                if (line.startsWith("# HELP platform_PlatformStatus ")) {
+                    help = line;
+                }
+                // platform_PlatformStatus{node="0",} 2.0
+                if (line.startsWith("platform_PlatformStatus{")) {
+                    String[] fields = line.split("\\s+");
+                    status = Double.valueOf(fields[fields.length - 1]).intValue();
+                }
+            }
+            String statusString = help.replaceFirst(".*\\s+" + status + "=(\\S+)\\s+.*", "$1");
+            if ("ACTIVE".equals(statusString)) {
+                rc = 0;
+            } else {
+                System.out.println(statusString);
+            }
         }
-        String statusString = help.replaceFirst(".*\\s+" + status + "=(\\S+)\\s+.*", "$1");
-        if ("ACTIVE".equals(statusString)) {
-          rc = 0;
-        } else {
-          System.out.println(statusString);
-        }
-      }
     } catch (Exception e) {
-      System.out.println(e);
+        System.out.println(e);
     }
     /exit rc

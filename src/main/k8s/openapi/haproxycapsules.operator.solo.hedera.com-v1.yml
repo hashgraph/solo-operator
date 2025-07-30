@@ -10,29 +10,25 @@ components:
   schemas:
     HAProxyCapsuleSpec:
       type: object
-      required: # required properties.
-        - orbit
-        - nodeId
       properties:
-        orbit:
-          description: |
-            Name of the orbit where the consensus capsule is deployed and this haproxy is part of.
+        image:
+          description: The HAProxy image to use.
           type: string
-        nodeId:
-          type: integer
-          format: int64
-        haproxy:
-          type: object
-          default: {}
-          properties:
-            user:
-              description: stats user
-              type: string
-              default: "user"
-            auth:
-              description: stats auth
-              type: string
-              default: "auth"
+          default: "haproxy:2.8.10-alpine3.20"
+        env:
+          type: array
+          items:
+            type: object
+            x-java-type: io.fabric8.kubernetes.api.model.EnvVar
+          default:
+            - name: HAPROXY_TARGET_IP
+            - name: HAPROXY_USER
+              value: user
+            - name: HAPROXY_AUTH
+              value: auth
+        secretName:
+          description: The name of the secret containing "hedera.pem".
+          type: string
         serviceType:
           type: string
           default: LoadBalancer

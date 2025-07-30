@@ -38,14 +38,13 @@ public class HAProxyConfigMap extends CRUDKubernetesDependentResource<ConfigMap,
         final ObjectMeta metadata = primary.getMetadata();
         final String validName = validName(metadata.getName(), NAME_SUFFIX);
         final String namespace = metadata.getNamespace();
-        final String orbit = primary.getSpec().getOrbit();
         final ConfigMap cm = loadYaml(ConfigMap.class, getClass(), TEMPLATE);
         final Map<String, String> labels = HAProxyDeployment.prepareHAProxyLabels(primary);
 
         return Metadata.applyStandardLabels(
                         cm.edit().editMetadata(),
                         validName,
-                        orbit,
+                        "none",
                         Constants.COMPONENT_HAPROXY,
                         Constants.COMPONENT_CONFIG_MAP,
                         labels)

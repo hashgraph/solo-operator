@@ -2,6 +2,7 @@
 
 package com.hedera.solo.operator.reconciler.capsule.haproxy.resources;
 
+import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_K8S_INSTANCE;
 import static com.hedera.solo.operator.reconciler.common.Metadata.validName;
 import static io.javaoperatorsdk.operator.ReconcilerUtils.loadYaml;
 
@@ -38,14 +39,13 @@ public class HAProxyService extends CRUDKubernetesDependentResource<Service, HAP
         final ObjectMeta metadata = primary.getMetadata();
         final String validName = validName(metadata.getName(), NAME_SUFFIX);
         final String namespace = metadata.getNamespace();
-        final String orbit = primary.getSpec().getOrbit();
         final Map<String, String> labels = HAProxyDeployment.prepareHAProxyLabels(primary);
 
         final Service service = loadYaml(Service.class, getClass(), TEMPLATE);
         return Metadata.applyStandardLabels(
                         service.edit().editMetadata(),
                         validName,
-                        orbit,
+                        "none",
                         Constants.COMPONENT_HAPROXY,
                         Constants.COMPONENT_SERVICE,
                         labels)
@@ -56,8 +56,8 @@ public class HAProxyService extends CRUDKubernetesDependentResource<Service, HAP
                 .withSelector(Map.of(
                         "app",
                         "haproxy",
-                        Constants.LABEL_NODE_NAME,
-                        Metadata.prepareNodeName(primary.getSpec().getNodeId())))
+                        LABEL_K8S_INSTANCE,
+                        validName(metadata.getName(), HAProxyDeployment.NAME_SUFFIX)))
                 .endSpec()
                 .build();
     }

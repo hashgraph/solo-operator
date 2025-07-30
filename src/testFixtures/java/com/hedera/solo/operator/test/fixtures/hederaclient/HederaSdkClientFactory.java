@@ -3,7 +3,6 @@
 package com.hedera.solo.operator.test.fixtures.hederaclient;
 
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_CONSENSUS_NODE_APP;
-import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_HAPROXY_APP;
 
 import com.google.protobuf.ByteString;
 import com.hedera.hashgraph.sdk.Client;
@@ -93,12 +92,14 @@ public class HederaSdkClientFactory {
     /**
      * Creates a client context for HAProxy service communication with the consensus node.
      *
+     * @param services A map of node names to proxy service names.
      * @param consensusNode The name of the consensus node service.
      * @param secure True if encryption is required, otherwise false.
      * @return A ClientContext instance for HAProxy Hedera SDK client setup
      */
-    public ClientContext haproxyContextCreator(final String consensusNode, boolean secure) {
-        return createClientContext(certificates(), pubKeys(), haproxy(), consensusNode, secure);
+    public ClientContext haproxyContextCreator(
+            final Map<String, String> services, final String consensusNode, final boolean secure) {
+        return createClientContext(certificates(), pubKeys(), services, consensusNode, secure);
     }
 
     /**
@@ -253,15 +254,6 @@ public class HederaSdkClientFactory {
      */
     Map<String, String> direct() {
         return services(LABEL_SELECTOR_CONSENSUS_NODE_APP);
-    }
-
-    /**
-     * Retrieves service names indexed by node names for HAProxy nodes from Kubernetes cluster.
-     *
-     * @return A map of service names indexed by node names
-     */
-    Map<String, String> haproxy() {
-        return services(LABEL_SELECTOR_HAPROXY_APP);
     }
 
     /**
