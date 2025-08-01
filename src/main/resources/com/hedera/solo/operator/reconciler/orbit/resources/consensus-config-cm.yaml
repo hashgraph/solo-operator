@@ -70,7 +70,8 @@ data:
     Duration timeout = Duration.ofSeconds(1);
     try (HttpClient client = HttpClient.newBuilder().connectTimeout(timeout).build()) {
         URI uri = URI.create("http://localhost:9999");
-        HttpRequest request = HttpRequest.newBuilder().uri(uri).GET().timeout(timeout).build();
+        HttpRequest request =
+                HttpRequest.newBuilder().uri(uri).GET().timeout(timeout).build();
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
         if (200 == response.statusCode()) {
             String body = response.body();
@@ -95,6 +96,20 @@ data:
             }
         }
     } catch (Exception e) {
-        System.out.println(e);
+        String message = e.getMessage();
+        StackTraceElement[] stackTrace = e.getStackTrace();
+        int lineNumber = -1;
+        for (StackTraceElement ste : stackTrace) {
+            if (ste.getClassName().startsWith("REPL.$JShell$") && ste.getModuleName() == null) {
+                lineNumber = ste.getLineNumber();
+                break;
+            }
+        }
+        System.out.printf(
+                "%s(%s%s)%s%n",
+                e.getClass().getSimpleName(),
+                lineNumber == -1 ? "" : "line:" + lineNumber + ", ",
+                stackTrace.length == 0 ? "" : stackTrace[0],
+                message == null ? "" : ": " + message);
     }
     /exit rc
