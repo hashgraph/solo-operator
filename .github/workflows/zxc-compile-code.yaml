@@ -160,6 +160,10 @@ jobs:
           QUARKUS_KUBERNETES_CLIENT_DEVSERVICES_OVERRIDE_KUBECONFIG: false
         run: |
           ./gradlew test --scan -Dtags=helm-test
+
+      - name: Capture Operator Log
+        if: ${{ inputs.enable-unit-tests && !cancelled() }}
+        run: |
           kubectl -n solo-operator logs -l app.kubernetes.io/name=solo-operator --tail -1 --timestamps > operator.log
 
       - name: Publish Operator Log
