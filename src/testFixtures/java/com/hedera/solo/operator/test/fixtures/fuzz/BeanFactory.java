@@ -37,7 +37,7 @@ public class BeanFactory {
             IntStream.range(' ', '~' + 1).mapToObj(Character::toString).collect(Collectors.toList());
     private static final Map<Predicate<Type>, BiFunction<BeanFactory, Type, Object>> defaultMap = defaultMap();
     protected List<String> charset = defaultCharset;
-    protected LinkedHashMap<Predicate<Type>, BiFunction<BeanFactory, Type, Object>> map = new LinkedHashMap<>();
+    protected SequencedMap<Predicate<Type>, BiFunction<BeanFactory, Type, Object>> map = new LinkedHashMap<>();
     protected Random random = new Random();
     protected int arrayBound;
     protected int listBound;
@@ -238,11 +238,11 @@ public class BeanFactory {
     /**
      * Set the character set used for generated strings.
      *
-     * @param charset a collection of characters to be used in generated strings
+     * @param chars a collection of characters to be used in generated strings
      * @return this BeanFactory instance for method chaining
      */
-    public BeanFactory charset(final Collection<String> charset) {
-        this.charset = new ArrayList<>(charset);
+    public BeanFactory charset(final Collection<String> chars) {
+        charset = new ArrayList<>(chars);
         return this;
     }
 
@@ -276,11 +276,11 @@ public class BeanFactory {
     /**
      * Customize how objects are generated.
      *
-     * @param map a map of predicates to suppliers
+     * @param suppliers a map of predicates to suppliers
      * @return this BeanFactory instance for method chaining
      */
-    public BeanFactory suppliers(final SequencedMap<Predicate<Type>, BiFunction<BeanFactory, Type, Object>> map) {
-        this.map = new LinkedHashMap<>(map);
+    public BeanFactory suppliers(final SequencedMap<Predicate<Type>, BiFunction<BeanFactory, Type, Object>> suppliers) {
+        map = new LinkedHashMap<>(suppliers);
         return this;
     }
 
@@ -552,23 +552,23 @@ public class BeanFactory {
      * @return a map of predicates to suppliers
      */
     private static Map<Predicate<Type>, BiFunction<BeanFactory, Type, Object>> defaultMap() {
-        Map<Predicate<Type>, BiFunction<BeanFactory, Type, Object>> defaultMap = new LinkedHashMap<>();
-        defaultMap.put(isClass(String.class), BeanFactory::randomString);
-        defaultMap.put(isClass(Long.class), BeanFactory::randomLong);
-        defaultMap.put(isClass(Double.class), BeanFactory::randomDouble);
-        defaultMap.put(isClass(Integer.class), BeanFactory::randomInteger);
-        defaultMap.put(isClass(Float.class), BeanFactory::randomFloat);
-        defaultMap.put(isClass(Short.class), BeanFactory::randomShort);
-        defaultMap.put(isClass(Character.class), BeanFactory::randomCharacter);
-        defaultMap.put(isClass(Byte.class), BeanFactory::randomByte);
-        defaultMap.put(isClass(Boolean.class), BeanFactory::randomBoolean);
-        defaultMap.put(isClass(Class::isArray), BeanFactory::randomArray);
-        defaultMap.put(isClass(Class::isEnum), BeanFactory::randomEnum);
-        defaultMap.put(t -> t instanceof Class<?>, BeanFactory::randomBean);
-        defaultMap.put(isParameterizedType(List.class), BeanFactory::randomList);
-        defaultMap.put(isParameterizedType(Map.class), BeanFactory::randomMap);
-        defaultMap.put(isParameterizedType(Set.class), BeanFactory::randomSet);
-        defaultMap.put(isParameterizedType(Stream.class), BeanFactory::randomStream);
-        return defaultMap;
+        Map<Predicate<Type>, BiFunction<BeanFactory, Type, Object>> suppliers = new LinkedHashMap<>();
+        suppliers.put(isClass(String.class), BeanFactory::randomString);
+        suppliers.put(isClass(Long.class), BeanFactory::randomLong);
+        suppliers.put(isClass(Double.class), BeanFactory::randomDouble);
+        suppliers.put(isClass(Integer.class), BeanFactory::randomInteger);
+        suppliers.put(isClass(Float.class), BeanFactory::randomFloat);
+        suppliers.put(isClass(Short.class), BeanFactory::randomShort);
+        suppliers.put(isClass(Character.class), BeanFactory::randomCharacter);
+        suppliers.put(isClass(Byte.class), BeanFactory::randomByte);
+        suppliers.put(isClass(Boolean.class), BeanFactory::randomBoolean);
+        suppliers.put(isClass(Class::isArray), BeanFactory::randomArray);
+        suppliers.put(isClass(Class::isEnum), BeanFactory::randomEnum);
+        suppliers.put(t -> t instanceof Class<?>, BeanFactory::randomBean);
+        suppliers.put(isParameterizedType(List.class), BeanFactory::randomList);
+        suppliers.put(isParameterizedType(Map.class), BeanFactory::randomMap);
+        suppliers.put(isParameterizedType(Set.class), BeanFactory::randomSet);
+        suppliers.put(isParameterizedType(Stream.class), BeanFactory::randomStream);
+        return suppliers;
     }
 }

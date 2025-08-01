@@ -77,7 +77,7 @@ public final class Finalizers {
         Objects.requireNonNull(client, "client must not be null");
         Objects.requireNonNull(resourceType, "resourceType must not be null");
 
-        final ArrayList<T> updatedResources = new ArrayList<>();
+        final List<T> updatedResources = new ArrayList<>();
 
         try {
             client.resources(resourceType).list().getItems().forEach(r -> {
@@ -105,7 +105,7 @@ public final class Finalizers {
         Objects.requireNonNull(namespace, "namespace must not be null");
         Objects.requireNonNull(resourceType, "resourceType must not be null");
 
-        final ArrayList<T> updatedResources = new ArrayList<>();
+        final List<T> updatedResources = new ArrayList<>();
 
         try {
             client.resources(resourceType)

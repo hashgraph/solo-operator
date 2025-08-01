@@ -184,7 +184,7 @@ public abstract class ConsensusCapsuleTestAbstract {
      * @param nodes The list of TestRecords.NodeInfo objects representing the consensus nodes
      */
     void setupSecrets(List<TestRecords.NodeInfo> nodes) {
-        final ArrayList<String> secretFiles =
+        final List<String> secretFiles =
                 new ArrayList<>(List.of("secrets/uploader-secrets.yaml", "secrets/mirror-secrets.yaml"));
 
         for (final String sf : secretFiles) {
@@ -280,14 +280,14 @@ public abstract class ConsensusCapsuleTestAbstract {
      * sets the namespace, and creates the Orbit resource in the cluster.
      */
     void createOrbit() {
-        final Orbit orbit = edit(loadYaml(Orbit.class, getClass(), "orbit.yaml"))
+        final Orbit orbitObject = edit(loadYaml(Orbit.class, getClass(), "orbit.yaml"))
                 .with(metadata -> metadata.editMetadata().withName(namespace))
                 .with(ResourceLoader::withResources)
                 .build();
-        kubernetesClient.resource(orbit).create();
+        kubernetesClient.resource(orbitObject).create();
 
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(kubernetesClient.resource(orbit).get()).isNotNull();
+            assertThat(kubernetesClient.resource(orbitObject).get()).isNotNull();
             assertThat(kubernetesClient.namespaces().withName(namespace).get()).isNotNull();
         });
     }

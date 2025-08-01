@@ -12,6 +12,7 @@ import java.util.Map;
  * @param <K> the type of keys maintained by this map
  * @param <V> the type of mapped values
  */
+@SuppressWarnings("checkstyle:IllegalType")
 public class LRUCache<K, V> extends LinkedHashMap<K, V> {
     private final int capacity;
 

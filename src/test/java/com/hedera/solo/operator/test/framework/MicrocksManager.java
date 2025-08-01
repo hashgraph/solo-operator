@@ -34,16 +34,16 @@ public class MicrocksManager {
      * Initializes the Microcks service by deploying it in a temporary namespace.
      *
      * @param event the startup event
-     * @param kubernetesClient the Kubernetes client to interact with the cluster
+     * @param client the Kubernetes client to interact with the cluster
      * @throws Exception if an error occurs during initialization
      */
-    void onStart(@Observes final StartupEvent event, final KubernetesClient kubernetesClient) throws Exception {
+    void onStart(@Observes final StartupEvent event, final KubernetesClient client) throws Exception {
         KubernetesSerialization kubernetesSerialization = new KubernetesSerialization();
-        this.kubernetesClient = new KubernetesClientBuilder()
-                .withConfig(kubernetesSerialization.asYaml(kubernetesClient.getConfiguration()))
+        kubernetesClient = new KubernetesClientBuilder()
+                .withConfig(kubernetesSerialization.asYaml(client.getConfiguration()))
                 .build();
-        tempNamespace = new TempNamespace(this.kubernetesClient, "microcks-");
-        microcksService = new MicrocksService(this.kubernetesClient, tempNamespace.name());
+        tempNamespace = new TempNamespace(kubernetesClient, "microcks-");
+        microcksService = new MicrocksService(kubernetesClient, tempNamespace.name());
         try {
             Deque<List<String>> resources = new ArrayDeque<>();
             resources.addAll(EchoService.resources());

@@ -6,6 +6,7 @@ import static com.hedera.solo.operator.test.fixtures.resource.SystemResource.get
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.SequencedMap;
 import java.util.regex.Pattern;
 
 /** Provides utility methods for converting resource files into maps. */
@@ -23,7 +24,7 @@ public class ResourceConverter {
      * @return A LinkedHashMap containing the key-value pairs from the resource file
      */
     public static Map<String, String> asMap(final String name, final int delimiter) {
-        LinkedHashMap<String, String> map = new LinkedHashMap<>();
+        SequencedMap<String, String> map = new LinkedHashMap<>();
         getSystemResourceAsString(name).lines().forEachOrdered(line -> put(map, delimiter, line));
         return map;
     }

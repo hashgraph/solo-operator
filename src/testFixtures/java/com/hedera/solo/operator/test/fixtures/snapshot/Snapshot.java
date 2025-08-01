@@ -26,11 +26,11 @@ public abstract class Snapshot {
     /**
      * Sets the namespaces for which resources will be captured or manipulated.
      *
-     * @param namespaces An array of namespace strings, or null to capture resources across all namespaces.
+     * @param arrayOfNamespaces An array of namespace strings, or null to capture resources across all namespaces.
      * @return The current {@code Snapshot} instance for method chaining
      */
-    public Snapshot namespaces(final String... namespaces) {
-        this.namespaces = namespaces;
+    public Snapshot namespaces(final String... arrayOfNamespaces) {
+        namespaces = arrayOfNamespaces;
         return this;
     }
 
@@ -51,8 +51,8 @@ public abstract class Snapshot {
      * @return The current {@code Snapshot} instance for method chaining
      */
     public Snapshot nonNamespacedResources(final String... groupVersions) {
-        String[] namespaces = this.namespaces;
-        return namespaces().resources(NonNamespaced.INCLUDE, groupVersions).namespaces(namespaces);
+        String[] arrayOfNamespaces = namespaces;
+        return namespaces().resources(NonNamespaced.INCLUDE, groupVersions).namespaces(arrayOfNamespaces);
     }
 
     /**

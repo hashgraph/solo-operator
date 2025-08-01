@@ -64,11 +64,11 @@ public class ManifestResponse {
      * @return A map of digest algorithm names to their corresponding Digest objects
      */
     private static Map<String, Digest> digestAlgorithms() {
-        Map<String, Digest> digestAlgorithms = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-        digestAlgorithms.put("blake3", Digest.BLAKE_3);
-        digestAlgorithms.put("sha256", Digest.SHA_256);
-        digestAlgorithms.put("sha384", Digest.SHA_384);
-        digestAlgorithms.put("sha512", Digest.SHA_512);
-        return digestAlgorithms;
+        Map<String, Digest> algorithms = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        algorithms.put("blake3", Digest.BLAKE_3);
+        algorithms.put("sha256", Digest.SHA_256);
+        algorithms.put("sha384", Digest.SHA_384);
+        algorithms.put("sha512", Digest.SHA_512);
+        return algorithms;
     }
 }
