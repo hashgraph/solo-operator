@@ -86,7 +86,7 @@ public abstract class EnvoyTestAbstract {
      */
     EnvoyProxy createEnvoyProxy() {
         Integer[] ports = randomDistinctPorts(2);
-        EnvoyProxy envoyProxy = kubernetesClient
+        EnvoyProxy created = kubernetesClient
                 .resource(kubernetesSerialization.unmarshal(
                         template("test/envoy/envoy-proxy.yaml")
                                 .instance()
@@ -99,12 +99,12 @@ public abstract class EnvoyTestAbstract {
                 .inNamespace(namespace())
                 .create();
         await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
-            EnvoyProxy resource = kubernetesClient.resource(envoyProxy).get();
-            assertThat(resource).isNotNull();
-            assertThat(resource.getStatus()).isNotNull();
-            assertThat(resource.getStatus().getAvailableReplicas()).isGreaterThanOrEqualTo(1);
+            EnvoyProxy response = kubernetesClient.resource(created).get();
+            assertThat(response).isNotNull();
+            assertThat(response.getStatus()).isNotNull();
+            assertThat(response.getStatus().getAvailableReplicas()).isGreaterThanOrEqualTo(1);
         });
-        return envoyProxy;
+        return created;
     }
 
     /**

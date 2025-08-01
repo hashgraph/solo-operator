@@ -72,9 +72,9 @@ public class KubernetesDevServiceExecutionListener implements TestExecutionListe
             return new KindContainer<>();
         }
         if ("k3s".equals(flavor)) {
-            KubernetesWithKubeletContainer<?> container = new K3sContainer<>();
-            container.setBinds(Collections.emptyList());
-            return container;
+            KubernetesWithKubeletContainer<?> k3sContainer = new K3sContainer<>();
+            k3sContainer.setBinds(Collections.emptyList());
+            return k3sContainer;
         }
         if ("api-only".equals(flavor)) {
             return new ApiServerContainer<>();

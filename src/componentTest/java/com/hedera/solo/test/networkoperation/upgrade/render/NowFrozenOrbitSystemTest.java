@@ -86,10 +86,10 @@ public class NowFrozenOrbitSystemTest extends NowFrozenOrbitUnitTest {
     }
 
     @Override
-    NetworkOperation networkOperation(final Orbit orbit) {
+    NetworkOperation networkOperation(final Orbit orbitObject) {
         return create(
                 kubernetesClient,
-                edit(super.networkOperation(orbit))
+                edit(super.networkOperation(orbitObject))
                         .with(metadata -> metadata.editMetadata()
                                 .withName(null)
                                 .withNamespace(namespace)

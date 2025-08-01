@@ -374,20 +374,21 @@ public class NowFrozenConsensusCapsulesUnitTest {
     /**
      * Creates a list of ImageRepositoryStatus instances for testing, with one selected for deployment.
      *
-     * @param factory The BeanFactory instance used to create the statuses.
+     * @param beanFactory The BeanFactory instance used to create the statuses.
      * @param type The Type reference for creating the list.
      * @return {@code List<ImageRepositoryStatus>} A list of image repository statuses configured for testing
      */
-    List<ImageRepositoryStatus> imageRepositoryStatusList(final BeanFactory factory, final Type type) {
-        List<ImageRepositoryStatus> list = factory.nonNulls(ImageRepositoryStatus.class)
-                .limit(factory.random().nextInt(1, 8))
+    List<ImageRepositoryStatus> imageRepositoryStatusList(final BeanFactory beanFactory, final Type type) {
+        List<ImageRepositoryStatus> list = beanFactory
+                .nonNulls(ImageRepositoryStatus.class)
+                .limit(beanFactory.random().nextInt(1, 8))
                 .toList();
         list.forEach(status -> status.setSelectedForDeployment(false));
-        ImageRepositoryStatus selected = list.get(factory.random().nextInt(list.size()));
+        ImageRepositoryStatus selected = list.get(beanFactory.random().nextInt(list.size()));
         selected.setValidity(ImageRepositoryStatus.Validity.Valid);
         selected.setSelectedForDeployment(true);
         if (selected.getImagePullPolicy() == null) {
-            selected.setImagePullPolicy(factory.nonNull(ImageRepositoryStatus.ImagePullPolicy.class));
+            selected.setImagePullPolicy(beanFactory.nonNull(ImageRepositoryStatus.ImagePullPolicy.class));
         }
         return list;
     }

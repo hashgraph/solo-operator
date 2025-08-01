@@ -122,12 +122,12 @@ public class SecretHostpathTest extends ConsensusCapsuleTestAbstract {
     /**
      * Runs a command in a pod with specified volumes and volume mounts.
      *
-     * @param volumes the list of volumes
-     * @param volumeMounts the list of volume mounts
+     * @param volumeList the list of volumes
+     * @param volumeMountList the list of volume mounts
      * @param command the command to run
      */
-    void runInPod(final List<Volume> volumes, final List<VolumeMount> volumeMounts, final String command) {
-        Pod pod = createPod(volumes, volumeMounts, command);
+    void runInPod(final List<Volume> volumeList, final List<VolumeMount> volumeMountList, final String command) {
+        Pod pod = createPod(volumeList, volumeMountList, command);
         await().atMost(Duration.ofSeconds(150)).untilAsserted(() -> {
             Pod tmpPod = kubernetesClient.resource(pod).get();
             assertThat(tmpPod).isNotNull();
@@ -139,17 +139,17 @@ public class SecretHostpathTest extends ConsensusCapsuleTestAbstract {
     /**
      * Creates a pod with specified volumes, volume mounts, and run specified command in it.
      *
-     * @param volumes the list of volumes
-     * @param volumeMounts the list of volume mounts
+     * @param volumeList the list of volumes
+     * @param volumeMountList the list of volume mounts
      * @param command the command to run
      * @return the created Pod object
      */
-    Pod createPod(final List<Volume> volumes, final List<VolumeMount> volumeMounts, final String command) {
+    Pod createPod(final List<Volume> volumeList, final List<VolumeMount> volumeMountList, final String command) {
         return operator.getKubernetesClient()
                 .resource(edit(new Pod())
                         .with(metadata ->
                                 metadata.editMetadata().withGenerateName("pod-").withNamespace(namespace))
-                        .with(spec -> spec.editSpec().addAllToVolumes(volumes))
+                        .with(spec -> spec.editSpec().addAllToVolumes(volumeList))
                         .with(container -> container
                                 .editSpec()
                                 .withRestartPolicy("Never")
@@ -157,7 +157,7 @@ public class SecretHostpathTest extends ConsensusCapsuleTestAbstract {
                                 .withName("main")
                                 .withImage("alpine")
                                 .withCommand("sh", "-c", command)
-                                .addAllToVolumeMounts(volumeMounts))
+                                .addAllToVolumeMounts(volumeMountList))
                         .build())
                 .create();
     }

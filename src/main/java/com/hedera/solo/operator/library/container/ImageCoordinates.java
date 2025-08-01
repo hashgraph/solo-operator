@@ -116,11 +116,11 @@ public class ImageCoordinates {
     /**
      * Creates a new ImageCoordinates object with a different digest.
      *
-     * @param digest The new digest for the image.
+     * @param newDigest The new digest for the image.
      * @return A new ImageCoordinates object with the specified digest
      */
-    public ImageCoordinates digest(final String digest) {
-        return new ImageCoordinates(protocol, registry, name, tag, digest, auths);
+    public ImageCoordinates digest(final String newDigest) {
+        return new ImageCoordinates(protocol, registry, name, tag, newDigest, auths);
     }
 
     /**
@@ -176,9 +176,9 @@ public class ImageCoordinates {
      * @return A map containing default registry mappings
      */
     private static Map<String, String> registries() {
-        final Map<String, String> registries = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-        registries.put("docker.io", "registry-1.docker.io");
-        return registries;
+        final Map<String, String> map = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        map.put("docker.io", "registry-1.docker.io");
+        return map;
     }
 
     @Override
