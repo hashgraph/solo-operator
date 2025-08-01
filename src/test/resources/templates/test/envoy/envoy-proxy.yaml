@@ -6,7 +6,6 @@ kind: "EnvoyProxy"
 metadata:
   name: {name}
 spec:
-  adminPort: {adminPort}
   proxyPort: {proxyPort}
   files:
     /etc/envoy/envoy.yaml: |

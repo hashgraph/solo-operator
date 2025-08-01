@@ -85,13 +85,16 @@ public abstract class EnvoyTestAbstract {
      * @return the created EnvoyProxy resource
      */
     EnvoyProxy createEnvoyProxy() {
-        Integer[] ports = randomDistinctPorts(2);
+        Integer port = beanFactory
+                .nonNulls(Integer.class)
+                .filter(i -> 1 <= i && i <= 0xffff && i != 8090)
+                .findFirst()
+                .orElseThrow();
         EnvoyProxy envoyProxy = kubernetesClient
                 .resource(kubernetesSerialization.unmarshal(
                         template(getClass(), "test/envoy/envoy-proxy.yaml")
                                 .instance()
-                                .data("proxyPort", ports[0])
-                                .data("adminPort", ports[1])
+                                .data("proxyPort", port)
                                 .data("name", "envoy-" + randomNonEmptyString())
                                 .data("microcksNamespace", microcksService.namespace())
                                 .render(),
@@ -105,21 +108,6 @@ public abstract class EnvoyTestAbstract {
             assertThat(resource.getStatus().getAvailableReplicas()).isGreaterThanOrEqualTo(1);
         });
         return envoyProxy;
-    }
-
-    /**
-     * Generates an array of random distinct ports.
-     *
-     * @param count the number of distinct ports to generate
-     * @return an array of random distinct ports
-     */
-    Integer[] randomDistinctPorts(final int count) {
-        return beanFactory
-                .nonNulls(Integer.class)
-                .filter(i -> 1 <= i && i <= 0xffff)
-                .distinct()
-                .limit(count)
-                .toArray(Integer[]::new);
     }
 
     /**

@@ -40,11 +40,6 @@ components:
           type: integer
           format: int32
           default: 8081
-        adminPort:
-          description: The port on which the Envoy admin interface will be exposed.
-          type: integer
-          format: int32
-          default: 9901
         files:
           description: |
             A map of file names to file contents. The files will be mounted into the Envoy container.
