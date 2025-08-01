@@ -10,6 +10,7 @@ import static com.hedera.solo.operator.library.render.QuteUtils.template;
 import static com.hedera.solo.operator.reconciler.envoy.resources.EnvoyUtils.configMapName;
 import static com.hedera.solo.operator.reconciler.envoy.resources.EnvoyUtils.deploymentName;
 import static com.hedera.solo.operator.reconciler.envoy.resources.EnvoyUtils.labels;
+import static java.util.Collections.unmodifiableMap;
 
 import com.hedera.solo.operator.library.data.Digest;
 import com.hedera.solo.operator.model.v1alpha1.EnvoyProxy;
@@ -39,7 +40,7 @@ public class EnvoyDeployment extends CRUDKubernetesDependentResource<Deployment,
 
     @Override
     protected Deployment desired(final EnvoyProxy primary, final Context<EnvoyProxy> context) {
-        final Map<String, String> labels = labels(primary);
+        final Map<String, String> labels = unmodifiableMap(labels(primary));
         return edit(generate(Deployment.class, template, t -> t.data("primary", primary)
                         .data("env", env(primary))))
                 .with(metadata -> metadata.editMetadata()

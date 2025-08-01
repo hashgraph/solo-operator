@@ -4,7 +4,7 @@ package com.hedera.solo.operator.library.model;
 
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.client.CustomResource;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Predicate;
@@ -68,7 +68,7 @@ public class Labels {
      */
     public static Map<String, String> recommendedLabels(
             final CustomResource<?, ?> primary, final String component, final String version) {
-        final Map<String, String> map = new HashMap<>();
+        final Map<String, String> map = new LinkedHashMap<>();
         // The name of the application (CRD type)
         map.put("name", primary.getSingular());
         // The name of the application instance (CRD name)

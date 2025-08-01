@@ -7,6 +7,7 @@ import static com.hedera.solo.operator.library.render.QuteUtils.generate;
 import static com.hedera.solo.operator.library.render.QuteUtils.template;
 import static com.hedera.solo.operator.reconciler.envoy.resources.EnvoyUtils.labels;
 import static com.hedera.solo.operator.reconciler.envoy.resources.EnvoyUtils.serviceName;
+import static java.util.Collections.unmodifiableMap;
 
 import com.hedera.solo.operator.model.v1alpha1.EnvoyProxy;
 import io.fabric8.kubernetes.api.model.Service;
@@ -22,7 +23,7 @@ public class EnvoyService extends CRUDKubernetesDependentResource<Service, Envoy
 
     @Override
     protected Service desired(final EnvoyProxy primary, final Context<EnvoyProxy> context) {
-        final Map<String, String> labels = labels(primary);
+        final Map<String, String> labels = unmodifiableMap(labels(primary));
         return edit(generate(Service.class, template, t -> t.data("primary", primary)))
                 .with(metadata ->
                         metadata.editMetadata().withName(serviceName(primary)).addToLabels(labels))
