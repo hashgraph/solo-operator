@@ -68,7 +68,7 @@ public class Labels {
      */
     public static Map<String, String> recommendedLabels(
             final CustomResource<?, ?> primary, final String component, final String version) {
-        Map<String, String> map = new HashMap<>();
+        final Map<String, String> map = new HashMap<>();
         // The name of the application (CRD type)
         map.put("name", primary.getSingular());
         // The name of the application instance (CRD name)

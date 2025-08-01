@@ -88,7 +88,7 @@ public abstract class EnvoyTestAbstract {
         Integer[] ports = randomDistinctPorts(2);
         EnvoyProxy envoyProxy = kubernetesClient
                 .resource(kubernetesSerialization.unmarshal(
-                        template("test/envoy/envoy-proxy.yaml")
+                        template(getClass(), "test/envoy/envoy-proxy.yaml")
                                 .instance()
                                 .data("proxyPort", ports[0])
                                 .data("adminPort", ports[1])

@@ -39,7 +39,7 @@ import java.util.List;
         resources = "poddisruptionbudgets",
         verbs = {"create", "delete", "get", "list", "patch", "update", "watch"})
 public class EnvoyProxyReconciler implements Cleaner<EnvoyProxy>, Reconciler<EnvoyProxy> {
-    Template template = template("envoy/envoy-proxy.yaml");
+    Template template = template(getClass(), "envoy/envoy-proxy.yaml");
     EnvoyConfigMap envoyConfigMap = new EnvoyConfigMap();
     EnvoyDeployment envoyDeployment = new EnvoyDeployment();
     EnvoyPodDisruptionBudget envoyPodDisruptionBudget = new EnvoyPodDisruptionBudget();

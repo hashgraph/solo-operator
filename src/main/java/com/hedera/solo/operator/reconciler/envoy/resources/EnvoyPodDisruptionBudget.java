@@ -14,18 +14,20 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.quarkus.qute.Template;
+import java.util.Map;
 
 /** Represents a Kubernetes PodDisruptionBudget resource for EnvoyProxy. */
 public class EnvoyPodDisruptionBudget extends CRUDKubernetesDependentResource<PodDisruptionBudget, EnvoyProxy> {
-    Template template = template("envoy/envoy-pdb.yaml");
+    Template template = template(getClass(), "envoy/envoy-pdb.yaml");
 
     @Override
     protected PodDisruptionBudget desired(final EnvoyProxy primary, final Context<EnvoyProxy> context) {
+        final Map<String, String> labels = labels(primary);
         return edit(generate(PodDisruptionBudget.class, template, t -> t.data("primary", primary)))
                 .with(metadata -> metadata.editMetadata()
                         .withName(podDisruptionBudgetName(primary))
-                        .addToLabels(labels(primary)))
-                .with(spec -> spec.editSpec().editSelector().addToMatchLabels(labels(primary)))
+                        .addToLabels(labels))
+                .with(spec -> spec.editSpec().editSelector().addToMatchLabels(labels))
                 .build();
     }
 

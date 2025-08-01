@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
 
 /** Represents a Kubernetes ConfigMap resource for EnvoyProxy. */
 public class EnvoyConfigMap extends CRUDKubernetesDependentResource<ConfigMap, EnvoyProxy> {
-    Template template = template("envoy/envoy-cm.yaml");
+    Template template = template(getClass(), "envoy/envoy-cm.yaml");
 
     @Override
     protected ConfigMap desired(final EnvoyProxy primary, final Context<EnvoyProxy> context) {

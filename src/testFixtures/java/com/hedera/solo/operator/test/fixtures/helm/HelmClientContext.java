@@ -49,9 +49,14 @@ public class HelmClientContext implements AutoCloseable {
 
     @Override
     public void close() throws Exception {
+        kubeConfig.toFile().delete();
         if (helmClient instanceof DefaultHelmClient defaultHelmClient) {
             Field helmExecutable = DefaultHelmClient.class.getDeclaredField("helmExecutable");
-            helmExecutable.setAccessible(true);
+            try {
+                helmExecutable.setAccessible(true);
+            } catch (SecurityException ignored) {
+                // Ignore security exceptions and proceed with cleanup
+            }
             Object object = helmExecutable.get(defaultHelmClient);
             if (object instanceof Path path) {
                 try (Stream<Path> paths = Files.walk(path.getParent())) {
@@ -59,6 +64,5 @@ public class HelmClientContext implements AutoCloseable {
                 }
             }
         }
-        kubeConfig.toFile().delete();
     }
 }

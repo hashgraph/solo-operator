@@ -35,21 +35,22 @@ import java.util.stream.Stream;
 
 /** Represents a Kubernetes Deployment resource for EnvoyProxy. */
 public class EnvoyDeployment extends CRUDKubernetesDependentResource<Deployment, EnvoyProxy> {
-    Template template = template("envoy/envoy-deploy.yaml");
+    Template template = template(getClass(), "envoy/envoy-deploy.yaml");
 
     @Override
     protected Deployment desired(final EnvoyProxy primary, final Context<EnvoyProxy> context) {
+        final Map<String, String> labels = labels(primary);
         return edit(generate(Deployment.class, template, t -> t.data("primary", primary)
                         .data("env", env(primary))))
                 .with(metadata -> metadata.editMetadata()
                         .withName(deploymentName(primary))
-                        .addToLabels(labels(primary)))
-                .with(spec -> spec.editSpec().editSelector().withMatchLabels(labels(primary)))
+                        .addToLabels(labels))
+                .with(spec -> spec.editSpec().editSelector().withMatchLabels(labels))
                 .with(templateMetadata -> templateMetadata
                         .editSpec()
                         .editTemplate()
                         .editMetadata()
-                        .addToLabels(labels(primary))
+                        .addToLabels(labels)
                         .addToAnnotations(
                                 soloOperatorDomain("digest"),
                                 Digest.SHA_384.hexOf(primary.getSpec().getFiles().entrySet().stream()

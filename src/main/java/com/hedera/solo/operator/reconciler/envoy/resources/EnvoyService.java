@@ -14,17 +14,19 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.quarkus.qute.Template;
+import java.util.Map;
 
 /** Represents a Kubernetes Service resource for EnvoyProxy. */
 public class EnvoyService extends CRUDKubernetesDependentResource<Service, EnvoyProxy> {
-    Template template = template("envoy/envoy-svc.yaml");
+    Template template = template(getClass(), "envoy/envoy-svc.yaml");
 
     @Override
     protected Service desired(final EnvoyProxy primary, final Context<EnvoyProxy> context) {
+        final Map<String, String> labels = labels(primary);
         return edit(generate(Service.class, template, t -> t.data("primary", primary)))
                 .with(metadata ->
-                        metadata.editMetadata().withName(serviceName(primary)).addToLabels(labels(primary)))
-                .with(spec -> spec.editSpec().withSelector(labels(primary)))
+                        metadata.editMetadata().withName(serviceName(primary)).addToLabels(labels))
+                .with(spec -> spec.editSpec().withSelector(labels))
                 .build();
     }
 

@@ -9,8 +9,10 @@ import io.quarkus.qute.ParserHook;
 import io.quarkus.qute.ReflectionValueResolver;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.function.Function;
@@ -63,25 +65,30 @@ public class QuteUtils {
     /**
      * Loads a template from the classpath under "templates/" directory.
      *
+     * @param loader the class from which to load the template
      * @param name the name of the template file
      * @return a Qute Template instance
      */
-    public static Template template(final String name) {
-        return template(name, StandardCharsets.UTF_8);
+    public static Template template(final Class<?> loader, final String name) {
+        return template(loader, name, StandardCharsets.UTF_8);
     }
 
     /**
      * Loads a template from the classpath under "templates/" directory.
      *
+     * @param loader the class from which to load the template
      * @param name the name of the template file
      * @param charset the character set to use for reading the template file
      * @return a Qute Template instance
      */
-    public static Template template(final String name, final Charset charset) {
-        try (InputStream is = QuteUtils.class.getResourceAsStream("/templates/" + name)) {
+    public static Template template(final Class<?> loader, final String name, final Charset charset) {
+        try (InputStream is = loader.getResourceAsStream("/templates/" + name)) {
+            if (is == null) {
+                throw new FileNotFoundException("Template file not found: " + name);
+            }
             return engine.parse(new String(is.readAllBytes(), charset));
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            throw new UncheckedIOException(e);
         }
     }
 }

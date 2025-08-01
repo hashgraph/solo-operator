@@ -28,6 +28,9 @@ public class Nullable {
      * Returns the result of invoking the supplier if it is non-null, otherwise returns the result of invoking the
      * alternate supplier.
      *
+     * <p>Any {@link NullPointerException} thrown by the supplier is caught and treated as if the supplier returned
+     * null. Any {@link NullPointerException} thrown by the alternate supplier is not caught, allowing it to propagate.
+     *
      * @param <T> The type of the object returned by the supplier and alternate supplier.
      * @param supplier A supplier whose result may be null.
      * @param alternate A supplier whose result may be used as an alternative if the first supplier's result is null.
