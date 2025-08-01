@@ -19,7 +19,6 @@ spec:
     spec:
       containers:
         - name: haproxy
-          image: haproxy:2.8.10-alpine3.20
           resources: {}
           env:
           - name: HAPROXY_TARGET_IP

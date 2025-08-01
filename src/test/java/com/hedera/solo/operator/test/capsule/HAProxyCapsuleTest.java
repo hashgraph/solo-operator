@@ -2,7 +2,10 @@
 
 package com.hedera.solo.operator.test.capsule;
 
-import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_CONSENSUS_NODE_APP;
+import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
+import static com.hedera.solo.operator.library.data.AsciiArmor.base64Decode;
+import static com.hedera.solo.operator.library.data.AsciiArmor.base64Encode;
+import static com.hedera.solo.operator.reconciler.common.Constants.KEY_TYPE_GRPC_TLS;
 import static com.hedera.solo.operator.reconciler.common.Constants.LABEL_SELECTOR_HAPROXY_APP;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -11,14 +14,17 @@ import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsule;
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsuleBuilder;
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsuleSpec;
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsuleStatus;
+import com.hedera.solo.operator.reconciler.capsule.haproxy.resources.HAProxyService;
 import com.hedera.solo.operator.reconciler.common.Metadata;
-import com.hedera.solo.operator.test.fixtures.hederaclient.HederaSdkClientFactory;
+import com.hedera.solo.operator.test.utils.TestRecords;
+import io.fabric8.kubernetes.api.model.EnvVar;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.quarkus.test.junit.QuarkusTest;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -65,6 +71,42 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
         simulateCertificateUpdate(consensusNodeIds);
     }
 
+    @Override
+    protected void setupSecrets(final List<TestRecords.NodeInfo> nodes) {
+        super.setupSecrets(nodes);
+        for (final TestRecords.NodeInfo node : nodes) {
+            final String secretName = "%s-%s-keys".formatted(node.name(), KEY_TYPE_GRPC_TLS);
+            Secret secret = kubernetesClient
+                    .secrets()
+                    .inNamespace(namespace)
+                    .withName(secretName)
+                    .get();
+            kubernetesClient
+                    .secrets()
+                    .inNamespace(namespace)
+                    .resource(edit(new Secret())
+                            .with(metadata -> metadata.editMetadata()
+                                    .withName("haproxy-secret-" + node.id())
+                                    .withNamespace(namespace))
+                            .with(data -> data.addToData(
+                                    "hedera.pem",
+                                    base64Encode(base64Decode(secret.getData().get("hedera-" + node.name() + ".key"))
+                                                    .trim()
+                                            + "\n"
+                                            + base64Decode(secret.getData().get("hedera-" + node.name() + ".crt"))
+                                                    .trim()
+                                            + "\n")))
+                            .build())
+                    .create();
+        }
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            assertThat(kubernetesClient.secrets().inNamespace(namespace).list().getItems().stream()
+                            .filter(s -> s.getMetadata().getName().startsWith("haproxy-secret-"))
+                            .count())
+                    .isEqualTo(nodes.size());
+        });
+    }
+
     /**
      * Creates HAProxy capsules based on the specified consensus node IDs.
      *
@@ -73,15 +115,20 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
      */
     Long[] createHAProxyCapsule() throws Exception {
         Long[] consensusNodeIds = consensusNodeIds();
+        HAProxyCapsuleSpec spec = new HAProxyCapsuleSpec();
+        spec.setEnv(null);
         for (Long nodeId : consensusNodeIds) {
             HAProxyCapsule haProxyCapsule = new HAProxyCapsuleBuilder()
                     .editMetadata()
                     .withNamespace(namespace)
                     .withName(Metadata.prepareNodeName(nodeId))
                     .endMetadata()
-                    .editSpec()
-                    .withOrbit(orbit)
-                    .withNodeId(nodeId)
+                    .withNewSpecLike(spec)
+                    .withSecretName("haproxy-secret-" + nodeId)
+                    .withEnv(
+                            new EnvVar("HAPROXY_TARGET_IP", Metadata.prepareNodeName(nodeId) + "-svc", null),
+                            new EnvVar("HAPROXY_USER", "user", null),
+                            new EnvVar("HAPROXY_AUTH", "auth", null))
                     .endSpec()
                     .build();
             kubernetesClient.resource(haProxyCapsule).create();
@@ -104,11 +151,6 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
                     .list()
                     .getItems();
             assertThat(proxies).hasSize(consensusNodeIds.length);
-            assertThat(proxies.stream()
-                            .map(CustomResource::getSpec)
-                            .map(HAProxyCapsuleSpec::getNodeId)
-                            .collect(Collectors.toSet()))
-                    .isEqualTo(Set.of(consensusNodeIds));
             assertThat(proxies.stream()).map(CustomResource::getStatus).allMatch(Objects::nonNull);
             assertThat(proxies.stream())
                     .map(CustomResource::getStatus)
@@ -117,7 +159,19 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
         });
 
         // test with client
-        checkAddressBook(HederaSdkClientFactory::haproxyContextCreator);
+        checkAddressBook((f, n, s) -> f.haproxyContextCreator(services(), n, s));
+    }
+
+    /**
+     * Returns an array of consensus node IDs for which HAProxy capsules are created.
+     *
+     * @return Array of consensus node IDs
+     */
+    Map<String, String> services() {
+        return Arrays.stream(consensusNodeIds())
+                .collect(Collectors.toMap(
+                        Metadata::prepareNodeName,
+                        nodeId -> Metadata.prepareNodeName(nodeId) + HAProxyService.NAME_SUFFIX));
     }
 
     /**
@@ -146,16 +200,13 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
         Map<String, String> initialChecksums = checksums.get();
 
         // modify hedera.crt in consensus secret
-        for (Secret secret : kubernetesClient
-                .secrets()
-                .inNamespace(namespace)
-                .withLabel(LABEL_SELECTOR_CONSENSUS_NODE_APP)
-                .list()
-                .getItems()) {
-            String fieldName = secret.getData().keySet().stream()
-                    .filter(s -> s.startsWith("hedera") && s.endsWith(".crt"))
-                    .findAny()
-                    .orElse("hedera.crt");
+        String fieldName = "hedera.pem";
+        for (Long nodeId : consensusNodeIds) {
+            Secret secret = kubernetesClient
+                    .secrets()
+                    .inNamespace(namespace)
+                    .withName("haproxy-secret-" + nodeId)
+                    .get();
             kubernetesClient.resource(secret).edit(s -> s.edit()
                     .addToData(fieldName + ".orig", s.getData().get(fieldName))
                     .addToData(fieldName, "AA==")
@@ -170,17 +221,12 @@ public class HAProxyCapsuleTest extends ConsensusCapsuleTestAbstract {
         });
 
         // restore hedera.crt consensus secret
-        for (Secret secret : kubernetesClient
-                .secrets()
-                .inNamespace(namespace)
-                .withLabel(LABEL_SELECTOR_CONSENSUS_NODE_APP)
-                .list()
-                .getItems()) {
-            String fieldName = secret.getData().keySet().stream()
-                    .filter(s -> s.startsWith("hedera") && s.endsWith(".crt.orig"))
-                    .map(s -> s.substring(0, s.length() - 5))
-                    .findAny()
-                    .orElse("hedera.crt");
+        for (Long nodeId : consensusNodeIds) {
+            Secret secret = kubernetesClient
+                    .secrets()
+                    .inNamespace(namespace)
+                    .withName("haproxy-secret-" + nodeId)
+                    .get();
             kubernetesClient.resource(secret).edit(s -> s.edit()
                     .addToData(fieldName, s.getData().get(fieldName + ".orig"))
                     .removeFromData(fieldName + ".orig")

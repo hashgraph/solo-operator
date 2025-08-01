@@ -3,21 +3,15 @@
 package com.hedera.solo.operator.reconciler.capsule.haproxy;
 
 import static com.hedera.solo.operator.library.builder.BuilderWrapper.edit;
-import static com.hedera.solo.operator.library.model.Labels.hasLabel;
 import static com.hedera.solo.operator.library.reconcile.ReconcileEvent.cleanupEvents;
 
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsule;
 import com.hedera.solo.operator.model.v1alpha1.HAProxyCapsuleStatus;
 import com.hedera.solo.operator.reconciler.capsule.haproxy.resources.HAProxyConfigMap;
-import com.hedera.solo.operator.reconciler.capsule.haproxy.resources.HAProxyConsensusSecret;
-import com.hedera.solo.operator.reconciler.capsule.haproxy.resources.HAProxyConsensusService;
 import com.hedera.solo.operator.reconciler.capsule.haproxy.resources.HAProxyDeployment;
-import com.hedera.solo.operator.reconciler.capsule.haproxy.resources.HAProxyPod;
 import com.hedera.solo.operator.reconciler.capsule.haproxy.resources.HAProxySecret;
 import com.hedera.solo.operator.reconciler.capsule.haproxy.resources.HAProxyService;
-import com.hedera.solo.operator.reconciler.common.Constants;
-import io.fabric8.kubernetes.api.model.HasMetadata;
-import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
@@ -32,7 +26,6 @@ import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import io.quarkiverse.operatorsdk.annotations.RBACRule;
 import java.lang.invoke.MethodHandles;
 import java.util.List;
-import java.util.function.Predicate;
 import org.jboss.logging.Logger;
 
 /**
@@ -49,22 +42,14 @@ import org.jboss.logging.Logger;
         resources = "events",
         verbs = {"create", "delete", "get", "list", "patch", "update", "watch", "deletecollection"})
 public class HAProxyCapsuleReconciler implements Cleaner<HAProxyCapsule>, Reconciler<HAProxyCapsule> {
-    public static final Predicate<HasMetadata> HAS_LABEL_SELECTOR_HAPROXY =
-            hasLabel(Constants.LABEL_APP, Constants.COMPONENT_HAPROXY);
     private static final Logger log = Logger.getLogger(MethodHandles.lookup().lookupClass());
     private EventSourceContext<HAProxyCapsule> eventSourceContext;
     public final HAProxyConfigMap haProxyConfigMap = new HAProxyConfigMap();
-    public final HAProxyConsensusSecret haProxyConsensusSecret = new HAProxyConsensusSecret(this);
-    public final HAProxyConsensusService haProxyConsensusService = new HAProxyConsensusService(this);
     public final HAProxyDeployment haProxyDeployment = new HAProxyDeployment(this);
-    public final HAProxyPod haProxyPod = new HAProxyPod();
     public final HAProxySecret haProxySecret = new HAProxySecret(this);
     public final HAProxyService haProxyService = new HAProxyService();
     private final Workflow<HAProxyCapsule> workflow = new WorkflowBuilder<HAProxyCapsule>()
             .addDependentResource(haProxyConfigMap)
-            .addDependentResource(haProxyConsensusSecret)
-            .addDependentResource(haProxyConsensusService)
-            .addDependentResource(haProxyPod)
             .addDependentResource(haProxySecret)
             .addDependentResource(haProxyService)
             .addDependentResourceAndConfigure(haProxyDeployment)
@@ -90,10 +75,14 @@ public class HAProxyCapsuleReconciler implements Cleaner<HAProxyCapsule>, Reconc
                     resource.getMetadata().getName());
             workflow.reconcile(resource, context);
 
-            Pod[] pods = context.getSecondaryResources(Pod.class).toArray(Pod[]::new);
-            HAProxyCapsuleStatus.Phase phase = pods.length != 1
+            Deployment deployment =
+                    context.getSecondaryResource(Deployment.class).orElse(null);
+            HAProxyCapsuleStatus.Phase phase = deployment == null
+                            || deployment.getStatus() == null
+                            || deployment.getStatus().getAvailableReplicas() == null
+                            || deployment.getStatus().getAvailableReplicas() < 1
                     ? HAProxyCapsuleStatus.Phase.Unknown
-                    : HAProxyCapsuleStatus.Phase.valueOf(pods[0].getStatus().getPhase());
+                    : HAProxyCapsuleStatus.Phase.Running;
 
             return UpdateControl.patchStatus(edit(new HAProxyCapsule())
                     .with(metadata -> metadata.editMetadata()
