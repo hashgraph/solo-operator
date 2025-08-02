@@ -144,8 +144,8 @@ spec:
             - name: JAVA_OPTS
               value: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"
           readinessProbe:
-            timeoutSeconds: 2
-            periodSeconds: 5
+            timeoutSeconds: 3
+            periodSeconds: 4
             exec:
               command:
                 - /mnt/cm/consensus-config/is-consensus-active

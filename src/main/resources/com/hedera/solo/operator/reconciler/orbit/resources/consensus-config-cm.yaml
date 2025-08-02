@@ -93,7 +93,7 @@ data:
 
     # Make HTTP request and parse response
     printf "GET / HTTP/1.1\r\nConnection: close\r\n\r\n" |
-      timeout 1 nc "$host" "$port" |
+      timeout 2 nc "$host" "$port" |
       awk '
         BEGIN { in_header = 1 }
         NR == 1 && $2 != 200 { print "HTTP status "$2" unexpected"; exit 1 }
