@@ -27,8 +27,11 @@ esac
 # Clone the repository and build the yahcli tool
 git clone --depth 1 --branch v${from_version} https://github.com/hiero-ledger/hiero-consensus-node.git
 pushd hiero-consensus-node
-./gradlew clean yahcli:assemble
-ln -s $(realpath hedera-node/yahcli/build/libs/yahcli-*-shadow.jar) ~/yahcli.jar
+./gradlew -version
+# ./gradlew clean yahcli:assemble
+# ln -s $(realpath hedera-node/yahcli/build/libs/yahcli-*-shadow.jar) ~/yahcli.jar
+./gradlew clean test-clients:yahCliJar --console plain --info
+ln -s $(realpath hedera-node/test-clients/build/libs/test-clients-*-yahcli.jar) ~/yahcli.jar
 ln -s $(realpath hedera-node/test-clients/yahcli/localhost) ~
 popd
 
