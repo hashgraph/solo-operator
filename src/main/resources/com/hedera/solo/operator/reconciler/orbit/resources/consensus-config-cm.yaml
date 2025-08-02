@@ -63,7 +63,7 @@ data:
     s6-svc -o ${SVC_DIR}
   s6-type-longrun: |
     longrun
-  is-consensus-active: |-
+  is-consensus-ready: |-
     #! /usr/bin/env sh
 
     set -eu
@@ -73,7 +73,7 @@ data:
     required_ports="9999 50111 50211 50212"
 
     # Check listening ports
-    awk -v ports="$required_ports" '
+    awk -v ports="${required_ports}" '
       BEGIN {
         split(ports, arr)
         for (i in arr) required[arr[i]] = 1
@@ -93,7 +93,7 @@ data:
 
     # Make HTTP request and parse response
     printf "GET / HTTP/1.1\r\nConnection: close\r\n\r\n" |
-      timeout 2 nc "$host" "$port" |
+      timeout 2 nc "${host}" "${port}" |
       awk '
         BEGIN { in_header = 1 }
         NR == 1 && $2 != 200 { print "HTTP status "$2" unexpected"; exit 1 }

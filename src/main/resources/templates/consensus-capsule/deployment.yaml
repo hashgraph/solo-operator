@@ -144,11 +144,11 @@ spec:
             - name: JAVA_OPTS
               value: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"
           readinessProbe:
-            timeoutSeconds: 3
-            periodSeconds: 4
+            timeoutSeconds: 4
+            periodSeconds: 6
             exec:
               command:
-                - /mnt/cm/consensus-config/is-consensus-active
+                - /mnt/cm/consensus-config/is-consensus-ready
           volumeMounts:
             - name: s6-start-consensus
               mountPath: /etc/s6-overlay/s6-rc.d/start-consensus
