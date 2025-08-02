@@ -66,6 +66,9 @@ jobs:
           gradle-version: wrapper
           cache-read-only: false
 
+      - name: Flaky Test
+        run: while ./gradlew test --scan -Dtags=flaky; do :; done
+
       - name: Compile Code
         run: ./gradlew clean assemble --scan
 

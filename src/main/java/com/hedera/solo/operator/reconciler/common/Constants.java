@@ -27,7 +27,7 @@ public final class Constants {
             .withRunAsGroup(HEDERA_GROUP)
             .withFsGroup(HEDERA_GROUP)
             .withFsGroupChangePolicy("OnRootMismatch");
-    public static final int DEFAULT_FILE_MODE = 493; // 0755
+    public static final int DEFAULT_FILE_MODE = 0555;
     public static final String NODE_NAME_FORMAT = "node%d";
 
     // names

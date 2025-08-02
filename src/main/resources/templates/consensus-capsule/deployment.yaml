@@ -144,21 +144,11 @@ spec:
             - name: JAVA_OPTS
               value: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"
           readinessProbe:
-            timeoutSeconds: 30
-            periodSeconds: 45
+            timeoutSeconds: 2
+            periodSeconds: 5
             exec:
               command:
-                - sh
-                - -c
-                - |
-                  # jshell communicates with a java process over tcp using dynamic ports. The use of dynamic tcp ports can
-                  # conflict with the ability of consensus service to bind to listening ports. To avoid a conflict wait
-                  # until all required ports are listening.
-                  if [ "$(netstat -nlt | egrep ':::(9999|50111|50211|50212)' | wc -l)" -ne 4 ]; then
-                    echo service not ready
-                    exit 1
-                  fi
-                  jshell /mnt/cm/consensus-config/is-consensus-active
+                - /mnt/cm/consensus-config/is-consensus-active
           volumeMounts:
             - name: s6-start-consensus
               mountPath: /etc/s6-overlay/s6-rc.d/start-consensus

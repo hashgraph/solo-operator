@@ -22,17 +22,17 @@ public class ClusterSetupManager {
 
     /** Checks and installs required services. */
     public synchronized void check() {
-        if (setupDone) {
-            return;
-        }
-
-        try {
-            minioSetupManager.install();
-        } catch (HelmExecutionException e) {
-            log.error(e.getStdErr());
-            throw e;
-        }
-        setupDone = true;
+//        if (setupDone) {
+//            return;
+//        }
+//
+//        try {
+//            minioSetupManager.install();
+//        } catch (HelmExecutionException e) {
+//            log.error(e.getStdErr());
+//            throw e;
+//        }
+//        setupDone = true;
     }
 
     /**
@@ -41,17 +41,17 @@ public class ClusterSetupManager {
      * @param event Shutdown event
      */
     public synchronized void cleanup(@Observes @Priority(1) ShutdownEvent event) {
-        if (!setupDone) {
-            return;
-        }
-
-        try {
-            minioSetupManager.uninstall();
-        } catch (HelmExecutionException e) {
-            log.error(e.getStdErr());
-            throw e;
-        }
-
-        setupDone = false;
+//        if (!setupDone) {
+//            return;
+//        }
+//
+//        try {
+//            minioSetupManager.uninstall();
+//        } catch (HelmExecutionException e) {
+//            log.error(e.getStdErr());
+//            throw e;
+//        }
+//
+//        setupDone = false;
     }
 }

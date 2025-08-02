@@ -44,12 +44,14 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
  * This class represents a test for the network upgrade operation in the solo-operator project. It extends the abstract
  * class ConsensusCapsuleTestAbstract and implements the QuarkusTestProfile interface.
  */
+@Tag("flaky")
 @QuarkusTest
 @TestProfile(NetworkUpgradeOperationTest.class)
 public class NetworkUpgradeOperationTest extends ConsensusCapsuleTestAbstract implements QuarkusTestProfile {
