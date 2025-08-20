@@ -138,7 +138,7 @@ jobs:
 
       - name: Set up Helm
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
-        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
 
       - name: Publish to registry
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
