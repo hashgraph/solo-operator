@@ -12,7 +12,7 @@ quarkus = "3.25.0"
 semver = "2.0.0"
 smallrye-cert = "0.9.2"
 spotbugs = "4.9.3"
-spotless = "7.2.1"
+spotless = "8.0.0"
 sundr = "0.200.4"
 wiremock = "3.13.1"
 
