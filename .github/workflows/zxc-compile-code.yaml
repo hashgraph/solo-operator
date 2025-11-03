@@ -118,7 +118,7 @@ jobs:
       - name: Kubernetes KinD Cluster
         id: kind
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
-        uses: helm/kind-action@b72c923563e6e80ea66e8e8c810798cc73e97e5e
+        uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab
         with:
           registry: true
 
