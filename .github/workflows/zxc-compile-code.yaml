@@ -82,7 +82,7 @@ jobs:
         run: ./gradlew check --scan
 
       - name: Publish Unit Test Report
-        uses: step-security/publish-unit-test-result-action@43e0c963eea0ace6eca353cb1d814d857fee5c53 # v2.20.2
+        uses: step-security/publish-unit-test-result-action@32f89bf71205087367e3fe317be553f2ee59a5b0 # v2.21.0
         if: ${{ inputs.enable-unit-tests && !cancelled() }}
         with:
           check_name: "Unit Test Results"
