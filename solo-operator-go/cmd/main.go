@@ -134,18 +134,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controller.HAProxyCapsuleReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	if err = controller.NewHAProxyCapsuleReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+	).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "HAProxyCapsule")
 		os.Exit(1)
 	}
 
-	if err = (&controller.EnvoyProxyReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	if err = controller.NewEnvoyProxyReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+	).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "EnvoyProxy")
 		os.Exit(1)
 	}
