@@ -1,0 +1,139 @@
+{{- if .Values.rbac.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "solo-operator.fullname" . }}-manager-role
+  labels:
+    {{- include "solo-operator.labels" . | nindent 4 }}
+rules:
+  # Core resources
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete", "deletecollection"]
+  # Apps resources
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # RBAC resources
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["rolebindings"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Solo Operator CRDs
+  - apiGroups: ["operator.solo.hedera.com"]
+    resources: ["orbits"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["operator.solo.hedera.com"]
+    resources: ["orbits/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["operator.solo.hedera.com"]
+    resources: ["orbits/finalizers"]
+    verbs: ["update"]
+  - apiGroups: ["operator.solo.hedera.com"]
+    resources: ["consensuscapsules"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["operator.solo.hedera.com"]
+    resources: ["consensuscapsules/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["operator.solo.hedera.com"]
+    resources: ["consensuscapsules/finalizers"]
+    verbs: ["update"]
+  - apiGroups: ["operator.solo.hedera.com"]
+    resources: ["networkoperations"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["operator.solo.hedera.com"]
+    resources: ["networkoperations/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["operator.solo.hedera.com"]
+    resources: ["networkoperations/finalizers"]
+    verbs: ["update"]
+  - apiGroups: ["operator.solo.hedera.com"]
+    resources: ["haproxycapsules"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["operator.solo.hedera.com"]
+    resources: ["haproxycapsules/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["operator.solo.hedera.com"]
+    resources: ["haproxycapsules/finalizers"]
+    verbs: ["update"]
+  - apiGroups: ["operator.solo.hedera.com"]
+    resources: ["envoyproxies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["operator.solo.hedera.com"]
+    resources: ["envoyproxies/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["operator.solo.hedera.com"]
+    resources: ["envoyproxies/finalizers"]
+    verbs: ["update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "solo-operator.fullname" . }}-manager-rolebinding
+  labels:
+    {{- include "solo-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "solo-operator.fullname" . }}-manager-role
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "solo-operator.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+---
+# Leader election role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "solo-operator.fullname" . }}-leader-election-role
+  labels:
+    {{- include "solo-operator.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "solo-operator.fullname" . }}-leader-election-rolebinding
+  labels:
+    {{- include "solo-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "solo-operator.fullname" . }}-leader-election-role
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "solo-operator.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
