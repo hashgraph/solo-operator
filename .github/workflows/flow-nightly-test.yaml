@@ -33,18 +33,18 @@ jobs:
     runs-on: solo-linux-medium
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+        uses: step-security/harden-runner@e3f713f2d8f53843e71c69a996d56f51aa9adfb9 # v2.14.1
         with:
           egress-policy: audit
 
       - name: Checkout Code
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           token: ${{ secrets.GH_ACCESS_TOKEN }}
 
       - name: Authenticate to Google Cloud
         id: google-auth
-        uses: step-security/google-github-auth@40f6deebd366f16c782d7a0ad0844e3b96a032a6 # v2.1.10
+        uses: step-security/google-github-auth@57c51210cb4d85d8a5d39dc4c576c79bd693f914 # v3.0.1
         with:
           workload_identity_provider: projects/970521953460/locations/global/workloadIdentityPools/solo-op-automation-pool/providers/gh-provider
           service_account: gh-solo-test-driver@solo-operator-automated-tests.iam.gserviceaccount.com
@@ -53,7 +53,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@6a7c903a70c8625ed6700fa299f5ddb4ca6022e9 # v2.1.5
 
       - name: Setup Go
-        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -68,7 +68,7 @@ jobs:
 
       - name: Try restoring cache
         id: restore
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: ${{ env.CACHE_DIR }}.tar
           key: ${{ env.CACHE_KEY }}
@@ -110,7 +110,7 @@ jobs:
 
       - name: Save new cache
         if: ${{ steps.nightly_test.outcome == 'success' && steps.nightly_test.outputs.refresh_cache == 'true' }}
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: ${{ env.CACHE_DIR }}.tar
           key: ${{ env.CACHE_KEY }}
