@@ -60,7 +60,7 @@ permissions:
   statuses: write
 
 env:
-  GO_VERSION: "1.21"
+  GO_VERSION: "1.25"
 
 jobs:
   analyze:
