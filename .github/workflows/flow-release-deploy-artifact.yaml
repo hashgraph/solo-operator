@@ -16,13 +16,13 @@ defaults:
     shell: bash
 
 env:
+  GO_VERSION: "1.21"
   GH_OCI_REGISTRY: ghcr.io
   GH_OCI_GROUP: hashgraph/solo-operator
   GH_HELM_GROUP: hashgraph/solo-operator
   JF_OCI_REGISTRY: ${{ vars.JF_HELM_REGISTRY }}
   JF_OCI_GROUP: solo-operator-docker-release
   JF_HELM_GROUP: solo-operator-helm-release
-  QUARKUS_DOCKER_BUILDX_PLATFORM: linux/amd64,linux/arm64
 
 permissions:
   contents: read
@@ -71,17 +71,11 @@ jobs:
         with:
           node-version: 20
 
-      - name: Setup Java
-        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+      - name: Setup Go
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
         with:
-          distribution: temurin
-          java-version: 21
-
-      - name: Setup Gradle
-        uses: gradle/gradle-build-action@ac2d340dc04d9e1113182899e983b5400c17cda1 # v3.5.0
-        with:
-          gradle-version: wrapper
-          cache-read-only: true
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
 
       - name: Setup Helm
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
@@ -100,29 +94,29 @@ jobs:
       - name: Show Docker Info
         run: docker info
 
-      - name: Docker Login
+      - name: Docker Login (GitHub)
         uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
         with:
           registry: ${{ env.GH_OCI_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Helm Registry Login
+      - name: Helm Registry Login (GitHub)
         run: helm registry login ${{ env.GH_OCI_REGISTRY }} -u ${{ github.actor }} -p "${{ secrets.GITHUB_TOKEN }}"
 
-      - name: Docker Login
+      - name: Docker Login (JFrog)
         uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
         with:
           registry: ${{ env.JF_OCI_REGISTRY }}
           username: ${{ vars.JF_USERNAME }}
           password: ${{ secrets.JF_ACCESS_TOKEN }}
 
-      - name: Helm Registry Login
+      - name: Helm Registry Login (JFrog)
         run: helm registry login ${{ env.JF_OCI_REGISTRY }} -u ${{ vars.JF_USERNAME }} -p "${{ secrets.JF_ACCESS_TOKEN }}"
 
       - name: Install Semantic Release
         run: |
-          npm install -g semantic-release@23.0.0 @semantic-release/git@10.0.1 @semantic-release/exec@6.0.3 gradle-semantic-release-plugin@1.9.1
+          npm install -g semantic-release@23.0.0 @semantic-release/git@10.0.1 @semantic-release/exec@6.0.3
           npm install -g conventional-changelog-conventionalcommits@7.0.2 @commitlint/cli@18.6.0 @commitlint/config-conventional@18.6.0
           npm install -g marked-mangle@1.1.6 marked-gfm-heading-id@3.1.2 semantic-release-conventional-commits@3.0.0
 

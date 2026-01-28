@@ -41,7 +41,7 @@ jobs:
       - code
     with:
       custom-job-label: Check
-      enable-spotless-check: true
+      enable-lint-check: true
 
   unit-tests:
     name: Unit Tests

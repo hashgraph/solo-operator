@@ -59,6 +59,9 @@ permissions:
   checks: write
   statuses: write
 
+env:
+  GO_VERSION: "1.21"
+
 jobs:
   analyze:
     name: ${{ inputs.custom-job-label || 'Analyze' }}
@@ -77,18 +80,12 @@ jobs:
         with:
           node-version: 20
 
-      - name: Setup Java
-        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+      - name: Setup Go
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
         if: ${{ inputs.enable-snyk-scan && !cancelled() && !failure() }}
         with:
-          distribution: temurin
-          java-version: 21
-
-      - name: Setup Gradle
-        uses: gradle/gradle-build-action@ac2d340dc04d9e1113182899e983b5400c17cda1 # v3.5.0
-        if: ${{ inputs.enable-snyk-scan && !cancelled() && !failure() }}
-        with:
-          gradle-version: wrapper
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
 
       - name: Download Unit Test Coverage Report
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
@@ -100,7 +97,7 @@ jobs:
         uses: codecov/codecov-action@5c47607acb93fed5485fdbf7232e8a31425f672a # v5.0.2
         if: ${{ inputs.enable-codecov-analysis && !cancelled() && !failure() }}
         with:
-          files: ./build/jacoco-report/jacoco.xml,./build/jacoco/jacoco-component-test.xml
+          files: ./coverage.out
         env:
           CODECOV_TOKEN: ${{ secrets.codecov-token }}
 
@@ -108,7 +105,7 @@ jobs:
         env:
           CODACY_PROJECT_TOKEN: ${{ secrets.codacy-project-token }}
         if: ${{ inputs.enable-codacy-coverage && !cancelled() && !failure() }}
-        run: bash <(curl -Ls https://coverage.codacy.com/get.sh) report -l Java $(find . -name 'jacoco*.xml' -printf '-r %p ')
+        run: bash <(curl -Ls https://coverage.codacy.com/get.sh) report -l Go -r coverage.out
 
       - name: Setup Snyk
         env:

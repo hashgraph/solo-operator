@@ -7,31 +7,45 @@ plugins:
     - preset: conventionalcommits
 verifyConditions:
   - - '@semantic-release/exec'
-    - cmd: ./gradlew clean build --no-build-cache
+    - cmd: go build -v ./...
 prepare:
   - - '@semantic-release/exec'
     - cmd: |
         set -e
-        ./gradlew versionAsSpecified -PnewVersion=${nextRelease.version}
-        ./gradlew githubVersionSummary
-        ./gradlew clean assemble --no-build-cache
-        sed -i "s,^name: .*,name: \"solo-operator-chart\"," build/helm/Chart.yaml
-        helm package build/helm
+        # Update version in Chart.yaml
+        sed -i "s/^version:.*/version: ${nextRelease.version}/" charts/solo-operator/Chart.yaml
+        sed -i "s/^appVersion:.*/appVersion: \"${nextRelease.version}\"/" charts/solo-operator/Chart.yaml
+        # Package Helm chart
+        helm package charts/solo-operator
   - - '@semantic-release/git'
     - assets:
-        - gradle.properties
+        - charts/solo-operator/Chart.yaml
 publish:
   - - '@semantic-release/exec'
     - cmd: |
         set -e
-        ./gradlew clean assemble --no-build-cache -Dquarkus.container-image.build=true -Dquarkus.container-image.push=true -Dquarkus.container-image.registry="${process.env.GH_OCI_REGISTRY}" -Dquarkus.container-image.group="${process.env.GH_OCI_GROUP}"
-        helm push solo-operator-chart-${nextRelease.version}.tgz "oci://${process.env.GH_OCI_REGISTRY}/${process.env.GH_HELM_GROUP}"
-        ./gradlew clean assemble --no-build-cache -Dquarkus.container-image.build=true -Dquarkus.container-image.push=true -Dquarkus.container-image.registry="${process.env.JF_OCI_REGISTRY}" -Dquarkus.container-image.group="${process.env.JF_OCI_GROUP}"
-        helm push solo-operator-chart-${nextRelease.version}.tgz "oci://${process.env.JF_OCI_REGISTRY}/${process.env.JF_HELM_GROUP}"
+        # Build and push Docker image to GitHub
+        docker buildx build \
+          --platform linux/amd64,linux/arm64 \
+          --tag "${GH_OCI_REGISTRY}/${GH_OCI_GROUP}:${nextRelease.version}" \
+          --tag "${GH_OCI_REGISTRY}/${GH_OCI_GROUP}:latest" \
+          --push \
+          .
+        # Push Helm chart to GitHub
+        helm push solo-operator-${nextRelease.version}.tgz "oci://${GH_OCI_REGISTRY}/${GH_HELM_GROUP}"
+        # Build and push Docker image to JFrog
+        docker buildx build \
+          --platform linux/amd64,linux/arm64 \
+          --tag "${JF_OCI_REGISTRY}/${JF_OCI_GROUP}/solo-operator:${nextRelease.version}" \
+          --tag "${JF_OCI_REGISTRY}/${JF_OCI_GROUP}/solo-operator:latest" \
+          --push \
+          .
+        # Push Helm chart to JFrog
+        helm push solo-operator-${nextRelease.version}.tgz "oci://${JF_OCI_REGISTRY}/${JF_HELM_GROUP}"
   - - '@semantic-release/github'
     - assets:
-        - build/kubernetes/*
-        - solo-operator-chart-*.tgz
+        - config/crd/bases/*
+        - solo-operator-*.tgz
 branches:
   - name: main
   - name: release/([0-9]+).([0-9]+)

@@ -179,27 +179,18 @@ jobs:
           git_commit_gpgsign: true
           git_tag_gpgsign: true
 
-      - name: Setup Java
-        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
-        with:
-          distribution: temurin
-          java-version: 21
-
-      - name: Setup Gradle
-        uses: gradle/gradle-build-action@ac2d340dc04d9e1113182899e983b5400c17cda1 # v3.5.0
-        with:
-          gradle-version: wrapper
-          cache-read-only: true
-
       - name: Update Version as Snapshot
-        run: ./gradlew versionAsSpecified -PnewVersion=${{ needs.prepare-release-train.outputs.next-snapshot-version }} --scan
+        run: |
+          # Update Chart.yaml with snapshot version
+          sed -i "s/^version:.*/version: ${{ needs.prepare-release-train.outputs.next-snapshot-version }}/" charts/solo-operator/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${{ needs.prepare-release-train.outputs.next-snapshot-version }}\"/" charts/solo-operator/Chart.yaml
 
       - name: Commit Changes
         uses: EndBug/add-and-commit@a94899bca583c204427a224a7af87c02f9b325d5 # v9.1.4
         if: ${{ github.event.inputs.dry-run-enabled != 'true' && needs.prepare-release-train.outputs.release-branch-exists != 'true' }}
         with:
           push: true
-          add: "gradle.properties"
+          add: "charts/solo-operator/Chart.yaml"
           author_name: ${{ secrets.GIT_USER_NAME }}
           author_email: ${{ secrets.GIT_USER_EMAIL }}
           message: "chore(release): prepare for next development iteration [skip ci]"

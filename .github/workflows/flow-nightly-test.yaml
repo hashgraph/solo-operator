@@ -14,6 +14,7 @@ permissions:
   id-token: write
 
 env:
+  GO_VERSION: "1.21"
   CACHE_DIR: cache_dir
   CACHE_KEY: nightly-test
   HOSTNAME_PREFIX: github-
@@ -51,17 +52,11 @@ jobs:
       - name: Setup Google Cloud SDK
         uses: google-github-actions/setup-gcloud@6a7c903a70c8625ed6700fa299f5ddb4ca6022e9 # v2.1.5
 
-      - name: Setup Java
-        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+      - name: Setup Go
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
         with:
-          distribution: temurin
-          java-version: 21
-
-      - name: Setup Gradle
-        uses: gradle/gradle-build-action@ac2d340dc04d9e1113182899e983b5400c17cda1 # v3.5.0
-        with:
-          gradle-version: wrapper
-          cache-read-only: false
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
 
       - name: Set up Helm
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
