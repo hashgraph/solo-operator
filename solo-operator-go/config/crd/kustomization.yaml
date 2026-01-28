@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- bases/operator.solo.hedera.com_orbits.yaml
+- bases/operator.solo.hedera.com_consensuscapsules.yaml
+- bases/operator.solo.hedera.com_networkoperations.yaml
+- bases/operator.solo.hedera.com_haproxycapsules.yaml
+- bases/operator.solo.hedera.com_envoyproxies.yaml

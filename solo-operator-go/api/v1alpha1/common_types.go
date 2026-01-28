@@ -1,0 +1,454 @@
+// SPDX-License-Identifier: Apache-2.0
+
+package v1alpha1
+
+import (
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// Phase represents the current phase of a resource
+// +kubebuilder:validation:Enum=Pending;Running;Succeeded;Failed;Unknown
+type Phase string
+
+const (
+	PhasePending   Phase = "Pending"
+	PhaseRunning   Phase = "Running"
+	PhaseSucceeded Phase = "Succeeded"
+	PhaseFailed    Phase = "Failed"
+	PhaseUnknown   Phase = "Unknown"
+)
+
+// ImagePullPolicy represents the image pull policy
+// +kubebuilder:validation:Enum=Always;Never;IfNotPresent
+type ImagePullPolicy string
+
+const (
+	ImagePullPolicyAlways       ImagePullPolicy = "Always"
+	ImagePullPolicyNever        ImagePullPolicy = "Never"
+	ImagePullPolicyIfNotPresent ImagePullPolicy = "IfNotPresent"
+)
+
+// SoftwareVersion defines the container image version
+type SoftwareVersion struct {
+	// Repository is the container registry (e.g., docker.io/library)
+	Repository string `json:"repository"`
+
+	// ImageName is the name of the image (e.g., ubuntu)
+	ImageName string `json:"imageName"`
+
+	// ImageTag is the tag of the image (e.g., focal)
+	ImageTag string `json:"imageTag"`
+
+	// ManifestHash is the optional manifest hash for verification
+	// +optional
+	ManifestHash string `json:"manifestHash,omitempty"`
+
+	// ImageVerificationSpec contains hash verification details
+	// +optional
+	ImageVerificationSpec *ImageVerificationSpec `json:"imageVerificationSpec,omitempty"`
+
+	// ImagePullSecrets is a list of references to secrets for pulling images
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+	// ImagePullPolicy specifies when to pull the image
+	// +kubebuilder:default=IfNotPresent
+	// +optional
+	ImagePullPolicy ImagePullPolicy `json:"imagePullPolicy,omitempty"`
+}
+
+// ImageVerificationSpec defines verification parameters for container images
+type ImageVerificationSpec struct {
+	// OS is the target operating system
+	// +kubebuilder:validation:Enum=darwin;linux;windows
+	// +optional
+	OS string `json:"os,omitempty"`
+
+	// Architecture is the target CPU architecture
+	// +kubebuilder:validation:Enum=amd64;arm64
+	// +optional
+	Architecture string `json:"architecture,omitempty"`
+
+	// LayerHashes are the expected layer digest hashes
+	LayerHashes []string `json:"layerHashes"`
+}
+
+// ImageRepository defines a container image repository
+type ImageRepository struct {
+	// Repository is the registry URL
+	Repository string `json:"repository"`
+
+	// ImageName is the image name
+	ImageName string `json:"imageName"`
+
+	// ImageTag is the image tag
+	ImageTag string `json:"imageTag"`
+
+	// ImagePullSecrets for accessing private registries
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+}
+
+// SoftwareVersionSource defines multiple sources for software versions
+type SoftwareVersionSource struct {
+	// ImageRepositories is a list of possible image repositories
+	ImageRepositories []ImageRepository `json:"imageRepositories"`
+
+	// ImageVerificationSpec contains verification specifications
+	ImageVerificationSpec []ImageVerificationSpec `json:"imageVerificationSpec"`
+
+	// ImagePullPolicy specifies when to pull images
+	// +kubebuilder:default=IfNotPresent
+	// +optional
+	ImagePullPolicy ImagePullPolicy `json:"imagePullPolicy,omitempty"`
+}
+
+// ImageValidity represents the validation status of an image
+// +kubebuilder:validation:Enum=Unknown;Valid;Invalid;NotFound
+type ImageValidity string
+
+const (
+	ImageValidityUnknown  ImageValidity = "Unknown"
+	ImageValidityValid    ImageValidity = "Valid"
+	ImageValidityInvalid  ImageValidity = "Invalid"
+	ImageValidityNotFound ImageValidity = "NotFound"
+)
+
+// ImageRepositoryStatus represents the status of an image repository
+type ImageRepositoryStatus struct {
+	// Repository is the registry URL
+	Repository string `json:"repository"`
+
+	// ImageName is the image name
+	ImageName string `json:"imageName"`
+
+	// ImageTag is the image tag
+	ImageTag string `json:"imageTag"`
+
+	// Validity indicates the validation status
+	Validity ImageValidity `json:"validity"`
+
+	// SelectedForDeployment indicates if this repository was selected
+	SelectedForDeployment bool `json:"selectedForDeployment"`
+
+	// ManifestHash is the resolved manifest hash
+	// +optional
+	ManifestHash string `json:"manifestHash,omitempty"`
+
+	// ImageVerificationSpec contains the verification spec used
+	// +optional
+	ImageVerificationSpec *ImageVerificationSpec `json:"imageVerificationSpec,omitempty"`
+
+	// ImagePullSecrets for accessing the registry
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+	// ImagePullPolicy for this image
+	// +optional
+	ImagePullPolicy ImagePullPolicy `json:"imagePullPolicy,omitempty"`
+}
+
+// AddressBookEntry represents a node in the address book
+type AddressBookEntry struct {
+	// NodeId is the unique identifier for the node
+	NodeId int64 `json:"nodeId"`
+
+	// NickName is a friendly name for the node
+	NickName string `json:"nickName"`
+
+	// SelfName is the self-identifying name
+	SelfName string `json:"selfName"`
+
+	// Weight is the consensus weight
+	Weight int `json:"weight"`
+
+	// InternalHostname is the internal FQDN or IP
+	InternalHostname string `json:"internalHostname"`
+
+	// InternalPort is the internal gossip port
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=65535
+	InternalPort int32 `json:"internalPort"`
+
+	// ExternalHostname is the external FQDN or IP
+	ExternalHostname string `json:"externalHostname"`
+
+	// ExternalPort is the external gossip port
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=65535
+	ExternalPort int32 `json:"externalPort"`
+
+	// NodeAccount is the account ID in the form "0.0.x"
+	NodeAccount string `json:"nodeAccount"`
+
+	// PublicSigningCertificate is the PEM-encoded signing certificate
+	// +optional
+	PublicSigningCertificate string `json:"publicSigningCertificate,omitempty"`
+
+	// PublicLedgerKey is the base64-encoded public ledger key
+	// +optional
+	PublicLedgerKey string `json:"publicLedgerKey,omitempty"`
+}
+
+// KeyReference references a key in a secret
+type KeyReference struct {
+	// SecretName is the name of the secret
+	SecretName string `json:"secretName"`
+
+	// KeyName is the key within the secret
+	// +optional
+	KeyName string `json:"keyName,omitempty"`
+}
+
+// StreamUploaderConfig contains configuration for stream uploaders
+type StreamUploaderConfig struct {
+	// Debug enables debug logging
+	// +kubebuilder:default=true
+	// +optional
+	Debug bool `json:"debug,omitempty"`
+
+	// EnableCompression enables stream compression
+	// +kubebuilder:default=false
+	// +optional
+	EnableCompression bool `json:"enableCompression,omitempty"`
+
+	// EnableSidecarFiles enables sidecar file processing
+	// +kubebuilder:default=false
+	// +optional
+	EnableSidecarFiles bool `json:"enableSidecarFiles,omitempty"`
+
+	// Reaper configuration
+	// +optional
+	Reaper *ReaperConfig `json:"reaper,omitempty"`
+
+	// Signature configuration
+	// +optional
+	Signature *SignatureConfig `json:"signature,omitempty"`
+
+	// StreamFileExtension is the extension for stream files
+	// +optional
+	StreamFileExtension string `json:"streamFileExtension,omitempty"`
+
+	// StreamSigExtension is the extension for signature files
+	// +optional
+	StreamSigExtension string `json:"streamSigExtension,omitempty"`
+
+	// StreamExtension is the general stream extension
+	// +optional
+	StreamExtension string `json:"streamExtension,omitempty"`
+
+	// SigExtension is the signature extension
+	// +optional
+	SigExtension string `json:"sigExtension,omitempty"`
+
+	// BucketName is the storage bucket name
+	// +optional
+	BucketName string `json:"bucketName,omitempty"`
+
+	// BucketPath is the path within the bucket
+	// +optional
+	BucketPath string `json:"bucketPath,omitempty"`
+
+	// S3 configuration
+	// +optional
+	S3 *S3Config `json:"s3,omitempty"`
+
+	// GCS configuration
+	// +optional
+	GCS *GCSConfig `json:"gcs,omitempty"`
+
+	// EnvFromSecret is the secret name for environment variables
+	// +optional
+	EnvFromSecret string `json:"envFromSecret,omitempty"`
+}
+
+// ReaperConfig contains reaper configuration
+type ReaperConfig struct {
+	// Enabled enables the reaper
+	// +kubebuilder:default=true
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// MinKeep is the minimum number of files to keep
+	// +kubebuilder:default=1
+	// +optional
+	MinKeep int `json:"minKeep,omitempty"`
+
+	// Interval is the reaper interval
+	// +kubebuilder:default=1
+	// +optional
+	Interval int `json:"interval,omitempty"`
+
+	// DefaultBackoff is the default backoff time
+	// +kubebuilder:default=1
+	// +optional
+	DefaultBackoff int `json:"defaultBackoff,omitempty"`
+}
+
+// SignatureConfig contains signature configuration
+type SignatureConfig struct {
+	// Require requires signatures
+	// +kubebuilder:default=true
+	// +optional
+	Require bool `json:"require,omitempty"`
+
+	// Prioritize prioritizes signature files
+	// +kubebuilder:default=true
+	// +optional
+	Prioritize bool `json:"prioritize,omitempty"`
+}
+
+// S3Config contains S3 storage configuration
+type S3Config struct {
+	// Enabled enables S3 storage
+	// +kubebuilder:default=false
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// AccessKey is the S3 access key
+	// +kubebuilder:default="solo-operator"
+	// +optional
+	AccessKey string `json:"accessKey,omitempty"`
+
+	// URL is the S3 endpoint URL
+	// +optional
+	URL string `json:"url,omitempty"`
+}
+
+// GCSConfig contains GCS storage configuration
+type GCSConfig struct {
+	// Enabled enables GCS storage
+	// +kubebuilder:default=false
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// AccessKey is the GCS access key
+	// +kubebuilder:default="solo-operator"
+	// +optional
+	AccessKey string `json:"accessKey,omitempty"`
+
+	// URL is the GCS endpoint URL
+	// +optional
+	URL string `json:"url,omitempty"`
+}
+
+// StreamUploader defines a stream uploader sidecar
+type StreamUploader struct {
+	// Name is the container name
+	// +optional
+	Name string `json:"name,omitempty"`
+
+	// SoftwareVersion specifies the image to use
+	SoftwareVersion SoftwareVersion `json:"softwareVersion"`
+
+	// Resources specifies resource requirements
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// Enabled enables the uploader
+	// +kubebuilder:default=false
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Config contains uploader configuration
+	// +optional
+	Config *StreamUploaderConfig `json:"config,omitempty"`
+
+	// AdditionalVolumeMounts for the uploader
+	// +optional
+	AdditionalVolumeMounts []corev1.VolumeMount `json:"additionalVolumeMounts,omitempty"`
+}
+
+// StreamUploaderChangeset defines changes to apply to a stream uploader
+type StreamUploaderChangeset struct {
+	// Name is the container name
+	// +optional
+	Name string `json:"name,omitempty"`
+
+	// SoftwareVersionSource specifies the new image source
+	// +optional
+	SoftwareVersionSource *SoftwareVersionSource `json:"softwareVersionSource,omitempty"`
+
+	// Resources specifies new resource requirements
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// Enabled changes the enabled state
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// Config contains configuration changes
+	// +optional
+	Config *StreamUploaderConfig `json:"config,omitempty"`
+}
+
+// NodeProperties represents node-specific properties
+type NodeProperties struct {
+	// NodeId is the node identifier
+	NodeId int64 `json:"nodeId"`
+
+	// Configuration is the key-value configuration
+	Configuration map[string]string `json:"configuration"`
+}
+
+// NodeLoggingConfiguration represents node-specific logging
+type NodeLoggingConfiguration struct {
+	// NodeId is the node identifier
+	NodeId int64 `json:"nodeId"`
+
+	// Configuration is the log4j2.xml content
+	Configuration string `json:"configuration"`
+}
+
+// ConsensusNodeChangeset defines changes for consensus nodes
+type ConsensusNodeChangeset struct {
+	// SoftwareVersionSource specifies the new image source
+	// +optional
+	SoftwareVersionSource *SoftwareVersionSource `json:"softwareVersionSource,omitempty"`
+
+	// NodeProperties are node-specific property changes
+	// +optional
+	NodeProperties []NodeProperties `json:"nodeProperties,omitempty"`
+
+	// Logging contains logging configuration changes
+	// +optional
+	Logging []NodeLoggingConfiguration `json:"logging,omitempty"`
+}
+
+// HaproxyChangeset defines changes for HAProxy
+type HaproxyChangeset struct {
+	// Haproxy contains HAProxy-specific changes
+	// +optional
+	Haproxy *HaproxyConfig `json:"haproxy,omitempty"`
+
+	// ServiceType is the Kubernetes service type
+	// +kubebuilder:validation:Enum=ClusterIP;Ingress;LoadBalancer
+	// +kubebuilder:default=LoadBalancer
+	// +optional
+	ServiceType string `json:"serviceType,omitempty"`
+
+	// ServiceSpec is the full service specification
+	// +optional
+	ServiceSpec *corev1.ServiceSpec `json:"serviceSpec,omitempty"`
+}
+
+// HaproxyConfig contains HAProxy configuration
+type HaproxyConfig struct {
+	// SoftwareVersionSource specifies the image source
+	// +optional
+	SoftwareVersionSource *SoftwareVersionSource `json:"softwareVersionSource,omitempty"`
+
+	// User is the stats username
+	// +kubebuilder:default="user"
+	// +optional
+	User string `json:"user,omitempty"`
+
+	// Auth is the stats authentication
+	// +kubebuilder:default="auth"
+	// +optional
+	Auth string `json:"auth,omitempty"`
+}
+
+// Condition is an alias for metav1.Condition
+type Condition = metav1.Condition
