@@ -136,8 +136,12 @@ jobs:
           # Connect the registry to the kind network
           docker network connect kind kind-registry || true
 
-          # Configure containerd to use the local registry
-          REGISTRY_DIR="/etc/containerd/certs.d/localhost:5000"
+          # Add kind-registry to /etc/hosts so we can push to it from the host
+          REGISTRY_IP=$(docker inspect -f '{{.NetworkSettings.Networks.kind.IPAddress}}' kind-registry)
+          echo "${REGISTRY_IP} kind-registry" | sudo tee -a /etc/hosts
+
+          # Configure containerd to use the local registry for kind-registry:5000
+          REGISTRY_DIR="/etc/containerd/certs.d/kind-registry:5000"
           for node in $(kind get nodes --name kind); do
             docker exec "${node}" mkdir -p "${REGISTRY_DIR}"
             docker exec "${node}" sh -c "cat > ${REGISTRY_DIR}/hosts.toml" <<EOF
@@ -154,7 +158,7 @@ jobs:
             namespace: kube-public
           data:
             localRegistryHosting.v1: |
-              host: "localhost:5000"
+              host: "kind-registry:5000"
               help: "https://kind.sigs.k8s.io/docs/user/local-registry/"
           EOF
 
@@ -167,11 +171,15 @@ jobs:
         env:
           VERSION: 0.0.0-${{ github.sha }}
         run: |
-          # Package and install Helm chart
+          # Tag the image for the kind-registry hostname (accessible from within KinD)
+          docker tag localhost:5000/solo-operator:${VERSION} kind-registry:5000/solo-operator:${VERSION}
+          docker push kind-registry:5000/solo-operator:${VERSION}
+
+          # Package and install Helm chart using the kind-registry hostname
           helm package charts/solo-operator --version ${VERSION} --app-version ${VERSION}
           helm upgrade solo-operator solo-operator-${VERSION}.tgz \
             -i -n solo-operator --create-namespace \
-            --set image.repository=localhost:5000/solo-operator \
+            --set image.repository=kind-registry:5000/solo-operator \
             --set image.tag=${VERSION}
 
       - name: Wait for Operator Ready
