@@ -22,8 +22,6 @@ jobs:
   build:
     name: Code
     uses: ./.github/workflows/zxc-compile-code.yaml
-    with:
-      enable-docker-build: true
 
   code-style:
     name: Code Style
