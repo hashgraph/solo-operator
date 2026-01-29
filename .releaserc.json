@@ -1,0 +1,76 @@
+{
+  "plugins": [
+    "@semantic-release/commit-analyzer",
+    [
+      "@semantic-release/release-notes-generator",
+      {
+        "preset": "conventionalcommits"
+      }
+    ]
+  ],
+  "verifyConditions": [
+    [
+      "@semantic-release/exec",
+      {
+        "cmd": "go build -v ./..."
+      }
+    ]
+  ],
+  "prepare": [
+    [
+      "@semantic-release/exec",
+      {
+        "cmd": "set -e\n# Update version in Chart.yaml\nsed -i \"s/^version:.*/version: ${nextRelease.version}/\" charts/solo-operator/Chart.yaml\nsed -i \"s/^appVersion:.*/appVersion: \\\"${nextRelease.version}\\\"/\" charts/solo-operator/Chart.yaml\n# Package Helm chart\nhelm package charts/solo-operator\n# Output version for subsequent workflow steps\necho \"${nextRelease.version}\" > .release-version"
+      }
+    ],
+    [
+      "@semantic-release/git",
+      {
+        "assets": [
+          "charts/solo-operator/Chart.yaml"
+        ]
+      }
+    ]
+  ],
+  "publish": [
+    [
+      "@semantic-release/github",
+      {
+        "assets": [
+          "config/crd/bases/*",
+          "solo-operator-*.tgz"
+        ]
+      }
+    ]
+  ],
+  "branches": [
+    {
+      "name": "main"
+    },
+    {
+      "name": "release/([0-9]+).([0-9]+)",
+      "channel": "${name.replace(/release\\//g, '').split('.')[0]}.${name.replace(/release\\//g, '').split('.')[1]}.x",
+      "range": "${name.replace(/release\\//g, '').split('.')[0]}.${name.replace(/release\\//g, '').split('.')[1]}.x"
+    },
+    {
+      "name": "alpha/*",
+      "prerelease": "alpha",
+      "channel": "alpha"
+    },
+    {
+      "name": "ci/*",
+      "prerelease": "alpha",
+      "channel": "alpha"
+    },
+    {
+      "name": "beta/*",
+      "prerelease": "beta",
+      "channel": "beta"
+    },
+    {
+      "name": "rc/*",
+      "prerelease": "rc",
+      "channel": "rc"
+    }
+  ]
+}

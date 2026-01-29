@@ -13,27 +13,30 @@ linters:
     - staticcheck
     - unused
     - ineffassign
-    - gofmt
-    - goimports
     - misspell
     - unconvert
     - gosimple
     - gocritic
 
   settings:
-    gofmt:
-      simplify: true
-    goimports:
-      local-prefixes:
-        - github.com/hashgraph/solo-operator
     gocritic:
       enabled-tags:
         - diagnostic
         - performance
         - style
 
-issues:
-  exclude-rules:
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/hashgraph/solo-operator
+
+exclusions:
+  rules:
     - path: _test\.go
       linters:
         - errcheck

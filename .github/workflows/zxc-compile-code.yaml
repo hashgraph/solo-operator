@@ -119,33 +119,32 @@ jobs:
 
       - name: Build and Push to Ephemeral Registry
         if: ${{ (inputs.enable-docker-build || inputs.enable-unit-tests) && !cancelled() && !failure() }}
-        env:
-          REGISTRY: ${{ env.REGISTRY_HOST }}:${{ env.REGISTRY_PORT }}
-          VERSION: 0.0.0-${{ github.sha }}
-        run: |
-          # Build multi-arch image and push to ephemeral registry
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --tag ${REGISTRY}/solo-operator:${VERSION} \
-            --push \
-            --provenance=false \
-            .
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          tags: ${{ env.REGISTRY_HOST }}:${{ env.REGISTRY_PORT }}/solo-operator:0.0.0-${{ github.sha }}
 
-          # Verify image was pushed
-          docker buildx imagetools inspect ${REGISTRY}/solo-operator:${VERSION}
+      - name: Create KinD Config
+        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
+        run: |
+          cat <<'EOF' > kind-config.yaml
+          kind: Cluster
+          apiVersion: kind.x-k8s.io/v1alpha4
+          containerdConfigPatches:
+            - |-
+              [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:5000"]
+                endpoint = ["http://host.docker.internal:5000"]
+          EOF
 
       - name: Kubernetes KinD Cluster
         id: kind
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
         uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
         with:
-          config: |
-            kind: Cluster
-            apiVersion: kind.x-k8s.io/v1alpha4
-            containerdConfigPatches:
-              - |-
-                [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:5000"]
-                  endpoint = ["http://host.docker.internal:5000"]
+          config: kind-config.yaml
 
       - name: Set up Helm
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}

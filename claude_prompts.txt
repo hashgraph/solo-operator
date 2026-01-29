@@ -1,5 +1,0 @@
-Research Java best practices, the Java Operator SDK, Quarkus, GoLang best practices,
-GoLang secure coding conventions, GoLang Operator SDK, and Kubernetes Operator best practices.
-Become an expert in Java, GoLang, Quarkus, Java Operator SDK, GoLang Operator SDK, and Kubernetes
-operators. Analyze and learn my existing Quarkus based Kubernetes operator. Refactor my existing project into a
-GoLang based Kubernetes Operator.
