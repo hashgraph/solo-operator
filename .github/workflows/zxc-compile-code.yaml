@@ -20,6 +20,11 @@ on:
         type: boolean
         required: false
         default: false
+      enable-docker-build:
+        description: "Docker Build Enabled"
+        type: boolean
+        required: false
+        default: false
       custom-job-label:
         description: "Custom Job Label:"
         type: string
@@ -40,11 +45,23 @@ permissions:
 
 env:
   GO_VERSION: "1.25"
+  REGISTRY_HOST: localhost
+  REGISTRY_PORT: 5000
 
 jobs:
   compile:
     name: ${{ inputs.custom-job-label || 'Compiles' }}
     runs-on: solo-linux-medium
+    services:
+      registry:
+        image: registry:2
+        ports:
+          - 5000:5000
+        options: >-
+          --health-cmd "wget -q --spider http://localhost:5000/v2/ || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e3f713f2d8f53843e71c69a996d56f51aa9adfb9 # v2.14.1
@@ -90,44 +107,56 @@ jobs:
             coverage.out
             coverage.html
 
+      - name: Set up QEMU
+        if: ${{ (inputs.enable-docker-build || inputs.enable-unit-tests) && !cancelled() && !failure() }}
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+
+      - name: Set up Docker Buildx
+        if: ${{ (inputs.enable-docker-build || inputs.enable-unit-tests) && !cancelled() && !failure() }}
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+        with:
+          driver-opts: network=host
+
+      - name: Build and Push to Ephemeral Registry
+        if: ${{ (inputs.enable-docker-build || inputs.enable-unit-tests) && !cancelled() && !failure() }}
+        env:
+          REGISTRY: ${{ env.REGISTRY_HOST }}:${{ env.REGISTRY_PORT }}
+          VERSION: 0.0.0-${{ github.sha }}
+        run: |
+          # Build multi-arch image and push to ephemeral registry
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --tag ${REGISTRY}/solo-operator:${VERSION} \
+            --push \
+            --provenance=false \
+            .
+
+          # Verify image was pushed
+          docker buildx imagetools inspect ${REGISTRY}/solo-operator:${VERSION}
+
       - name: Kubernetes KinD Cluster
         id: kind
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
         uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
         with:
-          registry: true
-
-      - name: Set up QEMU
-        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
-
-      - name: Set up Docker Buildx
-        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
-        with:
-          buildkitd-config-inline: |
-            [registry."kind-registry:5000"]
-              http = true
-          driver-opts: |
-            network=container:kind-registry
+          config: |
+            kind: Cluster
+            apiVersion: kind.x-k8s.io/v1alpha4
+            containerdConfigPatches:
+              - |-
+                [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:5000"]
+                  endpoint = ["http://host.docker.internal:5000"]
 
       - name: Set up Helm
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
 
-      - name: Build and Push to Registry
+      - name: Deploy to KinD
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
         env:
-          REGISTRY: ${{ steps.kind.outputs.LOCAL_REGISTRY }}
+          REGISTRY: ${{ env.REGISTRY_HOST }}:${{ env.REGISTRY_PORT }}
           VERSION: 0.0.0-${{ github.sha }}
         run: |
-          # Build multi-arch image
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --tag ${REGISTRY}/solo-operator:${VERSION} \
-            --push \
-            .
-
           # Package and install Helm chart
           helm package charts/solo-operator --version ${VERSION} --app-version ${VERSION}
           helm upgrade solo-operator solo-operator-${VERSION}.tgz \
