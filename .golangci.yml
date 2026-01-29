@@ -17,6 +17,13 @@ linters:
     - unconvert
     - gosimple
     - gocritic
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+    paths:
+      - zz_generated
 
   settings:
     gocritic:
@@ -34,12 +41,3 @@ formatters:
     goimports:
       local-prefixes:
         - github.com/hashgraph/solo-operator
-
-exclusions:
-  rules:
-    - path: _test\.go
-      linters:
-        - errcheck
-    - path: zz_generated
-      linters:
-        - all
