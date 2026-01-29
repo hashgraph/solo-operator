@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Build stage
-FROM golang:1.25-alpine AS builder
+FROM golang:1.25-trixie AS builder
 
 WORKDIR /workspace
 
@@ -20,7 +20,7 @@ COPY internal/ internal/
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager cmd/main.go
 
 # Final stage
-FROM gcr.io/distroless/static:nonroot
+FROM gcr.io/distroless/static-debian13:nonroot
 
 WORKDIR /
 
