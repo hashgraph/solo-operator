@@ -45,23 +45,11 @@ permissions:
 
 env:
   GO_VERSION: "1.25"
-  REGISTRY_HOST: localhost
-  REGISTRY_PORT: 5000
 
 jobs:
   compile:
     name: ${{ inputs.custom-job-label || 'Compiles' }}
     runs-on: solo-linux-medium
-    services:
-      registry:
-        image: registry:2
-        ports:
-          - 5000:5000
-        options: >-
-          --health-cmd "wget -q --spider http://localhost:5000/v2/ || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e3f713f2d8f53843e71c69a996d56f51aa9adfb9 # v2.14.1
@@ -117,6 +105,14 @@ jobs:
         with:
           driver-opts: network=host
 
+      - name: Start Ephemeral Registry
+        id: registry
+        if: ${{ (inputs.enable-docker-build || inputs.enable-unit-tests) && !cancelled() && !failure() }}
+        run: |
+          docker run -d --restart=always -p 5000:5000 --network bridge --name kind-registry registry:2
+          echo "host=localhost" >> $GITHUB_OUTPUT
+          echo "port=5000" >> $GITHUB_OUTPUT
+
       - name: Build and Push to Ephemeral Registry
         if: ${{ (inputs.enable-docker-build || inputs.enable-unit-tests) && !cancelled() && !failure() }}
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
@@ -125,26 +121,42 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           provenance: false
-          tags: ${{ env.REGISTRY_HOST }}:${{ env.REGISTRY_PORT }}/solo-operator:0.0.0-${{ github.sha }}
-
-      - name: Create KinD Config
-        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
-        run: |
-          cat <<'EOF' > kind-config.yaml
-          kind: Cluster
-          apiVersion: kind.x-k8s.io/v1alpha4
-          containerdConfigPatches:
-            - |-
-              [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:5000"]
-                endpoint = ["http://host.docker.internal:5000"]
-          EOF
+          tags: localhost:5000/solo-operator:0.0.0-${{ github.sha }}
 
       - name: Kubernetes KinD Cluster
         id: kind
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
         uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
         with:
-          config: kind-config.yaml
+          cluster_name: kind
+
+      - name: Connect Registry to KinD Network
+        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
+        run: |
+          # Connect the registry to the kind network
+          docker network connect kind kind-registry || true
+
+          # Configure containerd to use the local registry
+          REGISTRY_DIR="/etc/containerd/certs.d/localhost:5000"
+          for node in $(kind get nodes --name kind); do
+            docker exec "${node}" mkdir -p "${REGISTRY_DIR}"
+            docker exec "${node}" sh -c "cat > ${REGISTRY_DIR}/hosts.toml" <<EOF
+          [host."http://kind-registry:5000"]
+          EOF
+          done
+
+          # Document the local registry
+          kubectl apply -f - <<EOF
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: local-registry-hosting
+            namespace: kube-public
+          data:
+            localRegistryHosting.v1: |
+              host: "localhost:5000"
+              help: "https://kind.sigs.k8s.io/docs/user/local-registry/"
+          EOF
 
       - name: Set up Helm
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
@@ -153,14 +165,13 @@ jobs:
       - name: Deploy to KinD
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
         env:
-          REGISTRY: ${{ env.REGISTRY_HOST }}:${{ env.REGISTRY_PORT }}
           VERSION: 0.0.0-${{ github.sha }}
         run: |
           # Package and install Helm chart
           helm package charts/solo-operator --version ${VERSION} --app-version ${VERSION}
           helm upgrade solo-operator solo-operator-${VERSION}.tgz \
             -i -n solo-operator --create-namespace \
-            --set image.repository=${REGISTRY}/solo-operator \
+            --set image.repository=localhost:5000/solo-operator \
             --set image.tag=${VERSION}
 
       - name: Wait for Operator Ready
@@ -184,3 +195,8 @@ jobs:
         with:
           name: "Operator Log"
           path: "operator.log"
+
+      - name: Cleanup Registry
+        if: ${{ always() }}
+        run: |
+          docker rm -f kind-registry || true
