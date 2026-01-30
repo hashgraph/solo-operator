@@ -15,29 +15,27 @@ on:
 permissions:
   contents: read
 
+env:
+  GO_VERSION: "1.25"
+
 jobs:
   snyk:
     name: Snyk Monitor
     runs-on: solo-linux-medium
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+        uses: step-security/harden-runner@e3f713f2d8f53843e71c69a996d56f51aa9adfb9 # v2.14.1
         with:
           egress-policy: audit
 
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
-      - name: Setup Java
-        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+      - name: Setup Go
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
-          distribution: temurin
-          java-version: 21
-
-      - name: Setup Gradle
-        uses: gradle/gradle-build-action@ac2d340dc04d9e1113182899e983b5400c17cda1 # v3.5.0
-        with:
-          gradle-version: wrapper
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
 
       - name: Setup NodeJS
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -48,7 +46,7 @@ jobs:
       # Snyk will fail if the code does not compile and the error messages are less than helpful. Therefore, we will
       # compile the code first and then run Snyk so that we can get diagnostic information if the code does not compile.
       - name: Compile
-        run: ./gradlew assemble --scan
+        run: go build -v ./...
 
       - name: Setup Snyk
         run: npm install -g snyk
@@ -58,4 +56,4 @@ jobs:
       - name: Run Snyk Monitor
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: snyk monitor --all-projects --org=${{ inputs.snyk-org-identifier }}
+        run: snyk monitor --all-projects --org=${{ vars.SNYK_ORG_IDENTIFIER }}

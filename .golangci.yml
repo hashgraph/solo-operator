@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: Apache-2.0
+
+version: "2"
+
+run:
+  timeout: 5m
+  go: "1.25"
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - misspell
+    - unconvert
+    - gocritic
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - unused
+      # Ignore deprecated Requeue field - it's still commonly used in controller-runtime
+      - linters:
+          - staticcheck
+        text: "SA1019.*Requeue is deprecated"
+    paths:
+      - zz_generated
+
+  settings:
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+      disabled-checks:
+        # appendAssign is a style preference
+        - appendAssign
+        # Octal literal style is a matter of preference
+        - octalLiteral
+        # Empty string test style is a matter of preference
+        - emptyStringTest
+    staticcheck:
+      checks:
+        - all
+        # Disable nil check before len() - this is a style preference
+        - "-S1009"
+        # Disable naming convention checks - API field names are fixed for compatibility
+        - "-ST1003"
+        # Disable package comment requirement
+        - "-ST1000"
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/hashgraph/solo-operator

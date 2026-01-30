@@ -15,8 +15,13 @@ on:
         type: boolean
         required: false
         default: false
-      enable-spotless-check:
-        description: "Spotless Check Enabled"
+      enable-lint-check:
+        description: "Lint Check Enabled"
+        type: boolean
+        required: false
+        default: false
+      enable-docker-build:
+        description: "Docker Build Enabled"
         type: boolean
         required: false
         default: false
@@ -38,6 +43,9 @@ permissions:
   checks: write
   statuses: write
 
+env:
+  GO_VERSION: "1.25"
+  KIND_NODE_IMAGE: kindest/node:v1.31.4@sha256:2cb39f7295fe7eafee0842b1052a599a4fb0f8bcf3f83d96c7f4864c357c6c30
 
 jobs:
   compile:
@@ -45,126 +53,119 @@ jobs:
     runs-on: solo-linux-medium
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+        uses: step-security/harden-runner@e3f713f2d8f53843e71c69a996d56f51aa9adfb9 # v2.14.1
         with:
           egress-policy: audit
 
       - name: Checkout Code
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
-          fetch-depth: ${{ inputs.enable-spotless-check && '0' || '' }}
+          fetch-depth: ${{ inputs.enable-lint-check && '0' || '' }}
 
-      - name: Setup Java
-        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+      - name: Setup Go
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
-          distribution: temurin
-          java-version: 21
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
 
-      - name: Setup Gradle
-        uses: gradle/gradle-build-action@ac2d340dc04d9e1113182899e983b5400c17cda1 # v3.5.0
-        with:
-          gradle-version: wrapper
-          cache-read-only: false
+      - name: Download Dependencies
+        run: go mod download
 
       - name: Compile Code
-        run: ./gradlew clean assemble --scan
+        run: go build -v ./...
 
-      - name: Spotless Check
-        if: ${{ inputs.enable-spotless-check && !cancelled() && !failure() }}
-        run: ./gradlew spotlessCheck --scan
-
-      - name: Checkstyle Check
-        if: ${{ inputs.enable-spotless-check && !cancelled() && !failure() }}
-        run: ./gradlew checkstyleComponentTest checkstyleMain checkstyleTest checkstyleTestFixtures --scan
+      - name: Lint Check
+        if: ${{ inputs.enable-lint-check && !cancelled() && !failure() }}
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        with:
+          version: latest
+          args: --timeout=5m
 
       - name: Unit Tests
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
-        run: ./gradlew check --scan
-
-      - name: Publish Unit Test Report
-        uses: step-security/publish-unit-test-result-action@43e0c963eea0ace6eca353cb1d814d857fee5c53 # v2.20.2
-        if: ${{ inputs.enable-unit-tests && !cancelled() }}
-        with:
-          check_name: "Unit Test Results"
-          files: "**/build/test-results/test/TEST-*.xml"
+        run: |
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./internal/... ./api/...
+          go tool cover -html=coverage.out -o coverage.html
 
       - name: Publish Unit Test Coverage Reports
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: ${{ inputs.enable-unit-tests && !cancelled() }}
         with:
           name: Unit Test Coverage Reports
-          path: "**/jacoco*.xml"
-
-      - name: Publish Test Reports
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: ${{ inputs.enable-unit-tests && !cancelled() }}
-        with:
-          name: Test Reports
-          path: "**/build/test-results/test/TEST-*.xml"
-
-      - name: Archive Test Snapshots
-        if: ${{ inputs.enable-unit-tests && !cancelled() }}
-        run: |
-          (cd build; zip -qr snapshots.zip snapshots) || :
-
-      - name: Publish Test Snapshots
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: ${{ inputs.enable-unit-tests && !cancelled() }}
-        with:
-          name: Test Snapshots
-          path: build/snapshots.zip
-          if-no-files-found: ignore
-
-      - name: Kubernetes KinD Cluster
-        id: kind
-        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
-        uses: helm/kind-action@b72c923563e6e80ea66e8e8c810798cc73e97e5e
-        with:
-          registry: true
+          path: |
+            coverage.out
+            coverage.html
 
       - name: Set up QEMU
-        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
-        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+        if: ${{ (inputs.enable-docker-build || inputs.enable-unit-tests) && !cancelled() && !failure() }}
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
 
       - name: Set up Docker Buildx
-        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+        if: ${{ (inputs.enable-docker-build || inputs.enable-unit-tests) && !cancelled() && !failure() }}
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
         with:
-          buildkitd-config-inline: |
-            [registry."kind-registry:5000"]
-              http = true
-          driver-opts: |
-            network=container:kind-registry
+          driver-opts: network=host
 
       - name: Set up Helm
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
 
-      - name: Publish to registry
-        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
-        env:
-          QUARKUS_CONTAINER_IMAGE_BUILD: true
-          QUARKUS_CONTAINER_IMAGE_PUSH: true
-          QUARKUS_CONTAINER_IMAGE_REGISTRY: ${{ steps.kind.outputs.LOCAL_REGISTRY }}
-          QUARKUS_DOCKER_BUILDX_PLATFORM: linux/amd64,linux/arm64
-          ORG_GRADLE_PROJECT_version: 0.0.0-${{ github.sha }}
-        run: |
-          ./gradlew clean assemble
-          helm package build/helm
-          helm upgrade solo-operator solo-operator-${ORG_GRADLE_PROJECT_version}.tgz -i -n solo-operator --create-namespace
+      - name: Setup Kind
+        uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
+        if: ${{ (inputs.enable-docker-build || inputs.enable-unit-tests) && !cancelled() && !failure() }}
+        with:
+          install_only: true
+          node_image: ${{ env.KIND_NODE_IMAGE }}
+          version: v0.31.0
+          kubectl_version: v1.31.4
+          verbosity: 3
 
-      - name: Helm Tests
+      - name: Kubernetes KinD Cluster with Registry
+        id: kind
+        if: ${{ (inputs.enable-docker-build || inputs.enable-unit-tests) && !cancelled() && !failure() }}
+        uses: container-tools/kind-action@0ad70e2299366b0e1552c7240f4e4567148f723e # v2.0.4
+        with:
+          version: 0.31.0
+          kubectl_version: v1.31.4
+          registry: true
+          node_image: ${{ env.KIND_NODE_IMAGE }}
+
+      - name: Build and Push to Local Registry
+        if: ${{ (inputs.enable-docker-build || inputs.enable-unit-tests) && !cancelled() && !failure() }}
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          tags: localhost:5000/solo-operator:0.0.0-${{ github.sha }}
+
+      - name: Deploy to KinD
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
         env:
-          SOLO_OPERATOR_TEST_USING_EXTERNAL_OPERATOR_INSTANCE: true
-          QUARKUS_KUBERNETES_CLIENT_DEVSERVICES_OVERRIDE_KUBECONFIG: false
+          VERSION: 0.0.0-${{ github.sha }}
         run: |
-          ./gradlew test --scan -Dtags=helm-test
+          # Package and install Helm chart
+          helm package charts/solo-operator --version ${VERSION} --app-version ${VERSION}
+          helm upgrade solo-operator solo-operator-${VERSION}.tgz \
+            -i -n solo-operator --create-namespace \
+            --set image.repository=kind-registry:5000/solo-operator \
+            --set image.tag=${VERSION}
+
+      - name: Wait for Operator Ready
+        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
+        run: |
+          kubectl -n solo-operator rollout status deployment/solo-operator-controller-manager --timeout=120s
+
+      - name: Install CRDs
+        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
+        run: |
+          kubectl apply --server-side -f config/crd/bases/
 
       - name: Capture Operator Log
         if: ${{ inputs.enable-unit-tests && !cancelled() }}
         run: |
-          kubectl -n solo-operator logs -l app.kubernetes.io/name=solo-operator --tail -1 --timestamps > operator.log
+          kubectl -n solo-operator logs -l app.kubernetes.io/name=solo-operator --tail -1 --timestamps > operator.log || true
 
       - name: Publish Operator Log
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -172,11 +173,3 @@ jobs:
         with:
           name: "Operator Log"
           path: "operator.log"
-
-      - name: Publish Heap Dumps
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: ${{ inputs.enable-unit-tests && !cancelled() }}
-        with:
-          name: Test Heap Dumps
-          path: "java_*.hprof"
-          if-no-files-found: ignore
