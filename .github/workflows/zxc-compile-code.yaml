@@ -105,13 +105,27 @@ jobs:
         with:
           driver-opts: network=host
 
+      - name: Set up Helm
+        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+
+      - name: Setup Kind
+        uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
+        if: ${{ (inputs.enable-docker-build || inputs.enable-unit-tests) && !cancelled() && !failure() }}
+        with:
+          install_only: true
+          node_image: kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48
+          version: v0.31.0
+          kubectl_version: v1.34.3
+          verbosity: 3
+
       - name: Kubernetes KinD Cluster with Registry
         id: kind
         if: ${{ (inputs.enable-docker-build || inputs.enable-unit-tests) && !cancelled() && !failure() }}
         uses: container-tools/kind-action@0ad70e2299366b0e1552c7240f4e4567148f723e # v2.0.4
         with:
           version: 0.31.0
-          kubectl_version: v1.35.0
+          kubectl_version: v1.34.3
           registry: true
 
       - name: Build and Push to Local Registry
@@ -123,10 +137,6 @@ jobs:
           push: true
           provenance: false
           tags: localhost:5000/solo-operator:0.0.0-${{ github.sha }}
-
-      - name: Set up Helm
-        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
-        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
 
       - name: Deploy to KinD
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
