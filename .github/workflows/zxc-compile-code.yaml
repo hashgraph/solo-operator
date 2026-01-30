@@ -105,15 +105,14 @@ jobs:
         with:
           driver-opts: network=host
 
-      - name: Start Ephemeral Registry
-        id: registry
+      - name: Kubernetes KinD Cluster with Registry
+        id: kind
         if: ${{ (inputs.enable-docker-build || inputs.enable-unit-tests) && !cancelled() && !failure() }}
-        run: |
-          docker run -d --restart=always -p 5000:5000 --network bridge --name kind-registry registry:2
-          echo "host=localhost" >> $GITHUB_OUTPUT
-          echo "port=5000" >> $GITHUB_OUTPUT
+        uses: container-tools/kind-action@0ad70e2299366b0e1552c7240f4e4567148f723e # v2.0.4
+        with:
+          registry: true
 
-      - name: Build and Push to Ephemeral Registry
+      - name: Build and Push to Local Registry
         if: ${{ (inputs.enable-docker-build || inputs.enable-unit-tests) && !cancelled() && !failure() }}
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
@@ -121,46 +120,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           provenance: false
-          tags: localhost:5000/solo-operator:0.0.0-${{ github.sha }}
-
-      - name: Kubernetes KinD Cluster
-        id: kind
-        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
-        uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
-        with:
-          cluster_name: kind
-
-      - name: Connect Registry to KinD Network
-        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
-        run: |
-          # Connect the registry to the kind network
-          docker network connect kind kind-registry || true
-
-          # Add kind-registry to /etc/hosts so we can push to it from the host
-          REGISTRY_IP=$(docker inspect -f '{{.NetworkSettings.Networks.kind.IPAddress}}' kind-registry)
-          echo "${REGISTRY_IP} kind-registry" | sudo tee -a /etc/hosts
-
-          # Configure containerd to use the local registry for kind-registry:5000
-          REGISTRY_DIR="/etc/containerd/certs.d/kind-registry:5000"
-          for node in $(kind get nodes --name kind); do
-            docker exec "${node}" mkdir -p "${REGISTRY_DIR}"
-            docker exec "${node}" sh -c "cat > ${REGISTRY_DIR}/hosts.toml" <<EOF
-          [host."http://kind-registry:5000"]
-          EOF
-          done
-
-          # Document the local registry
-          kubectl apply -f - <<EOF
-          apiVersion: v1
-          kind: ConfigMap
-          metadata:
-            name: local-registry-hosting
-            namespace: kube-public
-          data:
-            localRegistryHosting.v1: |
-              host: "kind-registry:5000"
-              help: "https://kind.sigs.k8s.io/docs/user/local-registry/"
-          EOF
+          tags: kind-registry:5000/solo-operator:0.0.0-${{ github.sha }}
 
       - name: Set up Helm
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
@@ -171,11 +131,7 @@ jobs:
         env:
           VERSION: 0.0.0-${{ github.sha }}
         run: |
-          # Tag the image for the kind-registry hostname (accessible from within KinD)
-          docker tag localhost:5000/solo-operator:${VERSION} kind-registry:5000/solo-operator:${VERSION}
-          docker push kind-registry:5000/solo-operator:${VERSION}
-
-          # Package and install Helm chart using the kind-registry hostname
+          # Package and install Helm chart
           helm package charts/solo-operator --version ${VERSION} --app-version ${VERSION}
           helm upgrade solo-operator solo-operator-${VERSION}.tgz \
             -i -n solo-operator --create-namespace \
@@ -203,8 +159,3 @@ jobs:
         with:
           name: "Operator Log"
           path: "operator.log"
-
-      - name: Cleanup Registry
-        if: ${{ always() }}
-        run: |
-          docker rm -f kind-registry || true
