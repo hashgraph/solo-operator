@@ -50,12 +50,12 @@ const (
 
 // Volume and mount paths
 const (
-	ConfigVolumeName    = "config"
-	ConfigMountPath     = "/usr/local/etc/haproxy/haproxy.cfg"
-	ConfigFileName      = "haproxy.cfg"
-	TLSVolumeName       = "tls-secrets"
-	TLSMountPath        = "/etc/haproxy/certs"
-	ContainerName       = "haproxy"
+	ConfigVolumeName = "config"
+	ConfigMountPath  = "/usr/local/etc/haproxy/haproxy.cfg"
+	ConfigFileName   = "haproxy.cfg"
+	TLSVolumeName    = "tls-secrets"
+	TLSMountPath     = "/etc/haproxy/certs"
+	ContainerName    = "haproxy"
 )
 
 // DefaultHAProxyConfig is the default HAProxy configuration

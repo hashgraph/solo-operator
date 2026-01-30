@@ -5,8 +5,9 @@ package orbit
 import (
 	"testing"
 
-	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
 func TestStandardLabels(t *testing.T) {

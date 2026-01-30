@@ -5,11 +5,12 @@ package upgrade
 import (
 	"context"
 
-	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
-	"github.com/hashgraph/solo-operator/internal/processor"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/processor"
 )
 
 // FreezeAbortTask handles the abort of a network upgrade.
@@ -99,21 +100,6 @@ func (s *FreezeAbortStep) markSucceeded(status *UpgradeStatus, generation int64)
 		LastTransitionTime: now,
 		Reason:             StepConditionReasonFreezeAborted,
 		Message:            "Freeze abort completed successfully - upgrade cycle discarded",
-		ObservedGeneration: generation,
-	})
-	return status
-}
-
-// markFailed marks the step as failed
-func (s *FreezeAbortStep) markFailed(status *UpgradeStatus, generation int64, message string) *UpgradeStatus {
-	now := metav1.Now()
-	status.Phase = operatorv1alpha1.PhaseFailed
-	status.AddCondition(metav1.Condition{
-		Type:               StepConditionTypeFreezeAbort,
-		Status:             metav1.ConditionFalse,
-		LastTransitionTime: now,
-		Reason:             StepConditionReasonFreezeAborted,
-		Message:            message,
 		ObservedGeneration: generation,
 	})
 	return status

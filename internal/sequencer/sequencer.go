@@ -188,7 +188,7 @@ func (s *Sequencer[T]) ComputeReconcileDelay(request Request[T]) time.Duration {
 
 	// Take 30% of the total execution time of all items before this item
 	totalExecutionTime := processingTime * time.Duration(index)
-	computedDelay := time.Duration(math.Floor(float64(totalExecutionTime.Milliseconds()) * 0.3)) * time.Millisecond
+	computedDelay := time.Duration(math.Floor(float64(totalExecutionTime.Milliseconds())*0.3)) * time.Millisecond
 
 	// Return the smaller of computed and recommended delay
 	if computedDelay < reconcileDelay {
@@ -274,7 +274,7 @@ func (s *Sequencer[T]) computeReconcileDelayLocked(request Request[T]) time.Dura
 	}
 
 	totalExecutionTime := processingTime * time.Duration(index)
-	computedDelay := time.Duration(math.Floor(float64(totalExecutionTime.Milliseconds()) * 0.3)) * time.Millisecond
+	computedDelay := time.Duration(math.Floor(float64(totalExecutionTime.Milliseconds())*0.3)) * time.Millisecond
 
 	if computedDelay < reconcileDelay {
 		return computedDelay

@@ -5,9 +5,10 @@ package upgrade
 import (
 	"context"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/processor"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // FreezeScheduledTask performs the actions when the network node emits the "freeze_scheduled.mf" marker file.

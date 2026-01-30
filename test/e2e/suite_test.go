@@ -285,13 +285,3 @@ func deleteNamespace(ctx context.Context, name string) error {
 	ns.Name = name
 	return client.IgnoreNotFound(k8sClient.Delete(ctx, ns))
 }
-
-// waitForResource waits for a resource to exist
-func waitForResource(ctx context.Context, obj client.Object, key client.ObjectKey) error {
-	var lastErr error
-	Eventually(func() error {
-		lastErr = k8sClient.Get(ctx, key, obj)
-		return lastErr
-	}, timeout, interval).Should(Succeed())
-	return lastErr
-}

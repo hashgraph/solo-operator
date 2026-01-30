@@ -3,12 +3,14 @@
 package node
 
 import (
+	"context"
 	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/processor"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Step condition type constants
@@ -83,15 +85,15 @@ func NewProcessor(c client.Client) *Processor {
 
 // ProcessAdd processes a node add operation
 func (p *Processor) ProcessAdd(op *operatorv1alpha1.NetworkOperation) (*processor.Result[*NodeStatus], error) {
-	return p.nodeAddTask.Execute(nil, op)
+	return p.nodeAddTask.Execute(context.TODO(), op)
 }
 
 // ProcessUpdate processes a node update operation
 func (p *Processor) ProcessUpdate(op *operatorv1alpha1.NetworkOperation) (*processor.Result[*NodeStatus], error) {
-	return p.nodeUpdateTask.Execute(nil, op)
+	return p.nodeUpdateTask.Execute(context.TODO(), op)
 }
 
 // ProcessDelete processes a node delete operation
 func (p *Processor) ProcessDelete(op *operatorv1alpha1.NetworkOperation) (*processor.Result[*NodeStatus], error) {
-	return p.nodeDeleteTask.Execute(nil, op)
+	return p.nodeDeleteTask.Execute(context.TODO(), op)
 }

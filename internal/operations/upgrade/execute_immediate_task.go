@@ -6,9 +6,10 @@ import (
 	"context"
 	"time"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/processor"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // ExecuteImmediateTask performs the actions when the network node emits the "execute_immediate.mf" marker file.

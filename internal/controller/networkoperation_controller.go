@@ -5,7 +5,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -555,6 +554,3 @@ func (r *NetworkOperationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Named("networkoperation").
 		Complete(r)
 }
-
-// Default reconcile delay when no specific delay is needed
-const defaultReconcileDelay = 5 * time.Second

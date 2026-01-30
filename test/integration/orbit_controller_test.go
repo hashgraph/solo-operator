@@ -32,7 +32,7 @@ var _ = Describe("Orbit Controller", func() {
 				},
 				Spec: operatorv1alpha1.OrbitSpec{
 					Consensus: operatorv1alpha1.OrbitConsensus{
-						NetworkSettings:         map[string]string{"ledger.id": "0x03"},
+						NetworkSettings:          map[string]string{"ledger.id": "0x03"},
 						ApplicationConfiguration: map[string]string{"hedera.realm": "0"},
 						PermissionConfiguration:  map[string]string{"permission": "default"},
 					},
@@ -108,7 +108,7 @@ var _ = Describe("Orbit Controller", func() {
 						},
 					},
 					Consensus: operatorv1alpha1.OrbitConsensus{
-						NetworkSettings:         map[string]string{"ledger.id": "0x03"},
+						NetworkSettings:          map[string]string{"ledger.id": "0x03"},
 						ApplicationConfiguration: map[string]string{"hedera.realm": "0"},
 						PermissionConfiguration:  map[string]string{"permission": "default"},
 					},
@@ -148,7 +148,7 @@ var _ = Describe("Orbit Controller", func() {
 				Spec: operatorv1alpha1.OrbitSpec{
 					Lifetime: "24h",
 					Consensus: operatorv1alpha1.OrbitConsensus{
-						NetworkSettings:         map[string]string{"ledger.id": "0x03"},
+						NetworkSettings:          map[string]string{"ledger.id": "0x03"},
 						ApplicationConfiguration: map[string]string{"hedera.realm": "0"},
 						PermissionConfiguration:  map[string]string{"permission": "default"},
 					},

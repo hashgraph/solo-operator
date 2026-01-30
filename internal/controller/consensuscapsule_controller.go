@@ -4,7 +4,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -190,21 +189,4 @@ func (r *ConsensusCapsuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&rbacv1.RoleBinding{}).
 		Named("consensuscapsule").
 		Complete(r)
-}
-
-// commonLabels returns the common labels for resources (deprecated: use consensus.CommonLabels)
-func (r *ConsensusCapsuleReconciler) commonLabels(capsule *operatorv1alpha1.ConsensusCapsule) map[string]string {
-	return map[string]string{
-		LabelManagedBy: "solo-operator",
-		LabelPartOf:    "consensus-node",
-		LabelOrbit:     capsule.Spec.Orbit,
-		LabelNodeId:    fmt.Sprintf("%d", capsule.Spec.NodeId),
-	}
-}
-
-// podLabels returns the labels for pods (deprecated: use consensus.PodLabels)
-func (r *ConsensusCapsuleReconciler) podLabels(capsule *operatorv1alpha1.ConsensusCapsule) map[string]string {
-	labels := r.commonLabels(capsule)
-	labels[LabelComponent] = "deployment"
-	return labels
 }

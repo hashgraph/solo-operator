@@ -4,12 +4,12 @@ package node
 
 import (
 	"context"
-	"fmt"
 
-	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
 // NodeUpdateStep performs the consensus node update operation
@@ -53,20 +53,6 @@ func (s *NodeUpdateStep) Run(ctx context.Context, resource *operatorv1alpha1.Net
 	// 4. Updating network configuration if needed
 
 	return s.markFailed(status, resource.Generation, "Node update operation not yet implemented")
-}
-
-// markSucceeded marks the step as successful
-func (s *NodeUpdateStep) markSucceeded(status *NodeStatus, generation int64, nodeName string) *NodeStatus {
-	now := metav1.Now()
-	status.AddCondition(metav1.Condition{
-		Type:               StepConditionTypeNodeOperation,
-		Status:             metav1.ConditionTrue,
-		LastTransitionTime: now,
-		Reason:             StepConditionReasonNodeUpdate,
-		Message:            fmt.Sprintf("Successfully updated consensus node: %s", nodeName),
-		ObservedGeneration: generation,
-	})
-	return status
 }
 
 // markFailed marks the step as failed
