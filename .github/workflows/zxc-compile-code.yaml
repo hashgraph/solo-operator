@@ -110,6 +110,8 @@ jobs:
         if: ${{ (inputs.enable-docker-build || inputs.enable-unit-tests) && !cancelled() && !failure() }}
         uses: container-tools/kind-action@0ad70e2299366b0e1552c7240f4e4567148f723e # v2.0.4
         with:
+          version: 0.31.0
+          kubectl_version: v1.35.0
           registry: true
 
       - name: Build and Push to Local Registry
