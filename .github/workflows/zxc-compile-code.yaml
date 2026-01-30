@@ -120,7 +120,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           provenance: false
-          tags: kind-registry:5000/solo-operator:0.0.0-${{ github.sha }}
+          tags: localhost:5000/solo-operator:0.0.0-${{ github.sha }}
 
       - name: Set up Helm
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
