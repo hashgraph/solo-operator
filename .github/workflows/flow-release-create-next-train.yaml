@@ -186,7 +186,7 @@ jobs:
           sed -i "s/^appVersion:.*/appVersion: \"${{ needs.prepare-release-train.outputs.next-snapshot-version }}\"/" charts/solo-operator/Chart.yaml
 
       - name: Commit Changes
-        uses: EndBug/add-and-commit@777a761e0f8293b7b051170404976d7cf10611cb # v9.1.4
+        uses: EndBug/add-and-commit@a94899bca583c204427a224a7af87c02f9b325d5 # v9.1.4
         if: ${{ github.event.inputs.dry-run-enabled != 'true' && needs.prepare-release-train.outputs.release-branch-exists != 'true' }}
         with:
           push: true
