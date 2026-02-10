@@ -1002,29 +1002,3 @@ spec:
       enabled: true
       helmChart: oci://registry/hedera-json-rpc-relay
 ```
-
-## Implementation Plan
-
-### Phase 1: Core CRD (Week 1)
-- Define Sphere CRD
-- Implement SphereController skeleton
-- Basic status reporting
-- Create ConsensusCapsule CRs
-
-### Phase 2: Deployment (Weeks 2-3)
-- Key generation processor
-- Database initialization processor
-- Addressbook processor
-- Account initialization processor
-
-### Phase 3: Components (Week 4)
-- Flux CD HelmRelease integration
-- Mirror node deployment
-- Explorer deployment
-- Relay deployment
-
-### Phase 4: Production (Week 5)
-- E2E tests
-- Documentation
-- Performance optimization
-- Security hardening
