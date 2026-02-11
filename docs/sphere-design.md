@@ -28,7 +28,7 @@ The Hedera Network Operator automates deployment and lifecycle management of Hed
 - **ConsensusCapsule**: Hedera consensus node (StatefulSet)
 - **EnvoyCapsule**: Envoy proxy (Deployment)
 - **HAProxyCapsule**: HAProxy load balancer (Deployment)
-- **HelmCapsule**: Helm-managed component (HelmRelease CR)
+- **HelmCapsule**: Helm-managed component (creates Flux CD HelmRelease CR)
 
 **Purpose**:
 - Define component configuration
@@ -71,8 +71,16 @@ The Hedera Network Operator automates deployment and lifecycle management of Hed
        ▼                 ▼                 ▼
 ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
 │ StatefulSet  │  │ Deployment   │  │ HelmRelease  │
-│   (Pods)     │  │   (Pods)     │  │   (Flux)     │
-└──────────────┘  └──────────────┘  └──────────────┘
+│   (Pods)     │  │   (Pods)     │  │ (Flux CD)    │
+└──────────────┘  └──────────────┘  └──────┬───────┘
+                                            │
+                                            │ Flux CD
+                                            │ reconciles
+                                            ▼
+                                    ┌──────────────┐
+                                    │ Helm Chart   │
+                                    │  Resources   │
+                                    └──────────────┘
 ```
 
 ## Change Management Flow
@@ -99,6 +107,7 @@ The Hedera Network Operator automates deployment and lifecycle management of Hed
 7. Operator applies Kubernetes changes:
    • Update ConfigMaps
    • Update StatefulSet/Deployment
+   • Update HelmRelease CR (Flux CD handles Helm deployment)
    • Trigger pod restart if needed
          ↓
 8. Update Capsule status
@@ -286,7 +295,7 @@ Actions Required:
 3. **Plan Actions**: Determine required operations
 4. **Create NetworkOperation** (if blockchain transaction needed)
 5. **Wait for Consensus**: Monitor NetworkOperation status
-6. **Apply K8s Changes**: Update ConfigMaps, StatefulSets, Deployments
+6. **Apply K8s Changes**: Update ConfigMaps, StatefulSets, Deployments, or HelmRelease CRs (Flux CD reconciles)
 7. **Verify Health**: Check pod status, node consensus
 8. **Update Status**: Reflect changes in Capsule status
 
@@ -312,6 +321,8 @@ Addressbook must stay synchronized across all clusters and match blockchain stat
 - Git repository with Orbit CRs
 - Flux CD or ArgoCD syncing across clusters
 - Manual kubectl apply to all clusters
+
+**Note**: Flux CD HelmRelease operator handles all Helm-based component deployments referenced by HelmCapsule CRs.
 
 ## Multi-Cluster Deployment
 
