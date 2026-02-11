@@ -188,7 +188,6 @@ spec:
 **Behavior**:
 - **Messenger operator**: Creates and submits NetworkOperations
 - **Observer operators**: Watch NetworkOperation status, apply K8s changes after consensus
-- **Leader election**: Within messenger cluster for HA (multiple replicas)
 
 **Enforcement**:
 - Operator checks `TX_MODE` environment variable
@@ -399,3 +398,159 @@ status:
 - **Multi-Cluster**: Single network across multiple clusters
 - **Auditable**: NetworkOperation CRs provide transaction history
 - **Flexible**: Supports both operator and user-initiated operations
+
+## Migration Strategy
+
+### Phase 1: Manual NetworkOperations (Weeks 1-4)
+
+**Goal**: Operator manages Kubernetes resources, humans manage blockchain transactions.
+
+**Operator Behavior**:
+- Watches Capsule CRs for changes
+- Detects when blockchain transaction is needed
+- **Does NOT create NetworkOperation CRs**
+- Updates Capsule status to indicate "waiting for NetworkOperation"
+- Waits for freeze state before applying K8s changes
+
+**Human Workflow**:
+```
+1. User updates ConsensusCapsule (e.g., version upgrade)
+         ↓
+2. Operator detects change, updates status:
+   status.pendingSpec.version = v0.61.0
+   status.message = "Waiting for NetworkOperation with freeze timestamp"
+         ↓
+3. Human creates NetworkOperation CR manually:
+   kubectl apply -f networkop-node-0-upgrade.yaml
+         ↓
+4. Messenger operator submits freeze transaction with timestamp
+         ↓
+5. Operator waits until freeze timestamp is reached
+         ↓
+6. Operator polls nodes for freeze status
+         ↓
+7. All nodes frozen?
+         ↓
+8. Operator applies K8s changes (update StatefulSet)
+         ↓
+9. Pods restart with new version
+```
+
+**Example Manual NetworkOperation**:
+```yaml
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: NetworkOperation
+metadata:
+  name: node-0-upgrade
+  namespace: hedera
+spec:
+  mode: NodeUpdate
+  capsuleRef:
+    name: node-0
+    kind: ConsensusCapsule
+  operation:
+    nodeId: 0
+    newVersion: v0.61.0
+    freezeTimestamp: "2024-01-16T02:00:00Z"  # When nodes will freeze
+  configurationDiff:
+    field: spec.version
+    oldValue: v0.60.1
+    newValue: v0.61.0
+```
+
+**Benefits**:
+- Operators gain confidence in freeze detection
+- Humans control transaction timing
+- Lower risk for initial deployments
+- Clear separation of concerns
+
+**Limitations**:
+- Manual NetworkOperation creation required
+- Humans must monitor freeze status
+- Slower upgrade process
+
+### Phase 2: Automated NetworkOperations (Weeks 5+)
+
+**Goal**: Operator fully automates blockchain transactions and K8s changes.
+
+**Operator Behavior**:
+- Watches Capsule CRs for changes
+- Detects when blockchain transaction is needed
+- **Automatically creates NetworkOperation CRs**
+- Submits freeze transaction (if messenger)
+- Polls nodes for freeze status
+- Applies K8s changes when frozen
+- Updates Capsule status throughout process
+
+**Automated Workflow**:
+```
+1. User updates ConsensusCapsule (e.g., version upgrade)
+         ↓
+2. Operator detects change, generates diff
+         ↓
+3. Operator creates NetworkOperation CR automatically
+         ↓
+4. Messenger operator submits freeze transaction
+         ↓
+5. Operator polls nodes for freeze status
+         ↓
+6. All nodes frozen?
+         ↓
+7. Operator applies K8s changes (update StatefulSet)
+         ↓
+8. Pods restart with new version
+         ↓
+9. Operator verifies network resumes consensus
+```
+
+**Configuration Flag**:
+```yaml
+# Operator deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hedera-operator
+spec:
+  template:
+    spec:
+      containers:
+      - name: operator
+        env:
+        - name: TX_MODE
+          value: "messenger"
+        - name: AUTO_CREATE_NETOPS
+          value: "true"  # Enable automated NetworkOperation creation
+```
+
+**Benefits**:
+- Fully automated upgrades
+- Faster change deployment
+- Reduced human error
+- Consistent process across clusters
+
+**Risks**:
+- Operator bugs could cause network issues
+- Less human oversight
+- Requires thorough testing
+
+### Migration Checklist
+
+**Before Phase 1**:
+- [ ] Deploy operator in all clusters
+- [ ] Configure messenger vs observer mode
+- [ ] Set up Orbit synchronization (GitOps)
+- [ ] Create initial Capsule CRs
+- [ ] Document NetworkOperation creation process
+
+**Phase 1 → Phase 2 Transition**:
+- [ ] Test automated NetworkOperation creation in dev environment
+- [ ] Verify freeze detection works reliably
+- [ ] Monitor operator logs for errors
+- [ ] Perform test upgrade with automation
+- [ ] Set `AUTO_CREATE_NETOPS=true` in production
+- [ ] Monitor first automated upgrade closely
+
+**Rollback Plan**:
+- Set `AUTO_CREATE_NETOPS=false` to return to manual mode
+- Operator continues to manage K8s resources
+- Humans resume manual NetworkOperation creation
