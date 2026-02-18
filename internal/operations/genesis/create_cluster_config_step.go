@@ -148,7 +148,7 @@ func (s *CreateClusterConfigStep) buildConfigTxt(capsules []operatorv1alpha1.Con
 		ledgerId = orbit.Spec.Consensus.Genesis.AddressBook.LedgerId
 	}
 
-	sb.WriteString(fmt.Sprintf("swirld, %s\n", ledgerId))
+	fmt.Fprintf(&sb, "swirld, %s\n", ledgerId)
 	sb.WriteString("app, HederaNode.jar\n")
 
 	// Build address entries from capsules (sorted by node ID)
