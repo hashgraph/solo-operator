@@ -129,7 +129,7 @@ tasks:
   deploy:
     desc: Deploy controller to cluster
     cmds:
-      - kubectl apply -k config/default
+      - kubectl apply --server-side -k config/default
 
   undeploy:
     desc: Undeploy controller from cluster
