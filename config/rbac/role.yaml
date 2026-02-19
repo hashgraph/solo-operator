@@ -1,187 +1,17 @@
-# SPDX-License-Identifier: Apache-2.0
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: manager-role
-  labels:
-    app.kubernetes.io/name: solo-operator
-    app.kubernetes.io/managed-by: kustomize
 rules:
-# Orbits
-- apiGroups:
-  - operator.solo.hedera.com
-  resources:
-  - orbits
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - operator.solo.hedera.com
-  resources:
-  - orbits/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - operator.solo.hedera.com
-  resources:
-  - orbits/status
-  verbs:
-  - get
-  - patch
-  - update
-# ConsensusCapsules
-- apiGroups:
-  - operator.solo.hedera.com
-  resources:
-  - consensuscapsules
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - operator.solo.hedera.com
-  resources:
-  - consensuscapsules/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - operator.solo.hedera.com
-  resources:
-  - consensuscapsules/status
-  verbs:
-  - get
-  - patch
-  - update
-# NetworkOperations
-- apiGroups:
-  - operator.solo.hedera.com
-  resources:
-  - networkoperations
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - operator.solo.hedera.com
-  resources:
-  - networkoperations/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - operator.solo.hedera.com
-  resources:
-  - networkoperations/status
-  verbs:
-  - get
-  - patch
-  - update
-# HAProxyCapsules
-- apiGroups:
-  - operator.solo.hedera.com
-  resources:
-  - haproxycapsules
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - operator.solo.hedera.com
-  resources:
-  - haproxycapsules/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - operator.solo.hedera.com
-  resources:
-  - haproxycapsules/status
-  verbs:
-  - get
-  - patch
-  - update
-# EnvoyProxies
-- apiGroups:
-  - operator.solo.hedera.com
-  resources:
-  - envoyproxies
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - operator.solo.hedera.com
-  resources:
-  - envoyproxies/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - operator.solo.hedera.com
-  resources:
-  - envoyproxies/status
-  verbs:
-  - get
-  - patch
-  - update
-# Core resources
-- apiGroups:
-  - ""
-  resources:
-  - namespaces
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
 - apiGroups:
   - ""
   resources:
   - configmaps
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
+  - namespaces
+  - persistentvolumeclaims
   - secrets
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
+  - serviceaccounts
   - services
   verbs:
   - create
@@ -190,38 +20,6 @@ rules:
   - list
   - patch
   - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - serviceaccounts
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - persistentvolumeclaims
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  verbs:
-  - get
-  - list
   - watch
 - apiGroups:
   - ""
@@ -236,7 +34,14 @@ rules:
   - patch
   - update
   - watch
-# Apps resources
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
 - apiGroups:
   - apps
   resources:
@@ -249,11 +54,14 @@ rules:
   - patch
   - update
   - watch
-# RBAC resources
 - apiGroups:
-  - rbac.authorization.k8s.io
+  - operator.solo.hedera.com
   resources:
-  - roles
+  - consensuscapsules
+  - envoyproxies
+  - haproxycapsules
+  - networkoperations
+  - orbits
   verbs:
   - create
   - delete
@@ -262,23 +70,33 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - operator.solo.hedera.com
+  resources:
+  - consensuscapsules/finalizers
+  - envoyproxies/finalizers
+  - haproxycapsules/finalizers
+  - networkoperations/finalizers
+  - orbits/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - operator.solo.hedera.com
+  resources:
+  - consensuscapsules/status
+  - envoyproxies/status
+  - haproxycapsules/status
+  - networkoperations/status
+  - orbits/status
+  verbs:
+  - get
+  - patch
+  - update
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
   - rolebindings
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-# Coordination for leader election
-- apiGroups:
-  - coordination.k8s.io
-  resources:
-  - leases
+  - roles
   verbs:
   - create
   - delete
