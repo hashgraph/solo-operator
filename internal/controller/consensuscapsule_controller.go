@@ -158,6 +158,11 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 		}
 	}
 
+	// Check if status needs update
+	if capsule.Status.Phase == phase && capsule.Status.ObservedGeneration == capsule.Generation {
+		return nil
+	}
+
 	capsule.Status.Phase = phase
 	capsule.Status.ObservedGeneration = capsule.Generation
 

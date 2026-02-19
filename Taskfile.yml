@@ -89,7 +89,15 @@ tasks:
 
   generate:
     desc: Run all code generators
-    deps: [generate:manifests, generate:deepcopy]
+    cmds:
+      - task: generate:all
+
+  generate:all:
+    desc: Run all code generators
+    cmds:
+      - task: generate:deepcopy
+      - task: generate:manifests
+      - task: generate:rbac
 
   generate:manifests:
     desc: Generate CRD manifests
@@ -119,7 +127,7 @@ tasks:
   install:
     desc: Install CRDs into cluster
     cmds:
-      - kubectl apply -f config/crd/bases
+      - kubectl apply --server-side -f config/crd/bases
 
   uninstall:
     desc: Uninstall CRDs from cluster
@@ -139,7 +147,7 @@ tasks:
   kind:create:
     desc: Create a kind cluster for testing
     cmds:
-      - kind create cluster --name solo-operator
+      - kind create cluster --name solo-operator || true
 
   kind:delete:
     desc: Delete the kind cluster
@@ -150,6 +158,13 @@ tasks:
     desc: Load Docker image into kind cluster
     cmds:
       - kind load docker-image {{.IMG}} --name solo-operator
+
+  dev:
+    desc: Run operator locally against kind cluster
+    cmds:
+      - task: kind:create
+      - task: install
+      - task: run
 
   clean:
     desc: Clean build artifacts

@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: node2-output-pvc-manual
+  namespace: solo-orbit
+  labels:
+    app.kubernetes.io/component: pvc
+    app.kubernetes.io/managed-by: solo-operator
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi  # 1/10th of production size
