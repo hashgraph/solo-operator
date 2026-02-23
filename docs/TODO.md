@@ -4,6 +4,9 @@ Current issues:
 
 * We need to add `cheetah` support
 
+* We need to move genesis gen from NetworkOps into Orbit. Why it's there.
+
+
 * We need to add a capsules for helm releases so we can add mirror, explorer and so on using https://github.com/fluxcd/helm-controller 
     * Do we want to use HelmReleaseCapsule or have separate capsules for each and make it use HelmReleaseCapsule type 
 
@@ -11,7 +14,6 @@ Current issues:
 
 * Do we want to add a helm chart in between operator CRs and terraform/controlplane to hide CRs. It will describe hashsphere and include all the components in an opinionated way (?)
 
-*
 
 
 
