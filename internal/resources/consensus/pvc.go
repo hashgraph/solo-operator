@@ -18,16 +18,6 @@ import (
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
-// PVC volume types
-const (
-	VolumeTypeLogs          = "logs"
-	VolumeTypeStats         = "stats"
-	VolumeTypeStates        = "states"
-	VolumeTypeUpgrade       = "upgrade"
-	VolumeTypeRecordStreams = "record-streams"
-	VolumeTypeEventsStreams = "events-streams"
-)
-
 // PVCSubReconciler manages PersistentVolumeClaims for a ConsensusCapsule
 type PVCSubReconciler struct {
 	*subreconciler.BaseSubReconciler[*operatorv1alpha1.ConsensusCapsule]

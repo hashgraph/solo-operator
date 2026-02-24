@@ -2938,6 +2938,216 @@ spec:
                         required:
                         - softwareVersion
                         type: object
+                      cheetah:
+                        description: Cheetah is the Cheetah stream uploader sidecar
+                        properties:
+                          enabled:
+                            default: false
+                            description: Enabled enables Cheetah uploader
+                            type: boolean
+                          envFromSecret:
+                            description: EnvFromSecret is the secret name for environment
+                              variables
+                            type: string
+                          gcs:
+                            description: GCS configuration
+                            properties:
+                              accessKey:
+                                default: GCS_ACCESS_KEY
+                                description: AccessKey is the GCS access key env var
+                                  name
+                                type: string
+                              bucket:
+                                description: Bucket is the GCS bucket name
+                                type: string
+                              enabled:
+                                default: false
+                                description: Enabled enables GCS storage
+                                type: boolean
+                              endpoint:
+                                default: storage.googleapis.com
+                                description: Endpoint is the GCS endpoint URL
+                                type: string
+                              region:
+                                default: us-east-1
+                                description: Region is the GCS region
+                                type: string
+                              useSsl:
+                                default: true
+                                description: UseSsl enables SSL
+                                type: boolean
+                            type: object
+                          logLevel:
+                            default: Info
+                            description: LogLevel is the log level
+                            type: string
+                          resources:
+                            description: Resources specifies resource requirements
+                            properties:
+                              claims:
+                                description: |-
+                                  Claims lists the names of resources, defined in spec.resourceClaims,
+                                  that are used by this container.
+
+                                  This field depends on the
+                                  DynamicResourceAllocation feature gate.
+
+                                  This field is immutable. It can only be set for containers.
+                                items:
+                                  description: ResourceClaim references one entry
+                                    in PodSpec.ResourceClaims.
+                                  properties:
+                                    name:
+                                      description: |-
+                                        Name must match the name of one entry in pod.spec.resourceClaims of
+                                        the Pod where this field is used. It makes that resource available
+                                        inside a container.
+                                      type: string
+                                    request:
+                                      description: |-
+                                        Request is the name chosen for a request in the referenced claim.
+                                        If empty, everything from the claim is made available, otherwise
+                                        only the result of this request.
+                                      type: string
+                                  required:
+                                  - name
+                                  type: object
+                                type: array
+                                x-kubernetes-list-map-keys:
+                                - name
+                                x-kubernetes-list-type: map
+                              limits:
+                                additionalProperties:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                description: |-
+                                  Limits describes the maximum amount of compute resources allowed.
+                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                type: object
+                              requests:
+                                additionalProperties:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                description: |-
+                                  Requests describes the minimum amount of compute resources required.
+                                  If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                                  otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                type: object
+                            type: object
+                          s3:
+                            description: S3 configuration
+                            properties:
+                              accessKey:
+                                default: S3_ACCESS_KEY
+                                description: AccessKey is the S3 access key env var
+                                  name
+                                type: string
+                              bucket:
+                                description: Bucket is the S3 bucket name
+                                type: string
+                              enabled:
+                                default: false
+                                description: Enabled enables S3 storage
+                                type: boolean
+                              endpoint:
+                                description: Endpoint is the S3 endpoint URL
+                                type: string
+                              region:
+                                default: us-east-1
+                                description: Region is the S3 region
+                                type: string
+                              useSsl:
+                                default: false
+                                description: UseSsl enables SSL
+                                type: boolean
+                            type: object
+                          softwareVersion:
+                            description: SoftwareVersion specifies the Cheetah image
+                            properties:
+                              imageName:
+                                description: ImageName is the name of the image (e.g.,
+                                  ubuntu)
+                                type: string
+                              imagePullPolicy:
+                                default: IfNotPresent
+                                description: ImagePullPolicy specifies when to pull
+                                  the image
+                                enum:
+                                - Always
+                                - Never
+                                - IfNotPresent
+                                type: string
+                              imagePullSecrets:
+                                description: ImagePullSecrets is a list of references
+                                  to secrets for pulling images
+                                items:
+                                  description: |-
+                                    LocalObjectReference contains enough information to let you locate the
+                                    referenced object inside the same namespace.
+                                  properties:
+                                    name:
+                                      default: ""
+                                      description: |-
+                                        Name of the referent.
+                                        This field is effectively required, but due to backwards compatibility is
+                                        allowed to be empty. Instances of this type with an empty value here are
+                                        almost certainly wrong.
+                                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                      type: string
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                                type: array
+                              imageTag:
+                                description: ImageTag is the tag of the image (e.g.,
+                                  focal)
+                                type: string
+                              imageVerificationSpec:
+                                description: ImageVerificationSpec contains hash verification
+                                  details
+                                properties:
+                                  architecture:
+                                    description: Architecture is the target CPU architecture
+                                    enum:
+                                    - amd64
+                                    - arm64
+                                    type: string
+                                  layerHashes:
+                                    description: LayerHashes are the expected layer
+                                      digest hashes
+                                    items:
+                                      type: string
+                                    type: array
+                                  os:
+                                    description: OS is the target operating system
+                                    enum:
+                                    - darwin
+                                    - linux
+                                    - windows
+                                    type: string
+                                required:
+                                - layerHashes
+                                type: object
+                              manifestHash:
+                                description: ManifestHash is the optional manifest
+                                  hash for verification
+                                type: string
+                              repository:
+                                description: Repository is the container registry
+                                  (e.g., docker.io/library)
+                                type: string
+                            required:
+                            - imageName
+                            - imageTag
+                            - repository
+                            type: object
+                        type: object
                       consensusNode:
                         description: ConsensusNode is the main consensus node container
                         properties:
@@ -3153,7 +3363,7 @@ spec:
                         type: object
                       eventsStreamUploader:
                         description: EventsStreamUploader is the events stream uploader
-                          sidecar
+                          sidecar (deprecated, use Cheetah)
                         properties:
                           additionalVolumeMounts:
                             description: AdditionalVolumeMounts for the uploader
@@ -3788,7 +3998,7 @@ spec:
                         type: object
                       recordStreamSidecarFilesUploader:
                         description: RecordStreamSidecarFilesUploader is the sidecar
-                          files uploader
+                          files uploader (deprecated, use Cheetah)
                         properties:
                           additionalVolumeMounts:
                             description: AdditionalVolumeMounts for the uploader
@@ -4112,7 +4322,7 @@ spec:
                         type: object
                       recordStreamUploader:
                         description: RecordStreamUploader is the record stream uploader
-                          sidecar
+                          sidecar (deprecated, use Cheetah)
                         properties:
                           additionalVolumeMounts:
                             description: AdditionalVolumeMounts for the uploader

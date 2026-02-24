@@ -333,6 +333,92 @@ type GCSConfig struct {
 	URL string `json:"url,omitempty"`
 }
 
+// CheetahConfig contains Cheetah uploader configuration
+type CheetahConfig struct {
+	// Enabled enables Cheetah uploader
+	// +kubebuilder:default=false
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// SoftwareVersion specifies the Cheetah image
+	// +optional
+	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
+
+	// Resources specifies resource requirements
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// LogLevel is the log level
+	// +kubebuilder:default="Info"
+	// +optional
+	LogLevel string `json:"logLevel,omitempty"`
+
+	// S3 configuration
+	// +optional
+	S3 *CheetahS3Config `json:"s3,omitempty"`
+
+	// GCS configuration
+	// +optional
+	GCS *CheetahGCSConfig `json:"gcs,omitempty"`
+
+	// EnvFromSecret is the secret name for S3/GCS credentials (S3_SECRET_KEY, GCS_SECRET_KEY)
+	// +optional
+	EnvFromSecret string `json:"envFromSecret,omitempty"`
+}
+
+// CheetahS3Config contains S3 configuration for Cheetah
+type CheetahS3Config struct {
+	// Enabled enables S3 storage
+	// +kubebuilder:default=false
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Bucket is the S3 bucket name
+	// +optional
+	Bucket string `json:"bucket,omitempty"`
+
+	// Region is the S3 region
+	// +kubebuilder:default="us-east-1"
+	// +optional
+	Region string `json:"region,omitempty"`
+
+	// Endpoint is the S3 endpoint URL
+	// +optional
+	Endpoint string `json:"endpoint,omitempty"`
+
+	// UseSsl enables SSL
+	// +kubebuilder:default=false
+	// +optional
+	UseSsl bool `json:"useSsl,omitempty"`
+}
+
+// CheetahGCSConfig contains GCS configuration for Cheetah
+type CheetahGCSConfig struct {
+	// Enabled enables GCS storage
+	// +kubebuilder:default=false
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Bucket is the GCS bucket name
+	// +optional
+	Bucket string `json:"bucket,omitempty"`
+
+	// Region is the GCS region
+	// +kubebuilder:default="us-east-1"
+	// +optional
+	Region string `json:"region,omitempty"`
+
+	// Endpoint is the GCS endpoint URL
+	// +kubebuilder:default="storage.googleapis.com"
+	// +optional
+	Endpoint string `json:"endpoint,omitempty"`
+
+	// UseSsl enables SSL
+	// +kubebuilder:default=true
+	// +optional
+	UseSsl bool `json:"useSsl,omitempty"`
+}
+
 // StreamUploader defines a stream uploader sidecar
 type StreamUploader struct {
 	// Name is the container name

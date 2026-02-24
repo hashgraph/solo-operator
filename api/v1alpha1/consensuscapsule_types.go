@@ -166,15 +166,19 @@ type ConsensusContainers struct {
 	// ConsensusNode is the main consensus node container
 	ConsensusNode ConsensusNodeContainer `json:"consensusNode"`
 
-	// RecordStreamUploader is the record stream uploader sidecar
+	// Cheetah is the Cheetah stream uploader sidecar
+	// +optional
+	Cheetah *CheetahConfig `json:"cheetah,omitempty"`
+
+	// RecordStreamUploader is the record stream uploader sidecar (deprecated, use Cheetah)
 	// +optional
 	RecordStreamUploader *StreamUploader `json:"recordStreamUploader,omitempty"`
 
-	// RecordStreamSidecarFilesUploader is the sidecar files uploader
+	// RecordStreamSidecarFilesUploader is the sidecar files uploader (deprecated, use Cheetah)
 	// +optional
 	RecordStreamSidecarFilesUploader *StreamUploader `json:"recordStreamSidecarFilesUploader,omitempty"`
 
-	// EventsStreamUploader is the events stream uploader sidecar
+	// EventsStreamUploader is the events stream uploader sidecar (deprecated, use Cheetah)
 	// +optional
 	EventsStreamUploader *StreamUploader `json:"eventsStreamUploader,omitempty"`
 

@@ -64,6 +64,16 @@ const (
 	DebugPort      = 5005
 )
 
+// Volume types
+const (
+	VolumeTypeLogs          = "logs"
+	VolumeTypeStats         = "stats"
+	VolumeTypeStates        = "states"
+	VolumeTypeUpgrade       = "upgrade"
+	VolumeTypeRecordStreams = "record-streams"
+	VolumeTypeEventsStreams = "events-streams"
+)
+
 // CommonLabels returns the common labels for consensus capsule resources
 func CommonLabels(capsule *operatorv1alpha1.ConsensusCapsule) map[string]string {
 	return map[string]string{
@@ -112,6 +122,7 @@ func NewSubReconcilers(c client.Client, scheme *runtime.Scheme) *subreconciler.C
 		NewServiceAccountSubReconciler(c, scheme),
 		NewRoleBindingSubReconciler(c, scheme),
 		NewConfigMapSubReconciler(c, scheme),
+		NewCheetahConfigMapSubReconciler(c, scheme),
 		NewServiceSubReconciler(c, scheme),
 		NewPVCSubReconciler(c, scheme),
 		NewDeploymentSubReconciler(c, scheme),

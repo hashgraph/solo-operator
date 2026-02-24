@@ -172,7 +172,6 @@ func (r *DeploymentSubReconciler) buildConsensusNodeContainer(capsule *operatorv
 // buildVolumes builds the volumes and volume mounts for the deployment
 func (r *DeploymentSubReconciler) buildVolumes(capsule *operatorv1alpha1.ConsensusCapsule) ([]corev1.Volume, []corev1.VolumeMount) {
 	volumes := []corev1.Volume{
-		// ConfigMap for capsule-specific config (log4j2.xml)
 		{
 			Name: "capsule-config",
 			VolumeSource: corev1.VolumeSource{
@@ -181,7 +180,6 @@ func (r *DeploymentSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consens
 				},
 			},
 		},
-		// ConfigMap for consensus config (created by Orbit)
 		{
 			Name: "consensus-config",
 			VolumeSource: corev1.VolumeSource{
@@ -211,7 +209,7 @@ func (r *DeploymentSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consens
 				},
 			})
 			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name: VolumeTypeLogs, MountPath: "/opt/hgcapp/output/logs",
+				Name: VolumeTypeLogs, MountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/output",
 			})
 		}
 
@@ -225,7 +223,7 @@ func (r *DeploymentSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consens
 				},
 			})
 			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name: VolumeTypeStats, MountPath: "/opt/hgcapp/output/stats",
+				Name: VolumeTypeStats, MountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/data/stats",
 			})
 		}
 
@@ -239,7 +237,7 @@ func (r *DeploymentSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consens
 				},
 			})
 			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name: VolumeTypeStates, MountPath: "/opt/hgcapp/output/states",
+				Name: VolumeTypeStates, MountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/data/saved",
 			})
 		}
 
@@ -253,7 +251,7 @@ func (r *DeploymentSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consens
 				},
 			})
 			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name: VolumeTypeUpgrade, MountPath: "/opt/hgcapp/output/upgrade",
+				Name: VolumeTypeUpgrade, MountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade",
 			})
 		}
 
@@ -268,7 +266,7 @@ func (r *DeploymentSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consens
 					},
 				})
 				volumeMounts = append(volumeMounts, corev1.VolumeMount{
-					Name: VolumeTypeRecordStreams, MountPath: "/opt/hgcapp/output/recordStreams",
+					Name: VolumeTypeRecordStreams, MountPath: "/opt/hgcapp/recordStreams",
 				})
 			}
 
@@ -282,13 +280,13 @@ func (r *DeploymentSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consens
 					},
 				})
 				volumeMounts = append(volumeMounts, corev1.VolumeMount{
-					Name: VolumeTypeEventsStreams, MountPath: "/opt/hgcapp/output/eventsStreams",
+					Name: VolumeTypeEventsStreams, MountPath: "/opt/hgcapp/eventsStreams",
 				})
 			}
 		}
 	}
 
-	// Add pod-level volumes if configured
+	// Add pod-level volumes if configured (overrides PVC volumes)
 	if capsule.Spec.PodProperties.Volumes != nil {
 		podVolumes := capsule.Spec.PodProperties.Volumes
 
@@ -327,7 +325,7 @@ func (r *DeploymentSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consens
 				},
 			})
 			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name: "keys", MountPath: "/opt/hgcapp/keys",
+				Name: "keys", MountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/data/keys",
 			})
 		}
 	}
@@ -352,31 +350,43 @@ func (r *DeploymentSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consens
 func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment, capsule *operatorv1alpha1.ConsensusCapsule) {
 	containers := capsule.Spec.PodProperties.Containers
 
-	// Record stream uploader
+	// Cheetah uploader (replaces Python-based uploaders)
+	if containers.Cheetah != nil && containers.Cheetah.Enabled {
+		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers,
+			r.buildCheetahContainer(capsule, containers.Cheetah))
+		// Add Cheetah ConfigMap volume
+		deploy.Spec.Template.Spec.Volumes = append(deploy.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: "solo-cheetah-config",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: CheetahConfigMapName},
+				},
+			},
+		})
+		return
+	}
+
+	// Legacy Python-based uploaders (deprecated)
 	if containers.RecordStreamUploader != nil {
 		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers,
 			r.buildStreamUploaderContainer("record-stream-uploader", containers.RecordStreamUploader))
 	}
 
-	// Record stream sidecar files uploader
 	if containers.RecordStreamSidecarFilesUploader != nil {
 		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers,
 			r.buildStreamUploaderContainer("record-stream-sidecar-uploader", containers.RecordStreamSidecarFilesUploader))
 	}
 
-	// Events stream uploader
 	if containers.EventsStreamUploader != nil {
 		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers,
 			r.buildStreamUploaderContainer("events-stream-uploader", containers.EventsStreamUploader))
 	}
 
-	// Backup uploader
 	if containers.BackupUploader != nil {
 		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers,
 			r.buildStreamUploaderContainer("backup-uploader", containers.BackupUploader))
 	}
 
-	// OpenTelemetry collector
 	if containers.OpenTelemetryCollector != nil && containers.OpenTelemetryCollector.Enabled {
 		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers,
 			r.buildOtelCollectorContainer(capsule, containers.OpenTelemetryCollector))
@@ -396,6 +406,72 @@ func (r *DeploymentSubReconciler) buildStreamUploaderContainer(name string, conf
 
 	if len(config.AdditionalVolumeMounts) > 0 {
 		container.VolumeMounts = config.AdditionalVolumeMounts
+	}
+
+	return container
+}
+
+// buildCheetahContainer builds the Cheetah uploader sidecar container
+func (r *DeploymentSubReconciler) buildCheetahContainer(capsule *operatorv1alpha1.ConsensusCapsule, cheetah *operatorv1alpha1.CheetahConfig) corev1.Container {
+	image := "ghcr.io/hashgraph/solo-cheetah:latest"
+	if cheetah.SoftwareVersion != nil {
+		image = buildImage(*cheetah.SoftwareVersion)
+	}
+
+	volumeMounts := []corev1.VolumeMount{
+		{Name: "solo-cheetah-config", MountPath: "/app/config", ReadOnly: true},
+	}
+
+	// Mount record streams volume if configured
+	if capsule.Spec.PersistentVolumeClaims != nil && capsule.Spec.PersistentVolumeClaims.Streams != nil {
+		if capsule.Spec.PersistentVolumeClaims.Streams.Record != nil {
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      VolumeTypeRecordStreams,
+				MountPath: "/opt/hgcapp/recordStreams",
+			})
+		}
+		if capsule.Spec.PersistentVolumeClaims.Streams.Events != nil {
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      VolumeTypeEventsStreams,
+				MountPath: "/opt/hgcapp/eventsStreams",
+			})
+		}
+	} else if capsule.Spec.PodProperties.Volumes != nil && capsule.Spec.PodProperties.Volumes.Streams != nil {
+		if capsule.Spec.PodProperties.Volumes.Streams.Record != nil {
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      capsule.Spec.PodProperties.Volumes.Streams.Record.Name,
+				MountPath: "/opt/hgcapp/recordStreams",
+			})
+		}
+		if capsule.Spec.PodProperties.Volumes.Streams.Events != nil {
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      capsule.Spec.PodProperties.Volumes.Streams.Events.Name,
+				MountPath: "/opt/hgcapp/eventsStreams",
+			})
+		}
+	}
+
+	container := corev1.Container{
+		Name:  "cheetah",
+		Image: image,
+		Command: []string{
+			"/app/cheetah",
+			"upload",
+			"--config",
+			"/app/config/cheetah.yaml",
+		},
+		VolumeMounts: volumeMounts,
+	}
+
+	if cheetah.Resources != nil {
+		container.Resources = *cheetah.Resources
+	}
+
+	// Add secret reference for credentials (S3_ACCESS_KEY, S3_SECRET_KEY, GCS_ACCESS_KEY, GCS_SECRET_KEY)
+	if cheetah.EnvFromSecret != "" {
+		container.EnvFrom = []corev1.EnvFromSource{
+			{SecretRef: &corev1.SecretEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: cheetah.EnvFromSecret}}},
+		}
 	}
 
 	return container
