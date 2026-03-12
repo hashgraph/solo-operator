@@ -37,12 +37,15 @@ func NewCheetahConfigMapSubReconciler(c client.Client, scheme *runtime.Scheme) *
 func (r *CheetahConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	cheetah := capsule.Spec.PodProperties.Containers.Cheetah
-	if cheetah == nil || !cheetah.Enabled {
+	records := capsule.Spec.PodProperties.Containers.RecordsUploader
+	events := capsule.Spec.PodProperties.Containers.EventsUploader
+	blocks := capsule.Spec.PodProperties.Containers.BlocksUploader
+
+	if (records == nil || !records.Enabled) && (events == nil || !events.Enabled) && (blocks == nil || !blocks.Enabled) {
 		return ctrl.Result{}, nil
 	}
 
-	desired := r.buildConfigMap(capsule, cheetah)
+	desired := r.buildConfigMap(capsule, records, events, blocks)
 	if err := controllerutil.SetControllerReference(capsule, desired, r.Scheme); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -71,139 +74,169 @@ func (r *CheetahConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *
 	return ctrl.Result{}, nil
 }
 
-// buildConfigMap builds the Cheetah ConfigMap
-func (r *CheetahConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1.ConsensusCapsule, cheetah *operatorv1alpha1.CheetahConfig) *corev1.ConfigMap {
-	config := r.buildConfig(cheetah)
+// buildConfigMap builds the Cheetah ConfigMap with separate config files
+func (r *CheetahConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1.ConsensusCapsule, records, events, blocks *operatorv1alpha1.CheetahUploader) *corev1.ConfigMap {
+	data := make(map[string]string)
+
+	if blocks != nil && blocks.Enabled {
+		data["cheetah-block-streams.yaml"] = r.buildSingleConfig("block-streams-uploader", "/opt/hgcapp/blockStreams", ".mf", []string{".blk.gz"}, "blockStreams", blocks)
+	}
+
+	if records != nil && records.Enabled {
+		data["cheetah-record-streams.yaml"] = r.buildRecordConfig(records)
+	}
+
+	if events != nil && events.Enabled {
+		data["cheetah-events-streams.yaml"] = r.buildSingleConfig("events-streams-uploader", "/opt/hgcapp/eventsStreams", ".evts_sig", []string{".evts", ".evts_sig"}, "eventsStreams", events)
+	}
+
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      CheetahConfigMapName,
 			Namespace: capsule.Namespace,
 			Labels:    CommonLabels(capsule),
 		},
-		Data: map[string]string{
-			"cheetah.yaml": config,
-		},
+		Data: data,
 	}
 }
 
-// buildConfig builds the Cheetah YAML configuration string
-func (r *CheetahConfigMapSubReconciler) buildConfig(cheetah *operatorv1alpha1.CheetahConfig) string {
-	logLevel := "Info"
-	if cheetah.LogLevel != "" {
-		logLevel = cheetah.LogLevel
+// buildSingleConfig builds a single cheetah config file
+func (r *CheetahConfigMapSubReconciler) buildSingleConfig(name, directory, pattern string, patterns []string, prefix string, uploader *operatorv1alpha1.CheetahUploader) string {
+	logLevel := "Debug"
+	if uploader.LogLevel != "" {
+		logLevel = uploader.LogLevel
 	}
 
-	config := fmt.Sprintf(`log:
+	patternList := ""
+	for i, p := range patterns {
+		if i > 0 {
+			patternList += ", "
+		}
+		patternList += fmt.Sprintf(`"%s"`, p)
+	}
+
+	return fmt.Sprintf(`log:
   fileLogging: false
   level: %s
-  directory: /app/data/logs
+  directory: /app/logs
   fileName: cheetah.log
   maxSize: 1
   maxBackups: 10
   maxAge: 30
+  
 pipelines:
-`, logLevel)
-
-	config += r.buildPipeline("record-stream-uploader", "/opt/hgcapp/recordStreams", ".rcd_sig", []string{".rcd_sig", ".rcd"}, "record-streams", cheetah)
-	config += r.buildPipeline("events-stream-uploader", "/opt/hgcapp/eventsStreams", ".evts_sig", []string{".evts_sig", ".evts"}, "events-streams", cheetah)
-	config += r.buildPipeline("record-stream-sidecar-files-uploader", "/opt/hgcapp/recordStreams/sidecar", ".rcd", []string{".rcd"}, "record-streams/sidecar", cheetah)
-
-	return config
-}
-
-// buildPipeline builds a single pipeline configuration
-func (r *CheetahConfigMapSubReconciler) buildPipeline(name, path, pattern string, extensions []string, prefix string, cheetah *operatorv1alpha1.CheetahConfig) string {
-	extList := ""
-	for i, ext := range extensions {
-		if i > 0 {
-			extList += ", "
-		}
-		extList += fmt.Sprintf(`"%s"`, ext)
-	}
-
-	s3Enabled := "false"
-	s3Bucket := "cheetah"
-	s3Region := "us-east-1"
-	s3Endpoint := ""
-	s3UseSsl := "false"
-
-	if cheetah.S3 != nil {
-		if cheetah.S3.Enabled {
-			s3Enabled = "true"
-		}
-		if cheetah.S3.Bucket != "" {
-			s3Bucket = cheetah.S3.Bucket
-		}
-		if cheetah.S3.Region != "" {
-			s3Region = cheetah.S3.Region
-		}
-		if cheetah.S3.Endpoint != "" {
-			s3Endpoint = cheetah.S3.Endpoint
-		}
-		if cheetah.S3.UseSsl {
-			s3UseSsl = "true"
-		}
-	}
-
-	gcsEnabled := "false"
-	gcsBucket := "cheetah"
-	gcsRegion := "us-east-1"
-	gcsEndpoint := "storage.googleapis.com"
-	gcsUseSsl := "true"
-
-	if cheetah.GCS != nil {
-		if cheetah.GCS.Enabled {
-			gcsEnabled = "true"
-		}
-		if cheetah.GCS.Bucket != "" {
-			gcsBucket = cheetah.GCS.Bucket
-		}
-		if cheetah.GCS.Region != "" {
-			gcsRegion = cheetah.GCS.Region
-		}
-		if cheetah.GCS.Endpoint != "" {
-			gcsEndpoint = cheetah.GCS.Endpoint
-		}
-		if !cheetah.GCS.UseSsl {
-			gcsUseSsl = "false"
-		}
-	}
-
-	return fmt.Sprintf(`  - name: %s
+  - name: %s
+    enabled: true
+    stopOnError: "false"
     scanner:
-      path: %s
+      directory: %s
       pattern: "%s"
-      recursive: true
       interval: 100ms
+      batchSize: 1000
     processor:
-      maxProcessors: 10
-      fileExtensions: [%s]
+      maxProcessors: "30"
+      fileMatcherConfigs:
+        - matcherType: basic
+          patterns: [ %s ]
+      flushDelay: 150ms
+      markerCheckConfig:
+        checkInterval: 150ms
+        minSize: 925
+        maxAttempts: 5
       retry:
         limit: 5
       storage:
         s3:
-          enabled: %s
-          bucket: %s
-          region: %s
-          prefix: cheetah/streams/%s
-          endpoint: %s
+          enabled: false
+          bucket: S3_BUCKET_NAME
+          prefix: S3_%s_BUCKET_PREFIX
+          endpoint: S3_ENDPOINT
+          region: S3_BUCKET_REGION
           accessKey: S3_ACCESS_KEY
           secretKey: S3_SECRET_KEY
-          useSsl: %s
+          useSsl: true
         gcs:
-          enabled: %s
-          bucket: %s
-          region: %s
-          prefix: cheetah/streams/%s
-          endpoint: %s
+          enabled: false
+          bucket: GCS_BUCKET_NAME
+          prefix: GCS_%s_BUCKET_PREFIX
+          endpoint: GCS_ENDPOINT
+          region: GCS_BUCKET_REGION
           accessKey: GCS_ACCESS_KEY
           secretKey: GCS_SECRET_KEY
-          useSsl: %s
-`, name, path, pattern, extList, s3Enabled, s3Bucket, s3Region, prefix, s3Endpoint, s3UseSsl,
-		gcsEnabled, gcsBucket, gcsRegion, prefix, gcsEndpoint, gcsUseSsl)
+          useSsl: true
+`, logLevel, name, directory, pattern, patternList, prefix, prefix)
+}
+
+// buildRecordConfig builds record streams config with sidecar support
+func (r *CheetahConfigMapSubReconciler) buildRecordConfig(uploader *operatorv1alpha1.CheetahUploader) string {
+	logLevel := "Debug"
+	if uploader.LogLevel != "" {
+		logLevel = uploader.LogLevel
+	}
+
+	return fmt.Sprintf(`log:
+  fileLogging: false
+  level: %s
+  directory: /app/logs
+  fileName: cheetah.log
+  maxSize: 1
+  maxBackups: 10
+  maxAge: 30
+  
+pipelines:
+  - name: record-streams-uploader
+    enabled: true
+    stopOnError: "false"
+    scanner:
+      directory: /opt/hgcapp/recordStreams
+      pattern: ".rcd_sig"
+      interval: 100ms
+      batchSize: 1000
+    processor:
+      maxProcessors: "30"
+      fileMatcherConfigs:
+        - matcherType: basic
+          patterns: [ ".rcd.gz", ".rcd_sig" ]
+        - matcherType: sequential
+          patterns: [ "sidecar/{{.markerName}}_##.rcd.gz" ]
+      flushDelay: 150ms
+      markerCheckConfig:
+        checkInterval: 150ms
+        minSize: 925
+        maxAttempts: 5
+      retry:
+        limit: 5
+      storage:
+        s3:
+          enabled: false
+          bucket: S3_BUCKET_NAME
+          prefix: S3_RECORD_STREAMS_BUCKET_PREFIX
+          endpoint: S3_ENDPOINT
+          region: S3_BUCKET_REGION
+          accessKey: S3_ACCESS_KEY
+          secretKey: S3_SECRET_KEY
+          useSsl: true
+        gcs:
+          enabled: false
+          bucket: GCS_BUCKET_NAME
+          prefix: GCS_RECORD_STREAMS_BUCKET_PREFIX
+          endpoint: GCS_ENDPOINT
+          region: GCS_BUCKET_REGION
+          accessKey: GCS_ACCESS_KEY
+          secretKey: GCS_SECRET_KEY
+          useSsl: true
+`, logLevel)
 }
 
 // needsUpdate checks if the config needs to be updated
 func (r *CheetahConfigMapSubReconciler) needsUpdate(existing, desired map[string]string) bool {
-	return existing["cheetah.yaml"] != desired["cheetah.yaml"]
+	if len(existing) != len(desired) {
+		return true
+	}
+	for k, v := range desired {
+		if existing[k] != v {
+			return true
+		}
+	}
+	return false
 }

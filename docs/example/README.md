@@ -1,38 +1,53 @@
-# Deploy a test network with 3 nodes
+# Deploy a test network
 
 ## Prerequisites
-- create cluster
-``` 
-$ kind create cluster solo
+
+### Docker Desktop Resources
+
+Increase Docker Desktop memory allocation:
+2. Set Memory to at least 8GB (12GB recommended)
+3. Set CPUs to at least 4
+
+### Setup Cluster and Operator
+
+From the project root:
+
+```shell
+# Reset kind cluster with fresh CRDs
+task reset
+
+# Start solo operator (in another terminal - MUST be running)
+task run
 ```
 
-- start solo operator ( in another terminal ) 
-```
-# In another terminal go to the project root and run
-$ task dev
+## Workflow
+
+From the `docs/example` directory:
+
+```shell
+task setup
+
+# Deploy node1 (runs genesis first, then creates pod)
+task deploy:node1
+
+# Deploy additional nodes (optional)
+task deploy:node2
+task deploy:node3
+task deploy:node4
+
+# Or deploy all nodes at once
+task deploy
 ```
 
-## Demo
-- **setup:** deploy minIO and solo orbit
+## Cleanup
 
-```
-$ source script.sh && setup
-```
+```shell
+# Destroy specific node
+task destroy:node1
 
-- **deploy:** deploy network in the orbit
+# Or destroy all nodes
+task destroy
 
-```
-$ source script.sh && deploy 
-```
-
-- **destroy:** destroy network in the orbit
-
-```
-$ source script.sh && destroy
-```
-
-- **cleanup:** uninstall minIO and solo orbit
-
-```
-$ source script.sh && cleanup
+# Cleanup MinIO
+task cleanup
 ```

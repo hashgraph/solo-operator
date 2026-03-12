@@ -1,0 +1,224 @@
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: ConsensusCapsule
+metadata:
+  name: node0
+  namespace: "solo-orbit"
+  labels:
+    app.kubernetes.io/component: consensus-node
+    app.kubernetes.io/managed-by: solo-operator
+spec:
+  orbit: solo-orbit
+  nodeId: 0
+  accountId: "0.0.3"
+  weight: 1
+  podProperties:
+    containers:
+      consensusNode:
+        name: "consensus-node"
+        softwareVersion:
+          repository: "us-central1-docker.pkg.dev/hashsphere-development/hiero-consensus-node"
+          imageName: "consensus-node"
+          imageTag: "v0.65.1"
+          imagePullPolicy: IfNotPresent
+        resources:
+          limits:
+            cpu: "2"
+            memory: 4Gi
+          requests:
+            cpu: "500m"
+            memory: 2Gi
+      
+      # Block streams uploader
+      blocksUploader:
+        enabled: true
+        name: "blockstream-uploader"
+        softwareVersion:
+          repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
+          imageName: "cheetah"
+          imageTag: "0.3.1"
+          imagePullPolicy: IfNotPresent
+        logLevel: Debug
+        resources:
+          limits:
+            cpu: 400m
+            memory: 400Mi
+          requests:
+            cpu: 200m
+            memory: 200Mi
+        s3:
+          enabled: true
+          bucket: "solo-streams"
+          region: "us-east-1"
+          endpoint: "http://minio.minio-tenant.svc.cluster.local"
+          useSsl: false
+        gcs:
+          enabled: false
+        envFromSecret: "uploader-mirror-secrets"
+      
+      # Record streams uploader (includes sidecar files)
+      recordsUploader:
+        enabled: true
+        name: "record-stream-uploader"
+        softwareVersion:
+          repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
+          imageName: "cheetah"
+          imageTag: "0.3.1"
+          imagePullPolicy: IfNotPresent
+        logLevel: Debug
+        resources:
+          limits:
+            cpu: 400m
+            memory: 400Mi
+          requests:
+            cpu: 200m
+            memory: 200Mi
+        s3:
+          enabled: true
+          bucket: "solo-streams"
+          region: "us-east-1"
+          endpoint: "http://minio.minio-tenant.svc.cluster.local"
+          useSsl: false
+        gcs:
+          enabled: false
+        envFromSecret: "uploader-mirror-secrets"
+      
+      # Events streams uploader
+      eventsUploader:
+        enabled: true
+        name: "event-stream-uploader"
+        softwareVersion:
+          repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
+          imageName: "cheetah"
+          imageTag: "0.3.1"
+          imagePullPolicy: IfNotPresent
+        logLevel: Debug
+        resources:
+          limits:
+            cpu: 400m
+            memory: 400Mi
+          requests:
+            cpu: 200m
+            memory: 200Mi
+        s3:
+          enabled: true
+          bucket: "solo-streams"
+          region: "us-east-1"
+          endpoint: "http://minio.minio-tenant.svc.cluster.local"
+          useSsl: false
+        gcs:
+          enabled: false
+        envFromSecret: "uploader-mirror-secrets"
+      
+      # Backup uploader (rclone-based, not cheetah)
+      backupUploader:
+        enabled: true
+        name: "backup-uploader"
+        softwareVersion:
+          repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
+          imageName: "backup-uploader"
+          imageTag: "0.38.0"
+          imagePullPolicy: IfNotPresent
+        resources:
+          limits:
+            cpu: 400m
+            memory: 400Mi
+          requests:
+            cpu: 200m
+            memory: 200Mi
+        config:
+          bucketName: "solo-backups"
+          s3:
+            enabled: true
+            url: "http://minio.minio-tenant.svc.cluster.local"
+          gcs:
+            enabled: false
+          envFromSecret: "backup-uploader-secrets"
+      
+      # OpenTelemetry collector
+      openTelemetryCollector:
+        enabled: true
+        name: "otel-collector"
+        softwareVersion:
+          repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
+          imageName: "opentelemetry-collector-contrib"
+          imageTag: "0.72.0"
+          imagePullPolicy: IfNotPresent
+        config:
+          exporters:
+            loki:
+              enabled: false
+  
+  persistentVolumeClaims:
+    logs:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 5Gi
+    stats:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 5Gi
+    states:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi
+    upgrade:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 5Gi
+    streams:
+      block:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi
+      record:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi
+      events:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi
+  
+  secrets:
+    secretResources:
+      grpcTlsPrivateKey:
+        keyName: "hedera-node0.key"
+        secretName: "node0-grpc-tls-keys"
+      grpcTlsPublicCertificate:
+        keyName: "hedera-node0.crt"
+        secretName: "node0-grpc-tls-keys"
+      signingPrivateKey:
+        keyName: "s-private-node0.pem"
+        secretName: "node0-gossip-keys"
+      signingPublicCertificate:
+        keyName: "s-public-node0.pem"
+        secretName: "node0-gossip-keys"
+  
+  log4j2.xml: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <Configuration status="WARN" monitorInterval="600">
+      <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+          <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5p %-4L %c{1} - %m{nolookups}%n"/>
+        </Console>
+      </Appenders>
+      <Loggers>
+        <Root level="INFO">
+          <AppenderRef ref="Console"/>
+        </Root>
+      </Loggers>
+    </Configuration>

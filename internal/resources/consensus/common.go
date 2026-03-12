@@ -49,8 +49,8 @@ const (
 	ConsensusCapsuleRoleName = "consensus-capsule-role"
 	// ConsensusConfigMapName is the name of the ConfigMap created by Orbit
 	ConsensusConfigMapName = "consensus-config"
-	// DeploymentName is the name of the deployment
-	DeploymentName = "consensus-node"
+	// ClusterConfigMapName is the name of the ConfigMap created by genesis
+	ClusterConfigMapName = "cluster-config"
 	// ConsensusSubdomain is the subdomain for consensus nodes
 	ConsensusSubdomain = "consensus"
 )
@@ -66,12 +66,13 @@ const (
 
 // Volume types
 const (
-	VolumeTypeLogs          = "logs"
-	VolumeTypeStats         = "stats"
-	VolumeTypeStates        = "states"
-	VolumeTypeUpgrade       = "upgrade"
-	VolumeTypeRecordStreams = "record-streams"
-	VolumeTypeEventsStreams = "events-streams"
+	VolumeTypeLogs    = "logs"
+	VolumeTypeStats   = "stats"
+	VolumeTypeStates  = "states"
+	VolumeTypeUpgrade = "upgrade"
+	VolumeTypeBlocks  = "blocks"
+	VolumeTypeRecords = "records"
+	VolumeTypeEvents  = "events"
 )
 
 // CommonLabels returns the common labels for consensus capsule resources
@@ -109,6 +110,11 @@ func ConfigMapName(capsule *operatorv1alpha1.ConsensusCapsule) string {
 // PVCName returns the PVC name for a capsule and volume type
 func PVCName(capsule *operatorv1alpha1.ConsensusCapsule, volumeType string) string {
 	return fmt.Sprintf("%s-%s", capsule.Name, volumeType)
+}
+
+// DeploymentName returns the deployment name for a capsule
+func DeploymentName(capsule *operatorv1alpha1.ConsensusCapsule) string {
+	return capsule.Name + "-consensus-node"
 }
 
 // InternalHostname returns the internal FQDN for a capsule

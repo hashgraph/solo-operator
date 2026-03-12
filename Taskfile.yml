@@ -166,6 +166,14 @@ tasks:
       - task: install
       - task: run
 
+  reset:
+    desc: Reset kind cluster with fresh CRDs
+    cmds:
+      - task: kind:delete
+      - task: generate:all
+      - task: kind:create
+      - task: install
+
   clean:
     desc: Clean build artifacts
     cmds:

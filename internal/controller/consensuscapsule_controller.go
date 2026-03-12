@@ -105,6 +105,10 @@ func (r *ConsensusCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Update status based on pod state
 	if err := r.updateStatus(ctx, capsule); err != nil {
+		if apierrors.IsConflict(err) {
+			// Conflict errors are expected and will be retried
+			return ctrl.Result{Requeue: true}, nil
+		}
 		return ctrl.Result{}, err
 	}
 

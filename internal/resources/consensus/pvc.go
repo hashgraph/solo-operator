@@ -51,8 +51,9 @@ func (r *PVCSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alp
 	}
 
 	if pvcConfig.Streams != nil {
-		pvcSpecs[VolumeTypeRecordStreams] = pvcConfig.Streams.Record
-		pvcSpecs[VolumeTypeEventsStreams] = pvcConfig.Streams.Events
+		pvcSpecs[VolumeTypeBlocks] = pvcConfig.Streams.Block
+		pvcSpecs[VolumeTypeRecords] = pvcConfig.Streams.Record
+		pvcSpecs[VolumeTypeEvents] = pvcConfig.Streams.Events
 	}
 
 	for volumeType, spec := range pvcSpecs {
@@ -129,11 +130,14 @@ func GetPVCNames(capsule *operatorv1alpha1.ConsensusCapsule) []string {
 		names = append(names, PVCName(capsule, VolumeTypeUpgrade))
 	}
 	if pvcConfig.Streams != nil {
+		if pvcConfig.Streams.Block != nil {
+			names = append(names, PVCName(capsule, VolumeTypeBlocks))
+		}
 		if pvcConfig.Streams.Record != nil {
-			names = append(names, PVCName(capsule, VolumeTypeRecordStreams))
+			names = append(names, PVCName(capsule, VolumeTypeRecords))
 		}
 		if pvcConfig.Streams.Events != nil {
-			names = append(names, PVCName(capsule, VolumeTypeEventsStreams))
+			names = append(names, PVCName(capsule, VolumeTypeEvents))
 		}
 	}
 

@@ -134,11 +134,7 @@ func newTestCapsule() *operatorv1alpha1.ConsensusCapsule {
 				Containers: operatorv1alpha1.ConsensusContainers{
 					ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
 						Name: "consensus-node",
-						SoftwareVersion: operatorv1alpha1.SoftwareVersion{
-							Repository: "hashgraph",
-							ImageName:  "hedera-node",
-							ImageTag:   "v0.50.0",
-						},
+						Image: "hashgraph/hedera-node:v0.50.0",
 					},
 				},
 			},
@@ -369,42 +365,6 @@ func TestDeploymentSubReconciler(t *testing.T) {
 	}
 }
 
-func TestBuildImage(t *testing.T) {
-	tests := []struct {
-		name     string
-		sv       operatorv1alpha1.SoftwareVersion
-		expected string
-	}{
-		{
-			name: "with tag",
-			sv: operatorv1alpha1.SoftwareVersion{
-				Repository: "hashgraph",
-				ImageName:  "hedera-node",
-				ImageTag:   "v0.50.0",
-			},
-			expected: "hashgraph/hedera-node:v0.50.0",
-		},
-		{
-			name: "with manifest hash",
-			sv: operatorv1alpha1.SoftwareVersion{
-				Repository:   "hashgraph",
-				ImageName:    "hedera-node",
-				ImageTag:     "v0.50.0",
-				ManifestHash: "sha256:abc123",
-			},
-			expected: "hashgraph/hedera-node@sha256:abc123",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := buildImage(tt.sv)
-			if got != tt.expected {
-				t.Errorf("expected %s, got %s", tt.expected, got)
-			}
-		})
-	}
-}
 
 func TestNewSubReconcilers(t *testing.T) {
 	scheme := newTestScheme()
