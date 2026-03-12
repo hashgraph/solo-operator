@@ -32,7 +32,6 @@ tasks:
     cmds:
       - kubectl apply -f common/configs.yaml
       - kubectl apply -f common/secrets.yaml
-      - kubectl apply -f common/uploader-secrets.yaml
 
   deploy:genesis:
     desc: Deploy network genesis operation (must run before nodes)
@@ -40,15 +39,9 @@ tasks:
     cmds:
       - kubectl apply -f node0/secrets.yaml
       - kubectl apply -f node0/consensus-capsule.yaml
-      - echo ">> Waiting for ConsensusCapsule to be created..."
-      - sleep 5
-      - echo ">> Scaling down for genesis..."
-      - kubectl scale deployment node0-consensus-node -n solo-orbit --replicas=0 --timeout=30s || true
       - kubectl apply -f network-operation/network-genesis.yaml
       - echo ">> Waiting for genesis to complete..."
       - kubectl wait --for=jsonpath='{.status.phase}'=Succeeded networkoperation/network-genesis -n solo-orbit --timeout=300s
-      - echo ">> Scaling up after genesis..."
-      - kubectl scale deployment node0-consensus-node -n solo-orbit --replicas=1
 
   deploy:node0:
     desc: Deploy node0
@@ -57,10 +50,9 @@ tasks:
       - echo ">> Node0 already deployed by genesis step"
 
   deploy:node1:
-    desc: Deploy node1 with manual PVCs
+    desc: Deploy node1
     deps: [deploy:common]
     cmds:
-      - kubectl apply -f node1/pvcs.yaml
       - kubectl apply -f node1/consensus-capsule.yaml
       - kubectl apply -f node1/secrets.yaml
 
@@ -103,7 +95,6 @@ tasks:
     cmds:
       - kubectl delete -f node1/consensus-capsule.yaml
       - kubectl delete -f node1/secrets.yaml
-      - kubectl delete -f node1/pvcs.yaml
 
   destroy:node0:
     desc: Destroy node0
