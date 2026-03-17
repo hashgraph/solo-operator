@@ -2,13 +2,6 @@ Current issues:
 
 * Why Orbit is clusterscoped and creates a namespace? Can it be namespace scoped and namespace created before dropping CR into cluster
 
-* ✅ We need to add `cheetah` support - COMPLETED
-  * Added CheetahConfig type to API
-  * Created Cheetah ConfigMap builder for cheetah.yaml generation
-  * Updated deployment to support Cheetah sidecar container
-  * Cheetah replaces Python-based mirror-uploader sidecars
-  * See docs/CHEETAH_MIGRATION.md for migration guide
-
 * We need to move genesis gen from NetworkOps into Orbit. Why it's there.
 
 
