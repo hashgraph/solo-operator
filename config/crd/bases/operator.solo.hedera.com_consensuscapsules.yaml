@@ -3145,6 +3145,15 @@ spec:
                         description: BlocksUploader is the Cheetah blocks uploader
                           sidecar
                         properties:
+                          bucketPrefix:
+                            description: BucketPrefix is prepended to all stream bucket
+                              object paths (e.g. "mynetwork/testnet")
+                            type: string
+                          configCheckInterval:
+                            default: 30s
+                            description: ConfigCheckInterval is the interval for checking
+                              config changes and updating pipelines (e.g. "30s")
+                            type: string
                           enabled:
                             default: false
                             description: Enabled enables the uploader
@@ -3187,6 +3196,11 @@ spec:
                             default: Info
                             description: LogLevel is the log level
                             type: string
+                          maxProcessors:
+                            default: 10
+                            description: MaxProcessors is the maximum number of concurrent
+                              file processors per pipeline
+                            type: integer
                           name:
                             description: Name is the container name
                             type: string
@@ -3352,6 +3366,12 @@ spec:
                             - imageTag
                             - repository
                             type: object
+                          stopOnError:
+                            default: false
+                            description: |-
+                              StopOnError stops the pipeline when an error occurs.
+                              If false, the pipeline continues with the expectation that the error resolves on retry.
+                            type: boolean
                         type: object
                       consensusNode:
                         description: ConsensusNode is the main consensus node container
@@ -3907,6 +3927,15 @@ spec:
                         description: EventsUploader is the Cheetah events uploader
                           sidecar
                         properties:
+                          bucketPrefix:
+                            description: BucketPrefix is prepended to all stream bucket
+                              object paths (e.g. "mynetwork/testnet")
+                            type: string
+                          configCheckInterval:
+                            default: 30s
+                            description: ConfigCheckInterval is the interval for checking
+                              config changes and updating pipelines (e.g. "30s")
+                            type: string
                           enabled:
                             default: false
                             description: Enabled enables the uploader
@@ -3949,6 +3978,11 @@ spec:
                             default: Info
                             description: LogLevel is the log level
                             type: string
+                          maxProcessors:
+                            default: 10
+                            description: MaxProcessors is the maximum number of concurrent
+                              file processors per pipeline
+                            type: integer
                           name:
                             description: Name is the container name
                             type: string
@@ -4114,6 +4148,12 @@ spec:
                             - imageTag
                             - repository
                             type: object
+                          stopOnError:
+                            default: false
+                            description: |-
+                              StopOnError stops the pipeline when an error occurs.
+                              If false, the pipeline continues with the expectation that the error resolves on retry.
+                            type: boolean
                         type: object
                       openTelemetryCollector:
                         description: OpenTelemetryCollector is the otel collector
@@ -5100,6 +5140,15 @@ spec:
                         description: RecordsUploader is the Cheetah records uploader
                           sidecar (record streams + sidecar files)
                         properties:
+                          bucketPrefix:
+                            description: BucketPrefix is prepended to all stream bucket
+                              object paths (e.g. "mynetwork/testnet")
+                            type: string
+                          configCheckInterval:
+                            default: 30s
+                            description: ConfigCheckInterval is the interval for checking
+                              config changes and updating pipelines (e.g. "30s")
+                            type: string
                           enabled:
                             default: false
                             description: Enabled enables the uploader
@@ -5142,6 +5191,11 @@ spec:
                             default: Info
                             description: LogLevel is the log level
                             type: string
+                          maxProcessors:
+                            default: 10
+                            description: MaxProcessors is the maximum number of concurrent
+                              file processors per pipeline
+                            type: integer
                           name:
                             description: Name is the container name
                             type: string
@@ -5307,6 +5361,12 @@ spec:
                             - imageTag
                             - repository
                             type: object
+                          stopOnError:
+                            default: false
+                            description: |-
+                              StopOnError stops the pipeline when an error occurs.
+                              If false, the pipeline continues with the expectation that the error resolves on retry.
+                            type: boolean
                         type: object
                     required:
                     - consensusNode

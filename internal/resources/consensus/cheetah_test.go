@@ -4,6 +4,7 @@ package consensus
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -235,13 +236,15 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		uploader      *operatorv1alpha1.CheetahUploader
-		containerName string
-		configFile    string
-		mountPath     string
-		envPrefix     string
-		expectEnvVars []string
+		name             string
+		uploader         *operatorv1alpha1.CheetahUploader
+		containerName    string
+		configFile       string
+		mountPath        string
+		envPrefix        string
+		streamBucketPath string
+		expectEnvVars    []string
+		expectPrefixVal  string
 	}{
 		{
 			name: "blocks uploader with GCS",
@@ -264,11 +267,13 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 				},
 				EnvFromSecret: "test-secret",
 			},
-			containerName: "blockstream-uploader",
-			configFile:    "cheetah-block-streams.yaml",
-			mountPath:     "/opt/hgcapp/blockStreams",
-			envPrefix:     "BLOCK_STREAMS",
-			expectEnvVars: []string{"GCS_ENABLED", "GCS_BUCKET_NAME", "GCS_BUCKET_REGION", "GCS_ENDPOINT", "GCS_USE_SSL", "GCS_BLOCK_STREAMS_BUCKET_PREFIX"},
+			containerName:    "blockstream-uploader",
+			configFile:       "cheetah-block-streams.yaml",
+			mountPath:        "/opt/hgcapp/blockStreams",
+			envPrefix:        "BLOCK_STREAMS",
+			streamBucketPath: "blockStreams/block-0.0.3",
+			expectEnvVars:    []string{"GCS_ENABLED", "GCS_BUCKET_NAME", "GCS_BUCKET_REGION", "GCS_ENDPOINT", "GCS_USE_SSL", "GCS_BLOCK_STREAMS_BUCKET_PREFIX"},
+			expectPrefixVal:  "blockStreams/block-0.0.3",
 		},
 		{
 			name: "records uploader with S3",
@@ -283,17 +288,57 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 					UseSsl:   true,
 				},
 			},
-			containerName: "record-stream-uploader",
-			configFile:    "cheetah-record-streams.yaml",
-			mountPath:     "/opt/hgcapp/recordStreams",
-			envPrefix:     "RECORD_STREAMS",
-			expectEnvVars: []string{"S3_ENABLED", "S3_BUCKET_NAME", "S3_BUCKET_REGION", "S3_ENDPOINT", "S3_USE_SSL", "S3_RECORD_STREAMS_BUCKET_PREFIX"},
+			containerName:    "record-stream-uploader",
+			configFile:       "cheetah-record-streams.yaml",
+			mountPath:        "/opt/hgcapp/recordStreams",
+			envPrefix:        "RECORD_STREAMS",
+			streamBucketPath: "recordstreams/record0.0.3",
+			expectEnvVars:    []string{"S3_ENABLED", "S3_BUCKET_NAME", "S3_BUCKET_REGION", "S3_ENDPOINT", "S3_USE_SSL", "S3_RECORD_STREAMS_BUCKET_PREFIX"},
+			expectPrefixVal:  "recordstreams/record0.0.3",
+		},
+		{
+			name: "blocks uploader with BucketPrefix",
+			uploader: &operatorv1alpha1.CheetahUploader{
+				Enabled:      true,
+				Image:        "cheetah:0.3.1",
+				BucketPrefix: "mynetwork/testnet",
+				S3: &operatorv1alpha1.CheetahS3Config{
+					Enabled: true,
+					Bucket:  "my-bucket",
+				},
+			},
+			containerName:    "blockstream-uploader",
+			configFile:       "cheetah-block-streams.yaml",
+			mountPath:        "/opt/hgcapp/blockStreams",
+			envPrefix:        "BLOCK_STREAMS",
+			streamBucketPath: "blockStreams/block-0.0.3",
+			expectEnvVars:    []string{"S3_ENABLED", "S3_BLOCK_STREAMS_BUCKET_PREFIX"},
+			expectPrefixVal:  "mynetwork/testnet/blockStreams/block-0.0.3",
+		},
+		{
+			name: "blocks uploader with custom ConfigCheckInterval",
+			uploader: &operatorv1alpha1.CheetahUploader{
+				Enabled:             true,
+				Image:               "cheetah:0.4.5",
+				ConfigCheckInterval: "60s",
+				S3: &operatorv1alpha1.CheetahS3Config{
+					Enabled: true,
+					Bucket:  "my-bucket",
+				},
+			},
+			containerName:    "blockstream-uploader",
+			configFile:       "cheetah-block-streams.yaml",
+			mountPath:        "/opt/hgcapp/blockStreams",
+			envPrefix:        "BLOCK_STREAMS",
+			streamBucketPath: "blockStreams/block-0.0.3",
+			expectEnvVars:    []string{"S3_ENABLED", "S3_BLOCK_STREAMS_BUCKET_PREFIX"},
+			expectPrefixVal:  "blockStreams/block-0.0.3",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			container := reconciler.buildCheetahUploaderContainer(capsule, tt.uploader, tt.containerName, tt.configFile, tt.mountPath, tt.envPrefix)
+			container := reconciler.buildCheetahUploaderContainer(capsule, tt.uploader, tt.containerName, tt.configFile, tt.mountPath, tt.envPrefix, tt.streamBucketPath)
 
 			// Check container name
 			if container.Name != tt.containerName {
@@ -305,20 +350,55 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 				t.Errorf("expected image %s, got %s", tt.uploader.Image, container.Image)
 			}
 
-			// Check command
-			expectedCmd := []string{"/app/bin/cheetah", "upload", "--config", "/app/config/cheetah.yaml"}
+			// Check command includes --config-check-interval
+			expectedInterval := "30s"
+			if tt.uploader.ConfigCheckInterval != "" {
+				expectedInterval = tt.uploader.ConfigCheckInterval
+			}
+			expectedCmd := []string{"/app/bin/cheetah", "upload", "--config", "/app/config/cheetah.yaml", "--config-check-interval", expectedInterval}
 			if len(container.Command) != len(expectedCmd) {
 				t.Errorf("expected command length %d, got %d", len(expectedCmd), len(container.Command))
 			}
+			for i, arg := range expectedCmd {
+				if i < len(container.Command) && container.Command[i] != arg {
+					t.Errorf("command[%d]: expected %q, got %q", i, arg, container.Command[i])
+				}
+			}
 
-			// Check environment variables
-			envMap := make(map[string]bool)
+			// Check container ports
+			if len(container.Ports) != 2 {
+				t.Errorf("expected 2 ports, got %d", len(container.Ports))
+			} else {
+				portMap := make(map[string]int32)
+				for _, p := range container.Ports {
+					portMap[p.Name] = p.ContainerPort
+				}
+				if portMap["pprof"] != 6061 {
+					t.Errorf("expected pprof port 6061, got %d", portMap["pprof"])
+				}
+				if portMap["stats"] != 6060 {
+					t.Errorf("expected stats port 6060, got %d", portMap["stats"])
+				}
+			}
+
+			// Check environment variables exist and prefix value is correct
+			envMap := make(map[string]string)
 			for _, env := range container.Env {
-				envMap[env.Name] = true
+				envMap[env.Name] = env.Value
 			}
 			for _, expectedEnv := range tt.expectEnvVars {
-				if !envMap[expectedEnv] {
+				if _, ok := envMap[expectedEnv]; !ok {
 					t.Errorf("expected environment variable %s not found", expectedEnv)
+				}
+			}
+			// Verify bucket prefix value for whichever storage backend is configured
+			prefixKey := fmt.Sprintf("S3_%s_BUCKET_PREFIX", tt.envPrefix)
+			if tt.uploader.GCS != nil {
+				prefixKey = fmt.Sprintf("GCS_%s_BUCKET_PREFIX", tt.envPrefix)
+			}
+			if got, ok := envMap[prefixKey]; ok {
+				if got != tt.expectPrefixVal {
+					t.Errorf("bucket prefix: expected %q, got %q", tt.expectPrefixVal, got)
 				}
 			}
 
@@ -327,16 +407,9 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 				t.Errorf("expected 2 volume mounts, got %d", len(container.VolumeMounts))
 			}
 
-			// Check security context
-			if container.SecurityContext == nil {
-				t.Error("expected security context to be set")
-			} else {
-				if *container.SecurityContext.RunAsUser != 2000 {
-					t.Errorf("expected runAsUser 2000, got %d", *container.SecurityContext.RunAsUser)
-				}
-				if *container.SecurityContext.RunAsGroup != 2000 {
-					t.Errorf("expected runAsGroup 2000, got %d", *container.SecurityContext.RunAsGroup)
-				}
+			// No per-container security context — fsGroup at pod level handles ownership
+			if container.SecurityContext != nil {
+				t.Error("cheetah container should not set a per-container security context")
 			}
 
 			// Check resources
@@ -355,6 +428,18 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 					t.Errorf("expected secret %s, got %s", tt.uploader.EnvFromSecret, container.EnvFrom[0].SecretRef.Name)
 				}
 			}
+
+			// Check config-check-interval in command
+			if tt.uploader.ConfigCheckInterval != "" {
+				if len(container.Command) >= 6 && container.Command[5] != tt.uploader.ConfigCheckInterval {
+					t.Errorf("expected config-check-interval %q, got %q", tt.uploader.ConfigCheckInterval, container.Command[5])
+				}
+			} else {
+				// default should be 30s
+				if len(container.Command) >= 6 && container.Command[5] != "30s" {
+					t.Errorf("expected default config-check-interval 30s, got %q", container.Command[5])
+				}
+			}
 		})
 	}
 }
@@ -364,9 +449,9 @@ func TestGetVolumeNameForPath(t *testing.T) {
 		path     string
 		expected string
 	}{
-		{"/opt/hgcapp/blockStreams", VolumeTypeBlockStreams},
-		{"/opt/hgcapp/recordStreams", VolumeTypeRecordStreams},
-		{"/opt/hgcapp/eventsStreams", VolumeTypeEventsStreams},
+		{"/opt/hgcapp/blockStreams", VolumeTypeBlocks},
+		{"/opt/hgcapp/recordStreams", VolumeTypeRecords},
+		{"/opt/hgcapp/eventsStreams", VolumeTypeEvents},
 		{"/unknown/path", "unknown"},
 	}
 
@@ -451,6 +536,88 @@ func TestAddSidecarContainers_Cheetah(t *testing.T) {
 	}
 	if !foundConfigVolume {
 		t.Error("expected solo-cheetah-config volume to be added")
+	}
+
+	// No init container — fsGroup handles ownership instead
+	if len(deploy.Spec.Template.Spec.InitContainers) != 0 {
+		t.Errorf("expected no init containers, got %d", len(deploy.Spec.Template.Spec.InitContainers))
+	}
+}
+
+func TestApplyCheetahFSGroup(t *testing.T) {
+	reconciler := &DeploymentSubReconciler{}
+
+	t.Run("sets fsGroup 2000 when cheetah enabled and no security context set", func(t *testing.T) {
+		capsule := &operatorv1alpha1.ConsensusCapsule{
+			Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+				PodProperties: operatorv1alpha1.ConsensusPodProperties{
+					Containers: operatorv1alpha1.ConsensusContainers{
+						BlocksUploader: &operatorv1alpha1.CheetahUploader{Enabled: true},
+					},
+				},
+			},
+		}
+		deploy := &appsv1.Deployment{}
+		reconciler.applyCheetahFSGroup(deploy, capsule)
+		if deploy.Spec.Template.Spec.SecurityContext == nil || deploy.Spec.Template.Spec.SecurityContext.FSGroup == nil {
+			t.Fatal("expected fsGroup to be set")
+		}
+		if *deploy.Spec.Template.Spec.SecurityContext.FSGroup != 2000 {
+			t.Errorf("expected fsGroup 2000, got %d", *deploy.Spec.Template.Spec.SecurityContext.FSGroup)
+		}
+	})
+
+	t.Run("does not override user-provided fsGroup", func(t *testing.T) {
+		capsule := &operatorv1alpha1.ConsensusCapsule{
+			Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+				PodProperties: operatorv1alpha1.ConsensusPodProperties{
+					Containers: operatorv1alpha1.ConsensusContainers{
+						BlocksUploader: &operatorv1alpha1.CheetahUploader{Enabled: true},
+					},
+				},
+			},
+		}
+		userFSGroup := int64(1000)
+		deploy := &appsv1.Deployment{
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						SecurityContext: &corev1.PodSecurityContext{FSGroup: &userFSGroup},
+					},
+				},
+			},
+		}
+		reconciler.applyCheetahFSGroup(deploy, capsule)
+		if *deploy.Spec.Template.Spec.SecurityContext.FSGroup != 1000 {
+			t.Errorf("expected user fsGroup 1000 to be preserved, got %d", *deploy.Spec.Template.Spec.SecurityContext.FSGroup)
+		}
+	})
+
+	t.Run("no-op when cheetah not enabled", func(t *testing.T) {
+		capsule := &operatorv1alpha1.ConsensusCapsule{}
+		deploy := &appsv1.Deployment{}
+		reconciler.applyCheetahFSGroup(deploy, capsule)
+		if deploy.Spec.Template.Spec.SecurityContext != nil {
+			t.Error("expected no security context when cheetah not enabled")
+		}
+	})
+}
+
+func TestCheetahBucketPath(t *testing.T) {
+	tests := []struct {
+		bucketPrefix     string
+		streamPath       string
+		expected         string
+	}{
+		{"", "blockStreams/block-0.0.3", "blockStreams/block-0.0.3"},
+		{"mynetwork/testnet", "blockStreams/block-0.0.3", "mynetwork/testnet/blockStreams/block-0.0.3"},
+		{"prefix", "recordstreams/record0.0.3", "prefix/recordstreams/record0.0.3"},
+	}
+	for _, tt := range tests {
+		got := cheetahBucketPath(tt.bucketPrefix, tt.streamPath)
+		if got != tt.expected {
+			t.Errorf("cheetahBucketPath(%q, %q) = %q, want %q", tt.bucketPrefix, tt.streamPath, got, tt.expected)
+		}
 	}
 }
 

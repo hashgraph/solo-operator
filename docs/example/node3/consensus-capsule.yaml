@@ -35,9 +35,12 @@ spec:
         softwareVersion:
           repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
           imageName: "cheetah"
-          imageTag: "0.3.1"
+          imageTag: "0.4.5"
           imagePullPolicy: IfNotPresent
         logLevel: Debug
+        maxProcessors: 10
+        stopOnError: false
+        # bucketPrefix: "mynetwork/testnet"  # optional — prepended to stream object paths
         resources:
           limits:
             cpu: 400m
@@ -62,9 +65,11 @@ spec:
         softwareVersion:
           repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
           imageName: "cheetah"
-          imageTag: "0.3.1"
+          imageTag: "0.4.5"
           imagePullPolicy: IfNotPresent
         logLevel: Debug
+        maxProcessors: 10
+        stopOnError: false
         resources:
           limits:
             cpu: 400m
@@ -89,9 +94,11 @@ spec:
         softwareVersion:
           repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
           imageName: "cheetah"
-          imageTag: "0.3.1"
+          imageTag: "0.4.5"
           imagePullPolicy: IfNotPresent
         logLevel: Debug
+        maxProcessors: 10
+        stopOnError: false
         resources:
           limits:
             cpu: 400m

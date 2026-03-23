@@ -116,6 +116,12 @@ func (r *DeploymentSubReconciler) buildDeployment(capsule *operatorv1alpha1.Cons
 	// Apply pod properties
 	r.applyPodProperties(deploy, capsule)
 
+	// Ensure shared fsGroup when cheetah uploaders are present so that all
+	// containers in the pod share GID ownership of the stream volumes.
+	// Must run after applyPodProperties to fill the gap only when the user
+	// has not already configured fsGroup themselves.
+	r.applyCheetahFSGroup(deploy, capsule)
+
 	return deploy
 }
 
@@ -413,10 +419,13 @@ func (r *DeploymentSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consens
 func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment, capsule *operatorv1alpha1.ConsensusCapsule) {
 	containers := capsule.Spec.PodProperties.Containers
 
-	// Add Cheetah ConfigMap volume if any cheetah uploader is enabled
-	if (containers.BlocksUploader != nil && containers.BlocksUploader.Enabled) ||
+	accountId := capsule.Spec.AccountId
+	cheetahEnabled := (containers.BlocksUploader != nil && containers.BlocksUploader.Enabled) ||
 		(containers.RecordsUploader != nil && containers.RecordsUploader.Enabled) ||
-		(containers.EventsUploader != nil && containers.EventsUploader.Enabled) {
+		(containers.EventsUploader != nil && containers.EventsUploader.Enabled)
+
+	// Add Cheetah ConfigMap volume and init container if any cheetah uploader is enabled
+	if cheetahEnabled {
 		deploy.Spec.Template.Spec.Volumes = append(deploy.Spec.Template.Spec.Volumes, corev1.Volume{
 			Name: "solo-cheetah-config",
 			VolumeSource: corev1.VolumeSource{
@@ -430,19 +439,22 @@ func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment
 	// Block streams uploader
 	if containers.BlocksUploader != nil && containers.BlocksUploader.Enabled {
 		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers,
-			r.buildCheetahUploaderContainer(capsule, containers.BlocksUploader, "blockstream-uploader", "cheetah-block-streams.yaml", "/opt/hgcapp/blockStreams", "BLOCK_STREAMS"))
+			r.buildCheetahUploaderContainer(capsule, containers.BlocksUploader, "blockstream-uploader", "cheetah-block-streams.yaml", "/opt/hgcapp/blockStreams", "BLOCK_STREAMS",
+				fmt.Sprintf("blockStreams/block-%s", accountId)))
 	}
 
 	// Record streams uploader
 	if containers.RecordsUploader != nil && containers.RecordsUploader.Enabled {
 		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers,
-			r.buildCheetahUploaderContainer(capsule, containers.RecordsUploader, "record-stream-uploader", "cheetah-record-streams.yaml", "/opt/hgcapp/recordStreams", "RECORD_STREAMS"))
+			r.buildCheetahUploaderContainer(capsule, containers.RecordsUploader, "record-stream-uploader", "cheetah-record-streams.yaml", "/opt/hgcapp/recordStreams", "RECORD_STREAMS",
+				fmt.Sprintf("recordstreams/record%s", accountId)))
 	}
 
 	// Events streams uploader
 	if containers.EventsUploader != nil && containers.EventsUploader.Enabled {
 		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers,
-			r.buildCheetahUploaderContainer(capsule, containers.EventsUploader, "event-stream-uploader", "cheetah-events-streams.yaml", "/opt/hgcapp/eventsStreams", "EVENTS_STREAMS"))
+			r.buildCheetahUploaderContainer(capsule, containers.EventsUploader, "event-stream-uploader", "cheetah-events-streams.yaml", "/opt/hgcapp/eventsStreams", "EVENTS_STREAMS",
+				fmt.Sprintf("eventsStreams/events_%s", accountId)))
 	}
 
 	// Legacy backup uploader (rclone-based)
@@ -458,15 +470,16 @@ func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment
 	}
 }
 
-// buildCheetahUploaderContainer builds a cheetah uploader sidecar container
-func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(capsule *operatorv1alpha1.ConsensusCapsule, uploader *operatorv1alpha1.CheetahUploader, containerName, configFile, mountPath, envPrefix string) corev1.Container {
+// buildCheetahUploaderContainer builds a cheetah uploader sidecar container.
+// streamBucketPath is the stream-specific path component (e.g. "blockStreams/block-0.0.3").
+func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(capsule *operatorv1alpha1.ConsensusCapsule, uploader *operatorv1alpha1.CheetahUploader, containerName, configFile, mountPath, envPrefix, streamBucketPath string) corev1.Container {
 	// Support both Image and SoftwareVersion (deprecated)
 	image := uploader.Image
 	if image == "" && uploader.SoftwareVersion != nil {
 		image = common.BuildImage(*uploader.SoftwareVersion)
 	}
 	if image == "" {
-		image = "ghcr.io/hashgraph/cheetah:latest"
+		image = CheetahDefaultImage
 	}
 
 	name := uploader.Name
@@ -491,6 +504,8 @@ func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(capsule *operato
 	// Build environment variables
 	env := []corev1.EnvVar{}
 
+	bucketPath := cheetahBucketPath(uploader.BucketPrefix, streamBucketPath)
+
 	// GCS configuration
 	if uploader.GCS != nil {
 		if uploader.GCS.Enabled {
@@ -512,8 +527,7 @@ func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(capsule *operato
 		} else {
 			env = append(env, corev1.EnvVar{Name: "GCS_USE_SSL", Value: "false"})
 		}
-		// Add prefix env var
-		env = append(env, corev1.EnvVar{Name: fmt.Sprintf("GCS_%s_BUCKET_PREFIX", envPrefix), Value: fmt.Sprintf("%s/%s%s", envPrefix, capsule.Spec.AccountId, "")})
+		env = append(env, corev1.EnvVar{Name: fmt.Sprintf("GCS_%s_BUCKET_PREFIX", envPrefix), Value: bucketPath})
 	}
 
 	// S3 configuration
@@ -537,8 +551,12 @@ func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(capsule *operato
 		} else {
 			env = append(env, corev1.EnvVar{Name: "S3_USE_SSL", Value: "false"})
 		}
-		// Add prefix env var
-		env = append(env, corev1.EnvVar{Name: fmt.Sprintf("S3_%s_BUCKET_PREFIX", envPrefix), Value: fmt.Sprintf("%s/%s%s", envPrefix, capsule.Spec.AccountId, "")})
+		env = append(env, corev1.EnvVar{Name: fmt.Sprintf("S3_%s_BUCKET_PREFIX", envPrefix), Value: bucketPath})
+	}
+
+	configCheckInterval := CheetahDefaultConfigCheckInterval
+	if uploader.ConfigCheckInterval != "" {
+		configCheckInterval = uploader.ConfigCheckInterval
 	}
 
 	container := corev1.Container{
@@ -549,12 +567,14 @@ func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(capsule *operato
 			"upload",
 			"--config",
 			"/app/config/cheetah.yaml",
+			"--config-check-interval",
+			configCheckInterval,
 		},
 		Env:          env,
 		VolumeMounts: volumeMounts,
-		SecurityContext: &corev1.SecurityContext{
-			RunAsUser:  int64Ptr(2000),
-			RunAsGroup: int64Ptr(2000),
+		Ports: []corev1.ContainerPort{
+			{Name: "pprof", ContainerPort: CheetahPprofPort, Protocol: corev1.ProtocolTCP},
+			{Name: "stats", ContainerPort: CheetahStatsPort, Protocol: corev1.ProtocolTCP},
 		},
 	}
 
@@ -576,6 +596,38 @@ func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(capsule *operato
 	return container
 }
 
+// applyCheetahFSGroup sets fsGroup on the pod security context when any cheetah uploader
+// is enabled. This ensures all containers in the pod share GID ownership of stream volumes,
+// so cheetah can delete files written by the consensus node without needing an init container
+// or a hardcoded per-container RunAsUser.
+// Only fills in fsGroup if the user has not already set one.
+func (r *DeploymentSubReconciler) applyCheetahFSGroup(deploy *appsv1.Deployment, capsule *operatorv1alpha1.ConsensusCapsule) {
+	containers := capsule.Spec.PodProperties.Containers
+	cheetahEnabled := (containers.BlocksUploader != nil && containers.BlocksUploader.Enabled) ||
+		(containers.RecordsUploader != nil && containers.RecordsUploader.Enabled) ||
+		(containers.EventsUploader != nil && containers.EventsUploader.Enabled)
+	if !cheetahEnabled {
+		return
+	}
+
+	if deploy.Spec.Template.Spec.SecurityContext == nil {
+		deploy.Spec.Template.Spec.SecurityContext = &corev1.PodSecurityContext{}
+	}
+	if deploy.Spec.Template.Spec.SecurityContext.FSGroup == nil {
+		fsGroup := int64(2000)
+		deploy.Spec.Template.Spec.SecurityContext.FSGroup = &fsGroup
+	}
+}
+
+// cheetahBucketPath returns the full bucket object prefix for a stream.
+// If the uploader has a BucketPrefix set it is prepended; otherwise the stream-specific path is used as-is.
+func cheetahBucketPath(bucketPrefix, streamPath string) string {
+	if bucketPrefix != "" {
+		return bucketPrefix + "/" + streamPath
+	}
+	return streamPath
+}
+
 // getVolumeNameForPath returns the volume name for a given mount path
 func getVolumeNameForPath(path string) string {
 	switch path {
@@ -588,11 +640,6 @@ func getVolumeNameForPath(path string) string {
 	default:
 		return "unknown"
 	}
-}
-
-// int64Ptr returns a pointer to an int64
-func int64Ptr(i int64) *int64 {
-	return &i
 }
 
 // buildBackupUploaderContainer builds the backup uploader container (rclone-based)

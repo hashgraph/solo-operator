@@ -377,6 +377,26 @@ type CheetahUploader struct {
 	// EnvFromSecret is the secret name for credentials
 	// +optional
 	EnvFromSecret string `json:"envFromSecret,omitempty"`
+
+	// MaxProcessors is the maximum number of concurrent file processors per pipeline
+	// +kubebuilder:default=10
+	// +optional
+	MaxProcessors int `json:"maxProcessors,omitempty"`
+
+	// StopOnError stops the pipeline when an error occurs.
+	// If false, the pipeline continues with the expectation that the error resolves on retry.
+	// +kubebuilder:default=false
+	// +optional
+	StopOnError bool `json:"stopOnError,omitempty"`
+
+	// BucketPrefix is prepended to all stream bucket object paths (e.g. "mynetwork/testnet")
+	// +optional
+	BucketPrefix string `json:"bucketPrefix,omitempty"`
+
+	// ConfigCheckInterval is the interval for checking config changes and updating pipelines (e.g. "30s")
+	// +kubebuilder:default="30s"
+	// +optional
+	ConfigCheckInterval string `json:"configCheckInterval,omitempty"`
 }
 
 // CheetahConfig contains Cheetah uploader configuration
