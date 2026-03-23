@@ -133,7 +133,7 @@ func newTestCapsule() *operatorv1alpha1.ConsensusCapsule {
 			PodProperties: operatorv1alpha1.ConsensusPodProperties{
 				Containers: operatorv1alpha1.ConsensusContainers{
 					ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
-						Name: "consensus-node",
+						Name:  "consensus-node",
 						Image: "hashgraph/hedera-node:v0.50.0",
 					},
 				},
@@ -364,7 +364,6 @@ func TestDeploymentSubReconciler(t *testing.T) {
 		t.Error("unexpected requeue")
 	}
 }
-
 
 func TestNewSubReconcilers(t *testing.T) {
 	scheme := newTestScheme()

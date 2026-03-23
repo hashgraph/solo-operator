@@ -127,7 +127,7 @@ func (r *CheetahConfigMapSubReconciler) buildSingleConfig(name, directory, patte
 		if i > 0 {
 			patternList += ", "
 		}
-		patternList += fmt.Sprintf(`"%s"`, p)
+		patternList += fmt.Sprintf("%q", p)
 	}
 
 	return fmt.Sprintf(`log:

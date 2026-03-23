@@ -21,10 +21,10 @@ func TestCheetahConfigMapSubReconciler_Reconcile(t *testing.T) {
 	scheme := newTestScheme()
 
 	tests := []struct {
-		name           string
-		capsule        *operatorv1alpha1.ConsensusCapsule
+		name            string
+		capsule         *operatorv1alpha1.ConsensusCapsule
 		expectConfigMap bool
-		expectFiles    []string
+		expectFiles     []string
 	}{
 		{
 			name: "no uploaders enabled",
@@ -125,22 +125,20 @@ func TestCheetahConfigMapSubReconciler_Reconcile(t *testing.T) {
 			// Check if ConfigMap was created
 			cm := &corev1.ConfigMap{}
 			err = c.Get(ctx, client.ObjectKey{Name: CheetahConfigMapName, Namespace: tt.capsule.Namespace}, cm)
-			
+
 			if tt.expectConfigMap {
 				if err != nil {
 					t.Fatalf("expected ConfigMap to be created, got error: %v", err)
 				}
-				
+
 				// Check expected files exist
 				for _, file := range tt.expectFiles {
 					if _, ok := cm.Data[file]; !ok {
 						t.Errorf("expected file %s not found in ConfigMap", file)
 					}
 				}
-			} else {
-				if err == nil {
-					t.Error("expected no ConfigMap, but one was created")
-				}
+			} else if err == nil {
+				t.Error("expected no ConfigMap, but one was created")
 			}
 		})
 	}
@@ -467,7 +465,7 @@ func TestGetVolumeNameForPath(t *testing.T) {
 
 func TestAddSidecarContainers_Cheetah(t *testing.T) {
 	reconciler := &DeploymentSubReconciler{}
-	
+
 	capsule := &operatorv1alpha1.ConsensusCapsule{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-node",
@@ -605,9 +603,9 @@ func TestApplyCheetahFSGroup(t *testing.T) {
 
 func TestCheetahBucketPath(t *testing.T) {
 	tests := []struct {
-		bucketPrefix     string
-		streamPath       string
-		expected         string
+		bucketPrefix string
+		streamPath   string
+		expected     string
 	}{
 		{"", "blockStreams/block-0.0.3", "blockStreams/block-0.0.3"},
 		{"mynetwork/testnet", "blockStreams/block-0.0.3", "mynetwork/testnet/blockStreams/block-0.0.3"},

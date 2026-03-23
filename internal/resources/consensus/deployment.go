@@ -368,7 +368,11 @@ func (r *DeploymentSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consens
 				Name: "keys", MountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/data/keys",
 			})
 		} else if capsule.Spec.Secrets.SecretResources != nil {
-			// Mount secrets from Kubernetes Secret resources
+			// Use a projected volume to combine the node's signing keys (Secret)
+			// with all nodes' public keys (ConfigMap) into a single mount
+			var projectedSources []corev1.VolumeProjection
+
+			// Add node's own signing keys from Secret
 			secretItems := []corev1.KeyToPath{}
 			if capsule.Spec.Secrets.SecretResources.SigningPrivateKey.SecretName != "" {
 				secretItems = append(secretItems, corev1.KeyToPath{
@@ -383,12 +387,32 @@ func (r *DeploymentSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consens
 				})
 			}
 			if len(secretItems) > 0 && capsule.Spec.Secrets.SecretResources.SigningPrivateKey.SecretName != "" {
+				projectedSources = append(projectedSources, corev1.VolumeProjection{
+					Secret: &corev1.SecretProjection{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: capsule.Spec.Secrets.SecretResources.SigningPrivateKey.SecretName,
+						},
+						Items: secretItems,
+					},
+				})
+			}
+
+			// Add all nodes' public keys from the genesis-created ConfigMap
+			projectedSources = append(projectedSources, corev1.VolumeProjection{
+				ConfigMap: &corev1.ConfigMapProjection{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: PublicKeysConfigMapName,
+					},
+					Optional: func() *bool { t := true; return &t }(),
+				},
+			})
+
+			if len(projectedSources) > 0 {
 				volumes = append(volumes, corev1.Volume{
 					Name: "keys",
 					VolumeSource: corev1.VolumeSource{
-						Secret: &corev1.SecretVolumeSource{
-							SecretName: capsule.Spec.Secrets.SecretResources.SigningPrivateKey.SecretName,
-							Items:      secretItems,
+						Projected: &corev1.ProjectedVolumeSource{
+							Sources: projectedSources,
 						},
 					},
 				})
@@ -790,6 +814,3 @@ func (r *DeploymentSubReconciler) needsUpdate(existing, desired *appsv1.Deployme
 
 	return false
 }
-
-
-

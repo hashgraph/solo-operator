@@ -222,15 +222,6 @@ func (s *CreateClusterConfigStep) buildConfigTxt(capsules []operatorv1alpha1.Con
 	return sb.String()
 }
 
-// computeNodeInternalAddress computes the internal address for a consensus node
-func (s *CreateClusterConfigStep) computeNodeInternalAddress(capsule *operatorv1alpha1.ConsensusCapsule, namespace string) string {
-	if capsule.Spec.InternalAddress != "" {
-		return capsule.Spec.InternalAddress
-	}
-	// Default: pod-name.headless-svc.namespace.svc.cluster.local
-	return fmt.Sprintf("%s.consensus.%s.svc.cluster.local", capsule.Name, namespace)
-}
-
 // computeNodeExternalAddress computes the external address for a consensus node
 func (s *CreateClusterConfigStep) computeNodeExternalAddress(capsule *operatorv1alpha1.ConsensusCapsule, nodeName, namespace string) string {
 	if capsule.Spec.ExternalAddress != "" {
@@ -273,22 +264,24 @@ func (s *CreateClusterConfigStep) buildApplicationProperties(orbit *operatorv1al
 			// If it's a plain number, convert to hex format for application.properties
 			if !strings.HasPrefix(rawLedgerId, "0x") {
 				// Plain number like "298" - convert to hex and set chainId
-				if rawLedgerId == "298" {
+				switch rawLedgerId {
+				case "298":
 					ledgerId = "0x01" // 298 is testnet, use 0x01
 					chainId = "298"
-				} else if rawLedgerId == "0" {
+				case "0":
 					ledgerId = "0x00"
 					chainId = "0"
-				} else {
+				default:
 					ledgerId = "0x" + rawLedgerId // Simple conversion
 					chainId = rawLedgerId
 				}
 			} else {
 				ledgerId = rawLedgerId
 				// For hex format, derive chainId
-				if rawLedgerId == "0x01" {
+				switch rawLedgerId {
+				case "0x01":
 					chainId = "298"
-				} else if rawLedgerId == "0x00" {
+				case "0x00":
 					chainId = "0"
 				}
 			}
@@ -400,11 +393,12 @@ func (s *CreateClusterConfigStep) buildBootstrapProperties(orbit *operatorv1alph
 			rawLedgerId := orbit.Spec.Consensus.Genesis.AddressBook.LedgerId
 			// If it's a plain number, convert to hex format
 			if !strings.HasPrefix(rawLedgerId, "0x") {
-				if rawLedgerId == "298" {
+				switch rawLedgerId {
+				case "298":
 					ledgerId = "0x01"
-				} else if rawLedgerId == "0" {
+				case "0":
 					ledgerId = "0x00"
-				} else {
+				default:
 					ledgerId = "0x" + rawLedgerId
 				}
 			} else {

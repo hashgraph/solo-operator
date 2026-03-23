@@ -51,6 +51,8 @@ const (
 	ConsensusConfigMapName = "consensus-config"
 	// ClusterConfigMapName is the name of the ConfigMap created by genesis
 	ClusterConfigMapName = "cluster-config"
+	// PublicKeysConfigMapName is the name of the public keys ConfigMap created by genesis
+	PublicKeysConfigMapName = "public-keys"
 	// ConsensusSubdomain is the subdomain for consensus nodes
 	ConsensusSubdomain = "consensus"
 )
