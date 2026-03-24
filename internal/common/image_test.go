@@ -32,6 +32,31 @@ func TestBuildImage(t *testing.T) {
 			},
 			expected: "docker.io/hashgraph/hedera-node:latest",
 		},
+		{
+			name:     "without repository",
+			sv:       operatorv1alpha1.SoftwareVersion{ImageName: "node", ImageTag: "v1"},
+			expected: "node:v1",
+		},
+		{
+			name:     "without tag",
+			sv:       operatorv1alpha1.SoftwareVersion{Repository: "gcr.io", ImageName: "node"},
+			expected: "gcr.io/node",
+		},
+		{
+			name:     "image name only",
+			sv:       operatorv1alpha1.SoftwareVersion{ImageName: "node"},
+			expected: "node",
+		},
+		{
+			name:     "empty image name",
+			sv:       operatorv1alpha1.SoftwareVersion{Repository: "gcr.io", ImageTag: "v1"},
+			expected: "",
+		},
+		{
+			name:     "all empty",
+			sv:       operatorv1alpha1.SoftwareVersion{},
+			expected: "",
+		},
 	}
 
 	for _, tt := range tests {
@@ -64,6 +89,12 @@ func TestBuildImageOrDefault(t *testing.T) {
 		{
 			name:         "nil software version",
 			sv:           nil,
+			defaultImage: "default:latest",
+			expected:     "default:latest",
+		},
+		{
+			name:         "empty image name falls back to default",
+			sv:           &operatorv1alpha1.SoftwareVersion{Repository: "gcr.io"},
 			defaultImage: "default:latest",
 			expected:     "default:latest",
 		},

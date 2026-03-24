@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 )
 
 func TestCheetahConfigMapSubReconciler_Reconcile(t *testing.T) {
@@ -249,7 +250,11 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 			uploader: &operatorv1alpha1.CheetahUploader{
 				Enabled: true,
 				Name:    "blockstream-uploader",
-				Image:   "cheetah:0.3.1",
+				SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+					Repository: "ghcr.io/hashgraph",
+					ImageName:  "cheetah",
+					ImageTag:   "0.3.1",
+				},
 				GCS: &operatorv1alpha1.CheetahGCSConfig{
 					Enabled:  true,
 					Bucket:   "test-bucket",
@@ -277,7 +282,11 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 			name: "records uploader with S3",
 			uploader: &operatorv1alpha1.CheetahUploader{
 				Enabled: true,
-				Image:   "cheetah:latest",
+				SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+					Repository: "ghcr.io/hashgraph",
+					ImageName:  "cheetah",
+					ImageTag:   "latest",
+				},
 				S3: &operatorv1alpha1.CheetahS3Config{
 					Enabled:  true,
 					Bucket:   "s3-bucket",
@@ -297,8 +306,12 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 		{
 			name: "blocks uploader with BucketPrefix",
 			uploader: &operatorv1alpha1.CheetahUploader{
-				Enabled:      true,
-				Image:        "cheetah:0.3.1",
+				Enabled: true,
+				SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+					Repository: "ghcr.io/hashgraph",
+					ImageName:  "cheetah",
+					ImageTag:   "0.3.1",
+				},
 				BucketPrefix: "mynetwork/testnet",
 				S3: &operatorv1alpha1.CheetahS3Config{
 					Enabled: true,
@@ -316,8 +329,12 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 		{
 			name: "blocks uploader with custom ConfigCheckInterval",
 			uploader: &operatorv1alpha1.CheetahUploader{
-				Enabled:             true,
-				Image:               "cheetah:0.4.5",
+				Enabled: true,
+				SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+					Repository: "ghcr.io/hashgraph",
+					ImageName:  "cheetah",
+					ImageTag:   "0.4.5",
+				},
 				ConfigCheckInterval: "60s",
 				S3: &operatorv1alpha1.CheetahS3Config{
 					Enabled: true,
@@ -344,8 +361,9 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 			}
 
 			// Check image
-			if container.Image != tt.uploader.Image {
-				t.Errorf("expected image %s, got %s", tt.uploader.Image, container.Image)
+			expectedImage := common.BuildImageOrDefault(tt.uploader.SoftwareVersion, CheetahDefaultImage)
+			if container.Image != expectedImage {
+				t.Errorf("expected image %s, got %s", expectedImage, container.Image)
 			}
 
 			// Check command includes --config-check-interval
@@ -480,15 +498,27 @@ func TestAddSidecarContainers_Cheetah(t *testing.T) {
 					},
 					BlocksUploader: &operatorv1alpha1.CheetahUploader{
 						Enabled: true,
-						Image:   "cheetah:0.3.1",
+						SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+							Repository: "ghcr.io/hashgraph",
+							ImageName:  "cheetah",
+							ImageTag:   "0.3.1",
+						},
 					},
 					RecordsUploader: &operatorv1alpha1.CheetahUploader{
 						Enabled: true,
-						Image:   "cheetah:0.3.1",
+						SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+							Repository: "ghcr.io/hashgraph",
+							ImageName:  "cheetah",
+							ImageTag:   "0.3.1",
+						},
 					},
 					EventsUploader: &operatorv1alpha1.CheetahUploader{
 						Enabled: true,
-						Image:   "cheetah:0.3.1",
+						SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+							Repository: "ghcr.io/hashgraph",
+							ImageName:  "cheetah",
+							ImageTag:   "0.3.1",
+						},
 					},
 				},
 			},

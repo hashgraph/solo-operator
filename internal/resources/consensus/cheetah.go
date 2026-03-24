@@ -80,19 +80,22 @@ func (r *CheetahConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1
 	accountId := capsule.Spec.AccountId
 
 	if blocks != nil && blocks.Enabled {
-		data["cheetah-block-streams.yaml"] = r.buildSingleConfig("block-streams-uploader",
+		data["cheetah-block-streams.yaml"] = r.buildCheetahConfig("block-streams-uploader",
 			fmt.Sprintf("/opt/hgcapp/blockStreams/block-%s", accountId),
-			".mf", []string{".blk.gz"}, "BLOCK_STREAMS", blocks)
+			".mf", []string{".blk.gz"}, "BLOCK_STREAMS", blocks, "")
 	}
 
 	if records != nil && records.Enabled {
-		data["cheetah-record-streams.yaml"] = r.buildRecordConfig(records, accountId)
+		data["cheetah-record-streams.yaml"] = r.buildCheetahConfig("record-streams-uploader",
+			fmt.Sprintf("/opt/hgcapp/recordStreams/record%s", accountId),
+			".rcd_sig", []string{".rcd.gz", ".rcd_sig"}, "RECORD_STREAMS", records,
+			`sidecar/{{.markerName}}_##.rcd.gz`)
 	}
 
 	if events != nil && events.Enabled {
-		data["cheetah-events-streams.yaml"] = r.buildSingleConfig("events-streams-uploader",
+		data["cheetah-events-streams.yaml"] = r.buildCheetahConfig("events-streams-uploader",
 			fmt.Sprintf("/opt/hgcapp/eventsStreams/events_%s", accountId),
-			".evts_sig", []string{".evts", ".evts_sig"}, "EVENTS_STREAMS", events)
+			".evts_sig", []string{".evts", ".evts_sig"}, "EVENTS_STREAMS", events, "")
 	}
 
 	return &corev1.ConfigMap{
@@ -105,8 +108,8 @@ func (r *CheetahConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1
 	}
 }
 
-// buildSingleConfig builds a single cheetah config file
-func (r *CheetahConfigMapSubReconciler) buildSingleConfig(name, directory, pattern string, patterns []string, prefix string, uploader *operatorv1alpha1.CheetahUploader) string {
+// buildCheetahConfig builds a single cheetah config file
+func (r *CheetahConfigMapSubReconciler) buildCheetahConfig(name, directory, pattern string, patterns []string, prefix string, uploader *operatorv1alpha1.CheetahUploader, sidecarPattern string) string {
 	logLevel := CheetahDefaultLogLevel
 	if uploader.LogLevel != "" {
 		logLevel = uploader.LogLevel
@@ -128,6 +131,13 @@ func (r *CheetahConfigMapSubReconciler) buildSingleConfig(name, directory, patte
 			patternList += ", "
 		}
 		patternList += fmt.Sprintf("%q", p)
+	}
+
+	sidecarSection := ""
+	if sidecarPattern != "" {
+		sidecarSection = fmt.Sprintf(`
+        - matcherType: sequential
+          patterns: [ %q ]`, sidecarPattern)
 	}
 
 	return fmt.Sprintf(`log:
@@ -163,7 +173,7 @@ pipelines:
       maxProcessors: "%d"
       fileMatcherConfigs:
         - matcherType: basic
-          patterns: [ %s ]
+          patterns: [ %s ]%s
       flushDelay: 150ms
       markerCheckConfig:
         checkInterval: 150ms
@@ -190,89 +200,7 @@ pipelines:
           accessKey: GCS_ACCESS_KEY
           secretKey: GCS_SECRET_KEY
           useSsl: true
-`, logLevel, name, stopOnError, directory, pattern, maxProcessors, patternList, prefix, prefix)
-}
-
-// buildRecordConfig builds record streams config with sidecar support
-func (r *CheetahConfigMapSubReconciler) buildRecordConfig(uploader *operatorv1alpha1.CheetahUploader, accountId string) string {
-	logLevel := CheetahDefaultLogLevel
-	if uploader.LogLevel != "" {
-		logLevel = uploader.LogLevel
-	}
-
-	maxProcessors := CheetahDefaultMaxProcessors
-	if uploader.MaxProcessors > 0 {
-		maxProcessors = uploader.MaxProcessors
-	}
-
-	stopOnError := "false"
-	if uploader.StopOnError {
-		stopOnError = "true"
-	}
-
-	return fmt.Sprintf(`log:
-  fileLogging: false
-  level: %s
-  directory: /app/logs
-  fileName: cheetah.log
-  maxSize: 1
-  maxBackups: 10
-  maxAge: 30
-
-profiling:
-  enabled: false
-  interval: 5s
-  serverHost: 127.0.0.1
-  serverPort: 0
-  enablePprofServer: true
-  pprofPort: 0
-  fileLogging: false
-  directory: stats
-  maxSize: 100
-
-pipelines:
-  - name: record-streams-uploader
-    enabled: true
-    stopOnError: "%s"
-    scanner:
-      directory: /opt/hgcapp/recordStreams/record%s
-      pattern: ".rcd_sig"
-      interval: 100ms
-      batchSize: 1000
-    processor:
-      maxProcessors: "%d"
-      fileMatcherConfigs:
-        - matcherType: basic
-          patterns: [ ".rcd.gz", ".rcd_sig" ]
-        - matcherType: sequential
-          patterns: [ "sidecar/{{.markerName}}_##.rcd.gz" ]
-      flushDelay: 150ms
-      markerCheckConfig:
-        checkInterval: 150ms
-        minSize: 925
-        maxAttempts: 5
-      retry:
-        limit: 5
-      storage:
-        s3:
-          enabled: false
-          bucket: S3_BUCKET_NAME
-          prefix: S3_RECORD_STREAMS_BUCKET_PREFIX
-          endpoint: S3_ENDPOINT
-          region: S3_BUCKET_REGION
-          accessKey: S3_ACCESS_KEY
-          secretKey: S3_SECRET_KEY
-          useSsl: true
-        gcs:
-          enabled: false
-          bucket: GCS_BUCKET_NAME
-          prefix: GCS_RECORD_STREAMS_BUCKET_PREFIX
-          endpoint: GCS_ENDPOINT
-          region: GCS_BUCKET_REGION
-          accessKey: GCS_ACCESS_KEY
-          secretKey: GCS_SECRET_KEY
-          useSsl: true
-`, logLevel, stopOnError, accountId, maxProcessors)
+`, logLevel, name, stopOnError, directory, pattern, maxProcessors, patternList, sidecarSection, prefix, prefix)
 }
 
 // needsUpdate checks if the config needs to be updated

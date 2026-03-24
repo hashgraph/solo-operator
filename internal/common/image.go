@@ -3,15 +3,24 @@
 package common
 
 import (
-	"fmt"
-
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
 // BuildImage constructs a full image reference from a SoftwareVersion
-// Format: repository/imageName:imageTag
+// Format: repository/imageName:imageTag, repository/imageName, or imageName:imageTag
 func BuildImage(sv operatorv1alpha1.SoftwareVersion) string {
-	return fmt.Sprintf("%s/%s:%s", sv.Repository, sv.ImageName, sv.ImageTag)
+	if sv.ImageName == "" {
+		return ""
+	}
+
+	image := sv.ImageName
+	if sv.Repository != "" {
+		image = sv.Repository + "/" + image
+	}
+	if sv.ImageTag != "" {
+		image = image + ":" + sv.ImageTag
+	}
+	return image
 }
 
 // BuildImageOrDefault constructs an image reference from SoftwareVersion or returns the default
@@ -19,5 +28,8 @@ func BuildImageOrDefault(sv *operatorv1alpha1.SoftwareVersion, defaultImage stri
 	if sv == nil {
 		return defaultImage
 	}
-	return BuildImage(*sv)
+	if image := BuildImage(*sv); image != "" {
+		return image
+	}
+	return defaultImage
 }

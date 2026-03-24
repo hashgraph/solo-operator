@@ -134,14 +134,7 @@ func (r *DeploymentSubReconciler) buildConsensusNodeContainer(capsule *operatorv
 		containerName = "consensus-node"
 	}
 
-	// Support both Image and SoftwareVersion (deprecated)
-	image := cn.Image
-	if image == "" && cn.SoftwareVersion != nil {
-		image = common.BuildImage(*cn.SoftwareVersion)
-	}
-	if image == "" {
-		image = "gcr.io/hedera-registry/consensus-node:latest"
-	}
+	image := common.BuildImageOrDefault(cn.SoftwareVersion, "gcr.io/hedera-registry/consensus-node:latest")
 
 	container := corev1.Container{
 		Name:  containerName,
@@ -497,14 +490,7 @@ func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment
 // buildCheetahUploaderContainer builds a cheetah uploader sidecar container.
 // streamBucketPath is the stream-specific path component (e.g. "blockStreams/block-0.0.3").
 func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(capsule *operatorv1alpha1.ConsensusCapsule, uploader *operatorv1alpha1.CheetahUploader, containerName, configFile, mountPath, envPrefix, streamBucketPath string) corev1.Container {
-	// Support both Image and SoftwareVersion (deprecated)
-	image := uploader.Image
-	if image == "" && uploader.SoftwareVersion != nil {
-		image = common.BuildImage(*uploader.SoftwareVersion)
-	}
-	if image == "" {
-		image = CheetahDefaultImage
-	}
+	image := common.BuildImageOrDefault(uploader.SoftwareVersion, CheetahDefaultImage)
 
 	name := uploader.Name
 	if name == "" {
@@ -668,14 +654,7 @@ func getVolumeNameForPath(path string) string {
 
 // buildBackupUploaderContainer builds the backup uploader container (rclone-based)
 func (r *DeploymentSubReconciler) buildBackupUploaderContainer(config *operatorv1alpha1.StreamUploader) corev1.Container {
-	// Support both Image and SoftwareVersion (deprecated)
-	image := config.Image
-	if image == "" && config.SoftwareVersion != nil {
-		image = common.BuildImage(*config.SoftwareVersion)
-	}
-	if image == "" {
-		image = "gcr.io/hedera-registry/hedera-backups:latest"
-	}
+	image := common.BuildImageOrDefault(config.SoftwareVersion, "gcr.io/hedera-registry/hedera-backups:latest")
 
 	name := config.Name
 	if name == "" {
