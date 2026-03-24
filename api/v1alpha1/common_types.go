@@ -333,14 +333,240 @@ type GCSConfig struct {
 	URL string `json:"url,omitempty"`
 }
 
+// CheetahUploader is the Cheetah uploader configuration
+type CheetahUploader struct {
+	// Enabled enables the uploader
+	// +kubebuilder:default=false
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Name is the container name
+	// +optional
+	Name string `json:"name,omitempty"`
+
+	// Image is the container image
+	// +optional
+	Image string `json:"image,omitempty"`
+
+	// ImagePullPolicy specifies when to pull the image
+	// +kubebuilder:default=IfNotPresent
+	// +optional
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+
+	// SoftwareVersion specifies the image (deprecated, use Image instead)
+	// +optional
+	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
+
+	// Resources specifies resource requirements
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// LogLevel is the log level
+	// +kubebuilder:default="Info"
+	// +optional
+	LogLevel string `json:"logLevel,omitempty"`
+
+	// S3 configuration
+	// +optional
+	S3 *CheetahS3Config `json:"s3,omitempty"`
+
+	// GCS configuration
+	// +optional
+	GCS *CheetahGCSConfig `json:"gcs,omitempty"`
+
+	// EnvFromSecret is the secret name for credentials
+	// +optional
+	EnvFromSecret string `json:"envFromSecret,omitempty"`
+
+	// MaxProcessors is the maximum number of concurrent file processors per pipeline
+	// +kubebuilder:default=10
+	// +optional
+	MaxProcessors int `json:"maxProcessors,omitempty"`
+
+	// StopOnError stops the pipeline when an error occurs.
+	// If false, the pipeline continues with the expectation that the error resolves on retry.
+	// +kubebuilder:default=false
+	// +optional
+	StopOnError bool `json:"stopOnError,omitempty"`
+
+	// BucketPrefix is prepended to all stream bucket object paths (e.g. "mynetwork/testnet")
+	// +optional
+	BucketPrefix string `json:"bucketPrefix,omitempty"`
+
+	// ConfigCheckInterval is the interval for checking config changes and updating pipelines (e.g. "30s")
+	// +kubebuilder:default="30s"
+	// +optional
+	ConfigCheckInterval string `json:"configCheckInterval,omitempty"`
+}
+
+// CheetahConfig contains Cheetah uploader configuration
+type CheetahConfig struct {
+	// Enabled enables Cheetah uploader
+	// +kubebuilder:default=false
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// SoftwareVersion specifies the Cheetah image
+	// +optional
+	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
+
+	// Resources specifies resource requirements
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// LogLevel is the log level
+	// +kubebuilder:default="Info"
+	// +optional
+	LogLevel string `json:"logLevel,omitempty"`
+
+	// StreamsConfig for record/events stream uploads
+	// +optional
+	StreamsConfig *CheetahStreamsConfig `json:"streamsConfig,omitempty"`
+
+	// BackupConfig for state backup uploads
+	// +optional
+	BackupConfig *CheetahBackupConfig `json:"backupConfig,omitempty"`
+
+	// EnvFromSecret is the secret name for S3/GCS credentials (S3_SECRET_KEY, GCS_SECRET_KEY)
+	// +optional
+	EnvFromSecret string `json:"envFromSecret,omitempty"`
+}
+
+// CheetahStreamsConfig contains stream upload configuration
+type CheetahStreamsConfig struct {
+	// Enabled enables stream uploads
+	// +kubebuilder:default=true
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// S3 configuration
+	// +optional
+	S3 *CheetahS3Config `json:"s3,omitempty"`
+
+	// GCS configuration
+	// +optional
+	GCS *CheetahGCSConfig `json:"gcs,omitempty"`
+}
+
+// GetS3OrDefault returns S3 config or nil
+func (c *CheetahStreamsConfig) GetS3OrDefault() *CheetahS3Config {
+	if c == nil {
+		return nil
+	}
+	return c.S3
+}
+
+// GetGCSOrDefault returns GCS config or nil
+func (c *CheetahStreamsConfig) GetGCSOrDefault() *CheetahGCSConfig {
+	if c == nil {
+		return nil
+	}
+	return c.GCS
+}
+
+// CheetahBackupConfig contains backup upload configuration
+type CheetahBackupConfig struct {
+	// Enabled enables backup uploads
+	// +kubebuilder:default=false
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// S3 configuration
+	// +optional
+	S3 *CheetahS3Config `json:"s3,omitempty"`
+
+	// GCS configuration
+	// +optional
+	GCS *CheetahGCSConfig `json:"gcs,omitempty"`
+}
+
+// GetS3OrDefault returns S3 config or nil
+func (c *CheetahBackupConfig) GetS3OrDefault() *CheetahS3Config {
+	if c == nil {
+		return nil
+	}
+	return c.S3
+}
+
+// GetGCSOrDefault returns GCS config or nil
+func (c *CheetahBackupConfig) GetGCSOrDefault() *CheetahGCSConfig {
+	if c == nil {
+		return nil
+	}
+	return c.GCS
+}
+
+// CheetahS3Config contains S3 configuration for Cheetah
+type CheetahS3Config struct {
+	// Enabled enables S3 storage
+	// +kubebuilder:default=false
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Bucket is the S3 bucket name
+	// +optional
+	Bucket string `json:"bucket,omitempty"`
+
+	// Region is the S3 region
+	// +kubebuilder:default="us-east-1"
+	// +optional
+	Region string `json:"region,omitempty"`
+
+	// Endpoint is the S3 endpoint URL
+	// +optional
+	Endpoint string `json:"endpoint,omitempty"`
+
+	// UseSsl enables SSL
+	// +kubebuilder:default=false
+	// +optional
+	UseSsl bool `json:"useSsl,omitempty"`
+}
+
+// CheetahGCSConfig contains GCS configuration for Cheetah
+type CheetahGCSConfig struct {
+	// Enabled enables GCS storage
+	// +kubebuilder:default=false
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Bucket is the GCS bucket name
+	// +optional
+	Bucket string `json:"bucket,omitempty"`
+
+	// Region is the GCS region
+	// +kubebuilder:default="us-east-1"
+	// +optional
+	Region string `json:"region,omitempty"`
+
+	// Endpoint is the GCS endpoint URL
+	// +kubebuilder:default="storage.googleapis.com"
+	// +optional
+	Endpoint string `json:"endpoint,omitempty"`
+
+	// UseSsl enables SSL
+	// +kubebuilder:default=true
+	// +optional
+	UseSsl bool `json:"useSsl,omitempty"`
+}
+
 // StreamUploader defines a stream uploader sidecar
 type StreamUploader struct {
 	// Name is the container name
 	// +optional
 	Name string `json:"name,omitempty"`
 
-	// SoftwareVersion specifies the image to use
-	SoftwareVersion SoftwareVersion `json:"softwareVersion"`
+	// Image is the container image
+	// +optional
+	Image string `json:"image,omitempty"`
+
+	// ImagePullPolicy specifies when to pull the image
+	// +kubebuilder:default=IfNotPresent
+	// +optional
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+
+	// SoftwareVersion specifies the image (deprecated, use Image instead)
+	// +optional
+	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
 
 	// Resources specifies resource requirements
 	// +optional

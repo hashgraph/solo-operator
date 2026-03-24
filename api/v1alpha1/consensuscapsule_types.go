@@ -166,21 +166,33 @@ type ConsensusContainers struct {
 	// ConsensusNode is the main consensus node container
 	ConsensusNode ConsensusNodeContainer `json:"consensusNode"`
 
-	// RecordStreamUploader is the record stream uploader sidecar
+	// BlocksUploader is the Cheetah blocks uploader sidecar
+	// +optional
+	BlocksUploader *CheetahUploader `json:"blocksUploader,omitempty"`
+
+	// RecordsUploader is the Cheetah records uploader sidecar (record streams + sidecar files)
+	// +optional
+	RecordsUploader *CheetahUploader `json:"recordsUploader,omitempty"`
+
+	// EventsUploader is the Cheetah events uploader sidecar
+	// +optional
+	EventsUploader *CheetahUploader `json:"eventsUploader,omitempty"`
+
+	// BackupUploader is the backup uploader sidecar (rclone-based)
+	// +optional
+	BackupUploader *StreamUploader `json:"backupUploader,omitempty"`
+
+	// RecordStreamUploader is deprecated, use RecordsUploader
 	// +optional
 	RecordStreamUploader *StreamUploader `json:"recordStreamUploader,omitempty"`
 
-	// RecordStreamSidecarFilesUploader is the sidecar files uploader
+	// RecordStreamSidecarFilesUploader is deprecated, use RecordsUploader
 	// +optional
 	RecordStreamSidecarFilesUploader *StreamUploader `json:"recordStreamSidecarFilesUploader,omitempty"`
 
-	// EventsStreamUploader is the events stream uploader sidecar
+	// EventsStreamUploader is deprecated, use EventsUploader
 	// +optional
 	EventsStreamUploader *StreamUploader `json:"eventsStreamUploader,omitempty"`
-
-	// BackupUploader is the backup uploader sidecar
-	// +optional
-	BackupUploader *StreamUploader `json:"backupUploader,omitempty"`
 
 	// OpenTelemetryCollector is the otel collector sidecar
 	// +optional
@@ -194,8 +206,18 @@ type ConsensusNodeContainer struct {
 	// +optional
 	Name string `json:"name,omitempty"`
 
-	// SoftwareVersion specifies the image
-	SoftwareVersion SoftwareVersion `json:"softwareVersion"`
+	// Image is the container image
+	// +optional
+	Image string `json:"image,omitempty"`
+
+	// ImagePullPolicy specifies when to pull the image
+	// +kubebuilder:default=IfNotPresent
+	// +optional
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+
+	// SoftwareVersion specifies the image (deprecated, use Image instead)
+	// +optional
+	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
 
 	// Resources specifies resource requirements
 	// +optional
@@ -213,7 +235,16 @@ type OpenTelemetryCollectorConfig struct {
 	// +optional
 	Name string `json:"name,omitempty"`
 
-	// SoftwareVersion specifies the image
+	// Image is the container image
+	// +optional
+	Image string `json:"image,omitempty"`
+
+	// ImagePullPolicy specifies when to pull the image
+	// +kubebuilder:default=IfNotPresent
+	// +optional
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+
+	// SoftwareVersion specifies the image (deprecated, use Image instead)
 	// +optional
 	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
 
@@ -368,6 +399,10 @@ type ConsensusPodVolumes struct {
 
 // ConsensusStreamVolumes contains stream-specific volumes
 type ConsensusStreamVolumes struct {
+	// Block stream volume
+	// +optional
+	Block *corev1.Volume `json:"block,omitempty"`
+
 	// Record stream volume
 	// +optional
 	Record *corev1.Volume `json:"record,omitempty"`
@@ -406,6 +441,10 @@ type ConsensusPVCConfig struct {
 
 // ConsensusPVCStreams contains stream-specific PVC specs
 type ConsensusPVCStreams struct {
+	// Block stream PVC
+	// +optional
+	Block *corev1.PersistentVolumeClaimSpec `json:"block,omitempty"`
+
 	// Record stream PVC
 	// +optional
 	Record *corev1.PersistentVolumeClaimSpec `json:"record,omitempty"`

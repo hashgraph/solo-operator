@@ -49,8 +49,10 @@ const (
 	ConsensusCapsuleRoleName = "consensus-capsule-role"
 	// ConsensusConfigMapName is the name of the ConfigMap created by Orbit
 	ConsensusConfigMapName = "consensus-config"
-	// DeploymentName is the name of the deployment
-	DeploymentName = "consensus-node"
+	// ClusterConfigMapName is the name of the ConfigMap created by genesis
+	ClusterConfigMapName = "cluster-config"
+	// PublicKeysConfigMapName is the name of the public keys ConfigMap created by genesis
+	PublicKeysConfigMapName = "public-keys"
 	// ConsensusSubdomain is the subdomain for consensus nodes
 	ConsensusSubdomain = "consensus"
 )
@@ -62,6 +64,17 @@ const (
 	GrpcsPort      = 50212
 	PrometheusPort = 9999
 	DebugPort      = 5005
+)
+
+// Volume types
+const (
+	VolumeTypeLogs    = "logs"
+	VolumeTypeStats   = "stats"
+	VolumeTypeStates  = "states"
+	VolumeTypeUpgrade = "upgrade"
+	VolumeTypeBlocks  = "blocks"
+	VolumeTypeRecords = "records"
+	VolumeTypeEvents  = "events"
 )
 
 // CommonLabels returns the common labels for consensus capsule resources
@@ -101,6 +114,11 @@ func PVCName(capsule *operatorv1alpha1.ConsensusCapsule, volumeType string) stri
 	return fmt.Sprintf("%s-%s", capsule.Name, volumeType)
 }
 
+// DeploymentName returns the deployment name for a capsule
+func DeploymentName(capsule *operatorv1alpha1.ConsensusCapsule) string {
+	return capsule.Name + "-consensus-node"
+}
+
 // InternalHostname returns the internal FQDN for a capsule
 func InternalHostname(capsule *operatorv1alpha1.ConsensusCapsule) string {
 	return fmt.Sprintf("%s.%s.%s.svc.cluster.local", capsule.Name, ConsensusSubdomain, capsule.Namespace)
@@ -112,6 +130,7 @@ func NewSubReconcilers(c client.Client, scheme *runtime.Scheme) *subreconciler.C
 		NewServiceAccountSubReconciler(c, scheme),
 		NewRoleBindingSubReconciler(c, scheme),
 		NewConfigMapSubReconciler(c, scheme),
+		NewCheetahConfigMapSubReconciler(c, scheme),
 		NewServiceSubReconciler(c, scheme),
 		NewPVCSubReconciler(c, scheme),
 		NewDeploymentSubReconciler(c, scheme),

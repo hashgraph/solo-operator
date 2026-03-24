@@ -187,12 +187,8 @@ func BenchmarkConsensusCapsuleSubReconcilers(b *testing.B) {
 			PodProperties: operatorv1alpha1.ConsensusPodProperties{
 				Containers: operatorv1alpha1.ConsensusContainers{
 					ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
-						Name: "consensus-node",
-						SoftwareVersion: operatorv1alpha1.SoftwareVersion{
-							Repository: "hashgraph",
-							ImageName:  "hedera-node",
-							ImageTag:   "v0.50.0",
-						},
+						Name:  "consensus-node",
+						Image: "hashgraph/hedera-node:v0.50.0",
 					},
 				},
 			},
@@ -329,12 +325,8 @@ func BenchmarkMemoryConsensusCapsuleCreation(b *testing.B) {
 				PodProperties: operatorv1alpha1.ConsensusPodProperties{
 					Containers: operatorv1alpha1.ConsensusContainers{
 						ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
-							Name: "consensus-node",
-							SoftwareVersion: operatorv1alpha1.SoftwareVersion{
-								Repository: "hashgraph",
-								ImageName:  "hedera-node",
-								ImageTag:   "v0.50.0",
-							},
+							Name:  "consensus-node",
+							Image: "hashgraph/hedera-node:v0.50.0",
 						},
 					},
 				},
@@ -542,12 +534,8 @@ func BenchmarkConsensusCapsuleDeepCopy(b *testing.B) {
 			PodProperties: operatorv1alpha1.ConsensusPodProperties{
 				Containers: operatorv1alpha1.ConsensusContainers{
 					ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
-						Name: "consensus-node",
-						SoftwareVersion: operatorv1alpha1.SoftwareVersion{
-							Repository: "hashgraph",
-							ImageName:  "hedera-node",
-							ImageTag:   "v0.50.0",
-						},
+						Name:  "consensus-node",
+						Image: "hashgraph/hedera-node:v0.50.0",
 					},
 				},
 			},

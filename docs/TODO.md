@@ -2,8 +2,6 @@ Current issues:
 
 * Why Orbit is clusterscoped and creates a namespace? Can it be namespace scoped and namespace created before dropping CR into cluster
 
-* We need to add `cheetah` support
-
 * We need to move genesis gen from NetworkOps into Orbit. Why it's there.
 
 

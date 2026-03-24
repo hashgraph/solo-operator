@@ -123,10 +123,11 @@ var _ = Describe("E2E Tests", func() {
 							Containers: operatorv1alpha1.ConsensusContainers{
 								ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
 									Name: "consensus-node",
-									SoftwareVersion: operatorv1alpha1.SoftwareVersion{
-										Repository: "hashgraph",
-										ImageName:  "hedera-node",
-										ImageTag:   "v0.50.0",
+									SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+										Repository:      "us-central1-docker.pkg.dev/hashsphere-development/hiero-consensus-node",
+										ImageName:       "consensus-node",
+										ImageTag:        "v0.65.1",
+										ImagePullPolicy: "IfNotPresent",
 									},
 								},
 							},
@@ -205,9 +206,9 @@ var _ = Describe("E2E Tests", func() {
 									SoftwareVersionSource: &operatorv1alpha1.SoftwareVersionSource{
 										ImageRepositories: []operatorv1alpha1.ImageRepository{
 											{
-												Repository: "hashgraph",
-												ImageName:  "hedera-node",
-												ImageTag:   "v0.51.0",
+												Repository: "us-central1-docker.pkg.dev/hashsphere-development/hiero-consensus-node",
+												ImageName:  "consensus-node",
+												ImageTag:   "v0.65.1",
 											},
 										},
 										ImageVerificationSpec: []operatorv1alpha1.ImageVerificationSpec{},
@@ -457,10 +458,11 @@ var _ = Describe("E2E Tests", func() {
 							Containers: operatorv1alpha1.ConsensusContainers{
 								ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
 									Name: "consensus-node",
-									SoftwareVersion: operatorv1alpha1.SoftwareVersion{
-										Repository: "hashgraph",
-										ImageName:  "hedera-node",
-										ImageTag:   "v0.50.0",
+									SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+										Repository:      "us-central1-docker.pkg.dev/hashsphere-development/hiero-consensus-node",
+										ImageName:       "consensus-node",
+										ImageTag:        "v0.65.1",
+										ImagePullPolicy: "IfNotPresent",
 									},
 								},
 							},
@@ -615,10 +617,11 @@ var _ = Describe("E2E Tests", func() {
 							Containers: operatorv1alpha1.ConsensusContainers{
 								ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
 									Name: "consensus-node",
-									SoftwareVersion: operatorv1alpha1.SoftwareVersion{
-										Repository: "hashgraph",
-										ImageName:  "hedera-node",
-										ImageTag:   "v0.50.0",
+									SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+										Repository:      "us-central1-docker.pkg.dev/hashsphere-development/hiero-consensus-node",
+										ImageName:       "consensus-node",
+										ImageTag:        "v0.65.1",
+										ImagePullPolicy: "IfNotPresent",
 									},
 								},
 							},
@@ -740,10 +743,11 @@ var _ = Describe("Operator Reconciliation Tests", Label("operator-required"), fu
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
 								Name: "consensus-node",
-								SoftwareVersion: operatorv1alpha1.SoftwareVersion{
-									Repository: "hashgraph",
-									ImageName:  "hedera-node",
-									ImageTag:   "v0.50.0",
+								SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+									Repository:      "us-central1-docker.pkg.dev/hashsphere-development/hiero-consensus-node",
+									ImageName:       "consensus-node",
+									ImageTag:        "v0.65.1",
+									ImagePullPolicy: "IfNotPresent",
 								},
 							},
 						},

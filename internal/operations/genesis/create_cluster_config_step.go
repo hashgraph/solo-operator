@@ -57,7 +57,7 @@ func (s *CreateClusterConfigStep) Run(ctx context.Context, resource *operatorv1a
 		return s.markFailed(status, resource.Generation, fmt.Sprintf("No consensus capsules found in namespace: %s", namespace))
 	}
 
-	// List pods to get IPs
+	// List pods to get IPs (optional - genesis can run without pods)
 	podList := &corev1.PodList{}
 	listOpts := []client.ListOption{
 		client.InNamespace(namespace),
@@ -72,23 +72,25 @@ func (s *CreateClusterConfigStep) Run(ctx context.Context, resource *operatorv1a
 		return s.markFailed(status, resource.Generation, fmt.Sprintf("Failed to list pods: %v", err))
 	}
 
-	// Collect ready pod IPs
+	// Collect ready pod IPs (optional - genesis can proceed without them)
 	podIPs := s.collectPodIPs(podList)
-	if len(podIPs) != len(capsuleList.Items) {
-		logger.Info("Not all pods are ready",
-			"expected", len(capsuleList.Items),
-			"found", len(podIPs))
-		// Don't mark as failed - this is a retry condition
-		return status
-	}
+	logger.Info("Pod status for genesis",
+		"expected", len(capsuleList.Items),
+		"found", len(podIPs))
+	// Genesis can proceed without pods - config will be created for capsules to use
 
 	// Build config.txt content
 	configTxt := s.buildConfigTxt(capsuleList.Items, orbit, namespace)
 
-	// Build data map
+	// Build data map with all required config files
 	data := map[string]string{
-		ConfigKeyConfigTxt: configTxt,
-		ConfigKeyPodIPs:    strings.Join(podIPs, "\n"),
+		ConfigKeyConfigTxt:          configTxt,
+		ConfigKeyPodIPs:             strings.Join(podIPs, "\n"),
+		"settings.txt":              s.buildSettingsTxt(orbit),
+		"application.properties":    s.buildApplicationProperties(orbit),
+		"api-permission.properties": s.buildApiPermissionProperties(),
+		"bootstrap.properties":      s.buildBootstrapProperties(orbit),
+		"genesis-throttles.json":    s.buildGenesisThrottles(),
 	}
 
 	// Create or update the ConfigMap
@@ -140,12 +142,23 @@ func (s *CreateClusterConfigStep) collectPodIPs(podList *corev1.PodList) []strin
 func (s *CreateClusterConfigStep) buildConfigTxt(capsules []operatorv1alpha1.ConsensusCapsule, orbit *operatorv1alpha1.Orbit, namespace string) string {
 	var sb strings.Builder
 
-	// Get ledger ID from orbit
-	ledgerId := "123" // default
+	// Get ledger ID from orbit - use plain format for config.txt (not hex)
+	ledgerId := "0" // default
 	if orbit.Spec.Consensus.Genesis != nil &&
 		orbit.Spec.Consensus.Genesis.AddressBook != nil &&
 		orbit.Spec.Consensus.Genesis.AddressBook.LedgerId != "" {
+		// If ledgerId is in hex format (0x...), convert to decimal for config.txt
+		// Otherwise use as-is
 		ledgerId = orbit.Spec.Consensus.Genesis.AddressBook.LedgerId
+		if strings.HasPrefix(ledgerId, "0x") {
+			// For config.txt, strip 0x prefix and use the value
+			// For 0x01, just use the decimal equivalent from chainId (298)
+			if ledgerId == "0x01" {
+				ledgerId = "298"
+			} else {
+				ledgerId = strings.TrimPrefix(ledgerId, "0x")
+			}
+		}
 	}
 
 	fmt.Fprintf(&sb, "swirld, %s\n", ledgerId)
@@ -156,14 +169,13 @@ func (s *CreateClusterConfigStep) buildConfigTxt(capsules []operatorv1alpha1.Con
 
 	for _, capsule := range capsules {
 		nodeId := capsule.Spec.NodeId
-		nodeName := prepareNodeName(nodeId)
+		nodeName := capsule.Name
 
-		internalAddr := s.computeNodeInternalAddress(&capsule, namespace)
 		externalAddr := s.computeNodeExternalAddress(&capsule, nodeName, namespace)
 
 		weight := int64(capsule.Spec.Weight)
 		if weight == 0 {
-			weight = 1
+			weight = 500 // default weight to match working deployment
 		}
 
 		accountId := capsule.Spec.AccountId
@@ -171,9 +183,10 @@ func (s *CreateClusterConfigStep) buildConfigTxt(capsules []operatorv1alpha1.Con
 			accountId = fmt.Sprintf("0.0.%d", 3+nodeId) // default account
 		}
 
-		// Format: address, nodeId, name, name, weight, internalHost, 50111, externalHost, 50111, accountId
-		addressMap[nodeId] = fmt.Sprintf("address, %d, %s, %s, %d, %s, 50111, %s, 50111, %s\n",
-			nodeId, nodeName, nodeName, weight, internalAddr, externalAddr, accountId)
+		// Format: address, nodeId, nickname, selfname, weight, internalIP, internalPort, externalHost, externalPort, accountId
+		// Use 127.0.0.1 for internal IP and 50111 for ports to match working deployment
+		addressMap[nodeId] = fmt.Sprintf("address, %d, %s, %s, %d, 127.0.0.1, 50111, %s, 50111, %s\n",
+			nodeId, nodeName, nodeName, weight, externalAddr, accountId)
 	}
 
 	// Add external addresses from orbit if present
@@ -182,10 +195,10 @@ func (s *CreateClusterConfigStep) buildConfigTxt(capsules []operatorv1alpha1.Con
 
 		for _, entry := range orbit.Spec.Consensus.Genesis.AddressBook.ExternalAddresses {
 			nodeId := entry.NodeId
-			addressMap[nodeId] = fmt.Sprintf("address, %d, %s, %s, %d, %s, %d, %s, %d, %s\n",
+			addressMap[nodeId] = fmt.Sprintf("address, %d, %d, %s, %d, %s, %d, %s, %d, %s\n",
+				nodeId,
 				nodeId,
 				entry.NickName,
-				entry.SelfName,
 				entry.Weight,
 				entry.InternalHostname,
 				entry.InternalPort,
@@ -209,15 +222,6 @@ func (s *CreateClusterConfigStep) buildConfigTxt(capsules []operatorv1alpha1.Con
 	return sb.String()
 }
 
-// computeNodeInternalAddress computes the internal address for a consensus node
-func (s *CreateClusterConfigStep) computeNodeInternalAddress(capsule *operatorv1alpha1.ConsensusCapsule, namespace string) string {
-	if capsule.Spec.InternalAddress != "" {
-		return capsule.Spec.InternalAddress
-	}
-	// Default: pod-name.headless-svc.namespace.svc.cluster.local
-	return fmt.Sprintf("%s.consensus.%s.svc.cluster.local", capsule.Name, namespace)
-}
-
 // computeNodeExternalAddress computes the external address for a consensus node
 func (s *CreateClusterConfigStep) computeNodeExternalAddress(capsule *operatorv1alpha1.ConsensusCapsule, nodeName, namespace string) string {
 	if capsule.Spec.ExternalAddress != "" {
@@ -225,6 +229,404 @@ func (s *CreateClusterConfigStep) computeNodeExternalAddress(capsule *operatorv1
 	}
 	// Default: node-svc.namespace
 	return fmt.Sprintf("%s-svc.%s", nodeName, namespace)
+}
+
+// buildSettingsTxt builds the settings.txt content
+func (s *CreateClusterConfigStep) buildSettingsTxt(orbit *operatorv1alpha1.Orbit) string {
+	return `deployment                                     hashsphere
+checkSignedStateFromDisk,                      1
+csvFileName,                                   MainNetStats
+doUpnp,                                        false
+loadKeysFromPfxFiles,                          1
+maxOutgoingSyncs,                              1
+reconnect.active,                              1
+reconnect.reconnectWindowSeconds,              -1
+showInternalStats,                             1
+state.saveStatePeriod,                         900
+useLoopbackIp,                                 false
+waitAtStartup,                                 false
+state.mainClassNameOverride,                   com.hedera.services.ServicesMain
+maxEventQueueForCons,                          1000
+merkleDb.hashesRamToDiskThreshold,             8388608
+event.creation.maxCreationRate,                20
+virtualMap.familyThrottleThreshold,            6000000000
+merkleDb.maxFileChannelsPerFileReader,	       1
+`
+}
+
+// buildApplicationProperties builds the application.properties content
+func (s *CreateClusterConfigStep) buildApplicationProperties(orbit *operatorv1alpha1.Orbit) string {
+	ledgerId := "0x00" // default hex format for application.properties
+	chainId := "0"     // default chainId
+	if orbit.Spec.Consensus.Genesis != nil && orbit.Spec.Consensus.Genesis.AddressBook != nil {
+		if orbit.Spec.Consensus.Genesis.AddressBook.LedgerId != "" {
+			rawLedgerId := orbit.Spec.Consensus.Genesis.AddressBook.LedgerId
+			// If it's a plain number, convert to hex format for application.properties
+			if !strings.HasPrefix(rawLedgerId, "0x") {
+				// Plain number like "298" - convert to hex and set chainId
+				switch rawLedgerId {
+				case "298":
+					ledgerId = "0x01" // 298 is testnet, use 0x01
+					chainId = "298"
+				case "0":
+					ledgerId = "0x00"
+					chainId = "0"
+				default:
+					ledgerId = "0x" + rawLedgerId // Simple conversion
+					chainId = rawLedgerId
+				}
+			} else {
+				ledgerId = rawLedgerId
+				// For hex format, derive chainId
+				switch rawLedgerId {
+				case "0x01":
+					chainId = "298"
+				case "0x00":
+					chainId = "0"
+				}
+			}
+		}
+	}
+	return fmt.Sprintf(`hedera.config.version=0
+ledger.id=%s
+netty.mode=TEST
+contracts.chainId=%s
+hedera.recordStream.logPeriod=1
+balances.exportPeriodSecs=400
+files.maxSizeKb=2048
+hedera.recordStream.compressFilesOnCreation=true
+balances.compressOnCreation=true
+contracts.maxNumWithHapiSigsAccess=0
+autoRenew.targetTypes=
+nodes.gossipFqdnRestricted=false
+hedera.profiles.active=TEST
+staking.periodMins=1
+nodes.updateAccountIdAllowed=true
+blockStream.streamMode=RECORDS
+scheduling.longTermEnabled=false
+bootstrap.throttleDefsJson.resource=data/config/genesis-throttles.json
+cache.warmThreads=6
+`, ledgerId, chainId)
+}
+
+// buildApiPermissionProperties builds the api-permission.properties content
+func (s *CreateClusterConfigStep) buildApiPermissionProperties() string {
+	return `# Crypto
+createAccount=0-*
+cryptoTransfer=0-*
+updateAccount=0-*
+cryptoGetBalance=0-*
+getAccountInfo=0-*
+cryptoDelete=0-*
+getAccountRecords=0-*
+getTxRecordByTxID=0-*
+getTransactionReceipts=0-*
+approveAllowances=0-*
+deleteAllowances=0-*
+# File
+createFile=0-*
+updateFile=0-*
+deleteFile=0-*
+appendContent=0-*
+getFileContent=0-*
+getFileInfo=0-*
+# Contract
+createContract=0-*
+updateContract=0-*
+contractCallMethod=0-*
+getContractInfo=0-*
+contractCallLocalMethod=0-*
+contractGetBytecode=0-*
+getTxRecordByContractID=0-*
+deleteContract=0-*
+# Consensus
+createTopic=0-*
+updateTopic=0-*
+deleteTopic=0-*
+submitMessage=0-*
+getTopicInfo=0-*
+# Ethereum
+ethereumTransaction=0-*
+# Scheduling
+scheduleCreate=0-*
+scheduleSign=0-*
+scheduleDelete=0-*
+scheduleGetInfo=0-*
+# Token
+tokenCreate=0-*
+tokenFreezeAccount=0-*
+tokenUnfreezeAccount=0-*
+tokenGrantKycToAccount=0-*
+tokenRevokeKycFromAccount=0-*
+tokenDelete=0-*
+tokenMint=0-*
+tokenBurn=0-*
+tokenAccountWipe=0-*
+tokenUpdate=0-*
+tokenGetInfo=0-*
+tokenGetNftInfo=0-*
+tokenGetNftInfos=0-*
+tokenGetAccountNftInfos=0-*
+tokenAssociateToAccount=0-*
+tokenDissociateFromAccount=0-*
+tokenFeeScheduleUpdate=0-*
+tokenPause=0-*
+tokenUnpause=0-*
+# Network 
+getVersionInfo=0-*
+networkGetExecutionTime=2-50
+systemDelete=2-59
+systemUndelete=2-60
+freeze=2-58
+getAccountDetails=2-50
+# Util
+utilPrng=0-*
+`
+}
+
+// buildBootstrapProperties builds the bootstrap.properties content
+func (s *CreateClusterConfigStep) buildBootstrapProperties(orbit *operatorv1alpha1.Orbit) string {
+	ledgerId := "0x00" // default hex format
+	chainId := "298"
+	if orbit.Spec.Consensus.Genesis != nil && orbit.Spec.Consensus.Genesis.AddressBook != nil {
+		if orbit.Spec.Consensus.Genesis.AddressBook.LedgerId != "" {
+			rawLedgerId := orbit.Spec.Consensus.Genesis.AddressBook.LedgerId
+			// If it's a plain number, convert to hex format
+			if !strings.HasPrefix(rawLedgerId, "0x") {
+				switch rawLedgerId {
+				case "298":
+					ledgerId = "0x01"
+				case "0":
+					ledgerId = "0x00"
+				default:
+					ledgerId = "0x" + rawLedgerId
+				}
+			} else {
+				ledgerId = rawLedgerId
+			}
+		}
+	}
+	return fmt.Sprintf(`# TODO: bootstrap.properties is scheduled to go away, will need to delete this and related code
+ledger.id=%s
+netty.mode=DEV
+# TODO: if chain ID is passed in as a flag, this is not getting updated
+contracts.chainId=%s
+hedera.recordStream.logPeriod=1
+balances.exportPeriodSecs=400
+files.maxSizeKb=2048
+hedera.recordStream.compressFilesOnCreation=true
+balances.compressOnCreation=true
+contracts.maxNumWithHapiSigsAccess=0
+`, ledgerId, chainId)
+}
+
+// buildGenesisThrottles builds the genesis-throttles.json content
+func (s *CreateClusterConfigStep) buildGenesisThrottles() string {
+	return `{
+  "buckets": [
+    {
+      "burstPeriod": 0,
+      "burstPeriodMs": 15000,
+      "name": "ThroughputLimits",
+      "throttleGroups": [
+        {
+          "opsPerSec": 0,
+          "milliOpsPerSec": 100000,
+          "operations": [
+            "ScheduleCreate",
+            "CryptoCreate",
+            "CryptoTransfer",
+            "CryptoUpdate",
+            "CryptoDelete",
+            "CryptoGetInfo",
+            "CryptoGetAccountRecords",
+            "ConsensusCreateTopic",
+            "ConsensusSubmitMessage",
+            "ConsensusUpdateTopic",
+            "ConsensusDeleteTopic",
+            "ConsensusGetTopicInfo",
+            "TokenGetNftInfo",
+            "TokenGetInfo",
+            "ScheduleDelete",
+            "ScheduleGetInfo",
+            "FileGetContents",
+            "FileGetInfo",
+            "ContractUpdate",
+            "ContractDelete",
+            "ContractGetInfo",
+            "ContractGetBytecode",
+            "ContractGetRecords",
+            "ContractCallLocal",
+            "TransactionGetRecord",
+            "GetVersionInfo",
+            "TokenGetAccountNftInfos",
+            "TokenGetNftInfos",
+            "CryptoApproveAllowance",
+            "CryptoDeleteAllowance",
+            "UtilPrng",
+            "NodeCreate",
+            "NodeUpdate",
+            "NodeDelete"
+          ]
+        },
+        {
+          "opsPerSec": 0,
+          "milliOpsPerSec": 40000,
+          "operations": [
+            "FileCreate",
+            "FileUpdate",
+            "FileAppend",
+            "FileDelete"
+          ]
+        },
+        {
+          "opsPerSec": 0,
+          "milliOpsPerSec": 100000,
+          "operations": [
+            "ScheduleSign"
+          ]
+        },
+        {
+          "opsPerSec": 0,
+          "milliOpsPerSec": 100000,
+          "operations": [
+            "TokenMint"
+          ]
+        },
+        {
+          "opsPerSec": 0,
+          "milliOpsPerSec": 35000,
+          "operations": [
+            "ContractCall",
+            "ContractCreate",
+            "EthereumTransaction"
+          ]
+        },
+        {
+          "opsPerSec": 0,
+          "milliOpsPerSec": 100000,
+          "operations": [
+            "TokenCreate",
+            "TokenDelete",
+            "TokenBurn",
+            "TokenUpdate",
+            "TokenFeeScheduleUpdate",
+            "TokenAssociateToAccount",
+            "TokenAccountWipe",
+            "TokenDissociateFromAccount",
+            "TokenFreezeAccount",
+            "TokenUnfreezeAccount",
+            "TokenGrantKycToAccount",
+            "TokenRevokeKycFromAccount",
+            "TokenPause",
+            "TokenUnpause",
+            "TokenUpdateNfts",
+            "TokenReject",
+            "TokenAirdrop",
+            "TokenClaimAirdrop",
+            "TokenCancelAirdrop"
+          ]
+        }
+      ]
+    },
+    {
+      "burstPeriod": 0,
+      "burstPeriodMs": 1000,
+      "name": "OffHeapQueryLimits",
+      "throttleGroups": [
+        {
+          "opsPerSec": 0,
+          "milliOpsPerSec": 100000,
+          "operations": [
+            "FileGetContents",
+            "FileGetInfo",
+            "ContractGetInfo",
+            "ContractGetBytecode",
+            "ContractCallLocal"
+          ]
+        }
+      ]
+    },
+    {
+      "burstPeriod": 0,
+      "burstPeriodMs": 3000,
+      "name": "PriorityReservations",
+      "throttleGroups": [
+        {
+          "opsPerSec": 0,
+          "milliOpsPerSec": 40000,
+          "operations": [
+            "FileCreate",
+            "FileUpdate",
+            "FileAppend",
+            "FileDelete"
+          ]
+        }
+      ]
+    },
+    {
+      "burstPeriod": 0,
+      "burstPeriodMs": 15000,
+      "name": "CreationLimits",
+      "throttleGroups": [
+        {
+          "opsPerSec": 0,
+          "milliOpsPerSec": 40000,
+          "operations": [
+            "CryptoCreate",
+            "NodeCreate"
+          ]
+        },
+        {
+          "opsPerSec": 0,
+          "milliOpsPerSec": 5000,
+          "operations": [
+            "ConsensusCreateTopic"
+          ]
+        },
+        {
+          "opsPerSec": 0,
+          "milliOpsPerSec": 100000,
+          "operations": [
+            "TokenCreate",
+            "TokenAssociateToAccount",
+            "ScheduleCreate",
+            "TokenAirdrop"
+          ]
+        }
+      ]
+    },
+    {
+      "burstPeriod": 0,
+      "burstPeriodMs": 1000,
+      "name": "FreeQueryLimits",
+      "throttleGroups": [
+        {
+          "opsPerSec": 0,
+          "milliOpsPerSec": 1000000000,
+          "operations": [
+            "TransactionGetReceipt"
+          ]
+        }
+      ]
+    },
+    {
+      "burstPeriod": 0,
+      "burstPeriodMs": 1000,
+      "name": "BalanceQueryLimits",
+      "throttleGroups": [
+        {
+          "opsPerSec": 0,
+          "milliOpsPerSec": 1000000,
+          "operations": [
+            "CryptoGetAccountBalance"
+          ]
+        }
+      ]
+    }
+  ]
+}
+`
 }
 
 // createOrUpdateConfigMap creates or updates the cluster config ConfigMap
@@ -268,6 +670,8 @@ func (s *CreateClusterConfigStep) markSucceeded(status *GenesisStatus, generatio
 		Message:            fmt.Sprintf("Successfully created cluster config: %s/%s", namespace, ClusterConfigName),
 		ObservedGeneration: generation,
 	})
+	// Mark genesis as succeeded since this is the final step
+	status.Phase = operatorv1alpha1.PhaseSucceeded
 	return status
 }
 

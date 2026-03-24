@@ -35,8 +35,20 @@ tasks:
     cmds:
       - go run cmd/main.go
 
+  test:setup:
+    desc: Setup envtest binaries for integration tests
+    internal: true
+    cmds:
+      - setup-envtest use {{.ENVTEST_K8S_VERSION}} --bin-dir $(pwd)/bin -p path
+    status:
+      - test -d bin/k8s
+
   test:
-    desc: Run unit tests
+    desc: Run all tests
+    deps: [test:setup]
+    env:
+      KUBEBUILDER_ASSETS:
+        sh: setup-envtest use {{.ENVTEST_K8S_VERSION}} --bin-dir $(pwd)/bin -p path
     cmds:
       - go test ./... -coverprofile {{.COVERAGE_FILE}}
 
@@ -48,8 +60,12 @@ tasks:
 
   test:integration:
     desc: Run integration tests with envtest
+    deps: [test:setup]
+    env:
+      KUBEBUILDER_ASSETS:
+        sh: setup-envtest use {{.ENVTEST_K8S_VERSION}} --bin-dir $(pwd)/bin -p path
     cmds:
-      - KUBEBUILDER_ASSETS="$(setup-envtest use {{.ENVTEST_K8S_VERSION}} --bin-dir $(pwd)/bin -p path)" go test ./test/integration/... -v
+      - go test ./test/integration/... -v
 
   test:e2e:
     desc: Run E2E tests against kind cluster
@@ -58,6 +74,10 @@ tasks:
 
   test:coverage:
     desc: Run tests with coverage report
+    deps: [test:setup]
+    env:
+      KUBEBUILDER_ASSETS:
+        sh: setup-envtest use {{.ENVTEST_K8S_VERSION}} --bin-dir $(pwd)/bin -p path
     cmds:
       - go test ./... -coverprofile {{.COVERAGE_FILE}}
       - go tool cover -html={{.COVERAGE_FILE}} -o {{.COVERAGE_HTML}}
@@ -165,6 +185,14 @@ tasks:
       - task: kind:create
       - task: install
       - task: run
+
+  reset:
+    desc: Reset kind cluster with fresh CRDs
+    cmds:
+      - task: kind:delete
+      - task: generate:all
+      - task: kind:create
+      - task: install
 
   clean:
     desc: Clean build artifacts

@@ -77,12 +77,8 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
-								Name: "consensus-node",
-								SoftwareVersion: operatorv1alpha1.SoftwareVersion{
-									Repository: "hashgraph",
-									ImageName:  "hedera-node",
-									ImageTag:   "v0.50.0",
-								},
+								Name:  "consensus-node",
+								Image: "hashgraph/hedera-node:v0.50.0",
 							},
 						},
 					},
@@ -132,7 +128,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}, timeout, interval).Should(BeTrue())
 
 			By("Verifying the Deployment is created")
-			deployLookupKey := types.NamespacedName{Name: "consensus-node", Namespace: capsuleNamespace}
+			deployLookupKey := types.NamespacedName{Name: fmt.Sprintf("%s-consensus-node", capsuleName), Namespace: capsuleNamespace}
 			createdDeploy := &appsv1.Deployment{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, deployLookupKey, createdDeploy)
@@ -202,12 +198,8 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
-								Name: "consensus-node",
-								SoftwareVersion: operatorv1alpha1.SoftwareVersion{
-									Repository: "hashgraph",
-									ImageName:  "hedera-node",
-									ImageTag:   "v0.50.0",
-								},
+								Name:  "consensus-node",
+								Image: "hashgraph/hedera-node:v0.50.0",
 							},
 						},
 					},
