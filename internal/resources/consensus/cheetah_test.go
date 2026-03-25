@@ -353,7 +353,11 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 			name: "blocks uploader with blob storage (S3 via go-cloud)",
 			uploader: &operatorv1alpha1.CheetahUploader{
 				Enabled: true,
-				Image:   "ghcr.io/hashgraph/solo-cheetah/cheetah:0.5.1",
+				SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+					Repository: "ghcr.io/hashgraph/solo-cheetah",
+					ImageName:  "cheetah",
+					ImageTag:   "0.5.1",
+				},
 				Blob: &operatorv1alpha1.CheetahBlobConfig{
 					Enabled: true,
 					URL:     "s3://hedera-streams?region=us-east-1",
@@ -370,8 +374,12 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 		{
 			name: "records uploader with blob storage (GCS via go-cloud) and BucketPrefix",
 			uploader: &operatorv1alpha1.CheetahUploader{
-				Enabled:      true,
-				Image:        "ghcr.io/hashgraph/solo-cheetah/cheetah:0.5.1",
+				Enabled: true,
+				SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+					Repository: "ghcr.io/hashgraph/solo-cheetah",
+					ImageName:  "cheetah",
+					ImageTag:   "0.5.1",
+				},
 				BucketPrefix: "mynetwork/testnet",
 				Blob: &operatorv1alpha1.CheetahBlobConfig{
 					Enabled: true,
@@ -390,7 +398,11 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 			name: "events uploader with blob storage (Azure via go-cloud)",
 			uploader: &operatorv1alpha1.CheetahUploader{
 				Enabled: true,
-				Image:   "ghcr.io/hashgraph/solo-cheetah/cheetah:0.5.1",
+				SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+					Repository: "ghcr.io/hashgraph/solo-cheetah",
+					ImageName:  "cheetah",
+					ImageTag:   "0.5.1",
+				},
 				Blob: &operatorv1alpha1.CheetahBlobConfig{
 					Enabled: true,
 					URL:     "azblob://hedera-streams",
@@ -408,7 +420,10 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			container := reconciler.buildCheetahUploaderContainer(capsule, tt.uploader, tt.containerName, tt.configFile, tt.mountPath, tt.envPrefix, tt.streamBucketPath)
+			container, err := reconciler.buildCheetahUploaderContainer(capsule, tt.uploader, tt.containerName, tt.configFile, tt.mountPath, tt.envPrefix, tt.streamBucketPath)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
 			// Check container name
 			if container.Name != tt.containerName {

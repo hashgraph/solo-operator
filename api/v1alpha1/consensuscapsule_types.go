@@ -215,7 +215,7 @@ type ConsensusNodeContainer struct {
 	// +optional
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 
-	// SoftwareVersion specifies the image (deprecated, use Image instead)
+	// SoftwareVersion specifies the container image repository and tag
 	// +optional
 	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
 
@@ -244,7 +244,7 @@ type OpenTelemetryCollectorConfig struct {
 	// +optional
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 
-	// SoftwareVersion specifies the image (deprecated, use Image instead)
+	// SoftwareVersion specifies the container image repository and tag
 	// +optional
 	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
 

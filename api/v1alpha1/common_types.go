@@ -353,7 +353,7 @@ type CheetahUploader struct {
 	// +optional
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 
-	// SoftwareVersion specifies the image (deprecated, use Image instead)
+	// SoftwareVersion specifies the container image repository and tag
 	// +optional
 	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
 
@@ -561,6 +561,7 @@ type CheetahGCSConfig struct {
 
 // CheetahBlobConfig contains multicloud blob storage configuration for Cheetah.
 // Uses gocloud.dev/blob for unified access to S3, GCS, and Azure Blob Storage.
+// +kubebuilder:validation:XValidation:rule="!self.enabled || self.url != ''",message="url is required when blob storage is enabled"
 type CheetahBlobConfig struct {
 	// Enabled enables blob storage
 	// +kubebuilder:default=false
@@ -591,7 +592,7 @@ type StreamUploader struct {
 	// +optional
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 
-	// SoftwareVersion specifies the image (deprecated, use Image instead)
+	// SoftwareVersion specifies the container image repository and tag
 	// +optional
 	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
 

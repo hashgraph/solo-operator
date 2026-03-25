@@ -37,7 +37,10 @@ func NewDeploymentSubReconciler(c client.Client, scheme *runtime.Scheme) *Deploy
 func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	desired := r.buildDeployment(capsule)
+	desired, err := r.buildDeployment(capsule)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	// Set owner reference
 	if err := controllerutil.SetControllerReference(capsule, desired, r.Scheme); err != nil {
@@ -46,7 +49,7 @@ func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, capsule *operat
 
 	// Check if exists
 	existing := &appsv1.Deployment{}
-	err := r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
+	err = r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("Creating deployment", "name", desired.Name, "namespace", desired.Namespace)
@@ -72,7 +75,7 @@ func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, capsule *operat
 }
 
 // buildDeployment builds the desired deployment
-func (r *DeploymentSubReconciler) buildDeployment(capsule *operatorv1alpha1.ConsensusCapsule) *appsv1.Deployment {
+func (r *DeploymentSubReconciler) buildDeployment(capsule *operatorv1alpha1.ConsensusCapsule) (*appsv1.Deployment, error) {
 	replicas := int32(1)
 	labels := PodLabels(capsule)
 
@@ -111,7 +114,9 @@ func (r *DeploymentSubReconciler) buildDeployment(capsule *operatorv1alpha1.Cons
 	}
 
 	// Add sidecar containers
-	r.addSidecarContainers(deploy, capsule)
+	if err := r.addSidecarContainers(deploy, capsule); err != nil {
+		return nil, err
+	}
 
 	// Apply pod properties
 	r.applyPodProperties(deploy, capsule)
@@ -122,7 +127,7 @@ func (r *DeploymentSubReconciler) buildDeployment(capsule *operatorv1alpha1.Cons
 	// has not already configured fsGroup themselves.
 	r.applyCheetahFSGroup(deploy, capsule)
 
-	return deploy
+	return deploy, nil
 }
 
 // buildConsensusNodeContainer builds the main consensus node container
@@ -433,7 +438,7 @@ func (r *DeploymentSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consens
 }
 
 // addSidecarContainers adds sidecar containers to the deployment
-func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment, capsule *operatorv1alpha1.ConsensusCapsule) {
+func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment, capsule *operatorv1alpha1.ConsensusCapsule) error {
 	containers := capsule.Spec.PodProperties.Containers
 
 	accountId := capsule.Spec.AccountId
@@ -455,23 +460,32 @@ func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment
 
 	// Block streams uploader
 	if containers.BlocksUploader != nil && containers.BlocksUploader.Enabled {
-		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers,
-			r.buildCheetahUploaderContainer(capsule, containers.BlocksUploader, "blockstream-uploader", "cheetah-block-streams.yaml", "/opt/hgcapp/blockStreams", "BLOCK_STREAMS",
-				fmt.Sprintf("blockStreams/block-%s", accountId)))
+		c, err := r.buildCheetahUploaderContainer(capsule, containers.BlocksUploader, "blockstream-uploader", "cheetah-block-streams.yaml", "/opt/hgcapp/blockStreams", "BLOCK_STREAMS",
+			fmt.Sprintf("blockStreams/block-%s", accountId))
+		if err != nil {
+			return fmt.Errorf("blockstream-uploader: %w", err)
+		}
+		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers, c)
 	}
 
 	// Record streams uploader
 	if containers.RecordsUploader != nil && containers.RecordsUploader.Enabled {
-		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers,
-			r.buildCheetahUploaderContainer(capsule, containers.RecordsUploader, "record-stream-uploader", "cheetah-record-streams.yaml", "/opt/hgcapp/recordStreams", "RECORD_STREAMS",
-				fmt.Sprintf("recordstreams/record%s", accountId)))
+		c, err := r.buildCheetahUploaderContainer(capsule, containers.RecordsUploader, "record-stream-uploader", "cheetah-record-streams.yaml", "/opt/hgcapp/recordStreams", "RECORD_STREAMS",
+			fmt.Sprintf("recordstreams/record%s", accountId))
+		if err != nil {
+			return fmt.Errorf("record-stream-uploader: %w", err)
+		}
+		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers, c)
 	}
 
 	// Events streams uploader
 	if containers.EventsUploader != nil && containers.EventsUploader.Enabled {
-		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers,
-			r.buildCheetahUploaderContainer(capsule, containers.EventsUploader, "event-stream-uploader", "cheetah-events-streams.yaml", "/opt/hgcapp/eventsStreams", "EVENTS_STREAMS",
-				fmt.Sprintf("eventsStreams/events_%s", accountId)))
+		c, err := r.buildCheetahUploaderContainer(capsule, containers.EventsUploader, "event-stream-uploader", "cheetah-events-streams.yaml", "/opt/hgcapp/eventsStreams", "EVENTS_STREAMS",
+			fmt.Sprintf("eventsStreams/events_%s", accountId))
+		if err != nil {
+			return fmt.Errorf("event-stream-uploader: %w", err)
+		}
+		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers, c)
 	}
 
 	// Legacy backup uploader (rclone-based)
@@ -485,11 +499,18 @@ func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment
 		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers,
 			r.buildOtelCollectorContainer(capsule, containers.OpenTelemetryCollector))
 	}
+
+	return nil
 }
 
 // buildCheetahUploaderContainer builds a cheetah uploader sidecar container.
 // streamBucketPath is the stream-specific path component (e.g. "blockStreams/block-0.0.3").
-func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(capsule *operatorv1alpha1.ConsensusCapsule, uploader *operatorv1alpha1.CheetahUploader, containerName, configFile, mountPath, envPrefix, streamBucketPath string) corev1.Container {
+func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(capsule *operatorv1alpha1.ConsensusCapsule, uploader *operatorv1alpha1.CheetahUploader, containerName, configFile, mountPath, envPrefix, streamBucketPath string) (corev1.Container, error) {
+	// Validate blob config: URL is required when blob is enabled
+	if uploader.Blob != nil && uploader.Blob.Enabled && uploader.Blob.URL == "" {
+		return corev1.Container{}, fmt.Errorf("blob storage is enabled but url is not set")
+	}
+
 	image := common.BuildImageOrDefault(uploader.SoftwareVersion, CheetahDefaultImage)
 
 	name := uploader.Name
@@ -616,7 +637,7 @@ func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(capsule *operato
 		}
 	}
 
-	return container
+	return container, nil
 }
 
 // applyCheetahFSGroup sets fsGroup on the pod security context when any cheetah uploader
