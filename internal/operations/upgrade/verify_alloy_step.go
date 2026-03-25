@@ -13,31 +13,31 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
-// VerifyOtelCollectorStep verifies the OpenTelemetry collector changeset
-type VerifyOtelCollectorStep struct {
+// VerifyAlloyStep verifies the Grafana Alloy changeset
+type VerifyAlloyStep struct {
 	client client.Client
 }
 
-// NewVerifyOtelCollectorStep creates a new VerifyOtelCollectorStep
-func NewVerifyOtelCollectorStep(c client.Client) *VerifyOtelCollectorStep {
-	return &VerifyOtelCollectorStep{client: c}
+// NewVerifyAlloyStep creates a new VerifyAlloyStep
+func NewVerifyAlloyStep(c client.Client) *VerifyAlloyStep {
+	return &VerifyAlloyStep{client: c}
 }
 
 // Name returns the step name
-func (s *VerifyOtelCollectorStep) Name() string {
-	return "VerifyOtelCollectorChangeset"
+func (s *VerifyAlloyStep) Name() string {
+	return "VerifyAlloyChangeset"
 }
 
-// Run executes the otel collector changeset verification
-func (s *VerifyOtelCollectorStep) Run(ctx context.Context, resource *operatorv1alpha1.NetworkOperation, status *UpgradeStatus) *UpgradeStatus {
+// Run executes the Alloy changeset verification
+func (s *VerifyAlloyStep) Run(ctx context.Context, resource *operatorv1alpha1.NetworkOperation, status *UpgradeStatus) *UpgradeStatus {
 	logger := log.FromContext(ctx)
 
-	if !hasOtelChangeset(resource) {
-		logger.Info("No otel collector changeset specified, skipping")
+	if !hasAlloyChangeset(resource) {
+		logger.Info("No Alloy changeset specified, skipping")
 		return s.markSucceeded(status, resource.Generation, "No changeset specified")
 	}
 
-	changeset := resource.Spec.NetworkUpgrade.Changesets.OtelCollector
+	changeset := resource.Spec.NetworkUpgrade.Changesets.Alloy
 	if changeset == nil {
 		return s.markSucceeded(status, resource.Generation, "No changeset specified")
 	}
@@ -65,7 +65,7 @@ func (s *VerifyOtelCollectorStep) Run(ctx context.Context, resource *operatorv1a
 		// Use the first valid repository
 		if selectedRepo == nil {
 			selectedRepo = repo
-			logger.Info("Selected image repository for otel collector",
+			logger.Info("Selected image repository for Alloy",
 				"repository", repo.Repository,
 				"imageName", repo.ImageName,
 				"tag", repo.ImageTag)
@@ -73,14 +73,14 @@ func (s *VerifyOtelCollectorStep) Run(ctx context.Context, resource *operatorv1a
 	}
 
 	if selectedRepo == nil {
-		return s.markFailed(status, resource.Generation, fmt.Sprintf("No valid image repositories found for otel collector: %v", validationErrors))
+		return s.markFailed(status, resource.Generation, fmt.Sprintf("No valid image repositories found for Alloy: %v", validationErrors))
 	}
 
 	// Update status with selected repository
 	if status.SoftwareSourceStatus == nil {
 		status.SoftwareSourceStatus = &operatorv1alpha1.SoftwareSourceStatus{}
 	}
-	status.SoftwareSourceStatus.OtelCollector = []operatorv1alpha1.ImageRepositoryStatus{{
+	status.SoftwareSourceStatus.Alloy = []operatorv1alpha1.ImageRepositoryStatus{{
 		Repository:            selectedRepo.Repository,
 		ImageName:             selectedRepo.ImageName,
 		ImageTag:              selectedRepo.ImageTag,
@@ -88,7 +88,7 @@ func (s *VerifyOtelCollectorStep) Run(ctx context.Context, resource *operatorv1a
 		SelectedForDeployment: true,
 	}}
 
-	logger.Info("Successfully verified otel collector changeset",
+	logger.Info("Successfully verified Alloy changeset",
 		"selectedRepository", selectedRepo.Repository,
 		"selectedImageName", selectedRepo.ImageName)
 
@@ -96,7 +96,7 @@ func (s *VerifyOtelCollectorStep) Run(ctx context.Context, resource *operatorv1a
 }
 
 // validateImageRepository validates an image repository
-func (s *VerifyOtelCollectorStep) validateImageRepository(ctx context.Context, repo *operatorv1alpha1.ImageRepository) error {
+func (s *VerifyAlloyStep) validateImageRepository(ctx context.Context, repo *operatorv1alpha1.ImageRepository) error {
 	if repo.Repository == "" {
 		return fmt.Errorf("repository is required")
 	}
@@ -112,13 +112,13 @@ func (s *VerifyOtelCollectorStep) validateImageRepository(ctx context.Context, r
 }
 
 // markSucceeded marks the step as successful
-func (s *VerifyOtelCollectorStep) markSucceeded(status *UpgradeStatus, generation int64, message string) *UpgradeStatus {
+func (s *VerifyAlloyStep) markSucceeded(status *UpgradeStatus, generation int64, message string) *UpgradeStatus {
 	now := metav1.Now()
 	status.AddCondition(metav1.Condition{
 		Type:               StepConditionTypeVerifyChangeset,
 		Status:             metav1.ConditionTrue,
 		LastTransitionTime: now,
-		Reason:             StepConditionReasonOtelCollector,
+		Reason:             StepConditionReasonAlloy,
 		Message:            message,
 		ObservedGeneration: generation,
 	})
@@ -126,14 +126,14 @@ func (s *VerifyOtelCollectorStep) markSucceeded(status *UpgradeStatus, generatio
 }
 
 // markFailed marks the step as failed
-func (s *VerifyOtelCollectorStep) markFailed(status *UpgradeStatus, generation int64, message string) *UpgradeStatus {
+func (s *VerifyAlloyStep) markFailed(status *UpgradeStatus, generation int64, message string) *UpgradeStatus {
 	now := metav1.Now()
 	status.Phase = operatorv1alpha1.PhaseFailed
 	status.AddCondition(metav1.Condition{
 		Type:               StepConditionTypeVerifyChangeset,
 		Status:             metav1.ConditionFalse,
 		LastTransitionTime: now,
-		Reason:             StepConditionReasonOtelCollector,
+		Reason:             StepConditionReasonAlloy,
 		Message:            message,
 		ObservedGeneration: generation,
 	})
@@ -141,17 +141,17 @@ func (s *VerifyOtelCollectorStep) markFailed(status *UpgradeStatus, generation i
 }
 
 // IsSuccessful checks if this step has completed successfully
-func (s *VerifyOtelCollectorStep) IsSuccessful(resource *operatorv1alpha1.NetworkOperation, status *UpgradeStatus) bool {
-	return status.HasSuccessfulCondition(StepConditionTypeVerifyChangeset, StepConditionReasonOtelCollector)
+func (s *VerifyAlloyStep) IsSuccessful(resource *operatorv1alpha1.NetworkOperation, status *UpgradeStatus) bool {
+	return status.HasSuccessfulCondition(StepConditionTypeVerifyChangeset, StepConditionReasonAlloy)
 }
 
 // ShouldSkip determines if this step should be skipped
-func (s *VerifyOtelCollectorStep) ShouldSkip(resource *operatorv1alpha1.NetworkOperation, status *UpgradeStatus) bool {
+func (s *VerifyAlloyStep) ShouldSkip(resource *operatorv1alpha1.NetworkOperation, status *UpgradeStatus) bool {
 	if status.Phase == operatorv1alpha1.PhaseFailed {
 		return true
 	}
 	// Skip if no changeset or already successful
-	if !hasOtelChangeset(resource) {
+	if !hasAlloyChangeset(resource) {
 		return true
 	}
 	return s.IsSuccessful(resource, status)

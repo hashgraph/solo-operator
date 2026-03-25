@@ -480,10 +480,10 @@ func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment
 			r.buildBackupUploaderContainer(containers.BackupUploader))
 	}
 
-	// OpenTelemetry collector
-	if containers.OpenTelemetryCollector != nil && containers.OpenTelemetryCollector.Enabled {
+	// Grafana Alloy telemetry sidecar
+	if containers.Alloy != nil && containers.Alloy.Enabled {
 		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers,
-			r.buildOtelCollectorContainer(capsule, containers.OpenTelemetryCollector))
+			r.buildAlloyContainer(capsule, containers.Alloy))
 	}
 }
 
@@ -681,16 +681,16 @@ func (r *DeploymentSubReconciler) buildBackupUploaderContainer(config *operatorv
 	return container
 }
 
-// buildOtelCollectorContainer builds the OpenTelemetry collector sidecar container
-func (r *DeploymentSubReconciler) buildOtelCollectorContainer(capsule *operatorv1alpha1.ConsensusCapsule, config *operatorv1alpha1.OpenTelemetryCollectorConfig) corev1.Container {
+// buildAlloyContainer builds the Grafana Alloy telemetry sidecar container
+func (r *DeploymentSubReconciler) buildAlloyContainer(capsule *operatorv1alpha1.ConsensusCapsule, config *operatorv1alpha1.AlloyConfig) corev1.Container {
 	containerName := config.Name
 	if containerName == "" {
-		containerName = "open-telemetry-collector"
+		containerName = "alloy"
 	}
 
 	image := config.Image
 	if image == "" {
-		image = "otel/opentelemetry-collector-contrib:latest"
+		image = "grafana/alloy:latest"
 	}
 
 	container := corev1.Container{

@@ -170,13 +170,13 @@ type NetworkUpgradeChangesets struct {
 	// +optional
 	BackupUploaderChangeset *StreamUploaderChangeset `json:"backupUploaderChangeset,omitempty"`
 
-	// OtelCollector changeset
+	// Alloy changeset
 	// +optional
-	OtelCollector *OtelCollectorChangeset `json:"otelCollector,omitempty"`
+	Alloy *AlloyChangeset `json:"alloy,omitempty"`
 }
 
-// OtelCollectorChangeset contains changes for otel collector
-type OtelCollectorChangeset struct {
+// AlloyChangeset contains changes for Grafana Alloy sidecar
+type AlloyChangeset struct {
 	// SoftwareVersionSource specifies the image source
 	SoftwareVersionSource SoftwareVersionSource `json:"softwareVersionSource"`
 }
@@ -271,9 +271,9 @@ type SoftwareSourceStatus struct {
 	// +optional
 	BackupUploader []ImageRepositoryStatus `json:"backupUploader,omitempty"`
 
-	// OtelCollector status
+	// Alloy status
 	// +optional
-	OtelCollector []ImageRepositoryStatus `json:"otelCollector,omitempty"`
+	Alloy []ImageRepositoryStatus `json:"alloy,omitempty"`
 }
 
 // +kubebuilder:object:root=true

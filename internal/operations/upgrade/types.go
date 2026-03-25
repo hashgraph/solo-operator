@@ -28,7 +28,7 @@ const (
 	StepConditionReasonSidecarFilesUploader = "SidecarFilesUploader"
 	StepConditionReasonEventStreamUploader  = "EventStreamUploader"
 	StepConditionReasonBackupUploader       = "BackupUploader"
-	StepConditionReasonOtelCollector        = "OtelCollector"
+	StepConditionReasonAlloy                = "Alloy"
 	StepConditionReasonClusterConfig        = "ClusterConfig"
 	StepConditionReasonConsensusPodChange   = "ConsensusPodChange"
 	StepConditionReasonOrbitConfiguration   = "OrbitConfiguration"
@@ -188,12 +188,12 @@ func hasStreamUploaderChangeset(op *operatorv1alpha1.NetworkOperation, uploaderT
 	return false
 }
 
-// hasOtelChangeset checks if the network operation has an otel collector changeset
-func hasOtelChangeset(op *operatorv1alpha1.NetworkOperation) bool {
+// hasAlloyChangeset checks if the network operation has an Alloy changeset
+func hasAlloyChangeset(op *operatorv1alpha1.NetworkOperation) bool {
 	if op.Spec.NetworkUpgrade == nil {
 		return false
 	}
-	return op.Spec.NetworkUpgrade.Changesets.OtelCollector != nil
+	return op.Spec.NetworkUpgrade.Changesets.Alloy != nil
 }
 
 // getStreamUploaderConditionReason returns the condition reason for the given uploader type
@@ -229,8 +229,8 @@ func hasSelectedRepository(status *UpgradeStatus, component string) bool {
 		repos = status.SoftwareSourceStatus.EventsStreamUploader
 	case "backupUploader":
 		repos = status.SoftwareSourceStatus.BackupUploader
-	case "otelCollector":
-		repos = status.SoftwareSourceStatus.OtelCollector
+	case "alloy":
+		repos = status.SoftwareSourceStatus.Alloy
 	}
 
 	for _, repo := range repos {

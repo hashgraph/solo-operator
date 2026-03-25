@@ -194,9 +194,9 @@ type ConsensusContainers struct {
 	// +optional
 	EventsStreamUploader *StreamUploader `json:"eventsStreamUploader,omitempty"`
 
-	// OpenTelemetryCollector is the otel collector sidecar
+	// Alloy is the Grafana Alloy telemetry sidecar
 	// +optional
-	OpenTelemetryCollector *OpenTelemetryCollectorConfig `json:"openTelemetryCollector,omitempty"`
+	Alloy *AlloyConfig `json:"alloy,omitempty"`
 }
 
 // ConsensusNodeContainer is the main consensus node container
@@ -228,10 +228,10 @@ type ConsensusNodeContainer struct {
 	AdditionalVolumeMounts []corev1.VolumeMount `json:"additionalVolumeMounts,omitempty"`
 }
 
-// OpenTelemetryCollectorConfig is the otel collector container config
-type OpenTelemetryCollectorConfig struct {
+// AlloyConfig is the Grafana Alloy telemetry sidecar container config
+type AlloyConfig struct {
 	// Name is the container name
-	// +kubebuilder:default="open-telemetry-collector"
+	// +kubebuilder:default="alloy"
 	// +optional
 	Name string `json:"name,omitempty"`
 
@@ -252,22 +252,22 @@ type OpenTelemetryCollectorConfig struct {
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
-	// Enabled enables the collector
+	// Enabled enables the Alloy sidecar
 	// +kubebuilder:default=false
 	// +optional
 	Enabled bool `json:"enabled,omitempty"`
 
-	// Config contains collector configuration
+	// Config contains Alloy configuration
 	// +optional
-	Config *OtelCollectorConfig `json:"config,omitempty"`
+	Config *AlloyCollectorConfig `json:"config,omitempty"`
 
 	// AdditionalVolumeMounts for the container
 	// +optional
 	AdditionalVolumeMounts []corev1.VolumeMount `json:"additionalVolumeMounts,omitempty"`
 }
 
-// OtelCollectorConfig contains otel collector configuration
-type OtelCollectorConfig struct {
+// AlloyCollectorConfig contains Alloy telemetry configuration
+type AlloyCollectorConfig struct {
 	// AppName is the application name
 	// +kubebuilder:default="hedera-node"
 	// +optional
@@ -278,33 +278,33 @@ type OtelCollectorConfig struct {
 	// +optional
 	Environment string `json:"environment,omitempty"`
 
-	// LogLevel is the logging exporter log level
+	// LogLevel is the logging level
 	// +kubebuilder:default="DEBUG"
 	// +optional
 	LogLevel string `json:"logLevel,omitempty"`
 
 	// Processors contains processor configuration
 	// +optional
-	Processors *OtelProcessors `json:"processors,omitempty"`
+	Processors *AlloyProcessors `json:"processors,omitempty"`
 
 	// Exporters contains exporter configuration
 	// +optional
-	Exporters *OtelExporters `json:"exporters,omitempty"`
+	Exporters *AlloyExporters `json:"exporters,omitempty"`
 
 	// Receivers contains receiver configuration
 	// +optional
-	Receivers *OtelReceivers `json:"receivers,omitempty"`
+	Receivers *AlloyReceivers `json:"receivers,omitempty"`
 }
 
-// OtelProcessors contains processor configuration
-type OtelProcessors struct {
+// AlloyProcessors contains processor configuration
+type AlloyProcessors struct {
 	// MemoryLimiter configuration
 	// +optional
-	MemoryLimiter *OtelMemoryLimiter `json:"memoryLimiter,omitempty"`
+	MemoryLimiter *AlloyMemoryLimiter `json:"memoryLimiter,omitempty"`
 }
 
-// OtelMemoryLimiter contains memory limiter configuration
-type OtelMemoryLimiter struct {
+// AlloyMemoryLimiter contains memory limiter configuration
+type AlloyMemoryLimiter struct {
 	// LimitMib is the memory limit in MiB
 	// +kubebuilder:default="400"
 	// +optional
@@ -316,15 +316,15 @@ type OtelMemoryLimiter struct {
 	SpikeLimitMib string `json:"spikeLimitMib,omitempty"`
 }
 
-// OtelExporters contains exporter configuration
-type OtelExporters struct {
+// AlloyExporters contains exporter configuration
+type AlloyExporters struct {
 	// Loki exporter configuration
 	// +optional
-	Loki *OtelLokiExporter `json:"loki,omitempty"`
+	Loki *AlloyLokiExporter `json:"loki,omitempty"`
 }
 
-// OtelLokiExporter contains Loki exporter configuration
-type OtelLokiExporter struct {
+// AlloyLokiExporter contains Loki exporter configuration
+type AlloyLokiExporter struct {
 	// Enabled enables Loki logging
 	// +kubebuilder:default=true
 	// +optional
@@ -332,15 +332,15 @@ type OtelLokiExporter struct {
 
 	// Auth contains authentication configuration
 	// +optional
-	Auth *OtelLokiAuth `json:"auth,omitempty"`
+	Auth *AlloyLokiAuth `json:"auth,omitempty"`
 
 	// Endpoint is the Loki endpoint URL
 	// +optional
 	Endpoint string `json:"endpoint,omitempty"`
 }
 
-// OtelLokiAuth contains Loki authentication configuration
-type OtelLokiAuth struct {
+// AlloyLokiAuth contains Loki authentication configuration
+type AlloyLokiAuth struct {
 	// Enabled enables authentication
 	// +kubebuilder:default=false
 	// +optional
@@ -351,19 +351,19 @@ type OtelLokiAuth struct {
 	Secret *corev1.LocalObjectReference `json:"secret,omitempty"`
 }
 
-// OtelReceivers contains receiver configuration
-type OtelReceivers struct {
+// AlloyReceivers contains receiver configuration
+type AlloyReceivers struct {
 	// SwirldsVMap receiver configuration
 	// +optional
-	SwirldsVMap *OtelReceiver `json:"swirldsVMap,omitempty"`
+	SwirldsVMap *AlloyReceiver `json:"swirldsVMap,omitempty"`
 
 	// Hashstream receiver configuration
 	// +optional
-	Hashstream *OtelReceiver `json:"hashstream,omitempty"`
+	Hashstream *AlloyReceiver `json:"hashstream,omitempty"`
 }
 
-// OtelReceiver is a generic receiver configuration
-type OtelReceiver struct {
+// AlloyReceiver is a generic receiver configuration
+type AlloyReceiver struct {
 	// Enabled enables the receiver
 	// +kubebuilder:default=false
 	// +optional
