@@ -3170,7 +3170,7 @@ spec:
                             type: object
                             x-kubernetes-validations:
                             - message: url is required when blob storage is enabled
-                              rule: '!self.enabled || self.url != '''''
+                              rule: '!self.enabled || self.url != ”'
                           bucketPrefix:
                             description: BucketPrefix is prepended to all stream bucket
                               object paths (e.g. "mynetwork/testnet")
@@ -3979,7 +3979,7 @@ spec:
                             type: object
                             x-kubernetes-validations:
                             - message: url is required when blob storage is enabled
-                              rule: '!self.enabled || self.url != '''''
+                              rule: '!self.enabled || self.url != ”'
                           bucketPrefix:
                             description: BucketPrefix is prepended to all stream bucket
                               object paths (e.g. "mynetwork/testnet")
@@ -5219,7 +5219,7 @@ spec:
                             type: object
                             x-kubernetes-validations:
                             - message: url is required when blob storage is enabled
-                              rule: '!self.enabled || self.url != '''''
+                              rule: '!self.enabled || self.url != ”'
                           bucketPrefix:
                             description: BucketPrefix is prepended to all stream bucket
                               object paths (e.g. "mynetwork/testnet")
