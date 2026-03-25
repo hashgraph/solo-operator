@@ -508,7 +508,7 @@ func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment
 func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(capsule *operatorv1alpha1.ConsensusCapsule, uploader *operatorv1alpha1.CheetahUploader, containerName, configFile, mountPath, envPrefix, streamBucketPath string) (corev1.Container, error) {
 	// Validate blob config: URL is required when blob is enabled
 	if uploader.Blob != nil && uploader.Blob.Enabled && uploader.Blob.URL == "" {
-		return corev1.Container{}, fmt.Errorf("blob storage is enabled but url is not set")
+		return corev1.Container{}, fmt.Errorf("blob storage is enabled (blob.enabled=true) but blob.url is not set")
 	}
 
 	image := common.BuildImageOrDefault(uploader.SoftwareVersion, CheetahDefaultImage)

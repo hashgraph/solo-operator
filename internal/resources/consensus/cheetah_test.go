@@ -532,6 +532,28 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 	}
 }
 
+func TestBuildCheetahUploaderContainer_BlobEnabledWithoutURL(t *testing.T) {
+	reconciler := &DeploymentSubReconciler{}
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			AccountId: "0.0.3",
+		},
+	}
+
+	uploader := &operatorv1alpha1.CheetahUploader{
+		Enabled: true,
+		Blob: &operatorv1alpha1.CheetahBlobConfig{
+			Enabled: true,
+			URL:     "",
+		},
+	}
+
+	_, err := reconciler.buildCheetahUploaderContainer(capsule, uploader, "blockstream-uploader", "cheetah-block-streams.yaml", "/opt/hgcapp/blockStreams", "BLOCK_STREAMS", "blockStreams/block-0.0.3")
+	if err == nil {
+		t.Fatal("expected error when blob is enabled without URL, got nil")
+	}
+}
+
 func TestGetVolumeNameForPath(t *testing.T) {
 	tests := []struct {
 		path     string
@@ -609,7 +631,9 @@ func TestAddSidecarContainers_Cheetah(t *testing.T) {
 		},
 	}
 
-	reconciler.addSidecarContainers(deploy, capsule)
+	if err := reconciler.addSidecarContainers(deploy, capsule); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	// Should have 4 containers: consensus-node + 3 cheetah uploaders
 	if len(deploy.Spec.Template.Spec.Containers) != 4 {
