@@ -561,7 +561,7 @@ type CheetahGCSConfig struct {
 
 // CheetahBlobConfig contains multicloud blob storage configuration for Cheetah.
 // Uses gocloud.dev/blob for unified access to S3, GCS, and Azure Blob Storage.
-// +kubebuilder:validation:XValidation:rule=”!self.enabled || size(self.url) > 0”,message=”url is required when blob storage is enabled”
+// +kubebuilder:validation:XValidation:rule="!self.enabled || size(self.url) > 0",message="url is required when blob storage is enabled"
 type CheetahBlobConfig struct {
 	// Enabled enables blob storage
 	// +kubebuilder:default=false

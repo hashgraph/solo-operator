@@ -3169,8 +3169,8 @@ spec:
                                 type: string
                             type: object
                             x-kubernetes-validations:
-                            - message: ”url is required when blob storage is enabled”
-                              rule: ”!self.enabled || size(self.url) > 0”
+                            - message: url is required when blob storage is enabled
+                              rule: '!self.enabled || size(self.url) > 0'
                           bucketPrefix:
                             description: BucketPrefix is prepended to all stream bucket
                               object paths (e.g. "mynetwork/testnet")
@@ -3978,8 +3978,8 @@ spec:
                                 type: string
                             type: object
                             x-kubernetes-validations:
-                            - message: ”url is required when blob storage is enabled”
-                              rule: ”!self.enabled || size(self.url) > 0”
+                            - message: url is required when blob storage is enabled
+                              rule: '!self.enabled || size(self.url) > 0'
                           bucketPrefix:
                             description: BucketPrefix is prepended to all stream bucket
                               object paths (e.g. "mynetwork/testnet")
@@ -5218,8 +5218,8 @@ spec:
                                 type: string
                             type: object
                             x-kubernetes-validations:
-                            - message: ”url is required when blob storage is enabled”
-                              rule: ”!self.enabled || size(self.url) > 0”
+                            - message: url is required when blob storage is enabled
+                              rule: '!self.enabled || size(self.url) > 0'
                           bucketPrefix:
                             description: BucketPrefix is prepended to all stream bucket
                               object paths (e.g. "mynetwork/testnet")
