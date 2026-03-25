@@ -58,14 +58,14 @@ spec:
             cpu: "500m"
             memory: 2Gi
       
-      # Block streams uploader
+      # Block streams uploader (cheetah 0.5.0 with blob storage)
       blocksUploader:
         enabled: true
         name: "blockstream-uploader"
         softwareVersion:
           repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
           imageName: "cheetah"
-          imageTag: "0.4.5"
+          imageTag: "0.5.0"
           imagePullPolicy: IfNotPresent
         logLevel: Debug
         maxProcessors: 10
@@ -78,16 +78,11 @@ spec:
           requests:
             cpu: 200m
             memory: 200Mi
-        s3:
+        blob:
           enabled: true
-          bucket: "solo-streams"
-          region: "us-east-1"
-          endpoint: "http://minio.minio-tenant.svc.cluster.local"
-          useSsl: false
-        gcs:
-          enabled: false
-        envFromSecret: "uploader-mirror-secrets"
-      
+          url: "s3://solo-streams?region=us-east-1&endpoint=http://minio.minio-tenant.svc.cluster.local&use_path_style=true&disable_https=true"
+        envFromSecret: "uploader-mirror-secrets"  # provides AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY for MinIO
+
       # Record streams uploader (includes sidecar files)
       recordsUploader:
         enabled: true
@@ -95,7 +90,7 @@ spec:
         softwareVersion:
           repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
           imageName: "cheetah"
-          imageTag: "0.4.5"
+          imageTag: "0.5.0"
           imagePullPolicy: IfNotPresent
         logLevel: Debug
         maxProcessors: 10
@@ -107,16 +102,11 @@ spec:
           requests:
             cpu: 200m
             memory: 200Mi
-        s3:
+        blob:
           enabled: true
-          bucket: "solo-streams"
-          region: "us-east-1"
-          endpoint: "http://minio.minio-tenant.svc.cluster.local"
-          useSsl: false
-        gcs:
-          enabled: false
-        envFromSecret: "uploader-mirror-secrets"
-      
+          url: "s3://solo-streams?region=us-east-1&endpoint=http://minio.minio-tenant.svc.cluster.local&use_path_style=true&disable_https=true"
+        envFromSecret: "uploader-mirror-secrets"  # provides AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY for MinIO
+
       # Events streams uploader
       eventsUploader:
         enabled: true
@@ -124,7 +114,7 @@ spec:
         softwareVersion:
           repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
           imageName: "cheetah"
-          imageTag: "0.4.5"
+          imageTag: "0.5.0"
           imagePullPolicy: IfNotPresent
         logLevel: Debug
         maxProcessors: 10
@@ -136,15 +126,10 @@ spec:
           requests:
             cpu: 200m
             memory: 200Mi
-        s3:
+        blob:
           enabled: true
-          bucket: "solo-streams"
-          region: "us-east-1"
-          endpoint: "http://minio.minio-tenant.svc.cluster.local"
-          useSsl: false
-        gcs:
-          enabled: false
-        envFromSecret: "uploader-mirror-secrets"
+          url: "s3://solo-streams?region=us-east-1&endpoint=http://minio.minio-tenant.svc.cluster.local&use_path_style=true&disable_https=true"
+        envFromSecret: "uploader-mirror-secrets"  # provides AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY for MinIO
       
       # Backup uploader (rclone-based, not cheetah)
       backupUploader:
