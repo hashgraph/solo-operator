@@ -366,13 +366,23 @@ type CheetahUploader struct {
 	// +optional
 	LogLevel string `json:"logLevel,omitempty"`
 
-	// S3 configuration
+	// S3 configuration (deprecated: use Blob instead)
 	// +optional
 	S3 *CheetahS3Config `json:"s3,omitempty"`
 
-	// GCS configuration
+	// GCS configuration (deprecated: use Blob instead)
 	// +optional
 	GCS *CheetahGCSConfig `json:"gcs,omitempty"`
+
+	// Blob configuration for multicloud storage via go-cloud (S3, GCS, Azure).
+	// The URL scheme determines the cloud provider:
+	//   - "s3://bucket?region=us-east-1" for AWS S3
+	//   - "gs://bucket" for Google Cloud Storage
+	//   - "azblob://container" for Azure Blob Storage
+	// Credentials are resolved automatically via each provider's default chain,
+	// including workload identity (EKS IRSA, GKE Workload Identity, Azure Managed Identity).
+	// +optional
+	Blob *CheetahBlobConfig `json:"blob,omitempty"`
 
 	// EnvFromSecret is the secret name for credentials
 	// +optional
@@ -547,6 +557,23 @@ type CheetahGCSConfig struct {
 	// +kubebuilder:default=true
 	// +optional
 	UseSsl bool `json:"useSsl,omitempty"`
+}
+
+// CheetahBlobConfig contains multicloud blob storage configuration for Cheetah.
+// Uses gocloud.dev/blob for unified access to S3, GCS, and Azure Blob Storage.
+type CheetahBlobConfig struct {
+	// Enabled enables blob storage
+	// +kubebuilder:default=false
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// URL is the gocloud.dev bucket URL.
+	// The scheme determines the cloud provider:
+	//   - "s3://bucket?region=us-east-1" for AWS S3
+	//   - "gs://bucket" for Google Cloud Storage
+	//   - "azblob://container" for Azure Blob Storage
+	// +optional
+	URL string `json:"url,omitempty"`
 }
 
 // StreamUploader defines a stream uploader sidecar

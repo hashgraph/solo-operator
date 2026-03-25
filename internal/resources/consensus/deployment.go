@@ -564,6 +564,19 @@ func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(capsule *operato
 		env = append(env, corev1.EnvVar{Name: fmt.Sprintf("S3_%s_BUCKET_PREFIX", envPrefix), Value: bucketPath})
 	}
 
+	// Blob configuration (multicloud via go-cloud)
+	if uploader.Blob != nil {
+		if uploader.Blob.Enabled {
+			env = append(env, corev1.EnvVar{Name: "BLOB_ENABLED", Value: "true"})
+		} else {
+			env = append(env, corev1.EnvVar{Name: "BLOB_ENABLED", Value: "false"})
+		}
+		if uploader.Blob.URL != "" {
+			env = append(env, corev1.EnvVar{Name: "BLOB_URL", Value: uploader.Blob.URL})
+		}
+		env = append(env, corev1.EnvVar{Name: fmt.Sprintf("BLOB_%s_PREFIX", envPrefix), Value: bucketPath})
+	}
+
 	configCheckInterval := CheetahDefaultConfigCheckInterval
 	if uploader.ConfigCheckInterval != "" {
 		configCheckInterval = uploader.ConfigCheckInterval

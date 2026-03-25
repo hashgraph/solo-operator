@@ -349,6 +349,61 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 			expectEnvVars:    []string{"S3_ENABLED", "S3_BLOCK_STREAMS_BUCKET_PREFIX"},
 			expectPrefixVal:  "blockStreams/block-0.0.3",
 		},
+		{
+			name: "blocks uploader with blob storage (S3 via go-cloud)",
+			uploader: &operatorv1alpha1.CheetahUploader{
+				Enabled: true,
+				Image:   "ghcr.io/hashgraph/solo-cheetah/cheetah:0.5.0",
+				Blob: &operatorv1alpha1.CheetahBlobConfig{
+					Enabled: true,
+					URL:     "s3://hedera-streams?region=us-east-1",
+				},
+			},
+			containerName:    "blockstream-uploader",
+			configFile:       "cheetah-block-streams.yaml",
+			mountPath:        "/opt/hgcapp/blockStreams",
+			envPrefix:        "BLOCK_STREAMS",
+			streamBucketPath: "blockStreams/block-0.0.3",
+			expectEnvVars:    []string{"BLOB_ENABLED", "BLOB_URL", "BLOB_BLOCK_STREAMS_PREFIX"},
+			expectPrefixVal:  "blockStreams/block-0.0.3",
+		},
+		{
+			name: "records uploader with blob storage (GCS via go-cloud) and BucketPrefix",
+			uploader: &operatorv1alpha1.CheetahUploader{
+				Enabled:      true,
+				Image:        "ghcr.io/hashgraph/solo-cheetah/cheetah:0.5.0",
+				BucketPrefix: "mynetwork/testnet",
+				Blob: &operatorv1alpha1.CheetahBlobConfig{
+					Enabled: true,
+					URL:     "gs://hedera-streams",
+				},
+			},
+			containerName:    "record-stream-uploader",
+			configFile:       "cheetah-record-streams.yaml",
+			mountPath:        "/opt/hgcapp/recordStreams",
+			envPrefix:        "RECORD_STREAMS",
+			streamBucketPath: "recordstreams/record0.0.3",
+			expectEnvVars:    []string{"BLOB_ENABLED", "BLOB_URL", "BLOB_RECORD_STREAMS_PREFIX"},
+			expectPrefixVal:  "mynetwork/testnet/recordstreams/record0.0.3",
+		},
+		{
+			name: "events uploader with blob storage (Azure via go-cloud)",
+			uploader: &operatorv1alpha1.CheetahUploader{
+				Enabled: true,
+				Image:   "ghcr.io/hashgraph/solo-cheetah/cheetah:0.5.0",
+				Blob: &operatorv1alpha1.CheetahBlobConfig{
+					Enabled: true,
+					URL:     "azblob://hedera-streams",
+				},
+			},
+			containerName:    "event-stream-uploader",
+			configFile:       "cheetah-events-streams.yaml",
+			mountPath:        "/opt/hgcapp/eventsStreams",
+			envPrefix:        "EVENTS_STREAMS",
+			streamBucketPath: "eventsStreams/events_0.0.3",
+			expectEnvVars:    []string{"BLOB_ENABLED", "BLOB_URL", "BLOB_EVENTS_STREAMS_PREFIX"},
+			expectPrefixVal:  "eventsStreams/events_0.0.3",
+		},
 	}
 
 	for _, tt := range tests {
@@ -409,7 +464,9 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 			}
 			// Verify bucket prefix value for whichever storage backend is configured
 			prefixKey := fmt.Sprintf("S3_%s_BUCKET_PREFIX", tt.envPrefix)
-			if tt.uploader.GCS != nil {
+			if tt.uploader.Blob != nil {
+				prefixKey = fmt.Sprintf("BLOB_%s_PREFIX", tt.envPrefix)
+			} else if tt.uploader.GCS != nil {
 				prefixKey = fmt.Sprintf("GCS_%s_BUCKET_PREFIX", tt.envPrefix)
 			}
 			if got, ok := envMap[prefixKey]; ok {

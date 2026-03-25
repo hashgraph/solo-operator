@@ -200,7 +200,11 @@ pipelines:
           accessKey: GCS_ACCESS_KEY
           secretKey: GCS_SECRET_KEY
           useSsl: true
-`, logLevel, name, stopOnError, directory, pattern, maxProcessors, patternList, sidecarSection, prefix, prefix)
+        blob:
+          enabled: false
+          url: BLOB_URL
+          prefix: BLOB_%s_PREFIX
+`, logLevel, name, stopOnError, directory, pattern, maxProcessors, patternList, sidecarSection, prefix, prefix, prefix)
 }
 
 // needsUpdate checks if the config needs to be updated
