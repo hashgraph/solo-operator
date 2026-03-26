@@ -2927,6 +2927,19 @@ spec:
                                           URL
                                         type: string
                                     type: object
+                                  prometheus:
+                                    description: Prometheus remote-write configuration
+                                    properties:
+                                      enabled:
+                                        default: false
+                                        description: Enabled enables the Prometheus
+                                          remote-write exporter
+                                        type: boolean
+                                      endpoint:
+                                        description: Endpoint is the Prometheus remote-write
+                                          URL (e.g. "http://prometheus.observability:9090/api/v1/write")
+                                        type: string
+                                    type: object
                                 type: object
                               logLevel:
                                 default: DEBUG
@@ -3048,8 +3061,8 @@ spec:
                                 type: object
                             type: object
                           softwareVersion:
-                            description: SoftwareVersion specifies the image (deprecated,
-                              use Image instead)
+                            description: SoftwareVersion specifies the image via repository,
+                              imageName, and imageTag
                             properties:
                               imageName:
                                 description: ImageName is the name of the image (e.g.,
@@ -3758,9 +3771,6 @@ spec:
                               - name
                               type: object
                             type: array
-                          image:
-                            description: Image is the container image
-                            type: string
                           imagePullPolicy:
                             default: IfNotPresent
                             description: ImagePullPolicy specifies when to pull the
@@ -3831,8 +3841,8 @@ spec:
                                 type: object
                             type: object
                           softwareVersion:
-                            description: SoftwareVersion specifies the image (deprecated,
-                              use Image instead)
+                            description: SoftwareVersion specifies the image via repository,
+                              imageName, and imageTag
                             properties:
                               imageName:
                                 description: ImageName is the name of the image (e.g.,

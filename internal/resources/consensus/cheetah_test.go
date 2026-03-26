@@ -38,7 +38,10 @@ func TestCheetahConfigMapSubReconciler_Reconcile(t *testing.T) {
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
-								Image: "test:latest",
+								SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+									ImageName: "test",
+									ImageTag:  "latest",
+								},
 							},
 						},
 					},
@@ -58,7 +61,10 @@ func TestCheetahConfigMapSubReconciler_Reconcile(t *testing.T) {
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
-								Image: "test:latest",
+								SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+									ImageName: "test",
+									ImageTag:  "latest",
+								},
 							},
 							BlocksUploader: &operatorv1alpha1.CheetahUploader{
 								Enabled:  true,
@@ -87,7 +93,10 @@ func TestCheetahConfigMapSubReconciler_Reconcile(t *testing.T) {
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
-								Image: "test:latest",
+								SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+									ImageName: "test",
+									ImageTag:  "latest",
+								},
 							},
 							BlocksUploader: &operatorv1alpha1.CheetahUploader{
 								Enabled:  true,
@@ -166,7 +175,10 @@ func TestCheetahConfigMapSubReconciler_BuildConfigMap(t *testing.T) {
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
-								Image: "test:latest",
+								SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+									ImageName: "test",
+									ImageTag:  "latest",
+								},
 							},
 							BlocksUploader: &operatorv1alpha1.CheetahUploader{
 								Enabled:  true,
@@ -190,7 +202,10 @@ func TestCheetahConfigMapSubReconciler_BuildConfigMap(t *testing.T) {
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
-								Image: "test:latest",
+								SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+									ImageName: "test",
+									ImageTag:  "latest",
+								},
 							},
 							BlocksUploader: &operatorv1alpha1.CheetahUploader{
 								Enabled:  true,
@@ -494,7 +509,10 @@ func TestAddSidecarContainers_Cheetah(t *testing.T) {
 			PodProperties: operatorv1alpha1.ConsensusPodProperties{
 				Containers: operatorv1alpha1.ConsensusContainers{
 					ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
-						Image: "test:latest",
+						SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+							ImageName: "test",
+							ImageTag:  "latest",
+						},
 					},
 					BlocksUploader: &operatorv1alpha1.CheetahUploader{
 						Enabled: true,

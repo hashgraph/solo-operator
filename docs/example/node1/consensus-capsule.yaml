@@ -172,18 +172,24 @@ spec:
           envFromSecret: "backup-uploader-secrets"
       
       # Grafana Alloy telemetry sidecar
+      # Alloy exposes its own metrics at :12345/metrics for external Prometheus scraping
       alloy:
         enabled: true
         name: "alloy"
-        softwareVersion:
-          repository: "docker.io/grafana"
-          imageName: "alloy"
-          imageTag: "v1.8.1"
-          imagePullPolicy: IfNotPresent
+        image: "grafana/alloy:v1.14.2"
+        imagePullPolicy: IfNotPresent
         config:
+          appName: "hedera-node"
+          environment: "integration"
+          logLevel: "INFO"
           exporters:
             loki:
               enabled: true
+              endpoint: "http://loki.observability:3100/loki/api/v1/push"
+            # Prometheus — remote-write scraped metrics from consensus node (:9999)
+            # Alternatively, external Prometheus can scrape Alloy directly at :12345/metrics
+            prometheus:
+              enabled: false
   
   # Manual PVCs configured via podProperties.volumes
   # persistentVolumeClaims section is commented out

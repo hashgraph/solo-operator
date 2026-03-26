@@ -37,7 +37,10 @@ func NewDeploymentSubReconciler(c client.Client, scheme *runtime.Scheme) *Deploy
 func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	desired := r.buildDeployment(capsule)
+	desired, err := r.buildDeployment(capsule)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	// Set owner reference
 	if err := controllerutil.SetControllerReference(capsule, desired, r.Scheme); err != nil {
@@ -46,7 +49,7 @@ func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, capsule *operat
 
 	// Check if exists
 	existing := &appsv1.Deployment{}
-	err := r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
+	err = r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("Creating deployment", "name", desired.Name, "namespace", desired.Namespace)
@@ -72,12 +75,17 @@ func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, capsule *operat
 }
 
 // buildDeployment builds the desired deployment
-func (r *DeploymentSubReconciler) buildDeployment(capsule *operatorv1alpha1.ConsensusCapsule) *appsv1.Deployment {
+func (r *DeploymentSubReconciler) buildDeployment(capsule *operatorv1alpha1.ConsensusCapsule) (*appsv1.Deployment, error) {
 	replicas := int32(1)
 	labels := PodLabels(capsule)
 
 	// Build volumes and volume mounts
 	volumes, volumeMounts := r.buildVolumes(capsule)
+
+	consensusContainer, err := r.buildConsensusNodeContainer(capsule, volumeMounts)
+	if err != nil {
+		return nil, err
+	}
 
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -102,7 +110,7 @@ func (r *DeploymentSubReconciler) buildDeployment(capsule *operatorv1alpha1.Cons
 					Hostname:           capsule.Name,
 					Subdomain:          ConsensusSubdomain,
 					Containers: []corev1.Container{
-						r.buildConsensusNodeContainer(capsule, volumeMounts),
+						consensusContainer,
 					},
 					Volumes: volumes,
 				},
@@ -122,11 +130,11 @@ func (r *DeploymentSubReconciler) buildDeployment(capsule *operatorv1alpha1.Cons
 	// has not already configured fsGroup themselves.
 	r.applyCheetahFSGroup(deploy, capsule)
 
-	return deploy
+	return deploy, nil
 }
 
 // buildConsensusNodeContainer builds the main consensus node container
-func (r *DeploymentSubReconciler) buildConsensusNodeContainer(capsule *operatorv1alpha1.ConsensusCapsule, volumeMounts []corev1.VolumeMount) corev1.Container {
+func (r *DeploymentSubReconciler) buildConsensusNodeContainer(capsule *operatorv1alpha1.ConsensusCapsule, volumeMounts []corev1.VolumeMount) (corev1.Container, error) {
 	cn := capsule.Spec.PodProperties.Containers.ConsensusNode
 
 	containerName := cn.Name
@@ -134,7 +142,10 @@ func (r *DeploymentSubReconciler) buildConsensusNodeContainer(capsule *operatorv
 		containerName = "consensus-node"
 	}
 
-	image := common.BuildImageOrDefault(cn.SoftwareVersion, "gcr.io/hedera-registry/consensus-node:latest")
+	image := common.BuildImageOrDefault(cn.SoftwareVersion, "")
+	if image == "" {
+		return corev1.Container{}, fmt.Errorf("consensus node image is required: set spec.podProperties.containers.consensusNode.softwareVersion")
+	}
 
 	container := corev1.Container{
 		Name:  containerName,
@@ -166,7 +177,7 @@ func (r *DeploymentSubReconciler) buildConsensusNodeContainer(capsule *operatorv
 		container.VolumeMounts = append(container.VolumeMounts, cn.AdditionalVolumeMounts...)
 	}
 
-	return container
+	return container, nil
 }
 
 // buildVolumes builds the volumes and volume mounts for the deployment
@@ -482,6 +493,16 @@ func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment
 
 	// Grafana Alloy telemetry sidecar
 	if containers.Alloy != nil && containers.Alloy.Enabled {
+		// Add Alloy config volume
+		deploy.Spec.Template.Spec.Volumes = append(deploy.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: "alloy-config",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: AlloyConfigMapName(capsule)},
+				},
+			},
+		})
+
 		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers,
 			r.buildAlloyContainer(capsule, containers.Alloy))
 	}
@@ -690,12 +711,33 @@ func (r *DeploymentSubReconciler) buildAlloyContainer(capsule *operatorv1alpha1.
 
 	image := config.Image
 	if image == "" {
-		image = "grafana/alloy:latest"
+		image = AlloyDefaultImage
 	}
 
 	container := corev1.Container{
 		Name:  containerName,
 		Image: image,
+		Args:  []string{"run", "/etc/alloy/config.alloy"},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      "alloy-config",
+				MountPath: "/etc/alloy",
+				ReadOnly:  true,
+			},
+		},
+	}
+
+	// Share the logs volume with the consensus node (read-only) for log scraping.
+	// Only mount if Loki is enabled AND the logs PVC is configured, to avoid a failed mount.
+	lokiEnabled := config.Config != nil && config.Config.Exporters != nil &&
+		config.Config.Exporters.Loki != nil && config.Config.Exporters.Loki.Enabled
+	logsPVCExists := capsule.Spec.PersistentVolumeClaims != nil && capsule.Spec.PersistentVolumeClaims.Logs != nil
+	if lokiEnabled && logsPVCExists {
+		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+			Name:      VolumeTypeLogs,
+			MountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/output",
+			ReadOnly:  true,
+		})
 	}
 
 	if config.ImagePullPolicy != "" {
@@ -707,7 +749,7 @@ func (r *DeploymentSubReconciler) buildAlloyContainer(capsule *operatorv1alpha1.
 	}
 
 	if len(config.AdditionalVolumeMounts) > 0 {
-		container.VolumeMounts = config.AdditionalVolumeMounts
+		container.VolumeMounts = append(container.VolumeMounts, config.AdditionalVolumeMounts...)
 	}
 
 	return container

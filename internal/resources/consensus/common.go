@@ -131,6 +131,7 @@ func NewSubReconcilers(c client.Client, scheme *runtime.Scheme) *subreconciler.C
 		NewRoleBindingSubReconciler(c, scheme),
 		NewConfigMapSubReconciler(c, scheme),
 		NewCheetahConfigMapSubReconciler(c, scheme),
+		NewAlloyConfigMapSubReconciler(c, scheme),
 		NewServiceSubReconciler(c, scheme),
 		NewPVCSubReconciler(c, scheme),
 		NewDeploymentSubReconciler(c, scheme),

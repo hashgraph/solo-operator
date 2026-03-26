@@ -199,24 +199,20 @@ type ConsensusContainers struct {
 	Alloy *AlloyConfig `json:"alloy,omitempty"`
 }
 
-// ConsensusNodeContainer is the main consensus node container
+// ConsensusNodeContainer is the main consensus node container.
+// softwareVersion must be set.
 type ConsensusNodeContainer struct {
 	// Name is the container name
 	// +kubebuilder:default="consensus-node"
 	// +optional
 	Name string `json:"name,omitempty"`
 
-	// Image is the container image
-	// +optional
-	Image string `json:"image,omitempty"`
-
 	// ImagePullPolicy specifies when to pull the image
 	// +kubebuilder:default=IfNotPresent
 	// +optional
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 
-	// SoftwareVersion specifies the image (deprecated, use Image instead)
-	// +optional
+	// SoftwareVersion specifies the image via repository, imageName, and imageTag
 	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
 
 	// Resources specifies resource requirements
@@ -244,7 +240,7 @@ type AlloyConfig struct {
 	// +optional
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 
-	// SoftwareVersion specifies the image (deprecated, use Image instead)
+	// SoftwareVersion specifies the image via repository, imageName, and imageTag
 	// +optional
 	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
 
@@ -321,6 +317,22 @@ type AlloyExporters struct {
 	// Loki exporter configuration
 	// +optional
 	Loki *AlloyLokiExporter `json:"loki,omitempty"`
+
+	// Prometheus remote-write configuration
+	// +optional
+	Prometheus *AlloyPrometheusExporter `json:"prometheus,omitempty"`
+}
+
+// AlloyPrometheusExporter contains Prometheus remote-write configuration
+type AlloyPrometheusExporter struct {
+	// Enabled enables the Prometheus remote-write exporter
+	// +kubebuilder:default=false
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Endpoint is the Prometheus remote-write URL (e.g. "http://prometheus.observability:9090/api/v1/write")
+	// +optional
+	Endpoint string `json:"endpoint,omitempty"`
 }
 
 // AlloyLokiExporter contains Loki exporter configuration
