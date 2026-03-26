@@ -37,7 +37,7 @@ func NewDeploymentSubReconciler(c client.Client, scheme *runtime.Scheme) *Deploy
 func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	desired, err := r.buildDeployment(capsule)
+	desired, err := r.buildDeployment(ctx, capsule)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -75,7 +75,7 @@ func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, capsule *operat
 }
 
 // buildDeployment builds the desired deployment
-func (r *DeploymentSubReconciler) buildDeployment(capsule *operatorv1alpha1.ConsensusCapsule) (*appsv1.Deployment, error) {
+func (r *DeploymentSubReconciler) buildDeployment(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (*appsv1.Deployment, error) {
 	replicas := int32(1)
 	labels := PodLabels(capsule)
 
@@ -118,8 +118,14 @@ func (r *DeploymentSubReconciler) buildDeployment(capsule *operatorv1alpha1.Cons
 		},
 	}
 
+	// Resolve alloy config (orbit defaults + capsule overrides)
+	resolvedAlloy, err := ResolveAlloyConfig(ctx, r.Client, capsule)
+	if err != nil {
+		return nil, err
+	}
+
 	// Add sidecar containers
-	r.addSidecarContainers(deploy, capsule)
+	r.addSidecarContainers(deploy, capsule, resolvedAlloy)
 
 	// Apply pod properties
 	r.applyPodProperties(deploy, capsule)
@@ -158,7 +164,7 @@ func (r *DeploymentSubReconciler) buildConsensusNodeContainer(capsule *operatorv
 			{Name: "gossip", ContainerPort: GossipPort, Protocol: corev1.ProtocolTCP},
 			{Name: "grpc", ContainerPort: GrpcPort, Protocol: corev1.ProtocolTCP},
 			{Name: "grpcs", ContainerPort: GrpcsPort, Protocol: corev1.ProtocolTCP},
-			{Name: "prometheus", ContainerPort: PrometheusPort, Protocol: corev1.ProtocolTCP},
+			{Name: "metrics", ContainerPort: PrometheusPort, Protocol: corev1.ProtocolTCP},
 		},
 		VolumeMounts: volumeMounts,
 	}
@@ -443,8 +449,9 @@ func (r *DeploymentSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consens
 	return volumes, volumeMounts
 }
 
-// addSidecarContainers adds sidecar containers to the deployment
-func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment, capsule *operatorv1alpha1.ConsensusCapsule) {
+// addSidecarContainers adds sidecar containers to the deployment.
+// resolvedAlloy is the effective AlloyConfig after merging orbit defaults with capsule overrides.
+func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment, capsule *operatorv1alpha1.ConsensusCapsule, resolvedAlloy *operatorv1alpha1.AlloyConfig) {
 	containers := capsule.Spec.PodProperties.Containers
 
 	accountId := capsule.Spec.AccountId
@@ -491,8 +498,8 @@ func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment
 			r.buildBackupUploaderContainer(containers.BackupUploader))
 	}
 
-	// Grafana Alloy telemetry sidecar
-	if containers.Alloy != nil && containers.Alloy.Enabled {
+	// Grafana Alloy telemetry sidecar (uses resolved config from orbit defaults + capsule overrides)
+	if resolvedAlloy != nil && resolvedAlloy.Enabled {
 		// Add Alloy config volume
 		deploy.Spec.Template.Spec.Volumes = append(deploy.Spec.Template.Spec.Volumes, corev1.Volume{
 			Name: "alloy-config",
@@ -504,7 +511,7 @@ func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment
 		})
 
 		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers,
-			r.buildAlloyContainer(capsule, containers.Alloy))
+			r.buildAlloyContainer(capsule, resolvedAlloy))
 	}
 }
 
@@ -718,6 +725,9 @@ func (r *DeploymentSubReconciler) buildAlloyContainer(capsule *operatorv1alpha1.
 		Name:  containerName,
 		Image: image,
 		Args:  []string{"run", "/etc/alloy/config.alloy"},
+		Ports: []corev1.ContainerPort{
+			{Name: "alloy-metrics", ContainerPort: AlloyHTTPPort, Protocol: corev1.ProtocolTCP},
+		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      "alloy-config",

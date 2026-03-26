@@ -2927,19 +2927,36 @@ spec:
                                           URL
                                         type: string
                                     type: object
-                                  prometheus:
-                                    description: Prometheus remote-write configuration
+                                  prometheusRemote:
+                                    description: |-
+                                      PrometheusRemote configures Prometheus remote-write via Alloy.
+                                      The consensus node always exposes metrics at :9999 for direct scraping —
+                                      this controls whether Alloy also scrapes those metrics and pushes them
+                                      to a remote Prometheus-compatible endpoint.
                                     properties:
                                       enabled:
                                         default: false
-                                        description: Enabled enables the Prometheus
-                                          remote-write exporter
+                                        description: |-
+                                          Enabled enables Alloy to scrape consensus node metrics at :9999
+                                          and remote-write them to the configured endpoint.
                                         type: boolean
                                       endpoint:
                                         description: Endpoint is the Prometheus remote-write
                                           URL (e.g. "http://prometheus.observability:9090/api/v1/write")
                                         type: string
+                                      scrapeInterval:
+                                        default: 15s
+                                        description: ScrapeInterval is the Prometheus
+                                          scrape interval (e.g. "15s", "30s")
+                                        type: string
                                     type: object
+                                type: object
+                              labels:
+                                additionalProperties:
+                                  type: string
+                                description: |-
+                                  Labels contains additional static labels to attach to all telemetry data (logs and metrics).
+                                  These are merged with the built-in labels (app, environment, node).
                                 type: object
                               logLevel:
                                 default: DEBUG

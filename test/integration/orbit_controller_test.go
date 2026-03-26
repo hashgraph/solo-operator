@@ -101,10 +101,16 @@ var _ = Describe("Orbit Controller", func() {
 				},
 				Spec: operatorv1alpha1.OrbitSpec{
 					Telemetry: &operatorv1alpha1.OrbitTelemetry{
-						Metrics: &operatorv1alpha1.OrbitMetrics{
-							Enabled:  true,
-							Interval: "10s",
-							Port:     9998,
+						Alloy: &operatorv1alpha1.OrbitAlloyDefaults{
+							Enabled: true,
+							Config: &operatorv1alpha1.AlloyCollectorConfig{
+								Exporters: &operatorv1alpha1.AlloyExporters{
+									Loki: &operatorv1alpha1.AlloyLokiExporter{
+										Enabled:  true,
+										Endpoint: "http://loki:3100/loki/api/v1/push",
+									},
+								},
+							},
 						},
 					},
 					Consensus: operatorv1alpha1.OrbitConsensus{
@@ -125,7 +131,7 @@ var _ = Describe("Orbit Controller", func() {
 			}, timeout, interval).Should(BeTrue())
 
 			Expect(createdOrbit.Spec.Telemetry).ToNot(BeNil())
-			Expect(createdOrbit.Spec.Telemetry.Metrics.Enabled).To(BeTrue())
+			Expect(createdOrbit.Spec.Telemetry.Alloy.Enabled).To(BeTrue())
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, orbit)).Should(Succeed())

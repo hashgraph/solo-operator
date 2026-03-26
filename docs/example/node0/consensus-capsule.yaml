@@ -141,42 +141,13 @@ spec:
             enabled: false
           envFromSecret: "backup-uploader-secrets"
       
-      # Grafana Alloy telemetry sidecar
-      # Alloy exposes its own metrics at :12345/metrics for external Prometheus scraping
+      # Grafana Alloy telemetry sidecar — defaults inherited from Orbit spec.telemetry.alloy.
+      # Only per-node labels here; merged with orbit labels (cluster, team).
       alloy:
         enabled: true
-        name: "alloy"
-        image: "grafana/alloy:v1.14.2"
-        imagePullPolicy: IfNotPresent
-        resources:
-          limits:
-            cpu: 200m
-            memory: 256Mi
-          requests:
-            cpu: 100m
-            memory: 128Mi
         config:
-          appName: "hedera-node"
-          environment: "integration"
-          logLevel: "INFO"
-          processors:
-            memoryLimiter:
-              limitMib: "400"
-              spikeLimitMib: "80"
-          exporters:
-            # Loki — ship consensus node logs
-            loki:
-              enabled: true
-              endpoint: "http://loki.observability:3100/loki/api/v1/push"
-              # auth:
-              #   enabled: true
-              #   secret:
-              #     name: "loki-credentials"
-            # Prometheus — remote-write scraped metrics from consensus node (:9999)
-            # Alternatively, external Prometheus can scrape Alloy directly at :12345/metrics
-            prometheus:
-              enabled: false
-              endpoint: "http://prometheus.observability:9090/api/v1/write"
+          labels:
+            zone: "us-east-1a"
   
   persistentVolumeClaims:
     logs:

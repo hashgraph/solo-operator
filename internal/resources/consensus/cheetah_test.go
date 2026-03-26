@@ -555,7 +555,7 @@ func TestAddSidecarContainers_Cheetah(t *testing.T) {
 		},
 	}
 
-	reconciler.addSidecarContainers(deploy, capsule)
+	reconciler.addSidecarContainers(deploy, capsule, nil)
 
 	// Should have 4 containers: consensus-node + 3 cheetah uploaders
 	if len(deploy.Spec.Template.Spec.Containers) != 4 {

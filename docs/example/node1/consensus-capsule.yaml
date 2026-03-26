@@ -12,36 +12,6 @@ spec:
   accountId: "0.0.4"
   weight: 1
   podProperties:
-    volumes:
-      logs:
-        name: logs
-        persistentVolumeClaim:
-          claimName: node2-logs
-      stats:
-        name: stats
-        persistentVolumeClaim:
-          claimName: node2-stats
-      states:
-        name: states
-        persistentVolumeClaim:
-          claimName: node2-states
-      upgrade:
-        name: upgrade
-        persistentVolumeClaim:
-          claimName: node2-upgrade
-      streams:
-        block:
-          name: blocks
-          persistentVolumeClaim:
-            claimName: node2-blocks
-        record:
-          name: records
-          persistentVolumeClaim:
-            claimName: node2-records
-        events:
-          name: events
-          persistentVolumeClaim:
-            claimName: node2-events
     containers:
       consensusNode:
         name: "consensus-node"
@@ -171,72 +141,57 @@ spec:
             enabled: false
           envFromSecret: "backup-uploader-secrets"
       
-      # Grafana Alloy telemetry sidecar
-      # Alloy exposes its own metrics at :12345/metrics for external Prometheus scraping
+      # Grafana Alloy telemetry sidecar — defaults inherited from Orbit spec.telemetry.alloy.
       alloy:
         enabled: true
-        name: "alloy"
-        image: "grafana/alloy:v1.14.2"
-        imagePullPolicy: IfNotPresent
         config:
-          appName: "hedera-node"
-          environment: "integration"
-          logLevel: "INFO"
-          exporters:
-            loki:
-              enabled: true
-              endpoint: "http://loki.observability:3100/loki/api/v1/push"
-            # Prometheus — remote-write scraped metrics from consensus node (:9999)
-            # Alternatively, external Prometheus can scrape Alloy directly at :12345/metrics
-            prometheus:
-              enabled: false
+          labels:
+            zone: "us-east-1b"
   
-  # Manual PVCs configured via podProperties.volumes
-  # persistentVolumeClaims section is commented out
-  # persistentVolumeClaims:
-  #   logs:
-  #     accessModes:
-  #       - ReadWriteOnce
-  #     resources:
-  #       requests:
-  #         storage: 5Gi
-  #   stats:
-  #     accessModes:
-  #       - ReadWriteOnce
-  #     resources:
-  #       requests:
-  #         storage: 50Gi
-  #   states:
-  #     accessModes:
-  #       - ReadWriteOnce
-  #     resources:
-  #       requests:
-  #         storage: 500Gi
-  #   upgrade:
-  #     accessModes:
-  #       - ReadWriteOnce
-  #     resources:
-  #       requests:
-  #         storage: 5Gi
-  #   streams:
-  #     block:
-  #       accessModes:
-  #         - ReadWriteOnce
-  #       resources:
-  #         requests:
-  #           storage: 100Gi
-  #     record:
-  #       accessModes:
-  #         - ReadWriteOnce
-  #       resources:
-  #         requests:
-  #           storage: 100Gi
-  #     events:
-  #       accessModes:
-  #         - ReadWriteOnce
-  #       resources:
-  #         requests:
-  #           storage: 100Gi
+  persistentVolumeClaims:
+    logs:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 5Gi
+    stats:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 5Gi
+    states:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi
+    upgrade:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 5Gi
+    streams:
+      block:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi
+      record:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi
+      events:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi
   
   secrets:
     secretResources:

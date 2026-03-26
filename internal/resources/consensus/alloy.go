@@ -5,6 +5,7 @@ package consensus
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -41,7 +42,10 @@ func AlloyConfigMapName(capsule *operatorv1alpha1.ConsensusCapsule) string {
 func (r *AlloyConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	alloy := capsule.Spec.PodProperties.Containers.Alloy
+	alloy, err := ResolveAlloyConfig(ctx, r.Client, capsule)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 	if alloy == nil || !alloy.Enabled {
 		return ctrl.Result{}, nil
 	}
@@ -52,7 +56,7 @@ func (r *AlloyConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *op
 	}
 
 	existing := &corev1.ConfigMap{}
-	err := r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
+	err = r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("Creating Alloy ConfigMap", "name", desired.Name)
@@ -128,8 +132,20 @@ func BuildAlloyRiverConfig(capsule *operatorv1alpha1.ConsensusCapsule, alloy *op
 	fmt.Fprintf(&b, "logging {\n  level = %q\n}\n\n", logLevel)
 
 	// Labels block — reused across components
-	nodeLabels := fmt.Sprintf(`{"app" = %q, "environment" = %q, "node" = %q}`,
-		appName, environment, capsule.Name)
+	// Built-in labels are always present; user-defined labels from config are appended.
+	nodeLabels := fmt.Sprintf(`{"app" = %q, "environment" = %q, "node" = %q`, appName, environment, capsule.Name)
+	if cfg != nil && len(cfg.Labels) > 0 {
+		// Sort keys for deterministic output
+		keys := make([]string, 0, len(cfg.Labels))
+		for k := range cfg.Labels {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			nodeLabels += fmt.Sprintf(`, %q = %q`, k, cfg.Labels[k])
+		}
+	}
+	nodeLabels += "}"
 
 	// --- Receivers ---
 
@@ -172,19 +188,26 @@ func BuildAlloyRiverConfig(capsule *operatorv1alpha1.ConsensusCapsule, alloy *op
 		b.WriteString("}\n\n")
 	}
 
-	// --- Prometheus metrics scraping ---
-	prometheusEnabled := cfg != nil && cfg.Exporters != nil && cfg.Exporters.Prometheus != nil && cfg.Exporters.Prometheus.Enabled
+	// --- Prometheus remote-write ---
+	// The consensus node always exposes metrics at :9999 for direct scraping.
+	// When enabled, Alloy scrapes :9999 and remote-writes to the configured endpoint.
+	prometheusEnabled := cfg != nil && cfg.Exporters != nil && cfg.Exporters.PrometheusRemote != nil && cfg.Exporters.PrometheusRemote.Enabled
 	if prometheusEnabled {
-		b.WriteString("// Prometheus metrics scraping\n")
+		scrapeInterval := "15s"
+		if cfg.Exporters.PrometheusRemote.ScrapeInterval != "" {
+			scrapeInterval = cfg.Exporters.PrometheusRemote.ScrapeInterval
+		}
+
+		b.WriteString("// Scrape consensus node metrics and remote-write\n")
 		b.WriteString("prometheus.scrape \"hedera_metrics\" {\n")
 		fmt.Fprintf(&b, "  targets = [{__address__ = \"localhost:%d\"}]\n", PrometheusPort)
 		b.WriteString("  forward_to = [prometheus.remote_write.default.receiver]\n")
-		b.WriteString("  scrape_interval = \"15s\"\n")
+		fmt.Fprintf(&b, "  scrape_interval = %q\n", scrapeInterval)
 		b.WriteString("}\n\n")
 
 		endpoint := "http://prometheus:9090/api/v1/write"
-		if cfg.Exporters.Prometheus.Endpoint != "" {
-			endpoint = cfg.Exporters.Prometheus.Endpoint
+		if cfg.Exporters.PrometheusRemote.Endpoint != "" {
+			endpoint = cfg.Exporters.PrometheusRemote.Endpoint
 		}
 
 		b.WriteString("prometheus.remote_write \"default\" {\n")

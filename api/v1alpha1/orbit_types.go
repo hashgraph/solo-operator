@@ -3,6 +3,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -29,54 +30,39 @@ type OrbitSpec struct {
 	Consensus OrbitConsensus `json:"consensus"`
 }
 
-// OrbitTelemetry contains telemetry configuration for the Orbit
+// OrbitTelemetry contains telemetry configuration for the Orbit.
+// Alloy is the single telemetry sidecar that handles both logging (Loki) and metrics (Prometheus).
 type OrbitTelemetry struct {
-	// Metrics configuration
+	// Alloy contains default Grafana Alloy telemetry sidecar configuration
+	// applied to all ConsensusCapsules in this orbit. Capsule-level settings override these defaults.
 	// +optional
-	Metrics *OrbitMetrics `json:"metrics,omitempty"`
-
-	// Logging configuration
-	// +optional
-	Logging *OrbitLogging `json:"logging,omitempty"`
+	Alloy *OrbitAlloyDefaults `json:"alloy,omitempty"`
 }
 
-// OrbitMetrics contains metrics configuration
-type OrbitMetrics struct {
-	// Enabled enables metrics collection
+// OrbitAlloyDefaults provides default Alloy sidecar configuration for all ConsensusCapsules in the orbit.
+// Individual capsules can override any of these fields via their own alloy spec.
+type OrbitAlloyDefaults struct {
+	// Enabled enables Alloy sidecar for all capsules in this orbit by default
 	// +kubebuilder:default=false
 	// +optional
 	Enabled bool `json:"enabled,omitempty"`
 
-	// Interval specifies the collection interval (e.g., "5s")
-	// +kubebuilder:default="5s"
+	// Image is the default Alloy container image
 	// +optional
-	Interval string `json:"interval,omitempty"`
+	Image string `json:"image,omitempty"`
 
-	// Labels to attach to metrics
+	// ImagePullPolicy is the default image pull policy
+	// +kubebuilder:default=IfNotPresent
 	// +optional
-	Labels map[string]string `json:"labels,omitempty"`
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 
-	// Port on which metrics are exposed
-	// +kubebuilder:default=9998
+	// Resources is the default resource requirements for the Alloy sidecar
 	// +optional
-	Port int `json:"port,omitempty"`
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
-	// RemoteWrite enables remote write
-	// +kubebuilder:default=false
+	// Config contains default Alloy collector configuration (exporters, processors, etc.)
 	// +optional
-	RemoteWrite bool `json:"remoteWrite,omitempty"`
-}
-
-// OrbitLogging contains logging configuration
-type OrbitLogging struct {
-	// Enabled enables logging
-	// +kubebuilder:default=false
-	// +optional
-	Enabled bool `json:"enabled,omitempty"`
-
-	// Labels to attach to logs
-	// +optional
-	Labels map[string]string `json:"labels,omitempty"`
+	Config *AlloyCollectorConfig `json:"config,omitempty"`
 }
 
 // OrbitConsensus contains shared consensus configuration

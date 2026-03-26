@@ -279,6 +279,11 @@ type AlloyCollectorConfig struct {
 	// +optional
 	LogLevel string `json:"logLevel,omitempty"`
 
+	// Labels contains additional static labels to attach to all telemetry data (logs and metrics).
+	// These are merged with the built-in labels (app, environment, node).
+	// +optional
+	Labels map[string]string `json:"labels,omitempty"`
+
 	// Processors contains processor configuration
 	// +optional
 	Processors *AlloyProcessors `json:"processors,omitempty"`
@@ -318,14 +323,18 @@ type AlloyExporters struct {
 	// +optional
 	Loki *AlloyLokiExporter `json:"loki,omitempty"`
 
-	// Prometheus remote-write configuration
+	// PrometheusRemote configures Prometheus remote-write via Alloy.
+	// The consensus node always exposes metrics at :9999 for direct scraping —
+	// this controls whether Alloy also scrapes those metrics and pushes them
+	// to a remote Prometheus-compatible endpoint.
 	// +optional
-	Prometheus *AlloyPrometheusExporter `json:"prometheus,omitempty"`
+	PrometheusRemote *AlloyPrometheusRemoteExporter `json:"prometheusRemote,omitempty"`
 }
 
-// AlloyPrometheusExporter contains Prometheus remote-write configuration
-type AlloyPrometheusExporter struct {
-	// Enabled enables the Prometheus remote-write exporter
+// AlloyPrometheusRemoteExporter configures Prometheus remote-write via Alloy.
+type AlloyPrometheusRemoteExporter struct {
+	// Enabled enables Alloy to scrape consensus node metrics at :9999
+	// and remote-write them to the configured endpoint.
 	// +kubebuilder:default=false
 	// +optional
 	Enabled bool `json:"enabled,omitempty"`
@@ -333,6 +342,11 @@ type AlloyPrometheusExporter struct {
 	// Endpoint is the Prometheus remote-write URL (e.g. "http://prometheus.observability:9090/api/v1/write")
 	// +optional
 	Endpoint string `json:"endpoint,omitempty"`
+
+	// ScrapeInterval is the Prometheus scrape interval (e.g. "15s", "30s")
+	// +kubebuilder:default="15s"
+	// +optional
+	ScrapeInterval string `json:"scrapeInterval,omitempty"`
 }
 
 // AlloyLokiExporter contains Loki exporter configuration

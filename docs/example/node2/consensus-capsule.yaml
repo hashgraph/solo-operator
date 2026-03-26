@@ -22,11 +22,11 @@ spec:
           imagePullPolicy: IfNotPresent
         resources:
           limits:
-            cpu: "6"
-            memory: 48Gi
-          requests:
             cpu: "2"
-            memory: 16Gi
+            memory: 4Gi
+          requests:
+            cpu: "500m"
+            memory: 2Gi
       
       # Block streams uploader
       blocksUploader:
@@ -141,25 +141,12 @@ spec:
             enabled: false
           envFromSecret: "backup-uploader-secrets"
       
-      # Grafana Alloy telemetry sidecar
-      # Alloy exposes its own metrics at :12345/metrics for external Prometheus scraping
+      # Grafana Alloy telemetry sidecar — defaults inherited from Orbit spec.telemetry.alloy.
       alloy:
         enabled: true
-        name: "alloy"
-        image: "grafana/alloy:v1.14.2"
-        imagePullPolicy: IfNotPresent
         config:
-          appName: "hedera-node"
-          environment: "integration"
-          logLevel: "INFO"
-          exporters:
-            loki:
-              enabled: true
-              endpoint: "http://loki.observability:3100/loki/api/v1/push"
-            # Prometheus — remote-write scraped metrics from consensus node (:9999)
-            # Alternatively, external Prometheus can scrape Alloy directly at :12345/metrics
-            prometheus:
-              enabled: false
+          labels:
+            zone: "us-west-2a"
   
   persistentVolumeClaims:
     logs:
@@ -173,13 +160,13 @@ spec:
         - ReadWriteOnce
       resources:
         requests:
-          storage: 50Gi
+          storage: 5Gi
     states:
       accessModes:
         - ReadWriteOnce
       resources:
         requests:
-          storage: 500Gi
+          storage: 10Gi
     upgrade:
       accessModes:
         - ReadWriteOnce
@@ -192,19 +179,19 @@ spec:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 100Gi
+            storage: 5Gi
       record:
         accessModes:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 100Gi
+            storage: 5Gi
       events:
         accessModes:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 100Gi
+            storage: 5Gi
   
   secrets:
     secretResources:

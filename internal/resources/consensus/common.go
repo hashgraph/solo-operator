@@ -63,6 +63,7 @@ const (
 	GrpcPort       = 50211
 	GrpcsPort      = 50212
 	PrometheusPort = 9999
+	AlloyHTTPPort  = 12345
 	DebugPort      = 5005
 )
 

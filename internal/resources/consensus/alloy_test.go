@@ -242,7 +242,7 @@ func TestAddSidecarContainers_Alloy(t *testing.T) {
 		},
 	}
 
-	reconciler.addSidecarContainers(deploy, capsule)
+	reconciler.addSidecarContainers(deploy, capsule, capsule.Spec.PodProperties.Containers.Alloy)
 
 	// Should have 2 containers: consensus-node + alloy
 	if len(deploy.Spec.Template.Spec.Containers) != 2 {
@@ -310,7 +310,7 @@ func TestAddSidecarContainers_AlloyDisabled(t *testing.T) {
 		},
 	}
 
-	reconciler.addSidecarContainers(deploy, capsule)
+	reconciler.addSidecarContainers(deploy, capsule, capsule.Spec.PodProperties.Containers.Alloy)
 
 	// Should have only 1 container when alloy is disabled
 	if len(deploy.Spec.Template.Spec.Containers) != 1 {
@@ -353,7 +353,7 @@ func TestAddSidecarContainers_AlloyNil(t *testing.T) {
 		},
 	}
 
-	reconciler.addSidecarContainers(deploy, capsule)
+	reconciler.addSidecarContainers(deploy, capsule, nil)
 
 	// Should have only 1 container when alloy is nil
 	if len(deploy.Spec.Template.Spec.Containers) != 1 {
@@ -463,7 +463,7 @@ func TestBuildAlloyRiverConfig_PrometheusEnabled(t *testing.T) {
 		Enabled: true,
 		Config: &operatorv1alpha1.AlloyCollectorConfig{
 			Exporters: &operatorv1alpha1.AlloyExporters{
-				Prometheus: &operatorv1alpha1.AlloyPrometheusExporter{
+				PrometheusRemote: &operatorv1alpha1.AlloyPrometheusRemoteExporter{
 					Enabled:  true,
 					Endpoint: "http://mimir:9090/api/v1/write",
 				},
@@ -495,7 +495,7 @@ func TestBuildAlloyRiverConfig_AllExportersEnabled(t *testing.T) {
 				Loki: &operatorv1alpha1.AlloyLokiExporter{
 					Enabled: true,
 				},
-				Prometheus: &operatorv1alpha1.AlloyPrometheusExporter{
+				PrometheusRemote: &operatorv1alpha1.AlloyPrometheusRemoteExporter{
 					Enabled: true,
 				},
 			},
@@ -509,6 +509,84 @@ func TestBuildAlloyRiverConfig_AllExportersEnabled(t *testing.T) {
 	}
 	if !strings.Contains(cfg, "prometheus.remote_write") {
 		t.Error("expected prometheus.remote_write block")
+	}
+}
+
+func TestBuildAlloyRiverConfig_CustomLabels(t *testing.T) {
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "test-ns"},
+	}
+	alloy := &operatorv1alpha1.AlloyConfig{
+		Enabled: true,
+		Config: &operatorv1alpha1.AlloyCollectorConfig{
+			Labels: map[string]string{
+				"cluster": "us-east-1",
+				"team":    "platform",
+			},
+			Exporters: &operatorv1alpha1.AlloyExporters{
+				Loki: &operatorv1alpha1.AlloyLokiExporter{
+					Enabled: true,
+				},
+			},
+		},
+	}
+
+	cfg := BuildAlloyRiverConfig(capsule, alloy)
+
+	if !strings.Contains(cfg, `"cluster" = "us-east-1"`) {
+		t.Error("expected custom label 'cluster' in config")
+	}
+	if !strings.Contains(cfg, `"team" = "platform"`) {
+		t.Error("expected custom label 'team' in config")
+	}
+	// Built-in labels should still be present
+	if !strings.Contains(cfg, `"app"`) {
+		t.Error("expected built-in 'app' label")
+	}
+}
+
+func TestBuildAlloyRiverConfig_CustomScrapeInterval(t *testing.T) {
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "test-ns"},
+	}
+	alloy := &operatorv1alpha1.AlloyConfig{
+		Enabled: true,
+		Config: &operatorv1alpha1.AlloyCollectorConfig{
+			Exporters: &operatorv1alpha1.AlloyExporters{
+				PrometheusRemote: &operatorv1alpha1.AlloyPrometheusRemoteExporter{
+					Enabled:        true,
+					ScrapeInterval: "30s",
+				},
+			},
+		},
+	}
+
+	cfg := BuildAlloyRiverConfig(capsule, alloy)
+
+	if !strings.Contains(cfg, `scrape_interval = "30s"`) {
+		t.Error("expected custom scrape interval '30s'")
+	}
+}
+
+func TestBuildAlloyRiverConfig_DefaultScrapeInterval(t *testing.T) {
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "test-ns"},
+	}
+	alloy := &operatorv1alpha1.AlloyConfig{
+		Enabled: true,
+		Config: &operatorv1alpha1.AlloyCollectorConfig{
+			Exporters: &operatorv1alpha1.AlloyExporters{
+				PrometheusRemote: &operatorv1alpha1.AlloyPrometheusRemoteExporter{
+					Enabled: true,
+				},
+			},
+		},
+	}
+
+	cfg := BuildAlloyRiverConfig(capsule, alloy)
+
+	if !strings.Contains(cfg, `scrape_interval = "15s"`) {
+		t.Error("expected default scrape interval '15s'")
 	}
 }
 
