@@ -177,7 +177,7 @@ func BuildAlloyRiverConfig(capsule *operatorv1alpha1.ConsensusCapsule, alloy *op
 		b.WriteString("loki.write \"default\" {\n")
 		fmt.Fprintf(&b, "  endpoint {\n    url = %q\n", endpoint)
 
-		if cfg.Exporters.Loki.Auth != nil && cfg.Exporters.Loki.Auth.Enabled {
+		if cfg.Exporters.Loki.Auth != nil && cfg.Exporters.Loki.Auth.Enabled && cfg.Exporters.Loki.Auth.Secret != nil {
 			b.WriteString("    basic_auth {\n")
 			b.WriteString("      username = env(\"LOKI_USERNAME\")\n")
 			b.WriteString("      password = env(\"LOKI_PASSWORD\")\n")

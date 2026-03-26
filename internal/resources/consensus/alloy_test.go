@@ -439,6 +439,7 @@ func TestBuildAlloyRiverConfig_LokiWithAuth(t *testing.T) {
 					Enabled: true,
 					Auth: &operatorv1alpha1.AlloyLokiAuth{
 						Enabled: true,
+						Secret:  &corev1.LocalObjectReference{Name: "loki-credentials"},
 					},
 				},
 			},
