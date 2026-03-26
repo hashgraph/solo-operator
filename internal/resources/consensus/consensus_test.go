@@ -245,9 +245,9 @@ func TestServiceSubReconciler(t *testing.T) {
 
 	// Verify ports
 	expectedPorts := map[string]int32{
-		"gossip":     GossipPort,
-		"grpc":       GrpcPort,
-		"grpcs":      GrpcsPort,
+		"gossip":  GossipPort,
+		"grpc":    GrpcPort,
+		"grpcs":   GrpcsPort,
 		"metrics": PrometheusPort,
 	}
 
