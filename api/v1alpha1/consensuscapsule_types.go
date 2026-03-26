@@ -213,7 +213,8 @@ type ConsensusNodeContainer struct {
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 
 	// SoftwareVersion specifies the image via repository, imageName, and imageTag
-	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
+	// +kubebuilder:validation:Required
+	SoftwareVersion *SoftwareVersion `json:"softwareVersion"`
 
 	// Resources specifies resource requirements
 	// +optional

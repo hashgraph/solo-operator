@@ -248,7 +248,7 @@ func TestServiceSubReconciler(t *testing.T) {
 		"gossip":     GossipPort,
 		"grpc":       GrpcPort,
 		"grpcs":      GrpcsPort,
-		"prometheus": PrometheusPort,
+		"metrics": PrometheusPort,
 	}
 
 	for _, port := range svc.Spec.Ports {

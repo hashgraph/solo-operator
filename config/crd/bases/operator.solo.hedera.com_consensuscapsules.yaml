@@ -3938,6 +3938,8 @@ spec:
                             - imageTag
                             - repository
                             type: object
+                        required:
+                        - softwareVersion
                         type: object
                       eventsStreamUploader:
                         description: EventsStreamUploader is deprecated, use EventsUploader
