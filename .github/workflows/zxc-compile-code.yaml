@@ -107,9 +107,10 @@ jobs:
 
       - name: Set up Docker Buildx
         if: ${{ (inputs.enable-docker-build || inputs.enable-unit-tests) && !cancelled() && !failure() }}
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+        uses: step-security/setup-buildx-action@f931205d68723ad9589fd2a7e2ece238bf9de341 # v4.0.0
         with:
-          driver-opts: network=host
+          version: v0.32.1
+          driver-opts: network=host,image=ghcr.io/hashgraph/runner-images/buildkit:buildx-stable-1
 
       - name: Set up Helm
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
