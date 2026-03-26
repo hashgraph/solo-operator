@@ -5,6 +5,7 @@ package consensus
 import (
 	"context"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -23,11 +24,15 @@ func ResolveAlloyConfig(ctx context.Context, c client.Client, capsule *operatorv
 
 	capsuleAlloy := capsule.Spec.PodProperties.Containers.Alloy
 
-	// Fetch orbit defaults
+	// Fetch orbit defaults. Only swallow NotFound (orbit may not exist yet);
+	// propagate transient errors so the reconciler requeues.
 	orbitDefaults, err := fetchOrbitAlloyDefaults(ctx, c, capsule.Spec.Orbit)
 	if err != nil {
-		logger.Error(err, "Failed to fetch Orbit for alloy defaults, falling back to capsule config", "orbit", capsule.Spec.Orbit)
-		return capsuleAlloy, nil
+		if apierrors.IsNotFound(err) {
+			logger.V(1).Info("Orbit not found, using capsule alloy config only", "orbit", capsule.Spec.Orbit)
+			return capsuleAlloy, nil
+		}
+		return nil, err
 	}
 
 	// No orbit defaults — return capsule config as-is

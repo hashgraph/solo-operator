@@ -716,7 +716,8 @@ func (r *DeploymentSubReconciler) buildAlloyContainer(capsule *operatorv1alpha1.
 		containerName = "alloy"
 	}
 
-	image := config.Image
+	// Precedence: SoftwareVersion > Image > AlloyDefaultImage
+	image := common.BuildImageOrDefault(config.SoftwareVersion, config.Image)
 	if image == "" {
 		image = AlloyDefaultImage
 	}
@@ -748,6 +749,35 @@ func (r *DeploymentSubReconciler) buildAlloyContainer(capsule *operatorv1alpha1.
 			MountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/output",
 			ReadOnly:  true,
 		})
+	}
+
+	// Inject Loki auth credentials from secret if configured.
+	// The River config references env("LOKI_USERNAME") and env("LOKI_PASSWORD").
+	lokiAuth := config.Config != nil && config.Config.Exporters != nil &&
+		config.Config.Exporters.Loki != nil && config.Config.Exporters.Loki.Auth != nil &&
+		config.Config.Exporters.Loki.Auth.Enabled && config.Config.Exporters.Loki.Auth.Secret != nil
+	if lokiAuth {
+		secretName := config.Config.Exporters.Loki.Auth.Secret.Name
+		container.Env = append(container.Env,
+			corev1.EnvVar{
+				Name: "LOKI_USERNAME",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+						Key:                  "username",
+					},
+				},
+			},
+			corev1.EnvVar{
+				Name: "LOKI_PASSWORD",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+						Key:                  "password",
+					},
+				},
+			},
+		)
 	}
 
 	if config.ImagePullPolicy != "" {

@@ -2959,8 +2959,9 @@ spec:
                                   These are merged with the built-in labels (app, environment, node).
                                 type: object
                               logLevel:
-                                default: DEBUG
-                                description: LogLevel is the logging level
+                                default: info
+                                description: LogLevel is the logging level (e.g. "debug",
+                                  "info", "warn", "error")
                                 type: string
                               processors:
                                 description: Processors contains processor configuration

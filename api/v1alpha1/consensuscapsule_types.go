@@ -274,8 +274,8 @@ type AlloyCollectorConfig struct {
 	// +optional
 	Environment string `json:"environment,omitempty"`
 
-	// LogLevel is the logging level
-	// +kubebuilder:default="DEBUG"
+	// LogLevel is the logging level (e.g. "debug", "info", "warn", "error")
+	// +kubebuilder:default="info"
 	// +optional
 	LogLevel string `json:"logLevel,omitempty"`
 
