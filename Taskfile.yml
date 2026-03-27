@@ -186,7 +186,7 @@ tasks:
       - task: install
       - task: run
 
-  reset:
+  kind:reset:
     desc: Reset kind cluster with fresh CRDs
     cmds:
       - task: kind:delete

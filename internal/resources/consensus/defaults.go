@@ -2,6 +2,21 @@
 
 package consensus
 
+// Alloy telemetry sidecar defaults.
+const (
+	// AlloyDefaultImage is the fallback Grafana Alloy sidecar container image.
+	AlloyDefaultImage = "grafana/alloy:v1.14.2"
+
+	// AlloyDefaultAppName is the default application name label.
+	AlloyDefaultAppName = "hedera-node"
+
+	// AlloyDefaultEnvironment is the default environment label.
+	AlloyDefaultEnvironment = "integration"
+
+	// AlloyDefaultLogLevel is the default Alloy logging level.
+	AlloyDefaultLogLevel = "info"
+)
+
 // Cheetah uploader defaults — kept in one place so that ConfigMap generation,
 // container building, and tests all share the same values.
 const (

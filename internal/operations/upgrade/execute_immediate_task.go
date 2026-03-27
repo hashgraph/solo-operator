@@ -18,7 +18,7 @@ import (
 // This triggers validation of:
 // 1. Consensus node changeset - image manifest verification
 // 2. Stream uploader changesets - record, sidecar, events, backup uploaders
-// 3. OpenTelemetry collector changeset
+// 3. Alloy changeset
 //
 // The reconciler uses a 1-hour delay after completion since FreezeScheduled may not be triggered
 // for up to 24-48 hours.
@@ -38,7 +38,7 @@ func NewExecuteImmediateTask(c client.Client) *ExecuteImmediateTask {
 			NewVerifyStreamUploaderChangesetStep(c, StreamUploaderTypeSidecarFiles),
 			NewVerifyStreamUploaderChangesetStep(c, StreamUploaderTypeEventStream),
 			NewVerifyStreamUploaderChangesetStep(c, StreamUploaderTypeBackup),
-			NewVerifyOtelCollectorStep(c),
+			NewVerifyAlloyStep(c),
 		},
 		statusGetter: StatusFromNetworkOperation,
 	}
@@ -91,9 +91,9 @@ func (t *ExecuteImmediateTask) IsDone(op *operatorv1alpha1.NetworkOperation, sta
 		}
 	}
 
-	// Check otel collector if it has a changeset
-	if hasOtelChangeset(op) {
-		if !status.HasSuccessfulCondition(StepConditionTypeVerifyChangeset, StepConditionReasonOtelCollector) {
+	// Check Alloy if it has a changeset
+	if hasAlloyChangeset(op) {
+		if !status.HasSuccessfulCondition(StepConditionTypeVerifyChangeset, StepConditionReasonAlloy) {
 			return false
 		}
 	}

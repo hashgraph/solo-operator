@@ -1,12 +1,12 @@
-# Deploy a test network
+# Deploy a 4-node test network
 
 ## Prerequisites
 
 ### Docker Desktop Resources
 
 Increase Docker Desktop memory allocation:
-2. Set Memory to at least 8GB (12GB recommended)
-3. Set CPUs to at least 4
+- Set Memory to at least 8GB (12GB recommended)
+- Set CPUs to at least 4
 
 ### Setup Cluster and Operator
 
@@ -14,7 +14,7 @@ From the project root:
 
 ```shell
 # Reset kind cluster with fresh CRDs
-task reset
+task kind:reset
 
 # Start solo operator (in another terminal - MUST be running)
 task run
@@ -25,29 +25,41 @@ task run
 From the `docs/example` directory:
 
 ```shell
+# Install MinIO (object storage for stream uploaders)
 task setup
 
-# Deploy node1 (runs genesis first, then creates pod)
-task deploy:node1
+# Deploy full 4-node network (orbit + all nodes + genesis)
+task deploy
 
-# Deploy additional nodes (optional)
+# Check status
+task status
+
+# Wait for all pods to be ready
+task wait
+
+# Tail consensus node logs
+task logs
+```
+
+### Deploy individual nodes
+
+```shell
+# Deploy a single node (deploys orbit + common first)
+task deploy:node0
+task deploy:node1
 task deploy:node2
 task deploy:node3
-task deploy:node4
-
-# Or deploy all nodes at once
-task deploy
 ```
 
 ## Cleanup
 
 ```shell
-# Destroy specific node
+# Destroy a specific node
 task destroy:node1
 
-# Or destroy all nodes
+# Destroy all nodes, configs, and orbit
 task destroy
 
-# Cleanup MinIO
+# Uninstall MinIO
 task cleanup
 ```

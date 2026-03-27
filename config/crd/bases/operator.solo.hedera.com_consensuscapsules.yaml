@@ -2810,6 +2810,355 @@ spec:
                   containers:
                     description: Containers contains container specifications
                     properties:
+                      alloy:
+                        description: Alloy is the Grafana Alloy telemetry sidecar
+                        properties:
+                          additionalVolumeMounts:
+                            description: AdditionalVolumeMounts for the container
+                            items:
+                              description: VolumeMount describes a mounting of a Volume
+                                within a container.
+                              properties:
+                                mountPath:
+                                  description: |-
+                                    Path within the container at which the volume should be mounted.  Must
+                                    not contain ':'.
+                                  type: string
+                                mountPropagation:
+                                  description: |-
+                                    mountPropagation determines how mounts are propagated from the host
+                                    to container and the other way around.
+                                    When not set, MountPropagationNone is used.
+                                    This field is beta in 1.10.
+                                    When RecursiveReadOnly is set to IfPossible or to Enabled, MountPropagation must be None or unspecified
+                                    (which defaults to None).
+                                  type: string
+                                name:
+                                  description: This must match the Name of a Volume.
+                                  type: string
+                                readOnly:
+                                  description: |-
+                                    Mounted read-only if true, read-write otherwise (false or unspecified).
+                                    Defaults to false.
+                                  type: boolean
+                                recursiveReadOnly:
+                                  description: |-
+                                    RecursiveReadOnly specifies whether read-only mounts should be handled
+                                    recursively.
+
+                                    If ReadOnly is false, this field has no meaning and must be unspecified.
+
+                                    If ReadOnly is true, and this field is set to Disabled, the mount is not made
+                                    recursively read-only.  If this field is set to IfPossible, the mount is made
+                                    recursively read-only, if it is supported by the container runtime.  If this
+                                    field is set to Enabled, the mount is made recursively read-only if it is
+                                    supported by the container runtime, otherwise the pod will not be started and
+                                    an error will be generated to indicate the reason.
+
+                                    If this field is set to IfPossible or Enabled, MountPropagation must be set to
+                                    None (or be unspecified, which defaults to None).
+
+                                    If this field is not specified, it is treated as an equivalent of Disabled.
+                                  type: string
+                                subPath:
+                                  description: |-
+                                    Path within the volume from which the container's volume should be mounted.
+                                    Defaults to "" (volume's root).
+                                  type: string
+                                subPathExpr:
+                                  description: |-
+                                    Expanded path within the volume from which the container's volume should be mounted.
+                                    Behaves similarly to SubPath but environment variable references $(VAR_NAME) are expanded using the container's environment.
+                                    Defaults to "" (volume's root).
+                                    SubPathExpr and SubPath are mutually exclusive.
+                                  type: string
+                              required:
+                              - mountPath
+                              - name
+                              type: object
+                            type: array
+                          config:
+                            description: Config contains Alloy configuration
+                            properties:
+                              appName:
+                                default: hedera-node
+                                description: AppName is the application name
+                                type: string
+                              environment:
+                                default: integration
+                                description: Environment is the network environment
+                                type: string
+                              exporters:
+                                description: Exporters contains exporter configuration
+                                properties:
+                                  loki:
+                                    description: Loki exporter configuration
+                                    properties:
+                                      auth:
+                                        description: Auth contains authentication
+                                          configuration
+                                        properties:
+                                          enabled:
+                                            default: false
+                                            description: Enabled enables authentication
+                                            type: boolean
+                                          secret:
+                                            description: Secret references the secret
+                                              containing credentials
+                                            properties:
+                                              name:
+                                                default: ""
+                                                description: |-
+                                                  Name of the referent.
+                                                  This field is effectively required, but due to backwards compatibility is
+                                                  allowed to be empty. Instances of this type with an empty value here are
+                                                  almost certainly wrong.
+                                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                                type: string
+                                            type: object
+                                            x-kubernetes-map-type: atomic
+                                        type: object
+                                      enabled:
+                                        default: true
+                                        description: Enabled enables Loki logging
+                                        type: boolean
+                                      endpoint:
+                                        description: Endpoint is the Loki endpoint
+                                          URL
+                                        type: string
+                                    type: object
+                                  prometheusRemote:
+                                    description: |-
+                                      PrometheusRemote configures Prometheus remote-write via Alloy.
+                                      The consensus node always exposes metrics at :9999 for direct scraping —
+                                      this controls whether Alloy also scrapes those metrics and pushes them
+                                      to a remote Prometheus-compatible endpoint.
+                                    properties:
+                                      enabled:
+                                        default: false
+                                        description: |-
+                                          Enabled enables Alloy to scrape consensus node metrics at :9999
+                                          and remote-write them to the configured endpoint.
+                                        type: boolean
+                                      endpoint:
+                                        description: Endpoint is the Prometheus remote-write
+                                          URL (e.g. "http://prometheus.observability:9090/api/v1/write")
+                                        type: string
+                                      scrapeInterval:
+                                        default: 15s
+                                        description: ScrapeInterval is the Prometheus
+                                          scrape interval (e.g. "15s", "30s")
+                                        type: string
+                                    type: object
+                                type: object
+                              labels:
+                                additionalProperties:
+                                  type: string
+                                description: |-
+                                  Labels contains additional static labels to attach to all telemetry data (logs and metrics).
+                                  These are merged with the built-in labels (app, environment, node).
+                                type: object
+                              logLevel:
+                                default: info
+                                description: LogLevel is the logging level (e.g. "debug",
+                                  "info", "warn", "error")
+                                type: string
+                              processors:
+                                description: Processors contains processor configuration
+                                properties:
+                                  memoryLimiter:
+                                    description: MemoryLimiter configuration
+                                    properties:
+                                      limitMib:
+                                        default: "400"
+                                        description: LimitMib is the memory limit
+                                          in MiB
+                                        type: string
+                                      spikeLimitMib:
+                                        default: "80"
+                                        description: SpikeLimitMib is the spike limit
+                                          in MiB (20% of limit)
+                                        type: string
+                                    type: object
+                                type: object
+                              receivers:
+                                description: Receivers contains receiver configuration
+                                properties:
+                                  hashstream:
+                                    description: Hashstream receiver configuration
+                                    properties:
+                                      enabled:
+                                        default: false
+                                        description: Enabled enables the receiver
+                                        type: boolean
+                                    type: object
+                                  swirldsVMap:
+                                    description: SwirldsVMap receiver configuration
+                                    properties:
+                                      enabled:
+                                        default: false
+                                        description: Enabled enables the receiver
+                                        type: boolean
+                                    type: object
+                                type: object
+                            type: object
+                          enabled:
+                            default: false
+                            description: Enabled enables the Alloy sidecar
+                            type: boolean
+                          image:
+                            description: Image is the container image
+                            type: string
+                          imagePullPolicy:
+                            default: IfNotPresent
+                            description: ImagePullPolicy specifies when to pull the
+                              image
+                            type: string
+                          name:
+                            default: alloy
+                            description: Name is the container name
+                            type: string
+                          resources:
+                            description: Resources specifies resource requirements
+                            properties:
+                              claims:
+                                description: |-
+                                  Claims lists the names of resources, defined in spec.resourceClaims,
+                                  that are used by this container.
+
+                                  This field depends on the
+                                  DynamicResourceAllocation feature gate.
+
+                                  This field is immutable. It can only be set for containers.
+                                items:
+                                  description: ResourceClaim references one entry
+                                    in PodSpec.ResourceClaims.
+                                  properties:
+                                    name:
+                                      description: |-
+                                        Name must match the name of one entry in pod.spec.resourceClaims of
+                                        the Pod where this field is used. It makes that resource available
+                                        inside a container.
+                                      type: string
+                                    request:
+                                      description: |-
+                                        Request is the name chosen for a request in the referenced claim.
+                                        If empty, everything from the claim is made available, otherwise
+                                        only the result of this request.
+                                      type: string
+                                  required:
+                                  - name
+                                  type: object
+                                type: array
+                                x-kubernetes-list-map-keys:
+                                - name
+                                x-kubernetes-list-type: map
+                              limits:
+                                additionalProperties:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                description: |-
+                                  Limits describes the maximum amount of compute resources allowed.
+                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                type: object
+                              requests:
+                                additionalProperties:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                description: |-
+                                  Requests describes the minimum amount of compute resources required.
+                                  If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                                  otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                type: object
+                            type: object
+                          softwareVersion:
+                            description: SoftwareVersion specifies the image via repository,
+                              imageName, and imageTag
+                            properties:
+                              imageName:
+                                description: ImageName is the name of the image (e.g.,
+                                  ubuntu)
+                                type: string
+                              imagePullPolicy:
+                                default: IfNotPresent
+                                description: ImagePullPolicy specifies when to pull
+                                  the image
+                                enum:
+                                - Always
+                                - Never
+                                - IfNotPresent
+                                type: string
+                              imagePullSecrets:
+                                description: ImagePullSecrets is a list of references
+                                  to secrets for pulling images
+                                items:
+                                  description: |-
+                                    LocalObjectReference contains enough information to let you locate the
+                                    referenced object inside the same namespace.
+                                  properties:
+                                    name:
+                                      default: ""
+                                      description: |-
+                                        Name of the referent.
+                                        This field is effectively required, but due to backwards compatibility is
+                                        allowed to be empty. Instances of this type with an empty value here are
+                                        almost certainly wrong.
+                                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                      type: string
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                                type: array
+                              imageTag:
+                                description: ImageTag is the tag of the image (e.g.,
+                                  focal)
+                                type: string
+                              imageVerificationSpec:
+                                description: ImageVerificationSpec contains hash verification
+                                  details
+                                properties:
+                                  architecture:
+                                    description: Architecture is the target CPU architecture
+                                    enum:
+                                    - amd64
+                                    - arm64
+                                    type: string
+                                  layerHashes:
+                                    description: LayerHashes are the expected layer
+                                      digest hashes
+                                    items:
+                                      type: string
+                                    type: array
+                                  os:
+                                    description: OS is the target operating system
+                                    enum:
+                                    - darwin
+                                    - linux
+                                    - windows
+                                    type: string
+                                required:
+                                - layerHashes
+                                type: object
+                              manifestHash:
+                                description: ManifestHash is the optional manifest
+                                  hash for verification
+                                type: string
+                              repository:
+                                description: Repository is the container registry
+                                  (e.g., docker.io/library)
+                                type: string
+                            required:
+                            - imageName
+                            - imageTag
+                            - repository
+                            type: object
+                        type: object
                       backupUploader:
                         description: BackupUploader is the backup uploader sidecar
                           (rclone-based)
@@ -3440,9 +3789,6 @@ spec:
                               - name
                               type: object
                             type: array
-                          image:
-                            description: Image is the container image
-                            type: string
                           imagePullPolicy:
                             default: IfNotPresent
                             description: ImagePullPolicy specifies when to pull the
@@ -3513,8 +3859,8 @@ spec:
                                 type: object
                             type: object
                           softwareVersion:
-                            description: SoftwareVersion specifies the image (deprecated,
-                              use Image instead)
+                            description: SoftwareVersion specifies the image via repository,
+                              imageName, and imageTag
                             properties:
                               imageName:
                                 description: ImageName is the name of the image (e.g.,
@@ -3592,6 +3938,8 @@ spec:
                             - imageTag
                             - repository
                             type: object
+                        required:
+                        - softwareVersion
                         type: object
                       eventsStreamUploader:
                         description: EventsStreamUploader is deprecated, use EventsUploader
@@ -4154,326 +4502,6 @@ spec:
                               StopOnError stops the pipeline when an error occurs.
                               If false, the pipeline continues with the expectation that the error resolves on retry.
                             type: boolean
-                        type: object
-                      openTelemetryCollector:
-                        description: OpenTelemetryCollector is the otel collector
-                          sidecar
-                        properties:
-                          additionalVolumeMounts:
-                            description: AdditionalVolumeMounts for the container
-                            items:
-                              description: VolumeMount describes a mounting of a Volume
-                                within a container.
-                              properties:
-                                mountPath:
-                                  description: |-
-                                    Path within the container at which the volume should be mounted.  Must
-                                    not contain ':'.
-                                  type: string
-                                mountPropagation:
-                                  description: |-
-                                    mountPropagation determines how mounts are propagated from the host
-                                    to container and the other way around.
-                                    When not set, MountPropagationNone is used.
-                                    This field is beta in 1.10.
-                                    When RecursiveReadOnly is set to IfPossible or to Enabled, MountPropagation must be None or unspecified
-                                    (which defaults to None).
-                                  type: string
-                                name:
-                                  description: This must match the Name of a Volume.
-                                  type: string
-                                readOnly:
-                                  description: |-
-                                    Mounted read-only if true, read-write otherwise (false or unspecified).
-                                    Defaults to false.
-                                  type: boolean
-                                recursiveReadOnly:
-                                  description: |-
-                                    RecursiveReadOnly specifies whether read-only mounts should be handled
-                                    recursively.
-
-                                    If ReadOnly is false, this field has no meaning and must be unspecified.
-
-                                    If ReadOnly is true, and this field is set to Disabled, the mount is not made
-                                    recursively read-only.  If this field is set to IfPossible, the mount is made
-                                    recursively read-only, if it is supported by the container runtime.  If this
-                                    field is set to Enabled, the mount is made recursively read-only if it is
-                                    supported by the container runtime, otherwise the pod will not be started and
-                                    an error will be generated to indicate the reason.
-
-                                    If this field is set to IfPossible or Enabled, MountPropagation must be set to
-                                    None (or be unspecified, which defaults to None).
-
-                                    If this field is not specified, it is treated as an equivalent of Disabled.
-                                  type: string
-                                subPath:
-                                  description: |-
-                                    Path within the volume from which the container's volume should be mounted.
-                                    Defaults to "" (volume's root).
-                                  type: string
-                                subPathExpr:
-                                  description: |-
-                                    Expanded path within the volume from which the container's volume should be mounted.
-                                    Behaves similarly to SubPath but environment variable references $(VAR_NAME) are expanded using the container's environment.
-                                    Defaults to "" (volume's root).
-                                    SubPathExpr and SubPath are mutually exclusive.
-                                  type: string
-                              required:
-                              - mountPath
-                              - name
-                              type: object
-                            type: array
-                          config:
-                            description: Config contains collector configuration
-                            properties:
-                              appName:
-                                default: hedera-node
-                                description: AppName is the application name
-                                type: string
-                              environment:
-                                default: integration
-                                description: Environment is the network environment
-                                type: string
-                              exporters:
-                                description: Exporters contains exporter configuration
-                                properties:
-                                  loki:
-                                    description: Loki exporter configuration
-                                    properties:
-                                      auth:
-                                        description: Auth contains authentication
-                                          configuration
-                                        properties:
-                                          enabled:
-                                            default: false
-                                            description: Enabled enables authentication
-                                            type: boolean
-                                          secret:
-                                            description: Secret references the secret
-                                              containing credentials
-                                            properties:
-                                              name:
-                                                default: ""
-                                                description: |-
-                                                  Name of the referent.
-                                                  This field is effectively required, but due to backwards compatibility is
-                                                  allowed to be empty. Instances of this type with an empty value here are
-                                                  almost certainly wrong.
-                                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                                                type: string
-                                            type: object
-                                            x-kubernetes-map-type: atomic
-                                        type: object
-                                      enabled:
-                                        default: true
-                                        description: Enabled enables Loki logging
-                                        type: boolean
-                                      endpoint:
-                                        description: Endpoint is the Loki endpoint
-                                          URL
-                                        type: string
-                                    type: object
-                                type: object
-                              logLevel:
-                                default: DEBUG
-                                description: LogLevel is the logging exporter log
-                                  level
-                                type: string
-                              processors:
-                                description: Processors contains processor configuration
-                                properties:
-                                  memoryLimiter:
-                                    description: MemoryLimiter configuration
-                                    properties:
-                                      limitMib:
-                                        default: "400"
-                                        description: LimitMib is the memory limit
-                                          in MiB
-                                        type: string
-                                      spikeLimitMib:
-                                        default: "80"
-                                        description: SpikeLimitMib is the spike limit
-                                          in MiB (20% of limit)
-                                        type: string
-                                    type: object
-                                type: object
-                              receivers:
-                                description: Receivers contains receiver configuration
-                                properties:
-                                  hashstream:
-                                    description: Hashstream receiver configuration
-                                    properties:
-                                      enabled:
-                                        default: false
-                                        description: Enabled enables the receiver
-                                        type: boolean
-                                    type: object
-                                  swirldsVMap:
-                                    description: SwirldsVMap receiver configuration
-                                    properties:
-                                      enabled:
-                                        default: false
-                                        description: Enabled enables the receiver
-                                        type: boolean
-                                    type: object
-                                type: object
-                            type: object
-                          enabled:
-                            default: false
-                            description: Enabled enables the collector
-                            type: boolean
-                          image:
-                            description: Image is the container image
-                            type: string
-                          imagePullPolicy:
-                            default: IfNotPresent
-                            description: ImagePullPolicy specifies when to pull the
-                              image
-                            type: string
-                          name:
-                            default: open-telemetry-collector
-                            description: Name is the container name
-                            type: string
-                          resources:
-                            description: Resources specifies resource requirements
-                            properties:
-                              claims:
-                                description: |-
-                                  Claims lists the names of resources, defined in spec.resourceClaims,
-                                  that are used by this container.
-
-                                  This field depends on the
-                                  DynamicResourceAllocation feature gate.
-
-                                  This field is immutable. It can only be set for containers.
-                                items:
-                                  description: ResourceClaim references one entry
-                                    in PodSpec.ResourceClaims.
-                                  properties:
-                                    name:
-                                      description: |-
-                                        Name must match the name of one entry in pod.spec.resourceClaims of
-                                        the Pod where this field is used. It makes that resource available
-                                        inside a container.
-                                      type: string
-                                    request:
-                                      description: |-
-                                        Request is the name chosen for a request in the referenced claim.
-                                        If empty, everything from the claim is made available, otherwise
-                                        only the result of this request.
-                                      type: string
-                                  required:
-                                  - name
-                                  type: object
-                                type: array
-                                x-kubernetes-list-map-keys:
-                                - name
-                                x-kubernetes-list-type: map
-                              limits:
-                                additionalProperties:
-                                  anyOf:
-                                  - type: integer
-                                  - type: string
-                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                  x-kubernetes-int-or-string: true
-                                description: |-
-                                  Limits describes the maximum amount of compute resources allowed.
-                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-                                type: object
-                              requests:
-                                additionalProperties:
-                                  anyOf:
-                                  - type: integer
-                                  - type: string
-                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                  x-kubernetes-int-or-string: true
-                                description: |-
-                                  Requests describes the minimum amount of compute resources required.
-                                  If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
-                                  otherwise to an implementation-defined value. Requests cannot exceed Limits.
-                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-                                type: object
-                            type: object
-                          softwareVersion:
-                            description: SoftwareVersion specifies the image (deprecated,
-                              use Image instead)
-                            properties:
-                              imageName:
-                                description: ImageName is the name of the image (e.g.,
-                                  ubuntu)
-                                type: string
-                              imagePullPolicy:
-                                default: IfNotPresent
-                                description: ImagePullPolicy specifies when to pull
-                                  the image
-                                enum:
-                                - Always
-                                - Never
-                                - IfNotPresent
-                                type: string
-                              imagePullSecrets:
-                                description: ImagePullSecrets is a list of references
-                                  to secrets for pulling images
-                                items:
-                                  description: |-
-                                    LocalObjectReference contains enough information to let you locate the
-                                    referenced object inside the same namespace.
-                                  properties:
-                                    name:
-                                      default: ""
-                                      description: |-
-                                        Name of the referent.
-                                        This field is effectively required, but due to backwards compatibility is
-                                        allowed to be empty. Instances of this type with an empty value here are
-                                        almost certainly wrong.
-                                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                                      type: string
-                                  type: object
-                                  x-kubernetes-map-type: atomic
-                                type: array
-                              imageTag:
-                                description: ImageTag is the tag of the image (e.g.,
-                                  focal)
-                                type: string
-                              imageVerificationSpec:
-                                description: ImageVerificationSpec contains hash verification
-                                  details
-                                properties:
-                                  architecture:
-                                    description: Architecture is the target CPU architecture
-                                    enum:
-                                    - amd64
-                                    - arm64
-                                    type: string
-                                  layerHashes:
-                                    description: LayerHashes are the expected layer
-                                      digest hashes
-                                    items:
-                                      type: string
-                                    type: array
-                                  os:
-                                    description: OS is the target operating system
-                                    enum:
-                                    - darwin
-                                    - linux
-                                    - windows
-                                    type: string
-                                required:
-                                - layerHashes
-                                type: object
-                              manifestHash:
-                                description: ManifestHash is the optional manifest
-                                  hash for verification
-                                type: string
-                              repository:
-                                description: Repository is the container registry
-                                  (e.g., docker.io/library)
-                                type: string
-                            required:
-                            - imageName
-                            - imageTag
-                            - repository
-                            type: object
                         type: object
                       recordStreamSidecarFilesUploader:
                         description: RecordStreamSidecarFilesUploader is deprecated,

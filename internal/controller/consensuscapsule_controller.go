@@ -47,6 +47,7 @@ func NewConsensusCapsuleReconciler(c client.Client, scheme *runtime.Scheme) *Con
 	}
 }
 
+// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=orbits,verbs=get;list;watch
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=consensuscapsules,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=consensuscapsules/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=consensuscapsules/finalizers,verbs=update

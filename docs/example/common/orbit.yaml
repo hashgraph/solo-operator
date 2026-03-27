@@ -3,6 +3,36 @@ kind: Orbit
 metadata:
   name: solo-orbit
 spec:
+  telemetry:
+    alloy:
+      enabled: true
+      image: "grafana/alloy:v1.14.2"
+      imagePullPolicy: IfNotPresent
+      resources:
+        limits:
+          cpu: 200m
+          memory: 256Mi
+        requests:
+          cpu: 100m
+          memory: 128Mi
+      config:
+        appName: "hedera-node"
+        environment: "integration"
+        logLevel: "INFO"
+        labels:
+          cluster: "local-kind"
+          team: "platform"
+        exporters:
+          loki:
+            enabled: true
+            endpoint: "http://loki.observability:3100/loki/api/v1/push"
+          # Prometheus remote-write is disabled by default.
+          # The consensus node always exposes metrics at :9999 for direct scraping.
+          # Uncomment to have Alloy scrape :9999 and push to a remote endpoint:
+          # prometheusRemote:
+          #   enabled: true
+          #   endpoint: "http://prometheus.observability:9090/api/v1/write"
+          #   scrapeInterval: "15s"
   consensus: # FIXME use valid consensus block
     applicationConfiguration:
       ledger.id: "0x00"
