@@ -2,18 +2,14 @@ version: '3'
 
 tasks:
   setup:
-    desc: Setup MinIO and Loki
+    desc: Install MinIO operator and tenant
     cmds:
       - helm repo add minio-operator https://operator.min.io/
-      # - helm repo add telemetry https://grafana.github.io/helm-charts
       - helm repo update
       - helm upgrade --install --namespace minio-operator --create-namespace minio-operator minio-operator/operator
       - helm upgrade --install --namespace minio-tenant --create-namespace --values setup/minio-values.yaml minio-tenant minio-operator/tenant
-      # - helm upgrade --install loki grafana/loki-stack --namespace telemetry --create-namespace --values setup/loki-stack.yaml
-      # - echo ">> Waiting 180s for Loki to be ready..."
-      # - kubectl wait --for=condition=ready pod -l app=loki -n telemetry --timeout 180s
       - echo ">> Waiting for MinIO to be ready..."
-      - sleep 10
+      - sleep 4
       - kubectl wait --for=condition=ready pod -l v1.min.io/tenant=minio-tenant -n minio-tenant --timeout 300s || true
 
   deploy:orbit:
@@ -33,89 +29,124 @@ tasks:
       - kubectl apply -f common/configs.yaml
       - kubectl apply -f common/secrets.yaml
 
-  deploy:genesis:
-    desc: Deploy network genesis operation (must run before nodes)
+  deploy:nodes:
+    desc: Deploy all node secrets and consensus capsules
     deps: [deploy:common]
     cmds:
       - kubectl apply -f node0/secrets.yaml
       - kubectl apply -f node0/consensus-capsule.yaml
+      - kubectl apply -f node1/secrets.yaml
+      - kubectl apply -f node1/consensus-capsule.yaml
+      - kubectl apply -f node2/secrets.yaml
+      - kubectl apply -f node2/consensus-capsule.yaml
+      - kubectl apply -f node3/secrets.yaml
+      - kubectl apply -f node3/consensus-capsule.yaml
+
+  deploy:genesis:
+    desc: Run network genesis (all nodes must be deployed first)
+    deps: [deploy:nodes]
+    cmds:
       - kubectl apply -f network-operation/network-genesis.yaml
       - echo ">> Waiting for genesis to complete..."
       - kubectl wait --for=jsonpath='{.status.phase}'=Succeeded networkoperation/network-genesis -n solo-orbit --timeout=300s
 
+  deploy:
+    desc: Deploy full 4-node network (orbit + nodes + genesis)
+    cmds:
+      - task: deploy:genesis
+      - echo ">> All 4 nodes deployed and genesis completed"
+
+  status:
+    desc: Show status of all consensus capsules, pods, and services
+    cmds:
+      - echo ">> Consensus Capsules:"
+      - kubectl get consensuscapsules -n solo-orbit -o wide || true
+      - echo ""
+      - echo ">> Pods:"
+      - kubectl get pods -n solo-orbit -o wide || true
+      - echo ""
+      - echo ">> Services:"
+      - kubectl get svc -n solo-orbit || true
+
+  logs:
+    desc: Tail logs from all consensus nodes
+    cmds:
+      - kubectl logs -n solo-orbit -l app.kubernetes.io/component=consensus-node -c consensus-node --tail=50 -f
+
+  wait:
+    desc: Wait for all consensus node pods to be ready
+    cmds:
+      - echo ">> Waiting for all consensus node pods to be ready..."
+      - kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=consensus-node -n solo-orbit --timeout=300s || true
+      - echo ">> Node status:"
+      - kubectl get pods -n solo-orbit -l app.kubernetes.io/component=consensus-node -o wide
+
   deploy:node0:
     desc: Deploy node0
-    deps: [deploy:genesis]
+    deps: [deploy:common]
     cmds:
-      - echo ">> Node0 already deployed by genesis step"
+      - kubectl apply -f node0/secrets.yaml
+      - kubectl apply -f node0/consensus-capsule.yaml
 
   deploy:node1:
     desc: Deploy node1
     deps: [deploy:common]
     cmds:
-      - kubectl apply -f node1/consensus-capsule.yaml
       - kubectl apply -f node1/secrets.yaml
+      - kubectl apply -f node1/consensus-capsule.yaml
 
   deploy:node2:
     desc: Deploy node2
     deps: [deploy:common]
     cmds:
-      - kubectl apply -f node2/consensus-capsule.yaml
       - kubectl apply -f node2/secrets.yaml
+      - kubectl apply -f node2/consensus-capsule.yaml
 
   deploy:node3:
     desc: Deploy node3
     deps: [deploy:common]
     cmds:
-      - kubectl apply -f node3/consensus-capsule.yaml
       - kubectl apply -f node3/secrets.yaml
-
-  deploy:
-    desc: Deploy all nodes
-    cmds:
-      - task: deploy:node0
-      - task: deploy:node1
-      - task: deploy:node2
-      - task: deploy:node3
+      - kubectl apply -f node3/consensus-capsule.yaml
 
   destroy:node3:
     desc: Destroy node3
     cmds:
-      - kubectl delete -f node3/consensus-capsule.yaml
-      - kubectl delete -f node3/secrets.yaml
+      - kubectl delete -f node3/consensus-capsule.yaml || true
+      - kubectl delete -f node3/secrets.yaml || true
 
   destroy:node2:
     desc: Destroy node2
     cmds:
-      - kubectl delete -f node2/consensus-capsule.yaml
-      - kubectl delete -f node2/secrets.yaml
+      - kubectl delete -f node2/consensus-capsule.yaml || true
+      - kubectl delete -f node2/secrets.yaml || true
 
   destroy:node1:
     desc: Destroy node1
     cmds:
-      - kubectl delete -f node1/consensus-capsule.yaml
-      - kubectl delete -f node1/secrets.yaml
+      - kubectl delete -f node1/consensus-capsule.yaml || true
+      - kubectl delete -f node1/secrets.yaml || true
 
   destroy:node0:
     desc: Destroy node0
     cmds:
-      - kubectl delete -f node0/consensus-capsule.yaml
-      - kubectl delete -f node0/secrets.yaml
+      - kubectl delete -f node0/consensus-capsule.yaml || true
+      - kubectl delete -f node0/secrets.yaml || true
 
   destroy:common:
-    desc: Destroy common resources
+    desc: Destroy common configs and secrets
     cmds:
-      - kubectl delete -f common/configs.yaml
-      - kubectl delete -f common/secrets.yaml
+      - kubectl delete -f common/configs.yaml || true
+      - kubectl delete -f common/secrets.yaml || true
 
   destroy:orbit:
-    desc: Destroy Orbit
+    desc: Destroy Orbit and namespace
     cmds:
-      - kubectl delete -f common/orbit.yaml
-      - kubectl delete namespace solo-orbit
+      - kubectl delete -f common/orbit.yaml || true
+      - kubectl delete namespace solo-orbit --ignore-not-found
 
   destroy:
-    desc: Destroy all nodes and resources
+    desc: Destroy all nodes, configs, and orbit
     cmds:
       - task: destroy:node3
       - task: destroy:node2
@@ -125,11 +156,9 @@ tasks:
       - task: destroy:orbit
 
   cleanup:
-    desc: Cleanup MinIO and Loki
+    desc: Uninstall MinIO operator and tenant
     cmds:
-      - helm uninstall minio-operator -n minio-operator
-      - helm uninstall minio-tenant -n minio-tenant
-      # - helm uninstall loki -n telemetry
-      - kubectl delete namespace minio-tenant
-      - kubectl delete namespace minio-operator
-      # - kubectl delete namespace telemetry
+      - helm uninstall minio-operator -n minio-operator || true
+      - helm uninstall minio-tenant -n minio-tenant || true
+      - kubectl delete namespace minio-tenant --ignore-not-found
+      - kubectl delete namespace minio-operator --ignore-not-found

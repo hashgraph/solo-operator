@@ -63,6 +63,7 @@ const (
 	GrpcPort       = 50211
 	GrpcsPort      = 50212
 	PrometheusPort = 9999
+	AlloyHTTPPort  = 12345
 	DebugPort      = 5005
 )
 
@@ -131,6 +132,7 @@ func NewSubReconcilers(c client.Client, scheme *runtime.Scheme) *subreconciler.C
 		NewRoleBindingSubReconciler(c, scheme),
 		NewConfigMapSubReconciler(c, scheme),
 		NewCheetahConfigMapSubReconciler(c, scheme),
+		NewAlloyConfigMapSubReconciler(c, scheme),
 		NewServiceSubReconciler(c, scheme),
 		NewPVCSubReconciler(c, scheme),
 		NewDeploymentSubReconciler(c, scheme),

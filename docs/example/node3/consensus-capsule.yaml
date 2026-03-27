@@ -22,11 +22,11 @@ spec:
           imagePullPolicy: IfNotPresent
         resources:
           limits:
-            cpu: "6"
-            memory: 48Gi
-          requests:
             cpu: "2"
-            memory: 16Gi
+            memory: 4Gi
+          requests:
+            cpu: "500m"
+            memory: 2Gi
       
       # Block streams uploader (cheetah 0.6.0 with blob storage)
       blocksUploader:
@@ -126,19 +126,12 @@ spec:
             enabled: false
           envFromSecret: "backup-uploader-secrets"
       
-      # OpenTelemetry collector
-      openTelemetryCollector:
+      # Grafana Alloy telemetry sidecar — defaults inherited from Orbit spec.telemetry.alloy.
+      alloy:
         enabled: true
-        name: "otel-collector"
-        softwareVersion:
-          repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
-          imageName: "opentelemetry-collector-contrib"
-          imageTag: "0.72.0"
-          imagePullPolicy: IfNotPresent
         config:
-          exporters:
-            loki:
-              enabled: true
+          labels:
+            zone: "us-west-2b"
   
   persistentVolumeClaims:
     logs:
@@ -152,13 +145,13 @@ spec:
         - ReadWriteOnce
       resources:
         requests:
-          storage: 50Gi
+          storage: 5Gi
     states:
       accessModes:
         - ReadWriteOnce
       resources:
         requests:
-          storage: 500Gi
+          storage: 10Gi
     upgrade:
       accessModes:
         - ReadWriteOnce
@@ -171,19 +164,19 @@ spec:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 100Gi
+            storage: 5Gi
       record:
         accessModes:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 100Gi
+            storage: 5Gi
       events:
         accessModes:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 100Gi
+            storage: 5Gi
   
   secrets:
     secretResources:

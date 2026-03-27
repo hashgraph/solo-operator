@@ -132,6 +132,102 @@ spec:
                   changesets:
                     description: Changesets contains the changes to apply
                     properties:
+                      alloy:
+                        description: Alloy changeset
+                        properties:
+                          softwareVersionSource:
+                            description: SoftwareVersionSource specifies the image
+                              source
+                            properties:
+                              imagePullPolicy:
+                                default: IfNotPresent
+                                description: ImagePullPolicy specifies when to pull
+                                  images
+                                enum:
+                                - Always
+                                - Never
+                                - IfNotPresent
+                                type: string
+                              imageRepositories:
+                                description: ImageRepositories is a list of possible
+                                  image repositories
+                                items:
+                                  description: ImageRepository defines a container
+                                    image repository
+                                  properties:
+                                    imageName:
+                                      description: ImageName is the image name
+                                      type: string
+                                    imagePullSecrets:
+                                      description: ImagePullSecrets for accessing
+                                        private registries
+                                      items:
+                                        description: |-
+                                          LocalObjectReference contains enough information to let you locate the
+                                          referenced object inside the same namespace.
+                                        properties:
+                                          name:
+                                            default: ""
+                                            description: |-
+                                              Name of the referent.
+                                              This field is effectively required, but due to backwards compatibility is
+                                              allowed to be empty. Instances of this type with an empty value here are
+                                              almost certainly wrong.
+                                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                            type: string
+                                        type: object
+                                        x-kubernetes-map-type: atomic
+                                      type: array
+                                    imageTag:
+                                      description: ImageTag is the image tag
+                                      type: string
+                                    repository:
+                                      description: Repository is the registry URL
+                                      type: string
+                                  required:
+                                  - imageName
+                                  - imageTag
+                                  - repository
+                                  type: object
+                                type: array
+                              imageVerificationSpec:
+                                description: ImageVerificationSpec contains verification
+                                  specifications
+                                items:
+                                  description: ImageVerificationSpec defines verification
+                                    parameters for container images
+                                  properties:
+                                    architecture:
+                                      description: Architecture is the target CPU
+                                        architecture
+                                      enum:
+                                      - amd64
+                                      - arm64
+                                      type: string
+                                    layerHashes:
+                                      description: LayerHashes are the expected layer
+                                        digest hashes
+                                      items:
+                                        type: string
+                                      type: array
+                                    os:
+                                      description: OS is the target operating system
+                                      enum:
+                                      - darwin
+                                      - linux
+                                      - windows
+                                      type: string
+                                  required:
+                                  - layerHashes
+                                  type: object
+                                type: array
+                            required:
+                            - imageRepositories
+                            - imageVerificationSpec
+                            type: object
+                        required:
+                        - softwareVersionSource
+                        type: object
                       backupUploaderChangeset:
                         description: BackupUploaderChangeset for backup uploader
                         properties:
@@ -798,102 +894,6 @@ spec:
                             - imageRepositories
                             - imageVerificationSpec
                             type: object
-                        type: object
-                      otelCollector:
-                        description: OtelCollector changeset
-                        properties:
-                          softwareVersionSource:
-                            description: SoftwareVersionSource specifies the image
-                              source
-                            properties:
-                              imagePullPolicy:
-                                default: IfNotPresent
-                                description: ImagePullPolicy specifies when to pull
-                                  images
-                                enum:
-                                - Always
-                                - Never
-                                - IfNotPresent
-                                type: string
-                              imageRepositories:
-                                description: ImageRepositories is a list of possible
-                                  image repositories
-                                items:
-                                  description: ImageRepository defines a container
-                                    image repository
-                                  properties:
-                                    imageName:
-                                      description: ImageName is the image name
-                                      type: string
-                                    imagePullSecrets:
-                                      description: ImagePullSecrets for accessing
-                                        private registries
-                                      items:
-                                        description: |-
-                                          LocalObjectReference contains enough information to let you locate the
-                                          referenced object inside the same namespace.
-                                        properties:
-                                          name:
-                                            default: ""
-                                            description: |-
-                                              Name of the referent.
-                                              This field is effectively required, but due to backwards compatibility is
-                                              allowed to be empty. Instances of this type with an empty value here are
-                                              almost certainly wrong.
-                                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                                            type: string
-                                        type: object
-                                        x-kubernetes-map-type: atomic
-                                      type: array
-                                    imageTag:
-                                      description: ImageTag is the image tag
-                                      type: string
-                                    repository:
-                                      description: Repository is the registry URL
-                                      type: string
-                                  required:
-                                  - imageName
-                                  - imageTag
-                                  - repository
-                                  type: object
-                                type: array
-                              imageVerificationSpec:
-                                description: ImageVerificationSpec contains verification
-                                  specifications
-                                items:
-                                  description: ImageVerificationSpec defines verification
-                                    parameters for container images
-                                  properties:
-                                    architecture:
-                                      description: Architecture is the target CPU
-                                        architecture
-                                      enum:
-                                      - amd64
-                                      - arm64
-                                      type: string
-                                    layerHashes:
-                                      description: LayerHashes are the expected layer
-                                        digest hashes
-                                      items:
-                                        type: string
-                                      type: array
-                                    os:
-                                      description: OS is the target operating system
-                                      enum:
-                                      - darwin
-                                      - linux
-                                      - windows
-                                      type: string
-                                  required:
-                                  - layerHashes
-                                  type: object
-                                type: array
-                            required:
-                            - imageRepositories
-                            - imageVerificationSpec
-                            type: object
-                        required:
-                        - softwareVersionSource
                         type: object
                       recordStreamSidecarUploaderChangeset:
                         description: RecordStreamSidecarUploaderChangeset for sidecar
@@ -2126,6 +2126,96 @@ spec:
               softwareSourceStatus:
                 description: SoftwareSourceStatus contains image validation status
                 properties:
+                  alloy:
+                    description: Alloy status
+                    items:
+                      description: ImageRepositoryStatus represents the status of
+                        an image repository
+                      properties:
+                        imageName:
+                          description: ImageName is the image name
+                          type: string
+                        imagePullPolicy:
+                          description: ImagePullPolicy for this image
+                          enum:
+                          - Always
+                          - Never
+                          - IfNotPresent
+                          type: string
+                        imagePullSecrets:
+                          description: ImagePullSecrets for accessing the registry
+                          items:
+                            description: |-
+                              LocalObjectReference contains enough information to let you locate the
+                              referenced object inside the same namespace.
+                            properties:
+                              name:
+                                default: ""
+                                description: |-
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          type: array
+                        imageTag:
+                          description: ImageTag is the image tag
+                          type: string
+                        imageVerificationSpec:
+                          description: ImageVerificationSpec contains the verification
+                            spec used
+                          properties:
+                            architecture:
+                              description: Architecture is the target CPU architecture
+                              enum:
+                              - amd64
+                              - arm64
+                              type: string
+                            layerHashes:
+                              description: LayerHashes are the expected layer digest
+                                hashes
+                              items:
+                                type: string
+                              type: array
+                            os:
+                              description: OS is the target operating system
+                              enum:
+                              - darwin
+                              - linux
+                              - windows
+                              type: string
+                          required:
+                          - layerHashes
+                          type: object
+                        manifestHash:
+                          description: ManifestHash is the resolved manifest hash
+                          type: string
+                        repository:
+                          description: Repository is the registry URL
+                          type: string
+                        selectedForDeployment:
+                          description: SelectedForDeployment indicates if this repository
+                            was selected
+                          type: boolean
+                        validity:
+                          description: Validity indicates the validation status
+                          enum:
+                          - Unknown
+                          - Valid
+                          - Invalid
+                          - NotFound
+                          type: string
+                      required:
+                      - imageName
+                      - imageTag
+                      - repository
+                      - selectedForDeployment
+                      - validity
+                      type: object
+                    type: array
                   backupUploader:
                     description: BackupUploader status
                     items:
@@ -2308,96 +2398,6 @@ spec:
                     type: array
                   eventsStreamUploader:
                     description: EventsStreamUploader status
-                    items:
-                      description: ImageRepositoryStatus represents the status of
-                        an image repository
-                      properties:
-                        imageName:
-                          description: ImageName is the image name
-                          type: string
-                        imagePullPolicy:
-                          description: ImagePullPolicy for this image
-                          enum:
-                          - Always
-                          - Never
-                          - IfNotPresent
-                          type: string
-                        imagePullSecrets:
-                          description: ImagePullSecrets for accessing the registry
-                          items:
-                            description: |-
-                              LocalObjectReference contains enough information to let you locate the
-                              referenced object inside the same namespace.
-                            properties:
-                              name:
-                                default: ""
-                                description: |-
-                                  Name of the referent.
-                                  This field is effectively required, but due to backwards compatibility is
-                                  allowed to be empty. Instances of this type with an empty value here are
-                                  almost certainly wrong.
-                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                                type: string
-                            type: object
-                            x-kubernetes-map-type: atomic
-                          type: array
-                        imageTag:
-                          description: ImageTag is the image tag
-                          type: string
-                        imageVerificationSpec:
-                          description: ImageVerificationSpec contains the verification
-                            spec used
-                          properties:
-                            architecture:
-                              description: Architecture is the target CPU architecture
-                              enum:
-                              - amd64
-                              - arm64
-                              type: string
-                            layerHashes:
-                              description: LayerHashes are the expected layer digest
-                                hashes
-                              items:
-                                type: string
-                              type: array
-                            os:
-                              description: OS is the target operating system
-                              enum:
-                              - darwin
-                              - linux
-                              - windows
-                              type: string
-                          required:
-                          - layerHashes
-                          type: object
-                        manifestHash:
-                          description: ManifestHash is the resolved manifest hash
-                          type: string
-                        repository:
-                          description: Repository is the registry URL
-                          type: string
-                        selectedForDeployment:
-                          description: SelectedForDeployment indicates if this repository
-                            was selected
-                          type: boolean
-                        validity:
-                          description: Validity indicates the validation status
-                          enum:
-                          - Unknown
-                          - Valid
-                          - Invalid
-                          - NotFound
-                          type: string
-                      required:
-                      - imageName
-                      - imageTag
-                      - repository
-                      - selectedForDeployment
-                      - validity
-                      type: object
-                    type: array
-                  otelCollector:
-                    description: OtelCollector status
                     items:
                       description: ImageRepositoryStatus represents the status of
                         an image repository

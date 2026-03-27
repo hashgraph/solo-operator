@@ -35,7 +35,7 @@ func NewFreezeScheduledTask(c client.Client) *FreezeScheduledTask {
 			NewReverifyStreamUploaderChangesetStep(c, StreamUploaderTypeSidecarFiles),
 			NewReverifyStreamUploaderChangesetStep(c, StreamUploaderTypeEventStream),
 			NewReverifyStreamUploaderChangesetStep(c, StreamUploaderTypeBackup),
-			NewReverifyOtelCollectorStep(c),
+			NewReverifyAlloyStep(c),
 		},
 		statusGetter: StatusFromNetworkOperation,
 	}
@@ -168,46 +168,46 @@ func (s *ReverifyStreamUploaderChangesetStep) ShouldSkip(resource *operatorv1alp
 	return !hasStreamUploaderChangeset(resource, s.uploaderType)
 }
 
-// ReverifyOtelCollectorStep re-verifies the otel collector changeset
-type ReverifyOtelCollectorStep struct {
+// ReverifyAlloyStep re-verifies the Alloy changeset
+type ReverifyAlloyStep struct {
 	client client.Client
 }
 
-// NewReverifyOtelCollectorStep creates a new ReverifyOtelCollectorStep
-func NewReverifyOtelCollectorStep(c client.Client) *ReverifyOtelCollectorStep {
-	return &ReverifyOtelCollectorStep{client: c}
+// NewReverifyAlloyStep creates a new ReverifyAlloyStep
+func NewReverifyAlloyStep(c client.Client) *ReverifyAlloyStep {
+	return &ReverifyAlloyStep{client: c}
 }
 
 // Name returns the step name
-func (s *ReverifyOtelCollectorStep) Name() string {
-	return "ReverifyOtelCollectorChangeset"
+func (s *ReverifyAlloyStep) Name() string {
+	return "ReverifyAlloyChangeset"
 }
 
 // Run executes the re-verification
-func (s *ReverifyOtelCollectorStep) Run(ctx context.Context, resource *operatorv1alpha1.NetworkOperation, status *UpgradeStatus) *UpgradeStatus {
-	if !hasOtelChangeset(resource) {
+func (s *ReverifyAlloyStep) Run(ctx context.Context, resource *operatorv1alpha1.NetworkOperation, status *UpgradeStatus) *UpgradeStatus {
+	if !hasAlloyChangeset(resource) {
 		return status
 	}
 
-	if hasSelectedRepository(status, "otelCollector") {
+	if hasSelectedRepository(status, "alloy") {
 		// TODO: Re-verify the image is still accessible
 		return status
 	}
 
 	// Delegate to the original verification step
-	verifyStep := NewVerifyOtelCollectorStep(s.client)
+	verifyStep := NewVerifyAlloyStep(s.client)
 	return verifyStep.Run(ctx, resource, status)
 }
 
 // IsSuccessful checks if this step has completed successfully
-func (s *ReverifyOtelCollectorStep) IsSuccessful(resource *operatorv1alpha1.NetworkOperation, status *UpgradeStatus) bool {
-	return status.HasSuccessfulCondition(StepConditionTypeVerifyChangeset, StepConditionReasonOtelCollector)
+func (s *ReverifyAlloyStep) IsSuccessful(resource *operatorv1alpha1.NetworkOperation, status *UpgradeStatus) bool {
+	return status.HasSuccessfulCondition(StepConditionTypeVerifyChangeset, StepConditionReasonAlloy)
 }
 
 // ShouldSkip determines if this step should be skipped
-func (s *ReverifyOtelCollectorStep) ShouldSkip(resource *operatorv1alpha1.NetworkOperation, status *UpgradeStatus) bool {
+func (s *ReverifyAlloyStep) ShouldSkip(resource *operatorv1alpha1.NetworkOperation, status *UpgradeStatus) bool {
 	if status.Phase == operatorv1alpha1.PhaseFailed {
 		return true
 	}
-	return !hasOtelChangeset(resource)
+	return !hasAlloyChangeset(resource)
 }

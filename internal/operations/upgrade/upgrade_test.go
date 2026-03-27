@@ -152,7 +152,7 @@ func TestHasStreamUploaderChangeset(t *testing.T) {
 	}
 }
 
-func TestHasOtelChangeset(t *testing.T) {
+func TestHasAlloyChangeset(t *testing.T) {
 	tests := []struct {
 		name     string
 		op       *operatorv1alpha1.NetworkOperation
@@ -164,12 +164,12 @@ func TestHasOtelChangeset(t *testing.T) {
 			expected: false,
 		},
 		{
-			name: "has otel changeset",
+			name: "has alloy changeset",
 			op: &operatorv1alpha1.NetworkOperation{
 				Spec: operatorv1alpha1.NetworkOperationSpec{
 					NetworkUpgrade: &operatorv1alpha1.NetworkUpgradeSpec{
 						Changesets: operatorv1alpha1.NetworkUpgradeChangesets{
-							OtelCollector: &operatorv1alpha1.OtelCollectorChangeset{},
+							Alloy: &operatorv1alpha1.AlloyChangeset{},
 						},
 					},
 				},
@@ -177,7 +177,7 @@ func TestHasOtelChangeset(t *testing.T) {
 			expected: true,
 		},
 		{
-			name: "no otel changeset",
+			name: "no alloy changeset",
 			op: &operatorv1alpha1.NetworkOperation{
 				Spec: operatorv1alpha1.NetworkOperationSpec{
 					NetworkUpgrade: &operatorv1alpha1.NetworkUpgradeSpec{
@@ -191,9 +191,9 @@ func TestHasOtelChangeset(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result := hasOtelChangeset(tc.op)
+			result := hasAlloyChangeset(tc.op)
 			if result != tc.expected {
-				t.Errorf("hasOtelChangeset() = %v, expected %v", result, tc.expected)
+				t.Errorf("hasAlloyChangeset() = %v, expected %v", result, tc.expected)
 			}
 		})
 	}
@@ -263,7 +263,7 @@ func TestNewExecuteImmediateTask(t *testing.T) {
 		"VerifyStreamUploaderChangeset-recordStreamSidecarFilesUploader",
 		"VerifyStreamUploaderChangeset-eventsStreamUploader",
 		"VerifyStreamUploaderChangeset-backupUploader",
-		"VerifyOtelCollectorChangeset",
+		"VerifyAlloyChangeset",
 	}
 
 	for i, step := range task.steps {

@@ -60,13 +60,16 @@ var _ = Describe("E2E Tests", func() {
 					},
 					Spec: operatorv1alpha1.OrbitSpec{
 						Telemetry: &operatorv1alpha1.OrbitTelemetry{
-							Metrics: &operatorv1alpha1.OrbitMetrics{
-								Enabled:  true,
-								Interval: "10s",
-								Port:     9998,
-							},
-							Logging: &operatorv1alpha1.OrbitLogging{
+							Alloy: &operatorv1alpha1.OrbitAlloyDefaults{
 								Enabled: true,
+								Config: &operatorv1alpha1.AlloyCollectorConfig{
+									Exporters: &operatorv1alpha1.AlloyExporters{
+										Loki: &operatorv1alpha1.AlloyLokiExporter{
+											Enabled:  true,
+											Endpoint: "http://loki:3100/loki/api/v1/push",
+										},
+									},
+								},
 							},
 						},
 						Consensus: operatorv1alpha1.OrbitConsensus{
@@ -85,7 +88,7 @@ var _ = Describe("E2E Tests", func() {
 				err = k8sClient.Get(ctx, client.ObjectKey{Name: "e2e-orbit-telemetry"}, created)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(created.Spec.Telemetry).NotTo(BeNil())
-				Expect(created.Spec.Telemetry.Metrics.Enabled).To(BeTrue())
+				Expect(created.Spec.Telemetry.Alloy.Enabled).To(BeTrue())
 
 				// Cleanup
 				Expect(k8sClient.Delete(ctx, orbit)).To(Succeed())

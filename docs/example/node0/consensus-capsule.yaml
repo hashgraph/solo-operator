@@ -126,19 +126,13 @@ spec:
             enabled: false
           envFromSecret: "backup-uploader-secrets"
       
-      # OpenTelemetry collector
-      openTelemetryCollector:
+      # Grafana Alloy telemetry sidecar — defaults inherited from Orbit spec.telemetry.alloy.
+      # Only per-node labels here; merged with orbit labels (cluster, team).
+      alloy:
         enabled: true
-        name: "otel-collector"
-        softwareVersion:
-          repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
-          imageName: "opentelemetry-collector-contrib"
-          imageTag: "0.72.0"
-          imagePullPolicy: IfNotPresent
         config:
-          exporters:
-            loki:
-              enabled: false
+          labels:
+            zone: "us-east-1a"
   
   persistentVolumeClaims:
     logs:

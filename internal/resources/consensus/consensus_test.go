@@ -133,8 +133,12 @@ func newTestCapsule() *operatorv1alpha1.ConsensusCapsule {
 			PodProperties: operatorv1alpha1.ConsensusPodProperties{
 				Containers: operatorv1alpha1.ConsensusContainers{
 					ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
-						Name:  "consensus-node",
-						Image: "hashgraph/hedera-node:v0.50.0",
+						Name: "consensus-node",
+						SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+							Repository: "hashgraph",
+							ImageName:  "hedera-node",
+							ImageTag:   "v0.50.0",
+						},
 					},
 				},
 			},
@@ -241,10 +245,10 @@ func TestServiceSubReconciler(t *testing.T) {
 
 	// Verify ports
 	expectedPorts := map[string]int32{
-		"gossip":     GossipPort,
-		"grpc":       GrpcPort,
-		"grpcs":      GrpcsPort,
-		"prometheus": PrometheusPort,
+		"gossip":  GossipPort,
+		"grpc":    GrpcPort,
+		"grpcs":   GrpcsPort,
+		"metrics": PrometheusPort,
 	}
 
 	for _, port := range svc.Spec.Ports {
