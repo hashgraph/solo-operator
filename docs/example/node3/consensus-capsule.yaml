@@ -28,14 +28,14 @@ spec:
             cpu: "2"
             memory: 16Gi
       
-      # Block streams uploader (cheetah 0.5.1 with blob storage)
+      # Block streams uploader (cheetah 0.6.0 with blob storage)
       blocksUploader:
         enabled: true
         name: "blockstream-uploader"
         softwareVersion:
           repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
           imageName: "cheetah"
-          imageTag: "0.5.1"
+          imageTag: "0.6.0"
           imagePullPolicy: IfNotPresent
         logLevel: Debug
         maxProcessors: 10
@@ -60,7 +60,7 @@ spec:
         softwareVersion:
           repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
           imageName: "cheetah"
-          imageTag: "0.5.1"
+          imageTag: "0.6.0"
           imagePullPolicy: IfNotPresent
         logLevel: Debug
         maxProcessors: 10
@@ -84,7 +84,7 @@ spec:
         softwareVersion:
           repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
           imageName: "cheetah"
-          imageTag: "0.5.1"
+          imageTag: "0.6.0"
           imagePullPolicy: IfNotPresent
         logLevel: Debug
         maxProcessors: 10

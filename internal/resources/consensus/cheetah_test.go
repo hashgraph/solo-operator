@@ -356,7 +356,7 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 				SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
 					Repository: "ghcr.io/hashgraph/solo-cheetah",
 					ImageName:  "cheetah",
-					ImageTag:   "0.5.1",
+					ImageTag:   "0.6.0",
 				},
 				Blob: &operatorv1alpha1.CheetahBlobConfig{
 					Enabled: true,
@@ -378,7 +378,7 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 				SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
 					Repository: "ghcr.io/hashgraph/solo-cheetah",
 					ImageName:  "cheetah",
-					ImageTag:   "0.5.1",
+					ImageTag:   "0.6.0",
 				},
 				BucketPrefix: "mynetwork/testnet",
 				Blob: &operatorv1alpha1.CheetahBlobConfig{
@@ -401,7 +401,7 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 				SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
 					Repository: "ghcr.io/hashgraph/solo-cheetah",
 					ImageName:  "cheetah",
-					ImageTag:   "0.5.1",
+					ImageTag:   "0.6.0",
 				},
 				Blob: &operatorv1alpha1.CheetahBlobConfig{
 					Enabled: true,
