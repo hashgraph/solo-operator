@@ -79,9 +79,9 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
 								Name: "consensus-node",
 								SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
-									Repository: "hashgraph",
-									ImageName:  "hedera-node",
-									ImageTag:   "v0.50.0",
+									Repository: "gcr.io/hedera-registry",
+									ImageName:  "consensus-node",
+									ImageTag:   "0.65.1",
 								},
 							},
 						},
@@ -138,7 +138,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 				err := k8sClient.Get(ctx, deployLookupKey, createdDeploy)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
-			Expect(createdDeploy.Spec.Template.Spec.Containers[0].Image).To(Equal("hashgraph/hedera-node:v0.50.0"))
+			Expect(createdDeploy.Spec.Template.Spec.Containers[0].Image).To(Equal("gcr.io/hedera-registry/consensus-node:0.65.1"))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, capsule)).Should(Succeed())
@@ -204,9 +204,9 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
 								Name: "consensus-node",
 								SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
-									Repository: "hashgraph",
-									ImageName:  "hedera-node",
-									ImageTag:   "v0.50.0",
+									Repository: "gcr.io/hedera-registry",
+									ImageName:  "consensus-node",
+									ImageTag:   "0.65.1",
 								},
 							},
 						},

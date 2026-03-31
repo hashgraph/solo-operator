@@ -364,11 +364,81 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 			expectEnvVars:    []string{"S3_ENABLED", "S3_BLOCK_STREAMS_BUCKET_PREFIX"},
 			expectPrefixVal:  "blockStreams/block-0.0.3",
 		},
+		{
+			name: "blocks uploader with blob storage (S3 via go-cloud)",
+			uploader: &operatorv1alpha1.CheetahUploader{
+				Enabled: true,
+				SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+					Repository: "ghcr.io/hashgraph/solo-cheetah",
+					ImageName:  "cheetah",
+					ImageTag:   "0.6.0",
+				},
+				Blob: &operatorv1alpha1.CheetahBlobConfig{
+					Enabled: true,
+					URL:     "s3://hedera-streams?region=us-east-1",
+				},
+			},
+			containerName:    "blockstream-uploader",
+			configFile:       "cheetah-block-streams.yaml",
+			mountPath:        "/opt/hgcapp/blockStreams",
+			envPrefix:        "BLOCK_STREAMS",
+			streamBucketPath: "blockStreams/block-0.0.3",
+			expectEnvVars:    []string{"BLOB_ENABLED", "BLOB_URL", "BLOB_BLOCK_STREAMS_PREFIX"},
+			expectPrefixVal:  "blockStreams/block-0.0.3",
+		},
+		{
+			name: "records uploader with blob storage (GCS via go-cloud) and BucketPrefix",
+			uploader: &operatorv1alpha1.CheetahUploader{
+				Enabled: true,
+				SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+					Repository: "ghcr.io/hashgraph/solo-cheetah",
+					ImageName:  "cheetah",
+					ImageTag:   "0.6.0",
+				},
+				BucketPrefix: "mynetwork/testnet",
+				Blob: &operatorv1alpha1.CheetahBlobConfig{
+					Enabled: true,
+					URL:     "gs://hedera-streams",
+				},
+			},
+			containerName:    "record-stream-uploader",
+			configFile:       "cheetah-record-streams.yaml",
+			mountPath:        "/opt/hgcapp/recordStreams",
+			envPrefix:        "RECORD_STREAMS",
+			streamBucketPath: "recordstreams/record0.0.3",
+			expectEnvVars:    []string{"BLOB_ENABLED", "BLOB_URL", "BLOB_RECORD_STREAMS_PREFIX"},
+			expectPrefixVal:  "mynetwork/testnet/recordstreams/record0.0.3",
+		},
+		{
+			name: "events uploader with blob storage (Azure via go-cloud)",
+			uploader: &operatorv1alpha1.CheetahUploader{
+				Enabled: true,
+				SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+					Repository: "ghcr.io/hashgraph/solo-cheetah",
+					ImageName:  "cheetah",
+					ImageTag:   "0.6.0",
+				},
+				Blob: &operatorv1alpha1.CheetahBlobConfig{
+					Enabled: true,
+					URL:     "azblob://hedera-streams",
+				},
+			},
+			containerName:    "event-stream-uploader",
+			configFile:       "cheetah-events-streams.yaml",
+			mountPath:        "/opt/hgcapp/eventsStreams",
+			envPrefix:        "EVENTS_STREAMS",
+			streamBucketPath: "eventsStreams/events_0.0.3",
+			expectEnvVars:    []string{"BLOB_ENABLED", "BLOB_URL", "BLOB_EVENTS_STREAMS_PREFIX"},
+			expectPrefixVal:  "eventsStreams/events_0.0.3",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			container := reconciler.buildCheetahUploaderContainer(capsule, tt.uploader, tt.containerName, tt.configFile, tt.mountPath, tt.envPrefix, tt.streamBucketPath)
+			container, err := reconciler.buildCheetahUploaderContainer(capsule, tt.uploader, tt.containerName, tt.configFile, tt.mountPath, tt.envPrefix, tt.streamBucketPath)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
 			// Check container name
 			if container.Name != tt.containerName {
@@ -424,7 +494,9 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 			}
 			// Verify bucket prefix value for whichever storage backend is configured
 			prefixKey := fmt.Sprintf("S3_%s_BUCKET_PREFIX", tt.envPrefix)
-			if tt.uploader.GCS != nil {
+			if tt.uploader.Blob != nil {
+				prefixKey = fmt.Sprintf("BLOB_%s_PREFIX", tt.envPrefix)
+			} else if tt.uploader.GCS != nil {
 				prefixKey = fmt.Sprintf("GCS_%s_BUCKET_PREFIX", tt.envPrefix)
 			}
 			if got, ok := envMap[prefixKey]; ok {
@@ -472,6 +544,28 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestBuildCheetahUploaderContainer_BlobEnabledWithoutURL(t *testing.T) {
+	reconciler := &DeploymentSubReconciler{}
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			AccountId: "0.0.3",
+		},
+	}
+
+	uploader := &operatorv1alpha1.CheetahUploader{
+		Enabled: true,
+		Blob: &operatorv1alpha1.CheetahBlobConfig{
+			Enabled: true,
+			URL:     "",
+		},
+	}
+
+	_, err := reconciler.buildCheetahUploaderContainer(capsule, uploader, "blockstream-uploader", "cheetah-block-streams.yaml", "/opt/hgcapp/blockStreams", "BLOCK_STREAMS", "blockStreams/block-0.0.3")
+	if err == nil {
+		t.Fatal("expected error when blob is enabled without URL, got nil")
 	}
 }
 
@@ -555,7 +649,9 @@ func TestAddSidecarContainers_Cheetah(t *testing.T) {
 		},
 	}
 
-	reconciler.addSidecarContainers(deploy, capsule, nil)
+	if err := reconciler.addSidecarContainers(deploy, capsule, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	// Should have 4 containers: consensus-node + 3 cheetah uploaders
 	if len(deploy.Spec.Template.Spec.Containers) != 4 {

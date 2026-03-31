@@ -125,7 +125,9 @@ func (r *DeploymentSubReconciler) buildDeployment(ctx context.Context, capsule *
 	}
 
 	// Add sidecar containers
-	r.addSidecarContainers(deploy, capsule, resolvedAlloy)
+	if err := r.addSidecarContainers(deploy, capsule, resolvedAlloy); err != nil {
+		return nil, err
+	}
 
 	// Apply pod properties
 	r.applyPodProperties(deploy, capsule)
@@ -451,7 +453,7 @@ func (r *DeploymentSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consens
 
 // addSidecarContainers adds sidecar containers to the deployment.
 // resolvedAlloy is the effective AlloyConfig after merging orbit defaults with capsule overrides.
-func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment, capsule *operatorv1alpha1.ConsensusCapsule, resolvedAlloy *operatorv1alpha1.AlloyConfig) {
+func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment, capsule *operatorv1alpha1.ConsensusCapsule, resolvedAlloy *operatorv1alpha1.AlloyConfig) error {
 	containers := capsule.Spec.PodProperties.Containers
 
 	accountId := capsule.Spec.AccountId
@@ -473,23 +475,32 @@ func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment
 
 	// Block streams uploader
 	if containers.BlocksUploader != nil && containers.BlocksUploader.Enabled {
-		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers,
-			r.buildCheetahUploaderContainer(capsule, containers.BlocksUploader, "blockstream-uploader", "cheetah-block-streams.yaml", "/opt/hgcapp/blockStreams", "BLOCK_STREAMS",
-				fmt.Sprintf("blockStreams/block-%s", accountId)))
+		c, err := r.buildCheetahUploaderContainer(capsule, containers.BlocksUploader, "blockstream-uploader", "cheetah-block-streams.yaml", "/opt/hgcapp/blockStreams", "BLOCK_STREAMS",
+			fmt.Sprintf("blockStreams/block-%s", accountId))
+		if err != nil {
+			return fmt.Errorf("blockstream-uploader: %w", err)
+		}
+		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers, c)
 	}
 
 	// Record streams uploader
 	if containers.RecordsUploader != nil && containers.RecordsUploader.Enabled {
-		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers,
-			r.buildCheetahUploaderContainer(capsule, containers.RecordsUploader, "record-stream-uploader", "cheetah-record-streams.yaml", "/opt/hgcapp/recordStreams", "RECORD_STREAMS",
-				fmt.Sprintf("recordstreams/record%s", accountId)))
+		c, err := r.buildCheetahUploaderContainer(capsule, containers.RecordsUploader, "record-stream-uploader", "cheetah-record-streams.yaml", "/opt/hgcapp/recordStreams", "RECORD_STREAMS",
+			fmt.Sprintf("recordstreams/record%s", accountId))
+		if err != nil {
+			return fmt.Errorf("record-stream-uploader: %w", err)
+		}
+		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers, c)
 	}
 
 	// Events streams uploader
 	if containers.EventsUploader != nil && containers.EventsUploader.Enabled {
-		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers,
-			r.buildCheetahUploaderContainer(capsule, containers.EventsUploader, "event-stream-uploader", "cheetah-events-streams.yaml", "/opt/hgcapp/eventsStreams", "EVENTS_STREAMS",
-				fmt.Sprintf("eventsStreams/events_%s", accountId)))
+		c, err := r.buildCheetahUploaderContainer(capsule, containers.EventsUploader, "event-stream-uploader", "cheetah-events-streams.yaml", "/opt/hgcapp/eventsStreams", "EVENTS_STREAMS",
+			fmt.Sprintf("eventsStreams/events_%s", accountId))
+		if err != nil {
+			return fmt.Errorf("event-stream-uploader: %w", err)
+		}
+		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers, c)
 	}
 
 	// Legacy backup uploader (rclone-based)
@@ -513,11 +524,18 @@ func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment
 		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers,
 			r.buildAlloyContainer(capsule, resolvedAlloy))
 	}
+
+	return nil
 }
 
 // buildCheetahUploaderContainer builds a cheetah uploader sidecar container.
 // streamBucketPath is the stream-specific path component (e.g. "blockStreams/block-0.0.3").
-func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(capsule *operatorv1alpha1.ConsensusCapsule, uploader *operatorv1alpha1.CheetahUploader, containerName, configFile, mountPath, envPrefix, streamBucketPath string) corev1.Container {
+func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(capsule *operatorv1alpha1.ConsensusCapsule, uploader *operatorv1alpha1.CheetahUploader, containerName, configFile, mountPath, envPrefix, streamBucketPath string) (corev1.Container, error) {
+	// Validate blob config: URL is required when blob is enabled
+	if uploader.Blob != nil && uploader.Blob.Enabled && uploader.Blob.URL == "" {
+		return corev1.Container{}, fmt.Errorf("blob storage is enabled (blob.enabled=true) but blob.url is not set")
+	}
+
 	image := common.BuildImageOrDefault(uploader.SoftwareVersion, CheetahDefaultImage)
 
 	name := uploader.Name
@@ -592,6 +610,19 @@ func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(capsule *operato
 		env = append(env, corev1.EnvVar{Name: fmt.Sprintf("S3_%s_BUCKET_PREFIX", envPrefix), Value: bucketPath})
 	}
 
+	// Blob configuration (multicloud via go-cloud)
+	if uploader.Blob != nil {
+		if uploader.Blob.Enabled {
+			env = append(env, corev1.EnvVar{Name: "BLOB_ENABLED", Value: "true"})
+		} else {
+			env = append(env, corev1.EnvVar{Name: "BLOB_ENABLED", Value: "false"})
+		}
+		if uploader.Blob.URL != "" {
+			env = append(env, corev1.EnvVar{Name: "BLOB_URL", Value: uploader.Blob.URL})
+		}
+		env = append(env, corev1.EnvVar{Name: fmt.Sprintf("BLOB_%s_PREFIX", envPrefix), Value: bucketPath})
+	}
+
 	configCheckInterval := CheetahDefaultConfigCheckInterval
 	if uploader.ConfigCheckInterval != "" {
 		configCheckInterval = uploader.ConfigCheckInterval
@@ -631,7 +662,7 @@ func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(capsule *operato
 		}
 	}
 
-	return container
+	return container, nil
 }
 
 // applyCheetahFSGroup sets fsGroup on the pod security context when any cheetah uploader

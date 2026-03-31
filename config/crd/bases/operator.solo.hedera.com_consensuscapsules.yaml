@@ -3410,8 +3410,8 @@ spec:
                                 type: object
                             type: object
                           softwareVersion:
-                            description: SoftwareVersion specifies the image (deprecated,
-                              use Image instead)
+                            description: SoftwareVersion specifies the container image
+                              repository and tag
                             properties:
                               imageName:
                                 description: ImageName is the name of the image (e.g.,
@@ -3494,6 +3494,32 @@ spec:
                         description: BlocksUploader is the Cheetah blocks uploader
                           sidecar
                         properties:
+                          blob:
+                            description: |-
+                              Blob configuration for multicloud storage via go-cloud (S3, GCS, Azure).
+                              The URL scheme determines the cloud provider:
+                                - "s3://bucket?region=us-east-1" for AWS S3
+                                - "gs://bucket" for Google Cloud Storage
+                                - "azblob://container" for Azure Blob Storage
+                              Credentials are resolved automatically via each provider's default chain,
+                              including workload identity (EKS IRSA, GKE Workload Identity, Azure Managed Identity).
+                            properties:
+                              enabled:
+                                default: false
+                                description: Enabled enables blob storage
+                                type: boolean
+                              url:
+                                description: |-
+                                  URL is the gocloud.dev bucket URL.
+                                  The scheme determines the cloud provider:
+                                    - "s3://bucket?region=us-east-1" for AWS S3
+                                    - "gs://bucket" for Google Cloud Storage
+                                    - "azblob://container" for Azure Blob Storage
+                                type: string
+                            type: object
+                            x-kubernetes-validations:
+                            - message: url is required when blob storage is enabled
+                              rule: '!self.enabled || size(self.url) > 0'
                           bucketPrefix:
                             description: BucketPrefix is prepended to all stream bucket
                               object paths (e.g. "mynetwork/testnet")
@@ -3511,7 +3537,8 @@ spec:
                             description: EnvFromSecret is the secret name for credentials
                             type: string
                           gcs:
-                            description: GCS configuration
+                            description: 'GCS configuration (deprecated: use Blob
+                              instead)'
                             properties:
                               bucket:
                                 description: Bucket is the GCS bucket name
@@ -3614,7 +3641,7 @@ spec:
                                 type: object
                             type: object
                           s3:
-                            description: S3 configuration
+                            description: 'S3 configuration (deprecated: use Blob instead)'
                             properties:
                               bucket:
                                 description: Bucket is the S3 bucket name
@@ -3636,8 +3663,8 @@ spec:
                                 type: boolean
                             type: object
                           softwareVersion:
-                            description: SoftwareVersion specifies the image (deprecated,
-                              use Image instead)
+                            description: SoftwareVersion specifies the container image
+                              repository and tag
                             properties:
                               imageName:
                                 description: ImageName is the name of the image (e.g.,
@@ -4191,8 +4218,8 @@ spec:
                                 type: object
                             type: object
                           softwareVersion:
-                            description: SoftwareVersion specifies the image (deprecated,
-                              use Image instead)
+                            description: SoftwareVersion specifies the container image
+                              repository and tag
                             properties:
                               imageName:
                                 description: ImageName is the name of the image (e.g.,
@@ -4275,6 +4302,32 @@ spec:
                         description: EventsUploader is the Cheetah events uploader
                           sidecar
                         properties:
+                          blob:
+                            description: |-
+                              Blob configuration for multicloud storage via go-cloud (S3, GCS, Azure).
+                              The URL scheme determines the cloud provider:
+                                - "s3://bucket?region=us-east-1" for AWS S3
+                                - "gs://bucket" for Google Cloud Storage
+                                - "azblob://container" for Azure Blob Storage
+                              Credentials are resolved automatically via each provider's default chain,
+                              including workload identity (EKS IRSA, GKE Workload Identity, Azure Managed Identity).
+                            properties:
+                              enabled:
+                                default: false
+                                description: Enabled enables blob storage
+                                type: boolean
+                              url:
+                                description: |-
+                                  URL is the gocloud.dev bucket URL.
+                                  The scheme determines the cloud provider:
+                                    - "s3://bucket?region=us-east-1" for AWS S3
+                                    - "gs://bucket" for Google Cloud Storage
+                                    - "azblob://container" for Azure Blob Storage
+                                type: string
+                            type: object
+                            x-kubernetes-validations:
+                            - message: url is required when blob storage is enabled
+                              rule: '!self.enabled || size(self.url) > 0'
                           bucketPrefix:
                             description: BucketPrefix is prepended to all stream bucket
                               object paths (e.g. "mynetwork/testnet")
@@ -4292,7 +4345,8 @@ spec:
                             description: EnvFromSecret is the secret name for credentials
                             type: string
                           gcs:
-                            description: GCS configuration
+                            description: 'GCS configuration (deprecated: use Blob
+                              instead)'
                             properties:
                               bucket:
                                 description: Bucket is the GCS bucket name
@@ -4395,7 +4449,7 @@ spec:
                                 type: object
                             type: object
                           s3:
-                            description: S3 configuration
+                            description: 'S3 configuration (deprecated: use Blob instead)'
                             properties:
                               bucket:
                                 description: Bucket is the S3 bucket name
@@ -4417,8 +4471,8 @@ spec:
                                 type: boolean
                             type: object
                           softwareVersion:
-                            description: SoftwareVersion specifies the image (deprecated,
-                              use Image instead)
+                            description: SoftwareVersion specifies the container image
+                              repository and tag
                             properties:
                               imageName:
                                 description: ImageName is the name of the image (e.g.,
@@ -4754,8 +4808,8 @@ spec:
                                 type: object
                             type: object
                           softwareVersion:
-                            description: SoftwareVersion specifies the image (deprecated,
-                              use Image instead)
+                            description: SoftwareVersion specifies the container image
+                              repository and tag
                             properties:
                               imageName:
                                 description: ImageName is the name of the image (e.g.,
@@ -5084,8 +5138,8 @@ spec:
                                 type: object
                             type: object
                           softwareVersion:
-                            description: SoftwareVersion specifies the image (deprecated,
-                              use Image instead)
+                            description: SoftwareVersion specifies the container image
+                              repository and tag
                             properties:
                               imageName:
                                 description: ImageName is the name of the image (e.g.,
@@ -5168,6 +5222,32 @@ spec:
                         description: RecordsUploader is the Cheetah records uploader
                           sidecar (record streams + sidecar files)
                         properties:
+                          blob:
+                            description: |-
+                              Blob configuration for multicloud storage via go-cloud (S3, GCS, Azure).
+                              The URL scheme determines the cloud provider:
+                                - "s3://bucket?region=us-east-1" for AWS S3
+                                - "gs://bucket" for Google Cloud Storage
+                                - "azblob://container" for Azure Blob Storage
+                              Credentials are resolved automatically via each provider's default chain,
+                              including workload identity (EKS IRSA, GKE Workload Identity, Azure Managed Identity).
+                            properties:
+                              enabled:
+                                default: false
+                                description: Enabled enables blob storage
+                                type: boolean
+                              url:
+                                description: |-
+                                  URL is the gocloud.dev bucket URL.
+                                  The scheme determines the cloud provider:
+                                    - "s3://bucket?region=us-east-1" for AWS S3
+                                    - "gs://bucket" for Google Cloud Storage
+                                    - "azblob://container" for Azure Blob Storage
+                                type: string
+                            type: object
+                            x-kubernetes-validations:
+                            - message: url is required when blob storage is enabled
+                              rule: '!self.enabled || size(self.url) > 0'
                           bucketPrefix:
                             description: BucketPrefix is prepended to all stream bucket
                               object paths (e.g. "mynetwork/testnet")
@@ -5185,7 +5265,8 @@ spec:
                             description: EnvFromSecret is the secret name for credentials
                             type: string
                           gcs:
-                            description: GCS configuration
+                            description: 'GCS configuration (deprecated: use Blob
+                              instead)'
                             properties:
                               bucket:
                                 description: Bucket is the GCS bucket name
@@ -5288,7 +5369,7 @@ spec:
                                 type: object
                             type: object
                           s3:
-                            description: S3 configuration
+                            description: 'S3 configuration (deprecated: use Blob instead)'
                             properties:
                               bucket:
                                 description: Bucket is the S3 bucket name
@@ -5310,8 +5391,8 @@ spec:
                                 type: boolean
                             type: object
                           softwareVersion:
-                            description: SoftwareVersion specifies the image (deprecated,
-                              use Image instead)
+                            description: SoftwareVersion specifies the container image
+                              repository and tag
                             properties:
                               imageName:
                                 description: ImageName is the name of the image (e.g.,
