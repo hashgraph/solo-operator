@@ -99,24 +99,34 @@ func (r *ServiceSubReconciler) Reconcile(ctx context.Context, haproxy *operatorv
 	// Update spec if needed
 	if r.needsUpdate(existing, desired) {
 		logger.V(1).Info("Updating HAProxy service", "name", desired.Name, "namespace", desired.Namespace)
-		existing.Spec.Selector = desired.Spec.Selector
-		existing.Spec.Type = desired.Spec.Type
-		existing.Spec.ExternalTrafficPolicy = desired.Spec.ExternalTrafficPolicy
 		existing.Labels = desired.Labels
 		setManagedAnnotations(existing, haproxy.Spec.ServiceAnnotations)
 
-		// Preserve NodePorts when updating ports
-		for i, port := range desired.Spec.Ports {
-			if i < len(existing.Spec.Ports) {
-				port.NodePort = existing.Spec.Ports[i].NodePort
-				existing.Spec.Ports[i] = port
-			} else {
-				existing.Spec.Ports = append(existing.Spec.Ports, port)
+		if haproxy.Spec.ServiceSpec != nil {
+			// Apply full custom spec while preserving the immutable ClusterIP
+			clusterIP := existing.Spec.ClusterIP
+			existing.Spec = *haproxy.Spec.ServiceSpec
+			existing.Spec.ClusterIP = clusterIP
+			if existing.Spec.Selector == nil {
+				existing.Spec.Selector = desired.Spec.Selector
 			}
-		}
-		// Trim extra ports if desired has fewer
-		if len(desired.Spec.Ports) < len(existing.Spec.Ports) {
-			existing.Spec.Ports = existing.Spec.Ports[:len(desired.Spec.Ports)]
+		} else {
+			existing.Spec.Selector = desired.Spec.Selector
+			existing.Spec.Type = desired.Spec.Type
+			existing.Spec.ExternalTrafficPolicy = desired.Spec.ExternalTrafficPolicy
+			// Preserve NodePorts when updating ports
+			for i, port := range desired.Spec.Ports {
+				if i < len(existing.Spec.Ports) {
+					port.NodePort = existing.Spec.Ports[i].NodePort
+					existing.Spec.Ports[i] = port
+				} else {
+					existing.Spec.Ports = append(existing.Spec.Ports, port)
+				}
+			}
+			// Trim extra ports if desired has fewer
+			if len(desired.Spec.Ports) < len(existing.Spec.Ports) {
+				existing.Spec.Ports = existing.Spec.Ports[:len(desired.Spec.Ports)]
+			}
 		}
 
 		if err := r.Client.Update(ctx, existing); err != nil {

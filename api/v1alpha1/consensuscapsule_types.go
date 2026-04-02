@@ -23,12 +23,14 @@ type ConsensusCapsuleSpec struct {
 	Orbit string `json:"orbit"`
 
 	// NodeId is the unique node identifier
+	// +kubebuilder:validation:Minimum=0
 	NodeId int64 `json:"nodeId"`
 
 	// AccountId is the node account ID
 	AccountId string `json:"accountId"`
 
 	// Weight is the consensus weight
+	// +kubebuilder:validation:Minimum=0
 	Weight int `json:"weight"`
 
 	// Log4j2XML is the logging configuration

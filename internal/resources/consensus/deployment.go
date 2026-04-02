@@ -475,7 +475,7 @@ func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment
 
 	// Block streams uploader
 	if containers.BlocksUploader != nil && containers.BlocksUploader.Enabled {
-		c, err := r.buildCheetahUploaderContainer(capsule, containers.BlocksUploader, "blockstream-uploader", "cheetah-block-streams.yaml", "/opt/hgcapp/blockStreams", "BLOCK_STREAMS",
+		c, err := r.buildCheetahUploaderContainer(containers.BlocksUploader, "blockstream-uploader", "cheetah-block-streams.yaml", "/opt/hgcapp/blockStreams", "BLOCK_STREAMS",
 			fmt.Sprintf("blockStreams/block-%s", accountId))
 		if err != nil {
 			return fmt.Errorf("blockstream-uploader: %w", err)
@@ -485,7 +485,7 @@ func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment
 
 	// Record streams uploader
 	if containers.RecordsUploader != nil && containers.RecordsUploader.Enabled {
-		c, err := r.buildCheetahUploaderContainer(capsule, containers.RecordsUploader, "record-stream-uploader", "cheetah-record-streams.yaml", "/opt/hgcapp/recordStreams", "RECORD_STREAMS",
+		c, err := r.buildCheetahUploaderContainer(containers.RecordsUploader, "record-stream-uploader", "cheetah-record-streams.yaml", "/opt/hgcapp/recordStreams", "RECORD_STREAMS",
 			fmt.Sprintf("recordstreams/record%s", accountId))
 		if err != nil {
 			return fmt.Errorf("record-stream-uploader: %w", err)
@@ -495,7 +495,7 @@ func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment
 
 	// Events streams uploader
 	if containers.EventsUploader != nil && containers.EventsUploader.Enabled {
-		c, err := r.buildCheetahUploaderContainer(capsule, containers.EventsUploader, "event-stream-uploader", "cheetah-events-streams.yaml", "/opt/hgcapp/eventsStreams", "EVENTS_STREAMS",
+		c, err := r.buildCheetahUploaderContainer(containers.EventsUploader, "event-stream-uploader", "cheetah-events-streams.yaml", "/opt/hgcapp/eventsStreams", "EVENTS_STREAMS",
 			fmt.Sprintf("eventsStreams/events_%s", accountId))
 		if err != nil {
 			return fmt.Errorf("event-stream-uploader: %w", err)
@@ -530,7 +530,7 @@ func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment
 
 // buildCheetahUploaderContainer builds a cheetah uploader sidecar container.
 // streamBucketPath is the stream-specific path component (e.g. "blockStreams/block-0.0.3").
-func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(capsule *operatorv1alpha1.ConsensusCapsule, uploader *operatorv1alpha1.CheetahUploader, containerName, configFile, mountPath, envPrefix, streamBucketPath string) (corev1.Container, error) {
+func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(uploader *operatorv1alpha1.CheetahUploader, containerName, configFile, mountPath, envPrefix, streamBucketPath string) (corev1.Container, error) {
 	// Validate blob config: URL is required when blob is enabled
 	if uploader.Blob != nil && uploader.Blob.Enabled && uploader.Blob.URL == "" {
 		return corev1.Container{}, fmt.Errorf("blob storage is enabled (blob.enabled=true) but blob.url is not set")

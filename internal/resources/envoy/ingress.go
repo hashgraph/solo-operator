@@ -6,6 +6,7 @@ import (
 	"context"
 
 	networkingv1 "k8s.io/api/networking/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -44,6 +45,9 @@ func (r *IngressSubReconciler) Reconcile(ctx context.Context, envoy *operatorv1a
 
 	if desired == nil {
 		if !notFound {
+			if !metav1.IsControlledBy(existing, envoy) {
+				return ctrl.Result{}, nil
+			}
 			logger.Info("Deleting Envoy ingress", "name", existing.Name, "namespace", existing.Namespace)
 			if err := r.Client.Delete(ctx, existing); err != nil && !apierrors.IsNotFound(err) {
 				return ctrl.Result{}, err
@@ -64,14 +68,31 @@ func (r *IngressSubReconciler) Reconcile(ctx context.Context, envoy *operatorv1a
 		return ctrl.Result{}, nil
 	}
 
-	existing.Spec = desired.Spec
-	existing.Labels = desired.Labels
-	logger.V(1).Info("Updating Envoy ingress", "name", desired.Name, "namespace", desired.Namespace)
-	if err := r.Client.Update(ctx, existing); err != nil {
-		return ctrl.Result{}, err
+	if r.needsUpdate(existing, desired) {
+		existing.Spec = desired.Spec
+		existing.Labels = desired.Labels
+		logger.V(1).Info("Updating Envoy ingress", "name", desired.Name, "namespace", desired.Namespace)
+		if err := r.Client.Update(ctx, existing); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *IngressSubReconciler) needsUpdate(existing, desired *networkingv1.Ingress) bool {
+	if !equality.Semantic.DeepEqual(existing.Spec, desired.Spec) {
+		return true
+	}
+	if len(existing.Labels) != len(desired.Labels) {
+		return true
+	}
+	for k, v := range desired.Labels {
+		if existing.Labels[k] != v {
+			return true
+		}
+	}
+	return false
 }
 
 // buildIngress builds the desired Ingress from the IngressSpec, or returns nil when not desired.

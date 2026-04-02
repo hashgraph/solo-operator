@@ -173,6 +173,12 @@ func (r *DeploymentSubReconciler) buildDeployment(haproxy *operatorv1alpha1.HAPr
 							StartupProbe:   startupProbe,
 							LivenessProbe:  livenessProbe,
 							ReadinessProbe: readinessProbe,
+							SecurityContext: &corev1.SecurityContext{
+								AllowPrivilegeEscalation: func() *bool { f := false; return &f }(),
+								Capabilities: &corev1.Capabilities{
+									Drop: []corev1.Capability{"ALL"},
+								},
+							},
 						},
 					},
 					Volumes: volumes,
@@ -279,7 +285,10 @@ func (r *DeploymentSubReconciler) needsUpdate(existing, desired *appsv1.Deployme
 		}
 	}
 
-	// Check pod template labels (captures AdditionalLabels changes)
+	// Check pod template labels bidirectionally (captures AdditionalLabels additions and removals)
+	if len(existing.Spec.Template.Labels) != len(desired.Spec.Template.Labels) {
+		return true
+	}
 	for k, v := range desired.Spec.Template.Labels {
 		if existing.Spec.Template.Labels[k] != v {
 			return true

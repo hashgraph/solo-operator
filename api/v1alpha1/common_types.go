@@ -162,6 +162,7 @@ type ImageRepositoryStatus struct {
 // AddressBookEntry represents a node in the address book
 type AddressBookEntry struct {
 	// NodeId is the unique identifier for the node
+	// +kubebuilder:validation:Minimum=0
 	NodeId int64 `json:"nodeId"`
 
 	// NickName is a friendly name for the node
@@ -171,6 +172,7 @@ type AddressBookEntry struct {
 	SelfName string `json:"selfName"`
 
 	// Weight is the consensus weight
+	// +kubebuilder:validation:Minimum=0
 	Weight int `json:"weight"`
 
 	// InternalHostname is the internal FQDN or IP
@@ -282,16 +284,19 @@ type ReaperConfig struct {
 
 	// MinKeep is the minimum number of files to keep
 	// +kubebuilder:default=1
+	// +kubebuilder:validation:Minimum=1
 	// +optional
 	MinKeep int `json:"minKeep,omitempty"`
 
 	// Interval is the reaper interval
 	// +kubebuilder:default=1
+	// +kubebuilder:validation:Minimum=1
 	// +optional
 	Interval int `json:"interval,omitempty"`
 
 	// DefaultBackoff is the default backoff time
 	// +kubebuilder:default=1
+	// +kubebuilder:validation:Minimum=1
 	// +optional
 	DefaultBackoff int `json:"defaultBackoff,omitempty"`
 }
@@ -400,6 +405,7 @@ type CheetahUploader struct {
 
 	// MaxProcessors is the maximum number of concurrent file processors per pipeline
 	// +kubebuilder:default=10
+	// +kubebuilder:validation:Minimum=1
 	// +optional
 	MaxProcessors int `json:"maxProcessors"`
 
@@ -650,6 +656,7 @@ type StreamUploaderChangeset struct {
 // NodeProperties represents node-specific properties
 type NodeProperties struct {
 	// NodeId is the node identifier
+	// +kubebuilder:validation:Minimum=0
 	NodeId int64 `json:"nodeId"`
 
 	// Configuration is the key-value configuration
@@ -659,6 +666,7 @@ type NodeProperties struct {
 // NodeLoggingConfiguration represents node-specific logging
 type NodeLoggingConfiguration struct {
 	// NodeId is the node identifier
+	// +kubebuilder:validation:Minimum=0
 	NodeId int64 `json:"nodeId"`
 
 	// Configuration is the log4j2.xml content

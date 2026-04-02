@@ -33,6 +33,7 @@ type CORSConfig struct {
 }
 
 // EnvoyProxySpec defines the desired state of EnvoyProxy
+// +kubebuilder:validation:XValidation:rule="self.serviceType != 'Ingress' || has(self.ingressSpec)",message="ingressSpec is required when serviceType is Ingress"
 type EnvoyProxySpec struct {
 	// Image is the Envoy container image.
 	// +kubebuilder:default="envoyproxy/envoy:v1.21.6"
@@ -45,21 +46,28 @@ type EnvoyProxySpec struct {
 
 	// Replicas is the number of proxy replicas.
 	// +kubebuilder:default=2
+	// +kubebuilder:validation:Minimum=0
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty"`
 
 	// ProxyPort is the gRPC-Web listener port.
-	// +kubebuilder:default=8080
+	// +kubebuilder:default=8081
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
 	// +optional
 	ProxyPort int32 `json:"proxyPort,omitempty"`
 
 	// AdminPort is the Envoy admin interface port.
 	// +kubebuilder:default=9901
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
 	// +optional
 	AdminPort int32 `json:"adminPort,omitempty"`
 
 	// MetricsPort is the Prometheus metrics port.
 	// +kubebuilder:default=9090
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
 	// +optional
 	MetricsPort int32 `json:"metricsPort,omitempty"`
 
@@ -94,16 +102,20 @@ type EnvoyProxySpec struct {
 
 	// TerminationGracePeriodSeconds is the pod shutdown grace period.
 	// +kubebuilder:default=10
+	// +kubebuilder:validation:Minimum=0
 	// +optional
 	TerminationGracePeriodSeconds int64 `json:"terminationGracePeriodSeconds,omitempty"`
 
 	// UpstreamService is the consensus node Service to route traffic to.
 	// Defaults to the CR name with "envoy-" stripped (envoy-node1 → node1). Accepts any DNS name or FQDN.
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$`
 	// +optional
 	UpstreamService string `json:"upstreamService,omitempty"`
 
 	// UpstreamPort is the upstream gRPC port.
 	// +kubebuilder:default=50211
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
 	// +optional
 	UpstreamPort int32 `json:"upstreamPort,omitempty"`
 

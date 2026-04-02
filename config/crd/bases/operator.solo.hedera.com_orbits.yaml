@@ -103,6 +103,7 @@ spec:
                                   description: NodeId is the unique identifier for
                                     the node
                                   format: int64
+                                  minimum: 0
                                   type: integer
                                 publicLedgerKey:
                                   description: PublicLedgerKey is the base64-encoded
@@ -117,6 +118,7 @@ spec:
                                   type: string
                                 weight:
                                   description: Weight is the consensus weight
+                                  minimum: 0
                                   type: integer
                               required:
                               - externalHostname
@@ -137,10 +139,12 @@ spec:
                           realmId:
                             default: 0
                             description: RealmId is the numeric realm ID
+                            minimum: 0
                             type: integer
                           shardId:
                             default: 0
                             description: ShardId is the numeric shard ID
+                            minimum: 0
                             type: integer
                         type: object
                     type: object

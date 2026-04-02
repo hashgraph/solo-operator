@@ -22,40 +22,47 @@ type HAProxyHealthCheckSpec struct {
 	// Enabled turns on startup, liveness, and readiness probes.
 	// +kubebuilder:default=true
 	// +optional
-	Enabled bool `json:"enabled"`
+	Enabled bool `json:"enabled,omitempty"`
 
 	// StartupInitialDelaySeconds is the delay before the startup probe first runs.
 	// +kubebuilder:default=60
+	// +kubebuilder:validation:Minimum=0
 	// +optional
 	StartupInitialDelaySeconds int32 `json:"startupInitialDelaySeconds,omitempty"`
 
 	// StartupPeriodSeconds is the startup probe interval.
 	// +kubebuilder:default=5
+	// +kubebuilder:validation:Minimum=1
 	// +optional
 	StartupPeriodSeconds int32 `json:"startupPeriodSeconds,omitempty"`
 
 	// StartupFailureThreshold is the number of startup probe failures before restart. 720 × 5s = 60 min window.
 	// +kubebuilder:default=720
+	// +kubebuilder:validation:Minimum=1
 	// +optional
 	StartupFailureThreshold int32 `json:"startupFailureThreshold,omitempty"`
 
 	// PeriodSeconds is the liveness/readiness probe interval.
 	// +kubebuilder:default=10
+	// +kubebuilder:validation:Minimum=1
 	// +optional
 	PeriodSeconds int32 `json:"periodSeconds,omitempty"`
 
 	// FailureThreshold is the number of consecutive liveness/readiness failures before the pod is unhealthy.
 	// +kubebuilder:default=3
+	// +kubebuilder:validation:Minimum=1
 	// +optional
 	FailureThreshold int32 `json:"failureThreshold,omitempty"`
 
 	// TimeoutSeconds is the probe timeout.
 	// +kubebuilder:default=1
+	// +kubebuilder:validation:Minimum=1
 	// +optional
 	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
 }
 
 // HAProxyCapsuleSpec defines the desired state of HAProxyCapsule
+// +kubebuilder:validation:XValidation:rule="self.serviceType != 'Ingress' || has(self.ingressSpec)",message="ingressSpec is required when serviceType is Ingress"
 type HAProxyCapsuleSpec struct {
 	// Image is the HAProxy container image.
 	// +kubebuilder:default="haproxy:2.8.10-alpine3.20"
@@ -98,6 +105,7 @@ type HAProxyCapsuleSpec struct {
 
 	// TerminationGracePeriodSeconds is the pod shutdown grace period.
 	// +kubebuilder:default=10
+	// +kubebuilder:validation:Minimum=0
 	// +optional
 	TerminationGracePeriodSeconds int64 `json:"terminationGracePeriodSeconds,omitempty"`
 
@@ -117,21 +125,28 @@ type HAProxyCapsuleSpec struct {
 
 	// GrpcPort is the plain gRPC frontend port.
 	// +kubebuilder:default=50211
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
 	// +optional
 	GrpcPort int32 `json:"grpcPort,omitempty"`
 
 	// GrpcsPort is the TLS gRPC frontend port.
 	// +kubebuilder:default=50212
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
 	// +optional
 	GrpcsPort int32 `json:"grpcsPort,omitempty"`
 
 	// MetricsPort is the Prometheus metrics port.
 	// +kubebuilder:default=9090
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
 	// +optional
 	MetricsPort int32 `json:"metricsPort,omitempty"`
 
 	// UpstreamService is the consensus node Service to route traffic to.
 	// Defaults to the CR name with "haproxy-" stripped (haproxy-node1 → node1). Accepts any DNS name or FQDN.
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$`
 	// +optional
 	UpstreamService string `json:"upstreamService,omitempty"`
 

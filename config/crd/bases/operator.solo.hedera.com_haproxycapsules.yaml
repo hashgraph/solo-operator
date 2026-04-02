@@ -1134,11 +1134,15 @@ spec:
                 default: 50211
                 description: GrpcPort is the plain gRPC frontend port.
                 format: int32
+                maximum: 65535
+                minimum: 1
                 type: integer
               grpcsPort:
                 default: 50212
                 description: GrpcsPort is the TLS gRPC frontend port.
                 format: int32
+                maximum: 65535
+                minimum: 1
                 type: integer
               healthCheck:
                 description: HealthCheck configures probes. Defaults match the GKE
@@ -1154,33 +1158,39 @@ spec:
                     description: FailureThreshold is the number of consecutive liveness/readiness
                       failures before the pod is unhealthy.
                     format: int32
+                    minimum: 1
                     type: integer
                   periodSeconds:
                     default: 10
                     description: PeriodSeconds is the liveness/readiness probe interval.
                     format: int32
+                    minimum: 1
                     type: integer
                   startupFailureThreshold:
                     default: 720
                     description: StartupFailureThreshold is the number of startup
                       probe failures before restart. 720 × 5s = 60 min window.
                     format: int32
+                    minimum: 1
                     type: integer
                   startupInitialDelaySeconds:
                     default: 60
                     description: StartupInitialDelaySeconds is the delay before the
                       startup probe first runs.
                     format: int32
+                    minimum: 0
                     type: integer
                   startupPeriodSeconds:
                     default: 5
                     description: StartupPeriodSeconds is the startup probe interval.
                     format: int32
+                    minimum: 1
                     type: integer
                   timeoutSeconds:
                     default: 1
                     description: TimeoutSeconds is the probe timeout.
                     format: int32
+                    minimum: 1
                     type: integer
                 type: object
               image:
@@ -1455,6 +1465,8 @@ spec:
                 default: 9090
                 description: MetricsPort is the Prometheus metrics port.
                 format: int32
+                maximum: 65535
+                minimum: 1
                 type: integer
               nodeSelector:
                 additionalProperties:
@@ -1821,6 +1833,7 @@ spec:
                 description: TerminationGracePeriodSeconds is the pod shutdown grace
                   period.
                 format: int64
+                minimum: 0
                 type: integer
               tlsSecretName:
                 description: |-
@@ -1871,8 +1884,12 @@ spec:
                 description: |-
                   UpstreamService is the consensus node Service to route traffic to.
                   Defaults to the CR name with "haproxy-" stripped (haproxy-node1 → node1). Accepts any DNS name or FQDN.
+                pattern: ^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$
                 type: string
             type: object
+            x-kubernetes-validations:
+            - message: ingressSpec is required when serviceType is Ingress
+              rule: self.serviceType != 'Ingress' || has(self.ingressSpec)
           status:
             description: HAProxyCapsuleStatus defines the observed state of HAProxyCapsule
             properties:
