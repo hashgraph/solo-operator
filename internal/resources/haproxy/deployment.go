@@ -120,6 +120,9 @@ func (r *DeploymentSubReconciler) buildDeployment(haproxy *operatorv1alpha1.HAPr
 	}
 
 	gracePeriod := haproxy.Spec.TerminationGracePeriodSeconds
+	if gracePeriod == 0 {
+		gracePeriod = 10
+	}
 
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{

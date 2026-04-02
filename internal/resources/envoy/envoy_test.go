@@ -388,11 +388,11 @@ func TestDeploymentSubReconciler_Probes(t *testing.T) {
 	if container.StartupProbe.HTTPGet == nil {
 		t.Fatal("expected startup probe to use HTTPGet")
 	}
-	if container.StartupProbe.HTTPGet.Path != "/ready" {
-		t.Errorf("expected startup probe path /ready, got %s", container.StartupProbe.HTTPGet.Path)
+	if container.StartupProbe.HTTPGet.Path != "/healthz" {
+		t.Errorf("expected startup probe path /healthz, got %s", container.StartupProbe.HTTPGet.Path)
 	}
-	if container.StartupProbe.HTTPGet.Port.IntVal != DefaultAdminPort {
-		t.Errorf("expected startup probe port %d, got %d", DefaultAdminPort, container.StartupProbe.HTTPGet.Port.IntVal)
+	if container.StartupProbe.HTTPGet.Port.IntVal != DefaultMetricsPort {
+		t.Errorf("expected startup probe port %d, got %d", DefaultMetricsPort, container.StartupProbe.HTTPGet.Port.IntVal)
 	}
 	if container.StartupProbe.FailureThreshold == 0 {
 		t.Error("expected startup probe failure threshold to be set")
@@ -401,8 +401,8 @@ func TestDeploymentSubReconciler_Probes(t *testing.T) {
 	if container.LivenessProbe == nil {
 		t.Fatal("expected liveness probe to be set")
 	}
-	if container.LivenessProbe.HTTPGet == nil || container.LivenessProbe.HTTPGet.Path != "/ready" {
-		t.Error("expected liveness probe GET /ready")
+	if container.LivenessProbe.HTTPGet == nil || container.LivenessProbe.HTTPGet.Path != "/healthz" {
+		t.Error("expected liveness probe GET /healthz")
 	}
 	if container.LivenessProbe.InitialDelaySeconds != 0 {
 		t.Error("liveness probe should have no initial delay (startup probe gates it)")
@@ -411,8 +411,8 @@ func TestDeploymentSubReconciler_Probes(t *testing.T) {
 	if container.ReadinessProbe == nil {
 		t.Fatal("expected readiness probe to be set")
 	}
-	if container.ReadinessProbe.HTTPGet == nil || container.ReadinessProbe.HTTPGet.Path != "/ready" {
-		t.Error("expected readiness probe GET /ready")
+	if container.ReadinessProbe.HTTPGet == nil || container.ReadinessProbe.HTTPGet.Path != "/healthz" {
+		t.Error("expected readiness probe GET /healthz")
 	}
 }
 
@@ -661,8 +661,8 @@ func TestDeploymentSubReconciler(t *testing.T) {
 	}
 
 	// Verify ports
-	if len(container.Ports) != 3 {
-		t.Fatalf("expected 3 ports (grpc, admin, metrics), got %d", len(container.Ports))
+	if len(container.Ports) != 2 {
+		t.Fatalf("expected 2 ports (grpc, metrics), got %d", len(container.Ports))
 	}
 
 	// Verify probes
@@ -1037,6 +1037,91 @@ func TestIngressSubReconciler_DeletesOnServiceTypeChange(t *testing.T) {
 	if err := c.Get(ctx, client.ObjectKey{Name: envoy.Name, Namespace: envoy.Namespace}, ing); err == nil {
 		t.Error("expected ingress to be deleted after switching to LoadBalancer type")
 	}
+}
+
+func TestExposeAdmin_DefaultHidesAdminPort(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	envoy := newTestEnvoy()
+	c := newTestClient(scheme, envoy)
+
+	_, err := NewDeploymentSubReconciler(c, scheme).Reconcile(ctx, envoy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	deploy := &appsv1.Deployment{}
+	if err := c.Get(ctx, client.ObjectKey{Name: envoy.Name, Namespace: envoy.Namespace}, deploy); err != nil {
+		t.Fatalf("failed to get deployment: %v", err)
+	}
+
+	container := deploy.Spec.Template.Spec.Containers[0]
+	if len(container.Ports) != 2 {
+		t.Errorf("expected 2 ports (grpc+metrics), got %d", len(container.Ports))
+	}
+	for _, p := range container.Ports {
+		if p.Name == "admin" {
+			t.Error("admin port must not be exposed by default")
+		}
+	}
+}
+
+func TestExposeAdmin_ExposesAdminPort(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	envoy := newTestEnvoy()
+	envoy.Spec.ExposeAdmin = true
+	c := newTestClient(scheme, envoy)
+
+	_, err := NewDeploymentSubReconciler(c, scheme).Reconcile(ctx, envoy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	deploy := &appsv1.Deployment{}
+	if err := c.Get(ctx, client.ObjectKey{Name: envoy.Name, Namespace: envoy.Namespace}, deploy); err != nil {
+		t.Fatalf("failed to get deployment: %v", err)
+	}
+
+	container := deploy.Spec.Template.Spec.Containers[0]
+	if len(container.Ports) != 3 {
+		t.Errorf("expected 3 ports (grpc+metrics+admin), got %d", len(container.Ports))
+	}
+	var found bool
+	for _, p := range container.Ports {
+		if p.Name == "admin" && p.ContainerPort == DefaultAdminPort {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected admin port %d to be exposed", DefaultAdminPort)
+	}
+}
+
+func TestExposeAdmin_AdminAddressInConfig(t *testing.T) {
+	t.Run("admin bound to 127.0.0.1 by default", func(t *testing.T) {
+		envoy := &operatorv1alpha1.EnvoyProxy{}
+		cfg := DefaultEnvoyConfig(envoy)[ConfigFileName]
+		if !containsStr(cfg, "address: 127.0.0.1") {
+			t.Error("expected admin to be bound to 127.0.0.1 by default")
+		}
+		if containsStr(cfg, "address: 0.0.0.0\n      port_value: 9901") {
+			t.Error("admin must not be on 0.0.0.0 by default")
+		}
+	})
+
+	t.Run("admin bound to 0.0.0.0 when ExposeAdmin=true", func(t *testing.T) {
+		envoy := &operatorv1alpha1.EnvoyProxy{
+			Spec: operatorv1alpha1.EnvoyProxySpec{
+				ExposeAdmin: true,
+				AdminPort:   9901,
+			},
+		}
+		cfg := DefaultEnvoyConfig(envoy)[ConfigFileName]
+		if !containsStr(cfg, "address: 0.0.0.0") {
+			t.Error("expected admin to be bound to 0.0.0.0 when ExposeAdmin=true")
+		}
+	})
 }
 
 func TestNewSubReconcilers(t *testing.T) {

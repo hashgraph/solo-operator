@@ -130,6 +130,11 @@ func DefaultEnvoyConfig(envoy *operatorv1alpha1.EnvoyProxy) map[string]string {
 	upstreamService := GetUpstreamService(envoy)
 	upstreamPort := GetUpstreamPort(envoy)
 
+	adminAddress := "127.0.0.1"
+	if envoy.Spec.ExposeAdmin {
+		adminAddress = "0.0.0.0"
+	}
+
 	// Build TLS transport_socket block when a secret is configured.
 	tlsBlock := ""
 	if envoy.Spec.TLSSecretName != "" {
@@ -180,7 +185,7 @@ func DefaultEnvoyConfig(envoy *operatorv1alpha1.EnvoyProxy) map[string]string {
 	config := fmt.Sprintf(`admin:
   address:
     socket_address:
-      address: 0.0.0.0
+      address: %s
       port_value: %d
 layered_runtime:
   layers:
@@ -250,6 +255,12 @@ static_resources:
                         - '*'
                       routes:
                         - match:
+                            prefix: /healthz
+                          direct_response:
+                            status: 200
+                            body:
+                              inline_string: "ok"
+                        - match:
                             prefix: /metrics
                           route:
                             cluster: prometheus_stats
@@ -283,7 +294,7 @@ static_resources:
                     socket_address:
                       address: 127.0.0.1
                       port_value: %d
-`, adminPort, proxyPort, allowOrigins, allowMethods, allowHeaders, maxAge, exposeHeaders, tlsBlock, metricsPort, upstreamService, upstreamPort, adminPort)
+`, adminAddress, adminPort, proxyPort, allowOrigins, allowMethods, allowHeaders, maxAge, exposeHeaders, tlsBlock, metricsPort, upstreamService, upstreamPort, adminPort)
 
 	return map[string]string{
 		ConfigFileName: config,

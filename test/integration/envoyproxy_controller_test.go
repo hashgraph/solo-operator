@@ -88,7 +88,7 @@ var _ = Describe("EnvoyProxy Controller", func() {
 			container := createdDeploy.Spec.Template.Spec.Containers[0]
 			Expect(container.StartupProbe).ToNot(BeNil())
 			Expect(container.StartupProbe.HTTPGet).ToNot(BeNil())
-			Expect(container.StartupProbe.HTTPGet.Path).To(Equal("/ready"))
+			Expect(container.StartupProbe.HTTPGet.Path).To(Equal("/healthz"))
 			Expect(container.LivenessProbe).ToNot(BeNil())
 			Expect(container.LivenessProbe.InitialDelaySeconds).To(Equal(int32(0)), "liveness should have no initial delay — startup probe gates it")
 			Expect(container.ReadinessProbe).ToNot(BeNil())
@@ -804,6 +804,46 @@ static_resources:
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, updatedEnvoy)).Should(Succeed())
+		})
+
+		It("Should expose admin port on container when ExposeAdmin=true", func() {
+			By("Creating an EnvoyProxy with ExposeAdmin=true")
+			envoy := &operatorv1alpha1.EnvoyProxy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      envoyName + "-admin",
+					Namespace: envoyNamespace,
+				},
+				Spec: operatorv1alpha1.EnvoyProxySpec{
+					Image:       "envoyproxy/envoy:v1.21.6",
+					ProxyPort:   8081,
+					AdminPort:   9901,
+					ServiceType: operatorv1alpha1.ProxyServiceTypeLoadBalancer,
+					ExposeAdmin: true,
+				},
+			}
+			Expect(k8sClient.Create(ctx, envoy)).Should(Succeed())
+
+			By("Verifying the Deployment has the admin container port")
+			deployLookupKey := types.NamespacedName{Name: envoy.Name, Namespace: envoyNamespace}
+			createdDeploy := &appsv1.Deployment{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, deployLookupKey, createdDeploy)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			container := createdDeploy.Spec.Template.Spec.Containers[0]
+			var adminPortFound bool
+			for _, p := range container.Ports {
+				if p.Name == "admin" && p.ContainerPort == 9901 {
+					adminPortFound = true
+					break
+				}
+			}
+			Expect(adminPortFound).To(BeTrue(), "expected admin container port to be present when ExposeAdmin=true")
+			Expect(container.Ports).To(HaveLen(3))
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, envoy)).Should(Succeed())
 		})
 	})
 })

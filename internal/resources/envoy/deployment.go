@@ -69,10 +69,13 @@ func (r *DeploymentSubReconciler) buildDeployment(envoy *operatorv1alpha1.EnvoyP
 	selectorLabels := CommonLabels(envoy)
 	resourceLabels := ResourceLabels(envoy)
 	proxyPort := GetProxyPort(envoy)
-	adminPort := GetAdminPort(envoy)
 	metricsPort := GetMetricsPort(envoy)
+	adminPort := GetAdminPort(envoy)
 
 	gracePeriod := envoy.Spec.TerminationGracePeriodSeconds
+	if gracePeriod == 0 {
+		gracePeriod = 10
+	}
 
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -96,21 +99,17 @@ func (r *DeploymentSubReconciler) buildDeployment(envoy *operatorv1alpha1.EnvoyP
 					TerminationGracePeriodSeconds: &gracePeriod,
 					Containers: []corev1.Container{
 						{
-							Name:  ContainerName,
-							Image: GetImage(envoy),
-							Args:  []string{"-c", "/etc/envoy/envoy.yaml"},
-							Ports: []corev1.ContainerPort{
-								{Name: "grpc", ContainerPort: proxyPort, Protocol: corev1.ProtocolTCP},
-								{Name: "admin", ContainerPort: adminPort, Protocol: corev1.ProtocolTCP},
-								{Name: "metrics", ContainerPort: metricsPort, Protocol: corev1.ProtocolTCP},
-							},
+							Name:         ContainerName,
+							Image:        GetImage(envoy),
+							Args:         []string{"-c", "/etc/envoy/envoy.yaml"},
+							Ports:        buildContainerPorts(proxyPort, adminPort, metricsPort, envoy.Spec.ExposeAdmin),
 							VolumeMounts: buildVolumeMounts(envoy),
 							Env:          BuildEnv(envoy),
 							StartupProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/ready",
-										Port: intstr.FromInt32(adminPort),
+										Path: "/healthz",
+										Port: intstr.FromInt32(metricsPort),
 									},
 								},
 								InitialDelaySeconds: 5,
@@ -120,8 +119,8 @@ func (r *DeploymentSubReconciler) buildDeployment(envoy *operatorv1alpha1.EnvoyP
 							LivenessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/ready",
-										Port: intstr.FromInt32(adminPort),
+										Path: "/healthz",
+										Port: intstr.FromInt32(metricsPort),
 									},
 								},
 								PeriodSeconds:    10,
@@ -130,8 +129,8 @@ func (r *DeploymentSubReconciler) buildDeployment(envoy *operatorv1alpha1.EnvoyP
 							ReadinessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/ready",
-										Port: intstr.FromInt32(adminPort),
+										Path: "/healthz",
+										Port: intstr.FromInt32(metricsPort),
 									},
 								},
 								InitialDelaySeconds: 5,
@@ -146,6 +145,17 @@ func (r *DeploymentSubReconciler) buildDeployment(envoy *operatorv1alpha1.EnvoyP
 	}
 
 	return deploy
+}
+
+func buildContainerPorts(proxyPort, adminPort, metricsPort int32, exposeAdmin bool) []corev1.ContainerPort {
+	ports := []corev1.ContainerPort{
+		{Name: "grpc", ContainerPort: proxyPort, Protocol: corev1.ProtocolTCP},
+		{Name: "metrics", ContainerPort: metricsPort, Protocol: corev1.ProtocolTCP},
+	}
+	if exposeAdmin {
+		ports = append(ports, corev1.ContainerPort{Name: "admin", ContainerPort: adminPort, Protocol: corev1.ProtocolTCP})
+	}
+	return ports
 }
 
 func buildVolumeMounts(envoy *operatorv1alpha1.EnvoyProxy) []corev1.VolumeMount {

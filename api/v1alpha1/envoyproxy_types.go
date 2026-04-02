@@ -129,6 +129,11 @@ type EnvoyProxySpec struct {
 	// Works directly with cert-manager Certificate secrets.
 	// +optional
 	TLSSecretName string `json:"tlsSecretName,omitempty"`
+
+	// ExposeAdmin binds the Envoy admin interface to 0.0.0.0 and adds the admin port to the container ports.
+	// By default admin is bound to 127.0.0.1 only (not reachable outside the pod).
+	// +optional
+	ExposeAdmin bool `json:"exposeAdmin,omitempty"`
 }
 
 // EnvoyProxyStatus defines the observed state of EnvoyProxy
