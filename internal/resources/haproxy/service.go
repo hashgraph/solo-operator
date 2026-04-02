@@ -190,5 +190,12 @@ func (r *ServiceSubReconciler) needsUpdate(existing, desired *corev1.Service) bo
 		}
 	}
 
+	// Check labels (only desired keys; extra labels are preserved)
+	for k, v := range desired.Labels {
+		if existing.Labels[k] != v {
+			return true
+		}
+	}
+
 	return false
 }

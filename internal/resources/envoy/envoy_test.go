@@ -1714,3 +1714,34 @@ func TestServiceSubReconciler_CustomServiceSpec_NilSelector(t *testing.T) {
 		t.Error("expected selector to be set even with nil selector in custom ServiceSpec")
 	}
 }
+
+func TestDeploymentSubReconciler_ProbesDisabledWithCustomFiles(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	envoy := newTestEnvoy()
+	envoy.Spec.Files = map[string]string{
+		"envoy.yaml": "# custom config",
+	}
+	c := newTestClient(scheme, envoy)
+
+	_, err := NewDeploymentSubReconciler(c, scheme).Reconcile(ctx, envoy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	deploy := &appsv1.Deployment{}
+	if err := c.Get(ctx, client.ObjectKey{Name: envoy.Name, Namespace: envoy.Namespace}, deploy); err != nil {
+		t.Fatalf("failed to get deployment: %v", err)
+	}
+
+	container := deploy.Spec.Template.Spec.Containers[0]
+	if container.StartupProbe != nil {
+		t.Error("startup probe must be nil when spec.Files is set (custom config may not expose /healthz)")
+	}
+	if container.LivenessProbe != nil {
+		t.Error("liveness probe must be nil when spec.Files is set")
+	}
+	if container.ReadinessProbe != nil {
+		t.Error("readiness probe must be nil when spec.Files is set")
+	}
+}

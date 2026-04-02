@@ -1,0 +1,37 @@
+global
+    log stdout format raw local0
+
+defaults
+    log global
+    mode tcp
+    option tcplog
+    timeout connect 10s
+    timeout client 30s
+    timeout server 30s
+
+frontend grpc_frontend
+    bind *:{{.GrpcPort}}
+    default_backend consensus_nodes
+
+frontend grpcs_frontend
+    bind *:{{.GrpcsPort}}{{if .TLSEnabled}} ssl crt /etc/haproxy/certs/tls.crt alpn h2
+    mode http{{end}}
+    default_backend consensus_nodes{{if .TLSEnabled}}_tls{{end}}
+
+backend consensus_nodes
+    balance roundrobin
+    server upstream {{.UpstreamService}}:{{.GrpcPort}} check
+
+{{if .TLSEnabled -}}
+backend consensus_nodes_tls
+    mode http
+    balance roundrobin
+    server upstream {{.UpstreamService}}:{{.GrpcsPort}} ssl verify none check
+
+{{end -}}
+listen stats
+    bind *:{{.MetricsPort}}
+    mode http
+    stats enable
+    stats uri /stats
+    stats refresh 10s

@@ -17,7 +17,7 @@ const (
 	HAProxyServiceTypeLoadBalancer = ProxyServiceTypeLoadBalancer
 )
 
-// HAProxyHealthCheckSpec configures health check probes via the Data Plane API (port 5555).
+// HAProxyHealthCheckSpec configures startup, liveness, and readiness probes using HTTP GET /stats on the metrics port.
 type HAProxyHealthCheckSpec struct {
 	// Enabled turns on startup, liveness, and readiness probes.
 	// +kubebuilder:default=true
@@ -27,32 +27,32 @@ type HAProxyHealthCheckSpec struct {
 	// StartupInitialDelaySeconds is the delay before the startup probe first runs.
 	// +kubebuilder:default=60
 	// +optional
-	StartupInitialDelaySeconds int32 `json:"startupInitialDelaySeconds"`
+	StartupInitialDelaySeconds int32 `json:"startupInitialDelaySeconds,omitempty"`
 
 	// StartupPeriodSeconds is the startup probe interval.
 	// +kubebuilder:default=5
 	// +optional
-	StartupPeriodSeconds int32 `json:"startupPeriodSeconds"`
+	StartupPeriodSeconds int32 `json:"startupPeriodSeconds,omitempty"`
 
 	// StartupFailureThreshold is the number of startup probe failures before restart. 720 × 5s = 60 min window.
 	// +kubebuilder:default=720
 	// +optional
-	StartupFailureThreshold int32 `json:"startupFailureThreshold"`
+	StartupFailureThreshold int32 `json:"startupFailureThreshold,omitempty"`
 
 	// PeriodSeconds is the liveness/readiness probe interval.
 	// +kubebuilder:default=10
 	// +optional
-	PeriodSeconds int32 `json:"periodSeconds"`
+	PeriodSeconds int32 `json:"periodSeconds,omitempty"`
 
 	// FailureThreshold is the number of consecutive liveness/readiness failures before the pod is unhealthy.
 	// +kubebuilder:default=3
 	// +optional
-	FailureThreshold int32 `json:"failureThreshold"`
+	FailureThreshold int32 `json:"failureThreshold,omitempty"`
 
 	// TimeoutSeconds is the probe timeout.
 	// +kubebuilder:default=1
 	// +optional
-	TimeoutSeconds int32 `json:"timeoutSeconds"`
+	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
 }
 
 // HAProxyCapsuleSpec defines the desired state of HAProxyCapsule
@@ -99,7 +99,7 @@ type HAProxyCapsuleSpec struct {
 	// TerminationGracePeriodSeconds is the pod shutdown grace period.
 	// +kubebuilder:default=10
 	// +optional
-	TerminationGracePeriodSeconds int64 `json:"terminationGracePeriodSeconds"`
+	TerminationGracePeriodSeconds int64 `json:"terminationGracePeriodSeconds,omitempty"`
 
 	// ExternalTrafficPolicy controls routing for external traffic.
 	// +kubebuilder:validation:Enum=Cluster;Local

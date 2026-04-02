@@ -283,17 +283,17 @@ type ReaperConfig struct {
 	// MinKeep is the minimum number of files to keep
 	// +kubebuilder:default=1
 	// +optional
-	MinKeep int `json:"minKeep"`
+	MinKeep int `json:"minKeep,omitempty"`
 
 	// Interval is the reaper interval
 	// +kubebuilder:default=1
 	// +optional
-	Interval int `json:"interval"`
+	Interval int `json:"interval,omitempty"`
 
 	// DefaultBackoff is the default backoff time
 	// +kubebuilder:default=1
 	// +optional
-	DefaultBackoff int `json:"defaultBackoff"`
+	DefaultBackoff int `json:"defaultBackoff,omitempty"`
 }
 
 // SignatureConfig contains signature configuration

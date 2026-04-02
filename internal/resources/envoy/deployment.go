@@ -99,43 +99,15 @@ func (r *DeploymentSubReconciler) buildDeployment(envoy *operatorv1alpha1.EnvoyP
 					TerminationGracePeriodSeconds: &gracePeriod,
 					Containers: []corev1.Container{
 						{
-							Name:         ContainerName,
-							Image:        GetImage(envoy),
-							Args:         []string{"-c", "/etc/envoy/envoy.yaml"},
-							Ports:        buildContainerPorts(proxyPort, adminPort, metricsPort, envoy.Spec.ExposeAdmin),
-							VolumeMounts: buildVolumeMounts(envoy),
-							Env:          BuildEnv(envoy),
-							StartupProbe: &corev1.Probe{
-								ProbeHandler: corev1.ProbeHandler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/healthz",
-										Port: intstr.FromInt32(metricsPort),
-									},
-								},
-								InitialDelaySeconds: 5,
-								PeriodSeconds:       5,
-								FailureThreshold:    24, // 2 min window
-							},
-							LivenessProbe: &corev1.Probe{
-								ProbeHandler: corev1.ProbeHandler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/healthz",
-										Port: intstr.FromInt32(metricsPort),
-									},
-								},
-								PeriodSeconds:    10,
-								FailureThreshold: 3,
-							},
-							ReadinessProbe: &corev1.Probe{
-								ProbeHandler: corev1.ProbeHandler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/healthz",
-										Port: intstr.FromInt32(metricsPort),
-									},
-								},
-								InitialDelaySeconds: 5,
-								PeriodSeconds:       5,
-							},
+							Name:           ContainerName,
+							Image:          GetImage(envoy),
+							Args:           []string{"-c", "/etc/envoy/envoy.yaml"},
+							Ports:          buildContainerPorts(proxyPort, adminPort, metricsPort, envoy.Spec.ExposeAdmin),
+							VolumeMounts:   buildVolumeMounts(envoy),
+							Env:            BuildEnv(envoy),
+							StartupProbe:   buildStartupProbe(metricsPort, envoy),
+							LivenessProbe:  buildLivenessProbe(metricsPort, envoy),
+							ReadinessProbe: buildReadinessProbe(metricsPort, envoy),
 						},
 					},
 					Volumes: buildVolumes(envoy),
@@ -198,6 +170,57 @@ func buildVolumes(envoy *operatorv1alpha1.EnvoyProxy) []corev1.Volume {
 		})
 	}
 	return volumes
+}
+
+// buildStartupProbe returns a startup probe when the operator manages the config (spec.Files is empty).
+// Custom configs (spec.Files set) may not expose /healthz, so probes are omitted.
+func buildStartupProbe(metricsPort int32, envoy *operatorv1alpha1.EnvoyProxy) *corev1.Probe {
+	if len(envoy.Spec.Files) > 0 {
+		return nil
+	}
+	return &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Path: "/healthz",
+				Port: intstr.FromInt32(metricsPort),
+			},
+		},
+		InitialDelaySeconds: 5,
+		PeriodSeconds:       5,
+		FailureThreshold:    24, // 2 min window
+	}
+}
+
+func buildLivenessProbe(metricsPort int32, envoy *operatorv1alpha1.EnvoyProxy) *corev1.Probe {
+	if len(envoy.Spec.Files) > 0 {
+		return nil
+	}
+	return &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Path: "/healthz",
+				Port: intstr.FromInt32(metricsPort),
+			},
+		},
+		PeriodSeconds:    10,
+		FailureThreshold: 3,
+	}
+}
+
+func buildReadinessProbe(metricsPort int32, envoy *operatorv1alpha1.EnvoyProxy) *corev1.Probe {
+	if len(envoy.Spec.Files) > 0 {
+		return nil
+	}
+	return &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Path: "/healthz",
+				Port: intstr.FromInt32(metricsPort),
+			},
+		},
+		InitialDelaySeconds: 5,
+		PeriodSeconds:       5,
+	}
 }
 
 func (r *DeploymentSubReconciler) needsUpdate(existing, desired *appsv1.Deployment) bool {

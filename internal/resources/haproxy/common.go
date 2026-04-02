@@ -3,7 +3,10 @@
 package haproxy
 
 import (
+	"bytes"
+	_ "embed"
 	"fmt"
+	"text/template"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -11,6 +14,19 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
+
+//go:embed tmpl/haproxy.cfg.tmpl
+var haproxyCfgTmpl string
+
+var haproxyTemplate = template.Must(template.New("haproxy.cfg").Parse(haproxyCfgTmpl))
+
+type haproxyConfigData struct {
+	GrpcPort        int32
+	GrpcsPort       int32
+	MetricsPort     int32
+	UpstreamService string
+	TLSEnabled      bool
+}
 
 const (
 	LabelManagedBy  = "app.kubernetes.io/managed-by"
@@ -72,87 +88,18 @@ const (
 )
 
 func HAProxyConfig(haproxy *operatorv1alpha1.HAProxyCapsule) string {
-	grpcPort := GetGrpcPort(haproxy)
-	grpcsPort := GetGrpcsPort(haproxy)
-	metricsPort := GetMetricsPort(haproxy)
-	upstream := GetUpstreamService(haproxy)
-	tlsEnabled := haproxy.Spec.TLSSecretName != ""
-
-	if tlsEnabled {
-		return fmt.Sprintf(`
-global
-    log stdout format raw local0
-
-defaults
-    log global
-    mode tcp
-    option tcplog
-    timeout connect 10s
-    timeout client 30s
-    timeout server 30s
-
-frontend grpc_frontend
-    bind *:%d
-    default_backend consensus_nodes
-
-frontend grpcs_frontend
-    bind *:%d ssl crt /etc/haproxy/certs/tls.crt alpn h2
-    mode http
-    default_backend consensus_nodes_tls
-
-backend consensus_nodes
-    balance roundrobin
-    server upstream %s:%d check
-
-backend consensus_nodes_tls
-    mode http
-    balance roundrobin
-    server upstream %s:%d ssl verify none check
-
-listen stats
-    bind *:%d
-    mode http
-    stats enable
-    stats uri /stats
-    stats refresh 10s
-`, grpcPort, grpcsPort, upstream, grpcPort, upstream, grpcsPort, metricsPort)
+	data := haproxyConfigData{
+		GrpcPort:        GetGrpcPort(haproxy),
+		GrpcsPort:       GetGrpcsPort(haproxy),
+		MetricsPort:     GetMetricsPort(haproxy),
+		UpstreamService: GetUpstreamService(haproxy),
+		TLSEnabled:      haproxy.Spec.TLSSecretName != "",
 	}
-
-	return fmt.Sprintf(`
-global
-    log stdout format raw local0
-
-defaults
-    log global
-    mode tcp
-    option tcplog
-    timeout connect 10s
-    timeout client 30s
-    timeout server 30s
-
-frontend grpc_frontend
-    bind *:%d
-    default_backend consensus_nodes
-
-frontend grpcs_frontend
-    bind *:%d
-    default_backend consensus_nodes_tls
-
-backend consensus_nodes
-    balance roundrobin
-    server upstream %s:%d check
-
-backend consensus_nodes_tls
-    balance roundrobin
-    server upstream %s:%d check
-
-listen stats
-    bind *:%d
-    mode http
-    stats enable
-    stats uri /stats
-    stats refresh 10s
-`, grpcPort, grpcsPort, upstream, grpcPort, upstream, grpcsPort, metricsPort)
+	var buf bytes.Buffer
+	if err := haproxyTemplate.Execute(&buf, data); err != nil {
+		panic(fmt.Sprintf("haproxy config template execution failed: %v", err))
+	}
+	return buf.String()
 }
 
 // CommonLabels returns the pod selector labels. These must remain stable — never include AdditionalLabels here.

@@ -95,7 +95,7 @@ type EnvoyProxySpec struct {
 	// TerminationGracePeriodSeconds is the pod shutdown grace period.
 	// +kubebuilder:default=10
 	// +optional
-	TerminationGracePeriodSeconds int64 `json:"terminationGracePeriodSeconds"`
+	TerminationGracePeriodSeconds int64 `json:"terminationGracePeriodSeconds,omitempty"`
 
 	// UpstreamService is the consensus node Service to route traffic to.
 	// Defaults to the CR name with "envoy-" stripped (envoy-node1 → node1). Accepts any DNS name or FQDN.

@@ -3,8 +3,11 @@
 package envoy
 
 import (
+	"bytes"
+	_ "embed"
 	"fmt"
 	"strings"
+	"text/template"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -13,6 +16,28 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
+
+//go:embed tmpl/envoy.yaml.tmpl
+var envoyYamlTmpl string
+
+var envoyTemplate = template.Must(template.New("envoy.yaml").Parse(envoyYamlTmpl))
+
+type envoyConfigData struct {
+	AdminAddress    string
+	AdminPort       int32
+	ProxyPort       int32
+	MetricsPort     int32
+	AllowOrigins    string
+	AllowMethods    string
+	AllowHeaders    string
+	MaxAge          string
+	ExposeHeaders   string
+	TLSBlock        bool
+	TLSCertPath     string
+	TLSKeyPath      string
+	UpstreamService string
+	UpstreamPort    int32
+}
 
 const (
 	LabelManagedBy   = "app.kubernetes.io/managed-by"
@@ -125,30 +150,9 @@ func BuildEnv(envoy *operatorv1alpha1.EnvoyProxy) []corev1.EnvVar {
 
 // DefaultEnvoyConfig generates the operator-managed envoy.yaml: a gRPC-Web proxy listener and a Prometheus metrics listener.
 func DefaultEnvoyConfig(envoy *operatorv1alpha1.EnvoyProxy) map[string]string {
-	proxyPort := GetProxyPort(envoy)
-	metricsPort := GetMetricsPort(envoy)
-	upstreamService := GetUpstreamService(envoy)
-	upstreamPort := GetUpstreamPort(envoy)
-
 	adminAddress := "127.0.0.1"
 	if envoy.Spec.ExposeAdmin {
 		adminAddress = "0.0.0.0"
-	}
-
-	// Build TLS transport_socket block when a secret is configured.
-	tlsBlock := ""
-	if envoy.Spec.TLSSecretName != "" {
-		tlsBlock = fmt.Sprintf(`          transport_socket:
-            name: envoy.transport_sockets.tls
-            typed_config:
-              '@type': type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
-              common_tls_context:
-                tls_certificates:
-                  - certificate_chain:
-                      filename: %s
-                    private_key:
-                      filename: %s
-`, TLSCertPath, TLSKeyPath)
 	}
 
 	// Build CORS values — use spec overrides or fall back to defaults
@@ -180,124 +184,30 @@ func DefaultEnvoyConfig(envoy *operatorv1alpha1.EnvoyProxy) map[string]string {
 		}
 	}
 
-	adminPort := GetAdminPort(envoy)
+	data := envoyConfigData{
+		AdminAddress:    adminAddress,
+		AdminPort:       GetAdminPort(envoy),
+		ProxyPort:       GetProxyPort(envoy),
+		MetricsPort:     GetMetricsPort(envoy),
+		AllowOrigins:    allowOrigins,
+		AllowMethods:    allowMethods,
+		AllowHeaders:    allowHeaders,
+		MaxAge:          maxAge,
+		ExposeHeaders:   exposeHeaders,
+		TLSBlock:        envoy.Spec.TLSSecretName != "",
+		TLSCertPath:     TLSCertPath,
+		TLSKeyPath:      TLSKeyPath,
+		UpstreamService: GetUpstreamService(envoy),
+		UpstreamPort:    GetUpstreamPort(envoy),
+	}
 
-	config := fmt.Sprintf(`admin:
-  address:
-    socket_address:
-      address: %s
-      port_value: %d
-layered_runtime:
-  layers:
-    - name: static_layer
-      static_layer:
-        overload:
-          global_downstream_max_connections: 50000
-static_resources:
-  listeners:
-    - name: listener_0
-      address:
-        socket_address:
-          address: 0.0.0.0
-          port_value: %d
-      filter_chains:
-        - filters:
-            - name: envoy.filters.network.http_connection_manager
-              typed_config:
-                '@type': type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
-                codec_type: auto
-                stat_prefix: ingress_http
-                use_remote_address: true
-                skip_xff_append: false
-                route_config:
-                  name: local_route
-                  virtual_hosts:
-                    - name: local_service
-                      domains:
-                        - '*'
-                      routes:
-                        - match:
-                            prefix: /
-                          route:
-                            cluster: echo_service
-                            timeout: 0s
-                            max_stream_duration:
-                              grpc_timeout_header_max: 0s
-                      cors:
-                        allow_origin_string_match:
-                          %s
-                        allow_methods: %s
-                        allow_headers: %s
-                        max_age: %s
-                        expose_headers: %s
-                http_filters:
-                  - name: envoy.filters.http.grpc_web
-                  - name: envoy.filters.http.cors
-                  - name: envoy.filters.http.router
-%s
-    - name: prometheus_listener
-      address:
-        socket_address:
-          address: 0.0.0.0
-          port_value: %d
-      filter_chains:
-        - filters:
-            - name: envoy.filters.network.http_connection_manager
-              typed_config:
-                '@type': type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
-                codec_type: auto
-                stat_prefix: prometheus_stats
-                route_config:
-                  name: prometheus_route
-                  virtual_hosts:
-                    - name: prometheus
-                      domains:
-                        - '*'
-                      routes:
-                        - match:
-                            prefix: /healthz
-                          direct_response:
-                            status: 200
-                            body:
-                              inline_string: "ok"
-                        - match:
-                            prefix: /metrics
-                          route:
-                            cluster: prometheus_stats
-                            prefix_rewrite: /stats/prometheus
-                http_filters:
-                  - name: envoy.filters.http.router
-  clusters:
-    - name: echo_service
-      connect_timeout: 0.25s
-      type: logical_dns
-      http2_protocol_options: {}
-      lb_policy: round_robin
-      load_assignment:
-        cluster_name: cluster_0
-        endpoints:
-          - lb_endpoints:
-              - endpoint:
-                  address:
-                    socket_address:
-                      address: %s
-                      port_value: %d
-    - name: prometheus_stats
-      connect_timeout: 0.25s
-      type: STATIC
-      load_assignment:
-        cluster_name: prometheus_stats
-        endpoints:
-          - lb_endpoints:
-              - endpoint:
-                  address:
-                    socket_address:
-                      address: 127.0.0.1
-                      port_value: %d
-`, adminAddress, adminPort, proxyPort, allowOrigins, allowMethods, allowHeaders, maxAge, exposeHeaders, tlsBlock, metricsPort, upstreamService, upstreamPort, adminPort)
+	var buf bytes.Buffer
+	if err := envoyTemplate.Execute(&buf, data); err != nil {
+		panic(fmt.Sprintf("envoy config template execution failed: %v", err))
+	}
 
 	return map[string]string{
-		ConfigFileName: config,
+		ConfigFileName: buf.String(),
 	}
 }
 

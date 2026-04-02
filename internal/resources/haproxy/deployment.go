@@ -4,6 +4,8 @@ package haproxy
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -19,6 +21,8 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
+
+const configChecksumAnnotation = "operator.solo.hedera.com/config-checksum"
 
 type DeploymentSubReconciler struct {
 	*subreconciler.BaseSubReconciler[*operatorv1alpha1.HAProxyCapsule]
@@ -124,6 +128,8 @@ func (r *DeploymentSubReconciler) buildDeployment(haproxy *operatorv1alpha1.HAPr
 		gracePeriod = 10
 	}
 
+	configChecksum := fmt.Sprintf("%x", sha256.Sum256([]byte(HAProxyConfig(haproxy))))
+
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      haproxy.Name,
@@ -137,7 +143,8 @@ func (r *DeploymentSubReconciler) buildDeployment(haproxy *operatorv1alpha1.HAPr
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: resourceLabels,
+					Labels:      resourceLabels,
+					Annotations: map[string]string{configChecksumAnnotation: configChecksum},
 				},
 				Spec: corev1.PodSpec{
 					NodeSelector:                  haproxy.Spec.NodeSelector,
@@ -228,7 +235,27 @@ func (r *DeploymentSubReconciler) needsUpdate(existing, desired *appsv1.Deployme
 		if container.Image != existingContainer.Image || container.Name != existingContainer.Name {
 			return true
 		}
+		if len(container.Ports) != len(existingContainer.Ports) {
+			return true
+		}
+		if len(container.Env) != len(existingContainer.Env) {
+			return true
+		}
 	}
 
-	return len(existing.Spec.Template.Spec.Volumes) != len(desired.Spec.Template.Spec.Volumes)
+	if len(existing.Spec.Template.Spec.Volumes) != len(desired.Spec.Template.Spec.Volumes) {
+		return true
+	}
+
+	// Check pod template labels (captures AdditionalLabels changes)
+	for k, v := range desired.Spec.Template.Labels {
+		if existing.Spec.Template.Labels[k] != v {
+			return true
+		}
+	}
+
+	// Check config checksum annotation so ConfigMap changes trigger a rollout
+	desiredAnnotations := desired.Spec.Template.Annotations
+	existingAnnotations := existing.Spec.Template.Annotations
+	return desiredAnnotations[configChecksumAnnotation] != existingAnnotations[configChecksumAnnotation]
 }

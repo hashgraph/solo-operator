@@ -1304,3 +1304,201 @@ func TestGetHealthCheck_PartialSpec_ZeroValueFallback(t *testing.T) {
 		t.Errorf("expected zero TimeoutSeconds to fall back to 1, got %d", hc.TimeoutSeconds)
 	}
 }
+
+// --- HAProxyConfig template tests ---
+
+func TestHAProxyConfig_NonTLS(t *testing.T) {
+	haproxy := &operatorv1alpha1.HAProxyCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "haproxy-node1"},
+	}
+	cfg := HAProxyConfig(haproxy)
+
+	if !strings.Contains(cfg, "bind *:50211") {
+		t.Errorf("expected grpc frontend on 50211, config:\n%s", cfg)
+	}
+	if !strings.Contains(cfg, "bind *:50212") {
+		t.Errorf("expected grpcs frontend on 50212, config:\n%s", cfg)
+	}
+	if !strings.Contains(cfg, "server upstream node1:50211") {
+		t.Errorf("expected upstream node1:50211 (haproxy- prefix stripped), config:\n%s", cfg)
+	}
+	if strings.Contains(cfg, "ssl") {
+		t.Error("non-TLS config must not contain ssl directive")
+	}
+	if strings.Contains(cfg, "consensus_nodes_tls") {
+		t.Error("non-TLS config must not contain consensus_nodes_tls backend")
+	}
+}
+
+func TestHAProxyConfig_TLS(t *testing.T) {
+	haproxy := &operatorv1alpha1.HAProxyCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "haproxy-node1"},
+		Spec: operatorv1alpha1.HAProxyCapsuleSpec{
+			TLSSecretName: "my-tls",
+		},
+	}
+	cfg := HAProxyConfig(haproxy)
+
+	if !strings.Contains(cfg, "ssl crt /etc/haproxy/certs/tls.crt alpn h2") {
+		t.Errorf("expected TLS grpcs bind directive, config:\n%s", cfg)
+	}
+	if !strings.Contains(cfg, "consensus_nodes_tls") {
+		t.Errorf("expected consensus_nodes_tls backend in TLS config, config:\n%s", cfg)
+	}
+	if !strings.Contains(cfg, "ssl verify none") {
+		t.Errorf("expected ssl verify none on TLS backend, config:\n%s", cfg)
+	}
+}
+
+func TestHAProxyConfig_CustomPorts(t *testing.T) {
+	haproxy := &operatorv1alpha1.HAProxyCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "test"},
+		Spec: operatorv1alpha1.HAProxyCapsuleSpec{
+			GrpcPort:    50311,
+			GrpcsPort:   50312,
+			MetricsPort: 9191,
+		},
+	}
+	cfg := HAProxyConfig(haproxy)
+
+	if !strings.Contains(cfg, "bind *:50311") {
+		t.Errorf("expected custom grpc port 50311, config:\n%s", cfg)
+	}
+	if !strings.Contains(cfg, "bind *:50312") {
+		t.Errorf("expected custom grpcs port 50312, config:\n%s", cfg)
+	}
+	if !strings.Contains(cfg, "bind *:9191") {
+		t.Errorf("expected custom metrics port 9191, config:\n%s", cfg)
+	}
+}
+
+func TestHAProxyConfig_CustomUpstreamService(t *testing.T) {
+	haproxy := &operatorv1alpha1.HAProxyCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "haproxy-node1"},
+		Spec: operatorv1alpha1.HAProxyCapsuleSpec{
+			UpstreamService: "my-custom-svc",
+		},
+	}
+	cfg := HAProxyConfig(haproxy)
+
+	if !strings.Contains(cfg, "my-custom-svc") {
+		t.Errorf("expected custom upstream service in config, config:\n%s", cfg)
+	}
+	// Prefix stripping must not apply when UpstreamService is explicit
+	if strings.Contains(cfg, "node1") {
+		t.Error("explicit UpstreamService must override prefix stripping")
+	}
+}
+
+// --- GetUpstreamService tests ---
+
+func TestGetUpstreamService(t *testing.T) {
+	tests := []struct {
+		name     string
+		crName   string
+		upstream string
+		want     string
+	}{
+		{"strips haproxy- prefix", "haproxy-node1", "", "node1"},
+		{"strips haproxy- short", "haproxy-x", "", "x"},
+		{"no prefix to strip", "node1", "", "node1"},
+		{"name too short for prefix", "haproxy", "", "haproxy"},
+		{"explicit upstream overrides", "haproxy-node1", "custom-svc", "custom-svc"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			haproxy := &operatorv1alpha1.HAProxyCapsule{
+				ObjectMeta: metav1.ObjectMeta{Name: tt.crName},
+				Spec:       operatorv1alpha1.HAProxyCapsuleSpec{UpstreamService: tt.upstream},
+			}
+			if got := GetUpstreamService(haproxy); got != tt.want {
+				t.Errorf("GetUpstreamService() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// --- Config checksum annotation tests ---
+
+func TestDeploymentSubReconciler_ConfigChecksumAnnotation(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	haproxy := newTestHAProxy()
+	c := newTestClient(scheme, haproxy)
+
+	_, err := NewDeploymentSubReconciler(c, scheme).Reconcile(ctx, haproxy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	deploy := &appsv1.Deployment{}
+	if err := c.Get(ctx, client.ObjectKey{Name: "test-haproxy", Namespace: "test-namespace"}, deploy); err != nil {
+		t.Fatalf("failed to get deployment: %v", err)
+	}
+
+	checksum := deploy.Spec.Template.Annotations[configChecksumAnnotation]
+	if checksum == "" {
+		t.Errorf("expected config checksum annotation %q to be set on pod template", configChecksumAnnotation)
+	}
+}
+
+func TestDeploymentSubReconciler_UpdateOnConfigChange(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	haproxy := newTestHAProxy()
+	c := newTestClient(scheme, haproxy)
+	reconciler := NewDeploymentSubReconciler(c, scheme)
+
+	if _, err := reconciler.Reconcile(ctx, haproxy); err != nil {
+		t.Fatalf("unexpected error on create: %v", err)
+	}
+
+	deploy := &appsv1.Deployment{}
+	if err := c.Get(ctx, client.ObjectKey{Name: "test-haproxy", Namespace: "test-namespace"}, deploy); err != nil {
+		t.Fatalf("failed to get deployment: %v", err)
+	}
+	checksumBefore := deploy.Spec.Template.Annotations[configChecksumAnnotation]
+
+	// Change config by adding upstream service (changes generated HAProxy config)
+	haproxy.Spec.UpstreamService = "new-upstream"
+	if _, err := reconciler.Reconcile(ctx, haproxy); err != nil {
+		t.Fatalf("unexpected error on update: %v", err)
+	}
+
+	if err := c.Get(ctx, client.ObjectKey{Name: "test-haproxy", Namespace: "test-namespace"}, deploy); err != nil {
+		t.Fatalf("failed to get deployment after update: %v", err)
+	}
+	checksumAfter := deploy.Spec.Template.Annotations[configChecksumAnnotation]
+
+	if checksumBefore == checksumAfter {
+		t.Error("expected config checksum annotation to change when upstream service changes")
+	}
+}
+
+// --- Service label update test ---
+
+func TestServiceSubReconciler_UpdateOnLabelChange(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	haproxy := newTestHAProxy()
+	c := newTestClient(scheme, haproxy)
+	reconciler := NewServiceSubReconciler(c, scheme)
+
+	if _, err := reconciler.Reconcile(ctx, haproxy); err != nil {
+		t.Fatalf("unexpected error on create: %v", err)
+	}
+
+	// Add an additional label — needsUpdate must detect this
+	haproxy.Spec.AdditionalLabels = map[string]string{"solo.hedera.com/env": "prod"}
+	if _, err := reconciler.Reconcile(ctx, haproxy); err != nil {
+		t.Fatalf("unexpected error on update: %v", err)
+	}
+
+	svc := &corev1.Service{}
+	if err := c.Get(ctx, client.ObjectKey{Name: "test-haproxy", Namespace: "test-namespace"}, svc); err != nil {
+		t.Fatalf("failed to get service: %v", err)
+	}
+	if svc.Labels["solo.hedera.com/env"] != "prod" {
+		t.Errorf("expected service label to be updated, got %v", svc.Labels)
+	}
+}
