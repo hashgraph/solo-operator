@@ -141,8 +141,8 @@ var _ = Describe("HAProxyCapsule Controller", func() {
 					Namespace: haproxyNamespace,
 				},
 				Spec: operatorv1alpha1.HAProxyCapsuleSpec{
-					Image:       "haproxy:2.8.10-alpine3.20",
-					ServiceType: operatorv1alpha1.HAProxyServiceTypeClusterIP,
+					Image:         "haproxy:2.8.10-alpine3.20",
+					ServiceType:   operatorv1alpha1.HAProxyServiceTypeClusterIP,
 					TLSSecretName: tlsSecretName,
 				},
 			}

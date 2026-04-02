@@ -105,7 +105,7 @@ type HAProxyCapsuleSpec struct {
 	// +kubebuilder:validation:Enum=Cluster;Local
 	// +kubebuilder:default=Local
 	// +optional
-	ExternalTrafficPolicy corev1.ServiceExternalTrafficPolicyType `json:"externalTrafficPolicy,omitempty"`
+	ExternalTrafficPolicy corev1.ServiceExternalTrafficPolicy `json:"externalTrafficPolicy,omitempty"`
 
 	// ServiceAnnotations are extra Service annotations (e.g. cloud.google.com/neg for GCP NEG).
 	// +optional

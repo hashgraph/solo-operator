@@ -827,6 +827,166 @@ func TestIngressSubReconciler_CreatesIngress(t *testing.T) {
 	}
 }
 
+func TestIngressSubReconciler_SkippedForClusterIP(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	envoy := newTestEnvoy()
+	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeClusterIP
+	c := newTestClient(scheme, envoy)
+
+	reconciler := NewIngressSubReconciler(c, scheme)
+	if reconciler.ShouldReconcile(ctx, envoy) {
+		t.Error("expected ShouldReconcile to return false for ClusterIP type")
+	}
+}
+
+func TestIngressSubReconciler_NilIngressSpec(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	envoy := newTestEnvoy()
+	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeIngress
+	envoy.Spec.IngressSpec = nil
+	c := newTestClient(scheme, envoy)
+
+	reconciler := NewIngressSubReconciler(c, scheme)
+	_, err := reconciler.Reconcile(ctx, envoy)
+	if err != nil {
+		t.Fatalf("unexpected error with nil ingressSpec: %v", err)
+	}
+	ing := &networkingv1.Ingress{}
+	if err := c.Get(ctx, client.ObjectKey{Name: envoy.Name, Namespace: envoy.Namespace}, ing); err == nil {
+		t.Error("expected no ingress to be created when ingressSpec is nil")
+	}
+}
+
+func TestIngressSubReconciler_IngressClassName(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	envoy := newTestEnvoy()
+	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeIngress
+	className := "nginx"
+	pathType := networkingv1.PathTypePrefix
+	envoy.Spec.IngressSpec = &networkingv1.IngressSpec{
+		IngressClassName: &className,
+		Rules: []networkingv1.IngressRule{
+			{
+				Host: "envoy.example.com",
+				IngressRuleValue: networkingv1.IngressRuleValue{
+					HTTP: &networkingv1.HTTPIngressRuleValue{
+						Paths: []networkingv1.HTTPIngressPath{
+							{Path: "/", PathType: &pathType, Backend: networkingv1.IngressBackend{
+								Service: &networkingv1.IngressServiceBackend{
+									Name: "test-envoy",
+									Port: networkingv1.ServiceBackendPort{Number: DefaultProxyPort},
+								},
+							}},
+						},
+					},
+				},
+			},
+		},
+	}
+	c := newTestClient(scheme, envoy)
+
+	_, err := NewIngressSubReconciler(c, scheme).Reconcile(ctx, envoy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	ing := &networkingv1.Ingress{}
+	if err := c.Get(ctx, client.ObjectKey{Name: envoy.Name, Namespace: envoy.Namespace}, ing); err != nil {
+		t.Fatalf("failed to get ingress: %v", err)
+	}
+	if ing.Spec.IngressClassName == nil || *ing.Spec.IngressClassName != "nginx" {
+		t.Errorf("expected ingressClassName nginx, got %v", ing.Spec.IngressClassName)
+	}
+}
+
+func TestIngressSubReconciler_Labels(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	envoy := newTestEnvoy()
+	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeIngress
+	pathType := networkingv1.PathTypePrefix
+	envoy.Spec.IngressSpec = &networkingv1.IngressSpec{
+		Rules: []networkingv1.IngressRule{
+			{Host: "envoy.example.com", IngressRuleValue: networkingv1.IngressRuleValue{
+				HTTP: &networkingv1.HTTPIngressRuleValue{
+					Paths: []networkingv1.HTTPIngressPath{
+						{Path: "/", PathType: &pathType, Backend: networkingv1.IngressBackend{
+							Service: &networkingv1.IngressServiceBackend{
+								Name: "test-envoy",
+								Port: networkingv1.ServiceBackendPort{Number: DefaultProxyPort},
+							},
+						}},
+					},
+				},
+			}},
+		},
+	}
+	c := newTestClient(scheme, envoy)
+
+	_, err := NewIngressSubReconciler(c, scheme).Reconcile(ctx, envoy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	ing := &networkingv1.Ingress{}
+	if err := c.Get(ctx, client.ObjectKey{Name: envoy.Name, Namespace: envoy.Namespace}, ing); err != nil {
+		t.Fatalf("failed to get ingress: %v", err)
+	}
+	if ing.Labels[LabelManagedBy] != ManagedByValue {
+		t.Errorf("expected managed-by label, got %v", ing.Labels)
+	}
+	if ing.Labels[LabelApp] != envoy.Name {
+		t.Errorf("expected app label %s, got %s", envoy.Name, ing.Labels[LabelApp])
+	}
+}
+
+func TestIngressSubReconciler_Update(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	envoy := newTestEnvoy()
+	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeIngress
+	pathType := networkingv1.PathTypePrefix
+	envoy.Spec.IngressSpec = &networkingv1.IngressSpec{
+		Rules: []networkingv1.IngressRule{
+			{Host: "envoy-v1.example.com", IngressRuleValue: networkingv1.IngressRuleValue{
+				HTTP: &networkingv1.HTTPIngressRuleValue{
+					Paths: []networkingv1.HTTPIngressPath{
+						{Path: "/", PathType: &pathType, Backend: networkingv1.IngressBackend{
+							Service: &networkingv1.IngressServiceBackend{
+								Name: "test-envoy",
+								Port: networkingv1.ServiceBackendPort{Number: DefaultProxyPort},
+							},
+						}},
+					},
+				},
+			}},
+		},
+	}
+	c := newTestClient(scheme, envoy)
+	reconciler := NewIngressSubReconciler(c, scheme)
+
+	if _, err := reconciler.Reconcile(ctx, envoy); err != nil {
+		t.Fatalf("first reconcile failed: %v", err)
+	}
+
+	// Update the host
+	envoy.Spec.IngressSpec.Rules[0].Host = "envoy-v2.example.com"
+	if _, err := reconciler.Reconcile(ctx, envoy); err != nil {
+		t.Fatalf("second reconcile failed: %v", err)
+	}
+
+	ing := &networkingv1.Ingress{}
+	if err := c.Get(ctx, client.ObjectKey{Name: envoy.Name, Namespace: envoy.Namespace}, ing); err != nil {
+		t.Fatalf("failed to get ingress: %v", err)
+	}
+	if ing.Spec.Rules[0].Host != "envoy-v2.example.com" {
+		t.Errorf("expected updated host envoy-v2.example.com, got %s", ing.Spec.Rules[0].Host)
+	}
+}
+
 func TestNewSubReconcilers(t *testing.T) {
 	scheme := newTestScheme()
 	c := newTestClient(scheme)
@@ -1417,4 +1577,3 @@ func TestServiceSubReconciler_CustomServiceSpec_NilSelector(t *testing.T) {
 		t.Error("expected selector to be set even with nil selector in custom ServiceSpec")
 	}
 }
-

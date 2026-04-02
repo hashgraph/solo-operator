@@ -385,7 +385,7 @@ func TestServiceSubReconciler_IngressType(t *testing.T) {
 func TestIngressSubReconciler_Skipped(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
-	haproxy := newTestHAProxy() // ServiceType = LoadBalancer
+	haproxy := newTestHAProxy()
 	c := newTestClient(scheme, haproxy)
 
 	reconciler := NewIngressSubReconciler(c, scheme)
@@ -443,6 +443,166 @@ func TestIngressSubReconciler_CreatesIngress(t *testing.T) {
 	}
 	if len(ing.Spec.Rules) != 1 || ing.Spec.Rules[0].Host != "haproxy.example.com" {
 		t.Errorf("unexpected ingress spec: %+v", ing.Spec)
+	}
+}
+
+func TestIngressSubReconciler_SkippedForClusterIP(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	haproxy := newTestHAProxy()
+	haproxy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeClusterIP
+	c := newTestClient(scheme, haproxy)
+
+	reconciler := NewIngressSubReconciler(c, scheme)
+	if reconciler.ShouldReconcile(ctx, haproxy) {
+		t.Error("expected ShouldReconcile to return false for ClusterIP type")
+	}
+}
+
+func TestIngressSubReconciler_NilIngressSpec(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	haproxy := newTestHAProxy()
+	haproxy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeIngress
+	haproxy.Spec.IngressSpec = nil
+	c := newTestClient(scheme, haproxy)
+
+	reconciler := NewIngressSubReconciler(c, scheme)
+	_, err := reconciler.Reconcile(ctx, haproxy)
+	if err != nil {
+		t.Fatalf("unexpected error with nil ingressSpec: %v", err)
+	}
+	ing := &networkingv1.Ingress{}
+	if err := c.Get(ctx, client.ObjectKey{Name: haproxy.Name, Namespace: haproxy.Namespace}, ing); err == nil {
+		t.Error("expected no ingress to be created when ingressSpec is nil")
+	}
+}
+
+func TestIngressSubReconciler_IngressClassName(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	haproxy := newTestHAProxy()
+	haproxy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeIngress
+	className := "nginx"
+	pathType := networkingv1.PathTypePrefix
+	haproxy.Spec.IngressSpec = &networkingv1.IngressSpec{
+		IngressClassName: &className,
+		Rules: []networkingv1.IngressRule{
+			{
+				Host: "haproxy.example.com",
+				IngressRuleValue: networkingv1.IngressRuleValue{
+					HTTP: &networkingv1.HTTPIngressRuleValue{
+						Paths: []networkingv1.HTTPIngressPath{
+							{Path: "/", PathType: &pathType, Backend: networkingv1.IngressBackend{
+								Service: &networkingv1.IngressServiceBackend{
+									Name: "test-haproxy",
+									Port: networkingv1.ServiceBackendPort{Number: DefaultGrpcPort},
+								},
+							}},
+						},
+					},
+				},
+			},
+		},
+	}
+	c := newTestClient(scheme, haproxy)
+
+	_, err := NewIngressSubReconciler(c, scheme).Reconcile(ctx, haproxy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	ing := &networkingv1.Ingress{}
+	if err := c.Get(ctx, client.ObjectKey{Name: haproxy.Name, Namespace: haproxy.Namespace}, ing); err != nil {
+		t.Fatalf("failed to get ingress: %v", err)
+	}
+	if ing.Spec.IngressClassName == nil || *ing.Spec.IngressClassName != "nginx" {
+		t.Errorf("expected ingressClassName nginx, got %v", ing.Spec.IngressClassName)
+	}
+}
+
+func TestIngressSubReconciler_Labels(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	haproxy := newTestHAProxy()
+	haproxy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeIngress
+	pathType := networkingv1.PathTypePrefix
+	haproxy.Spec.IngressSpec = &networkingv1.IngressSpec{
+		Rules: []networkingv1.IngressRule{
+			{Host: "haproxy.example.com", IngressRuleValue: networkingv1.IngressRuleValue{
+				HTTP: &networkingv1.HTTPIngressRuleValue{
+					Paths: []networkingv1.HTTPIngressPath{
+						{Path: "/", PathType: &pathType, Backend: networkingv1.IngressBackend{
+							Service: &networkingv1.IngressServiceBackend{
+								Name: "test-haproxy",
+								Port: networkingv1.ServiceBackendPort{Number: DefaultGrpcPort},
+							},
+						}},
+					},
+				},
+			}},
+		},
+	}
+	c := newTestClient(scheme, haproxy)
+
+	_, err := NewIngressSubReconciler(c, scheme).Reconcile(ctx, haproxy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	ing := &networkingv1.Ingress{}
+	if err := c.Get(ctx, client.ObjectKey{Name: haproxy.Name, Namespace: haproxy.Namespace}, ing); err != nil {
+		t.Fatalf("failed to get ingress: %v", err)
+	}
+	if ing.Labels[LabelManagedBy] != ManagedByValue {
+		t.Errorf("expected managed-by label, got %v", ing.Labels)
+	}
+	if ing.Labels[LabelApp] != haproxy.Name {
+		t.Errorf("expected app label %s, got %s", haproxy.Name, ing.Labels[LabelApp])
+	}
+}
+
+func TestIngressSubReconciler_Update(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	haproxy := newTestHAProxy()
+	haproxy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeIngress
+	pathType := networkingv1.PathTypePrefix
+	haproxy.Spec.IngressSpec = &networkingv1.IngressSpec{
+		Rules: []networkingv1.IngressRule{
+			{Host: "haproxy-v1.example.com", IngressRuleValue: networkingv1.IngressRuleValue{
+				HTTP: &networkingv1.HTTPIngressRuleValue{
+					Paths: []networkingv1.HTTPIngressPath{
+						{Path: "/", PathType: &pathType, Backend: networkingv1.IngressBackend{
+							Service: &networkingv1.IngressServiceBackend{
+								Name: "test-haproxy",
+								Port: networkingv1.ServiceBackendPort{Number: DefaultGrpcPort},
+							},
+						}},
+					},
+				},
+			}},
+		},
+	}
+	c := newTestClient(scheme, haproxy)
+	reconciler := NewIngressSubReconciler(c, scheme)
+
+	if _, err := reconciler.Reconcile(ctx, haproxy); err != nil {
+		t.Fatalf("first reconcile failed: %v", err)
+	}
+
+	// Update the host
+	haproxy.Spec.IngressSpec.Rules[0].Host = "haproxy-v2.example.com"
+	if _, err := reconciler.Reconcile(ctx, haproxy); err != nil {
+		t.Fatalf("second reconcile failed: %v", err)
+	}
+
+	ing := &networkingv1.Ingress{}
+	if err := c.Get(ctx, client.ObjectKey{Name: haproxy.Name, Namespace: haproxy.Namespace}, ing); err != nil {
+		t.Fatalf("failed to get ingress: %v", err)
+	}
+	if ing.Spec.Rules[0].Host != "haproxy-v2.example.com" {
+		t.Errorf("expected updated host haproxy-v2.example.com, got %s", ing.Spec.Rules[0].Host)
 	}
 }
 

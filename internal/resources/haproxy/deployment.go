@@ -230,9 +230,5 @@ func (r *DeploymentSubReconciler) needsUpdate(existing, desired *appsv1.Deployme
 		}
 	}
 
-	if len(existing.Spec.Template.Spec.Volumes) != len(desired.Spec.Template.Spec.Volumes) {
-		return true
-	}
-
-	return false
+	return len(existing.Spec.Template.Spec.Volumes) != len(desired.Spec.Template.Spec.Volumes)
 }

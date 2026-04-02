@@ -108,7 +108,7 @@ func (r *DeploymentSubReconciler) buildDeployment(envoy *operatorv1alpha1.EnvoyP
 								{Name: "metrics", ContainerPort: metricsPort, Protocol: corev1.ProtocolTCP},
 							},
 							VolumeMounts: buildVolumeMounts(envoy),
-							Env: BuildEnv(envoy),
+							Env:          BuildEnv(envoy),
 							StartupProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
@@ -214,9 +214,5 @@ func (r *DeploymentSubReconciler) needsUpdate(existing, desired *appsv1.Deployme
 		}
 	}
 
-	if len(existing.Spec.Template.Spec.Volumes) != len(desired.Spec.Template.Spec.Volumes) {
-		return true
-	}
-
-	return false
+	return len(existing.Spec.Template.Spec.Volumes) != len(desired.Spec.Template.Spec.Volumes)
 }
