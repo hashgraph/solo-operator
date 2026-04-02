@@ -41,10 +41,12 @@ static_resources:
                               grpc_timeout_header_max: 0s
                       cors:
                         allow_origin_string_match:
-                          {{.AllowOrigins}}
+                          {{- range .AllowOrigins}}
+                          - prefix: '{{. | yamlEscape}}'
+                          {{- end}}
                         allow_methods: {{.AllowMethods}}
                         allow_headers: {{.AllowHeaders}}
-                        max_age: {{.MaxAge}}
+                        max_age: "{{.MaxAge}}"
                         expose_headers: {{.ExposeHeaders}}
                 http_filters:
                   - name: envoy.filters.http.grpc_web

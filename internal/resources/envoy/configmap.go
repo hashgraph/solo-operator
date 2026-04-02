@@ -34,7 +34,10 @@ func NewConfigMapSubReconciler(c client.Client, scheme *runtime.Scheme) *ConfigM
 func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, envoy *operatorv1alpha1.EnvoyProxy) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	desired := r.buildConfigMap(envoy)
+	desired, err := r.buildConfigMap(envoy)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	// Set owner reference
 	if err := controllerutil.SetControllerReference(envoy, desired, r.Scheme); err != nil {
@@ -43,7 +46,7 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, envoy *operatorv
 
 	// Check if exists
 	existing := &corev1.ConfigMap{}
-	err := r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
+	err = r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("Creating Envoy config map", "name", desired.Name, "namespace", desired.Namespace)
@@ -69,11 +72,14 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, envoy *operatorv
 }
 
 // buildConfigMap builds the desired config map
-func (r *ConfigMapSubReconciler) buildConfigMap(envoy *operatorv1alpha1.EnvoyProxy) *corev1.ConfigMap {
-	// Use provided files or default config
+func (r *ConfigMapSubReconciler) buildConfigMap(envoy *operatorv1alpha1.EnvoyProxy) (*corev1.ConfigMap, error) {
 	files := envoy.Spec.Files
-	if files == nil || len(files) == 0 {
-		files = DefaultEnvoyConfig(envoy)
+	if len(files) == 0 {
+		var err error
+		files, err = DefaultEnvoyConfig(envoy)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &corev1.ConfigMap{
@@ -83,7 +89,7 @@ func (r *ConfigMapSubReconciler) buildConfigMap(envoy *operatorv1alpha1.EnvoyPro
 			Labels:    CommonLabels(envoy),
 		},
 		Data: files,
-	}
+	}, nil
 }
 
 // needsUpdate checks if the config map needs to be updated

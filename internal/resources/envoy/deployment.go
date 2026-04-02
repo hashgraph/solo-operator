@@ -7,6 +7,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -228,19 +229,60 @@ func (r *DeploymentSubReconciler) needsUpdate(existing, desired *appsv1.Deployme
 		return true
 	}
 
-	if len(existing.Spec.Template.Spec.Containers) != len(desired.Spec.Template.Spec.Containers) {
+	ep := existing.Spec.Template.Spec
+	dp := desired.Spec.Template.Spec
+
+	if !equality.Semantic.DeepEqual(ep.NodeSelector, dp.NodeSelector) {
+		return true
+	}
+	if !equality.Semantic.DeepEqual(ep.Affinity, dp.Affinity) {
+		return true
+	}
+	if !equality.Semantic.DeepEqual(ep.Tolerations, dp.Tolerations) {
+		return true
+	}
+	if !equality.Semantic.DeepEqual(ep.TerminationGracePeriodSeconds, dp.TerminationGracePeriodSeconds) {
+		return true
+	}
+	if !equality.Semantic.DeepEqual(ep.Volumes, dp.Volumes) {
 		return true
 	}
 
-	for i, container := range desired.Spec.Template.Spec.Containers {
-		if i >= len(existing.Spec.Template.Spec.Containers) {
+	if len(ep.Containers) != len(dp.Containers) {
+		return true
+	}
+	for i := range dp.Containers {
+		ec := ep.Containers[i]
+		dc := dp.Containers[i]
+		if ec.Name != dc.Name || ec.Image != dc.Image {
 			return true
 		}
-		existingContainer := existing.Spec.Template.Spec.Containers[i]
-		if container.Image != existingContainer.Image || container.Name != existingContainer.Name {
+		if !equality.Semantic.DeepEqual(ec.Ports, dc.Ports) {
+			return true
+		}
+		if !equality.Semantic.DeepEqual(ec.Env, dc.Env) {
+			return true
+		}
+		if !equality.Semantic.DeepEqual(ec.VolumeMounts, dc.VolumeMounts) {
+			return true
+		}
+		if !equality.Semantic.DeepEqual(ec.StartupProbe, dc.StartupProbe) {
+			return true
+		}
+		if !equality.Semantic.DeepEqual(ec.LivenessProbe, dc.LivenessProbe) {
+			return true
+		}
+		if !equality.Semantic.DeepEqual(ec.ReadinessProbe, dc.ReadinessProbe) {
 			return true
 		}
 	}
 
-	return len(existing.Spec.Template.Spec.Volumes) != len(desired.Spec.Template.Spec.Volumes)
+	// Check pod template labels (captures AdditionalLabels changes)
+	for k, v := range desired.Spec.Template.Labels {
+		if existing.Spec.Template.Labels[k] != v {
+			return true
+		}
+	}
+
+	return false
 }

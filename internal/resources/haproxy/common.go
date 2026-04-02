@@ -87,7 +87,7 @@ const (
 	ContainerName    = "haproxy"
 )
 
-func HAProxyConfig(haproxy *operatorv1alpha1.HAProxyCapsule) string {
+func HAProxyConfig(haproxy *operatorv1alpha1.HAProxyCapsule) (string, error) {
 	data := haproxyConfigData{
 		GrpcPort:        GetGrpcPort(haproxy),
 		GrpcsPort:       GetGrpcsPort(haproxy),
@@ -97,9 +97,9 @@ func HAProxyConfig(haproxy *operatorv1alpha1.HAProxyCapsule) string {
 	}
 	var buf bytes.Buffer
 	if err := haproxyTemplate.Execute(&buf, data); err != nil {
-		panic(fmt.Sprintf("haproxy config template execution failed: %v", err))
+		return "", fmt.Errorf("haproxy config template execution failed: %w", err)
 	}
-	return buf.String()
+	return buf.String(), nil
 }
 
 // CommonLabels returns the pod selector labels. These must remain stable — never include AdditionalLabels here.

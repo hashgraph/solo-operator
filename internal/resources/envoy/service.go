@@ -4,6 +4,8 @@ package envoy
 
 import (
 	"context"
+	"sort"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -18,6 +20,44 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
+
+// managedAnnotationsAnnotation records which annotation keys were last written by the operator.
+// This enables deletion of annotations removed from spec.serviceAnnotations.
+const managedAnnotationsAnnotation = "operator.solo.hedera.com/managed-annotations"
+
+// managedAnnotationsKeys extracts the sorted annotation keys stored in the marker annotation.
+func managedAnnotationsKeys(svc *corev1.Service) []string {
+	val := svc.Annotations[managedAnnotationsAnnotation]
+	if val == "" {
+		return nil
+	}
+	return strings.Split(val, ",")
+}
+
+// setManagedAnnotations writes desired annotations into existing and removes any previously
+// managed keys that are no longer in desired.
+func setManagedAnnotations(existing *corev1.Service, desired map[string]string) {
+	if existing.Annotations == nil {
+		existing.Annotations = make(map[string]string)
+	}
+	// Remove previously managed keys no longer in desired
+	for _, k := range managedAnnotationsKeys(existing) {
+		if _, still := desired[k]; !still {
+			delete(existing.Annotations, k)
+		}
+	}
+	// Upsert desired keys
+	for k, v := range desired {
+		existing.Annotations[k] = v
+	}
+	// Record the new managed key set
+	keys := make([]string, 0, len(desired))
+	for k := range desired {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	existing.Annotations[managedAnnotationsAnnotation] = strings.Join(keys, ",")
+}
 
 // ServiceSubReconciler manages the Service for an EnvoyProxy
 type ServiceSubReconciler struct {
@@ -63,12 +103,7 @@ func (r *ServiceSubReconciler) Reconcile(ctx context.Context, envoy *operatorv1a
 		existing.Spec.Type = desired.Spec.Type
 		existing.Spec.ExternalTrafficPolicy = desired.Spec.ExternalTrafficPolicy
 		existing.Labels = desired.Labels
-		for k, v := range desired.Annotations {
-			if existing.Annotations == nil {
-				existing.Annotations = make(map[string]string)
-			}
-			existing.Annotations[k] = v
-		}
+		setManagedAnnotations(existing, envoy.Spec.ServiceAnnotations)
 
 		// Preserve NodePorts when updating ports
 		for i, port := range desired.Spec.Ports {
@@ -114,12 +149,24 @@ func (r *ServiceSubReconciler) buildService(envoy *operatorv1alpha1.EnvoyProxy) 
 		extPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
 	}
 
+	// Build annotations: user annotations + managed-keys marker
+	annotations := make(map[string]string, len(envoy.Spec.ServiceAnnotations)+1)
+	for k, v := range envoy.Spec.ServiceAnnotations {
+		annotations[k] = v
+	}
+	managedKeys := make([]string, 0, len(envoy.Spec.ServiceAnnotations))
+	for k := range envoy.Spec.ServiceAnnotations {
+		managedKeys = append(managedKeys, k)
+	}
+	sort.Strings(managedKeys)
+	annotations[managedAnnotationsAnnotation] = strings.Join(managedKeys, ",")
+
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        envoy.Name,
 			Namespace:   envoy.Namespace,
 			Labels:      resourceLabels,
-			Annotations: envoy.Spec.ServiceAnnotations,
+			Annotations: annotations,
 		},
 		Spec: corev1.ServiceSpec{
 			Type:     svcType,
@@ -182,9 +229,17 @@ func (r *ServiceSubReconciler) needsUpdate(existing, desired *corev1.Service) bo
 		}
 	}
 
-	// Check annotations (only desired keys; extra cloud-added annotations are preserved)
+	// Check annotations: the managed-marker changes whenever keys are added or removed,
+	// and desired values are compared for upsert detection.
 	for k, v := range desired.Annotations {
 		if existing.Annotations[k] != v {
+			return true
+		}
+	}
+
+	// Check labels (only desired keys; extra labels are preserved)
+	for k, v := range desired.Labels {
+		if existing.Labels[k] != v {
 			return true
 		}
 	}

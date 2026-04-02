@@ -20,14 +20,27 @@ import (
 //go:embed tmpl/envoy.yaml.tmpl
 var envoyYamlTmpl string
 
-var envoyTemplate = template.Must(template.New("envoy.yaml").Parse(envoyYamlTmpl))
+// yamlEscapeString escapes a string for safe embedding as a YAML scalar (single-quoted style).
+// Single quotes in the value are doubled; newlines are rejected to prevent YAML injection.
+func yamlEscapeString(s string) (string, error) {
+	if strings.ContainsAny(s, "\n\r") {
+		return "", fmt.Errorf("CORS value contains newline, which is not allowed: %q", s)
+	}
+	return strings.ReplaceAll(s, "'", "''"), nil
+}
+
+var envoyTemplate = template.Must(
+	template.New("envoy.yaml").
+		Funcs(template.FuncMap{"yamlEscape": yamlEscapeString}).
+		Parse(envoyYamlTmpl),
+)
 
 type envoyConfigData struct {
 	AdminAddress    string
 	AdminPort       int32
 	ProxyPort       int32
 	MetricsPort     int32
-	AllowOrigins    string
+	AllowOrigins    []string // each entry is a raw origin string; template wraps with yaml escape
 	AllowMethods    string
 	AllowHeaders    string
 	MaxAge          string
@@ -149,26 +162,22 @@ func BuildEnv(envoy *operatorv1alpha1.EnvoyProxy) []corev1.EnvVar {
 }
 
 // DefaultEnvoyConfig generates the operator-managed envoy.yaml: a gRPC-Web proxy listener and a Prometheus metrics listener.
-func DefaultEnvoyConfig(envoy *operatorv1alpha1.EnvoyProxy) map[string]string {
+func DefaultEnvoyConfig(envoy *operatorv1alpha1.EnvoyProxy) (map[string]string, error) {
 	adminAddress := "127.0.0.1"
 	if envoy.Spec.ExposeAdmin {
 		adminAddress = "0.0.0.0"
 	}
 
 	// Build CORS values — use spec overrides or fall back to defaults
-	allowOrigins := "- prefix: '*'"
+	allowOrigins := []string{"*"}
 	allowMethods := "GET, PUT, DELETE, POST, OPTIONS"
 	allowHeaders := "keep-alive,user-agent,cache-control,content-type,content-transfer-encoding,custom-header-1,x-accept-content-transfer-encoding,x-accept-response-streaming,x-user-agent,x-grpc-web,grpc-timeout"
 	exposeHeaders := "custom-header-1,grpc-status,grpc-message"
-	maxAge := `"1728000"`
+	maxAge := "1728000"
 
 	if c := envoy.Spec.CORSConfig; c != nil {
 		if len(c.AllowOrigins) > 0 {
-			parts := make([]string, len(c.AllowOrigins))
-			for i, o := range c.AllowOrigins {
-				parts[i] = "- prefix: '" + o + "'"
-			}
-			allowOrigins = strings.Join(parts, "\n                          ")
+			allowOrigins = c.AllowOrigins
 		}
 		if c.AllowMethods != "" {
 			allowMethods = c.AllowMethods
@@ -180,7 +189,7 @@ func DefaultEnvoyConfig(envoy *operatorv1alpha1.EnvoyProxy) map[string]string {
 			exposeHeaders = strings.Join(c.ExposeHeaders, ",")
 		}
 		if c.MaxAge != "" {
-			maxAge = `"` + c.MaxAge + `"`
+			maxAge = c.MaxAge
 		}
 	}
 
@@ -203,12 +212,12 @@ func DefaultEnvoyConfig(envoy *operatorv1alpha1.EnvoyProxy) map[string]string {
 
 	var buf bytes.Buffer
 	if err := envoyTemplate.Execute(&buf, data); err != nil {
-		panic(fmt.Sprintf("envoy config template execution failed: %v", err))
+		return nil, fmt.Errorf("envoy config template execution failed: %w", err)
 	}
 
 	return map[string]string{
 		ConfigFileName: buf.String(),
-	}
+	}, nil
 }
 
 // GetUpstreamService strips the "envoy-" prefix from the CR name when UpstreamService is not set.

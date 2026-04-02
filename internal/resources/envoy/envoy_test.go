@@ -252,7 +252,7 @@ func TestDefaultEnvoyConfig(t *testing.T) {
 		},
 	}
 
-	config := DefaultEnvoyConfig(envoy)
+	config := mustDefaultEnvoyConfig(t, envoy)
 
 	if _, ok := config[ConfigFileName]; !ok {
 		t.Errorf("expected %s to be present in config", ConfigFileName)
@@ -266,7 +266,7 @@ func TestDefaultEnvoyConfig_PrometheusListener(t *testing.T) {
 		},
 	}
 
-	config := DefaultEnvoyConfig(envoy)
+	config := mustDefaultEnvoyConfig(t, envoy)
 	cfg := config[ConfigFileName]
 
 	if !containsStr(cfg, "prometheus_listener") {
@@ -283,7 +283,7 @@ func TestDefaultEnvoyConfig_PrometheusListener(t *testing.T) {
 func TestDefaultEnvoyConfig_MetricsPort_Default(t *testing.T) {
 	envoy := &operatorv1alpha1.EnvoyProxy{}
 
-	config := DefaultEnvoyConfig(envoy)
+	config := mustDefaultEnvoyConfig(t, envoy)
 	cfg := config[ConfigFileName]
 
 	expected := fmt.Sprintf("port_value: %d", DefaultMetricsPort)
@@ -299,7 +299,7 @@ func TestDefaultEnvoyConfig_MetricsPort_Custom(t *testing.T) {
 		},
 	}
 
-	config := DefaultEnvoyConfig(envoy)
+	config := mustDefaultEnvoyConfig(t, envoy)
 	cfg := config[ConfigFileName]
 
 	if !containsStr(cfg, "port_value: 9091") {
@@ -310,7 +310,7 @@ func TestDefaultEnvoyConfig_MetricsPort_Custom(t *testing.T) {
 func TestDefaultEnvoyConfig_CORSDefaults(t *testing.T) {
 	envoy := &operatorv1alpha1.EnvoyProxy{}
 
-	config := DefaultEnvoyConfig(envoy)
+	config := mustDefaultEnvoyConfig(t, envoy)
 	cfg := config[ConfigFileName]
 
 	if !containsStr(cfg, "x-grpc-web") {
@@ -340,7 +340,7 @@ func TestDefaultEnvoyConfig_CORSConfig_Override(t *testing.T) {
 		},
 	}
 
-	config := DefaultEnvoyConfig(envoy)
+	config := mustDefaultEnvoyConfig(t, envoy)
 	cfg := config[ConfigFileName]
 
 	if !containsStr(cfg, "https://app.example.com") {
@@ -419,7 +419,7 @@ func TestDeploymentSubReconciler_Probes(t *testing.T) {
 func TestDefaultEnvoyConfig_TLS(t *testing.T) {
 	t.Run("no transport_socket without TLS", func(t *testing.T) {
 		envoy := &operatorv1alpha1.EnvoyProxy{}
-		cfg := DefaultEnvoyConfig(envoy)[ConfigFileName]
+		cfg := mustDefaultEnvoyConfig(t, envoy)[ConfigFileName]
 		if containsStr(cfg, "transport_socket") {
 			t.Error("transport_socket must not appear when TLSSecretName is empty")
 		}
@@ -429,7 +429,7 @@ func TestDefaultEnvoyConfig_TLS(t *testing.T) {
 		envoy := &operatorv1alpha1.EnvoyProxy{
 			Spec: operatorv1alpha1.EnvoyProxySpec{TLSSecretName: "my-tls-secret"},
 		}
-		cfg := DefaultEnvoyConfig(envoy)[ConfigFileName]
+		cfg := mustDefaultEnvoyConfig(t, envoy)[ConfigFileName]
 		if !containsStr(cfg, "transport_socket") {
 			t.Error("expected transport_socket in config when TLSSecretName is set")
 		}
@@ -519,6 +519,16 @@ func int32Ptr(i int32) *int32 {
 
 func containsStr(s, substr string) bool {
 	return strings.Contains(s, substr)
+}
+
+// mustDefaultEnvoyConfig calls DefaultEnvoyConfig and fails the test on error.
+func mustDefaultEnvoyConfig(t *testing.T, envoy *operatorv1alpha1.EnvoyProxy) map[string]string {
+	t.Helper()
+	cfg, err := DefaultEnvoyConfig(envoy)
+	if err != nil {
+		t.Fatalf("DefaultEnvoyConfig returned unexpected error: %v", err)
+	}
+	return cfg
 }
 
 func newTestScheme() *runtime.Scheme {
@@ -1101,7 +1111,7 @@ func TestExposeAdmin_ExposesAdminPort(t *testing.T) {
 func TestExposeAdmin_AdminAddressInConfig(t *testing.T) {
 	t.Run("admin bound to 127.0.0.1 by default", func(t *testing.T) {
 		envoy := &operatorv1alpha1.EnvoyProxy{}
-		cfg := DefaultEnvoyConfig(envoy)[ConfigFileName]
+		cfg := mustDefaultEnvoyConfig(t, envoy)[ConfigFileName]
 		if !containsStr(cfg, "address: 127.0.0.1") {
 			t.Error("expected admin to be bound to 127.0.0.1 by default")
 		}
@@ -1117,7 +1127,7 @@ func TestExposeAdmin_AdminAddressInConfig(t *testing.T) {
 				AdminPort:   9901,
 			},
 		}
-		cfg := DefaultEnvoyConfig(envoy)[ConfigFileName]
+		cfg := mustDefaultEnvoyConfig(t, envoy)[ConfigFileName]
 		if !containsStr(cfg, "address: 0.0.0.0") {
 			t.Error("expected admin to be bound to 0.0.0.0 when ExposeAdmin=true")
 		}
@@ -1743,5 +1753,110 @@ func TestDeploymentSubReconciler_ProbesDisabledWithCustomFiles(t *testing.T) {
 	}
 	if container.ReadinessProbe != nil {
 		t.Error("readiness probe must be nil when spec.Files is set")
+	}
+}
+
+// --- CORS YAML escaping tests ---
+
+func TestDefaultEnvoyConfig_CORSOrigin_SingleQuoteEscaped(t *testing.T) {
+	envoy := &operatorv1alpha1.EnvoyProxy{
+		Spec: operatorv1alpha1.EnvoyProxySpec{
+			CORSConfig: &operatorv1alpha1.CORSConfig{
+				AllowOrigins: []string{"https://it's.example.com"},
+			},
+		},
+	}
+	cfg, err := DefaultEnvoyConfig(envoy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Single quote must be doubled for valid YAML single-quoted scalar
+	if !containsStr(cfg[ConfigFileName], "it''s.example.com") {
+		t.Errorf("expected single quote to be doubled in YAML output, got:\n%s", cfg[ConfigFileName])
+	}
+}
+
+func TestDefaultEnvoyConfig_CORSOrigin_NewlineRejected(t *testing.T) {
+	envoy := &operatorv1alpha1.EnvoyProxy{
+		Spec: operatorv1alpha1.EnvoyProxySpec{
+			CORSConfig: &operatorv1alpha1.CORSConfig{
+				AllowOrigins: []string{"https://evil.com\ninjected: true"},
+			},
+		},
+	}
+	_, err := DefaultEnvoyConfig(envoy)
+	if err == nil {
+		t.Error("expected error for CORS origin containing newline, got nil")
+	}
+}
+
+func TestYamlEscapeString(t *testing.T) {
+	tests := []struct {
+		input   string
+		want    string
+		wantErr bool
+	}{
+		{"https://example.com", "https://example.com", false},
+		{"it's here", "it''s here", false},
+		{"double'' already", "double'''' already", false},
+		{"has\nnewline", "", true},
+		{"has\rreturn", "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got, err := yamlEscapeString(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("yamlEscapeString(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && got != tt.want {
+				t.Errorf("yamlEscapeString(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// --- Managed annotation deletion tests ---
+
+func TestServiceSubReconciler_AnnotationDeletion(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	envoy := newTestEnvoy()
+	envoy.Spec.ServiceAnnotations = map[string]string{
+		"cloud.google.com/neg": `{"ingress": true}`,
+		"foo/bar":              "baz",
+	}
+	c := newTestClient(scheme, envoy)
+	reconciler := NewServiceSubReconciler(c, scheme)
+
+	// Create with two annotations
+	if _, err := reconciler.Reconcile(ctx, envoy); err != nil {
+		t.Fatalf("unexpected error on create: %v", err)
+	}
+
+	svc := &corev1.Service{}
+	if err := c.Get(ctx, client.ObjectKey{Name: envoy.Name, Namespace: envoy.Namespace}, svc); err != nil {
+		t.Fatalf("failed to get service: %v", err)
+	}
+	if svc.Annotations["foo/bar"] != "baz" {
+		t.Fatalf("expected foo/bar annotation on create, got %v", svc.Annotations)
+	}
+
+	// Remove foo/bar from spec — reconciler must delete it from the Service
+	envoy.Spec.ServiceAnnotations = map[string]string{
+		"cloud.google.com/neg": `{"ingress": true}`,
+	}
+	if _, err := reconciler.Reconcile(ctx, envoy); err != nil {
+		t.Fatalf("unexpected error on update: %v", err)
+	}
+
+	if err := c.Get(ctx, client.ObjectKey{Name: envoy.Name, Namespace: envoy.Namespace}, svc); err != nil {
+		t.Fatalf("failed to get service after update: %v", err)
+	}
+	if _, found := svc.Annotations["foo/bar"]; found {
+		t.Error("expected foo/bar annotation to be removed after deletion from spec")
+	}
+	if svc.Annotations["cloud.google.com/neg"] == "" {
+		t.Error("expected cloud.google.com/neg annotation to be preserved")
 	}
 }

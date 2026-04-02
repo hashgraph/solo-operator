@@ -1305,13 +1305,23 @@ func TestGetHealthCheck_PartialSpec_ZeroValueFallback(t *testing.T) {
 	}
 }
 
+// mustHAProxyConfig calls HAProxyConfig and fails the test on error.
+func mustHAProxyConfig(t *testing.T, haproxy *operatorv1alpha1.HAProxyCapsule) string {
+	t.Helper()
+	cfg, err := HAProxyConfig(haproxy)
+	if err != nil {
+		t.Fatalf("HAProxyConfig returned unexpected error: %v", err)
+	}
+	return cfg
+}
+
 // --- HAProxyConfig template tests ---
 
 func TestHAProxyConfig_NonTLS(t *testing.T) {
 	haproxy := &operatorv1alpha1.HAProxyCapsule{
 		ObjectMeta: metav1.ObjectMeta{Name: "haproxy-node1"},
 	}
-	cfg := HAProxyConfig(haproxy)
+	cfg := mustHAProxyConfig(t, haproxy)
 
 	if !strings.Contains(cfg, "bind *:50211") {
 		t.Errorf("expected grpc frontend on 50211, config:\n%s", cfg)
@@ -1337,7 +1347,7 @@ func TestHAProxyConfig_TLS(t *testing.T) {
 			TLSSecretName: "my-tls",
 		},
 	}
-	cfg := HAProxyConfig(haproxy)
+	cfg := mustHAProxyConfig(t, haproxy)
 
 	if !strings.Contains(cfg, "ssl crt /etc/haproxy/certs/tls.crt alpn h2") {
 		t.Errorf("expected TLS grpcs bind directive, config:\n%s", cfg)
@@ -1359,7 +1369,7 @@ func TestHAProxyConfig_CustomPorts(t *testing.T) {
 			MetricsPort: 9191,
 		},
 	}
-	cfg := HAProxyConfig(haproxy)
+	cfg := mustHAProxyConfig(t, haproxy)
 
 	if !strings.Contains(cfg, "bind *:50311") {
 		t.Errorf("expected custom grpc port 50311, config:\n%s", cfg)
@@ -1379,7 +1389,7 @@ func TestHAProxyConfig_CustomUpstreamService(t *testing.T) {
 			UpstreamService: "my-custom-svc",
 		},
 	}
-	cfg := HAProxyConfig(haproxy)
+	cfg := mustHAProxyConfig(t, haproxy)
 
 	if !strings.Contains(cfg, "my-custom-svc") {
 		t.Errorf("expected custom upstream service in config, config:\n%s", cfg)
@@ -1500,5 +1510,50 @@ func TestServiceSubReconciler_UpdateOnLabelChange(t *testing.T) {
 	}
 	if svc.Labels["solo.hedera.com/env"] != "prod" {
 		t.Errorf("expected service label to be updated, got %v", svc.Labels)
+	}
+}
+
+// --- Managed annotation deletion tests ---
+
+func TestServiceSubReconciler_AnnotationDeletion(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	haproxy := newTestHAProxy()
+	haproxy.Spec.ServiceAnnotations = map[string]string{
+		"cloud.google.com/neg": `{"ingress": true}`,
+		"foo/bar":              "baz",
+	}
+	c := newTestClient(scheme, haproxy)
+	reconciler := NewServiceSubReconciler(c, scheme)
+
+	// Create with two annotations
+	if _, err := reconciler.Reconcile(ctx, haproxy); err != nil {
+		t.Fatalf("unexpected error on create: %v", err)
+	}
+
+	svc := &corev1.Service{}
+	if err := c.Get(ctx, client.ObjectKey{Name: "test-haproxy", Namespace: "test-namespace"}, svc); err != nil {
+		t.Fatalf("failed to get service: %v", err)
+	}
+	if svc.Annotations["foo/bar"] != "baz" {
+		t.Fatalf("expected foo/bar annotation on create, got %v", svc.Annotations)
+	}
+
+	// Remove foo/bar from spec — reconciler must delete it from the Service
+	haproxy.Spec.ServiceAnnotations = map[string]string{
+		"cloud.google.com/neg": `{"ingress": true}`,
+	}
+	if _, err := reconciler.Reconcile(ctx, haproxy); err != nil {
+		t.Fatalf("unexpected error on update: %v", err)
+	}
+
+	if err := c.Get(ctx, client.ObjectKey{Name: "test-haproxy", Namespace: "test-namespace"}, svc); err != nil {
+		t.Fatalf("failed to get service: %v", err)
+	}
+	if _, found := svc.Annotations["foo/bar"]; found {
+		t.Error("expected foo/bar annotation to be removed after deletion from spec")
+	}
+	if svc.Annotations["cloud.google.com/neg"] == "" {
+		t.Error("expected cloud.google.com/neg annotation to be preserved")
 	}
 }

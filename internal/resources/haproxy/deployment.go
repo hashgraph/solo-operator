@@ -9,6 +9,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -37,14 +38,17 @@ func NewDeploymentSubReconciler(c client.Client, scheme *runtime.Scheme) *Deploy
 func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, haproxy *operatorv1alpha1.HAProxyCapsule) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	desired := r.buildDeployment(haproxy)
+	desired, err := r.buildDeployment(haproxy)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	if err := controllerutil.SetControllerReference(haproxy, desired, r.Scheme); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	existing := &appsv1.Deployment{}
-	err := r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
+	err = r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("Creating HAProxy deployment", "name", desired.Name, "namespace", desired.Namespace)
@@ -68,7 +72,7 @@ func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, haproxy *operat
 	return ctrl.Result{}, nil
 }
 
-func (r *DeploymentSubReconciler) buildDeployment(haproxy *operatorv1alpha1.HAProxyCapsule) *appsv1.Deployment {
+func (r *DeploymentSubReconciler) buildDeployment(haproxy *operatorv1alpha1.HAProxyCapsule) (*appsv1.Deployment, error) {
 	replicas := int32(1)
 	selectorLabels := CommonLabels(haproxy)
 	resourceLabels := ResourceLabels(haproxy)
@@ -128,7 +132,11 @@ func (r *DeploymentSubReconciler) buildDeployment(haproxy *operatorv1alpha1.HAPr
 		gracePeriod = 10
 	}
 
-	configChecksum := fmt.Sprintf("%x", sha256.Sum256([]byte(HAProxyConfig(haproxy))))
+	cfgStr, err := HAProxyConfig(haproxy)
+	if err != nil {
+		return nil, err
+	}
+	configChecksum := fmt.Sprintf("%x", sha256.Sum256([]byte(cfgStr)))
 
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -173,7 +181,7 @@ func (r *DeploymentSubReconciler) buildDeployment(haproxy *operatorv1alpha1.HAPr
 		},
 	}
 
-	return deploy
+	return deploy, nil
 }
 
 // statsProbeHandler returns an httpGet probe on the HAProxy stats endpoint.
@@ -223,28 +231,52 @@ func (r *DeploymentSubReconciler) needsUpdate(existing, desired *appsv1.Deployme
 		return true
 	}
 
-	if len(existing.Spec.Template.Spec.Containers) != len(desired.Spec.Template.Spec.Containers) {
+	ep := existing.Spec.Template.Spec
+	dp := desired.Spec.Template.Spec
+
+	if !equality.Semantic.DeepEqual(ep.NodeSelector, dp.NodeSelector) {
+		return true
+	}
+	if !equality.Semantic.DeepEqual(ep.Affinity, dp.Affinity) {
+		return true
+	}
+	if !equality.Semantic.DeepEqual(ep.Tolerations, dp.Tolerations) {
+		return true
+	}
+	if !equality.Semantic.DeepEqual(ep.TerminationGracePeriodSeconds, dp.TerminationGracePeriodSeconds) {
+		return true
+	}
+	if !equality.Semantic.DeepEqual(ep.Volumes, dp.Volumes) {
 		return true
 	}
 
-	for i, container := range desired.Spec.Template.Spec.Containers {
-		if i >= len(existing.Spec.Template.Spec.Containers) {
-			return true
-		}
-		existingContainer := existing.Spec.Template.Spec.Containers[i]
-		if container.Image != existingContainer.Image || container.Name != existingContainer.Name {
-			return true
-		}
-		if len(container.Ports) != len(existingContainer.Ports) {
-			return true
-		}
-		if len(container.Env) != len(existingContainer.Env) {
-			return true
-		}
-	}
-
-	if len(existing.Spec.Template.Spec.Volumes) != len(desired.Spec.Template.Spec.Volumes) {
+	if len(ep.Containers) != len(dp.Containers) {
 		return true
+	}
+	for i := range dp.Containers {
+		ec := ep.Containers[i]
+		dc := dp.Containers[i]
+		if ec.Name != dc.Name || ec.Image != dc.Image {
+			return true
+		}
+		if !equality.Semantic.DeepEqual(ec.Ports, dc.Ports) {
+			return true
+		}
+		if !equality.Semantic.DeepEqual(ec.Env, dc.Env) {
+			return true
+		}
+		if !equality.Semantic.DeepEqual(ec.VolumeMounts, dc.VolumeMounts) {
+			return true
+		}
+		if !equality.Semantic.DeepEqual(ec.StartupProbe, dc.StartupProbe) {
+			return true
+		}
+		if !equality.Semantic.DeepEqual(ec.LivenessProbe, dc.LivenessProbe) {
+			return true
+		}
+		if !equality.Semantic.DeepEqual(ec.ReadinessProbe, dc.ReadinessProbe) {
+			return true
+		}
 	}
 
 	// Check pod template labels (captures AdditionalLabels changes)
