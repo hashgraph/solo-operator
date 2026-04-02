@@ -73,9 +73,6 @@ func (r *DeploymentSubReconciler) buildDeployment(envoy *operatorv1alpha1.EnvoyP
 	metricsPort := GetMetricsPort(envoy)
 
 	gracePeriod := envoy.Spec.TerminationGracePeriodSeconds
-	if gracePeriod == 0 {
-		gracePeriod = 10
-	}
 
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -154,7 +151,6 @@ func (r *DeploymentSubReconciler) buildDeployment(envoy *operatorv1alpha1.EnvoyP
 func buildVolumeMounts(envoy *operatorv1alpha1.EnvoyProxy) []corev1.VolumeMount {
 	mounts := []corev1.VolumeMount{
 		{Name: ConfigVolumeName, MountPath: ConfigMountPath, ReadOnly: true},
-		{Name: AdminVolumeName, MountPath: AdminMountPath},
 	}
 	if envoy.Spec.TLSSecretName != "" {
 		mounts = append(mounts, corev1.VolumeMount{
@@ -176,7 +172,6 @@ func buildVolumes(envoy *operatorv1alpha1.EnvoyProxy) []corev1.Volume {
 				},
 			},
 		},
-		{Name: AdminVolumeName, VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 	}
 	if envoy.Spec.TLSSecretName != "" {
 		volumes = append(volumes, corev1.Volume{

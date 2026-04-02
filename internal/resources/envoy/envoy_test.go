@@ -769,10 +769,14 @@ func TestIngressSubReconciler_Skipped(t *testing.T) {
 	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeLoadBalancer
 	c := newTestClient(scheme, envoy)
 
-	reconciler := NewIngressSubReconciler(c, scheme)
+	_, err := NewIngressSubReconciler(c, scheme).Reconcile(ctx, envoy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	if reconciler.ShouldReconcile(ctx, envoy) {
-		t.Error("expected ShouldReconcile to return false for LoadBalancer type")
+	ing := &networkingv1.Ingress{}
+	if err := c.Get(ctx, client.ObjectKey{Name: envoy.Name, Namespace: envoy.Namespace}, ing); err == nil {
+		t.Error("expected no ingress to be created for LoadBalancer type")
 	}
 }
 
@@ -809,10 +813,6 @@ func TestIngressSubReconciler_CreatesIngress(t *testing.T) {
 
 	reconciler := NewIngressSubReconciler(c, scheme)
 
-	if !reconciler.ShouldReconcile(ctx, envoy) {
-		t.Fatal("expected ShouldReconcile to return true for Ingress type")
-	}
-
 	_, err := reconciler.Reconcile(ctx, envoy)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -834,9 +834,14 @@ func TestIngressSubReconciler_SkippedForClusterIP(t *testing.T) {
 	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeClusterIP
 	c := newTestClient(scheme, envoy)
 
-	reconciler := NewIngressSubReconciler(c, scheme)
-	if reconciler.ShouldReconcile(ctx, envoy) {
-		t.Error("expected ShouldReconcile to return false for ClusterIP type")
+	_, err := NewIngressSubReconciler(c, scheme).Reconcile(ctx, envoy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	ing := &networkingv1.Ingress{}
+	if err := c.Get(ctx, client.ObjectKey{Name: envoy.Name, Namespace: envoy.Namespace}, ing); err == nil {
+		t.Error("expected no ingress to be created for ClusterIP type")
 	}
 }
 
@@ -984,6 +989,52 @@ func TestIngressSubReconciler_Update(t *testing.T) {
 	}
 	if ing.Spec.Rules[0].Host != "envoy-v2.example.com" {
 		t.Errorf("expected updated host envoy-v2.example.com, got %s", ing.Spec.Rules[0].Host)
+	}
+}
+
+func TestIngressSubReconciler_DeletesOnServiceTypeChange(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	envoy := newTestEnvoy()
+	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeIngress
+	pathType := networkingv1.PathTypePrefix
+	envoy.Spec.IngressSpec = &networkingv1.IngressSpec{
+		Rules: []networkingv1.IngressRule{
+			{Host: "envoy.example.com", IngressRuleValue: networkingv1.IngressRuleValue{
+				HTTP: &networkingv1.HTTPIngressRuleValue{
+					Paths: []networkingv1.HTTPIngressPath{
+						{Path: "/", PathType: &pathType, Backend: networkingv1.IngressBackend{
+							Service: &networkingv1.IngressServiceBackend{
+								Name: "test-envoy",
+								Port: networkingv1.ServiceBackendPort{Number: DefaultProxyPort},
+							},
+						}},
+					},
+				},
+			}},
+		},
+	}
+	c := newTestClient(scheme, envoy)
+	reconciler := NewIngressSubReconciler(c, scheme)
+
+	if _, err := reconciler.Reconcile(ctx, envoy); err != nil {
+		t.Fatalf("create reconcile failed: %v", err)
+	}
+
+	// Verify ingress was created
+	ing := &networkingv1.Ingress{}
+	if err := c.Get(ctx, client.ObjectKey{Name: envoy.Name, Namespace: envoy.Namespace}, ing); err != nil {
+		t.Fatalf("expected ingress to exist after first reconcile: %v", err)
+	}
+
+	// Switch away from Ingress
+	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeLoadBalancer
+	if _, err := reconciler.Reconcile(ctx, envoy); err != nil {
+		t.Fatalf("delete reconcile failed: %v", err)
+	}
+
+	if err := c.Get(ctx, client.ObjectKey{Name: envoy.Name, Namespace: envoy.Namespace}, ing); err == nil {
+		t.Error("expected ingress to be deleted after switching to LoadBalancer type")
 	}
 }
 

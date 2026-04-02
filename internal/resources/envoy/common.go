@@ -34,8 +34,6 @@ const (
 const (
 	ConfigVolumeName = "config"
 	ConfigMountPath  = "/etc/envoy"
-	AdminVolumeName  = "admin"
-	AdminMountPath   = "/admin"
 	TLSVolumeName    = "tls"
 	TLSMountPath     = "/etc/envoy/certs"
 	TLSCertPath      = "/etc/envoy/certs/tls.crt"
@@ -231,7 +229,8 @@ static_resources:
                   - name: envoy.filters.http.grpc_web
                   - name: envoy.filters.http.cors
                   - name: envoy.filters.http.router
-%s    - name: prometheus_listener
+%s
+    - name: prometheus_listener
       address:
         socket_address:
           address: 0.0.0.0

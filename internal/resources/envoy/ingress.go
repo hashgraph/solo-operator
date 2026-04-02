@@ -30,17 +30,25 @@ func NewIngressSubReconciler(c client.Client, scheme *runtime.Scheme) *IngressSu
 	}
 }
 
-// ShouldReconcile returns true only when ServiceType is Ingress
-func (r *IngressSubReconciler) ShouldReconcile(_ context.Context, envoy *operatorv1alpha1.EnvoyProxy) bool {
-	return envoy.Spec.ServiceType == operatorv1alpha1.ProxyServiceTypeIngress
-}
-
-// Reconcile ensures the Ingress exists and is up to date
 func (r *IngressSubReconciler) Reconcile(ctx context.Context, envoy *operatorv1alpha1.EnvoyProxy) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	desired := r.buildIngress(envoy)
+
+	existing := &networkingv1.Ingress{}
+	err := r.Client.Get(ctx, client.ObjectKey{Name: envoy.Name, Namespace: envoy.Namespace}, existing)
+	notFound := apierrors.IsNotFound(err)
+	if err != nil && !notFound {
+		return ctrl.Result{}, err
+	}
+
 	if desired == nil {
+		if !notFound {
+			logger.Info("Deleting Envoy ingress", "name", existing.Name, "namespace", existing.Namespace)
+			if err := r.Client.Delete(ctx, existing); err != nil && !apierrors.IsNotFound(err) {
+				return ctrl.Result{}, err
+			}
+		}
 		return ctrl.Result{}, nil
 	}
 
@@ -48,20 +56,14 @@ func (r *IngressSubReconciler) Reconcile(ctx context.Context, envoy *operatorv1a
 		return ctrl.Result{}, err
 	}
 
-	existing := &networkingv1.Ingress{}
-	err := r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			logger.Info("Creating Envoy ingress", "name", desired.Name, "namespace", desired.Namespace)
-			if err := r.Client.Create(ctx, desired); err != nil {
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{}, nil
+	if notFound {
+		logger.Info("Creating Envoy ingress", "name", desired.Name, "namespace", desired.Namespace)
+		if err := r.Client.Create(ctx, desired); err != nil {
+			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, nil
 	}
 
-	// Update spec if changed
 	existing.Spec = desired.Spec
 	existing.Labels = desired.Labels
 	logger.V(1).Info("Updating Envoy ingress", "name", desired.Name, "namespace", desired.Namespace)
@@ -72,9 +74,9 @@ func (r *IngressSubReconciler) Reconcile(ctx context.Context, envoy *operatorv1a
 	return ctrl.Result{}, nil
 }
 
-// buildIngress builds the desired Ingress from the IngressSpec
+// buildIngress builds the desired Ingress from the IngressSpec, or returns nil when not desired.
 func (r *IngressSubReconciler) buildIngress(envoy *operatorv1alpha1.EnvoyProxy) *networkingv1.Ingress {
-	if envoy.Spec.IngressSpec == nil {
+	if envoy.Spec.ServiceType != operatorv1alpha1.ProxyServiceTypeIngress || envoy.Spec.IngressSpec == nil {
 		return nil
 	}
 
@@ -82,7 +84,7 @@ func (r *IngressSubReconciler) buildIngress(envoy *operatorv1alpha1.EnvoyProxy) 
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      envoy.Name,
 			Namespace: envoy.Namespace,
-			Labels:    CommonLabels(envoy),
+			Labels:    ResourceLabels(envoy),
 		},
 		Spec: *envoy.Spec.IngressSpec,
 	}

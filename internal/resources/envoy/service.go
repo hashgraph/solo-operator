@@ -63,7 +63,12 @@ func (r *ServiceSubReconciler) Reconcile(ctx context.Context, envoy *operatorv1a
 		existing.Spec.Type = desired.Spec.Type
 		existing.Spec.ExternalTrafficPolicy = desired.Spec.ExternalTrafficPolicy
 		existing.Labels = desired.Labels
-		existing.Annotations = desired.Annotations
+		for k, v := range desired.Annotations {
+			if existing.Annotations == nil {
+				existing.Annotations = make(map[string]string)
+			}
+			existing.Annotations[k] = v
+		}
 
 		// Preserve NodePorts when updating ports
 		for i, port := range desired.Spec.Ports {
