@@ -182,10 +182,7 @@ func (r *ServiceSubReconciler) needsUpdate(existing, desired *corev1.Service) bo
 		}
 	}
 
-	// Check annotations
-	if len(existing.Annotations) != len(desired.Annotations) {
-		return true
-	}
+	// Check annotations (only desired keys; extra cloud-added annotations are preserved)
 	for k, v := range desired.Annotations {
 		if existing.Annotations[k] != v {
 			return true

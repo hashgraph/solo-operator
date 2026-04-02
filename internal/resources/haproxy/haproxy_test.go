@@ -109,8 +109,9 @@ func newTestHAProxy() *operatorv1alpha1.HAProxyCapsule {
 			UID:       "test-uid",
 		},
 		Spec: operatorv1alpha1.HAProxyCapsuleSpec{
-			Image:       "haproxy:2.8.10-alpine3.20",
-			ServiceType: operatorv1alpha1.HAProxyServiceTypeLoadBalancer,
+			Image:                         "haproxy:2.8.10-alpine3.20",
+			ServiceType:                   operatorv1alpha1.HAProxyServiceTypeLoadBalancer,
+			TerminationGracePeriodSeconds: 10,
 		},
 	}
 }

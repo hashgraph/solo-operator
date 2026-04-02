@@ -715,7 +715,7 @@ static_resources:
 			}, timeout, interval).Should(BeTrue())
 
 			volumes := createdDeploy.Spec.Template.Spec.Volumes
-			Expect(volumes).To(HaveLen(3), "expected config + admin + tls volumes")
+			Expect(volumes).To(HaveLen(2), "expected config + tls volumes")
 			tlsVolumeFound := false
 			for _, v := range volumes {
 				if v.Name == "tls" {

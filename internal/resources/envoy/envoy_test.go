@@ -465,8 +465,8 @@ func TestDeployment_TLS(t *testing.T) {
 				t.Error("TLS volume must not be present when TLSSecretName is empty")
 			}
 		}
-		if len(deploy.Spec.Template.Spec.Volumes) != 2 {
-			t.Errorf("expected 2 volumes, got %d", len(deploy.Spec.Template.Spec.Volumes))
+		if len(deploy.Spec.Template.Spec.Volumes) != 1 {
+			t.Errorf("expected 1 volume, got %d", len(deploy.Spec.Template.Spec.Volumes))
 		}
 	})
 
@@ -482,8 +482,8 @@ func TestDeployment_TLS(t *testing.T) {
 		if err := c.Get(ctx, client.ObjectKey{Name: envoy.Name, Namespace: envoy.Namespace}, deploy); err != nil {
 			t.Fatalf("failed to get deployment: %v", err)
 		}
-		if len(deploy.Spec.Template.Spec.Volumes) != 3 {
-			t.Errorf("expected 3 volumes (config+admin+tls), got %d", len(deploy.Spec.Template.Spec.Volumes))
+		if len(deploy.Spec.Template.Spec.Volumes) != 2 {
+			t.Errorf("expected 2 volumes (config+tls), got %d", len(deploy.Spec.Template.Spec.Volumes))
 		}
 		found := false
 		for _, v := range deploy.Spec.Template.Spec.Volumes {
@@ -544,10 +544,11 @@ func newTestEnvoy() *operatorv1alpha1.EnvoyProxy {
 			UID:       "test-uid",
 		},
 		Spec: operatorv1alpha1.EnvoyProxySpec{
-			Image:     "envoyproxy/envoy:v1.21.6",
-			Replicas:  &replicas,
-			ProxyPort: 8081,
-			AdminPort: 9901,
+			Image:                         "envoyproxy/envoy:v1.21.6",
+			Replicas:                      &replicas,
+			ProxyPort:                     8081,
+			AdminPort:                     9901,
+			TerminationGracePeriodSeconds: 10,
 		},
 	}
 }
@@ -673,8 +674,8 @@ func TestDeploymentSubReconciler(t *testing.T) {
 	}
 
 	// Verify volumes
-	if len(deploy.Spec.Template.Spec.Volumes) != 2 {
-		t.Fatalf("expected 2 volumes, got %d", len(deploy.Spec.Template.Spec.Volumes))
+	if len(deploy.Spec.Template.Spec.Volumes) != 1 {
+		t.Fatalf("expected 1 volume, got %d", len(deploy.Spec.Template.Spec.Volumes))
 	}
 }
 
