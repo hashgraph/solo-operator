@@ -20,30 +20,25 @@ import (
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
-// DeploymentSubReconciler manages the Deployment for an EnvoyProxy
 type DeploymentSubReconciler struct {
 	*subreconciler.BaseSubReconciler[*operatorv1alpha1.EnvoyProxy]
 }
 
-// NewDeploymentSubReconciler creates a new DeploymentSubReconciler
 func NewDeploymentSubReconciler(c client.Client, scheme *runtime.Scheme) *DeploymentSubReconciler {
 	return &DeploymentSubReconciler{
 		BaseSubReconciler: subreconciler.NewBaseSubReconciler[*operatorv1alpha1.EnvoyProxy](c, scheme, "Deployment"),
 	}
 }
 
-// Reconcile ensures the deployment exists and is up to date
 func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, envoy *operatorv1alpha1.EnvoyProxy) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	desired := r.buildDeployment(envoy)
 
-	// Set owner reference
 	if err := controllerutil.SetControllerReference(envoy, desired, r.Scheme); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// Check if exists
 	existing := &appsv1.Deployment{}
 	err := r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
@@ -57,7 +52,6 @@ func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, envoy *operator
 		return ctrl.Result{}, err
 	}
 
-	// Update spec if needed
 	if r.needsUpdate(existing, desired) {
 		logger.V(1).Info("Updating Envoy deployment", "name", desired.Name, "namespace", desired.Namespace)
 		existing.Spec = desired.Spec
@@ -70,50 +64,62 @@ func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, envoy *operator
 	return ctrl.Result{}, nil
 }
 
-// buildDeployment builds the desired deployment
 func (r *DeploymentSubReconciler) buildDeployment(envoy *operatorv1alpha1.EnvoyProxy) *appsv1.Deployment {
 	replicas := GetReplicas(envoy)
-	labels := CommonLabels(envoy)
+	selectorLabels := CommonLabels(envoy)
+	resourceLabels := ResourceLabels(envoy)
 	proxyPort := GetProxyPort(envoy)
 	adminPort := GetAdminPort(envoy)
+	metricsPort := GetMetricsPort(envoy)
+
+	gracePeriod := envoy.Spec.TerminationGracePeriodSeconds
+	if gracePeriod == 0 {
+		gracePeriod = 10
+	}
 
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      envoy.Name,
 			Namespace: envoy.Namespace,
-			Labels:    labels,
+			Labels:    resourceLabels,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
+				MatchLabels: selectorLabels,
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels: resourceLabels,
 				},
 				Spec: corev1.PodSpec{
+					NodeSelector:                  envoy.Spec.NodeSelector,
+					Affinity:                      envoy.Spec.Affinity,
+					Tolerations:                   envoy.Spec.Tolerations,
+					TerminationGracePeriodSeconds: &gracePeriod,
 					Containers: []corev1.Container{
 						{
 							Name:  ContainerName,
 							Image: GetImage(envoy),
 							Args:  []string{"-c", "/etc/envoy/envoy.yaml"},
 							Ports: []corev1.ContainerPort{
-								{Name: "http", ContainerPort: proxyPort, Protocol: corev1.ProtocolTCP},
+								{Name: "grpc", ContainerPort: proxyPort, Protocol: corev1.ProtocolTCP},
 								{Name: "admin", ContainerPort: adminPort, Protocol: corev1.ProtocolTCP},
+								{Name: "metrics", ContainerPort: metricsPort, Protocol: corev1.ProtocolTCP},
 							},
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      ConfigVolumeName,
-									MountPath: ConfigMountPath,
-									ReadOnly:  true,
-								},
-								{
-									Name:      AdminVolumeName,
-									MountPath: AdminMountPath,
-								},
-							},
+							VolumeMounts: buildVolumeMounts(envoy),
 							Env: BuildEnv(envoy),
+							StartupProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path: "/ready",
+										Port: intstr.FromInt32(adminPort),
+									},
+								},
+								InitialDelaySeconds: 5,
+								PeriodSeconds:       5,
+								FailureThreshold:    24, // 2 min window
+							},
 							LivenessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
@@ -121,8 +127,8 @@ func (r *DeploymentSubReconciler) buildDeployment(envoy *operatorv1alpha1.EnvoyP
 										Port: intstr.FromInt32(adminPort),
 									},
 								},
-								InitialDelaySeconds: 10,
-								PeriodSeconds:       10,
+								PeriodSeconds:    10,
+								FailureThreshold: 3,
 							},
 							ReadinessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
@@ -136,22 +142,7 @@ func (r *DeploymentSubReconciler) buildDeployment(envoy *operatorv1alpha1.EnvoyP
 							},
 						},
 					},
-					Volumes: []corev1.Volume{
-						{
-							Name: ConfigVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{Name: ConfigMapName(envoy)},
-								},
-							},
-						},
-						{
-							Name: AdminVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
-						},
-					},
+					Volumes: buildVolumes(envoy),
 				},
 			},
 		},
@@ -160,14 +151,55 @@ func (r *DeploymentSubReconciler) buildDeployment(envoy *operatorv1alpha1.EnvoyP
 	return deploy
 }
 
-// needsUpdate checks if the deployment needs to be updated
+func buildVolumeMounts(envoy *operatorv1alpha1.EnvoyProxy) []corev1.VolumeMount {
+	mounts := []corev1.VolumeMount{
+		{Name: ConfigVolumeName, MountPath: ConfigMountPath, ReadOnly: true},
+		{Name: AdminVolumeName, MountPath: AdminMountPath},
+	}
+	if envoy.Spec.TLSSecretName != "" {
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      TLSVolumeName,
+			MountPath: TLSMountPath,
+			ReadOnly:  true,
+		})
+	}
+	return mounts
+}
+
+func buildVolumes(envoy *operatorv1alpha1.EnvoyProxy) []corev1.Volume {
+	volumes := []corev1.Volume{
+		{
+			Name: ConfigVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: ConfigMapName(envoy)},
+				},
+			},
+		},
+		{Name: AdminVolumeName, VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+	}
+	if envoy.Spec.TLSSecretName != "" {
+		volumes = append(volumes, corev1.Volume{
+			Name: TLSVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: envoy.Spec.TLSSecretName,
+					Items: []corev1.KeyToPath{
+						{Key: "tls.crt", Path: "tls.crt"},
+						{Key: "tls.key", Path: "tls.key"},
+					},
+				},
+			},
+		})
+	}
+	return volumes
+}
+
 func (r *DeploymentSubReconciler) needsUpdate(existing, desired *appsv1.Deployment) bool {
-	// Compare replicas
 	if existing.Spec.Replicas == nil || *existing.Spec.Replicas != *desired.Spec.Replicas {
 		return true
 	}
 
-	// Compare containers (simplified check)
 	if len(existing.Spec.Template.Spec.Containers) != len(desired.Spec.Template.Spec.Containers) {
 		return true
 	}
@@ -182,7 +214,6 @@ func (r *DeploymentSubReconciler) needsUpdate(existing, desired *appsv1.Deployme
 		}
 	}
 
-	// Compare volumes
 	if len(existing.Spec.Template.Spec.Volumes) != len(desired.Spec.Template.Spec.Volumes) {
 		return true
 	}

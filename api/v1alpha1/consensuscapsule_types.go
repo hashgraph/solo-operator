@@ -355,7 +355,7 @@ type AlloyLokiExporter struct {
 	// Enabled enables Loki logging
 	// +kubebuilder:default=true
 	// +optional
-	Enabled bool `json:"enabled,omitempty"`
+	Enabled bool `json:"enabled"`
 
 	// Auth contains authentication configuration
 	// +optional

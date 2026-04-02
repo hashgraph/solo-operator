@@ -9,8 +9,12 @@ tasks:
       - helm upgrade --install --namespace minio-operator --create-namespace minio-operator minio-operator/operator
       - helm upgrade --install --namespace minio-tenant --create-namespace --values setup/minio-values.yaml minio-tenant minio-operator/tenant
       - echo ">> Waiting for MinIO to be ready..."
-      - sleep 4
-      - kubectl wait --for=condition=ready pod -l v1.min.io/tenant=minio-tenant -n minio-tenant --timeout 300s || true
+      - |
+        until kubectl get pod -l v1.min.io/tenant=minio-tenant -n minio-tenant --no-headers 2>/dev/null | grep -q .; do
+          echo ">> Waiting for MinIO pods to appear..."
+          sleep 5
+        done
+      - kubectl wait --for=condition=ready pod -l v1.min.io/tenant=minio-tenant -n minio-tenant --timeout=60s
 
   deploy:orbit:
     desc: Deploy Orbit and wait for namespace
@@ -87,6 +91,8 @@ tasks:
     cmds:
       - kubectl apply -f node0/secrets.yaml
       - kubectl apply -f node0/consensus-capsule.yaml
+      - kubectl apply -f node0/haproxycapsule.yaml
+      - kubectl apply -f node0/envoyproxycapsule.yaml
 
   deploy:node1:
     desc: Deploy node1
@@ -94,6 +100,8 @@ tasks:
     cmds:
       - kubectl apply -f node1/secrets.yaml
       - kubectl apply -f node1/consensus-capsule.yaml
+      - kubectl apply -f node1/haproxycapsule.yaml
+      - kubectl apply -f node1/envoyproxycapsule.yaml
 
   deploy:node2:
     desc: Deploy node2
@@ -101,6 +109,8 @@ tasks:
     cmds:
       - kubectl apply -f node2/secrets.yaml
       - kubectl apply -f node2/consensus-capsule.yaml
+      - kubectl apply -f node2/haproxycapsule.yaml
+      - kubectl apply -f node2/envoyproxycapsule.yaml
 
   deploy:node3:
     desc: Deploy node3
@@ -108,28 +118,38 @@ tasks:
     cmds:
       - kubectl apply -f node3/secrets.yaml
       - kubectl apply -f node3/consensus-capsule.yaml
+      - kubectl apply -f node3/haproxycapsule.yaml
+      - kubectl apply -f node3/envoyproxycapsule.yaml
 
   destroy:node3:
     desc: Destroy node3
     cmds:
+      - kubectl delete -f node3/envoyproxycapsule.yaml || true
+      - kubectl delete -f node3/haproxycapsule.yaml || true
       - kubectl delete -f node3/consensus-capsule.yaml || true
       - kubectl delete -f node3/secrets.yaml || true
 
   destroy:node2:
     desc: Destroy node2
     cmds:
+      - kubectl delete -f node2/envoyproxycapsule.yaml || true
+      - kubectl delete -f node2/haproxycapsule.yaml || true
       - kubectl delete -f node2/consensus-capsule.yaml || true
       - kubectl delete -f node2/secrets.yaml || true
 
   destroy:node1:
     desc: Destroy node1
     cmds:
+      - kubectl delete -f node1/envoyproxycapsule.yaml || true
+      - kubectl delete -f node1/haproxycapsule.yaml || true
       - kubectl delete -f node1/consensus-capsule.yaml || true
       - kubectl delete -f node1/secrets.yaml || true
 
   destroy:node0:
     desc: Destroy node0
     cmds:
+      - kubectl delete -f node0/envoyproxycapsule.yaml || true
+      - kubectl delete -f node0/haproxycapsule.yaml || true
       - kubectl delete -f node0/consensus-capsule.yaml || true
       - kubectl delete -f node0/secrets.yaml || true
 

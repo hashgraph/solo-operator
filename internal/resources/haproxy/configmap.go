@@ -77,7 +77,7 @@ func (r *ConfigMapSubReconciler) buildConfigMap(haproxy *operatorv1alpha1.HAProx
 			Labels:    CommonLabels(haproxy),
 		},
 		Data: map[string]string{
-			ConfigFileName: DefaultHAProxyConfig,
+			ConfigFileName: HAProxyConfig(haproxy),
 		},
 	}
 }

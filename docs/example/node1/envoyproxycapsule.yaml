@@ -1,0 +1,67 @@
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: envoy-node1
+  namespace: solo-orbit
+spec:
+  image: envoyproxy/envoy:v1.21.6
+  replicas: 1
+  proxyPort: 8080
+  metricsPort: 9090
+
+  # upstreamService: node1   # defaults to CR name minus "envoy-" prefix; any DNS name works
+  # upstreamService: node1.solo-orbit.svc.cluster.local
+  # upstreamPort: 50211
+
+  # serviceType: LoadBalancer   # default
+  # serviceType: ClusterIP
+  # serviceType: Ingress        # requires ingressSpec
+
+  # externalTrafficPolicy: Local   # default
+
+  # serviceAnnotations:
+  #   cloud.google.com/neg: '{"ingress":true}'
+
+  # additionalLabels:
+  #   solo.hedera.com/account-id: "0.0.4"
+  #   solo.hedera.com/node-id: "1"
+  #   solo.hedera.com/node-name: node1
+  #   solo.hedera.com/type: envoy-proxy
+
+  # nodeSelector:
+  #   sphere.hashgraph.io/role: auxiliary
+  # tolerations:
+  #   - key: sphere.hashgraph.io/role
+  #     operator: Equal
+  #     value: auxiliary
+  #     effect: NoSchedule
+  # affinity:
+  #   podAntiAffinity:
+  #     requiredDuringSchedulingIgnoredDuringExecution:
+  #       - labelSelector:
+  #           matchLabels:
+  #             sphere.hashgraph.io/role: consensus
+  #         topologyKey: kubernetes.io/hostname
+
+  # terminationGracePeriodSeconds: 10
+
+  # TLS termination on proxyPort — needs a kubernetes.io/tls secret (cert-manager works directly).
+  # tlsSecretName: envoy-node1-tls
+
+  # corsConfig:   # only used with the operator-generated envoy.yaml
+  #   allowOrigins: ["*"]
+  #   allowMethods: "GET, PUT, DELETE, POST, OPTIONS"
+
+  # ingressSpec:
+  #   ingressClassName: nginx
+  #   rules:
+  #     - host: envoy-node1.example.com
+  #       http:
+  #         paths:
+  #           - path: /
+  #             pathType: Prefix
+  #             backend:
+  #               service:
+  #                 name: envoy-node1
+  #                 port:
+  #                   number: 8080

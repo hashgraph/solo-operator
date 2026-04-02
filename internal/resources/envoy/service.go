@@ -60,8 +60,23 @@ func (r *ServiceSubReconciler) Reconcile(ctx context.Context, envoy *operatorv1a
 	if r.needsUpdate(existing, desired) {
 		logger.V(1).Info("Updating Envoy service", "name", desired.Name, "namespace", desired.Namespace)
 		existing.Spec.Selector = desired.Spec.Selector
-		existing.Spec.Ports = desired.Spec.Ports
+		existing.Spec.Type = desired.Spec.Type
+		existing.Spec.ExternalTrafficPolicy = desired.Spec.ExternalTrafficPolicy
 		existing.Labels = desired.Labels
+		existing.Annotations = desired.Annotations
+
+		// Preserve NodePorts when updating ports
+		for i, port := range desired.Spec.Ports {
+			if i < len(existing.Spec.Ports) {
+				port.NodePort = existing.Spec.Ports[i].NodePort
+				existing.Spec.Ports[i] = port
+			} else {
+				existing.Spec.Ports = append(existing.Spec.Ports, port)
+			}
+		}
+		if len(desired.Spec.Ports) < len(existing.Spec.Ports) {
+			existing.Spec.Ports = existing.Spec.Ports[:len(desired.Spec.Ports)]
+		}
 
 		if err := r.Client.Update(ctx, existing); err != nil {
 			return ctrl.Result{}, err
@@ -73,27 +88,72 @@ func (r *ServiceSubReconciler) Reconcile(ctx context.Context, envoy *operatorv1a
 
 // buildService builds the desired service
 func (r *ServiceSubReconciler) buildService(envoy *operatorv1alpha1.EnvoyProxy) *corev1.Service {
-	labels := CommonLabels(envoy)
+	selectorLabels := CommonLabels(envoy)
+	resourceLabels := ResourceLabels(envoy)
 	proxyPort := GetProxyPort(envoy)
+	metricsPort := GetMetricsPort(envoy)
 
-	return &corev1.Service{
+	// Map ProxyServiceType to a valid K8s ServiceType.
+	// Ingress uses a ClusterIP service; the Ingress resource is managed by IngressSubReconciler.
+	svcType := corev1.ServiceTypeLoadBalancer
+	switch envoy.Spec.ServiceType {
+	case operatorv1alpha1.ProxyServiceTypeClusterIP, operatorv1alpha1.ProxyServiceTypeIngress:
+		svcType = corev1.ServiceTypeClusterIP
+	case operatorv1alpha1.ProxyServiceTypeLoadBalancer:
+		svcType = corev1.ServiceTypeLoadBalancer
+	}
+
+	// ExternalTrafficPolicy: default Local (only meaningful for non-ClusterIP types)
+	extPolicy := envoy.Spec.ExternalTrafficPolicy
+	if extPolicy == "" {
+		extPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
+	}
+
+	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      envoy.Name,
-			Namespace: envoy.Namespace,
-			Labels:    labels,
+			Name:        envoy.Name,
+			Namespace:   envoy.Namespace,
+			Labels:      resourceLabels,
+			Annotations: envoy.Spec.ServiceAnnotations,
 		},
 		Spec: corev1.ServiceSpec{
-			Type:     corev1.ServiceTypeClusterIP,
-			Selector: labels,
+			Type:     svcType,
+			Selector: selectorLabels,
 			Ports: []corev1.ServicePort{
-				{Name: "http", Port: proxyPort, TargetPort: intstr.FromInt32(proxyPort), Protocol: corev1.ProtocolTCP},
+				{Name: "grpc", Port: proxyPort, TargetPort: intstr.FromInt32(proxyPort), Protocol: corev1.ProtocolTCP},
+				{Name: "metrics", Port: metricsPort, TargetPort: intstr.FromInt32(metricsPort), Protocol: corev1.ProtocolTCP},
 			},
 		},
 	}
+
+	// Apply ExternalTrafficPolicy only for non-ClusterIP service types
+	if svcType != corev1.ServiceTypeClusterIP {
+		svc.Spec.ExternalTrafficPolicy = extPolicy
+	}
+
+	// Apply custom service spec if provided (overrides defaults)
+	if envoy.Spec.ServiceSpec != nil {
+		svc.Spec = *envoy.Spec.ServiceSpec
+		if svc.Spec.Selector == nil {
+			svc.Spec.Selector = selectorLabels
+		}
+	}
+
+	return svc
 }
 
 // needsUpdate checks if the service needs to be updated
 func (r *ServiceSubReconciler) needsUpdate(existing, desired *corev1.Service) bool {
+	// Check type
+	if existing.Spec.Type != desired.Spec.Type {
+		return true
+	}
+
+	// Check ExternalTrafficPolicy
+	if existing.Spec.ExternalTrafficPolicy != desired.Spec.ExternalTrafficPolicy {
+		return true
+	}
+
 	// Check selector
 	for k, v := range desired.Spec.Selector {
 		if existing.Spec.Selector[k] != v {
@@ -113,6 +173,16 @@ func (r *ServiceSubReconciler) needsUpdate(existing, desired *corev1.Service) bo
 		if port.Name != existingPort.Name ||
 			port.Port != existingPort.Port ||
 			port.Protocol != existingPort.Protocol {
+			return true
+		}
+	}
+
+	// Check annotations
+	if len(existing.Annotations) != len(desired.Annotations) {
+		return true
+	}
+	for k, v := range desired.Annotations {
+		if existing.Annotations[k] != v {
 			return true
 		}
 	}

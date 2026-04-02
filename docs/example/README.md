@@ -51,6 +51,26 @@ task deploy:node2
 task deploy:node3
 ```
 
+## Proxy Sidecars (optional)
+
+Each node has its own `HAProxyCapsule` and `EnvoyProxy` deployed alongside its `ConsensusCapsule` via `task deploy:nodeX`. To deploy proxies manually:
+
+```shell
+# HAProxy — gRPC load balancer (ports 50211/50212), routes directly to consensus node
+kubectl apply -f node0/haproxycapsule.yaml
+kubectl apply -f node1/haproxycapsule.yaml
+kubectl apply -f node2/haproxycapsule.yaml
+kubectl apply -f node3/haproxycapsule.yaml
+
+# EnvoyProxy — gRPC-Web gateway for browser/JS clients (port 8080), routes directly to consensus node
+kubectl apply -f node0/envoyproxycapsule.yaml
+kubectl apply -f node1/envoyproxycapsule.yaml
+kubectl apply -f node2/envoyproxycapsule.yaml
+kubectl apply -f node3/envoyproxycapsule.yaml
+```
+
+Both proxies auto-derive their upstream from the CR name (e.g. `haproxy-node1` → upstream `node1`, `envoy-node1` → upstream `node1`). Override with `upstreamService` if needed.
+
 ## Cleanup
 
 ```shell

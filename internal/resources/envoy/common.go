@@ -4,6 +4,7 @@ package envoy
 
 import (
 	"fmt"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -13,52 +14,37 @@ import (
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
-// Label keys
 const (
-	// LabelManagedBy indicates the resource is managed by solo-operator
-	LabelManagedBy = "app.kubernetes.io/managed-by"
-	// LabelPartOf indicates the component the resource is part of
-	LabelPartOf = "app.kubernetes.io/part-of"
-	// LabelApp indicates the application name
-	LabelApp = "app"
-)
-
-// Label values
-const (
-	// ManagedByValue is the value for the managed-by label
-	ManagedByValue = "solo-operator"
-	// PartOfEnvoyProxy is the value for Envoy proxy part-of label
+	LabelManagedBy   = "app.kubernetes.io/managed-by"
+	LabelPartOf      = "app.kubernetes.io/part-of"
+	LabelApp         = "app"
+	ManagedByValue   = "solo-operator"
 	PartOfEnvoyProxy = "envoy-proxy"
+	ConfigMapSuffix  = "-config"
 )
 
-// Resource name suffixes
 const (
-	ConfigMapSuffix = "-config"
+	DefaultImage       = "envoyproxy/envoy:v1.21.6"
+	DefaultReplicas    = int32(2)
+	DefaultProxyPort   = int32(8080)
+	DefaultAdminPort   = int32(9901)
+	DefaultMetricsPort = int32(9090)
 )
 
-// Default values
-const (
-	// DefaultImage is the default Envoy image
-	DefaultImage = "envoyproxy/envoy:v1.21.6"
-	// DefaultReplicas is the default number of replicas
-	DefaultReplicas = int32(2)
-	// DefaultProxyPort is the default proxy port
-	DefaultProxyPort = int32(8081)
-	// DefaultAdminPort is the default admin port
-	DefaultAdminPort = int32(9901)
-)
-
-// Volume and mount paths
 const (
 	ConfigVolumeName = "config"
 	ConfigMountPath  = "/etc/envoy"
 	AdminVolumeName  = "admin"
 	AdminMountPath   = "/admin"
+	TLSVolumeName    = "tls"
+	TLSMountPath     = "/etc/envoy/certs"
+	TLSCertPath      = "/etc/envoy/certs/tls.crt"
+	TLSKeyPath       = "/etc/envoy/certs/tls.key"
 	ContainerName    = "envoy"
 	ConfigFileName   = "envoy.yaml"
 )
 
-// CommonLabels returns the common labels for Envoy proxy resources
+// CommonLabels returns the pod selector labels. These must remain stable — never include AdditionalLabels here.
 func CommonLabels(envoy *operatorv1alpha1.EnvoyProxy) map[string]string {
 	return map[string]string{
 		LabelManagedBy: ManagedByValue,
@@ -67,12 +53,19 @@ func CommonLabels(envoy *operatorv1alpha1.EnvoyProxy) map[string]string {
 	}
 }
 
-// ConfigMapName returns the config map name for an Envoy proxy
+// ResourceLabels merges CommonLabels with AdditionalLabels. Use on ObjectMeta and pod template, not selectors.
+func ResourceLabels(envoy *operatorv1alpha1.EnvoyProxy) map[string]string {
+	labels := CommonLabels(envoy)
+	for k, v := range envoy.Spec.AdditionalLabels {
+		labels[k] = v
+	}
+	return labels
+}
+
 func ConfigMapName(envoy *operatorv1alpha1.EnvoyProxy) string {
 	return fmt.Sprintf("%s%s", envoy.Name, ConfigMapSuffix)
 }
 
-// GetImage returns the image to use, with default fallback
 func GetImage(envoy *operatorv1alpha1.EnvoyProxy) string {
 	if envoy.Spec.Image != "" {
 		return envoy.Spec.Image
@@ -80,7 +73,6 @@ func GetImage(envoy *operatorv1alpha1.EnvoyProxy) string {
 	return DefaultImage
 }
 
-// GetReplicas returns the number of replicas, with default fallback
 func GetReplicas(envoy *operatorv1alpha1.EnvoyProxy) int32 {
 	if envoy.Spec.Replicas != nil {
 		return *envoy.Spec.Replicas
@@ -88,7 +80,6 @@ func GetReplicas(envoy *operatorv1alpha1.EnvoyProxy) int32 {
 	return DefaultReplicas
 }
 
-// GetProxyPort returns the proxy port, with default fallback
 func GetProxyPort(envoy *operatorv1alpha1.EnvoyProxy) int32 {
 	if envoy.Spec.ProxyPort != 0 {
 		return envoy.Spec.ProxyPort
@@ -96,7 +87,6 @@ func GetProxyPort(envoy *operatorv1alpha1.EnvoyProxy) int32 {
 	return DefaultProxyPort
 }
 
-// GetAdminPort returns the admin port, with default fallback
 func GetAdminPort(envoy *operatorv1alpha1.EnvoyProxy) int32 {
 	if envoy.Spec.AdminPort != 0 {
 		return envoy.Spec.AdminPort
@@ -104,13 +94,17 @@ func GetAdminPort(envoy *operatorv1alpha1.EnvoyProxy) int32 {
 	return DefaultAdminPort
 }
 
-// BuildEnv builds the environment variables for the Envoy container
+func GetMetricsPort(envoy *operatorv1alpha1.EnvoyProxy) int32 {
+	if envoy.Spec.MetricsPort != 0 {
+		return envoy.Spec.MetricsPort
+	}
+	return DefaultMetricsPort
+}
+
 func BuildEnv(envoy *operatorv1alpha1.EnvoyProxy) []corev1.EnvVar {
 	if len(envoy.Spec.Env) > 0 {
 		return envoy.Spec.Env
 	}
-
-	// Default environment variables
 	return []corev1.EnvVar{
 		{
 			Name: "SERVICE_CLUSTER",
@@ -131,14 +125,71 @@ func BuildEnv(envoy *operatorv1alpha1.EnvoyProxy) []corev1.EnvVar {
 	}
 }
 
-// DefaultEnvoyConfig returns the default Envoy configuration
+// DefaultEnvoyConfig generates the operator-managed envoy.yaml: a gRPC-Web proxy listener and a Prometheus metrics listener.
 func DefaultEnvoyConfig(envoy *operatorv1alpha1.EnvoyProxy) map[string]string {
 	proxyPort := GetProxyPort(envoy)
+	metricsPort := GetMetricsPort(envoy)
+	upstreamService := GetUpstreamService(envoy)
+	upstreamPort := GetUpstreamPort(envoy)
+
+	// Build TLS transport_socket block when a secret is configured.
+	tlsBlock := ""
+	if envoy.Spec.TLSSecretName != "" {
+		tlsBlock = fmt.Sprintf(`          transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              '@type': type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+              common_tls_context:
+                tls_certificates:
+                  - certificate_chain:
+                      filename: %s
+                    private_key:
+                      filename: %s
+`, TLSCertPath, TLSKeyPath)
+	}
+
+	// Build CORS values — use spec overrides or fall back to defaults
+	allowOrigins := "- prefix: '*'"
+	allowMethods := "GET, PUT, DELETE, POST, OPTIONS"
+	allowHeaders := "keep-alive,user-agent,cache-control,content-type,content-transfer-encoding,custom-header-1,x-accept-content-transfer-encoding,x-accept-response-streaming,x-user-agent,x-grpc-web,grpc-timeout"
+	exposeHeaders := "custom-header-1,grpc-status,grpc-message"
+	maxAge := `"1728000"`
+
+	if c := envoy.Spec.CORSConfig; c != nil {
+		if len(c.AllowOrigins) > 0 {
+			parts := make([]string, len(c.AllowOrigins))
+			for i, o := range c.AllowOrigins {
+				parts[i] = "- prefix: '" + o + "'"
+			}
+			allowOrigins = strings.Join(parts, "\n                          ")
+		}
+		if c.AllowMethods != "" {
+			allowMethods = c.AllowMethods
+		}
+		if len(c.AllowHeaders) > 0 {
+			allowHeaders = strings.Join(c.AllowHeaders, ",")
+		}
+		if len(c.ExposeHeaders) > 0 {
+			exposeHeaders = strings.Join(c.ExposeHeaders, ",")
+		}
+		if c.MaxAge != "" {
+			maxAge = `"` + c.MaxAge + `"`
+		}
+	}
+
+	adminPort := GetAdminPort(envoy)
 
 	config := fmt.Sprintf(`admin:
   address:
-    pipe:
-      path: /admin/admin.sock
+    socket_address:
+      address: 127.0.0.1
+      port_value: %d
+layered_runtime:
+  layers:
+    - name: static_layer
+      static_layer:
+        overload:
+          global_downstream_max_connections: 50000
 static_resources:
   listeners:
     - name: listener_0
@@ -171,14 +222,40 @@ static_resources:
                               grpc_timeout_header_max: 0s
                       cors:
                         allow_origin_string_match:
-                          - prefix: '*'
-                        allow_methods: GET, PUT, DELETE, POST, OPTIONS
-                        allow_headers: keep-alive,user-agent,cache-control,content-type,content-transfer-encoding,custom-header-1,x-accept-content-transfer-encoding,x-accept-response-streaming,x-user-agent,x-grpc-web,grpc-timeout
-                        max_age: "1728000"
-                        expose_headers: custom-header-1,grpc-status,grpc-message
+                          %s
+                        allow_methods: %s
+                        allow_headers: %s
+                        max_age: %s
+                        expose_headers: %s
                 http_filters:
                   - name: envoy.filters.http.grpc_web
                   - name: envoy.filters.http.cors
+                  - name: envoy.filters.http.router
+%s    - name: prometheus_listener
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: %d
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                '@type': type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                codec_type: auto
+                stat_prefix: prometheus_stats
+                route_config:
+                  name: prometheus_route
+                  virtual_hosts:
+                    - name: prometheus
+                      domains:
+                        - '*'
+                      routes:
+                        - match:
+                            prefix: /metrics
+                          route:
+                            cluster: prometheus_stats
+                            prefix_rewrite: /stats/prometheus
+                http_filters:
                   - name: envoy.filters.http.router
   clusters:
     - name: echo_service
@@ -193,20 +270,58 @@ static_resources:
               - endpoint:
                   address:
                     socket_address:
-                      address: hedera-proxy
-                      port_value: 50211
-`, proxyPort)
+                      address: %s
+                      port_value: %d
+    - name: prometheus_stats
+      connect_timeout: 0.25s
+      type: STATIC
+      load_assignment:
+        cluster_name: prometheus_stats
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: 127.0.0.1
+                      port_value: %d
+`, adminPort, proxyPort, allowOrigins, allowMethods, allowHeaders, maxAge, exposeHeaders, tlsBlock, metricsPort, upstreamService, upstreamPort, adminPort)
 
 	return map[string]string{
 		ConfigFileName: config,
 	}
 }
 
-// NewSubReconcilers creates all Envoy proxy subreconcilers in execution order
+// GetUpstreamService strips the "envoy-" prefix from the CR name when UpstreamService is not set.
+func GetUpstreamService(envoy *operatorv1alpha1.EnvoyProxy) string {
+	if envoy.Spec.UpstreamService != "" {
+		return envoy.Spec.UpstreamService
+	}
+	name := envoy.Name
+	if len(name) > 6 && name[:6] == "envoy-" {
+		return name[6:]
+	}
+	return name
+}
+
+func GetUpstreamPort(envoy *operatorv1alpha1.EnvoyProxy) int32 {
+	if envoy.Spec.UpstreamPort != 0 {
+		return envoy.Spec.UpstreamPort
+	}
+	return int32(50211)
+}
+
+func GetServiceType(envoy *operatorv1alpha1.EnvoyProxy) operatorv1alpha1.ProxyServiceType {
+	if envoy.Spec.ServiceType != "" {
+		return envoy.Spec.ServiceType
+	}
+	return operatorv1alpha1.ProxyServiceTypeLoadBalancer
+}
+
 func NewSubReconcilers(c client.Client, scheme *runtime.Scheme) *subreconciler.Chain[*operatorv1alpha1.EnvoyProxy] {
 	return subreconciler.NewChain(
 		NewConfigMapSubReconciler(c, scheme),
 		NewDeploymentSubReconciler(c, scheme),
 		NewServiceSubReconciler(c, scheme),
+		NewIngressSubReconciler(c, scheme),
 	)
 }

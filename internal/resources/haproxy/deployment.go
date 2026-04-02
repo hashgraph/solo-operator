@@ -10,6 +10,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -19,30 +20,25 @@ import (
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
-// DeploymentSubReconciler manages the Deployment for an HAProxyCapsule
 type DeploymentSubReconciler struct {
 	*subreconciler.BaseSubReconciler[*operatorv1alpha1.HAProxyCapsule]
 }
 
-// NewDeploymentSubReconciler creates a new DeploymentSubReconciler
 func NewDeploymentSubReconciler(c client.Client, scheme *runtime.Scheme) *DeploymentSubReconciler {
 	return &DeploymentSubReconciler{
 		BaseSubReconciler: subreconciler.NewBaseSubReconciler[*operatorv1alpha1.HAProxyCapsule](c, scheme, "Deployment"),
 	}
 }
 
-// Reconcile ensures the deployment exists and is up to date
 func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, haproxy *operatorv1alpha1.HAProxyCapsule) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	desired := r.buildDeployment(haproxy)
 
-	// Set owner reference
 	if err := controllerutil.SetControllerReference(haproxy, desired, r.Scheme); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// Check if exists
 	existing := &appsv1.Deployment{}
 	err := r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
@@ -56,7 +52,6 @@ func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, haproxy *operat
 		return ctrl.Result{}, err
 	}
 
-	// Update spec if needed
 	if r.needsUpdate(existing, desired) {
 		logger.V(1).Info("Updating HAProxy deployment", "name", desired.Name, "namespace", desired.Namespace)
 		existing.Spec = desired.Spec
@@ -69,10 +64,10 @@ func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, haproxy *operat
 	return ctrl.Result{}, nil
 }
 
-// buildDeployment builds the desired deployment
 func (r *DeploymentSubReconciler) buildDeployment(haproxy *operatorv1alpha1.HAProxyCapsule) *appsv1.Deployment {
 	replicas := int32(1)
-	labels := CommonLabels(haproxy)
+	selectorLabels := CommonLabels(haproxy)
+	resourceLabels := ResourceLabels(haproxy)
 
 	volumeMounts := []corev1.VolumeMount{
 		{
@@ -93,13 +88,18 @@ func (r *DeploymentSubReconciler) buildDeployment(haproxy *operatorv1alpha1.HAPr
 		},
 	}
 
-	// Add TLS secret volume if specified
-	if haproxy.Spec.SecretName != "" {
+	// HAProxy 2.4+ auto-pairs tls.crt with tls.crt.key — keyToPath renames tls.key to make this work.
+	// This is what makes the secret cert-manager compatible without any init containers.
+	if haproxy.Spec.TLSSecretName != "" {
 		volumes = append(volumes, corev1.Volume{
 			Name: TLSVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: haproxy.Spec.SecretName,
+					SecretName: haproxy.Spec.TLSSecretName,
+					Items: []corev1.KeyToPath{
+						{Key: "tls.crt", Path: "tls.crt"},
+						{Key: "tls.key", Path: "tls.crt.key"},
+					},
 				},
 			},
 		})
@@ -110,33 +110,54 @@ func (r *DeploymentSubReconciler) buildDeployment(haproxy *operatorv1alpha1.HAPr
 		})
 	}
 
+	hc := GetHealthCheck(haproxy)
+	metricsPort := GetMetricsPort(haproxy)
+	var startupProbe, livenessProbe, readinessProbe *corev1.Probe
+	if hc.Enabled {
+		startupProbe = buildStartupProbe(hc, metricsPort)
+		livenessProbe = buildLivenessProbe(hc, metricsPort)
+		readinessProbe = buildReadinessProbe(hc, metricsPort)
+	}
+
+	gracePeriod := haproxy.Spec.TerminationGracePeriodSeconds
+	if gracePeriod == 0 {
+		gracePeriod = 10
+	}
+
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      haproxy.Name,
 			Namespace: haproxy.Namespace,
-			Labels:    labels,
+			Labels:    resourceLabels,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
+				MatchLabels: selectorLabels,
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels: resourceLabels,
 				},
 				Spec: corev1.PodSpec{
+					NodeSelector:                  haproxy.Spec.NodeSelector,
+					Affinity:                      haproxy.Spec.Affinity,
+					Tolerations:                   haproxy.Spec.Tolerations,
+					TerminationGracePeriodSeconds: &gracePeriod,
 					Containers: []corev1.Container{
 						{
 							Name:  ContainerName,
 							Image: GetImage(haproxy),
 							Ports: []corev1.ContainerPort{
-								{Name: "grpc", ContainerPort: GrpcPort, Protocol: corev1.ProtocolTCP},
-								{Name: "grpcs", ContainerPort: GrpcsPort, Protocol: corev1.ProtocolTCP},
-								{Name: "stats", ContainerPort: StatsPort, Protocol: corev1.ProtocolTCP},
+								{Name: "grpc", ContainerPort: GetGrpcPort(haproxy), Protocol: corev1.ProtocolTCP},
+								{Name: "grpcs", ContainerPort: GetGrpcsPort(haproxy), Protocol: corev1.ProtocolTCP},
+								{Name: "metrics", ContainerPort: GetMetricsPort(haproxy), Protocol: corev1.ProtocolTCP},
 							},
-							VolumeMounts: volumeMounts,
-							Env:          haproxy.Spec.Env,
+							VolumeMounts:   volumeMounts,
+							Env:            haproxy.Spec.Env,
+							StartupProbe:   startupProbe,
+							LivenessProbe:  livenessProbe,
+							ReadinessProbe: readinessProbe,
 						},
 					},
 					Volumes: volumes,
@@ -148,14 +169,53 @@ func (r *DeploymentSubReconciler) buildDeployment(haproxy *operatorv1alpha1.HAPr
 	return deploy
 }
 
-// needsUpdate checks if the deployment needs to be updated
+// statsProbeHandler returns an httpGet probe on the HAProxy stats endpoint.
+// The stats listener uses mode http so it responds with 200 when HAProxy is running.
+func statsProbeHandler(metricsPort int32) corev1.ProbeHandler {
+	return corev1.ProbeHandler{
+		HTTPGet: &corev1.HTTPGetAction{
+			Path: "/stats",
+			Port: intstr.FromInt32(metricsPort),
+		},
+	}
+}
+
+func buildStartupProbe(hc operatorv1alpha1.HAProxyHealthCheckSpec, metricsPort int32) *corev1.Probe {
+	return &corev1.Probe{
+		ProbeHandler:        statsProbeHandler(metricsPort),
+		InitialDelaySeconds: hc.StartupInitialDelaySeconds,
+		PeriodSeconds:       hc.StartupPeriodSeconds,
+		FailureThreshold:    hc.StartupFailureThreshold,
+		SuccessThreshold:    1,
+		TimeoutSeconds:      hc.TimeoutSeconds,
+	}
+}
+
+func buildLivenessProbe(hc operatorv1alpha1.HAProxyHealthCheckSpec, metricsPort int32) *corev1.Probe {
+	return &corev1.Probe{
+		ProbeHandler:     statsProbeHandler(metricsPort),
+		PeriodSeconds:    hc.PeriodSeconds,
+		FailureThreshold: hc.FailureThreshold,
+		SuccessThreshold: 1,
+		TimeoutSeconds:   hc.TimeoutSeconds,
+	}
+}
+
+func buildReadinessProbe(hc operatorv1alpha1.HAProxyHealthCheckSpec, metricsPort int32) *corev1.Probe {
+	return &corev1.Probe{
+		ProbeHandler:     statsProbeHandler(metricsPort),
+		PeriodSeconds:    hc.PeriodSeconds,
+		FailureThreshold: hc.FailureThreshold,
+		SuccessThreshold: 1,
+		TimeoutSeconds:   hc.TimeoutSeconds,
+	}
+}
+
 func (r *DeploymentSubReconciler) needsUpdate(existing, desired *appsv1.Deployment) bool {
-	// Compare replicas
 	if existing.Spec.Replicas == nil || *existing.Spec.Replicas != *desired.Spec.Replicas {
 		return true
 	}
 
-	// Compare containers (simplified check)
 	if len(existing.Spec.Template.Spec.Containers) != len(desired.Spec.Template.Spec.Containers) {
 		return true
 	}
@@ -170,7 +230,6 @@ func (r *DeploymentSubReconciler) needsUpdate(existing, desired *appsv1.Deployme
 		}
 	}
 
-	// Compare volumes
 	if len(existing.Spec.Template.Spec.Volumes) != len(desired.Spec.Template.Spec.Volumes) {
 		return true
 	}

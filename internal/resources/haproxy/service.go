@@ -61,7 +61,9 @@ func (r *ServiceSubReconciler) Reconcile(ctx context.Context, haproxy *operatorv
 		logger.V(1).Info("Updating HAProxy service", "name", desired.Name, "namespace", desired.Namespace)
 		existing.Spec.Selector = desired.Spec.Selector
 		existing.Spec.Type = desired.Spec.Type
+		existing.Spec.ExternalTrafficPolicy = desired.Spec.ExternalTrafficPolicy
 		existing.Labels = desired.Labels
+		existing.Annotations = desired.Annotations
 
 		// Preserve NodePorts when updating ports
 		for i, port := range desired.Spec.Ports {
@@ -87,29 +89,46 @@ func (r *ServiceSubReconciler) Reconcile(ctx context.Context, haproxy *operatorv
 
 // buildService builds the desired service
 func (r *ServiceSubReconciler) buildService(haproxy *operatorv1alpha1.HAProxyCapsule) *corev1.Service {
-	labels := CommonLabels(haproxy)
+	selectorLabels := CommonLabels(haproxy)
+	resourceLabels := ResourceLabels(haproxy)
 
-	// Default service type
+	// Map ProxyServiceType to a valid K8s ServiceType.
+	// Ingress uses a ClusterIP service; the Ingress resource is managed by IngressSubReconciler.
 	svcType := corev1.ServiceTypeLoadBalancer
-	if haproxy.Spec.ServiceType != "" {
-		svcType = corev1.ServiceType(haproxy.Spec.ServiceType)
+	switch haproxy.Spec.ServiceType {
+	case operatorv1alpha1.ProxyServiceTypeClusterIP, operatorv1alpha1.ProxyServiceTypeIngress:
+		svcType = corev1.ServiceTypeClusterIP
+	case operatorv1alpha1.ProxyServiceTypeLoadBalancer:
+		svcType = corev1.ServiceTypeLoadBalancer
+	}
+
+	// ExternalTrafficPolicy: default Local (only meaningful for non-ClusterIP types)
+	extPolicy := haproxy.Spec.ExternalTrafficPolicy
+	if extPolicy == "" {
+		extPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
 	}
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      haproxy.Name,
-			Namespace: haproxy.Namespace,
-			Labels:    labels,
+			Name:        haproxy.Name,
+			Namespace:   haproxy.Namespace,
+			Labels:      resourceLabels,
+			Annotations: haproxy.Spec.ServiceAnnotations,
 		},
 		Spec: corev1.ServiceSpec{
 			Type:     svcType,
-			Selector: labels,
+			Selector: selectorLabels,
 			Ports: []corev1.ServicePort{
-				{Name: "grpc", Port: GrpcPort, TargetPort: intstr.FromInt32(GrpcPort), Protocol: corev1.ProtocolTCP},
-				{Name: "grpcs", Port: GrpcsPort, TargetPort: intstr.FromInt32(GrpcsPort), Protocol: corev1.ProtocolTCP},
-				{Name: "stats", Port: StatsPort, TargetPort: intstr.FromInt32(StatsPort), Protocol: corev1.ProtocolTCP},
+				{Name: "grpc", Port: GetGrpcPort(haproxy), TargetPort: intstr.FromInt32(GetGrpcPort(haproxy)), Protocol: corev1.ProtocolTCP},
+				{Name: "grpcs", Port: GetGrpcsPort(haproxy), TargetPort: intstr.FromInt32(GetGrpcsPort(haproxy)), Protocol: corev1.ProtocolTCP},
+				{Name: "metrics", Port: GetMetricsPort(haproxy), TargetPort: intstr.FromInt32(GetMetricsPort(haproxy)), Protocol: corev1.ProtocolTCP},
 			},
 		},
+	}
+
+	// Apply ExternalTrafficPolicy only for non-ClusterIP service types
+	if svcType != corev1.ServiceTypeClusterIP {
+		svc.Spec.ExternalTrafficPolicy = extPolicy
 	}
 
 	// Apply custom service spec if provided (overrides default)
@@ -117,7 +136,7 @@ func (r *ServiceSubReconciler) buildService(haproxy *operatorv1alpha1.HAProxyCap
 		svc.Spec = *haproxy.Spec.ServiceSpec
 		// Ensure selector is set to our labels
 		if svc.Spec.Selector == nil {
-			svc.Spec.Selector = labels
+			svc.Spec.Selector = selectorLabels
 		}
 	}
 
@@ -128,6 +147,11 @@ func (r *ServiceSubReconciler) buildService(haproxy *operatorv1alpha1.HAProxyCap
 func (r *ServiceSubReconciler) needsUpdate(existing, desired *corev1.Service) bool {
 	// Check type
 	if existing.Spec.Type != desired.Spec.Type {
+		return true
+	}
+
+	// Check ExternalTrafficPolicy
+	if existing.Spec.ExternalTrafficPolicy != desired.Spec.ExternalTrafficPolicy {
 		return true
 	}
 
@@ -150,6 +174,16 @@ func (r *ServiceSubReconciler) needsUpdate(existing, desired *corev1.Service) bo
 		if port.Name != existingPort.Name ||
 			port.Port != existingPort.Port ||
 			port.Protocol != existingPort.Protocol {
+			return true
+		}
+	}
+
+	// Check annotations
+	if len(existing.Annotations) != len(desired.Annotations) {
+		return true
+	}
+	for k, v := range desired.Annotations {
+		if existing.Annotations[k] != v {
 			return true
 		}
 	}
