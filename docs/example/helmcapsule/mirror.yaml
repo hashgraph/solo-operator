@@ -1,0 +1,51 @@
+# HelmCapsule — Hedera Mirror Node
+#
+# Component: mirror
+# Chart:     hedera-mirror (https://github.com/hashgraph/hedera-mirror-node)
+#
+# Auto-injected values (from OrbitRef + ConsensusCapsules in the namespace):
+#   hedera.mirror.importer.consensusNodeEndpoints  — list of "host:port" from
+#       ConsensusCapsule.status.addressBookEntry.{internalHostname,internalPort}
+#   hedera.mirror.importer.network                 — set to the Orbit name
+#
+# The Values section below overrides or extends the auto-injected values.
+# All three layers are merged (auto-inject → ValuesFrom → Values).
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: HelmCapsule
+metadata:
+  name: mirror
+  namespace: solo-orbit
+spec:
+  chart:
+    repo: https://hiero-ledger.github.io/hiero-mirror-node/charts
+    chart: hedera-mirror
+    version: "0.151.0"
+
+  # Identifies this as a mirror node — enables topology value injection.
+  component: mirror
+
+  # Orbit whose ConsensusCapsules supply the consensus endpoints.
+  orbitRef:
+    name: solo-orbit
+
+  timeout: 1m
+
+  # Optional: load additional values from a ConfigMap or Secret.
+  # valuesFrom:
+  #   - kind: ConfigMap
+  #     name: mirror-extra-values
+
+  # Inline overrides — highest priority, merged last.
+  values:
+    hedera:
+      mirror:
+        importer:
+          network: OTHER
+        grpc:
+          enabled: true
+        monitor:
+          enabled: false
+    postgresql:
+      enabled: true
+      persistence:
+        size: 50Gi
