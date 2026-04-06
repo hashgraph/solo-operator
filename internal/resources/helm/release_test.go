@@ -235,6 +235,171 @@ func TestReleaseSubReconciler_propagatesHelmError(t *testing.T) {
 	}
 }
 
+func TestReleaseSubReconciler_conflictWhenSameReleaseName(t *testing.T) {
+	scheme := newTestScheme()
+
+	// Two HelmCapsules in the same namespace both resolve to "shared-release".
+	hc1 := &operatorv1alpha1.HelmCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "capsule-a", Namespace: "test-ns", UID: "uid-a"},
+		Spec: operatorv1alpha1.HelmCapsuleSpec{
+			Chart:       operatorv1alpha1.HelmChartSpec{Repo: "oci://ghcr.io/hashgraph", Chart: "hedera-mirror", Version: "0.129.1"},
+			ReleaseName: "shared-release",
+		},
+	}
+	hc2 := &operatorv1alpha1.HelmCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "capsule-b", Namespace: "test-ns", UID: "uid-b"},
+		Spec: operatorv1alpha1.HelmCapsuleSpec{
+			Chart:       operatorv1alpha1.HelmChartSpec{Repo: "oci://ghcr.io/hashgraph", Chart: "hedera-mirror", Version: "0.129.1"},
+			ReleaseName: "shared-release",
+		},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(hc1, hc2).Build()
+	mock := NewMockClient()
+	r := &ReleaseSubReconciler{
+		BaseSubReconciler: subreconciler.NewBaseSubReconciler[*operatorv1alpha1.HelmCapsule](c, scheme, "helm-release"),
+		helmClient:        mock,
+	}
+
+	// Both capsules see each other as conflicting — neither can proceed.
+	for _, hc := range []*operatorv1alpha1.HelmCapsule{hc1, hc2} {
+		_, err := r.Reconcile(context.Background(), hc)
+		if err == nil {
+			t.Fatalf("capsule %s: expected conflict error, got nil", hc.Name)
+		}
+		if !errors.Is(err, ErrReleaseNameConflict) {
+			t.Errorf("capsule %s: expected ErrReleaseNameConflict, got: %v", hc.Name, err)
+		}
+	}
+}
+
+func TestReleaseSubReconciler_conflictWhenNameDefaultsToObjectName(t *testing.T) {
+	scheme := newTestScheme()
+
+	// capsule-a uses explicit releaseName="mirror"; capsule-b defaults to its own object name "mirror".
+	hc1 := &operatorv1alpha1.HelmCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "capsule-a", Namespace: "test-ns", UID: "uid-a"},
+		Spec: operatorv1alpha1.HelmCapsuleSpec{
+			Chart:       operatorv1alpha1.HelmChartSpec{Repo: "oci://ghcr.io/hashgraph", Chart: "hedera-mirror", Version: "0.129.1"},
+			ReleaseName: "mirror",
+		},
+	}
+	hc2 := &operatorv1alpha1.HelmCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "mirror", Namespace: "test-ns", UID: "uid-b"},
+		Spec: operatorv1alpha1.HelmCapsuleSpec{
+			Chart: operatorv1alpha1.HelmChartSpec{Repo: "oci://ghcr.io/hashgraph", Chart: "hedera-mirror", Version: "0.129.1"},
+			// ReleaseName omitted — defaults to "mirror"
+		},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(hc1, hc2).Build()
+	mock := NewMockClient()
+	r := &ReleaseSubReconciler{
+		BaseSubReconciler: subreconciler.NewBaseSubReconciler[*operatorv1alpha1.HelmCapsule](c, scheme, "helm-release"),
+		helmClient:        mock,
+	}
+
+	for _, hc := range []*operatorv1alpha1.HelmCapsule{hc1, hc2} {
+		_, err := r.Reconcile(context.Background(), hc)
+		if err == nil {
+			t.Fatalf("capsule %s: expected conflict error, got nil", hc.Name)
+		}
+		if !errors.Is(err, ErrReleaseNameConflict) {
+			t.Errorf("capsule %s: expected ErrReleaseNameConflict, got: %v", hc.Name, err)
+		}
+	}
+}
+
+func TestReleaseSubReconciler_noConflictAcrossNamespaces(t *testing.T) {
+	scheme := newTestScheme()
+
+	// Two HelmCapsules with the same release name but in different namespaces — no conflict.
+	hc1 := &operatorv1alpha1.HelmCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "capsule-a", Namespace: "ns-1", UID: "uid-a"},
+		Spec: operatorv1alpha1.HelmCapsuleSpec{
+			Chart:       operatorv1alpha1.HelmChartSpec{Repo: "oci://ghcr.io/hashgraph", Chart: "hedera-mirror", Version: "0.129.1"},
+			ReleaseName: "mirror",
+		},
+	}
+	hc2 := &operatorv1alpha1.HelmCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "capsule-b", Namespace: "ns-2", UID: "uid-b"},
+		Spec: operatorv1alpha1.HelmCapsuleSpec{
+			Chart:       operatorv1alpha1.HelmChartSpec{Repo: "oci://ghcr.io/hashgraph", Chart: "hedera-mirror", Version: "0.129.1"},
+			ReleaseName: "mirror",
+		},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(hc1, hc2).Build()
+	mock := NewMockClient()
+
+	for _, hc := range []*operatorv1alpha1.HelmCapsule{hc1, hc2} {
+		r := &ReleaseSubReconciler{
+			BaseSubReconciler: subreconciler.NewBaseSubReconciler[*operatorv1alpha1.HelmCapsule](c, scheme, "helm-release"),
+			helmClient:        mock,
+		}
+		if _, err := r.Reconcile(context.Background(), hc); err != nil {
+			t.Errorf("capsule %s/%s: unexpected error: %v", hc.Namespace, hc.Name, err)
+		}
+	}
+}
+
+func TestReleaseSubReconciler_terminatingCapsuleDoesNotBlockPeer(t *testing.T) {
+	scheme := newTestScheme()
+	now := metav1.Now()
+
+	// hc1 is being deleted (has DeletionTimestamp).
+	hc1 := &operatorv1alpha1.HelmCapsule{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "capsule-a", Namespace: "test-ns", UID: "uid-a",
+			DeletionTimestamp: &now, Finalizers: []string{"test"},
+		},
+		Spec: operatorv1alpha1.HelmCapsuleSpec{
+			Chart:       operatorv1alpha1.HelmChartSpec{Repo: "oci://ghcr.io/hashgraph", Chart: "hedera-mirror", Version: "0.129.1"},
+			ReleaseName: "shared-release",
+		},
+	}
+	hc2 := &operatorv1alpha1.HelmCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "capsule-b", Namespace: "test-ns", UID: "uid-b"},
+		Spec: operatorv1alpha1.HelmCapsuleSpec{
+			Chart:       operatorv1alpha1.HelmChartSpec{Repo: "oci://ghcr.io/hashgraph", Chart: "hedera-mirror", Version: "0.129.1"},
+			ReleaseName: "shared-release",
+		},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(hc1, hc2).Build()
+	mock := NewMockClient()
+	r := &ReleaseSubReconciler{
+		BaseSubReconciler: subreconciler.NewBaseSubReconciler[*operatorv1alpha1.HelmCapsule](c, scheme, "helm-release"),
+		helmClient:        mock,
+	}
+
+	// hc2 should not be blocked by the terminating hc1.
+	if _, err := r.Reconcile(context.Background(), hc2); err != nil {
+		t.Errorf("expected no conflict against terminating capsule, got: %v", err)
+	}
+}
+
+func TestReleaseSubReconciler_listFailurePropagatesAsConflictError(t *testing.T) {
+	scheme := newTestScheme()
+
+	// Build a client with no HelmCapsule type registered so List returns an error.
+	c := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).Build()
+	mock := NewMockClient()
+	r := &ReleaseSubReconciler{
+		BaseSubReconciler: subreconciler.NewBaseSubReconciler[*operatorv1alpha1.HelmCapsule](c, scheme, "helm-release"),
+		helmClient:        mock,
+	}
+
+	hc := newHelmCapsule("mirror", "test-ns")
+	_, err := r.Reconcile(context.Background(), hc)
+	if err == nil {
+		t.Fatal("expected error when list fails")
+	}
+	if !errors.Is(err, ErrReleaseNameConflict) {
+		t.Errorf("expected ErrReleaseNameConflict wrapping the list error, got: %v", err)
+	}
+}
+
 func TestReleaseSubReconciler_usesCustomReleaseName(t *testing.T) {
 	scheme := newTestScheme()
 

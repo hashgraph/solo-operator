@@ -15,13 +15,11 @@ import (
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
-// ReleaseSubReconciler reconciles the Helm release for a HelmCapsule.
 type ReleaseSubReconciler struct {
 	*subreconciler.BaseSubReconciler[*operatorv1alpha1.HelmCapsule]
 	helmClient Client
 }
 
-// NewSubReconcilers returns the subreconciler chain for the HelmCapsule controller.
 func NewSubReconcilers(c client.Client, scheme *runtime.Scheme, helmClient Client) *subreconciler.Chain[*operatorv1alpha1.HelmCapsule] {
 	return subreconciler.NewChain[*operatorv1alpha1.HelmCapsule](
 		&ReleaseSubReconciler{
@@ -45,6 +43,10 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 		"version", hc.Spec.Chart.Version,
 	)
 
+	if err := r.checkReleaseNameConflict(ctx, hc, releaseName); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	values, err := MergeValues(ctx, r.Client, hc.Namespace, &hc.Spec)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("%w: %s", ErrValuesBuild, err)
@@ -55,8 +57,7 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 		return ctrl.Result{}, err
 	}
 	if hash == hc.Status.ValuesHash {
-		// Skip only if the release is actually deployed. A failed or pending-install
-		// release must be retried even when the spec hasn't changed.
+		// Only skip if actually deployed — failed/pending releases must be retried.
 		existing, err := r.helmClient.GetRelease(releaseName, hc.Namespace)
 		if err == nil && existing != nil && existing.Status == "deployed" {
 			logger.V(1).Info("Release up-to-date, skipping upgrade")
@@ -66,7 +67,7 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 
 	opts := releaseOptions(hc)
 	if opts.Timeout <= 0 {
-		opts.Timeout = defaultTimeout // apply default here so the log is accurate
+		opts.Timeout = defaultTimeout
 	}
 	logger.Info("Reconciling Helm release", "timeout", opts.Timeout)
 
@@ -82,6 +83,30 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 	hc.Status.ValuesHash = hash
 
 	return ctrl.Result{}, nil
+}
+
+// checkReleaseNameConflict fails if another live HelmCapsule in the same namespace
+// resolves to the same release name. The check is best-effort (TOCTOU under
+// concurrent reconciles); a ValidatingWebhook provides stronger admission-time enforcement.
+func (r *ReleaseSubReconciler) checkReleaseNameConflict(ctx context.Context, hc *operatorv1alpha1.HelmCapsule, releaseName string) error {
+	list := &operatorv1alpha1.HelmCapsuleList{}
+	if err := r.Client.List(ctx, list, client.InNamespace(hc.Namespace)); err != nil {
+		return fmt.Errorf("%w: listing HelmCapsules: %w", ErrReleaseNameConflict, err)
+	}
+	for _, other := range list.Items {
+		if other.UID == hc.UID || other.DeletionTimestamp != nil {
+			continue
+		}
+		otherRelease := other.Spec.ReleaseName
+		if otherRelease == "" {
+			otherRelease = other.Name
+		}
+		if otherRelease == releaseName {
+			return fmt.Errorf("%w: release %q is already owned by HelmCapsule %s (in namespace %s)",
+				ErrReleaseNameConflict, releaseName, other.Name, hc.Namespace)
+		}
+	}
+	return nil
 }
 
 func releaseOptions(hc *operatorv1alpha1.HelmCapsule) ReleaseOptions {

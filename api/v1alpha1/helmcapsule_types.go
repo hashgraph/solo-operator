@@ -209,10 +209,11 @@ type HelmCapsuleStatus struct {
 }
 
 const (
-	HelmCapsuleReasonDeployed          = "Deployed"
-	HelmCapsuleReasonChartFetchFailed  = "ChartFetchFailed"
-	HelmCapsuleReasonHelmFailed        = "HelmFailed"
-	HelmCapsuleReasonValuesBuildFailed = "ValuesBuildFailed"
+	HelmCapsuleReasonDeployed            = "Deployed"
+	HelmCapsuleReasonChartFetchFailed    = "ChartFetchFailed"
+	HelmCapsuleReasonHelmFailed          = "HelmFailed"
+	HelmCapsuleReasonValuesBuildFailed   = "ValuesBuildFailed"
+	HelmCapsuleReasonReleaseNameConflict = "ReleaseNameConflict"
 )
 
 // +kubebuilder:object:root=true

@@ -125,6 +125,8 @@ func (r *HelmCapsuleReconciler) recordFailure(ctx context.Context, hc *operatorv
 		reason = operatorv1alpha1.HelmCapsuleReasonChartFetchFailed
 	case errors.Is(cause, helm.ErrValuesBuild):
 		reason = operatorv1alpha1.HelmCapsuleReasonValuesBuildFailed
+	case errors.Is(cause, helm.ErrReleaseNameConflict):
+		reason = operatorv1alpha1.HelmCapsuleReasonReleaseNameConflict
 	}
 
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -155,10 +157,10 @@ func (r *HelmCapsuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&operatorv1alpha1.ConsensusCapsule{}, handler.EnqueueRequestsFromMapFunc(r.mapCapsuleToHelmCapsules)).
 		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(r.mapConfigMapToHelmCapsules)).
 		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.mapSecretToHelmCapsules)).
+		Watches(&operatorv1alpha1.HelmCapsule{}, handler.EnqueueRequestsFromMapFunc(r.mapHelmCapsuleToPeers)).
 		Complete(r)
 }
 
-// mapOrbitToHelmCapsules enqueues all HelmCapsules that reference the changed Orbit.
 func (r *HelmCapsuleReconciler) mapOrbitToHelmCapsules(ctx context.Context, obj client.Object) []reconcile.Request {
 	list := &operatorv1alpha1.HelmCapsuleList{}
 	if err := r.List(ctx, list); err != nil {
@@ -175,8 +177,6 @@ func (r *HelmCapsuleReconciler) mapOrbitToHelmCapsules(ctx context.Context, obj 
 	return reqs
 }
 
-// mapCapsuleToHelmCapsules enqueues HelmCapsules in the same namespace whose OrbitRef
-// matches the ConsensusCapsule's Orbit.
 func (r *HelmCapsuleReconciler) mapCapsuleToHelmCapsules(ctx context.Context, obj client.Object) []reconcile.Request {
 	cc, ok := obj.(*operatorv1alpha1.ConsensusCapsule)
 	if !ok {
@@ -197,14 +197,10 @@ func (r *HelmCapsuleReconciler) mapCapsuleToHelmCapsules(ctx context.Context, ob
 	return reqs
 }
 
-// mapConfigMapToHelmCapsules enqueues HelmCapsules that reference the changed ConfigMap
-// via ValuesFrom.
 func (r *HelmCapsuleReconciler) mapConfigMapToHelmCapsules(ctx context.Context, obj client.Object) []reconcile.Request {
 	return r.mapValuesSourceToHelmCapsules(ctx, obj, "ConfigMap")
 }
 
-// mapSecretToHelmCapsules enqueues HelmCapsules that reference the changed Secret
-// via ValuesFrom.
 func (r *HelmCapsuleReconciler) mapSecretToHelmCapsules(ctx context.Context, obj client.Object) []reconcile.Request {
 	return r.mapValuesSourceToHelmCapsules(ctx, obj, "Secret")
 }
@@ -224,6 +220,25 @@ func (r *HelmCapsuleReconciler) mapValuesSourceToHelmCapsules(ctx context.Contex
 				break
 			}
 		}
+	}
+	return reqs
+}
+
+// mapHelmCapsuleToPeers re-enqueues peers so release-name conflicts self-heal
+// promptly when the conflicting capsule is renamed or deleted.
+func (r *HelmCapsuleReconciler) mapHelmCapsuleToPeers(ctx context.Context, obj client.Object) []reconcile.Request {
+	list := &operatorv1alpha1.HelmCapsuleList{}
+	if err := r.List(ctx, list, client.InNamespace(obj.GetNamespace())); err != nil {
+		return nil
+	}
+	var reqs []reconcile.Request
+	for _, hc := range list.Items {
+		if hc.UID == obj.GetUID() {
+			continue
+		}
+		reqs = append(reqs, reconcile.Request{
+			NamespacedName: types.NamespacedName{Name: hc.Name, Namespace: hc.Namespace},
+		})
 	}
 	return reqs
 }
