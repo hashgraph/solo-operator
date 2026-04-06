@@ -701,14 +701,15 @@ func TestDeploymentSubReconciler_HealthProbes_Default(t *testing.T) {
 	if container.StartupProbe.HTTPGet.Port.IntVal != DefaultMetricsPort {
 		t.Errorf("expected startup probe port %d, got %d", DefaultMetricsPort, container.StartupProbe.HTTPGet.Port.IntVal)
 	}
-	if container.StartupProbe.InitialDelaySeconds != 60 {
-		t.Errorf("expected startup probe initialDelaySeconds 60, got %d", container.StartupProbe.InitialDelaySeconds)
+	defaults := DefaultHealthCheck()
+	if container.StartupProbe.InitialDelaySeconds != defaults.StartupInitialDelaySeconds {
+		t.Errorf("expected startup probe initialDelaySeconds %d, got %d", defaults.StartupInitialDelaySeconds, container.StartupProbe.InitialDelaySeconds)
 	}
-	if container.StartupProbe.PeriodSeconds != 5 {
-		t.Errorf("expected startup probe periodSeconds 5, got %d", container.StartupProbe.PeriodSeconds)
+	if container.StartupProbe.PeriodSeconds != defaults.StartupPeriodSeconds {
+		t.Errorf("expected startup probe periodSeconds %d, got %d", defaults.StartupPeriodSeconds, container.StartupProbe.PeriodSeconds)
 	}
-	if container.StartupProbe.FailureThreshold != 720 {
-		t.Errorf("expected startup probe failureThreshold 720, got %d", container.StartupProbe.FailureThreshold)
+	if container.StartupProbe.FailureThreshold != defaults.StartupFailureThreshold {
+		t.Errorf("expected startup probe failureThreshold %d, got %d", defaults.StartupFailureThreshold, container.StartupProbe.FailureThreshold)
 	}
 
 	if container.LivenessProbe == nil {
@@ -805,14 +806,14 @@ func TestGetHealthCheck_Defaults(t *testing.T) {
 	if !hc.Enabled {
 		t.Error("expected health check enabled by default")
 	}
-	if hc.StartupInitialDelaySeconds != 60 {
-		t.Errorf("expected default startupInitialDelaySeconds 60, got %d", hc.StartupInitialDelaySeconds)
+	if hc.StartupInitialDelaySeconds != 5 {
+		t.Errorf("expected default startupInitialDelaySeconds 5, got %d", hc.StartupInitialDelaySeconds)
 	}
 	if hc.StartupPeriodSeconds != 5 {
 		t.Errorf("expected default startupPeriodSeconds 5, got %d", hc.StartupPeriodSeconds)
 	}
-	if hc.StartupFailureThreshold != 720 {
-		t.Errorf("expected default startupFailureThreshold 720, got %d", hc.StartupFailureThreshold)
+	if hc.StartupFailureThreshold != 12 {
+		t.Errorf("expected default startupFailureThreshold 12, got %d", hc.StartupFailureThreshold)
 	}
 	if hc.PeriodSeconds != 10 {
 		t.Errorf("expected default periodSeconds 10, got %d", hc.PeriodSeconds)
@@ -1283,25 +1284,26 @@ func TestGetHealthCheck_PartialSpec_ZeroValueFallback(t *testing.T) {
 		Enabled: true,
 	}
 
+	defaults := DefaultHealthCheck()
 	hc := GetHealthCheck(haproxy)
 
-	if hc.StartupInitialDelaySeconds != 60 {
-		t.Errorf("expected zero StartupInitialDelaySeconds to fall back to 60, got %d", hc.StartupInitialDelaySeconds)
+	if hc.StartupInitialDelaySeconds != defaults.StartupInitialDelaySeconds {
+		t.Errorf("expected zero StartupInitialDelaySeconds to fall back to %d, got %d", defaults.StartupInitialDelaySeconds, hc.StartupInitialDelaySeconds)
 	}
-	if hc.StartupPeriodSeconds != 5 {
-		t.Errorf("expected zero StartupPeriodSeconds to fall back to 5, got %d", hc.StartupPeriodSeconds)
+	if hc.StartupPeriodSeconds != defaults.StartupPeriodSeconds {
+		t.Errorf("expected zero StartupPeriodSeconds to fall back to %d, got %d", defaults.StartupPeriodSeconds, hc.StartupPeriodSeconds)
 	}
-	if hc.StartupFailureThreshold != 720 {
-		t.Errorf("expected zero StartupFailureThreshold to fall back to 720, got %d", hc.StartupFailureThreshold)
+	if hc.StartupFailureThreshold != defaults.StartupFailureThreshold {
+		t.Errorf("expected zero StartupFailureThreshold to fall back to %d, got %d", defaults.StartupFailureThreshold, hc.StartupFailureThreshold)
 	}
-	if hc.PeriodSeconds != 10 {
-		t.Errorf("expected zero PeriodSeconds to fall back to 10, got %d", hc.PeriodSeconds)
+	if hc.PeriodSeconds != defaults.PeriodSeconds {
+		t.Errorf("expected zero PeriodSeconds to fall back to %d, got %d", defaults.PeriodSeconds, hc.PeriodSeconds)
 	}
-	if hc.FailureThreshold != 3 {
-		t.Errorf("expected zero FailureThreshold to fall back to 3, got %d", hc.FailureThreshold)
+	if hc.FailureThreshold != defaults.FailureThreshold {
+		t.Errorf("expected zero FailureThreshold to fall back to %d, got %d", defaults.FailureThreshold, hc.FailureThreshold)
 	}
-	if hc.TimeoutSeconds != 1 {
-		t.Errorf("expected zero TimeoutSeconds to fall back to 1, got %d", hc.TimeoutSeconds)
+	if hc.TimeoutSeconds != defaults.TimeoutSeconds {
+		t.Errorf("expected zero TimeoutSeconds to fall back to %d, got %d", defaults.TimeoutSeconds, hc.TimeoutSeconds)
 	}
 }
 
