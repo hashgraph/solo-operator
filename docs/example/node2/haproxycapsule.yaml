@@ -1,0 +1,72 @@
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: HAProxyCapsule
+metadata:
+  name: haproxy-node2
+  namespace: solo-orbit
+spec:
+  image: haproxy:2.8.10-alpine3.20
+
+  # Ports — shown values are defaults.
+  # grpcPort: 50211
+  # grpcsPort: 50212      # only active when tlsSecretName is set
+  # metricsPort: 9090
+  # upstreamService: node2   # defaults to CR name minus "haproxy-" prefix; any DNS name works
+  # upstreamService: node2.solo-orbit.svc.cluster.local
+
+  # serviceType: LoadBalancer   # default
+  # serviceType: ClusterIP
+  # serviceType: Ingress        # requires ingressSpec
+
+  # externalTrafficPolicy: Local   # default
+
+  # serviceAnnotations:
+  #   cloud.google.com/neg: '{"ingress":true}'
+
+  # additionalLabels:
+  #   solo.hedera.com/account-id: "0.0.5"
+  #   solo.hedera.com/node-id: "2"
+  #   solo.hedera.com/node-name: node2
+  #   solo.hedera.com/type: haproxy
+
+  # nodeSelector:
+  #   sphere.hashgraph.io/role: auxiliary
+  # tolerations:
+  #   - key: sphere.hashgraph.io/role
+  #     operator: Equal
+  #     value: auxiliary
+  #     effect: NoSchedule
+  # affinity:
+  #   podAntiAffinity:
+  #     requiredDuringSchedulingIgnoredDuringExecution:
+  #       - labelSelector:
+  #           matchLabels:
+  #             sphere.hashgraph.io/role: consensus
+  #         topologyKey: kubernetes.io/hostname
+
+  # terminationGracePeriodSeconds: 10
+
+  # healthCheck:
+  #   enabled: true
+  #   startupInitialDelaySeconds: 60
+  #   startupPeriodSeconds: 5
+  #   startupFailureThreshold: 720   # 60 min window
+  #   periodSeconds: 10
+  #   failureThreshold: 3
+  #   timeoutSeconds: 1
+
+  # TLS termination on grpcsPort — needs a kubernetes.io/tls secret (cert-manager works directly).
+  # tlsSecretName: haproxy-node2-tls
+
+  # ingressSpec:
+  #   ingressClassName: nginx
+  #   rules:
+  #     - host: haproxy-node2.example.com
+  #       http:
+  #         paths:
+  #           - path: /
+  #             pathType: Prefix
+  #             backend:
+  #               service:
+  #                 name: haproxy-node2
+  #                 port:
+  #                   number: 50211

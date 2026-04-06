@@ -7,6 +7,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// ProxyServiceType represents how a proxy service is exposed
+// +kubebuilder:validation:Enum=ClusterIP;Ingress;LoadBalancer
+type ProxyServiceType string
+
+const (
+	ProxyServiceTypeClusterIP    ProxyServiceType = "ClusterIP"
+	ProxyServiceTypeIngress      ProxyServiceType = "Ingress"
+	ProxyServiceTypeLoadBalancer ProxyServiceType = "LoadBalancer"
+)
+
 // Phase represents the current phase of a resource
 // +kubebuilder:validation:Enum=Pending;Running;Succeeded;Failed;Unknown
 type Phase string
@@ -152,6 +162,7 @@ type ImageRepositoryStatus struct {
 // AddressBookEntry represents a node in the address book
 type AddressBookEntry struct {
 	// NodeId is the unique identifier for the node
+	// +kubebuilder:validation:Minimum=0
 	NodeId int64 `json:"nodeId"`
 
 	// NickName is a friendly name for the node
@@ -161,6 +172,7 @@ type AddressBookEntry struct {
 	SelfName string `json:"selfName"`
 
 	// Weight is the consensus weight
+	// +kubebuilder:validation:Minimum=0
 	Weight int `json:"weight"`
 
 	// InternalHostname is the internal FQDN or IP
@@ -206,7 +218,7 @@ type StreamUploaderConfig struct {
 	// Debug enables debug logging
 	// +kubebuilder:default=true
 	// +optional
-	Debug bool `json:"debug,omitempty"`
+	Debug bool `json:"debug"`
 
 	// EnableCompression enables stream compression
 	// +kubebuilder:default=false
@@ -268,20 +280,23 @@ type ReaperConfig struct {
 	// Enabled enables the reaper
 	// +kubebuilder:default=true
 	// +optional
-	Enabled bool `json:"enabled,omitempty"`
+	Enabled bool `json:"enabled"`
 
 	// MinKeep is the minimum number of files to keep
 	// +kubebuilder:default=1
+	// +kubebuilder:validation:Minimum=1
 	// +optional
 	MinKeep int `json:"minKeep,omitempty"`
 
 	// Interval is the reaper interval
 	// +kubebuilder:default=1
+	// +kubebuilder:validation:Minimum=1
 	// +optional
 	Interval int `json:"interval,omitempty"`
 
 	// DefaultBackoff is the default backoff time
 	// +kubebuilder:default=1
+	// +kubebuilder:validation:Minimum=1
 	// +optional
 	DefaultBackoff int `json:"defaultBackoff,omitempty"`
 }
@@ -291,12 +306,12 @@ type SignatureConfig struct {
 	// Require requires signatures
 	// +kubebuilder:default=true
 	// +optional
-	Require bool `json:"require,omitempty"`
+	Require bool `json:"require"`
 
 	// Prioritize prioritizes signature files
 	// +kubebuilder:default=true
 	// +optional
-	Prioritize bool `json:"prioritize,omitempty"`
+	Prioritize bool `json:"prioritize"`
 }
 
 // S3Config contains S3 storage configuration
@@ -390,8 +405,9 @@ type CheetahUploader struct {
 
 	// MaxProcessors is the maximum number of concurrent file processors per pipeline
 	// +kubebuilder:default=10
+	// +kubebuilder:validation:Minimum=1
 	// +optional
-	MaxProcessors int `json:"maxProcessors,omitempty"`
+	MaxProcessors int `json:"maxProcessors"`
 
 	// StopOnError stops the pipeline when an error occurs.
 	// If false, the pipeline continues with the expectation that the error resolves on retry.
@@ -447,7 +463,7 @@ type CheetahStreamsConfig struct {
 	// Enabled enables stream uploads
 	// +kubebuilder:default=true
 	// +optional
-	Enabled bool `json:"enabled,omitempty"`
+	Enabled bool `json:"enabled"`
 
 	// S3 configuration
 	// +optional
@@ -556,7 +572,7 @@ type CheetahGCSConfig struct {
 	// UseSsl enables SSL
 	// +kubebuilder:default=true
 	// +optional
-	UseSsl bool `json:"useSsl,omitempty"`
+	UseSsl bool `json:"useSsl"`
 }
 
 // CheetahBlobConfig contains multicloud blob storage configuration for Cheetah.
@@ -640,6 +656,7 @@ type StreamUploaderChangeset struct {
 // NodeProperties represents node-specific properties
 type NodeProperties struct {
 	// NodeId is the node identifier
+	// +kubebuilder:validation:Minimum=0
 	NodeId int64 `json:"nodeId"`
 
 	// Configuration is the key-value configuration
@@ -649,6 +666,7 @@ type NodeProperties struct {
 // NodeLoggingConfiguration represents node-specific logging
 type NodeLoggingConfiguration struct {
 	// NodeId is the node identifier
+	// +kubebuilder:validation:Minimum=0
 	NodeId int64 `json:"nodeId"`
 
 	// Configuration is the log4j2.xml content

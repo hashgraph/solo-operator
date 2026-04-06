@@ -3,7 +3,10 @@
 package haproxy
 
 import (
+	"bytes"
+	_ "embed"
 	"fmt"
+	"text/template"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -12,41 +15,67 @@ import (
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
-// Label keys
-const (
-	// LabelManagedBy indicates the resource is managed by solo-operator
-	LabelManagedBy = "app.kubernetes.io/managed-by"
-	// LabelPartOf indicates the component the resource is part of
-	LabelPartOf = "app.kubernetes.io/part-of"
-	// LabelApp indicates the application name
-	LabelApp = "app"
-)
+//go:embed tmpl/haproxy.cfg.tmpl
+var haproxyCfgTmpl string
 
-// Label values
-const (
-	// ManagedByValue is the value for the managed-by label
-	ManagedByValue = "solo-operator"
-	// PartOfHAProxy is the value for HAProxy part-of label
-	PartOfHAProxy = "haproxy"
-)
+var haproxyTemplate = template.Must(template.New("haproxy.cfg").Parse(haproxyCfgTmpl))
 
-// Resource name suffixes
+type haproxyConfigData struct {
+	GrpcPort        int32
+	GrpcsPort       int32
+	MetricsPort     int32
+	UpstreamService string
+	TLSEnabled      bool
+}
+
 const (
+	LabelManagedBy  = "app.kubernetes.io/managed-by"
+	LabelPartOf     = "app.kubernetes.io/part-of"
+	LabelApp        = "app"
+	ManagedByValue  = "solo-operator"
+	PartOfHAProxy   = "haproxy"
 	ConfigMapSuffix = "-config"
+	DefaultImage    = "haproxy:2.8.10-alpine3.20"
 )
 
-// Default values
 const (
-	// DefaultImage is the default HAProxy image
-	DefaultImage = "haproxy:2.8.10-alpine3.20"
+	DefaultGrpcPort    = int32(50211)
+	DefaultGrpcsPort   = int32(50212)
+	DefaultMetricsPort = int32(9090)
 )
 
-// Port numbers
-const (
-	GrpcPort  = 50211
-	GrpcsPort = 50212
-	StatsPort = 8404
-)
+func GetGrpcPort(haproxy *operatorv1alpha1.HAProxyCapsule) int32 {
+	if haproxy.Spec.GrpcPort != 0 {
+		return haproxy.Spec.GrpcPort
+	}
+	return DefaultGrpcPort
+}
+
+func GetGrpcsPort(haproxy *operatorv1alpha1.HAProxyCapsule) int32 {
+	if haproxy.Spec.GrpcsPort != 0 {
+		return haproxy.Spec.GrpcsPort
+	}
+	return DefaultGrpcsPort
+}
+
+func GetMetricsPort(haproxy *operatorv1alpha1.HAProxyCapsule) int32 {
+	if haproxy.Spec.MetricsPort != 0 {
+		return haproxy.Spec.MetricsPort
+	}
+	return DefaultMetricsPort
+}
+
+// GetUpstreamService strips the "haproxy-" prefix from the CR name when UpstreamService is not set.
+func GetUpstreamService(haproxy *operatorv1alpha1.HAProxyCapsule) string {
+	if haproxy.Spec.UpstreamService != "" {
+		return haproxy.Spec.UpstreamService
+	}
+	name := haproxy.Name
+	if len(name) > 8 && name[:8] == "haproxy-" {
+		return name[8:]
+	}
+	return name
+}
 
 // Volume and mount paths
 const (
@@ -58,43 +87,22 @@ const (
 	ContainerName    = "haproxy"
 )
 
-// DefaultHAProxyConfig is the default HAProxy configuration
-const DefaultHAProxyConfig = `
-global
-    log stdout format raw local0
+func HAProxyConfig(haproxy *operatorv1alpha1.HAProxyCapsule) (string, error) {
+	data := haproxyConfigData{
+		GrpcPort:        GetGrpcPort(haproxy),
+		GrpcsPort:       GetGrpcsPort(haproxy),
+		MetricsPort:     GetMetricsPort(haproxy),
+		UpstreamService: GetUpstreamService(haproxy),
+		TLSEnabled:      haproxy.Spec.TLSSecretName != "",
+	}
+	var buf bytes.Buffer
+	if err := haproxyTemplate.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("haproxy config template execution failed: %w", err)
+	}
+	return buf.String(), nil
+}
 
-defaults
-    log global
-    mode tcp
-    option tcplog
-    timeout connect 10s
-    timeout client 30s
-    timeout server 30s
-
-frontend grpc_frontend
-    bind *:50211
-    default_backend consensus_nodes
-
-frontend grpcs_frontend
-    bind *:50212
-    default_backend consensus_nodes_tls
-
-backend consensus_nodes
-    balance roundrobin
-    server node1 consensus:50211 check
-
-backend consensus_nodes_tls
-    balance roundrobin
-    server node1 consensus:50212 check
-
-listen stats
-    bind *:8404
-    stats enable
-    stats uri /stats
-    stats refresh 10s
-`
-
-// CommonLabels returns the common labels for HAProxy capsule resources
+// CommonLabels returns the pod selector labels. These must remain stable — never include AdditionalLabels here.
 func CommonLabels(haproxy *operatorv1alpha1.HAProxyCapsule) map[string]string {
 	return map[string]string{
 		LabelManagedBy: ManagedByValue,
@@ -103,12 +111,58 @@ func CommonLabels(haproxy *operatorv1alpha1.HAProxyCapsule) map[string]string {
 	}
 }
 
-// ConfigMapName returns the config map name for an HAProxy capsule
+// ResourceLabels merges CommonLabels with AdditionalLabels. Use on ObjectMeta and pod template, not selectors.
+func ResourceLabels(haproxy *operatorv1alpha1.HAProxyCapsule) map[string]string {
+	labels := CommonLabels(haproxy)
+	for k, v := range haproxy.Spec.AdditionalLabels {
+		labels[k] = v
+	}
+	return labels
+}
+
+func DefaultHealthCheck() operatorv1alpha1.HAProxyHealthCheckSpec {
+	return operatorv1alpha1.HAProxyHealthCheckSpec{
+		Enabled:                    true,
+		StartupInitialDelaySeconds: 5,
+		StartupPeriodSeconds:       5,
+		StartupFailureThreshold:    12, // 1 min window
+		PeriodSeconds:              10,
+		FailureThreshold:           3,
+		TimeoutSeconds:             1,
+	}
+}
+
+func GetHealthCheck(haproxy *operatorv1alpha1.HAProxyCapsule) operatorv1alpha1.HAProxyHealthCheckSpec {
+	defaults := DefaultHealthCheck()
+	if haproxy.Spec.HealthCheck == nil {
+		return defaults
+	}
+	hc := *haproxy.Spec.HealthCheck
+	if hc.StartupInitialDelaySeconds == 0 {
+		hc.StartupInitialDelaySeconds = defaults.StartupInitialDelaySeconds
+	}
+	if hc.StartupPeriodSeconds == 0 {
+		hc.StartupPeriodSeconds = defaults.StartupPeriodSeconds
+	}
+	if hc.StartupFailureThreshold == 0 {
+		hc.StartupFailureThreshold = defaults.StartupFailureThreshold
+	}
+	if hc.PeriodSeconds == 0 {
+		hc.PeriodSeconds = defaults.PeriodSeconds
+	}
+	if hc.FailureThreshold == 0 {
+		hc.FailureThreshold = defaults.FailureThreshold
+	}
+	if hc.TimeoutSeconds == 0 {
+		hc.TimeoutSeconds = defaults.TimeoutSeconds
+	}
+	return hc
+}
+
 func ConfigMapName(haproxy *operatorv1alpha1.HAProxyCapsule) string {
 	return fmt.Sprintf("%s%s", haproxy.Name, ConfigMapSuffix)
 }
 
-// GetImage returns the image to use, with default fallback
 func GetImage(haproxy *operatorv1alpha1.HAProxyCapsule) string {
 	if haproxy.Spec.Image != "" {
 		return haproxy.Spec.Image
@@ -116,11 +170,11 @@ func GetImage(haproxy *operatorv1alpha1.HAProxyCapsule) string {
 	return DefaultImage
 }
 
-// NewSubReconcilers creates all HAProxy capsule subreconcilers in execution order
 func NewSubReconcilers(c client.Client, scheme *runtime.Scheme) *subreconciler.Chain[*operatorv1alpha1.HAProxyCapsule] {
 	return subreconciler.NewChain(
 		NewConfigMapSubReconciler(c, scheme),
 		NewDeploymentSubReconciler(c, scheme),
 		NewServiceSubReconciler(c, scheme),
+		NewIngressSubReconciler(c, scheme),
 	)
 }

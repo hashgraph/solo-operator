@@ -4,6 +4,8 @@ package haproxy
 
 import (
 	"context"
+	"sort"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -18,6 +20,44 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
+
+// managedAnnotationsAnnotation records which annotation keys were last written by the operator.
+// This enables deletion of annotations removed from spec.serviceAnnotations.
+const managedAnnotationsAnnotation = "operator.solo.hedera.com/managed-annotations"
+
+// managedAnnotationsKey extracts the sorted annotation keys stored in the marker annotation.
+func managedAnnotationsKeys(svc *corev1.Service) []string {
+	val := svc.Annotations[managedAnnotationsAnnotation]
+	if val == "" {
+		return nil
+	}
+	return strings.Split(val, ",")
+}
+
+// setManagedAnnotations writes desired annotations into existing and removes any previously
+// managed keys that are no longer in desired.
+func setManagedAnnotations(existing *corev1.Service, desired map[string]string) {
+	if existing.Annotations == nil {
+		existing.Annotations = make(map[string]string)
+	}
+	// Remove previously managed keys no longer in desired
+	for _, k := range managedAnnotationsKeys(existing) {
+		if _, still := desired[k]; !still {
+			delete(existing.Annotations, k)
+		}
+	}
+	// Upsert desired keys
+	for k, v := range desired {
+		existing.Annotations[k] = v
+	}
+	// Record the new managed key set
+	keys := make([]string, 0, len(desired))
+	for k := range desired {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	existing.Annotations[managedAnnotationsAnnotation] = strings.Join(keys, ",")
+}
 
 // ServiceSubReconciler manages the Service for an HAProxyCapsule
 type ServiceSubReconciler struct {
@@ -59,22 +99,34 @@ func (r *ServiceSubReconciler) Reconcile(ctx context.Context, haproxy *operatorv
 	// Update spec if needed
 	if r.needsUpdate(existing, desired) {
 		logger.V(1).Info("Updating HAProxy service", "name", desired.Name, "namespace", desired.Namespace)
-		existing.Spec.Selector = desired.Spec.Selector
-		existing.Spec.Type = desired.Spec.Type
 		existing.Labels = desired.Labels
+		setManagedAnnotations(existing, haproxy.Spec.ServiceAnnotations)
 
-		// Preserve NodePorts when updating ports
-		for i, port := range desired.Spec.Ports {
-			if i < len(existing.Spec.Ports) {
-				port.NodePort = existing.Spec.Ports[i].NodePort
-				existing.Spec.Ports[i] = port
-			} else {
-				existing.Spec.Ports = append(existing.Spec.Ports, port)
+		if haproxy.Spec.ServiceSpec != nil {
+			// Apply full custom spec while preserving the immutable ClusterIP
+			clusterIP := existing.Spec.ClusterIP
+			existing.Spec = *haproxy.Spec.ServiceSpec
+			existing.Spec.ClusterIP = clusterIP
+			if existing.Spec.Selector == nil {
+				existing.Spec.Selector = desired.Spec.Selector
 			}
-		}
-		// Trim extra ports if desired has fewer
-		if len(desired.Spec.Ports) < len(existing.Spec.Ports) {
-			existing.Spec.Ports = existing.Spec.Ports[:len(desired.Spec.Ports)]
+		} else {
+			existing.Spec.Selector = desired.Spec.Selector
+			existing.Spec.Type = desired.Spec.Type
+			existing.Spec.ExternalTrafficPolicy = desired.Spec.ExternalTrafficPolicy
+			// Preserve NodePorts when updating ports
+			for i, port := range desired.Spec.Ports {
+				if i < len(existing.Spec.Ports) {
+					port.NodePort = existing.Spec.Ports[i].NodePort
+					existing.Spec.Ports[i] = port
+				} else {
+					existing.Spec.Ports = append(existing.Spec.Ports, port)
+				}
+			}
+			// Trim extra ports if desired has fewer
+			if len(desired.Spec.Ports) < len(existing.Spec.Ports) {
+				existing.Spec.Ports = existing.Spec.Ports[:len(desired.Spec.Ports)]
+			}
 		}
 
 		if err := r.Client.Update(ctx, existing); err != nil {
@@ -87,29 +139,58 @@ func (r *ServiceSubReconciler) Reconcile(ctx context.Context, haproxy *operatorv
 
 // buildService builds the desired service
 func (r *ServiceSubReconciler) buildService(haproxy *operatorv1alpha1.HAProxyCapsule) *corev1.Service {
-	labels := CommonLabels(haproxy)
+	selectorLabels := CommonLabels(haproxy)
+	resourceLabels := ResourceLabels(haproxy)
 
-	// Default service type
+	// Map ProxyServiceType to a valid K8s ServiceType.
+	// Ingress uses a ClusterIP service; the Ingress resource is managed by IngressSubReconciler.
 	svcType := corev1.ServiceTypeLoadBalancer
-	if haproxy.Spec.ServiceType != "" {
-		svcType = corev1.ServiceType(haproxy.Spec.ServiceType)
+	switch haproxy.Spec.ServiceType {
+	case operatorv1alpha1.ProxyServiceTypeClusterIP, operatorv1alpha1.ProxyServiceTypeIngress:
+		svcType = corev1.ServiceTypeClusterIP
+	case operatorv1alpha1.ProxyServiceTypeLoadBalancer:
+		svcType = corev1.ServiceTypeLoadBalancer
 	}
+
+	// ExternalTrafficPolicy: default Local (only meaningful for non-ClusterIP types)
+	extPolicy := haproxy.Spec.ExternalTrafficPolicy
+	if extPolicy == "" {
+		extPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
+	}
+
+	// Build annotations: user annotations + managed-keys marker
+	annotations := make(map[string]string, len(haproxy.Spec.ServiceAnnotations)+1)
+	for k, v := range haproxy.Spec.ServiceAnnotations {
+		annotations[k] = v
+	}
+	managedKeys := make([]string, 0, len(haproxy.Spec.ServiceAnnotations))
+	for k := range haproxy.Spec.ServiceAnnotations {
+		managedKeys = append(managedKeys, k)
+	}
+	sort.Strings(managedKeys)
+	annotations[managedAnnotationsAnnotation] = strings.Join(managedKeys, ",")
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      haproxy.Name,
-			Namespace: haproxy.Namespace,
-			Labels:    labels,
+			Name:        haproxy.Name,
+			Namespace:   haproxy.Namespace,
+			Labels:      resourceLabels,
+			Annotations: annotations,
 		},
 		Spec: corev1.ServiceSpec{
 			Type:     svcType,
-			Selector: labels,
+			Selector: selectorLabels,
 			Ports: []corev1.ServicePort{
-				{Name: "grpc", Port: GrpcPort, TargetPort: intstr.FromInt32(GrpcPort), Protocol: corev1.ProtocolTCP},
-				{Name: "grpcs", Port: GrpcsPort, TargetPort: intstr.FromInt32(GrpcsPort), Protocol: corev1.ProtocolTCP},
-				{Name: "stats", Port: StatsPort, TargetPort: intstr.FromInt32(StatsPort), Protocol: corev1.ProtocolTCP},
+				{Name: "grpc", Port: GetGrpcPort(haproxy), TargetPort: intstr.FromInt32(GetGrpcPort(haproxy)), Protocol: corev1.ProtocolTCP},
+				{Name: "grpcs", Port: GetGrpcsPort(haproxy), TargetPort: intstr.FromInt32(GetGrpcsPort(haproxy)), Protocol: corev1.ProtocolTCP},
+				{Name: "metrics", Port: GetMetricsPort(haproxy), TargetPort: intstr.FromInt32(GetMetricsPort(haproxy)), Protocol: corev1.ProtocolTCP},
 			},
 		},
+	}
+
+	// Apply ExternalTrafficPolicy only for non-ClusterIP service types
+	if svcType != corev1.ServiceTypeClusterIP {
+		svc.Spec.ExternalTrafficPolicy = extPolicy
 	}
 
 	// Apply custom service spec if provided (overrides default)
@@ -117,7 +198,7 @@ func (r *ServiceSubReconciler) buildService(haproxy *operatorv1alpha1.HAProxyCap
 		svc.Spec = *haproxy.Spec.ServiceSpec
 		// Ensure selector is set to our labels
 		if svc.Spec.Selector == nil {
-			svc.Spec.Selector = labels
+			svc.Spec.Selector = selectorLabels
 		}
 	}
 
@@ -128,6 +209,11 @@ func (r *ServiceSubReconciler) buildService(haproxy *operatorv1alpha1.HAProxyCap
 func (r *ServiceSubReconciler) needsUpdate(existing, desired *corev1.Service) bool {
 	// Check type
 	if existing.Spec.Type != desired.Spec.Type {
+		return true
+	}
+
+	// Check ExternalTrafficPolicy
+	if existing.Spec.ExternalTrafficPolicy != desired.Spec.ExternalTrafficPolicy {
 		return true
 	}
 
@@ -150,6 +236,20 @@ func (r *ServiceSubReconciler) needsUpdate(existing, desired *corev1.Service) bo
 		if port.Name != existingPort.Name ||
 			port.Port != existingPort.Port ||
 			port.Protocol != existingPort.Protocol {
+			return true
+		}
+	}
+
+	// Check annotations: compare desired keys (including managed-marker for deletion detection)
+	for k, v := range desired.Annotations {
+		if existing.Annotations[k] != v {
+			return true
+		}
+	}
+
+	// Check labels (only desired keys; extra labels are preserved)
+	for k, v := range desired.Labels {
+		if existing.Labels[k] != v {
 			return true
 		}
 	}

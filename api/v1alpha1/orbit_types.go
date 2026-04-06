@@ -101,11 +101,13 @@ type OrbitGenesis struct {
 type OrbitAddressBook struct {
 	// RealmId is the numeric realm ID
 	// +kubebuilder:default=0
+	// +kubebuilder:validation:Minimum=0
 	// +optional
 	RealmId int `json:"realmId,omitempty"`
 
 	// ShardId is the numeric shard ID
 	// +kubebuilder:default=0
+	// +kubebuilder:validation:Minimum=0
 	// +optional
 	ShardId int `json:"shardId,omitempty"`
 
