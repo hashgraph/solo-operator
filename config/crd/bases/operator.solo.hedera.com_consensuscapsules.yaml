@@ -87,6 +87,7 @@ spec:
               nodeId:
                 description: NodeId is the unique node identifier
                 format: int64
+                minimum: 0
                 type: integer
               nodeProperties:
                 additionalProperties:
@@ -3275,6 +3276,7 @@ spec:
                                     default: 1
                                     description: DefaultBackoff is the default backoff
                                       time
+                                    minimum: 1
                                     type: integer
                                   enabled:
                                     default: true
@@ -3283,11 +3285,13 @@ spec:
                                   interval:
                                     default: 1
                                     description: Interval is the reaper interval
+                                    minimum: 1
                                     type: integer
                                   minKeep:
                                     default: 1
                                     description: MinKeep is the minimum number of
                                       files to keep
+                                    minimum: 1
                                     type: integer
                                 type: object
                               s3:
@@ -3576,6 +3580,7 @@ spec:
                             default: 10
                             description: MaxProcessors is the maximum number of concurrent
                               file processors per pipeline
+                            minimum: 1
                             type: integer
                           name:
                             description: Name is the container name
@@ -4083,6 +4088,7 @@ spec:
                                     default: 1
                                     description: DefaultBackoff is the default backoff
                                       time
+                                    minimum: 1
                                     type: integer
                                   enabled:
                                     default: true
@@ -4091,11 +4097,13 @@ spec:
                                   interval:
                                     default: 1
                                     description: Interval is the reaper interval
+                                    minimum: 1
                                     type: integer
                                   minKeep:
                                     default: 1
                                     description: MinKeep is the minimum number of
                                       files to keep
+                                    minimum: 1
                                     type: integer
                                 type: object
                               s3:
@@ -4384,6 +4392,7 @@ spec:
                             default: 10
                             description: MaxProcessors is the maximum number of concurrent
                               file processors per pipeline
+                            minimum: 1
                             type: integer
                           name:
                             description: Name is the container name
@@ -4673,6 +4682,7 @@ spec:
                                     default: 1
                                     description: DefaultBackoff is the default backoff
                                       time
+                                    minimum: 1
                                     type: integer
                                   enabled:
                                     default: true
@@ -4681,11 +4691,13 @@ spec:
                                   interval:
                                     default: 1
                                     description: Interval is the reaper interval
+                                    minimum: 1
                                     type: integer
                                   minKeep:
                                     default: 1
                                     description: MinKeep is the minimum number of
                                       files to keep
+                                    minimum: 1
                                     type: integer
                                 type: object
                               s3:
@@ -5003,6 +5015,7 @@ spec:
                                     default: 1
                                     description: DefaultBackoff is the default backoff
                                       time
+                                    minimum: 1
                                     type: integer
                                   enabled:
                                     default: true
@@ -5011,11 +5024,13 @@ spec:
                                   interval:
                                     default: 1
                                     description: Interval is the reaper interval
+                                    minimum: 1
                                     type: integer
                                   minKeep:
                                     default: 1
                                     description: MinKeep is the minimum number of
                                       files to keep
+                                    minimum: 1
                                     type: integer
                                 type: object
                               s3:
@@ -5304,6 +5319,7 @@ spec:
                             default: 10
                             description: MaxProcessors is the maximum number of concurrent
                               file processors per pipeline
+                            minimum: 1
                             type: integer
                           name:
                             description: Name is the container name
@@ -21481,6 +21497,7 @@ spec:
                 type: string
               weight:
                 description: Weight is the consensus weight
+                minimum: 0
                 type: integer
             required:
             - accountId
@@ -21523,6 +21540,7 @@ spec:
                   nodeId:
                     description: NodeId is the unique identifier for the node
                     format: int64
+                    minimum: 0
                     type: integer
                   publicLedgerKey:
                     description: PublicLedgerKey is the base64-encoded public ledger
@@ -21537,6 +21555,7 @@ spec:
                     type: string
                   weight:
                     description: Weight is the consensus weight
+                    minimum: 0
                     type: integer
                 required:
                 - externalHostname

@@ -102,6 +102,7 @@ spec:
                         nodeId:
                           description: NodeId is the unique identifier for the node
                           format: int64
+                          minimum: 0
                           type: integer
                         publicLedgerKey:
                           description: PublicLedgerKey is the base64-encoded public
@@ -116,6 +117,7 @@ spec:
                           type: string
                         weight:
                           description: Weight is the consensus weight
+                          minimum: 0
                           type: integer
                       required:
                       - externalHostname
@@ -279,6 +281,7 @@ spec:
                                     default: 1
                                     description: DefaultBackoff is the default backoff
                                       time
+                                    minimum: 1
                                     type: integer
                                   enabled:
                                     default: true
@@ -287,11 +290,13 @@ spec:
                                   interval:
                                     default: 1
                                     description: Interval is the reaper interval
+                                    minimum: 1
                                     type: integer
                                   minKeep:
                                     default: 1
                                     description: MinKeep is the minimum number of
                                       files to keep
+                                    minimum: 1
                                     type: integer
                                 type: object
                               s3:
@@ -510,6 +515,7 @@ spec:
                                 nodeId:
                                   description: NodeId is the node identifier
                                   format: int64
+                                  minimum: 0
                                   type: integer
                               required:
                               - configuration
@@ -531,6 +537,7 @@ spec:
                                 nodeId:
                                   description: NodeId is the node identifier
                                   format: int64
+                                  minimum: 0
                                   type: integer
                               required:
                               - configuration
@@ -679,6 +686,7 @@ spec:
                                     default: 1
                                     description: DefaultBackoff is the default backoff
                                       time
+                                    minimum: 1
                                     type: integer
                                   enabled:
                                     default: true
@@ -687,11 +695,13 @@ spec:
                                   interval:
                                     default: 1
                                     description: Interval is the reaper interval
+                                    minimum: 1
                                     type: integer
                                   minKeep:
                                     default: 1
                                     description: MinKeep is the minimum number of
                                       files to keep
+                                    minimum: 1
                                     type: integer
                                 type: object
                               s3:
@@ -947,6 +957,7 @@ spec:
                                     default: 1
                                     description: DefaultBackoff is the default backoff
                                       time
+                                    minimum: 1
                                     type: integer
                                   enabled:
                                     default: true
@@ -955,11 +966,13 @@ spec:
                                   interval:
                                     default: 1
                                     description: Interval is the reaper interval
+                                    minimum: 1
                                     type: integer
                                   minKeep:
                                     default: 1
                                     description: MinKeep is the minimum number of
                                       files to keep
+                                    minimum: 1
                                     type: integer
                                 type: object
                               s3:
@@ -1215,6 +1228,7 @@ spec:
                                     default: 1
                                     description: DefaultBackoff is the default backoff
                                       time
+                                    minimum: 1
                                     type: integer
                                   enabled:
                                     default: true
@@ -1223,11 +1237,13 @@ spec:
                                   interval:
                                     default: 1
                                     description: Interval is the reaper interval
+                                    minimum: 1
                                     type: integer
                                   minKeep:
                                     default: 1
                                     description: MinKeep is the minimum number of
                                       files to keep
+                                    minimum: 1
                                     type: integer
                                 type: object
                               s3:
@@ -1494,6 +1510,8 @@ spec:
                             port:
                               description: Port is the port number
                               format: int32
+                              maximum: 65535
+                              minimum: 1
                               type: integer
                             type:
                               description: Type is the endpoint type (gossip, grpc,
@@ -1507,6 +1525,7 @@ spec:
                       nodeId:
                         description: NodeID is the unique ID for the new node
                         format: int64
+                        minimum: 0
                         type: integer
                       nodeName:
                         description: NodeName is the name of the node to add
@@ -1523,6 +1542,7 @@ spec:
                       nodeId:
                         description: NodeID is the ID of the node to delete
                         format: int64
+                        minimum: 0
                         type: integer
                       nodeName:
                         description: NodeName is the name of the node to delete
@@ -1550,6 +1570,8 @@ spec:
                             port:
                               description: Port is the port number
                               format: int32
+                              maximum: 65535
+                              minimum: 1
                               type: integer
                             type:
                               description: Type is the endpoint type (gossip, grpc,

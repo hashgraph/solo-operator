@@ -243,11 +243,6 @@ func TestCheetahConfigMapSubReconciler_BuildConfigMap(t *testing.T) {
 
 func TestBuildCheetahUploaderContainer(t *testing.T) {
 	reconciler := &DeploymentSubReconciler{}
-	capsule := &operatorv1alpha1.ConsensusCapsule{
-		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-			AccountId: "0.0.3",
-		},
-	}
 
 	tests := []struct {
 		name             string
@@ -435,7 +430,7 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			container, err := reconciler.buildCheetahUploaderContainer(capsule, tt.uploader, tt.containerName, tt.configFile, tt.mountPath, tt.envPrefix, tt.streamBucketPath)
+			container, err := reconciler.buildCheetahUploaderContainer(tt.uploader, tt.containerName, tt.configFile, tt.mountPath, tt.envPrefix, tt.streamBucketPath)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -549,11 +544,6 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 
 func TestBuildCheetahUploaderContainer_BlobEnabledWithoutURL(t *testing.T) {
 	reconciler := &DeploymentSubReconciler{}
-	capsule := &operatorv1alpha1.ConsensusCapsule{
-		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-			AccountId: "0.0.3",
-		},
-	}
 
 	uploader := &operatorv1alpha1.CheetahUploader{
 		Enabled: true,
@@ -563,7 +553,7 @@ func TestBuildCheetahUploaderContainer_BlobEnabledWithoutURL(t *testing.T) {
 		},
 	}
 
-	_, err := reconciler.buildCheetahUploaderContainer(capsule, uploader, "blockstream-uploader", "cheetah-block-streams.yaml", "/opt/hgcapp/blockStreams", "BLOCK_STREAMS", "blockStreams/block-0.0.3")
+	_, err := reconciler.buildCheetahUploaderContainer(uploader, "blockstream-uploader", "cheetah-block-streams.yaml", "/opt/hgcapp/blockStreams", "BLOCK_STREAMS", "blockStreams/block-0.0.3")
 	if err == nil {
 		t.Fatal("expected error when blob is enabled without URL, got nil")
 	}
@@ -761,18 +751,4 @@ func TestCheetahBucketPath(t *testing.T) {
 			t.Errorf("cheetahBucketPath(%q, %q) = %q, want %q", tt.bucketPrefix, tt.streamPath, got, tt.expected)
 		}
 	}
-}
-
-// Helper function
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

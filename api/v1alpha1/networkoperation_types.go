@@ -86,6 +86,7 @@ type NodeAddSpec struct {
 	NodeName string `json:"nodeName"`
 
 	// NodeID is the unique ID for the new node
+	// +kubebuilder:validation:Minimum=0
 	NodeID int64 `json:"nodeId"`
 
 	// AccountID is the account ID for the node
@@ -116,6 +117,7 @@ type NodeDeleteSpec struct {
 	NodeName string `json:"nodeName"`
 
 	// NodeID is the ID of the node to delete
+	// +kubebuilder:validation:Minimum=0
 	NodeID int64 `json:"nodeId"`
 }
 
@@ -125,6 +127,8 @@ type NodeEndpoint struct {
 	Host string `json:"host"`
 
 	// Port is the port number
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
 	Port int32 `json:"port"`
 
 	// Type is the endpoint type (gossip, grpc, etc.)

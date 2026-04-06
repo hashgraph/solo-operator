@@ -34,7 +34,10 @@ func NewConfigMapSubReconciler(c client.Client, scheme *runtime.Scheme) *ConfigM
 func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, haproxy *operatorv1alpha1.HAProxyCapsule) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	desired := r.buildConfigMap(haproxy)
+	desired, err := r.buildConfigMap(haproxy)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	// Set owner reference
 	if err := controllerutil.SetControllerReference(haproxy, desired, r.Scheme); err != nil {
@@ -43,7 +46,7 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, haproxy *operato
 
 	// Check if exists
 	existing := &corev1.ConfigMap{}
-	err := r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
+	err = r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("Creating HAProxy config map", "name", desired.Name, "namespace", desired.Namespace)
@@ -69,7 +72,11 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, haproxy *operato
 }
 
 // buildConfigMap builds the desired config map
-func (r *ConfigMapSubReconciler) buildConfigMap(haproxy *operatorv1alpha1.HAProxyCapsule) *corev1.ConfigMap {
+func (r *ConfigMapSubReconciler) buildConfigMap(haproxy *operatorv1alpha1.HAProxyCapsule) (*corev1.ConfigMap, error) {
+	cfg, err := HAProxyConfig(haproxy)
+	if err != nil {
+		return nil, err
+	}
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ConfigMapName(haproxy),
@@ -77,9 +84,9 @@ func (r *ConfigMapSubReconciler) buildConfigMap(haproxy *operatorv1alpha1.HAProx
 			Labels:    CommonLabels(haproxy),
 		},
 		Data: map[string]string{
-			ConfigFileName: DefaultHAProxyConfig,
+			ConfigFileName: cfg,
 		},
-	}
+	}, nil
 }
 
 // needsUpdate checks if the config map needs to be updated
