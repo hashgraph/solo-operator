@@ -235,6 +235,49 @@ func TestReleaseSubReconciler_propagatesHelmError(t *testing.T) {
 	}
 }
 
+func TestReleaseSubReconciler_usesCustomReleaseName(t *testing.T) {
+	scheme := newTestScheme()
+
+	var capturedReleaseName string
+	mock := NewMockClient()
+	mock.InstallOrUpgradeFunc = func(_ context.Context, releaseName, namespace string, chart operatorv1alpha1.HelmChartSpec, _ map[string]interface{}, _ ReleaseOptions) (*ReleaseInfo, error) {
+		capturedReleaseName = releaseName
+		return &ReleaseInfo{Name: releaseName, Namespace: namespace, Version: 1, Status: "deployed", ChartString: chart.Chart + "-" + chart.Version}, nil
+	}
+
+	r := newTestReleaseSubReconciler(scheme, mock)
+	hc := newHelmCapsule("my-capsule", "test-ns")
+	hc.Spec.ReleaseName = "custom-release"
+
+	if _, err := r.Reconcile(context.Background(), hc); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capturedReleaseName != "custom-release" {
+		t.Errorf("expected releaseName=custom-release, got %s", capturedReleaseName)
+	}
+}
+
+func TestReleaseSubReconciler_defaultsReleaseNameToObjectName(t *testing.T) {
+	scheme := newTestScheme()
+
+	var capturedReleaseName string
+	mock := NewMockClient()
+	mock.InstallOrUpgradeFunc = func(_ context.Context, releaseName, namespace string, chart operatorv1alpha1.HelmChartSpec, _ map[string]interface{}, _ ReleaseOptions) (*ReleaseInfo, error) {
+		capturedReleaseName = releaseName
+		return &ReleaseInfo{Name: releaseName, Namespace: namespace, Version: 1, Status: "deployed", ChartString: chart.Chart + "-" + chart.Version}, nil
+	}
+
+	r := newTestReleaseSubReconciler(scheme, mock)
+	hc := newHelmCapsule("my-capsule", "test-ns") // no ReleaseName set
+
+	if _, err := r.Reconcile(context.Background(), hc); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capturedReleaseName != "my-capsule" {
+		t.Errorf("expected releaseName=my-capsule, got %s", capturedReleaseName)
+	}
+}
+
 // ─── MockClient unit tests ────────────────────────────────────────────────────
 
 func TestMockClient_installAndGet(t *testing.T) {

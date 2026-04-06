@@ -150,6 +150,12 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              releaseName:
+                description: |-
+                  ReleaseName overrides the Helm release name.
+                  Defaults to the HelmCapsule's metadata.name when omitted.
+                minLength: 1
+                type: string
               timeout:
                 description: |-
                   Timeout for Helm install/upgrade operations.

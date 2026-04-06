@@ -62,6 +62,12 @@ type HelmCapsuleSpec struct {
 	// Chart defines the Helm chart source to install.
 	Chart HelmChartSpec `json:"chart"`
 
+	// ReleaseName overrides the Helm release name.
+	// Defaults to the HelmCapsule's metadata.name when omitted.
+	// +kubebuilder:validation:MinLength=1
+	// +optional
+	ReleaseName string `json:"releaseName,omitempty"`
+
 	// Component identifies a known Hedera ecosystem component.
 	// When set together with OrbitRef the operator auto-injects network-topology
 	// values before any ValuesFrom or Values entries are merged.

@@ -92,7 +92,11 @@ func (r *HelmCapsuleReconciler) handleDeletion(ctx context.Context, hc *operator
 	if !controllerutil.ContainsFinalizer(hc, HelmCapsuleFinalizer) {
 		return ctrl.Result{}, nil
 	}
-	if err := r.helmClient.Uninstall(ctx, hc.Name, hc.Namespace); err != nil {
+	releaseName := hc.Spec.ReleaseName
+	if releaseName == "" {
+		releaseName = hc.Name
+	}
+	if err := r.helmClient.Uninstall(ctx, releaseName, hc.Namespace); err != nil {
 		return ctrl.Result{}, err
 	}
 	controllerutil.RemoveFinalizer(hc, HelmCapsuleFinalizer)

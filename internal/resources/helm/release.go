@@ -34,8 +34,13 @@ func NewSubReconcilers(c client.Client, scheme *runtime.Scheme, helmClient Clien
 func (r *ReleaseSubReconciler) Name() string { return "helm-release" }
 
 func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alpha1.HelmCapsule) (ctrl.Result, error) {
+	releaseName := hc.Spec.ReleaseName
+	if releaseName == "" {
+		releaseName = hc.Name
+	}
+
 	logger := log.FromContext(ctx).WithValues(
-		"release", hc.Name,
+		"release", releaseName,
 		"chart", hc.Spec.Chart.Chart,
 		"version", hc.Spec.Chart.Version,
 	)
@@ -52,7 +57,7 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 	if hash == hc.Status.ValuesHash {
 		// Skip only if the release is actually deployed. A failed or pending-install
 		// release must be retried even when the spec hasn't changed.
-		existing, err := r.helmClient.GetRelease(hc.Name, hc.Namespace)
+		existing, err := r.helmClient.GetRelease(releaseName, hc.Namespace)
 		if err == nil && existing != nil && existing.Status == "deployed" {
 			logger.V(1).Info("Release up-to-date, skipping upgrade")
 			return ctrl.Result{}, nil
@@ -65,7 +70,7 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 	}
 	logger.Info("Reconciling Helm release", "timeout", opts.Timeout)
 
-	info, err := r.helmClient.InstallOrUpgrade(ctx, hc.Name, hc.Namespace, hc.Spec.Chart, values, opts)
+	info, err := r.helmClient.InstallOrUpgrade(ctx, releaseName, hc.Namespace, hc.Spec.Chart, values, opts)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

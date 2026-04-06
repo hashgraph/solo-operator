@@ -39,6 +39,10 @@ var ErrChartFetch = errors.New("chart fetch failed")
 // Usually a config error (missing ConfigMap/Secret, bad JSON).
 var ErrValuesBuild = errors.New("values build failed")
 
+// ErrReleaseNameConflict is returned when another HelmCapsule in the same
+// namespace already owns the same Helm release name.
+var ErrReleaseNameConflict = errors.New("release name conflict")
+
 // ReleaseInfo holds key information about a deployed Helm release.
 type ReleaseInfo struct {
 	Name        string
