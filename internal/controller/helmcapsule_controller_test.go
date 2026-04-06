@@ -110,10 +110,13 @@ func TestRecordFailure_setsChartFetchReason(t *testing.T) {
 	r := &HelmCapsuleReconciler{Client: c, Scheme: scheme}
 	r.recordFailure(context.Background(), hc, fmt.Errorf("%w: repo down", helm.ErrChartFetch))
 
-	if hc.Status.Phase != operatorv1alpha1.PhaseFailed {
-		t.Errorf("expected Failed phase, got %s", hc.Status.Phase)
+	got := &operatorv1alpha1.HelmCapsule{}
+	_ = c.Get(context.Background(), types.NamespacedName{Name: hc.Name, Namespace: hc.Namespace}, got)
+
+	if got.Status.Phase != operatorv1alpha1.PhaseFailed {
+		t.Errorf("expected Failed phase, got %s", got.Status.Phase)
 	}
-	cond := findCondition(hc.Status.Conditions, "Ready")
+	cond := findCondition(got.Status.Conditions, "Ready")
 	if cond == nil {
 		t.Fatal("expected Ready condition")
 	}
@@ -137,7 +140,10 @@ func TestRecordFailure_setsValuesBuildReason(t *testing.T) {
 	r := &HelmCapsuleReconciler{Client: c, Scheme: scheme}
 	r.recordFailure(context.Background(), hc, fmt.Errorf("%w: missing configmap", helm.ErrValuesBuild))
 
-	cond := findCondition(hc.Status.Conditions, "Ready")
+	got := &operatorv1alpha1.HelmCapsule{}
+	_ = c.Get(context.Background(), types.NamespacedName{Name: hc.Name, Namespace: hc.Namespace}, got)
+
+	cond := findCondition(got.Status.Conditions, "Ready")
 	if cond == nil {
 		t.Fatal("expected Ready condition")
 	}
@@ -158,7 +164,10 @@ func TestRecordFailure_setsGenericHelmReason(t *testing.T) {
 	r := &HelmCapsuleReconciler{Client: c, Scheme: scheme}
 	r.recordFailure(context.Background(), hc, errors.New("hook timed out"))
 
-	cond := findCondition(hc.Status.Conditions, "Ready")
+	got := &operatorv1alpha1.HelmCapsule{}
+	_ = c.Get(context.Background(), types.NamespacedName{Name: hc.Name, Namespace: hc.Namespace}, got)
+
+	cond := findCondition(got.Status.Conditions, "Ready")
 	if cond == nil {
 		t.Fatal("expected Ready condition")
 	}
@@ -200,8 +209,8 @@ func TestReconcile_setsReadyTrueOnSuccess(t *testing.T) {
 	got := &operatorv1alpha1.HelmCapsule{}
 	_ = c.Get(context.Background(), types.NamespacedName{Name: "mirror", Namespace: "test-ns"}, got)
 
-	if got.Status.Phase != operatorv1alpha1.PhaseRunning {
-		t.Errorf("expected Running, got %s", got.Status.Phase)
+	if got.Status.Phase != operatorv1alpha1.PhaseSucceeded {
+		t.Errorf("expected Succeeded, got %s", got.Status.Phase)
 	}
 	cond := findCondition(got.Status.Conditions, "Ready")
 	if cond == nil {

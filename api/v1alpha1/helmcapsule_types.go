@@ -142,6 +142,7 @@ type HelmChartSpec struct {
 	// Version is the chart version to install (semver).
 	// Example: "0.129.1"
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Pattern=`^v?[0-9]+\.[0-9]+\.[0-9]`
 	Version string `json:"version"`
 }
 
@@ -210,7 +211,7 @@ const (
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:shortName=hc
+// +kubebuilder:resource:shortName=helmcap
 // +kubebuilder:printcolumn:name="Component",type="string",JSONPath=".spec.component"
 // +kubebuilder:printcolumn:name="Chart",type="string",JSONPath=".spec.chart.chart"
 // +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".spec.chart.version"

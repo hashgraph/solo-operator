@@ -91,9 +91,9 @@ func injectComponentValues(ctx context.Context, c client.Client, namespace strin
 	case operatorv1alpha1.HelmComponentMirror:
 		return mirrorValues(capsules, orbit), nil
 	case operatorv1alpha1.HelmComponentRelay, operatorv1alpha1.HelmComponentRelayWebSocket:
-		return relayValues(capsules, namespace, ledgerID), nil
+		return relayValues(capsules, namespace, ledgerID)
 	case operatorv1alpha1.HelmComponentExplorer:
-		return explorerValues(orbit, ledgerID), nil
+		return explorerValues(orbit, ledgerID)
 	case operatorv1alpha1.HelmComponentBlockNode:
 		return blockNodeValues(capsules), nil
 	default:
@@ -121,20 +121,24 @@ func mirrorValues(capsules []operatorv1alpha1.ConsensusCapsule, orbit *operatorv
 //   - config.HEDERA_NETWORK   JSON map {"host:port": "accountId"} from ConsensusCapsules
 //   - config.MIRROR_NODE_URL  http://mirror.<namespace>.svc.cluster.local
 //   - config.CHAIN_ID         from Orbit networkSettings["ledger.id"]
-func relayValues(capsules []operatorv1alpha1.ConsensusCapsule, namespace, ledgerID string) map[string]interface{} {
+func relayValues(capsules []operatorv1alpha1.ConsensusCapsule, namespace, ledgerID string) (map[string]interface{}, error) {
+	network, err := hederaNetworkJSON(capsules)
+	if err != nil {
+		return nil, err
+	}
 	config := map[string]interface{}{
-		"HEDERA_NETWORK":  hederaNetworkJSON(capsules),
+		"HEDERA_NETWORK":  network,
 		"MIRROR_NODE_URL": fmt.Sprintf("http://mirror.%s.svc.cluster.local", namespace),
 	}
 	if ledgerID != "" {
 		config["CHAIN_ID"] = ledgerID
 	}
-	return map[string]interface{}{"config": config}
+	return map[string]interface{}{"config": config}, nil
 }
 
 // explorerValues injects for hiero-explorer-chart:
 //   - config  (JSON array with a single network entry)
-func explorerValues(orbit *operatorv1alpha1.Orbit, ledgerID string) map[string]interface{} {
+func explorerValues(orbit *operatorv1alpha1.Orbit, ledgerID string) (map[string]interface{}, error) {
 	entry := map[string]interface{}{
 		"name":        orbit.Name,
 		"displayName": orbit.Name,
@@ -143,8 +147,11 @@ func explorerValues(orbit *operatorv1alpha1.Orbit, ledgerID string) map[string]i
 	if ledgerID != "" {
 		entry["ledgerID"] = ledgerID
 	}
-	configBytes, _ := json.Marshal([]interface{}{entry})
-	return map[string]interface{}{"config": string(configBytes)}
+	configBytes, err := json.Marshal([]interface{}{entry})
+	if err != nil {
+		return nil, fmt.Errorf("marshalling explorer config: %w", err)
+	}
+	return map[string]interface{}{"config": string(configBytes)}, nil
 }
 
 // blockNodeValues injects for block-node-server:
@@ -183,7 +190,7 @@ func consensusEndpoints(capsules []operatorv1alpha1.ConsensusCapsule) []string {
 
 // hederaNetworkJSON builds the HEDERA_NETWORK JSON string expected by the relay chart:
 // {"host:port": "accountId", ...} — one entry per ConsensusCapsule with a populated address book entry.
-func hederaNetworkJSON(capsules []operatorv1alpha1.ConsensusCapsule) string {
+func hederaNetworkJSON(capsules []operatorv1alpha1.ConsensusCapsule) (string, error) {
 	network := map[string]string{}
 	for _, c := range capsules {
 		entry := c.Status.AddressBookEntry
@@ -194,10 +201,16 @@ func hederaNetworkJSON(capsules []operatorv1alpha1.ConsensusCapsule) string {
 		if port == 0 {
 			port = 50211
 		}
+		if c.Spec.AccountId == "" {
+			continue
+		}
 		network[fmt.Sprintf("%s:%d", entry.InternalHostname, port)] = c.Spec.AccountId
 	}
-	b, _ := json.Marshal(network)
-	return string(b)
+	b, err := json.Marshal(network)
+	if err != nil {
+		return "", fmt.Errorf("marshalling HEDERA_NETWORK: %w", err)
+	}
+	return string(b), nil
 }
 
 func listConsensusCapsules(ctx context.Context, c client.Client, namespace, orbitName string) ([]operatorv1alpha1.ConsensusCapsule, error) {
@@ -232,7 +245,11 @@ func loadValuesReference(ctx context.Context, c client.Client, namespace string,
 		if err != nil {
 			return nil, err
 		}
-		raw = []byte(cm.Data[key])
+		val, ok := cm.Data[key]
+		if !ok && !ref.Optional {
+			return nil, fmt.Errorf("key %q not found in ConfigMap %s", key, ref.Name)
+		}
+		raw = []byte(val)
 	case "Secret":
 		secret := &corev1.Secret{}
 		err := c.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: namespace}, secret)
@@ -242,7 +259,11 @@ func loadValuesReference(ctx context.Context, c client.Client, namespace string,
 		if err != nil {
 			return nil, err
 		}
-		raw = secret.Data[key]
+		val, ok := secret.Data[key]
+		if !ok && !ref.Optional {
+			return nil, fmt.Errorf("key %q not found in Secret %s", key, ref.Name)
+		}
+		raw = val
 	default:
 		return nil, fmt.Errorf("unsupported ValuesReference kind %q; must be ConfigMap or Secret", ref.Kind)
 	}

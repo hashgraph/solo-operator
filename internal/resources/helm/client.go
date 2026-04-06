@@ -14,8 +14,8 @@ import (
 	"helm.sh/helm/v3/pkg/cli"
 	"helm.sh/helm/v3/pkg/registry"
 	helmrelease "helm.sh/helm/v3/pkg/release"
+	"helm.sh/helm/v3/pkg/storage/driver"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/rest"
@@ -219,7 +219,7 @@ func releaseInfoFrom(rel *helmrelease.Release) *ReleaseInfo {
 }
 
 func isNotFound(err error) bool {
-	return err != nil && err.Error() == "release: not found"
+	return errors.Is(err, driver.ErrReleaseNotFound)
 }
 
 // chartRef returns the argument to pass to LocateChart.
@@ -322,11 +322,18 @@ func (r *restConfigGetter) ToRawKubeConfigLoader() clientcmd.ClientConfig {
 	cfg.Clusters["default"] = &clientcmdapi.Cluster{
 		Server:                   r.restConfig.Host,
 		CertificateAuthorityData: r.restConfig.CAData,
+		CertificateAuthority:     r.restConfig.CAFile,
+		InsecureSkipTLSVerify:    r.restConfig.Insecure,
 	}
 	cfg.AuthInfos["default"] = &clientcmdapi.AuthInfo{
+		// BearerToken is set for kubeconfig-based auth; BearerTokenFile for in-cluster
+		// projected service account tokens (rotated automatically by Kubernetes).
 		Token:                 r.restConfig.BearerToken,
+		TokenFile:             r.restConfig.BearerTokenFile,
 		ClientCertificateData: r.restConfig.CertData,
 		ClientKeyData:         r.restConfig.KeyData,
+		ClientCertificate:     r.restConfig.CertFile,
+		ClientKey:             r.restConfig.KeyFile,
 	}
 	cfg.Contexts["default"] = &clientcmdapi.Context{
 		Cluster:   "default",
@@ -336,5 +343,3 @@ func (r *restConfigGetter) ToRawKubeConfigLoader() clientcmd.ClientConfig {
 	cfg.CurrentContext = "default"
 	return clientcmd.NewDefaultClientConfig(*cfg, &clientcmd.ConfigOverrides{})
 }
-
-var _ schema.GroupVersionResource = schema.GroupVersionResource{}

@@ -304,11 +304,11 @@ func TestRelayValues_mirrorURLDerived(t *testing.T) {
 	}
 
 	config, _ := result["config"].(map[string]interface{})
-	if config["mirrorNodeUrl"] != "http://mirror.test-ns.svc.cluster.local" {
-		t.Errorf("unexpected mirrorNodeUrl: %v", config["mirrorNodeUrl"])
+	if config["MIRROR_NODE_URL"] != "http://mirror.test-ns.svc.cluster.local" {
+		t.Errorf("unexpected MIRROR_NODE_URL: %v", config["MIRROR_NODE_URL"])
 	}
-	if config["chainId"] != "295" {
-		t.Errorf("expected chainId=295, got %v", config["chainId"])
+	if config["CHAIN_ID"] != "295" {
+		t.Errorf("expected CHAIN_ID=295, got %v", config["CHAIN_ID"])
 	}
 }
 

@@ -42,7 +42,7 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 
 	values, err := MergeValues(ctx, r.Client, hc.Namespace, &hc.Spec)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("%w: %w", ErrValuesBuild, err)
+		return ctrl.Result{}, fmt.Errorf("%w: %s", ErrValuesBuild, err)
 	}
 
 	hash, err := ComputeHash(hc.Spec.Chart, values)
@@ -50,13 +50,18 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 		return ctrl.Result{}, err
 	}
 	if hash == hc.Status.ValuesHash {
-		logger.V(1).Info("Release up-to-date, skipping upgrade")
-		return ctrl.Result{}, nil
+		// Skip only if the release is actually deployed. A failed or pending-install
+		// release must be retried even when the spec hasn't changed.
+		existing, err := r.helmClient.GetRelease(hc.Name, hc.Namespace)
+		if err == nil && existing != nil && existing.Status == "deployed" {
+			logger.V(1).Info("Release up-to-date, skipping upgrade")
+			return ctrl.Result{}, nil
+		}
 	}
 
 	opts := releaseOptions(hc)
 	if opts.Timeout <= 0 {
-		opts.Timeout = defaultTimeout
+		opts.Timeout = defaultTimeout // apply default here so the log is accurate
 	}
 	logger.Info("Reconciling Helm release", "timeout", opts.Timeout)
 

@@ -72,7 +72,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 					return ""
 				}
 				return got.Status.Phase
-			}, timeout, interval).Should(Equal(operatorv1alpha1.PhaseRunning))
+			}, timeout, interval).Should(Equal(operatorv1alpha1.PhaseSucceeded))
 
 			By("Checking release version is recorded in status")
 			Eventually(func() int {
@@ -141,7 +141,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 				got := &operatorv1alpha1.HelmCapsule{}
 				_ = k8sClient.Get(ctx, key, got)
 				return got.Status.Phase
-			}, timeout, interval).Should(Equal(operatorv1alpha1.PhaseRunning))
+			}, timeout, interval).Should(Equal(operatorv1alpha1.PhaseSucceeded))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, hc)).Should(Succeed())
@@ -233,7 +233,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 				got := &operatorv1alpha1.HelmCapsule{}
 				_ = k8sClient.Get(ctx, key, got)
 				return got.Status.Phase
-			}, timeout, interval).Should(Equal(operatorv1alpha1.PhaseRunning))
+			}, timeout, interval).Should(Equal(operatorv1alpha1.PhaseSucceeded))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, hc)).Should(Succeed())
@@ -276,7 +276,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 				got := &operatorv1alpha1.HelmCapsule{}
 				_ = k8sClient.Get(ctx, key, got)
 				return got.Status.Phase
-			}, timeout, interval).Should(Equal(operatorv1alpha1.PhaseRunning))
+			}, timeout, interval).Should(Equal(operatorv1alpha1.PhaseSucceeded))
 
 			Eventually(func() int64 {
 				got := &operatorv1alpha1.HelmCapsule{}

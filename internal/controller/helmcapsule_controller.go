@@ -6,13 +6,18 @@ import (
 	"context"
 	"errors"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/resources/helm"
@@ -95,7 +100,7 @@ func (r *HelmCapsuleReconciler) handleDeletion(ctx context.Context, hc *operator
 }
 
 func (r *HelmCapsuleReconciler) updateStatus(ctx context.Context, hc *operatorv1alpha1.HelmCapsule) error {
-	hc.Status.Phase = operatorv1alpha1.PhaseRunning
+	hc.Status.Phase = operatorv1alpha1.PhaseSucceeded
 	hc.Status.ObservedGeneration = hc.Generation
 	setCondition(&hc.Status.Conditions, metav1.Condition{
 		Type:               conditionReady,
@@ -107,8 +112,8 @@ func (r *HelmCapsuleReconciler) updateStatus(ctx context.Context, hc *operatorv1
 	return r.Status().Update(ctx, hc)
 }
 
-// recordFailure sets phase Failed and a Ready=False condition with an appropriate reason.
-// Returns without propagating so controller-runtime handles retry backoff.
+// recordFailure sets phase Failed and a Ready=False condition. Retries on conflict
+// by re-fetching the object, so the condition is reliably persisted.
 func (r *HelmCapsuleReconciler) recordFailure(ctx context.Context, hc *operatorv1alpha1.HelmCapsule, cause error) {
 	reason := operatorv1alpha1.HelmCapsuleReasonHelmFailed
 	switch {
@@ -118,17 +123,22 @@ func (r *HelmCapsuleReconciler) recordFailure(ctx context.Context, hc *operatorv
 		reason = operatorv1alpha1.HelmCapsuleReasonValuesBuildFailed
 	}
 
-	hc.Status.Phase = operatorv1alpha1.PhaseFailed
-	hc.Status.ObservedGeneration = hc.Generation
-	setCondition(&hc.Status.Conditions, metav1.Condition{
-		Type:               conditionReady,
-		Status:             metav1.ConditionFalse,
-		ObservedGeneration: hc.Generation,
-		Reason:             reason,
-		Message:            cause.Error(),
-	})
-
-	if err := r.Status().Update(ctx, hc); err != nil {
+	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &operatorv1alpha1.HelmCapsule{}
+		if err := r.Get(ctx, types.NamespacedName{Name: hc.Name, Namespace: hc.Namespace}, latest); err != nil {
+			return err
+		}
+		latest.Status.Phase = operatorv1alpha1.PhaseFailed
+		latest.Status.ObservedGeneration = latest.Generation
+		setCondition(&latest.Status.Conditions, metav1.Condition{
+			Type:               conditionReady,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: latest.Generation,
+			Reason:             reason,
+			Message:            cause.Error(),
+		})
+		return r.Status().Update(ctx, latest)
+	}); err != nil {
 		log.FromContext(ctx).Error(err, "Failed to record failure condition")
 	}
 }
@@ -137,7 +147,81 @@ func (r *HelmCapsuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.HelmCapsule{}).
 		Named("helmcapsule").
+		Watches(&operatorv1alpha1.Orbit{}, handler.EnqueueRequestsFromMapFunc(r.mapOrbitToHelmCapsules)).
+		Watches(&operatorv1alpha1.ConsensusCapsule{}, handler.EnqueueRequestsFromMapFunc(r.mapCapsuleToHelmCapsules)).
+		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(r.mapConfigMapToHelmCapsules)).
+		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.mapSecretToHelmCapsules)).
 		Complete(r)
+}
+
+// mapOrbitToHelmCapsules enqueues all HelmCapsules that reference the changed Orbit.
+func (r *HelmCapsuleReconciler) mapOrbitToHelmCapsules(ctx context.Context, obj client.Object) []reconcile.Request {
+	list := &operatorv1alpha1.HelmCapsuleList{}
+	if err := r.List(ctx, list); err != nil {
+		return nil
+	}
+	var reqs []reconcile.Request
+	for _, hc := range list.Items {
+		if hc.Spec.OrbitRef != nil && hc.Spec.OrbitRef.Name == obj.GetName() {
+			reqs = append(reqs, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: hc.Name, Namespace: hc.Namespace},
+			})
+		}
+	}
+	return reqs
+}
+
+// mapCapsuleToHelmCapsules enqueues HelmCapsules in the same namespace whose OrbitRef
+// matches the ConsensusCapsule's Orbit.
+func (r *HelmCapsuleReconciler) mapCapsuleToHelmCapsules(ctx context.Context, obj client.Object) []reconcile.Request {
+	cc, ok := obj.(*operatorv1alpha1.ConsensusCapsule)
+	if !ok {
+		return nil
+	}
+	list := &operatorv1alpha1.HelmCapsuleList{}
+	if err := r.List(ctx, list, client.InNamespace(cc.Namespace)); err != nil {
+		return nil
+	}
+	var reqs []reconcile.Request
+	for _, hc := range list.Items {
+		if hc.Spec.OrbitRef != nil && hc.Spec.OrbitRef.Name == cc.Spec.Orbit {
+			reqs = append(reqs, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: hc.Name, Namespace: hc.Namespace},
+			})
+		}
+	}
+	return reqs
+}
+
+// mapConfigMapToHelmCapsules enqueues HelmCapsules that reference the changed ConfigMap
+// via ValuesFrom.
+func (r *HelmCapsuleReconciler) mapConfigMapToHelmCapsules(ctx context.Context, obj client.Object) []reconcile.Request {
+	return r.mapValuesSourceToHelmCapsules(ctx, obj, "ConfigMap")
+}
+
+// mapSecretToHelmCapsules enqueues HelmCapsules that reference the changed Secret
+// via ValuesFrom.
+func (r *HelmCapsuleReconciler) mapSecretToHelmCapsules(ctx context.Context, obj client.Object) []reconcile.Request {
+	return r.mapValuesSourceToHelmCapsules(ctx, obj, "Secret")
+}
+
+func (r *HelmCapsuleReconciler) mapValuesSourceToHelmCapsules(ctx context.Context, obj client.Object, kind string) []reconcile.Request {
+	list := &operatorv1alpha1.HelmCapsuleList{}
+	if err := r.List(ctx, list, client.InNamespace(obj.GetNamespace())); err != nil {
+		return nil
+	}
+	var reqs []reconcile.Request
+	for _, hc := range list.Items {
+		for _, ref := range hc.Spec.ValuesFrom {
+			if ref.Kind == kind && ref.Name == obj.GetName() {
+				reqs = append(reqs, reconcile.Request{
+					NamespacedName: types.NamespacedName{Name: hc.Name, Namespace: hc.Namespace},
+				})
+				break
+			}
+		}
+	}
+	return reqs
 }
 
 // setCondition upserts a condition by type, only updating LastTransitionTime when Status changes.
