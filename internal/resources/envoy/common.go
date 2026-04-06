@@ -64,7 +64,7 @@ const (
 const (
 	DefaultImage       = "envoyproxy/envoy:v1.21.6"
 	DefaultReplicas    = int32(2)
-	DefaultProxyPort   = int32(8080)
+	DefaultProxyPort   = int32(8081)
 	DefaultAdminPort   = int32(9901)
 	DefaultMetricsPort = int32(9090)
 )

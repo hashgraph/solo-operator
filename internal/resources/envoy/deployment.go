@@ -194,7 +194,7 @@ func buildStartupProbe(metricsPort int32, envoy *operatorv1alpha1.EnvoyProxy) *c
 		},
 		InitialDelaySeconds: 5,
 		PeriodSeconds:       5,
-		FailureThreshold:    24, // 2 min window
+		FailureThreshold:    12, // 1 min window
 	}
 }
 

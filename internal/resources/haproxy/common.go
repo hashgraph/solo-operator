@@ -123,9 +123,9 @@ func ResourceLabels(haproxy *operatorv1alpha1.HAProxyCapsule) map[string]string 
 func DefaultHealthCheck() operatorv1alpha1.HAProxyHealthCheckSpec {
 	return operatorv1alpha1.HAProxyHealthCheckSpec{
 		Enabled:                    true,
-		StartupInitialDelaySeconds: 60,
+		StartupInitialDelaySeconds: 5,
 		StartupPeriodSeconds:       5,
-		StartupFailureThreshold:    720,
+		StartupFailureThreshold:    12, // 1 min window
 		PeriodSeconds:              10,
 		FailureThreshold:           3,
 		TimeoutSeconds:             1,
