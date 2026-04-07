@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -264,6 +265,301 @@ func TestReconcile_setsReadyFalseOnHelmError(t *testing.T) {
 	}
 	if cond.Reason != operatorv1alpha1.HelmCapsuleReasonChartFetchFailed {
 		t.Errorf("expected ChartFetchFailed, got %s", cond.Reason)
+	}
+}
+
+// ─── Phase lifecycle ──────────────────────────────────────────────────────────
+
+func TestReconcile_setsPhaseRunningBeforeHelmWork(t *testing.T) {
+	scheme := newControllerScheme()
+	hc := newHC("mirror", "test-ns")
+
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(hc).
+		WithStatusSubresource(hc).
+		Build()
+
+	mock := helm.NewMockClient()
+
+	// Capture the phase stored in the fake API server at the moment InstallOrUpgrade is called.
+	var phaseAtInstall operatorv1alpha1.Phase
+	mock.InstallOrUpgradeFunc = func(_ context.Context, releaseName, namespace string, chart operatorv1alpha1.HelmChartSpec, _ map[string]interface{}, _ helm.ReleaseOptions) (*helm.ReleaseInfo, error) {
+		obj := &operatorv1alpha1.HelmCapsule{}
+		_ = c.Get(context.Background(), types.NamespacedName{Name: "mirror", Namespace: "test-ns"}, obj)
+		phaseAtInstall = obj.Status.Phase
+		return &helm.ReleaseInfo{Name: releaseName, Namespace: namespace, Version: 1, Status: "deployed", ChartString: chart.Chart + "-" + chart.Version}, nil
+	}
+
+	r := NewHelmCapsuleReconciler(c, scheme, mock)
+
+	// First reconcile: adds finalizer.
+	_, _ = r.Reconcile(context.Background(), reconcile.Request{
+		NamespacedName: types.NamespacedName{Name: "mirror", Namespace: "test-ns"},
+	})
+	// Second reconcile: actual install.
+	_, err := r.Reconcile(context.Background(), reconcile.Request{
+		NamespacedName: types.NamespacedName{Name: "mirror", Namespace: "test-ns"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if phaseAtInstall != operatorv1alpha1.PhaseRunning {
+		t.Errorf("expected Phase=Running at the time of InstallOrUpgrade, got %s", phaseAtInstall)
+	}
+}
+
+func TestUpdateStatus_setsPhaseRunningForPendingRelease(t *testing.T) {
+	scheme := newControllerScheme()
+	hc := newHC("mirror", "test-ns")
+
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(hc).
+		WithStatusSubresource(hc).
+		Build()
+
+	r := &HelmCapsuleReconciler{Client: c, Scheme: scheme}
+
+	hc.Status.ReleaseStatus = "pending-install"
+	if err := r.updateStatus(context.Background(), hc); err != nil {
+		t.Fatalf("updateStatus error: %v", err)
+	}
+
+	got := &operatorv1alpha1.HelmCapsule{}
+	_ = c.Get(context.Background(), types.NamespacedName{Name: "mirror", Namespace: "test-ns"}, got)
+
+	if got.Status.Phase != operatorv1alpha1.PhaseRunning {
+		t.Errorf("expected PhaseRunning for pending-install, got %s", got.Status.Phase)
+	}
+}
+
+func TestUpdateStatus_setsPhaseSucceededForDeployedRelease(t *testing.T) {
+	scheme := newControllerScheme()
+	hc := newHC("mirror", "test-ns")
+
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(hc).
+		WithStatusSubresource(hc).
+		Build()
+
+	r := &HelmCapsuleReconciler{Client: c, Scheme: scheme}
+
+	hc.Status.ReleaseStatus = "deployed"
+	if err := r.updateStatus(context.Background(), hc); err != nil {
+		t.Fatalf("updateStatus error: %v", err)
+	}
+
+	got := &operatorv1alpha1.HelmCapsule{}
+	_ = c.Get(context.Background(), types.NamespacedName{Name: "mirror", Namespace: "test-ns"}, got)
+
+	if got.Status.Phase != operatorv1alpha1.PhaseSucceeded {
+		t.Errorf("expected PhaseSucceeded for deployed release, got %s", got.Status.Phase)
+	}
+}
+
+func TestReconcile_phaseSucceededAfterIdleRequeue(t *testing.T) {
+	scheme := newControllerScheme()
+	hc := newHC("mirror", "test-ns")
+
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(hc).
+		WithStatusSubresource(hc).
+		Build()
+
+	mock := helm.NewMockClient()
+	r := NewHelmCapsuleReconciler(c, scheme, mock)
+
+	req := reconcile.Request{NamespacedName: types.NamespacedName{Name: "mirror", Namespace: "test-ns"}}
+
+	// reconcile 1: finalizer
+	if _, err := r.Reconcile(context.Background(), req); err != nil {
+		t.Fatalf("reconcile 1 error: %v", err)
+	}
+	// reconcile 2: install
+	if _, err := r.Reconcile(context.Background(), req); err != nil {
+		t.Fatalf("reconcile 2 error: %v", err)
+	}
+	// reconcile 3: idle (hash matches, release deployed → RequeueAfter)
+	result, err := r.Reconcile(context.Background(), req)
+	if err != nil {
+		t.Fatalf("idle reconcile error: %v", err)
+	}
+	if result.RequeueAfter <= 0 {
+		t.Error("expected RequeueAfter > 0 on idle path")
+	}
+
+	got := &operatorv1alpha1.HelmCapsule{}
+	_ = c.Get(context.Background(), types.NamespacedName{Name: "mirror", Namespace: "test-ns"}, got)
+
+	if got.Status.Phase != operatorv1alpha1.PhaseSucceeded {
+		t.Errorf("expected PhaseSucceeded after idle requeue, got %s", got.Status.Phase)
+	}
+}
+
+// ─── PhasePending on first contact ────────────────────────────────────────────
+
+func TestReconcile_setsPhasePendingOnFirstContact(t *testing.T) {
+	scheme := newControllerScheme()
+	hc := newHC("mirror", "test-ns")
+
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(hc).
+		WithStatusSubresource(hc).
+		Build()
+
+	mock := helm.NewMockClient()
+	r := NewHelmCapsuleReconciler(c, scheme, mock)
+
+	// First reconcile: adds finalizer and sets PhasePending.
+	_, err := r.Reconcile(context.Background(), reconcile.Request{
+		NamespacedName: types.NamespacedName{Name: "mirror", Namespace: "test-ns"},
+	})
+	if err != nil {
+		t.Fatalf("first reconcile error: %v", err)
+	}
+
+	got := &operatorv1alpha1.HelmCapsule{}
+	_ = c.Get(context.Background(), types.NamespacedName{Name: "mirror", Namespace: "test-ns"}, got)
+
+	if got.Status.Phase != operatorv1alpha1.PhasePending {
+		t.Errorf("expected PhasePending after finalizer add, got %s", got.Status.Phase)
+	}
+}
+
+// ─── Deletion / escape hatch ──────────────────────────────────────────────────
+
+func TestDeletion_basicPath_callsUninstallAndRemovesFinalizer(t *testing.T) {
+	scheme := newControllerScheme()
+	hc := newHC("mirror", "test-ns")
+
+	now := metav1.Now()
+	hc.DeletionTimestamp = &now
+	hc.Finalizers = []string{HelmCapsuleFinalizer}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(hc).
+		WithStatusSubresource(hc).
+		Build()
+
+	mock := helm.NewMockClient()
+	uninstallCalled := false
+	var capturedRelease, capturedNamespace string
+	mock.UninstallFunc = func(_ context.Context, releaseName, namespace string, _ helm.UninstallOptions) error {
+		uninstallCalled = true
+		capturedRelease = releaseName
+		capturedNamespace = namespace
+		return nil
+	}
+
+	r := NewHelmCapsuleReconciler(c, scheme, mock)
+	_, err := r.Reconcile(context.Background(), reconcile.Request{
+		NamespacedName: types.NamespacedName{Name: "mirror", Namespace: "test-ns"},
+	})
+	if err != nil {
+		t.Fatalf("deletion reconcile error: %v", err)
+	}
+	if !uninstallCalled {
+		t.Fatal("expected Helm uninstall to be called during deletion")
+	}
+	if capturedRelease != "mirror" || capturedNamespace != "test-ns" {
+		t.Errorf("unexpected uninstall target: release=%s namespace=%s", capturedRelease, capturedNamespace)
+	}
+
+	// Finalizer must be removed.
+	got := &operatorv1alpha1.HelmCapsule{}
+	_ = c.Get(context.Background(), types.NamespacedName{Name: "mirror", Namespace: "test-ns"}, got)
+	for _, f := range got.Finalizers {
+		if f == HelmCapsuleFinalizer {
+			t.Error("expected finalizer to be removed after successful uninstall")
+		}
+	}
+}
+
+func TestDeletion_honorsSpecTimeoutAndOptions(t *testing.T) {
+	scheme := newControllerScheme()
+	hc := newHC("mirror", "test-ns")
+
+	now := metav1.Now()
+	hc.DeletionTimestamp = &now
+	hc.Finalizers = []string{HelmCapsuleFinalizer}
+	hc.Spec.KeepHistory = true
+	hc.Spec.DisableHooks = true
+	hc.Spec.Wait = true
+	hc.Spec.Timeout = &metav1.Duration{Duration: 10 * time.Minute}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(hc).
+		WithStatusSubresource(hc).
+		Build()
+
+	mock := helm.NewMockClient()
+	var capturedOpts helm.UninstallOptions
+	mock.UninstallFunc = func(_ context.Context, _, _ string, opts helm.UninstallOptions) error {
+		capturedOpts = opts
+		return nil
+	}
+
+	r := NewHelmCapsuleReconciler(c, scheme, mock)
+	_, err := r.Reconcile(context.Background(), reconcile.Request{
+		NamespacedName: types.NamespacedName{Name: "mirror", Namespace: "test-ns"},
+	})
+	if err != nil {
+		t.Fatalf("deletion reconcile error: %v", err)
+	}
+
+	if capturedOpts.Timeout != 10*time.Minute {
+		t.Errorf("expected timeout=10m, got %v", capturedOpts.Timeout)
+	}
+	if !capturedOpts.KeepHistory {
+		t.Error("expected KeepHistory=true")
+	}
+	if !capturedOpts.DisableHooks {
+		t.Error("expected DisableHooks=true")
+	}
+	if !capturedOpts.Wait {
+		t.Error("expected Wait=true")
+	}
+}
+
+func TestDeletion_skipUninstallAnnotationBypassesHelm(t *testing.T) {
+	scheme := newControllerScheme()
+	hc := newHC("mirror", "test-ns")
+
+	now := metav1.Now()
+	hc.DeletionTimestamp = &now
+	hc.Finalizers = []string{HelmCapsuleFinalizer}
+	hc.Annotations = map[string]string{HelmCapsuleFinalizer: "ignored", SkipUninstallAnnotation: "true"}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(hc).
+		WithStatusSubresource(hc).
+		Build()
+
+	mock := helm.NewMockClient()
+	uninstallCalled := false
+	mock.UninstallFunc = func(_ context.Context, _, _ string, _ helm.UninstallOptions) error {
+		uninstallCalled = true
+		return nil
+	}
+
+	r := NewHelmCapsuleReconciler(c, scheme, mock)
+	_, err := r.Reconcile(context.Background(), reconcile.Request{
+		NamespacedName: types.NamespacedName{Name: "mirror", Namespace: "test-ns"},
+	})
+	if err != nil {
+		t.Fatalf("deletion reconcile error: %v", err)
+	}
+	if uninstallCalled {
+		t.Error("expected Helm uninstall to be skipped when escape-hatch annotation is set")
+	}
+
+	// Finalizer must be removed so deletion can proceed.
+	got := &operatorv1alpha1.HelmCapsule{}
+	_ = c.Get(context.Background(), types.NamespacedName{Name: "mirror", Namespace: "test-ns"}, got)
+	for _, f := range got.Finalizers {
+		if f == HelmCapsuleFinalizer {
+			t.Error("expected finalizer to be removed after escape-hatch uninstall skip")
+		}
 	}
 }
 

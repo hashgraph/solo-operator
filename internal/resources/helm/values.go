@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Package helm provides the Helm release subreconciler, client interface, and value
-// injection logic for the HelmCapsule controller.
 package helm
 
 import (
@@ -23,10 +21,7 @@ import (
 
 const defaultValuesKey = "values.yaml"
 
-// MergeValues builds the final Helm values map, merging three layers in order:
-//  1. Auto-injected topology values (from Orbit + ConsensusCapsules)
-//  2. ValuesFrom references (ConfigMaps / Secrets)
-//  3. Inline Values (highest priority, always wins)
+// MergeValues assembles the final values by layering component injection, ValuesFrom refs, and inline values.
 func MergeValues(ctx context.Context, c client.Client, namespace string, spec *operatorv1alpha1.HelmCapsuleSpec) (map[string]interface{}, error) {
 	result := map[string]interface{}{}
 
@@ -57,17 +52,14 @@ func MergeValues(ctx context.Context, c client.Client, namespace string, spec *o
 	return result, nil
 }
 
-// ComputeHash returns a SHA-256 digest of the chart spec + merged values.
-// Stored in status.ValuesHash so the controller can skip upgrades when nothing changed.
+// ComputeHash returns a SHA-256 of chart spec + values, used in status.ValuesHash to skip no-op upgrades.
 func ComputeHash(chart operatorv1alpha1.HelmChartSpec, values map[string]interface{}) (string, error) {
 	valuesJSON, err := json.Marshal(values)
 	if err != nil {
 		return "", fmt.Errorf("marshalling values for hash: %w", err)
 	}
 	h := sha256.New()
-	h.Write([]byte(chart.Repo))
-	h.Write([]byte(chart.Chart))
-	h.Write([]byte(chart.Version))
+	fmt.Fprintf(h, "%s\x00%s\x00%s\x00", chart.Repo, chart.Chart, chart.Version)
 	h.Write(valuesJSON)
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
@@ -77,10 +69,16 @@ func ComputeHash(chart operatorv1alpha1.HelmChartSpec, values map[string]interfa
 func injectComponentValues(ctx context.Context, c client.Client, namespace string, spec *operatorv1alpha1.HelmCapsuleSpec) (map[string]interface{}, error) {
 	orbit := &operatorv1alpha1.Orbit{}
 	if err := c.Get(ctx, types.NamespacedName{Name: spec.OrbitRef.Name}, orbit); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, fmt.Errorf("orbit %q not found — check spec.orbitRef.name", spec.OrbitRef.Name)
+		}
 		return nil, fmt.Errorf("getting orbit %s: %w", spec.OrbitRef.Name, err)
 	}
 
-	ledgerID := orbit.Spec.Consensus.NetworkSettings["ledger.id"]
+	var ledgerID string
+	if orbit.Spec.Consensus.NetworkSettings != nil {
+		ledgerID = orbit.Spec.Consensus.NetworkSettings["ledger.id"]
+	}
 
 	capsules, err := listConsensusCapsules(ctx, c, namespace, spec.OrbitRef.Name)
 	if err != nil {
@@ -101,9 +99,6 @@ func injectComponentValues(ctx context.Context, c client.Client, namespace strin
 	}
 }
 
-// mirrorValues injects for hedera-mirror:
-//   - hedera.mirror.importer.consensusNodeEndpoints
-//   - hedera.mirror.importer.network
 func mirrorValues(capsules []operatorv1alpha1.ConsensusCapsule, orbit *operatorv1alpha1.Orbit) map[string]interface{} {
 	return map[string]interface{}{
 		"hedera": map[string]interface{}{
@@ -117,10 +112,6 @@ func mirrorValues(capsules []operatorv1alpha1.ConsensusCapsule, orbit *operatorv
 	}
 }
 
-// relayValues injects for hedera-json-rpc-relay and hedera-json-rpc-relay-websocket:
-//   - config.HEDERA_NETWORK   JSON map {"host:port": "accountId"} from ConsensusCapsules
-//   - config.MIRROR_NODE_URL  http://mirror.<namespace>.svc.cluster.local
-//   - config.CHAIN_ID         from Orbit networkSettings["ledger.id"]
 func relayValues(capsules []operatorv1alpha1.ConsensusCapsule, namespace, ledgerID string) (map[string]interface{}, error) {
 	network, err := hederaNetworkJSON(capsules)
 	if err != nil {
@@ -136,8 +127,6 @@ func relayValues(capsules []operatorv1alpha1.ConsensusCapsule, namespace, ledger
 	return map[string]interface{}{"config": config}, nil
 }
 
-// explorerValues injects for hiero-explorer-chart:
-//   - config  (JSON array with a single network entry)
 func explorerValues(orbit *operatorv1alpha1.Orbit, ledgerID string) (map[string]interface{}, error) {
 	entry := map[string]interface{}{
 		"name":        orbit.Name,
@@ -154,9 +143,6 @@ func explorerValues(orbit *operatorv1alpha1.Orbit, ledgerID string) (map[string]
 	return map[string]interface{}{"config": string(configBytes)}, nil
 }
 
-// blockNodeValues injects for block-node-server:
-//   - blockNode.config.BLOCK_NODE_ENDPOINTS
-//   - blockNode.config.CONSENSUS_NODE_COUNT
 func blockNodeValues(capsules []operatorv1alpha1.ConsensusCapsule) map[string]interface{} {
 	return map[string]interface{}{
 		"blockNode": map[string]interface{}{
@@ -170,10 +156,9 @@ func blockNodeValues(capsules []operatorv1alpha1.ConsensusCapsule) map[string]in
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-// consensusEndpoints returns "host:port" strings from ConsensusCapsule address book entries.
-// Capsules without a populated entry are skipped.
+// consensusEndpoints builds "host:port" strings from capsules that have an address book entry.
 func consensusEndpoints(capsules []operatorv1alpha1.ConsensusCapsule) []string {
-	var endpoints []string
+	endpoints := make([]string, 0, len(capsules))
 	for _, c := range capsules {
 		entry := c.Status.AddressBookEntry
 		if entry == nil || entry.InternalHostname == "" {
@@ -188,8 +173,7 @@ func consensusEndpoints(capsules []operatorv1alpha1.ConsensusCapsule) []string {
 	return endpoints
 }
 
-// hederaNetworkJSON builds the HEDERA_NETWORK JSON string expected by the relay chart:
-// {"host:port": "accountId", ...} — one entry per ConsensusCapsule with a populated address book entry.
+// hederaNetworkJSON formats the {"host:port": "accountId"} map expected by the relay chart.
 func hederaNetworkJSON(capsules []operatorv1alpha1.ConsensusCapsule) (string, error) {
 	network := map[string]string{}
 	for _, c := range capsules {

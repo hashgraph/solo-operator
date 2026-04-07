@@ -5,8 +5,11 @@ package helm
 import (
 	"context"
 	"fmt"
+	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -14,6 +17,9 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
+
+// releaseCheckInterval is how often we recheck a deployed release to catch external drift (e.g. helm rollback).
+const releaseCheckInterval = 5 * time.Minute
 
 type ReleaseSubReconciler struct {
 	*subreconciler.BaseSubReconciler[*operatorv1alpha1.HelmCapsule]
@@ -49,7 +55,7 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 
 	values, err := MergeValues(ctx, r.Client, hc.Namespace, &hc.Spec)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("%w: %s", ErrValuesBuild, err)
+		return ctrl.Result{}, fmt.Errorf("%w: %w", ErrValuesBuild, err)
 	}
 
 	hash, err := ComputeHash(hc.Spec.Chart, values)
@@ -57,18 +63,32 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 		return ctrl.Result{}, err
 	}
 	if hash == hc.Status.ValuesHash {
-		// Only skip if actually deployed — failed/pending releases must be retried.
 		existing, err := r.helmClient.GetRelease(releaseName, hc.Namespace)
-		if err == nil && existing != nil && existing.Status == "deployed" {
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("checking existing release: %w", err)
+		}
+		if existing != nil && existing.Status == "deployed" {
 			logger.V(1).Info("Release up-to-date, skipping upgrade")
-			return ctrl.Result{}, nil
+			return ctrl.Result{RequeueAfter: releaseCheckInterval}, nil
+		}
+		if existing != nil {
+			logger.Info("Release not in deployed state, retrying upgrade", "helmStatus", existing.Status)
 		}
 	}
 
 	opts := releaseOptions(hc)
 	if opts.Timeout <= 0 {
-		opts.Timeout = defaultTimeout
+		opts.Timeout = DefaultTimeout
 	}
+
+	if hc.Spec.Chart.CredentialsRef != nil {
+		creds, err := r.loadChartCredentials(ctx, hc.Namespace, hc.Spec.Chart.CredentialsRef.Name)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("%w: loading chart credentials from %s: %w", ErrChartFetch, hc.Spec.Chart.CredentialsRef.Name, err)
+		}
+		opts.Credentials = creds
+	}
+
 	logger.Info("Reconciling Helm release", "timeout", opts.Timeout)
 
 	info, err := r.helmClient.InstallOrUpgrade(ctx, releaseName, hc.Namespace, hc.Spec.Chart, values, opts)
@@ -80,14 +100,18 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 
 	hc.Status.ReleaseVersion = info.Version
 	hc.Status.InstalledChart = info.ChartString
-	hc.Status.ValuesHash = hash
+	hc.Status.ReleaseStatus = info.Status
 
-	return ctrl.Result{}, nil
+	if info.Status == "deployed" {
+		hc.Status.ValuesHash = hash // only save hash once deployed so failures are retried
+		return ctrl.Result{RequeueAfter: releaseCheckInterval}, nil
+	}
+
+	logger.Info("Helm release not yet deployed, requeueing", "helmStatus", info.Status)
+	return ctrl.Result{RequeueAfter: releaseCheckInterval}, nil
 }
 
-// checkReleaseNameConflict fails if another live HelmCapsule in the same namespace
-// resolves to the same release name. The check is best-effort (TOCTOU under
-// concurrent reconciles); a ValidatingWebhook provides stronger admission-time enforcement.
+// checkReleaseNameConflict returns an error if another HelmCapsule in the namespace already owns this release name.
 func (r *ReleaseSubReconciler) checkReleaseNameConflict(ctx context.Context, hc *operatorv1alpha1.HelmCapsule, releaseName string) error {
 	list := &operatorv1alpha1.HelmCapsuleList{}
 	if err := r.Client.List(ctx, list, client.InNamespace(hc.Namespace)); err != nil {
@@ -107,6 +131,19 @@ func (r *ReleaseSubReconciler) checkReleaseNameConflict(ctx context.Context, hc 
 		}
 	}
 	return nil
+}
+
+func (r *ReleaseSubReconciler) loadChartCredentials(ctx context.Context, namespace, secretName string) (*ChartCredentials, error) {
+	secret := &corev1.Secret{}
+	if err := r.Client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret); err != nil {
+		return nil, err
+	}
+	username := string(secret.Data["username"])
+	password := string(secret.Data["password"])
+	if username == "" || password == "" {
+		return nil, fmt.Errorf("secret %s must have non-empty \"username\" and \"password\" keys", secretName)
+	}
+	return &ChartCredentials{Username: username, Password: password}, nil
 }
 
 func releaseOptions(hc *operatorv1alpha1.HelmCapsule) ReleaseOptions {

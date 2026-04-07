@@ -27,6 +27,10 @@ import (
 const (
 	HelmCapsuleFinalizer = "operator.solo.hedera.com/helmcapsule-finalizer"
 	conditionReady       = "Ready"
+	// SkipUninstallAnnotation can be set to "true" on a HelmCapsule to bypass
+	// Helm uninstall during deletion. Useful when a release is stuck and an
+	// admin needs to unblock the finalizer without running helm uninstall.
+	SkipUninstallAnnotation = "operator.solo.hedera.com/skip-uninstall"
 )
 
 type HelmCapsuleReconciler struct {
@@ -50,7 +54,9 @@ func NewHelmCapsuleReconciler(c client.Client, scheme *runtime.Scheme, helmClien
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=helmcapsules/finalizers,verbs=update
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=orbits,verbs=get;list;watch
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=consensuscapsules,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",resources=configmaps;secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch
+// Secrets: read for ValuesFrom/CredentialsRef; full CRUD for Helm release storage (driver=secrets).
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 
 func (r *HelmCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -73,7 +79,22 @@ func (r *HelmCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if err := r.Update(ctx, hc); err != nil {
 			return ctrl.Result{}, err
 		}
+		// Surface Pending so observers know the resource was registered
+		// before any Helm work has started.
+		hc.Status.Phase = operatorv1alpha1.PhasePending
+		if err := r.Status().Update(ctx, hc); err != nil {
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// Transition to Running while reconciling so observers see the phase
+	// during long Helm install/upgrade operations.
+	if hc.Status.Phase != operatorv1alpha1.PhaseRunning {
+		hc.Status.Phase = operatorv1alpha1.PhaseRunning
+		if err := r.Status().Update(ctx, hc); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	result, err := r.subreconciler.Reconcile(ctx, hc)
@@ -81,30 +102,55 @@ func (r *HelmCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		r.recordFailure(ctx, hc, err)
 		return result, err
 	}
-	if result.Requeue || result.RequeueAfter > 0 {
-		return result, nil
-	}
 
-	return ctrl.Result{}, r.updateStatus(ctx, hc)
+	// Always update status — even on requeue — so Phase transitions correctly.
+	return result, r.updateStatus(ctx, hc)
 }
 
 func (r *HelmCapsuleReconciler) handleDeletion(ctx context.Context, hc *operatorv1alpha1.HelmCapsule) (ctrl.Result, error) {
 	if !controllerutil.ContainsFinalizer(hc, HelmCapsuleFinalizer) {
 		return ctrl.Result{}, nil
 	}
-	releaseName := hc.Spec.ReleaseName
-	if releaseName == "" {
-		releaseName = hc.Name
+
+	logger := log.FromContext(ctx)
+
+	if hc.Annotations[SkipUninstallAnnotation] == "true" {
+		logger.Info("Skipping Helm uninstall — escape-hatch annotation is set",
+			"annotation", SkipUninstallAnnotation)
+	} else {
+		releaseName := hc.Spec.ReleaseName
+		if releaseName == "" {
+			releaseName = hc.Name
+		}
+		timeout := helm.DefaultTimeout
+		if hc.Spec.Timeout != nil && hc.Spec.Timeout.Duration > 0 {
+			timeout = hc.Spec.Timeout.Duration
+		}
+		opts := helm.UninstallOptions{
+			Timeout:      timeout,
+			KeepHistory:  hc.Spec.KeepHistory,
+			DisableHooks: hc.Spec.DisableHooks,
+			Wait:         hc.Spec.Wait,
+		}
+		if err := r.helmClient.Uninstall(ctx, releaseName, hc.Namespace, opts); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
-	if err := r.helmClient.Uninstall(ctx, releaseName, hc.Namespace); err != nil {
-		return ctrl.Result{}, err
-	}
+
 	controllerutil.RemoveFinalizer(hc, HelmCapsuleFinalizer)
 	return ctrl.Result{}, r.Update(ctx, hc)
 }
 
 func (r *HelmCapsuleReconciler) updateStatus(ctx context.Context, hc *operatorv1alpha1.HelmCapsule) error {
-	hc.Status.Phase = operatorv1alpha1.PhaseSucceeded
+	// Reflect the actual Helm release state in Phase.
+	// pending-* statuses mean the release is in-flight; everything else (or no
+	// prior release) is treated as the operator having done its job successfully.
+	switch hc.Status.ReleaseStatus {
+	case "pending-install", "pending-upgrade", "pending-rollback":
+		hc.Status.Phase = operatorv1alpha1.PhaseRunning
+	default:
+		hc.Status.Phase = operatorv1alpha1.PhaseSucceeded
+	}
 	hc.Status.ObservedGeneration = hc.Generation
 	setCondition(&hc.Status.Conditions, metav1.Condition{
 		Type:               conditionReady,

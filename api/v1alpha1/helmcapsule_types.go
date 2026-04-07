@@ -129,6 +129,12 @@ type HelmCapsuleSpec struct {
 	// Helm default: false.
 	// +optional
 	DisableHooks bool `json:"disableHooks,omitempty"`
+
+	// KeepHistory preserves Helm release history when the HelmCapsule is deleted.
+	// Equivalent to helm uninstall --keep-history.
+	// Helm default: false.
+	// +optional
+	KeepHistory bool `json:"keepHistory,omitempty"`
 }
 
 // HelmChartSpec identifies the Helm chart to install.
@@ -150,6 +156,13 @@ type HelmChartSpec struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:Pattern=`^v?[0-9]+\.[0-9]+\.[0-9]`
 	Version string `json:"version"`
+
+	// CredentialsRef names a Secret in the same namespace as the HelmCapsule
+	// that contains chart repository credentials.
+	// The Secret must have "username" and "password" string keys.
+	// Required for private chart repositories; omit for public repos.
+	// +optional
+	CredentialsRef *corev1.LocalObjectReference `json:"credentialsRef,omitempty"`
 }
 
 // HelmValuesReference points to a ConfigMap or Secret key that contains a Helm values YAML.
@@ -192,6 +205,11 @@ type HelmCapsuleStatus struct {
 	// +optional
 	InstalledChart string `json:"installedChart,omitempty"`
 
+	// ReleaseStatus is the Helm release status as reported by Helm after the last
+	// install or upgrade (e.g. "deployed", "failed", "pending-install").
+	// +optional
+	ReleaseStatus string `json:"releaseStatus,omitempty"`
+
 	// ValuesHash is a SHA-256 digest of the chart spec and the fully-merged values
 	// map at the time of the last successful install or upgrade.
 	// The controller compares this against the current desired state on every
@@ -223,6 +241,7 @@ const (
 // +kubebuilder:printcolumn:name="Chart",type="string",JSONPath=".spec.chart.chart"
 // +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".spec.chart.version"
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
+// +kubebuilder:printcolumn:name="HelmStatus",type="string",JSONPath=".status.releaseStatus"
 // +kubebuilder:printcolumn:name="Release",type="integer",JSONPath=".status.releaseVersion"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=helmcapsules,verbs=get;list;watch;create;update;patch;delete

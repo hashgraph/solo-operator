@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	defaultTimeout    = 5 * time.Minute
+	DefaultTimeout    = 5 * time.Minute
 	helmStorageDriver = "secrets"
 )
 
@@ -37,7 +37,6 @@ var (
 	ErrReleaseNameConflict = errors.New("release name conflict")
 )
 
-// ReleaseInfo holds key information about a deployed Helm release.
 type ReleaseInfo struct {
 	Name        string
 	Namespace   string
@@ -46,8 +45,13 @@ type ReleaseInfo struct {
 	ChartString string // "chartname-version"
 }
 
-// ReleaseOptions mirrors the Helm action flags exposed in HelmCapsuleSpec.
-// Zero values match Helm's own defaults.
+// ChartCredentials is read from the Secret named in HelmChartSpec.CredentialsRef.
+type ChartCredentials struct {
+	Username string
+	Password string
+}
+
+// ReleaseOptions maps to HelmCapsuleSpec fields. Zero values match Helm defaults.
 type ReleaseOptions struct {
 	Timeout         time.Duration
 	Wait            bool
@@ -56,12 +60,22 @@ type ReleaseOptions struct {
 	MaxHistory      int
 	CreateNamespace bool
 	DisableHooks    bool
+	// Credentials are used to authenticate to a private chart repository.
+	// Nil means no authentication (public repo).
+	Credentials *ChartCredentials
+}
+
+type UninstallOptions struct {
+	Timeout      time.Duration // defaults to DefaultTimeout when zero
+	KeepHistory  bool          // helm uninstall --keep-history
+	DisableHooks bool
+	Wait         bool
 }
 
 // Client abstracts Helm operations for testability.
 type Client interface {
 	InstallOrUpgrade(ctx context.Context, releaseName, namespace string, chart operatorv1alpha1.HelmChartSpec, values map[string]interface{}, opts ReleaseOptions) (*ReleaseInfo, error)
-	Uninstall(ctx context.Context, releaseName, namespace string) error
+	Uninstall(ctx context.Context, releaseName, namespace string, opts UninstallOptions) error
 	GetRelease(releaseName, namespace string) (*ReleaseInfo, error)
 }
 
@@ -71,8 +85,7 @@ type helmSDKClient struct {
 	restConfig *rest.Config
 }
 
-// NewHelmSDKClient returns a Client backed by helm.sh/helm/v3.
-// Pass mgr.GetConfig() from controller-runtime.
+// NewHelmSDKClient returns a Client backed by helm.sh/helm/v3. Pass mgr.GetConfig().
 func NewHelmSDKClient(restConfig *rest.Config) Client {
 	return &helmSDKClient{restConfig: restConfig}
 }
@@ -93,9 +106,6 @@ func (h *helmSDKClient) actionConfig(namespace string) (*action.Configuration, e
 }
 
 func (h *helmSDKClient) InstallOrUpgrade(ctx context.Context, releaseName, namespace string, chart operatorv1alpha1.HelmChartSpec, values map[string]interface{}, opts ReleaseOptions) (*ReleaseInfo, error) {
-	if opts.Timeout <= 0 {
-		opts.Timeout = defaultTimeout
-	}
 	existing, err := h.GetRelease(releaseName, namespace)
 	if err != nil {
 		return nil, err
@@ -106,10 +116,32 @@ func (h *helmSDKClient) InstallOrUpgrade(ctx context.Context, releaseName, names
 	return h.upgrade(ctx, releaseName, namespace, chart, values, opts)
 }
 
+// loginIfNeeded logs in to the OCI registry when credentials are set. No-op for plain HTTPS repos.
+func loginIfNeeded(registryClient *registry.Client, chart operatorv1alpha1.HelmChartSpec, creds *ChartCredentials) error {
+	if creds == nil || !isOCI(chart.Repo) {
+		return nil
+	}
+	host := ociHost(chart.Repo)
+	return registryClient.Login(host, registry.LoginOptBasicAuth(creds.Username, creds.Password))
+}
+
+// ociHost extracts the registry host from an oci:// URL.
+// "oci://ghcr.io/hashgraph/solo-charts" → "ghcr.io"
+func ociHost(repo string) string {
+	without := strings.TrimPrefix(repo, "oci://")
+	if idx := strings.IndexByte(without, '/'); idx != -1 {
+		return without[:idx]
+	}
+	return without
+}
+
 func (h *helmSDKClient) install(ctx context.Context, releaseName, namespace string, chart operatorv1alpha1.HelmChartSpec, values map[string]interface{}, opts ReleaseOptions) (*ReleaseInfo, error) {
 	cfg, err := h.actionConfig(namespace)
 	if err != nil {
 		return nil, err
+	}
+	if err := loginIfNeeded(cfg.RegistryClient, chart, opts.Credentials); err != nil {
+		return nil, fmt.Errorf("authenticating to chart repository: %w", err)
 	}
 
 	install := action.NewInstall(cfg)
@@ -122,7 +154,10 @@ func (h *helmSDKClient) install(ctx context.Context, releaseName, namespace stri
 	install.DisableHooks = opts.DisableHooks
 	install.Version = chart.Version
 
-	ref := chartRef(chart)
+	ref, err := chartRef(chart)
+	if err != nil {
+		return nil, err
+	}
 	chartPath, err := install.LocateChart(ref, cli.New())
 	if err != nil {
 		return nil, fmt.Errorf("%w: locating chart %s: %w", ErrChartFetch, ref, err)
@@ -143,6 +178,9 @@ func (h *helmSDKClient) upgrade(ctx context.Context, releaseName, namespace stri
 	if err != nil {
 		return nil, err
 	}
+	if err := loginIfNeeded(cfg.RegistryClient, chart, opts.Credentials); err != nil {
+		return nil, fmt.Errorf("authenticating to chart repository: %w", err)
+	}
 
 	upgrade := action.NewUpgrade(cfg)
 	upgrade.Namespace = namespace
@@ -155,7 +193,10 @@ func (h *helmSDKClient) upgrade(ctx context.Context, releaseName, namespace stri
 	upgrade.ReuseValues = false
 	upgrade.Version = chart.Version
 
-	ref := chartRef(chart)
+	ref, err := chartRef(chart)
+	if err != nil {
+		return nil, err
+	}
 	chartPath, err := upgrade.LocateChart(ref, cli.New())
 	if err != nil {
 		return nil, fmt.Errorf("%w: locating chart %s: %w", ErrChartFetch, ref, err)
@@ -171,12 +212,21 @@ func (h *helmSDKClient) upgrade(ctx context.Context, releaseName, namespace stri
 	return releaseInfoFrom(rel), nil
 }
 
-func (h *helmSDKClient) Uninstall(_ context.Context, releaseName, namespace string) error {
+func (h *helmSDKClient) Uninstall(_ context.Context, releaseName, namespace string, opts UninstallOptions) error {
 	cfg, err := h.actionConfig(namespace)
 	if err != nil {
 		return err
 	}
-	if _, err := action.NewUninstall(cfg).Run(releaseName); err != nil {
+	uninstall := action.NewUninstall(cfg)
+	if opts.Timeout > 0 {
+		uninstall.Timeout = opts.Timeout
+	} else {
+		uninstall.Timeout = DefaultTimeout
+	}
+	uninstall.KeepHistory = opts.KeepHistory
+	uninstall.DisableHooks = opts.DisableHooks
+	uninstall.Wait = opts.Wait
+	if _, err := uninstall.Run(releaseName); err != nil {
 		if isNotFound(err) {
 			return nil
 		}
@@ -208,7 +258,9 @@ func releaseInfoFrom(rel *helmrelease.Release) *ReleaseInfo {
 		Name:      rel.Name,
 		Namespace: rel.Namespace,
 		Version:   rel.Version,
-		Status:    rel.Info.Status.String(),
+	}
+	if rel.Info != nil {
+		info.Status = rel.Info.Status.String()
 	}
 	if rel.Chart != nil && rel.Chart.Metadata != nil {
 		info.ChartString = rel.Chart.Metadata.Name + "-" + rel.Chart.Metadata.Version
@@ -220,15 +272,16 @@ func isNotFound(err error) bool {
 	return errors.Is(err, driver.ErrReleaseNotFound)
 }
 
-// chartRef returns the argument to pass to LocateChart.
-//
-// OCI repos: full OCI ref ({repo}/{chart}) — Version is set on the action separately.
-// HTTP repos: a direct tarball URL ({repo}/{chart}-{version}.tgz), no `helm repo add` needed.
-func chartRef(chart operatorv1alpha1.HelmChartSpec) string {
+// chartRef builds the ref passed to LocateChart. OCI gets a full oci:// ref;
+// HTTP gets a direct .tgz URL so we don't need `helm repo add`.
+func chartRef(chart operatorv1alpha1.HelmChartSpec) (string, error) {
 	if isOCI(chart.Repo) {
-		return fmt.Sprintf("%s/%s", strings.TrimRight(chart.Repo, "/"), chart.Chart)
+		return fmt.Sprintf("%s/%s", strings.TrimRight(chart.Repo, "/"), chart.Chart), nil
 	}
-	return fmt.Sprintf("%s/%s-%s.tgz", strings.TrimRight(chart.Repo, "/"), chart.Chart, chart.Version)
+	if chart.Version == "" {
+		return "", fmt.Errorf("%w: chart version is required for HTTP repos", ErrChartFetch)
+	}
+	return fmt.Sprintf("%s/%s-%s.tgz", strings.TrimRight(chart.Repo, "/"), chart.Chart, chart.Version), nil
 }
 
 func isOCI(repo string) bool {
@@ -242,7 +295,8 @@ type MockClient struct {
 	releases map[string]*ReleaseInfo
 
 	InstallOrUpgradeFunc func(ctx context.Context, releaseName, namespace string, chart operatorv1alpha1.HelmChartSpec, values map[string]interface{}, opts ReleaseOptions) (*ReleaseInfo, error)
-	UninstallFunc        func(ctx context.Context, releaseName, namespace string) error
+	UninstallFunc        func(ctx context.Context, releaseName, namespace string, opts UninstallOptions) error
+	GetReleaseFunc       func(releaseName, namespace string) (*ReleaseInfo, error)
 }
 
 func NewMockClient() *MockClient {
@@ -270,15 +324,18 @@ func (m *MockClient) InstallOrUpgrade(ctx context.Context, releaseName, namespac
 	return info, nil
 }
 
-func (m *MockClient) Uninstall(ctx context.Context, releaseName, namespace string) error {
+func (m *MockClient) Uninstall(ctx context.Context, releaseName, namespace string, opts UninstallOptions) error {
 	if m.UninstallFunc != nil {
-		return m.UninstallFunc(ctx, releaseName, namespace)
+		return m.UninstallFunc(ctx, releaseName, namespace, opts)
 	}
 	delete(m.releases, namespace+"/"+releaseName)
 	return nil
 }
 
 func (m *MockClient) GetRelease(releaseName, namespace string) (*ReleaseInfo, error) {
+	if m.GetReleaseFunc != nil {
+		return m.GetReleaseFunc(releaseName, namespace)
+	}
 	info, ok := m.releases[namespace+"/"+releaseName]
 	if !ok {
 		return nil, nil
@@ -288,8 +345,7 @@ func (m *MockClient) GetRelease(releaseName, namespace string) (*ReleaseInfo, er
 
 // ─── RESTClientGetter ─────────────────────────────────────────────────────────
 
-// restConfigGetter bridges controller-runtime's rest.Config with Helm's
-// RESTClientGetter interface, so Helm can talk to the same cluster.
+// restConfigGetter lets Helm use the same cluster connection as controller-runtime.
 type restConfigGetter struct {
 	restConfig *rest.Config
 	namespace  string
@@ -324,8 +380,6 @@ func (r *restConfigGetter) ToRawKubeConfigLoader() clientcmd.ClientConfig {
 		InsecureSkipTLSVerify:    r.restConfig.Insecure,
 	}
 	cfg.AuthInfos["default"] = &clientcmdapi.AuthInfo{
-		// BearerToken is set for kubeconfig-based auth; BearerTokenFile for in-cluster
-		// projected service account tokens (rotated automatically by Kubernetes).
 		Token:                 r.restConfig.BearerToken,
 		TokenFile:             r.restConfig.BearerTokenFile,
 		ClientCertificateData: r.restConfig.CertData,

@@ -29,6 +29,9 @@ spec:
     - jsonPath: .status.phase
       name: Phase
       type: string
+    - jsonPath: .status.releaseStatus
+      name: HelmStatus
+      type: string
     - jsonPath: .status.releaseVersion
       name: Release
       type: integer
@@ -78,6 +81,24 @@ spec:
                       Example: "hedera-mirror"
                     minLength: 1
                     type: string
+                  credentialsRef:
+                    description: |-
+                      CredentialsRef names a Secret in the same namespace as the HelmCapsule
+                      that contains chart repository credentials.
+                      The Secret must have "username" and "password" string keys.
+                      Required for private chart repositories; omit for public repos.
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
                   repo:
                     description: |-
                       Repo is the chart repository URL.
@@ -125,6 +146,12 @@ spec:
               disableHooks:
                 description: |-
                   DisableHooks skips running pre/post Helm hooks during install and upgrade.
+                  Helm default: false.
+                type: boolean
+              keepHistory:
+                description: |-
+                  KeepHistory preserves Helm release history when the HelmCapsule is deleted.
+                  Equivalent to helm uninstall --keep-history.
                   Helm default: false.
                 type: boolean
               maxHistory:
@@ -291,6 +318,11 @@ spec:
                 - Succeeded
                 - Failed
                 - Unknown
+                type: string
+              releaseStatus:
+                description: |-
+                  ReleaseStatus is the Helm release status as reported by Helm after the last
+                  install or upgrade (e.g. "deployed", "failed", "pending-install").
                 type: string
               releaseVersion:
                 description: ReleaseVersion is the Helm revision number currently

@@ -153,7 +153,7 @@ func TestReleaseSubReconciler_customTimeout(t *testing.T) {
 	}
 }
 
-func TestReleaseSubReconciler_defaultTimeout(t *testing.T) {
+func TestReleaseSubReconciler_DefaultTimeout(t *testing.T) {
 	scheme := newTestScheme()
 
 	var capturedTimeout time.Duration
@@ -169,8 +169,8 @@ func TestReleaseSubReconciler_defaultTimeout(t *testing.T) {
 	if _, err := r.Reconcile(context.Background(), hc); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if capturedTimeout != defaultTimeout {
-		t.Errorf("expected default timeout=%v, got %v", defaultTimeout, capturedTimeout)
+	if capturedTimeout != DefaultTimeout {
+		t.Errorf("expected default timeout=%v, got %v", DefaultTimeout, capturedTimeout)
 	}
 }
 
@@ -443,6 +443,250 @@ func TestReleaseSubReconciler_defaultsReleaseNameToObjectName(t *testing.T) {
 	}
 }
 
+// ─── ReleaseStatus surfacing ──────────────────────────────────────────────────
+
+func TestReleaseSubReconciler_setsReleaseStatusAfterInstall(t *testing.T) {
+	scheme := newTestScheme()
+	mock := NewMockClient()
+	r := newTestReleaseSubReconciler(scheme, mock)
+
+	hc := newHelmCapsule("mirror", "test-ns")
+
+	if _, err := r.Reconcile(context.Background(), hc); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hc.Status.ReleaseStatus != "deployed" {
+		t.Errorf("expected ReleaseStatus=deployed, got %q", hc.Status.ReleaseStatus)
+	}
+}
+
+// ─── Idle-path requeue for periodic drift detection ───────────────────────────
+
+func TestReleaseSubReconciler_idlePathRequeuesForPeriodicCheck(t *testing.T) {
+	scheme := newTestScheme()
+	mock := NewMockClient()
+	r := newTestReleaseSubReconciler(scheme, mock)
+
+	hc := newHelmCapsule("mirror", "test-ns")
+
+	// First reconcile installs and records hash.
+	if _, err := r.Reconcile(context.Background(), hc); err != nil {
+		t.Fatalf("first reconcile error: %v", err)
+	}
+
+	// Second reconcile: hash matches, release deployed — should return RequeueAfter for drift detection.
+	result, err := r.Reconcile(context.Background(), hc)
+	if err != nil {
+		t.Fatalf("idle reconcile error: %v", err)
+	}
+	if result.RequeueAfter <= 0 {
+		t.Error("expected RequeueAfter > 0 on idle path for periodic drift detection")
+	}
+}
+
+// ─── Non-deployed release recovery ───────────────────────────────────────────
+
+func TestReleaseSubReconciler_nonDeployedStatusDoesNotSaveHash(t *testing.T) {
+	scheme := newTestScheme()
+	mock := NewMockClient()
+	mock.InstallOrUpgradeFunc = func(_ context.Context, releaseName, namespace string, chart operatorv1alpha1.HelmChartSpec, _ map[string]interface{}, _ ReleaseOptions) (*ReleaseInfo, error) {
+		return &ReleaseInfo{Name: releaseName, Namespace: namespace, Version: 1, Status: "pending-install", ChartString: chart.Chart + "-" + chart.Version}, nil
+	}
+
+	r := newTestReleaseSubReconciler(scheme, mock)
+	hc := newHelmCapsule("mirror", "test-ns")
+
+	if _, err := r.Reconcile(context.Background(), hc); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hc.Status.ValuesHash != "" {
+		t.Error("ValuesHash must not be saved when Helm status is not 'deployed'")
+	}
+}
+
+func TestReleaseSubReconciler_nonDeployedStatusRequeues(t *testing.T) {
+	scheme := newTestScheme()
+	mock := NewMockClient()
+	mock.InstallOrUpgradeFunc = func(_ context.Context, releaseName, namespace string, chart operatorv1alpha1.HelmChartSpec, _ map[string]interface{}, _ ReleaseOptions) (*ReleaseInfo, error) {
+		return &ReleaseInfo{Name: releaseName, Namespace: namespace, Version: 1, Status: "pending-install", ChartString: chart.Chart + "-" + chart.Version}, nil
+	}
+
+	r := newTestReleaseSubReconciler(scheme, mock)
+	hc := newHelmCapsule("mirror", "test-ns")
+
+	result, err := r.Reconcile(context.Background(), hc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.RequeueAfter <= 0 {
+		t.Error("expected RequeueAfter > 0 when Helm release is not yet deployed")
+	}
+}
+
+func TestReleaseSubReconciler_retriesWhenHashMatchesButNotDeployed(t *testing.T) {
+	scheme := newTestScheme()
+	mock := NewMockClient()
+	r := newTestReleaseSubReconciler(scheme, mock)
+
+	// First reconcile: install and save hash.
+	hc := newHelmCapsule("mirror", "test-ns")
+	if _, err := r.Reconcile(context.Background(), hc); err != nil {
+		t.Fatalf("first reconcile error: %v", err)
+	}
+	installCalls := mock.releases["test-ns/mirror"].Version
+
+	// Simulate the release becoming failed externally (same hash, but Helm status = failed).
+	mock.releases["test-ns/mirror"].Status = "failed"
+
+	// Second reconcile: hash still matches, but release is failed — must retry the upgrade.
+	if _, err := r.Reconcile(context.Background(), hc); err != nil {
+		t.Fatalf("retry reconcile error: %v", err)
+	}
+	if mock.releases["test-ns/mirror"].Version == installCalls {
+		t.Error("expected Helm upgrade to fire when release is failed, even if hash matches")
+	}
+}
+
+// ─── Chart credentials ────────────────────────────────────────────────────────
+
+func TestReleaseSubReconciler_loadsCredentialsFromSecret(t *testing.T) {
+	scheme := newTestScheme()
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "chart-creds", Namespace: "test-ns"},
+		Data: map[string][]byte{
+			"username": []byte("alice"),
+			"password": []byte("s3cr3t"),
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(secret).Build()
+
+	var capturedCreds *ChartCredentials
+	mock := NewMockClient()
+	mock.InstallOrUpgradeFunc = func(_ context.Context, releaseName, namespace string, chart operatorv1alpha1.HelmChartSpec, _ map[string]interface{}, opts ReleaseOptions) (*ReleaseInfo, error) {
+		capturedCreds = opts.Credentials
+		return &ReleaseInfo{Name: releaseName, Namespace: namespace, Version: 1, Status: "deployed", ChartString: chart.Chart + "-" + chart.Version}, nil
+	}
+
+	r := &ReleaseSubReconciler{
+		BaseSubReconciler: subreconciler.NewBaseSubReconciler[*operatorv1alpha1.HelmCapsule](c, scheme, "helm-release"),
+		helmClient:        mock,
+	}
+
+	hc := newHelmCapsule("mirror", "test-ns")
+	hc.Spec.Chart.CredentialsRef = &corev1.LocalObjectReference{Name: "chart-creds"}
+
+	if _, err := r.Reconcile(context.Background(), hc); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capturedCreds == nil {
+		t.Fatal("expected credentials to be loaded and passed to InstallOrUpgrade")
+	}
+	if capturedCreds.Username != "alice" || capturedCreds.Password != "s3cr3t" {
+		t.Errorf("unexpected credentials: %+v", capturedCreds)
+	}
+}
+
+func TestReleaseSubReconciler_missingCredentialsSecretErrors(t *testing.T) {
+	scheme := newTestScheme()
+	mock := NewMockClient()
+	r := newTestReleaseSubReconciler(scheme, mock)
+
+	hc := newHelmCapsule("mirror", "test-ns")
+	hc.Spec.Chart.CredentialsRef = &corev1.LocalObjectReference{Name: "nonexistent"}
+
+	_, err := r.Reconcile(context.Background(), hc)
+	if err == nil {
+		t.Fatal("expected error for missing credentials secret")
+	}
+}
+
+// ─── GetRelease error handling ────────────────────────────────────────────────
+
+// When GetRelease errors inside the hash-match block, the error must be surfaced
+// rather than silently falling through to InstallOrUpgrade.
+func TestReleaseSubReconciler_getReleasesErrorIsReturned(t *testing.T) {
+	scheme := newTestScheme()
+	mock := NewMockClient()
+	r := newTestReleaseSubReconciler(scheme, mock)
+
+	// First reconcile: install succeeds and hash is recorded.
+	hc := newHelmCapsule("mirror", "test-ns")
+	if _, err := r.Reconcile(context.Background(), hc); err != nil {
+		t.Fatalf("first reconcile error: %v", err)
+	}
+	firstVersion := mock.releases["test-ns/mirror"].Version
+
+	// Inject an error into GetRelease.
+	mock.GetReleaseFunc = func(_, _ string) (*ReleaseInfo, error) {
+		return nil, errors.New("api server timeout")
+	}
+
+	// Second reconcile: hash matches, GetRelease errors — must return the error, not upgrade.
+	_, err := r.Reconcile(context.Background(), hc)
+	if err == nil {
+		t.Fatal("expected error when GetRelease fails during hash-match check")
+	}
+	if mock.releases["test-ns/mirror"].Version != firstVersion {
+		t.Error("InstallOrUpgrade must not be called when GetRelease returns an error")
+	}
+}
+
+// ─── Failed release recovery ──────────────────────────────────────────────────
+
+// When InstallOrUpgrade fails, ValuesHash must not be persisted so the next
+// reconcile retries the operation rather than treating the spec as up-to-date.
+func TestReleaseSubReconciler_helmErrorDoesNotSaveHash(t *testing.T) {
+	scheme := newTestScheme()
+	mock := NewMockClient()
+	mock.InstallOrUpgradeFunc = func(_ context.Context, _, _ string, _ operatorv1alpha1.HelmChartSpec, _ map[string]interface{}, _ ReleaseOptions) (*ReleaseInfo, error) {
+		return nil, errors.New("helm install failed: timeout waiting for pods")
+	}
+
+	r := newTestReleaseSubReconciler(scheme, mock)
+	hc := newHelmCapsule("mirror", "test-ns")
+
+	_, _ = r.Reconcile(context.Background(), hc) // error expected; ignore it
+
+	if hc.Status.ValuesHash != "" {
+		t.Error("ValuesHash must not be saved when InstallOrUpgrade returns an error")
+	}
+}
+
+// After a failed reconcile (hash not saved), the next reconcile must retry Helm.
+func TestReleaseSubReconciler_retriesAfterHelmError(t *testing.T) {
+	scheme := newTestScheme()
+
+	callCount := 0
+	mock := NewMockClient()
+	mock.InstallOrUpgradeFunc = func(_ context.Context, releaseName, namespace string, chart operatorv1alpha1.HelmChartSpec, _ map[string]interface{}, _ ReleaseOptions) (*ReleaseInfo, error) {
+		callCount++
+		if callCount == 1 {
+			return nil, errors.New("transient failure")
+		}
+		return &ReleaseInfo{Name: releaseName, Namespace: namespace, Version: 1, Status: "deployed", ChartString: chart.Chart + "-" + chart.Version}, nil
+	}
+
+	r := newTestReleaseSubReconciler(scheme, mock)
+	hc := newHelmCapsule("mirror", "test-ns")
+
+	// First reconcile fails.
+	if _, err := r.Reconcile(context.Background(), hc); err == nil {
+		t.Fatal("expected error on first reconcile")
+	}
+
+	// Second reconcile: hash still empty → must retry.
+	if _, err := r.Reconcile(context.Background(), hc); err != nil {
+		t.Fatalf("second reconcile (retry) error: %v", err)
+	}
+	if callCount != 2 {
+		t.Errorf("expected exactly 2 InstallOrUpgrade calls, got %d", callCount)
+	}
+	if hc.Status.ValuesHash == "" {
+		t.Error("expected ValuesHash to be saved after successful retry")
+	}
+}
+
 // ─── MockClient unit tests ────────────────────────────────────────────────────
 
 func TestMockClient_installAndGet(t *testing.T) {
@@ -484,7 +728,7 @@ func TestMockClient_uninstallRemovesRelease(t *testing.T) {
 	chart := operatorv1alpha1.HelmChartSpec{Repo: "oci://example.com", Chart: "test", Version: "1.0.0"}
 
 	_, _ = mock.InstallOrUpgrade(ctx, "r", "ns", chart, nil, ReleaseOptions{})
-	_ = mock.Uninstall(ctx, "r", "ns")
+	_ = mock.Uninstall(ctx, "r", "ns", UninstallOptions{})
 
 	info, _ := mock.GetRelease("r", "ns")
 	if info != nil {
