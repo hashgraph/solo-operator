@@ -5,6 +5,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -142,6 +143,13 @@ func (r *HelmCapsuleReconciler) handleDeletion(ctx context.Context, hc *operator
 }
 
 func (r *HelmCapsuleReconciler) updateStatus(ctx context.Context, hc *operatorv1alpha1.HelmCapsule) error {
+	// Capture current status before mutation. setCondition mutates Conditions in-place,
+	// so copy the slice to get an independent snapshot for change detection.
+	oldPhase := hc.Status.Phase
+	oldGen := hc.Status.ObservedGeneration
+	oldConds := make([]operatorv1alpha1.Condition, len(hc.Status.Conditions))
+	copy(oldConds, hc.Status.Conditions)
+
 	// Reflect the actual Helm release state in Phase.
 	// pending-* statuses mean the release is in-flight; everything else (or no
 	// prior release) is treated as the operator having done its job successfully.
@@ -159,6 +167,10 @@ func (r *HelmCapsuleReconciler) updateStatus(ctx context.Context, hc *operatorv1
 		Reason:             operatorv1alpha1.HelmCapsuleReasonDeployed,
 		Message:            "Helm release deployed",
 	})
+
+	if hc.Status.Phase == oldPhase && hc.Status.ObservedGeneration == oldGen && reflect.DeepEqual(hc.Status.Conditions, oldConds) {
+		return nil
+	}
 	return r.Status().Update(ctx, hc)
 }
 

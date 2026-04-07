@@ -5,6 +5,7 @@ package helm
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -233,6 +234,9 @@ func TestReleaseSubReconciler_propagatesHelmError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error to be propagated")
 	}
+	if !strings.Contains(err.Error(), "mirror") {
+		t.Errorf("expected error to contain release name, got: %v", err)
+	}
 }
 
 func TestReleaseSubReconciler_conflictWhenSameReleaseName(t *testing.T) {
@@ -379,7 +383,7 @@ func TestReleaseSubReconciler_terminatingCapsuleDoesNotBlockPeer(t *testing.T) {
 	}
 }
 
-func TestReleaseSubReconciler_listFailurePropagatesAsConflictError(t *testing.T) {
+func TestReleaseSubReconciler_listFailurePropagatesError(t *testing.T) {
 	scheme := newTestScheme()
 
 	// Build a client with no HelmCapsule type registered so List returns an error.
@@ -395,8 +399,9 @@ func TestReleaseSubReconciler_listFailurePropagatesAsConflictError(t *testing.T)
 	if err == nil {
 		t.Fatal("expected error when list fails")
 	}
-	if !errors.Is(err, ErrReleaseNameConflict) {
-		t.Errorf("expected ErrReleaseNameConflict wrapping the list error, got: %v", err)
+	// A transient list failure must NOT be misreported as a release name conflict.
+	if errors.Is(err, ErrReleaseNameConflict) {
+		t.Errorf("transient list error must not be wrapped as ErrReleaseNameConflict, got: %v", err)
 	}
 }
 

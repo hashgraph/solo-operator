@@ -120,6 +120,9 @@ func (r *HAProxyCapsuleReconciler) handleDeletion(ctx context.Context, haproxyOb
 
 // updateStatus updates the HAProxyCapsule status
 func (r *HAProxyCapsuleReconciler) updateStatus(ctx context.Context, haproxyObj *operatorv1alpha1.HAProxyCapsule) error {
+	// Capture current status — all fields are value types so this is a full copy.
+	oldStatus := haproxyObj.Status
+
 	// Check deployment status
 	deploy := &appsv1.Deployment{}
 	if err := r.Get(ctx, client.ObjectKey{Name: haproxyObj.Name, Namespace: haproxyObj.Namespace}, deploy); err != nil {
@@ -137,6 +140,9 @@ func (r *HAProxyCapsuleReconciler) updateStatus(ctx context.Context, haproxyObj 
 
 	haproxyObj.Status.ObservedGeneration = haproxyObj.Generation
 
+	if haproxyObj.Status.Phase == oldStatus.Phase && haproxyObj.Status.ObservedGeneration == oldStatus.ObservedGeneration {
+		return nil
+	}
 	return r.Status().Update(ctx, haproxyObj)
 }
 

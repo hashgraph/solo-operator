@@ -59,7 +59,9 @@ func ComputeHash(chart operatorv1alpha1.HelmChartSpec, values map[string]interfa
 		return "", fmt.Errorf("marshalling values for hash: %w", err)
 	}
 	h := sha256.New()
-	fmt.Fprintf(h, "%s\x00%s\x00%s\x00", chart.Repo, chart.Chart, chart.Version)
+	if _, err = fmt.Fprintf(h, "%s\x00%s\x00%s\x00", chart.Repo, chart.Chart, chart.Version); err != nil {
+		return "", fmt.Errorf("writing hash: %w", err)
+	}
 	h.Write(valuesJSON)
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }

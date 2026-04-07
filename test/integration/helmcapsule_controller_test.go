@@ -383,10 +383,14 @@ var _ = Describe("HelmCapsule Controller", func() {
 			}, timeout, interval).Should(Equal(1))
 
 			By("Bumping the chart version")
-			got := &operatorv1alpha1.HelmCapsule{}
-			Expect(k8sClient.Get(ctx, key, got)).Should(Succeed())
-			got.Spec.Chart.Version = "0.130.0"
-			Expect(k8sClient.Update(ctx, got)).Should(Succeed())
+			Eventually(func() error {
+				got := &operatorv1alpha1.HelmCapsule{}
+				if err := k8sClient.Get(ctx, key, got); err != nil {
+					return err
+				}
+				got.Spec.Chart.Version = "0.130.0"
+				return k8sClient.Update(ctx, got)
+			}, timeout, interval).Should(Succeed())
 
 			By("Waiting for upgrade to be reflected in ReleaseVersion")
 			Eventually(func() int {

@@ -36,7 +36,7 @@ type CORSConfig struct {
 // +kubebuilder:validation:XValidation:rule="self.serviceType != 'Ingress' || has(self.ingressSpec)",message="ingressSpec is required when serviceType is Ingress"
 type EnvoyProxySpec struct {
 	// Image is the Envoy container image.
-	// +kubebuilder:default="envoyproxy/envoy:v1.21.6"
+	// +kubebuilder:default="envoyproxy/envoy-distroless:v1.21.6"
 	// +optional
 	Image string `json:"image,omitempty"`
 

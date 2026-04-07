@@ -4,6 +4,7 @@ package controller
 
 import (
 	"context"
+	"reflect"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -120,6 +121,10 @@ func (r *EnvoyProxyReconciler) handleDeletion(ctx context.Context, envoyObj *ope
 
 // updateStatus updates the EnvoyProxy status
 func (r *EnvoyProxyReconciler) updateStatus(ctx context.Context, envoyObj *operatorv1alpha1.EnvoyProxy) error {
+	// Capture current status before mutation. Conditions is reassigned (not mutated
+	// in-place) below, so a shallow copy is sufficient for change detection.
+	oldStatus := envoyObj.Status
+
 	// Get deployment status
 	deploy := &appsv1.Deployment{}
 	if err := r.Get(ctx, client.ObjectKey{Name: envoyObj.Name, Namespace: envoyObj.Namespace}, deploy); err != nil {
@@ -143,6 +148,9 @@ func (r *EnvoyProxyReconciler) updateStatus(ctx context.Context, envoyObj *opera
 
 	envoyObj.Status.ObservedGeneration = envoyObj.Generation
 
+	if reflect.DeepEqual(oldStatus, envoyObj.Status) {
+		return nil
+	}
 	return r.Status().Update(ctx, envoyObj)
 }
 

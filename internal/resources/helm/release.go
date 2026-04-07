@@ -93,7 +93,7 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 
 	info, err := r.helmClient.InstallOrUpgrade(ctx, releaseName, hc.Namespace, hc.Spec.Chart, values, opts)
 	if err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("helm install/upgrade %s: %w", releaseName, err)
 	}
 
 	logger.Info("Helm release reconciled", "revision", info.Version, "status", info.Status)
@@ -115,7 +115,7 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 func (r *ReleaseSubReconciler) checkReleaseNameConflict(ctx context.Context, hc *operatorv1alpha1.HelmCapsule, releaseName string) error {
 	list := &operatorv1alpha1.HelmCapsuleList{}
 	if err := r.Client.List(ctx, list, client.InNamespace(hc.Namespace)); err != nil {
-		return fmt.Errorf("%w: listing HelmCapsules: %w", ErrReleaseNameConflict, err)
+		return fmt.Errorf("listing HelmCapsules: %w", err)
 	}
 	for _, other := range list.Items {
 		if other.UID == hc.UID || other.DeletionTimestamp != nil {

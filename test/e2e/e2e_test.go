@@ -390,7 +390,7 @@ var _ = Describe("E2E Tests", func() {
 						Namespace: testNamespace,
 					},
 					Spec: operatorv1alpha1.EnvoyProxySpec{
-						Image:     "envoyproxy/envoy:v1.21.6",
+						Image:     "envoyproxy/envoy-distroless:v1.21.6",
 						Replicas:  &replicas,
 						ProxyPort: 8080,
 						AdminPort: 9901,
@@ -404,7 +404,7 @@ var _ = Describe("E2E Tests", func() {
 				created := &operatorv1alpha1.EnvoyProxy{}
 				err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-envoy", Namespace: testNamespace}, created)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(created.Spec.Image).To(Equal("envoyproxy/envoy:v1.21.6"))
+				Expect(created.Spec.Image).To(Equal("envoyproxy/envoy-distroless:v1.21.6"))
 				Expect(*created.Spec.Replicas).To(Equal(int32(2)))
 
 				// Cleanup
@@ -418,7 +418,7 @@ var _ = Describe("E2E Tests", func() {
 						Namespace: testNamespace,
 					},
 					Spec: operatorv1alpha1.EnvoyProxySpec{
-						Image: "envoyproxy/envoy:v1.21.6",
+						Image: "envoyproxy/envoy-distroless:v1.21.6",
 					},
 				}
 
@@ -442,7 +442,7 @@ var _ = Describe("E2E Tests", func() {
 						Namespace: testNamespace,
 					},
 					Spec: operatorv1alpha1.EnvoyProxySpec{
-						Image:           "envoyproxy/envoy:v1.21.6",
+						Image:           "envoyproxy/envoy-distroless:v1.21.6",
 						ProxyPort:       8082,
 						MetricsPort:     9091,
 						UpstreamService: "my-consensus-node",
