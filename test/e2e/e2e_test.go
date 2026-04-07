@@ -427,7 +427,7 @@ var _ = Describe("E2E Tests", func() {
 				created := &operatorv1alpha1.EnvoyProxy{}
 				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: "test-envoy-defaults", Namespace: testNamespace}, created)).To(Succeed())
 
-				Expect(created.Spec.ProxyPort).To(Equal(int32(8080)), "ProxyPort should default to 8080")
+				Expect(created.Spec.ProxyPort).To(Equal(int32(8081)), "ProxyPort should default to 8081")
 				Expect(created.Spec.AdminPort).To(Equal(int32(9901)), "AdminPort should default to 9901")
 				Expect(created.Spec.MetricsPort).To(Equal(int32(9090)), "MetricsPort should default to 9090")
 				Expect(created.Spec.UpstreamPort).To(Equal(int32(50211)), "UpstreamPort should default to 50211")
