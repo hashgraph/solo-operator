@@ -177,8 +177,7 @@ func consensusEndpoints(capsules []operatorv1alpha1.ConsensusCapsule) []string {
 }
 
 // hederaNetworkJSON formats the {"host:port": "accountId"} map expected by the relay chart.
-// Capsules that are missing an address book entry or AccountId are skipped with a warning;
-// this produces a partial network map that the relay chart will accept but with fewer nodes.
+// Capsules missing an address book entry or AccountId are skipped with a warning.
 func hederaNetworkJSON(ctx context.Context, capsules []operatorv1alpha1.ConsensusCapsule) (string, error) {
 	logger := log.FromContext(ctx)
 	network := map[string]string{}

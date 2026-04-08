@@ -142,11 +142,6 @@ spec:
                 - relay-websocket
                 - block-node
                 type: string
-              createNamespace:
-                description: |-
-                  CreateNamespace instructs Helm to create the release namespace if it does not exist.
-                  Helm default: false.
-                type: boolean
               disableHooks:
                 description: |-
                   DisableHooks skips running pre/post Helm hooks during install and upgrade.
@@ -166,7 +161,7 @@ spec:
                 type: integer
               orbitRef:
                 description: |-
-                  OrbitRef is a reference to the Orbit CR in the same namespace.
+                  OrbitRef references the cluster-scoped Orbit CR by name.
                   The Orbit and its ConsensusCapsules are the source of auto-injected values
                   when Component is set. Required for mirror, relay, and block-node components.
                 properties:

@@ -141,9 +141,8 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 	return ctrl.Result{RequeueAfter: releaseCheckInterval}, nil
 }
 
-// checkReleaseNameConflict returns an error if another HelmCapsule in the namespace already owns this release name.
-// This performs a List API call on every reconcile. At the expected scale (single-digit HelmCapsules per namespace)
-// the cost is negligible. If namespaces grow large, replace with a field indexer on spec.releaseName.
+// checkReleaseNameConflict returns an error if another HelmCapsule in the namespace owns this release name.
+// Does a List per reconcile — negligible at expected scale; replace with a releaseName indexer if needed.
 func (r *ReleaseSubReconciler) checkReleaseNameConflict(ctx context.Context, hc *operatorv1alpha1.HelmCapsule, releaseName string) error {
 	list := &operatorv1alpha1.HelmCapsuleList{}
 	if err := r.Client.List(ctx, list, client.InNamespace(hc.Namespace)); err != nil {
@@ -180,12 +179,11 @@ func (r *ReleaseSubReconciler) loadChartCredentials(ctx context.Context, namespa
 
 func releaseOptions(hc *operatorv1alpha1.HelmCapsule) ReleaseOptions {
 	opts := ReleaseOptions{
-		Wait:            hc.Spec.Wait,
-		Atomic:          hc.Spec.Atomic,
-		CleanupOnFail:   hc.Spec.CleanupOnFail,
-		MaxHistory:      hc.Spec.MaxHistory,
-		CreateNamespace: hc.Spec.CreateNamespace,
-		DisableHooks:    hc.Spec.DisableHooks,
+		Wait:          hc.Spec.Wait,
+		Atomic:        hc.Spec.Atomic,
+		CleanupOnFail: hc.Spec.CleanupOnFail,
+		MaxHistory:    hc.Spec.MaxHistory,
+		DisableHooks:  hc.Spec.DisableHooks,
 	}
 	if hc.Spec.Timeout != nil && hc.Spec.Timeout.Duration > 0 {
 		opts.Timeout = hc.Spec.Timeout.Duration

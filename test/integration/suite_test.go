@@ -21,7 +21,6 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/controller"
-	"github.com/hashgraph/solo-operator/internal/resources/helm"
 )
 
 var (
@@ -94,13 +93,6 @@ var _ = BeforeSuite(func() {
 	err = controller.NewNetworkOperationReconciler(
 		k8sManager.GetClient(),
 		k8sManager.GetScheme(),
-	).SetupWithManager(k8sManager)
-	Expect(err).ToNot(HaveOccurred())
-
-	err = controller.NewHelmCapsuleReconciler(
-		k8sManager.GetClient(),
-		k8sManager.GetScheme(),
-		helm.NewMockClient(),
 	).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 

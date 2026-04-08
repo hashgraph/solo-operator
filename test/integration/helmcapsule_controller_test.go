@@ -35,7 +35,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 			}
 		})
 
-		It("Should add a finalizer and reach Running phase", func() {
+		It("Should add a finalizer and reach Succeeded phase", func() {
 			By("Creating a HelmCapsule")
 			hc := &operatorv1alpha1.HelmCapsule{
 				ObjectMeta: metav1.ObjectMeta{Name: hcName, Namespace: hcNS},

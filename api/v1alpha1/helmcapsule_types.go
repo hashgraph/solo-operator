@@ -77,7 +77,7 @@ type HelmCapsuleSpec struct {
 	// +optional
 	Component *HelmComponent `json:"component,omitempty"`
 
-	// OrbitRef is a reference to the Orbit CR in the same namespace.
+	// OrbitRef references the cluster-scoped Orbit CR by name.
 	// The Orbit and its ConsensusCapsules are the source of auto-injected values
 	// when Component is set. Required for mirror, relay, and block-node components.
 	// +optional
@@ -120,11 +120,6 @@ type HelmCapsuleSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	// +optional
 	MaxHistory int `json:"maxHistory,omitempty"`
-
-	// CreateNamespace instructs Helm to create the release namespace if it does not exist.
-	// Helm default: false.
-	// +optional
-	CreateNamespace bool `json:"createNamespace,omitempty"`
 
 	// DisableHooks skips running pre/post Helm hooks during install and upgrade.
 	// Helm default: false.
@@ -232,11 +227,14 @@ type HelmCapsuleStatus struct {
 }
 
 const (
-	HelmCapsuleReasonDeployed            = "Deployed"
-	HelmCapsuleReasonChartFetchFailed    = "ChartFetchFailed"
-	HelmCapsuleReasonHelmFailed          = "HelmFailed"
-	HelmCapsuleReasonValuesBuildFailed   = "ValuesBuildFailed"
-	HelmCapsuleReasonReleaseNameConflict = "ReleaseNameConflict"
+	HelmCapsuleReasonDeployed             = "Deployed"
+	HelmCapsuleReasonChartFetchFailed     = "ChartFetchFailed"
+	HelmCapsuleReasonHelmFailed           = "HelmFailed"
+	HelmCapsuleReasonValuesBuildFailed    = "ValuesBuildFailed"
+	HelmCapsuleReasonReleaseNameConflict  = "ReleaseNameConflict"
+	HelmCapsuleReasonProgressing          = "Progressing"
+	HelmCapsuleReasonReleaseNotReady      = "ReleaseNotReady"
+	HelmCapsuleReasonUnknownReleaseStatus = "UnknownReleaseStatus"
 )
 
 // +kubebuilder:object:root=true

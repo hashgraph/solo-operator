@@ -53,13 +53,12 @@ type ChartCredentials struct {
 
 // ReleaseOptions maps to HelmCapsuleSpec fields. Zero values match Helm defaults.
 type ReleaseOptions struct {
-	Timeout         time.Duration
-	Wait            bool
-	Atomic          bool
-	CleanupOnFail   bool
-	MaxHistory      int
-	CreateNamespace bool
-	DisableHooks    bool
+	Timeout       time.Duration
+	Wait          bool
+	Atomic        bool
+	CleanupOnFail bool
+	MaxHistory    int
+	DisableHooks  bool
 	// Credentials are used to authenticate to a private chart repository.
 	// Nil means no authentication (public repo).
 	Credentials *ChartCredentials
@@ -147,7 +146,6 @@ func (h *helmSDKClient) install(ctx context.Context, releaseName, namespace stri
 	install := action.NewInstall(cfg)
 	install.ReleaseName = releaseName
 	install.Namespace = namespace
-	install.CreateNamespace = opts.CreateNamespace
 	install.Timeout = opts.Timeout
 	install.Wait = opts.Wait
 	install.Atomic = opts.Atomic
@@ -160,11 +158,11 @@ func (h *helmSDKClient) install(ctx context.Context, releaseName, namespace stri
 	}
 	chartPath, err := install.LocateChart(ref, cli.New())
 	if err != nil {
-		return nil, fmt.Errorf("%w: locating chart %s: %w", ErrChartFetch, ref, err)
+		return nil, fmt.Errorf("%w: locating chart %s: %v", ErrChartFetch, ref, err)
 	}
 	c, err := loader.Load(chartPath)
 	if err != nil {
-		return nil, fmt.Errorf("%w: loading chart %s: %w", ErrChartFetch, chartPath, err)
+		return nil, fmt.Errorf("%w: loading chart %s: %v", ErrChartFetch, chartPath, err)
 	}
 	rel, err := install.RunWithContext(ctx, c, values)
 	if err != nil {
@@ -199,11 +197,11 @@ func (h *helmSDKClient) upgrade(ctx context.Context, releaseName, namespace stri
 	}
 	chartPath, err := upgrade.LocateChart(ref, cli.New())
 	if err != nil {
-		return nil, fmt.Errorf("%w: locating chart %s: %w", ErrChartFetch, ref, err)
+		return nil, fmt.Errorf("%w: locating chart %s: %v", ErrChartFetch, ref, err)
 	}
 	c, err := loader.Load(chartPath)
 	if err != nil {
-		return nil, fmt.Errorf("%w: loading chart %s: %w", ErrChartFetch, chartPath, err)
+		return nil, fmt.Errorf("%w: loading chart %s: %v", ErrChartFetch, chartPath, err)
 	}
 	rel, err := upgrade.RunWithContext(ctx, releaseName, c, values)
 	if err != nil {
@@ -212,6 +210,7 @@ func (h *helmSDKClient) upgrade(ctx context.Context, releaseName, namespace stri
 	return releaseInfoFrom(rel), nil
 }
 
+// Uninstall accepts ctx for interface consistency; Helm v3's uninstall action does not support context cancellation.
 func (h *helmSDKClient) Uninstall(_ context.Context, releaseName, namespace string, opts UninstallOptions) error {
 	cfg, err := h.actionConfig(namespace)
 	if err != nil {
