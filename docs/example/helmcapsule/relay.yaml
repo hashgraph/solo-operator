@@ -8,6 +8,12 @@
 #   config.MIRROR_NODE_URL  — "http://mirror.<namespace>.svc.cluster.local"
 #   config.CHAIN_ID         — from Orbit spec.consensus.networkSettings["ledger.id"]
 #
+# Required user-supplied values (relay will crash without these):
+#   config.OPERATOR_ID_MAIN  — operator account ID
+#   config.OPERATOR_KEY_MAIN — operator private key (hex DER)
+#
+# These are provided via the relay-operator-creds Secret defined in common/secrets.yaml.
+#
 apiVersion: operator.solo.hedera.com/v1alpha1
 kind: HelmCapsule
 metadata:
@@ -24,7 +30,11 @@ spec:
   orbitRef:
     name: solo-orbit
 
-  # Inline overrides applied on top of auto-injected values.
+  valuesFrom:
+    - kind: Secret
+      name: relay-operator-creds
+
+  # Inline overrides applied on top of auto-injected and valuesFrom values.
   values:
     replicaCount: 1
     config:
