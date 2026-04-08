@@ -12,6 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
@@ -20,8 +21,14 @@ import (
 
 // newTestReleaseSubReconciler builds a ReleaseSubReconciler backed by a MockClient
 // and an in-memory fake k8s client (no Helm SDK required).
-func newTestReleaseSubReconciler(scheme *runtime.Scheme, mockClient *MockClient) *ReleaseSubReconciler {
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+// Pass any HelmCapsule objects that will be reconciled so the fake client can serve
+// Get and Status().Update() calls inside the reconciler.
+func newTestReleaseSubReconciler(scheme *runtime.Scheme, mockClient *MockClient, objs ...client.Object) *ReleaseSubReconciler {
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(objs...).
+		WithStatusSubresource(&operatorv1alpha1.HelmCapsule{}).
+		Build()
 	return &ReleaseSubReconciler{
 		BaseSubReconciler: subreconciler.NewBaseSubReconciler[*operatorv1alpha1.HelmCapsule](c, scheme, "helm-release"),
 		helmClient:        mockClient,
@@ -47,9 +54,8 @@ func newHelmCapsule(name, namespace string) *operatorv1alpha1.HelmCapsule {
 func TestReleaseSubReconciler_installsNewRelease(t *testing.T) {
 	scheme := newTestScheme()
 	mock := NewMockClient()
-	r := newTestReleaseSubReconciler(scheme, mock)
-
 	hc := newHelmCapsule("mirror", "test-ns")
+	r := newTestReleaseSubReconciler(scheme, mock, hc)
 
 	result, err := r.Reconcile(context.Background(), hc)
 	if err != nil {
@@ -83,9 +89,8 @@ func TestReleaseSubReconciler_installsNewRelease(t *testing.T) {
 func TestReleaseSubReconciler_noOpWhenHashUnchanged(t *testing.T) {
 	scheme := newTestScheme()
 	mock := NewMockClient()
-	r := newTestReleaseSubReconciler(scheme, mock)
-
 	hc := newHelmCapsule("mirror", "test-ns")
+	r := newTestReleaseSubReconciler(scheme, mock, hc)
 
 	// First reconcile — installs and records hash.
 	if _, err := r.Reconcile(context.Background(), hc); err != nil {
@@ -108,9 +113,8 @@ func TestReleaseSubReconciler_noOpWhenHashUnchanged(t *testing.T) {
 func TestReleaseSubReconciler_upgradesOnChartVersionChange(t *testing.T) {
 	scheme := newTestScheme()
 	mock := NewMockClient()
-	r := newTestReleaseSubReconciler(scheme, mock)
-
 	hc := newHelmCapsule("mirror", "test-ns")
+	r := newTestReleaseSubReconciler(scheme, mock, hc)
 
 	if _, err := r.Reconcile(context.Background(), hc); err != nil {
 		t.Fatalf("first reconcile error: %v", err)
@@ -142,9 +146,9 @@ func TestReleaseSubReconciler_customTimeout(t *testing.T) {
 		return &ReleaseInfo{Name: releaseName, Namespace: namespace, Version: 1, Status: "deployed", ChartString: chart.Chart + "-" + chart.Version}, nil
 	}
 
-	r := newTestReleaseSubReconciler(scheme, mock)
 	hc := newHelmCapsule("mirror", "test-ns")
 	hc.Spec.Timeout = &metav1.Duration{Duration: 5 * time.Minute}
+	r := newTestReleaseSubReconciler(scheme, mock, hc)
 
 	if _, err := r.Reconcile(context.Background(), hc); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -164,8 +168,8 @@ func TestReleaseSubReconciler_DefaultTimeout(t *testing.T) {
 		return &ReleaseInfo{Name: releaseName, Namespace: namespace, Version: 1, Status: "deployed", ChartString: chart.Chart + "-" + chart.Version}, nil
 	}
 
-	r := newTestReleaseSubReconciler(scheme, mock)
 	hc := newHelmCapsule("mirror", "test-ns") // no Timeout set
+	r := newTestReleaseSubReconciler(scheme, mock, hc)
 
 	if _, err := r.Reconcile(context.Background(), hc); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -183,17 +187,16 @@ func TestReleaseSubReconciler_upgradesOnValuesChange(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "vals", Namespace: "test-ns"},
 		Data:       map[string]string{"values.yaml": `{"replicaCount": 1}`},
 	}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm).Build()
+	hc := newHelmCapsule("mirror", "test-ns")
+	hc.Spec.ValuesFrom = []operatorv1alpha1.HelmValuesReference{
+		{Kind: "ConfigMap", Name: "vals"},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm, hc).WithStatusSubresource(&operatorv1alpha1.HelmCapsule{}).Build()
 
 	mock := NewMockClient()
 	r := &ReleaseSubReconciler{
 		BaseSubReconciler: subreconciler.NewBaseSubReconciler[*operatorv1alpha1.HelmCapsule](c, scheme, "helm-release"),
 		helmClient:        mock,
-	}
-
-	hc := newHelmCapsule("mirror", "test-ns")
-	hc.Spec.ValuesFrom = []operatorv1alpha1.HelmValuesReference{
-		{Kind: "ConfigMap", Name: "vals"},
 	}
 
 	if _, err := r.Reconcile(context.Background(), hc); err != nil {
@@ -227,8 +230,8 @@ func TestReleaseSubReconciler_propagatesHelmError(t *testing.T) {
 		return nil, errors.New("simulated helm failure")
 	}
 
-	r := newTestReleaseSubReconciler(scheme, mock)
 	hc := newHelmCapsule("mirror", "test-ns")
+	r := newTestReleaseSubReconciler(scheme, mock, hc)
 
 	_, err := r.Reconcile(context.Background(), hc)
 	if err == nil {
@@ -258,7 +261,7 @@ func TestReleaseSubReconciler_conflictWhenSameReleaseName(t *testing.T) {
 		},
 	}
 
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(hc1, hc2).Build()
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(hc1, hc2).WithStatusSubresource(&operatorv1alpha1.HelmCapsule{}).Build()
 	mock := NewMockClient()
 	r := &ReleaseSubReconciler{
 		BaseSubReconciler: subreconciler.NewBaseSubReconciler[*operatorv1alpha1.HelmCapsule](c, scheme, "helm-release"),
@@ -296,7 +299,7 @@ func TestReleaseSubReconciler_conflictWhenNameDefaultsToObjectName(t *testing.T)
 		},
 	}
 
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(hc1, hc2).Build()
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(hc1, hc2).WithStatusSubresource(&operatorv1alpha1.HelmCapsule{}).Build()
 	mock := NewMockClient()
 	r := &ReleaseSubReconciler{
 		BaseSubReconciler: subreconciler.NewBaseSubReconciler[*operatorv1alpha1.HelmCapsule](c, scheme, "helm-release"),
@@ -333,7 +336,7 @@ func TestReleaseSubReconciler_noConflictAcrossNamespaces(t *testing.T) {
 		},
 	}
 
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(hc1, hc2).Build()
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(hc1, hc2).WithStatusSubresource(&operatorv1alpha1.HelmCapsule{}).Build()
 	mock := NewMockClient()
 
 	for _, hc := range []*operatorv1alpha1.HelmCapsule{hc1, hc2} {
@@ -370,7 +373,7 @@ func TestReleaseSubReconciler_terminatingCapsuleDoesNotBlockPeer(t *testing.T) {
 		},
 	}
 
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(hc1, hc2).Build()
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(hc1, hc2).WithStatusSubresource(&operatorv1alpha1.HelmCapsule{}).Build()
 	mock := NewMockClient()
 	r := &ReleaseSubReconciler{
 		BaseSubReconciler: subreconciler.NewBaseSubReconciler[*operatorv1alpha1.HelmCapsule](c, scheme, "helm-release"),
@@ -415,9 +418,9 @@ func TestReleaseSubReconciler_usesCustomReleaseName(t *testing.T) {
 		return &ReleaseInfo{Name: releaseName, Namespace: namespace, Version: 1, Status: "deployed", ChartString: chart.Chart + "-" + chart.Version}, nil
 	}
 
-	r := newTestReleaseSubReconciler(scheme, mock)
 	hc := newHelmCapsule("my-capsule", "test-ns")
 	hc.Spec.ReleaseName = "custom-release"
+	r := newTestReleaseSubReconciler(scheme, mock, hc)
 
 	if _, err := r.Reconcile(context.Background(), hc); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -437,8 +440,8 @@ func TestReleaseSubReconciler_defaultsReleaseNameToObjectName(t *testing.T) {
 		return &ReleaseInfo{Name: releaseName, Namespace: namespace, Version: 1, Status: "deployed", ChartString: chart.Chart + "-" + chart.Version}, nil
 	}
 
-	r := newTestReleaseSubReconciler(scheme, mock)
 	hc := newHelmCapsule("my-capsule", "test-ns") // no ReleaseName set
+	r := newTestReleaseSubReconciler(scheme, mock, hc)
 
 	if _, err := r.Reconcile(context.Background(), hc); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -453,9 +456,8 @@ func TestReleaseSubReconciler_defaultsReleaseNameToObjectName(t *testing.T) {
 func TestReleaseSubReconciler_setsReleaseStatusAfterInstall(t *testing.T) {
 	scheme := newTestScheme()
 	mock := NewMockClient()
-	r := newTestReleaseSubReconciler(scheme, mock)
-
 	hc := newHelmCapsule("mirror", "test-ns")
+	r := newTestReleaseSubReconciler(scheme, mock, hc)
 
 	if _, err := r.Reconcile(context.Background(), hc); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -470,9 +472,8 @@ func TestReleaseSubReconciler_setsReleaseStatusAfterInstall(t *testing.T) {
 func TestReleaseSubReconciler_idlePathRequeuesForPeriodicCheck(t *testing.T) {
 	scheme := newTestScheme()
 	mock := NewMockClient()
-	r := newTestReleaseSubReconciler(scheme, mock)
-
 	hc := newHelmCapsule("mirror", "test-ns")
+	r := newTestReleaseSubReconciler(scheme, mock, hc)
 
 	// First reconcile installs and records hash.
 	if _, err := r.Reconcile(context.Background(), hc); err != nil {
@@ -498,8 +499,8 @@ func TestReleaseSubReconciler_nonDeployedStatusDoesNotSaveHash(t *testing.T) {
 		return &ReleaseInfo{Name: releaseName, Namespace: namespace, Version: 1, Status: "pending-install", ChartString: chart.Chart + "-" + chart.Version}, nil
 	}
 
-	r := newTestReleaseSubReconciler(scheme, mock)
 	hc := newHelmCapsule("mirror", "test-ns")
+	r := newTestReleaseSubReconciler(scheme, mock, hc)
 
 	if _, err := r.Reconcile(context.Background(), hc); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -516,8 +517,8 @@ func TestReleaseSubReconciler_nonDeployedStatusRequeues(t *testing.T) {
 		return &ReleaseInfo{Name: releaseName, Namespace: namespace, Version: 1, Status: "pending-install", ChartString: chart.Chart + "-" + chart.Version}, nil
 	}
 
-	r := newTestReleaseSubReconciler(scheme, mock)
 	hc := newHelmCapsule("mirror", "test-ns")
+	r := newTestReleaseSubReconciler(scheme, mock, hc)
 
 	result, err := r.Reconcile(context.Background(), hc)
 	if err != nil {
@@ -531,10 +532,10 @@ func TestReleaseSubReconciler_nonDeployedStatusRequeues(t *testing.T) {
 func TestReleaseSubReconciler_retriesWhenHashMatchesButNotDeployed(t *testing.T) {
 	scheme := newTestScheme()
 	mock := NewMockClient()
-	r := newTestReleaseSubReconciler(scheme, mock)
+	hc := newHelmCapsule("mirror", "test-ns")
+	r := newTestReleaseSubReconciler(scheme, mock, hc)
 
 	// First reconcile: install and save hash.
-	hc := newHelmCapsule("mirror", "test-ns")
 	if _, err := r.Reconcile(context.Background(), hc); err != nil {
 		t.Fatalf("first reconcile error: %v", err)
 	}
@@ -564,7 +565,9 @@ func TestReleaseSubReconciler_loadsCredentialsFromSecret(t *testing.T) {
 			"password": []byte("s3cr3t"),
 		},
 	}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(secret).Build()
+	hc := newHelmCapsule("mirror", "test-ns")
+	hc.Spec.Chart.CredentialsRef = &corev1.LocalObjectReference{Name: "chart-creds"}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(secret, hc).WithStatusSubresource(&operatorv1alpha1.HelmCapsule{}).Build()
 
 	var capturedCreds *ChartCredentials
 	mock := NewMockClient()
@@ -577,9 +580,6 @@ func TestReleaseSubReconciler_loadsCredentialsFromSecret(t *testing.T) {
 		BaseSubReconciler: subreconciler.NewBaseSubReconciler[*operatorv1alpha1.HelmCapsule](c, scheme, "helm-release"),
 		helmClient:        mock,
 	}
-
-	hc := newHelmCapsule("mirror", "test-ns")
-	hc.Spec.Chart.CredentialsRef = &corev1.LocalObjectReference{Name: "chart-creds"}
 
 	if _, err := r.Reconcile(context.Background(), hc); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -595,10 +595,9 @@ func TestReleaseSubReconciler_loadsCredentialsFromSecret(t *testing.T) {
 func TestReleaseSubReconciler_missingCredentialsSecretErrors(t *testing.T) {
 	scheme := newTestScheme()
 	mock := NewMockClient()
-	r := newTestReleaseSubReconciler(scheme, mock)
-
 	hc := newHelmCapsule("mirror", "test-ns")
 	hc.Spec.Chart.CredentialsRef = &corev1.LocalObjectReference{Name: "nonexistent"}
+	r := newTestReleaseSubReconciler(scheme, mock, hc)
 
 	_, err := r.Reconcile(context.Background(), hc)
 	if err == nil {
@@ -613,10 +612,10 @@ func TestReleaseSubReconciler_missingCredentialsSecretErrors(t *testing.T) {
 func TestReleaseSubReconciler_getReleasesErrorIsReturned(t *testing.T) {
 	scheme := newTestScheme()
 	mock := NewMockClient()
-	r := newTestReleaseSubReconciler(scheme, mock)
+	hc := newHelmCapsule("mirror", "test-ns")
+	r := newTestReleaseSubReconciler(scheme, mock, hc)
 
 	// First reconcile: install succeeds and hash is recorded.
-	hc := newHelmCapsule("mirror", "test-ns")
 	if _, err := r.Reconcile(context.Background(), hc); err != nil {
 		t.Fatalf("first reconcile error: %v", err)
 	}
@@ -648,10 +647,12 @@ func TestReleaseSubReconciler_helmErrorDoesNotSaveHash(t *testing.T) {
 		return nil, errors.New("helm install failed: timeout waiting for pods")
 	}
 
-	r := newTestReleaseSubReconciler(scheme, mock)
 	hc := newHelmCapsule("mirror", "test-ns")
+	r := newTestReleaseSubReconciler(scheme, mock, hc)
 
-	_, _ = r.Reconcile(context.Background(), hc) // error expected; ignore it
+	if _, err := r.Reconcile(context.Background(), hc); err == nil {
+		t.Fatal("expected error when InstallOrUpgrade fails")
+	}
 
 	if hc.Status.ValuesHash != "" {
 		t.Error("ValuesHash must not be saved when InstallOrUpgrade returns an error")
@@ -672,8 +673,8 @@ func TestReleaseSubReconciler_retriesAfterHelmError(t *testing.T) {
 		return &ReleaseInfo{Name: releaseName, Namespace: namespace, Version: 1, Status: "deployed", ChartString: chart.Chart + "-" + chart.Version}, nil
 	}
 
-	r := newTestReleaseSubReconciler(scheme, mock)
 	hc := newHelmCapsule("mirror", "test-ns")
+	r := newTestReleaseSubReconciler(scheme, mock, hc)
 
 	// First reconcile fails.
 	if _, err := r.Reconcile(context.Background(), hc); err == nil {

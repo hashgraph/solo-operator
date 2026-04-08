@@ -270,45 +270,6 @@ func TestReconcile_setsReadyFalseOnHelmError(t *testing.T) {
 
 // ─── Phase lifecycle ──────────────────────────────────────────────────────────
 
-func TestReconcile_setsPhaseRunningBeforeHelmWork(t *testing.T) {
-	scheme := newControllerScheme()
-	hc := newHC("mirror", "test-ns")
-
-	c := fake.NewClientBuilder().WithScheme(scheme).
-		WithObjects(hc).
-		WithStatusSubresource(hc).
-		Build()
-
-	mock := helm.NewMockClient()
-
-	// Capture the phase stored in the fake API server at the moment InstallOrUpgrade is called.
-	var phaseAtInstall operatorv1alpha1.Phase
-	mock.InstallOrUpgradeFunc = func(_ context.Context, releaseName, namespace string, chart operatorv1alpha1.HelmChartSpec, _ map[string]interface{}, _ helm.ReleaseOptions) (*helm.ReleaseInfo, error) {
-		obj := &operatorv1alpha1.HelmCapsule{}
-		_ = c.Get(context.Background(), types.NamespacedName{Name: "mirror", Namespace: "test-ns"}, obj)
-		phaseAtInstall = obj.Status.Phase
-		return &helm.ReleaseInfo{Name: releaseName, Namespace: namespace, Version: 1, Status: "deployed", ChartString: chart.Chart + "-" + chart.Version}, nil
-	}
-
-	r := NewHelmCapsuleReconciler(c, scheme, mock)
-
-	// First reconcile: adds finalizer.
-	_, _ = r.Reconcile(context.Background(), reconcile.Request{
-		NamespacedName: types.NamespacedName{Name: "mirror", Namespace: "test-ns"},
-	})
-	// Second reconcile: actual install.
-	_, err := r.Reconcile(context.Background(), reconcile.Request{
-		NamespacedName: types.NamespacedName{Name: "mirror", Namespace: "test-ns"},
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if phaseAtInstall != operatorv1alpha1.PhaseRunning {
-		t.Errorf("expected Phase=Running at the time of InstallOrUpgrade, got %s", phaseAtInstall)
-	}
-}
-
 func TestUpdateStatus_setsPhaseRunningForPendingRelease(t *testing.T) {
 	scheme := newControllerScheme()
 	hc := newHC("mirror", "test-ns")

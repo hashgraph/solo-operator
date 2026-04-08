@@ -89,22 +89,12 @@ func (r *HelmCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	// Transition to Running while reconciling so observers see the phase
-	// during long Helm install/upgrade operations.
-	if hc.Status.Phase != operatorv1alpha1.PhaseRunning {
-		hc.Status.Phase = operatorv1alpha1.PhaseRunning
-		if err := r.Status().Update(ctx, hc); err != nil {
-			return ctrl.Result{}, err
-		}
-	}
-
 	result, err := r.subreconciler.Reconcile(ctx, hc)
 	if err != nil {
 		r.recordFailure(ctx, hc, err)
 		return result, err
 	}
 
-	// Always update status — even on requeue — so Phase transitions correctly.
 	return result, r.updateStatus(ctx, hc)
 }
 

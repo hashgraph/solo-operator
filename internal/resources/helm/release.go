@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -89,6 +90,23 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 		opts.Credentials = creds
 	}
 
+	// Mark Running before the helm call — it can block for minutes.
+	// Retry on conflict: the informer cache may serve a stale resourceVersion.
+	if hc.Status.Phase != operatorv1alpha1.PhaseRunning {
+		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			if err := r.Client.Get(ctx, types.NamespacedName{Name: hc.Name, Namespace: hc.Namespace}, hc); err != nil {
+				return err
+			}
+			if hc.Status.Phase == operatorv1alpha1.PhaseRunning {
+				return nil
+			}
+			hc.Status.Phase = operatorv1alpha1.PhaseRunning
+			return r.Client.Status().Update(ctx, hc)
+		}); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
 	logger.Info("Reconciling Helm release", "timeout", opts.Timeout)
 
 	info, err := r.helmClient.InstallOrUpgrade(ctx, releaseName, hc.Namespace, hc.Spec.Chart, values, opts)
@@ -98,16 +116,28 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 
 	logger.Info("Helm release reconciled", "revision", info.Version, "status", info.Status)
 
-	hc.Status.ReleaseVersion = info.Version
-	hc.Status.InstalledChart = info.ChartString
-	hc.Status.ReleaseStatus = info.Status
-
-	if info.Status == "deployed" {
-		hc.Status.ValuesHash = hash // only save hash once deployed so failures are retried
-		return ctrl.Result{RequeueAfter: releaseCheckInterval}, nil
+	// Persist the Helm status atomically with retry so that ValuesHash is
+	// always saved even when a concurrent spec update races with us.
+	// Without this, a conflict in the caller's updateStatus would leave
+	// ValuesHash unpersisted, causing a spurious re-upgrade on the next reconcile.
+	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		if err := r.Client.Get(ctx, types.NamespacedName{Name: hc.Name, Namespace: hc.Namespace}, hc); err != nil {
+			return err
+		}
+		hc.Status.ReleaseVersion = info.Version
+		hc.Status.InstalledChart = info.ChartString
+		hc.Status.ReleaseStatus = info.Status
+		if info.Status == "deployed" {
+			hc.Status.ValuesHash = hash // only save hash once deployed so failures are retried
+		}
+		return r.Client.Status().Update(ctx, hc)
+	}); err != nil {
+		return ctrl.Result{}, err
 	}
 
-	logger.Info("Helm release not yet deployed, requeueing", "helmStatus", info.Status)
+	if info.Status != "deployed" {
+		logger.Info("Helm release not yet deployed, requeueing", "helmStatus", info.Status)
+	}
 	return ctrl.Result{RequeueAfter: releaseCheckInterval}, nil
 }
 
