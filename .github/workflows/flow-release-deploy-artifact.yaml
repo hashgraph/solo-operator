@@ -16,7 +16,7 @@ defaults:
     shell: bash
 
 env:
-  GO_VERSION: "1.25"
+  GO_VERSION: "1.26.2"
   GH_OCI_REGISTRY: ghcr.io
   GH_OCI_GROUP: hashgraph/solo-operator
   GH_HELM_GROUP: hashgraph/solo-operator

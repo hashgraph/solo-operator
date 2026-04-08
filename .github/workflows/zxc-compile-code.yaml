@@ -44,7 +44,7 @@ permissions:
   statuses: write
 
 env:
-  GO_VERSION: "1.25"
+  GO_VERSION: "1.26.2"
   KIND_NODE_IMAGE: kindest/node:v1.31.4@sha256:2cb39f7295fe7eafee0842b1052a599a4fb0f8bcf3f83d96c7f4864c357c6c30
 
 jobs:
