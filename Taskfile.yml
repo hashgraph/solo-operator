@@ -210,15 +210,22 @@ tasks:
     desc: Sync CRD manifests from config/crd/bases into the crds Helm subchart templates
     cmds:
       - |
+        set -eu
         HEADER="charts/solo-operator/charts/crds/crd-header.tpl"
         mkdir -p "charts/solo-operator/charts/crds/templates"
+        found_crds=false
         for src in config/crd/bases/*.yaml; do
+          [ -e "${src}" ] || continue
+          found_crds=true
           dest="charts/solo-operator/charts/crds/templates/$(basename "${src}")"
           crd_name="$(grep -m1 "^  name:" "${src}" | sed 's/^  name: //' | tr -d '[:space:]')"
           spec_line="$(grep -n "^spec:" "${src}" | head -1 | cut -d: -f1)"
+          [ -n "${crd_name}" ] || { echo "failed to determine CRD name from ${src}" >&2; exit 1; }
+          [ -n "${spec_line}" ] || { echo "failed to determine spec line from ${src}" >&2; exit 1; }
           { cat "${HEADER}"; echo "  name: ${crd_name}"; tail -n +"${spec_line}" "${src}"; echo "{{`{{- end }}`}}"; } > "${dest}"
           echo "  synced: $(basename "${src}")"
         done
+        [ "${found_crds}" = true ] || { echo "no CRD manifests found in config/crd/bases" >&2; exit 1; }
 
   tools:
     desc: Install required tools
