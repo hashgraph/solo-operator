@@ -176,7 +176,7 @@ func (r *HelmCapsuleReconciler) updateStatus(ctx context.Context, hc *operatorv1
 				Message:            fmt.Sprintf("Helm release status: %s", hc.Status.ReleaseStatus),
 			}
 		default:
-			hc.Status.Phase = operatorv1alpha1.PhaseSucceeded
+			hc.Status.Phase = operatorv1alpha1.PhaseFailed
 			readyCondition = metav1.Condition{
 				Type:               conditionReady,
 				Status:             metav1.ConditionUnknown,

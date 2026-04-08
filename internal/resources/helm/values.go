@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -83,19 +84,26 @@ func injectComponentValues(ctx context.Context, c client.Client, namespace strin
 		ledgerID = orbit.Spec.Consensus.NetworkSettings["ledger.id"]
 	}
 
-	capsules, err := listConsensusCapsules(ctx, c, namespace, spec.OrbitRef.Name)
-	if err != nil {
-		return nil, err
-	}
-
 	switch *spec.Component {
 	case operatorv1alpha1.HelmComponentMirror:
+		capsules, err := listConsensusCapsules(ctx, c, namespace, spec.OrbitRef.Name)
+		if err != nil {
+			return nil, err
+		}
 		return mirrorValues(capsules, orbit), nil
 	case operatorv1alpha1.HelmComponentRelay, operatorv1alpha1.HelmComponentRelayWebSocket:
+		capsules, err := listConsensusCapsules(ctx, c, namespace, spec.OrbitRef.Name)
+		if err != nil {
+			return nil, err
+		}
 		return relayValues(ctx, capsules, namespace, ledgerID)
 	case operatorv1alpha1.HelmComponentExplorer:
 		return explorerValues(orbit, ledgerID)
 	case operatorv1alpha1.HelmComponentBlockNode:
+		capsules, err := listConsensusCapsules(ctx, c, namespace, spec.OrbitRef.Name)
+		if err != nil {
+			return nil, err
+		}
 		return blockNodeValues(capsules), nil
 	default:
 		return map[string]interface{}{}, nil
@@ -215,6 +223,9 @@ func listConsensusCapsules(ctx context.Context, c client.Client, namespace, orbi
 			matched = append(matched, cc)
 		}
 	}
+	sort.Slice(matched, func(i, j int) bool {
+		return matched[i].Spec.NodeId < matched[j].Spec.NodeId
+	})
 	return matched, nil
 }
 
