@@ -1,0 +1,9 @@
+apiVersion: v2
+name: crds
+description: CRDs for the solo-operator Helm chart
+type: application
+version: 0.0.0
+appVersion: "0.0.0"
+home: https://github.com/hashgraph/solo-operator
+sources:
+  - https://github.com/hashgraph/solo-operator

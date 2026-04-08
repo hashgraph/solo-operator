@@ -146,6 +146,10 @@ jobs:
           provenance: false
           tags: localhost:5000/solo-operator:0.0.0-${{ github.sha }}
 
+      - name: Sync CRD Templates into Subchart
+        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
+        run: task helm:sync-crds
+
       - name: Deploy to KinD
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
         env:

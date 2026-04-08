@@ -200,6 +200,20 @@ tasks:
       - rm -rf bin/
       - rm -f {{.COVERAGE_FILE}} {{.COVERAGE_HTML}}
 
+  helm:sync-crds:
+    desc: Sync CRD manifests from config/crd/bases into the crds Helm subchart templates
+    cmds:
+      - |
+        HEADER="charts/solo-operator/charts/crds/crd-header.tpl"
+        mkdir -p "charts/solo-operator/charts/crds/templates"
+        for src in config/crd/bases/*.yaml; do
+          dest="charts/solo-operator/charts/crds/templates/$(basename "${src}")"
+          crd_name="$(grep -m1 "^  name:" "${src}" | sed 's/^  name: //' | tr -d '[:space:]')"
+          spec_line="$(grep -n "^spec:" "${src}" | head -1 | cut -d: -f1)"
+          { cat "${HEADER}"; echo "  name: ${crd_name}"; tail -n +"${spec_line}" "${src}"; echo "{{- end }}"; } > "${dest}"
+          echo "  synced: $(basename "${src}")"
+        done
+
   tools:
     desc: Install required tools
     cmds:
