@@ -281,7 +281,11 @@ func TestUpdateStatus_setsPhaseRunningForPendingRelease(t *testing.T) {
 
 	r := &HelmCapsuleReconciler{Client: c, Scheme: scheme}
 
+	// Persist ReleaseStatus so the re-fetch inside updateStatus sees it.
 	hc.Status.ReleaseStatus = "pending-install"
+	if err := c.Status().Update(context.Background(), hc); err != nil {
+		t.Fatalf("seeding status: %v", err)
+	}
 	if err := r.updateStatus(context.Background(), hc); err != nil {
 		t.Fatalf("updateStatus error: %v", err)
 	}
@@ -305,7 +309,11 @@ func TestUpdateStatus_setsPhaseSucceededForDeployedRelease(t *testing.T) {
 
 	r := &HelmCapsuleReconciler{Client: c, Scheme: scheme}
 
+	// Persist ReleaseStatus so the re-fetch inside updateStatus sees it.
 	hc.Status.ReleaseStatus = "deployed"
+	if err := c.Status().Update(context.Background(), hc); err != nil {
+		t.Fatalf("seeding status: %v", err)
+	}
 	if err := r.updateStatus(context.Background(), hc); err != nil {
 		t.Fatalf("updateStatus error: %v", err)
 	}
@@ -489,7 +497,7 @@ func TestDeletion_skipUninstallAnnotationBypassesHelm(t *testing.T) {
 	now := metav1.Now()
 	hc.DeletionTimestamp = &now
 	hc.Finalizers = []string{HelmCapsuleFinalizer}
-	hc.Annotations = map[string]string{HelmCapsuleFinalizer: "ignored", SkipUninstallAnnotation: "true"}
+	hc.Annotations = map[string]string{SkipUninstallAnnotation: "true"}
 
 	c := fake.NewClientBuilder().WithScheme(scheme).
 		WithObjects(hc).

@@ -16,7 +16,7 @@ apiVersion: operator.solo.hedera.com/v1alpha1
 kind: HelmCapsule
 metadata:
   name: block-node
-  namespace: solo-phhzdf7vdapjsyxs-1
+  namespace: solo-orbit
 spec:
   chart:
     repo: oci://ghcr.io/hiero-ledger/charts
@@ -26,7 +26,7 @@ spec:
   component: block-node
 
   orbitRef:
-    name: phhzdf7vdapjsyxs-1
+    name: solo-orbit
 
   # Timeout for install/upgrade. Block-node may take longer due to StatefulSet startup.
   timeout: 15m

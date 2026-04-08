@@ -58,6 +58,7 @@ const (
 )
 
 // HelmCapsuleSpec defines the desired state of a HelmCapsule.
+// +kubebuilder:validation:XValidation:rule="!has(self.component) || self.component == 'explorer' || has(self.orbitRef)",message="orbitRef is required when component is mirror, relay, relay-websocket, or block-node"
 type HelmCapsuleSpec struct {
 	// Chart defines the Helm chart source to install.
 	Chart HelmChartSpec `json:"chart"`
@@ -140,7 +141,11 @@ type HelmCapsuleSpec struct {
 // HelmChartSpec identifies the Helm chart to install.
 type HelmChartSpec struct {
 	// Repo is the chart repository URL.
-	// Use the oci:// scheme for OCI registries, https:// for classic HTTP repos.
+	// Use the oci:// scheme for OCI registries (recommended).
+	// For https:// repos the operator constructs a direct .tgz URL in the form
+	// "<repo>/<chart>-<version>.tgz" — this works for repos that serve tarballs
+	// at a predictable path but does NOT support index-based Helm repos
+	// (those require `helm repo add` which is not performed by the operator).
 	// Example: "oci://ghcr.io/hashgraph/solo-charts"
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:Pattern=`^(oci|https)://`

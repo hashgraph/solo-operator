@@ -133,35 +133,45 @@ func (r *HelmCapsuleReconciler) handleDeletion(ctx context.Context, hc *operator
 }
 
 func (r *HelmCapsuleReconciler) updateStatus(ctx context.Context, hc *operatorv1alpha1.HelmCapsule) error {
-	// Capture current status before mutation. setCondition mutates Conditions in-place,
-	// so copy the slice to get an independent snapshot for change detection.
-	oldPhase := hc.Status.Phase
-	oldGen := hc.Status.ObservedGeneration
-	oldConds := make([]operatorv1alpha1.Condition, len(hc.Status.Conditions))
-	copy(oldConds, hc.Status.Conditions)
+	// Wrap with RetryOnConflict so that a concurrent spec update between the
+	// subreconciler's Status().Update and this call does not silently drop the
+	// phase/condition update (a conflict error from Status().Update is otherwise
+	// swallowed). Each retry re-fetches to pick up the latest ResourceVersion.
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		if err := r.Get(ctx, types.NamespacedName{Name: hc.Name, Namespace: hc.Namespace}, hc); err != nil {
+			return err
+		}
 
-	// Reflect the actual Helm release state in Phase.
-	// pending-* statuses mean the release is in-flight; everything else (or no
-	// prior release) is treated as the operator having done its job successfully.
-	switch hc.Status.ReleaseStatus {
-	case "pending-install", "pending-upgrade", "pending-rollback":
-		hc.Status.Phase = operatorv1alpha1.PhaseRunning
-	default:
-		hc.Status.Phase = operatorv1alpha1.PhaseSucceeded
-	}
-	hc.Status.ObservedGeneration = hc.Generation
-	setCondition(&hc.Status.Conditions, metav1.Condition{
-		Type:               conditionReady,
-		Status:             metav1.ConditionTrue,
-		ObservedGeneration: hc.Generation,
-		Reason:             operatorv1alpha1.HelmCapsuleReasonDeployed,
-		Message:            "Helm release deployed",
+		// Capture current status before mutation. setCondition mutates Conditions in-place,
+		// so copy the slice to get an independent snapshot for change detection.
+		oldPhase := hc.Status.Phase
+		oldGen := hc.Status.ObservedGeneration
+		oldConds := make([]operatorv1alpha1.Condition, len(hc.Status.Conditions))
+		copy(oldConds, hc.Status.Conditions)
+
+		// Reflect the actual Helm release state in Phase.
+		// pending-* statuses mean the release is in-flight; everything else (or no
+		// prior release) is treated as the operator having done its job successfully.
+		switch hc.Status.ReleaseStatus {
+		case "pending-install", "pending-upgrade", "pending-rollback":
+			hc.Status.Phase = operatorv1alpha1.PhaseRunning
+		default:
+			hc.Status.Phase = operatorv1alpha1.PhaseSucceeded
+		}
+		hc.Status.ObservedGeneration = hc.Generation
+		setCondition(&hc.Status.Conditions, metav1.Condition{
+			Type:               conditionReady,
+			Status:             metav1.ConditionTrue,
+			ObservedGeneration: hc.Generation,
+			Reason:             operatorv1alpha1.HelmCapsuleReasonDeployed,
+			Message:            "Helm release deployed",
+		})
+
+		if hc.Status.Phase == oldPhase && hc.Status.ObservedGeneration == oldGen && reflect.DeepEqual(hc.Status.Conditions, oldConds) {
+			return nil
+		}
+		return r.Status().Update(ctx, hc)
 	})
-
-	if hc.Status.Phase == oldPhase && hc.Status.ObservedGeneration == oldGen && reflect.DeepEqual(hc.Status.Conditions, oldConds) {
-		return nil
-	}
-	return r.Status().Update(ctx, hc)
 }
 
 // recordFailure sets phase Failed and a Ready=False condition. Retries on conflict
@@ -209,9 +219,12 @@ func (r *HelmCapsuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
+// mapOrbitToHelmCapsules fans out to all HelmCapsules that reference the changed Orbit.
+// Each Orbit creates exactly one namespace whose name equals orbit.Name, so we scope the
+// listing to that namespace to avoid touching HelmCapsules managed by other Orbits.
 func (r *HelmCapsuleReconciler) mapOrbitToHelmCapsules(ctx context.Context, obj client.Object) []reconcile.Request {
 	list := &operatorv1alpha1.HelmCapsuleList{}
-	if err := r.List(ctx, list); err != nil {
+	if err := r.List(ctx, list, client.InNamespace(obj.GetName())); err != nil {
 		return nil
 	}
 	var reqs []reconcile.Request
@@ -274,6 +287,9 @@ func (r *HelmCapsuleReconciler) mapValuesSourceToHelmCapsules(ctx context.Contex
 
 // mapHelmCapsuleToPeers re-enqueues peers so release-name conflicts self-heal
 // promptly when the conflicting capsule is renamed or deleted.
+// Intentional tradeoff: in a namespace with N HelmCapsules, each status write triggers
+// N-1 extra reconciles. This is acceptable at the expected scale (single-digit capsules
+// per orbit namespace) and avoids the complexity of a spec.releaseName field indexer.
 func (r *HelmCapsuleReconciler) mapHelmCapsuleToPeers(ctx context.Context, obj client.Object) []reconcile.Request {
 	list := &operatorv1alpha1.HelmCapsuleList{}
 	if err := r.List(ctx, list, client.InNamespace(obj.GetNamespace())); err != nil {

@@ -14,6 +14,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/yaml"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
@@ -91,7 +92,7 @@ func injectComponentValues(ctx context.Context, c client.Client, namespace strin
 	case operatorv1alpha1.HelmComponentMirror:
 		return mirrorValues(capsules, orbit), nil
 	case operatorv1alpha1.HelmComponentRelay, operatorv1alpha1.HelmComponentRelayWebSocket:
-		return relayValues(capsules, namespace, ledgerID)
+		return relayValues(ctx, capsules, namespace, ledgerID)
 	case operatorv1alpha1.HelmComponentExplorer:
 		return explorerValues(orbit, ledgerID)
 	case operatorv1alpha1.HelmComponentBlockNode:
@@ -114,8 +115,8 @@ func mirrorValues(capsules []operatorv1alpha1.ConsensusCapsule, orbit *operatorv
 	}
 }
 
-func relayValues(capsules []operatorv1alpha1.ConsensusCapsule, namespace, ledgerID string) (map[string]interface{}, error) {
-	network, err := hederaNetworkJSON(capsules)
+func relayValues(ctx context.Context, capsules []operatorv1alpha1.ConsensusCapsule, namespace, ledgerID string) (map[string]interface{}, error) {
+	network, err := hederaNetworkJSON(ctx, capsules)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +177,10 @@ func consensusEndpoints(capsules []operatorv1alpha1.ConsensusCapsule) []string {
 }
 
 // hederaNetworkJSON formats the {"host:port": "accountId"} map expected by the relay chart.
-func hederaNetworkJSON(capsules []operatorv1alpha1.ConsensusCapsule) (string, error) {
+// Capsules that are missing an address book entry or AccountId are skipped with a warning;
+// this produces a partial network map that the relay chart will accept but with fewer nodes.
+func hederaNetworkJSON(ctx context.Context, capsules []operatorv1alpha1.ConsensusCapsule) (string, error) {
+	logger := log.FromContext(ctx)
 	network := map[string]string{}
 	for _, c := range capsules {
 		entry := c.Status.AddressBookEntry
@@ -188,6 +192,8 @@ func hederaNetworkJSON(capsules []operatorv1alpha1.ConsensusCapsule) (string, er
 			port = 50211
 		}
 		if c.Spec.AccountId == "" {
+			logger.Info("Skipping ConsensusCapsule from HEDERA_NETWORK: spec.accountId is empty",
+				"capsule", c.Name)
 			continue
 		}
 		network[fmt.Sprintf("%s:%d", entry.InternalHostname, port)] = c.Spec.AccountId

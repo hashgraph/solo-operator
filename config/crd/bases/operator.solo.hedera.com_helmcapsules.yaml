@@ -102,7 +102,11 @@ spec:
                   repo:
                     description: |-
                       Repo is the chart repository URL.
-                      Use the oci:// scheme for OCI registries, https:// for classic HTTP repos.
+                      Use the oci:// scheme for OCI registries (recommended).
+                      For https:// repos the operator constructs a direct .tgz URL in the form
+                      "<repo>/<chart>-<version>.tgz" — this works for repos that serve tarballs
+                      at a predictable path but does NOT support index-based Helm repos
+                      (those require `helm repo add` which is not performed by the operator).
                       Example: "oci://ghcr.io/hashgraph/solo-charts"
                     minLength: 1
                     pattern: ^(oci|https)://
@@ -237,6 +241,10 @@ spec:
             required:
             - chart
             type: object
+            x-kubernetes-validations:
+            - message: orbitRef is required when component is mirror, relay, relay-websocket,
+                or block-node
+              rule: '!has(self.component) || self.component == ''explorer'' || has(self.orbitRef)'
           status:
             description: HelmCapsuleStatus defines the observed state of a HelmCapsule.
             properties:

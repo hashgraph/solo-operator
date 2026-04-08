@@ -142,6 +142,8 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 }
 
 // checkReleaseNameConflict returns an error if another HelmCapsule in the namespace already owns this release name.
+// This performs a List API call on every reconcile. At the expected scale (single-digit HelmCapsules per namespace)
+// the cost is negligible. If namespaces grow large, replace with a field indexer on spec.releaseName.
 func (r *ReleaseSubReconciler) checkReleaseNameConflict(ctx context.Context, hc *operatorv1alpha1.HelmCapsule, releaseName string) error {
 	list := &operatorv1alpha1.HelmCapsuleList{}
 	if err := r.Client.List(ctx, list, client.InNamespace(hc.Namespace)); err != nil {
