@@ -21,7 +21,7 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/controller"
-	"github.com/hashgraph/solo-operator/internal/resources/helm"
+	"github.com/hashgraph/solo-operator/internal/resources/helmtest"
 )
 
 var (
@@ -100,7 +100,7 @@ var _ = BeforeSuite(func() {
 	err = controller.NewHelmCapsuleReconciler(
 		k8sManager.GetClient(),
 		k8sManager.GetScheme(),
-		helm.NewMockClient(),
+		helmtest.NewMockClient(),
 	).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 

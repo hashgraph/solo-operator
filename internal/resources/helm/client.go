@@ -115,13 +115,20 @@ func (h *helmSDKClient) InstallOrUpgrade(ctx context.Context, releaseName, names
 	return h.upgrade(ctx, releaseName, namespace, chart, values, opts)
 }
 
-// loginIfNeeded logs in to the OCI registry when credentials are set. No-op for plain HTTPS repos.
-func loginIfNeeded(registryClient *registry.Client, chart operatorv1alpha1.HelmChartSpec, creds *ChartCredentials) error {
-	if creds == nil || !isOCI(chart.Repo) {
+// applyCredentials applies authentication for both OCI and plain HTTPS repos.
+// For OCI: logs in to the registry via the registry client.
+// For HTTPS: sets basic-auth fields on opts so LocateChart can authenticate.
+// No-op when creds is nil.
+func applyCredentials(registryClient *registry.Client, opts *action.ChartPathOptions, chart operatorv1alpha1.HelmChartSpec, creds *ChartCredentials) error {
+	if creds == nil {
 		return nil
 	}
-	host := ociHost(chart.Repo)
-	return registryClient.Login(host, registry.LoginOptBasicAuth(creds.Username, creds.Password))
+	if isOCI(chart.Repo) {
+		return registryClient.Login(ociHost(chart.Repo), registry.LoginOptBasicAuth(creds.Username, creds.Password))
+	}
+	opts.Username = creds.Username
+	opts.Password = creds.Password
+	return nil
 }
 
 // ociHost extracts the registry host from an oci:// URL.
@@ -139,10 +146,6 @@ func (h *helmSDKClient) install(ctx context.Context, releaseName, namespace stri
 	if err != nil {
 		return nil, err
 	}
-	if err := loginIfNeeded(cfg.RegistryClient, chart, opts.Credentials); err != nil {
-		return nil, fmt.Errorf("authenticating to chart repository: %w", err)
-	}
-
 	install := action.NewInstall(cfg)
 	install.ReleaseName = releaseName
 	install.Namespace = namespace
@@ -151,6 +154,9 @@ func (h *helmSDKClient) install(ctx context.Context, releaseName, namespace stri
 	install.Atomic = opts.Atomic
 	install.DisableHooks = opts.DisableHooks
 	install.Version = chart.Version
+	if err := applyCredentials(cfg.RegistryClient, &install.ChartPathOptions, chart, opts.Credentials); err != nil {
+		return nil, fmt.Errorf("authenticating to chart repository: %w", err)
+	}
 
 	ref, err := chartRef(chart)
 	if err != nil {
@@ -176,10 +182,6 @@ func (h *helmSDKClient) upgrade(ctx context.Context, releaseName, namespace stri
 	if err != nil {
 		return nil, err
 	}
-	if err := loginIfNeeded(cfg.RegistryClient, chart, opts.Credentials); err != nil {
-		return nil, fmt.Errorf("authenticating to chart repository: %w", err)
-	}
-
 	upgrade := action.NewUpgrade(cfg)
 	upgrade.Namespace = namespace
 	upgrade.Timeout = opts.Timeout
@@ -190,6 +192,9 @@ func (h *helmSDKClient) upgrade(ctx context.Context, releaseName, namespace stri
 	upgrade.DisableHooks = opts.DisableHooks
 	upgrade.ReuseValues = false
 	upgrade.Version = chart.Version
+	if err := applyCredentials(cfg.RegistryClient, &upgrade.ChartPathOptions, chart, opts.Credentials); err != nil {
+		return nil, fmt.Errorf("authenticating to chart repository: %w", err)
+	}
 
 	ref, err := chartRef(chart)
 	if err != nil {
@@ -285,61 +290,6 @@ func chartRef(chart operatorv1alpha1.HelmChartSpec) (string, error) {
 
 func isOCI(repo string) bool {
 	return strings.HasPrefix(repo, "oci://")
-}
-
-// ─── Mock implementation ──────────────────────────────────────────────────────
-
-// MockClient is an in-memory Client for tests.
-type MockClient struct {
-	releases map[string]*ReleaseInfo
-
-	InstallOrUpgradeFunc func(ctx context.Context, releaseName, namespace string, chart operatorv1alpha1.HelmChartSpec, values map[string]interface{}, opts ReleaseOptions) (*ReleaseInfo, error)
-	UninstallFunc        func(ctx context.Context, releaseName, namespace string, opts UninstallOptions) error
-	GetReleaseFunc       func(releaseName, namespace string) (*ReleaseInfo, error)
-}
-
-func NewMockClient() *MockClient {
-	return &MockClient{releases: make(map[string]*ReleaseInfo)}
-}
-
-func (m *MockClient) InstallOrUpgrade(ctx context.Context, releaseName, namespace string, chart operatorv1alpha1.HelmChartSpec, values map[string]interface{}, opts ReleaseOptions) (*ReleaseInfo, error) {
-	if m.InstallOrUpgradeFunc != nil {
-		return m.InstallOrUpgradeFunc(ctx, releaseName, namespace, chart, values, opts)
-	}
-	key := namespace + "/" + releaseName
-	existing := m.releases[key]
-	version := 1
-	if existing != nil {
-		version = existing.Version + 1
-	}
-	info := &ReleaseInfo{
-		Name:        releaseName,
-		Namespace:   namespace,
-		Version:     version,
-		Status:      "deployed",
-		ChartString: chart.Chart + "-" + chart.Version,
-	}
-	m.releases[key] = info
-	return info, nil
-}
-
-func (m *MockClient) Uninstall(ctx context.Context, releaseName, namespace string, opts UninstallOptions) error {
-	if m.UninstallFunc != nil {
-		return m.UninstallFunc(ctx, releaseName, namespace, opts)
-	}
-	delete(m.releases, namespace+"/"+releaseName)
-	return nil
-}
-
-func (m *MockClient) GetRelease(releaseName, namespace string) (*ReleaseInfo, error) {
-	if m.GetReleaseFunc != nil {
-		return m.GetReleaseFunc(releaseName, namespace)
-	}
-	info, ok := m.releases[namespace+"/"+releaseName]
-	if !ok {
-		return nil, nil
-	}
-	return info, nil
 }
 
 // ─── RESTClientGetter ─────────────────────────────────────────────────────────

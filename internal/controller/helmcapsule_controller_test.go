@@ -18,6 +18,7 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/resources/helm"
+	"github.com/hashgraph/solo-operator/internal/resources/helmtest"
 )
 
 func newControllerScheme() *runtime.Scheme {
@@ -188,7 +189,7 @@ func TestReconcile_setsReadyTrueOnSuccess(t *testing.T) {
 		WithStatusSubresource(hc).
 		Build()
 
-	mock := helm.NewMockClient()
+	mock := helmtest.NewMockClient()
 	r := NewHelmCapsuleReconciler(c, scheme, mock)
 
 	// First reconcile adds finalizer and requeues.
@@ -234,7 +235,7 @@ func TestReconcile_setsReadyFalseOnHelmError(t *testing.T) {
 		WithStatusSubresource(hc).
 		Build()
 
-	mock := helm.NewMockClient()
+	mock := helmtest.NewMockClient()
 	mock.InstallOrUpgradeFunc = func(_ context.Context, _, _ string, _ operatorv1alpha1.HelmChartSpec, _ map[string]interface{}, _ helm.ReleaseOptions) (*helm.ReleaseInfo, error) {
 		return nil, fmt.Errorf("%w: registry.ghcr.io: connection refused", helm.ErrChartFetch)
 	}
@@ -335,7 +336,7 @@ func TestReconcile_phaseSucceededAfterIdleRequeue(t *testing.T) {
 		WithStatusSubresource(hc).
 		Build()
 
-	mock := helm.NewMockClient()
+	mock := helmtest.NewMockClient()
 	r := NewHelmCapsuleReconciler(c, scheme, mock)
 
 	req := reconcile.Request{NamespacedName: types.NamespacedName{Name: "mirror", Namespace: "test-ns"}}
@@ -376,7 +377,7 @@ func TestReconcile_setsPhasePendingOnFirstContact(t *testing.T) {
 		WithStatusSubresource(hc).
 		Build()
 
-	mock := helm.NewMockClient()
+	mock := helmtest.NewMockClient()
 	r := NewHelmCapsuleReconciler(c, scheme, mock)
 
 	// First reconcile: adds finalizer and sets PhasePending.
@@ -410,7 +411,7 @@ func TestDeletion_basicPath_callsUninstallAndRemovesFinalizer(t *testing.T) {
 		WithStatusSubresource(hc).
 		Build()
 
-	mock := helm.NewMockClient()
+	mock := helmtest.NewMockClient()
 	uninstallCalled := false
 	var capturedRelease, capturedNamespace string
 	mock.UninstallFunc = func(_ context.Context, releaseName, namespace string, _ helm.UninstallOptions) error {
@@ -461,7 +462,7 @@ func TestDeletion_honorsSpecTimeoutAndOptions(t *testing.T) {
 		WithStatusSubresource(hc).
 		Build()
 
-	mock := helm.NewMockClient()
+	mock := helmtest.NewMockClient()
 	var capturedOpts helm.UninstallOptions
 	mock.UninstallFunc = func(_ context.Context, _, _ string, opts helm.UninstallOptions) error {
 		capturedOpts = opts
@@ -504,7 +505,7 @@ func TestDeletion_skipUninstallAnnotationBypassesHelm(t *testing.T) {
 		WithStatusSubresource(hc).
 		Build()
 
-	mock := helm.NewMockClient()
+	mock := helmtest.NewMockClient()
 	uninstallCalled := false
 	mock.UninstallFunc = func(_ context.Context, _, _ string, _ helm.UninstallOptions) error {
 		uninstallCalled = true
