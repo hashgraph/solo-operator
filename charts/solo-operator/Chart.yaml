@@ -13,6 +13,10 @@ keywords:
 home: https://github.com/hashgraph/solo-operator
 sources:
   - https://github.com/hashgraph/solo-operator
+dependencies:
+  - name: crds
+    version: "0.0.0"
+    condition: crds.install
 maintainers:
   - name: Hedera Hashgraph
     url: https://hedera.com
