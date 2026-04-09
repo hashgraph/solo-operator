@@ -2,7 +2,7 @@
 
 [![GitHub Release](https://img.shields.io/github/v/release/hashgraph/solo-operator?logo=github\&label=Release)](https://github.com/hashgraph/solo-operator/releases/latest)
 [![GitHub License](https://img.shields.io/github/license/hashgraph/solo-operator?logo=apache\&logoColor=red\&label=License)](LICENSE)
-[![Go Version](https://img.shields.io/badge/Go-1.21+-blue?logo=go)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/Go-1.25+-blue?logo=go)](https://go.dev/)
 [![Build Application](https://github.com/hashgraph/solo-operator/actions/workflows/flow-build-application.yaml/badge.svg)](https://github.com/hashgraph/solo-operator/actions/workflows/flow-build-application.yaml)
 
 
@@ -51,16 +51,29 @@ The Solo Operator provides several different methods for installation into a Kub
 
 ### Helm Chart
 
-The Solo Operator is available as a Helm chart from the Swirlds Labs Helm OCI repository.
+The Solo Operator Helm chart is published to two OCI registries on each release:
+
+| Registry | URL |
+|----------|-----|
+| GitHub Container Registry (GHCR) | `oci://ghcr.io/hashgraph/solo-operator` |
+| JFrog Artifactory | `oci://artifacts.hashgraph.io/solo-operator-helm-release` |
 
 #### Helm Install (Latest Version)
 ```shell
-helm install solo-operator oci://artifacts.swirldslabs.io/solo-operator-helm-release/solo-operator --namespace solo-operator --create-namespace
+# From GHCR (public)
+helm install solo-operator oci://ghcr.io/hashgraph/solo-operator/solo-operator --namespace solo-operator --create-namespace
+
+# From JFrog Artifactory
+helm install solo-operator oci://artifacts.hashgraph.io/solo-operator-helm-release/solo-operator --namespace solo-operator --create-namespace
 ```
 
 #### Helm Install (Specific Version)
 ```shell
-helm install solo-operator oci://artifacts.swirldslabs.io/solo-operator-helm-release/solo-operator --version 1.0.0 --namespace solo-operator --create-namespace
+# From GHCR (public)
+helm install solo-operator oci://ghcr.io/hashgraph/solo-operator/solo-operator --version 0.2.0 --namespace solo-operator --create-namespace
+
+# From JFrog Artifactory
+helm install solo-operator oci://artifacts.hashgraph.io/solo-operator-helm-release/solo-operator --version 0.2.0 --namespace solo-operator --create-namespace
 ```
 
 #### Helm Uninstall
@@ -89,7 +102,7 @@ kubectl delete -f https://github.com/hashgraph/solo-operator/releases/latest/dow
 
 ### Prerequisites
 
-- Go 1.21+
+- Go 1.25+
 - Kubernetes 1.28+
 - [Task](https://taskfile.dev/) (optional, for build automation)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/)
@@ -209,8 +222,8 @@ versioning and release processes. Version increments are determined by the
 3. The workflow will:
    - Determine the next version using semantic-release
    - Create a release tag and GitHub release
-   - Build and publish container images
-   - Publish Helm chart to OCI registry
+   - Build and publish container images to `ghcr.io/hashgraph/solo-operator` and `artifacts.hashgraph.io/solo-operator-docker-release/solo-operator`
+   - Publish Helm chart to `oci://ghcr.io/hashgraph/solo-operator` and `oci://artifacts.hashgraph.io/solo-operator-helm-release`
 
 ## Support
 

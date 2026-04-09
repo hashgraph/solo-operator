@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Build stage
-FROM golang:1.25-trixie AS builder
+ARG GO_VERSION=1.26.2
+FROM golang:${GO_VERSION}-trixie AS builder
 
 WORKDIR /workspace
 

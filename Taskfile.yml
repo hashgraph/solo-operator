@@ -200,9 +200,37 @@ tasks:
       - rm -rf bin/
       - rm -f {{.COVERAGE_FILE}} {{.COVERAGE_HTML}}
 
+  helm:build:
+    desc: Sync CRD templates and package the Helm chart
+    cmds:
+      - task: helm:sync-crds
+      - helm package charts/solo-operator
+
+  helm:sync-crds:
+    desc: Sync CRD manifests from config/crd/bases into the crds Helm subchart templates
+    cmds:
+      - |
+        set -eu
+        HEADER="charts/solo-operator/charts/crds/crd-header.tpl"
+        mkdir -p "charts/solo-operator/charts/crds/templates"
+        found_crds=false
+        for src in config/crd/bases/*.yaml; do
+          [ -e "${src}" ] || continue
+          found_crds=true
+          dest="charts/solo-operator/charts/crds/templates/$(basename "${src}")"
+          crd_name="$(yq '.metadata.name' "${src}")"
+          spec_line="$(grep -n "^spec:" "${src}" | head -1 | cut -d: -f1)"
+          [ -n "${crd_name}" ] || { echo "failed to determine CRD name from ${src}" >&2; exit 1; }
+          [ -n "${spec_line}" ] || { echo "failed to determine spec line from ${src}" >&2; exit 1; }
+          { cat "${HEADER}"; echo "  name: ${crd_name}"; tail -n +"${spec_line}" "${src}"; echo "{{`{{- end }}`}}"; } > "${dest}"
+          echo "  synced: $(basename "${src}")"
+        done
+        [ "${found_crds}" = true ] || { echo "no CRD manifests found in config/crd/bases" >&2; exit 1; }
+
   tools:
     desc: Install required tools
     cmds:
       - go install sigs.k8s.io/controller-tools/cmd/controller-gen@latest
       - go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
       - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.8.0
+      - go install github.com/mikefarah/yq/v4@latest

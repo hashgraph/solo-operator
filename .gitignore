@@ -64,6 +64,9 @@ setup-envtest
 # Generated files (uncomment if you want to ignore)
 # config/crd/bases/
 
+# Generated CRD Helm templates (produced by task helm:sync-crds)
+charts/solo-operator/charts/crds/templates/*.yaml
+
 # Temporary files
 tmp/
 *.tmp
