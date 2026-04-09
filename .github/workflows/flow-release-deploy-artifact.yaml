@@ -16,7 +16,6 @@ defaults:
     shell: bash
 
 env:
-  GO_VERSION: "1.26.2"
   GH_OCI_REGISTRY: ghcr.io
   GH_OCI_GROUP: hashgraph/solo-operator
   GH_HELM_GROUP: hashgraph/solo-operator
@@ -72,9 +71,10 @@ jobs:
           node-version: 20
 
       - name: Setup Go
+        id: setup-go
         uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
           cache: true
 
       - name: Setup Helm
@@ -117,8 +117,14 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Install yq
+        run: go install github.com/mikefarah/yq/v4@latest
+
       - name: Sync CRD Templates into Subchart
         run: task helm:sync-crds
+
+      - name: Helm Lint
+        run: helm lint charts/solo-operator
 
       - name: Install Semantic Release
         run: |
@@ -154,6 +160,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           provenance: false
+          build-args: GO_VERSION=${{ steps.setup-go.outputs.go-version }}
           tags: |
             ${{ env.GH_OCI_REGISTRY }}/${{ env.GH_OCI_GROUP }}:${{ steps.semantic-release.outputs.version }}
             ${{ env.GH_OCI_REGISTRY }}/${{ env.GH_OCI_GROUP }}:latest
@@ -166,6 +173,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           provenance: false
+          build-args: GO_VERSION=${{ steps.setup-go.outputs.go-version }}
           tags: |
             ${{ env.JF_OCI_REGISTRY }}/${{ env.JF_OCI_GROUP }}/solo-operator:${{ steps.semantic-release.outputs.version }}
             ${{ env.JF_OCI_REGISTRY }}/${{ env.JF_OCI_GROUP }}/solo-operator:latest

@@ -218,7 +218,7 @@ tasks:
           [ -e "${src}" ] || continue
           found_crds=true
           dest="charts/solo-operator/charts/crds/templates/$(basename "${src}")"
-          crd_name="$(grep -m1 "^  name:" "${src}" | sed 's/^  name: //' | tr -d '[:space:]')"
+          crd_name="$(yq '.metadata.name' "${src}")"
           spec_line="$(grep -n "^spec:" "${src}" | head -1 | cut -d: -f1)"
           [ -n "${crd_name}" ] || { echo "failed to determine CRD name from ${src}" >&2; exit 1; }
           [ -n "${spec_line}" ] || { echo "failed to determine spec line from ${src}" >&2; exit 1; }
@@ -233,3 +233,4 @@ tasks:
       - go install sigs.k8s.io/controller-tools/cmd/controller-gen@latest
       - go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
       - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.8.0
+      - go install github.com/mikefarah/yq/v4@latest

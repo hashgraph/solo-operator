@@ -44,7 +44,6 @@ permissions:
   statuses: write
 
 env:
-  GO_VERSION: "1.26.2"
   KIND_NODE_IMAGE: kindest/node:v1.31.4@sha256:2cb39f7295fe7eafee0842b1052a599a4fb0f8bcf3f83d96c7f4864c357c6c30
 
 jobs:
@@ -63,9 +62,10 @@ jobs:
           fetch-depth: ${{ inputs.enable-lint-check && '0' || '' }}
 
       - name: Setup Go
+        id: setup-go
         uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
           cache: true
 
       - name: Setup Task
@@ -145,10 +145,19 @@ jobs:
           push: true
           provenance: false
           tags: localhost:5000/solo-operator:0.0.0-${{ github.sha }}
+          build-args: GO_VERSION=${{ steps.setup-go.outputs.go-version }}
+
+      - name: Install yq
+        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
+        run: go install github.com/mikefarah/yq/v4@latest
 
       - name: Sync CRD Templates into Subchart
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
         run: task helm:sync-crds
+
+      - name: Helm Lint
+        if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
+        run: helm lint charts/solo-operator
 
       - name: Deploy to KinD
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
