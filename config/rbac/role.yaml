@@ -72,6 +72,7 @@ rules:
   - consensuscapsules
   - envoyproxies
   - haproxycapsules
+  - helmcapsules
   - networkoperations
   - orbits
   verbs:
@@ -88,6 +89,7 @@ rules:
   - consensuscapsules/finalizers
   - envoyproxies/finalizers
   - haproxycapsules/finalizers
+  - helmcapsules/finalizers
   - networkoperations/finalizers
   - orbits/finalizers
   verbs:
@@ -98,6 +100,7 @@ rules:
   - consensuscapsules/status
   - envoyproxies/status
   - haproxycapsules/status
+  - helmcapsules/status
   - networkoperations/status
   - orbits/status
   verbs:

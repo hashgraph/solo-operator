@@ -1,0 +1,41 @@
+# HelmCapsule — Hedera JSON-RPC Relay
+#
+# Component: relay
+# Chart:     hedera-json-rpc-relay (https://github.com/hiero-ledger/hiero-json-rpc-relay)
+#
+# Auto-injected values (from OrbitRef + ConsensusCapsules in the namespace):
+#   config.HEDERA_NETWORK   — JSON map {"host:port": "accountId"} from ConsensusCapsules
+#   config.MIRROR_NODE_URL  — "http://mirror.<namespace>.svc.cluster.local"
+#   config.CHAIN_ID         — from Orbit spec.consensus.networkSettings["ledger.id"]
+#
+# Required user-supplied values (relay will crash without these):
+#   config.OPERATOR_ID_MAIN  — operator account ID
+#   config.OPERATOR_KEY_MAIN — operator private key (hex DER)
+#
+# These are provided via the relay-operator-creds Secret defined in common/secrets.yaml.
+#
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: HelmCapsule
+metadata:
+  name: relay-node1
+  namespace: solo-orbit
+spec:
+  chart:
+    repo: https://hiero-ledger.github.io/hiero-json-rpc-relay/charts
+    chart: hedera-json-rpc-relay
+    version: "0.76.1"
+
+  component: relay
+
+  orbitRef:
+    name: solo-orbit
+
+  valuesFrom:
+    - kind: Secret
+      name: relay-operator-creds
+
+  # Inline overrides applied on top of auto-injected and valuesFrom values.
+  values:
+    replicaCount: 1
+    config:
+      MIRROR_NODE_RETRY_DELAY: "250"

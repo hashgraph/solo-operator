@@ -261,7 +261,7 @@ func BenchmarkEnvoySubReconcilers(b *testing.B) {
 			Namespace: "test-ns",
 		},
 		Spec: operatorv1alpha1.EnvoyProxySpec{
-			Image:     "envoyproxy/envoy:v1.21.6",
+			Image:     "envoyproxy/envoy-distroless:v1.21.6",
 			Replicas:  &replicas,
 			ProxyPort: 8080,
 			AdminPort: 9901,

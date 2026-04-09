@@ -1181,7 +1181,7 @@ spec:
                   of filename → content.
                 type: object
               image:
-                default: envoyproxy/envoy:v1.21.6
+                default: envoyproxy/envoy-distroless:v1.21.6
                 description: Image is the Envoy container image.
                 type: string
               ingressSpec:

@@ -49,7 +49,7 @@ var _ = Describe("EnvoyProxy Controller", func() {
 					Namespace: envoyNamespace,
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
-					Image:     "envoyproxy/envoy:v1.21.6",
+					Image:     "envoyproxy/envoy-distroless:v1.21.6",
 					Replicas:  &replicas,
 					ProxyPort: 8081,
 					AdminPort: 9901,
@@ -81,7 +81,7 @@ var _ = Describe("EnvoyProxy Controller", func() {
 				err := k8sClient.Get(ctx, deployLookupKey, createdDeploy)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
-			Expect(createdDeploy.Spec.Template.Spec.Containers[0].Image).To(Equal("envoyproxy/envoy:v1.21.6"))
+			Expect(createdDeploy.Spec.Template.Spec.Containers[0].Image).To(Equal("envoyproxy/envoy-distroless:v1.21.6"))
 			Expect(*createdDeploy.Spec.Replicas).To(Equal(int32(2)))
 
 			By("Verifying the Deployment has probes configured")
@@ -146,7 +146,7 @@ static_resources:
 					Namespace: envoyNamespace,
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
-					Image: "envoyproxy/envoy:v1.21.6",
+					Image: "envoyproxy/envoy-distroless:v1.21.6",
 					Files: map[string]string{
 						"envoy.yaml": customConfig,
 					},
@@ -198,7 +198,7 @@ static_resources:
 					Namespace: envoyNamespace,
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
-					Image:    "envoyproxy/envoy:v1.21.6",
+					Image:    "envoyproxy/envoy-distroless:v1.21.6",
 					Replicas: &replicas,
 				},
 			}
@@ -258,7 +258,7 @@ static_resources:
 					Namespace: envoyNamespace,
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
-					Image:     "envoyproxy/envoy:v1.21.6",
+					Image:     "envoyproxy/envoy-distroless:v1.21.6",
 					ProxyPort: 8081,
 					AdminPort: 9901,
 				},
@@ -326,7 +326,7 @@ static_resources:
 					Namespace: envoyNamespace,
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
-					Image:       "envoyproxy/envoy:v1.21.6",
+					Image:       "envoyproxy/envoy-distroless:v1.21.6",
 					ProxyPort:   8081,
 					AdminPort:   9901,
 					MetricsPort: 9100,
@@ -394,7 +394,7 @@ static_resources:
 					Namespace: envoyNamespace,
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
-					Image:     "envoyproxy/envoy:v1.21.6",
+					Image:     "envoyproxy/envoy-distroless:v1.21.6",
 					ProxyPort: 8081,
 					AdminPort: 9901,
 					CORSConfig: &operatorv1alpha1.CORSConfig{
@@ -453,7 +453,7 @@ static_resources:
 					Namespace: envoyNamespace,
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
-					Image:     "envoyproxy/envoy:v1.21.6",
+					Image:     "envoyproxy/envoy-distroless:v1.21.6",
 					ProxyPort: 8081,
 					AdminPort: 9901,
 					NodeSelector: map[string]string{
@@ -517,7 +517,7 @@ static_resources:
 					Namespace: envoyNamespace,
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
-					Image:     "envoyproxy/envoy:v1.21.6",
+					Image:     "envoyproxy/envoy-distroless:v1.21.6",
 					ProxyPort: 8081,
 					AdminPort: 9901,
 					AdditionalLabels: map[string]string{
@@ -593,7 +593,7 @@ static_resources:
 					Namespace: envoyNamespace,
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
-					Image:       "envoyproxy/envoy:v1.21.6",
+					Image:       "envoyproxy/envoy-distroless:v1.21.6",
 					ProxyPort:   8081,
 					AdminPort:   9901,
 					ServiceType: operatorv1alpha1.ProxyServiceTypeLoadBalancer,
@@ -623,7 +623,7 @@ static_resources:
 					Namespace: envoyNamespace,
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
-					Image:       "envoyproxy/envoy:v1.21.6",
+					Image:       "envoyproxy/envoy-distroless:v1.21.6",
 					ProxyPort:   8081,
 					AdminPort:   9901,
 					ServiceType: operatorv1alpha1.ProxyServiceTypeLoadBalancer,
@@ -690,7 +690,7 @@ static_resources:
 					Namespace: envoyNamespace,
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
-					Image:         "envoyproxy/envoy:v1.21.6",
+					Image:         "envoyproxy/envoy-distroless:v1.21.6",
 					TLSSecretName: tlsSecretName,
 				},
 			}
@@ -767,7 +767,7 @@ static_resources:
 					Namespace: envoyNamespace,
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
-					Image:       "envoyproxy/envoy:v1.21.6",
+					Image:       "envoyproxy/envoy-distroless:v1.21.6",
 					ProxyPort:   8081,
 					AdminPort:   9901,
 					ServiceType: operatorv1alpha1.ProxyServiceTypeLoadBalancer,
@@ -814,7 +814,7 @@ static_resources:
 					Namespace: envoyNamespace,
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
-					Image:       "envoyproxy/envoy:v1.21.6",
+					Image:       "envoyproxy/envoy-distroless:v1.21.6",
 					ProxyPort:   8081,
 					AdminPort:   9901,
 					ServiceType: operatorv1alpha1.ProxyServiceTypeLoadBalancer,

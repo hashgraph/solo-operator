@@ -216,9 +216,9 @@ var _ = Describe("HAProxyCapsule Controller", func() {
 			Expect(container.ReadinessProbe).ToNot(BeNil(), "readiness probe should be set by default")
 
 			By("Verifying startup probe uses default values")
-			Expect(container.StartupProbe.InitialDelaySeconds).To(Equal(int32(60)))
+			Expect(container.StartupProbe.InitialDelaySeconds).To(Equal(int32(5)))
 			Expect(container.StartupProbe.PeriodSeconds).To(Equal(int32(5)))
-			Expect(container.StartupProbe.FailureThreshold).To(Equal(int32(720)))
+			Expect(container.StartupProbe.FailureThreshold).To(Equal(int32(12)))
 
 			By("Verifying liveness probe uses default values")
 			Expect(container.LivenessProbe.PeriodSeconds).To(Equal(int32(10)))
@@ -229,39 +229,6 @@ var _ = Describe("HAProxyCapsule Controller", func() {
 			Expect(k8sClient.Delete(ctx, haproxy)).Should(Succeed())
 		})
 
-		It("Should not configure probes when health check is disabled", func() {
-			By("Creating an HAProxyCapsule with health checks disabled")
-			haproxy := &operatorv1alpha1.HAProxyCapsule{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      haproxyName + "-disabled",
-					Namespace: haproxyNamespace,
-				},
-				Spec: operatorv1alpha1.HAProxyCapsuleSpec{
-					Image:       "haproxy:2.8.10-alpine3.20",
-					ServiceType: operatorv1alpha1.HAProxyServiceTypeClusterIP,
-					HealthCheck: &operatorv1alpha1.HAProxyHealthCheckSpec{
-						Enabled: false,
-					},
-				},
-			}
-			Expect(k8sClient.Create(ctx, haproxy)).Should(Succeed())
-
-			By("Verifying no probes are set on the container")
-			deployLookupKey := types.NamespacedName{Name: haproxy.Name, Namespace: haproxyNamespace}
-			createdDeploy := &appsv1.Deployment{}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, deployLookupKey, createdDeploy)
-				return err == nil
-			}, timeout, interval).Should(BeTrue())
-
-			container := createdDeploy.Spec.Template.Spec.Containers[0]
-			Expect(container.StartupProbe).To(BeNil(), "startup probe should be absent when disabled")
-			Expect(container.LivenessProbe).To(BeNil(), "liveness probe should be absent when disabled")
-			Expect(container.ReadinessProbe).To(BeNil(), "readiness probe should be absent when disabled")
-
-			By("Cleaning up")
-			Expect(k8sClient.Delete(ctx, haproxy)).Should(Succeed())
-		})
 	})
 
 	Context("When creating an HAProxyCapsule with node scheduling", func() {

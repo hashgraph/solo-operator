@@ -23,6 +23,7 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/controller"
+	"github.com/hashgraph/solo-operator/internal/resources/helm"
 )
 
 var (
@@ -147,6 +148,15 @@ func main() {
 		mgr.GetScheme(),
 	).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "EnvoyProxy")
+		os.Exit(1)
+	}
+
+	if err = controller.NewHelmCapsuleReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+		helm.NewHelmSDKClient(mgr.GetConfig()),
+	).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "HelmCapsule")
 		os.Exit(1)
 	}
 

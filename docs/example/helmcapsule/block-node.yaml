@@ -1,0 +1,51 @@
+# HelmCapsule — Hiero Block Node Server
+#
+# Component: block-node
+# Chart:     block-node-server (https://github.com/hiero-ledger/hiero-block-node)
+#
+# Auto-injected values (from OrbitRef + ConsensusCapsules in the namespace):
+#   blockNode.config.BLOCK_NODE_ENDPOINTS  — comma-separated "host:port" list
+#       derived from ConsensusCapsule.status.addressBookEntry entries
+#   blockNode.config.CONSENSUS_NODE_COUNT  — number of ConsensusCapsules in the
+#       namespace that belong to the referenced Orbit
+#
+# The block-node chart uses a flexible blockNode.config map to pass environment
+# variables; any additional config keys can be added via the Values field.
+#
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: HelmCapsule
+metadata:
+  name: block-node
+  namespace: solo-orbit
+spec:
+  chart:
+    repo: oci://ghcr.io/hiero-ledger/charts
+    chart: block-node-server
+    version: "0.31.0"
+
+  component: block-node
+
+  orbitRef:
+    name: solo-orbit
+
+  # Timeout for install/upgrade. Block-node may take longer due to StatefulSet startup.
+  timeout: 15m
+
+  # Optional: load sensitive config (operator keys, etc.) from a Secret.
+  # valuesFrom:
+  #   - kind: Secret
+  #     name: block-node-secrets
+  #     valuesKey: values.yaml
+
+  # Inline overrides for non-injected blockNode.config entries.
+  values:
+    blockNode:
+      config:
+        PROMETHEUS_ENDPOINT_ENABLED: "true"
+        PROMETHEUS_ENDPOINT_PORT_NUMBER: "16007"
+        PERSISTENCE_STORAGE_LIVE_GB: "256"
+        PERSISTENCE_STORAGE_ARCHIVE_GB: "512"
+      service:
+        port: 40840
+    serviceMonitor:
+      enabled: true

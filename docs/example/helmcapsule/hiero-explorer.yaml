@@ -1,0 +1,41 @@
+# HelmCapsule — Hiero Block Explorer
+#
+# Component: explorer
+# Chart:     hiero-explorer-chart (https://github.com/hiero-ledger/hiero-mirror-node-explorer)
+#
+# Auto-injected values (from OrbitRef when set):
+#   config  — JSON array with a single network entry:
+#     [{"name":"<orbit-name>","displayName":"<orbit-name>","url":"/","ledgerID":"<ledger.id>"}]
+#
+# The explorer is the least tightly coupled component — orbitRef is optional.
+# When omitted, supply the full config via the Values field below.
+#
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: HelmCapsule
+metadata:
+  name: hiero-explorer
+  namespace: solo-orbit
+spec:
+  chart:
+    repo: oci://ghcr.io/hiero-ledger/hiero-mirror-node-explorer
+    chart: hiero-explorer-chart
+    version: "26.0.0"
+
+  component: explorer
+
+  # orbitRef is optional for explorer. When set, the config JSON is auto-derived.
+  orbitRef:
+    name: solo-orbit
+
+  # Inline Values override or extend auto-injected config.
+  # When orbitRef is not set, provide the full config here:
+  # values:
+  #   config: |
+  #     [
+  #       {
+  #         "name": "phhzdf7vdapjsyxs-1",
+  #         "displayName": "Hashsphere Ledger",
+  #         "url": "/",
+  #         "ledgerID": "03"
+  #       }
+  #     ]
