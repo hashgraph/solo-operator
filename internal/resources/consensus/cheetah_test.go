@@ -242,7 +242,7 @@ func TestCheetahConfigMapSubReconciler_BuildConfigMap(t *testing.T) {
 }
 
 func TestBuildCheetahUploaderContainer(t *testing.T) {
-	reconciler := &DeploymentSubReconciler{}
+	reconciler := &StatefulSetSubReconciler{}
 
 	tests := []struct {
 		name             string
@@ -543,7 +543,7 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 }
 
 func TestBuildCheetahUploaderContainer_BlobEnabledWithoutURL(t *testing.T) {
-	reconciler := &DeploymentSubReconciler{}
+	reconciler := &StatefulSetSubReconciler{}
 
 	uploader := &operatorv1alpha1.CheetahUploader{
 		Enabled: true,
@@ -581,7 +581,7 @@ func TestGetVolumeNameForPath(t *testing.T) {
 }
 
 func TestAddSidecarContainers_Cheetah(t *testing.T) {
-	reconciler := &DeploymentSubReconciler{}
+	reconciler := &StatefulSetSubReconciler{}
 
 	capsule := &operatorv1alpha1.ConsensusCapsule{
 		ObjectMeta: metav1.ObjectMeta{
@@ -627,8 +627,8 @@ func TestAddSidecarContainers_Cheetah(t *testing.T) {
 		},
 	}
 
-	deploy := &appsv1.Deployment{
-		Spec: appsv1.DeploymentSpec{
+	deploy := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
@@ -677,7 +677,7 @@ func TestAddSidecarContainers_Cheetah(t *testing.T) {
 }
 
 func TestApplyCheetahFSGroup(t *testing.T) {
-	reconciler := &DeploymentSubReconciler{}
+	reconciler := &StatefulSetSubReconciler{}
 
 	t.Run("sets fsGroup 2000 when cheetah enabled and no security context set", func(t *testing.T) {
 		capsule := &operatorv1alpha1.ConsensusCapsule{
@@ -689,7 +689,7 @@ func TestApplyCheetahFSGroup(t *testing.T) {
 				},
 			},
 		}
-		deploy := &appsv1.Deployment{}
+		deploy := &appsv1.StatefulSet{}
 		reconciler.applyCheetahFSGroup(deploy, capsule)
 		if deploy.Spec.Template.Spec.SecurityContext == nil || deploy.Spec.Template.Spec.SecurityContext.FSGroup == nil {
 			t.Fatal("expected fsGroup to be set")
@@ -710,8 +710,8 @@ func TestApplyCheetahFSGroup(t *testing.T) {
 			},
 		}
 		userFSGroup := int64(1000)
-		deploy := &appsv1.Deployment{
-			Spec: appsv1.DeploymentSpec{
+		deploy := &appsv1.StatefulSet{
+			Spec: appsv1.StatefulSetSpec{
 				Template: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						SecurityContext: &corev1.PodSecurityContext{FSGroup: &userFSGroup},
@@ -727,7 +727,7 @@ func TestApplyCheetahFSGroup(t *testing.T) {
 
 	t.Run("no-op when cheetah not enabled", func(t *testing.T) {
 		capsule := &operatorv1alpha1.ConsensusCapsule{}
-		deploy := &appsv1.Deployment{}
+		deploy := &appsv1.StatefulSet{}
 		reconciler.applyCheetahFSGroup(deploy, capsule)
 		if deploy.Spec.Template.Spec.SecurityContext != nil {
 			t.Error("expected no security context when cheetah not enabled")

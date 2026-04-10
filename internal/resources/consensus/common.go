@@ -4,6 +4,8 @@ package consensus
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -14,16 +16,16 @@ import (
 
 // Label keys
 const (
-	// LabelManagedBy indicates the resource is managed by solo-operator
 	LabelManagedBy = "app.kubernetes.io/managed-by"
-	// LabelPartOf indicates the component the resource is part of
-	LabelPartOf = "app.kubernetes.io/part-of"
-	// LabelOrbit indicates the orbit name
-	LabelOrbit = "operator.solo.hedera.com/orbit"
-	// LabelNodeId indicates the node ID
-	LabelNodeId = "operator.solo.hedera.com/node-id"
-	// LabelComponent indicates the component type
+	LabelPartOf    = "app.kubernetes.io/part-of"
+	LabelOrbit     = "operator.solo.hedera.com/orbit"
+	LabelNodeId    = "operator.solo.hedera.com/node-id"
 	LabelComponent = "app.kubernetes.io/component"
+
+	LabelSoloNodeName  = "operator.solo.hedera.com/node-name"
+	LabelSoloAccountId = "operator.solo.hedera.com/account-id"
+	LabelSoloType      = "operator.solo.hedera.com/type"
+	LabelSoloPromEndpt = "operator.solo.hedera.com/prometheus-endpoint"
 )
 
 // Label values
@@ -71,7 +73,8 @@ const (
 const (
 	VolumeTypeLogs    = "logs"
 	VolumeTypeStats   = "stats"
-	VolumeTypeStates  = "states"
+	VolumeTypeSaved   = "saved"
+	VolumeTypeState   = "state"
 	VolumeTypeUpgrade = "upgrade"
 	VolumeTypeBlocks  = "blocks"
 	VolumeTypeRecords = "records"
@@ -92,6 +95,9 @@ func CommonLabels(capsule *operatorv1alpha1.ConsensusCapsule) map[string]string 
 func PodLabels(capsule *operatorv1alpha1.ConsensusCapsule) map[string]string {
 	labels := CommonLabels(capsule)
 	labels[LabelComponent] = ComponentDeployment
+	labels[LabelSoloNodeName] = capsule.Name
+	labels[LabelSoloAccountId] = capsule.Spec.AccountId
+	labels[LabelSoloType] = "network-node"
 	return labels
 }
 
@@ -105,9 +111,29 @@ func RoleBindingName(capsule *operatorv1alpha1.ConsensusCapsule) string {
 	return capsule.Name + RoleBindingSuffix
 }
 
-// ConfigMapName returns the config map name for a capsule
+// HapiAppConfigMapName returns the hapi-app ConfigMap name for a capsule.
+// This ConfigMap contains log4j2.xml (from the capsule spec) and settings.txt (from the Orbit).
+func HapiAppConfigMapName(capsule *operatorv1alpha1.ConsensusCapsule) string {
+	return capsule.Name + "-hapi-app-cm"
+}
+
+// ConfigMapName is an alias for HapiAppConfigMapName kept for backward compatibility.
+//
+// Deprecated: use HapiAppConfigMapName.
 func ConfigMapName(capsule *operatorv1alpha1.ConsensusCapsule) string {
-	return capsule.Name + ConfigMapSuffix
+	return HapiAppConfigMapName(capsule)
+}
+
+// DataConfigMapName returns the data-config ConfigMap name for a capsule.
+// This ConfigMap contains application.properties and api-permission.properties sourced from the Orbit.
+func DataConfigMapName(capsule *operatorv1alpha1.ConsensusCapsule) string {
+	return capsule.Name + "-data-config-cm"
+}
+
+// BlockNodesConfigMapName returns the block-nodes ConfigMap name for a capsule.
+// Only created when capsule.Spec.BlockNodes is non-nil.
+func BlockNodesConfigMapName(capsule *operatorv1alpha1.ConsensusCapsule) string {
+	return capsule.Name + "-block-nodes-cm"
 }
 
 // PVCName returns the PVC name for a capsule and volume type
@@ -115,9 +141,23 @@ func PVCName(capsule *operatorv1alpha1.ConsensusCapsule, volumeType string) stri
 	return fmt.Sprintf("%s-%s", capsule.Name, volumeType)
 }
 
-// DeploymentName returns the deployment name for a capsule
-func DeploymentName(capsule *operatorv1alpha1.ConsensusCapsule) string {
-	return capsule.Name + "-consensus-node"
+// StatefulSetName returns the StatefulSet name for a capsule.
+func StatefulSetName(capsule *operatorv1alpha1.ConsensusCapsule) string {
+	return capsule.Name
+}
+
+// RenderProperties renders a map[string]string as a sorted Java-properties-style key=value file.
+func RenderProperties(m map[string]string) string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var sb strings.Builder
+	for _, k := range keys {
+		fmt.Fprintf(&sb, "%s=%s\n", k, m[k])
+	}
+	return sb.String()
 }
 
 // InternalHostname returns the internal FQDN for a capsule
@@ -130,11 +170,13 @@ func NewSubReconcilers(c client.Client, scheme *runtime.Scheme) *subreconciler.C
 	return subreconciler.NewChain(
 		NewServiceAccountSubReconciler(c, scheme),
 		NewRoleBindingSubReconciler(c, scheme),
-		NewConfigMapSubReconciler(c, scheme),
+		NewHapiAppConfigMapSubReconciler(c, scheme),
+		NewDataConfigMapSubReconciler(c, scheme),
+		NewBlockNodesConfigMapSubReconciler(c, scheme),
 		NewCheetahConfigMapSubReconciler(c, scheme),
 		NewAlloyConfigMapSubReconciler(c, scheme),
 		NewServiceSubReconciler(c, scheme),
 		NewPVCSubReconciler(c, scheme),
-		NewDeploymentSubReconciler(c, scheme),
+		NewStatefulSetSubReconciler(c, scheme),
 	)
 }

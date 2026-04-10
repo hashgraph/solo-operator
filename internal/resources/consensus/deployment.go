@@ -21,38 +21,36 @@ import (
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
-// DeploymentSubReconciler manages the Deployment for a ConsensusCapsule
-type DeploymentSubReconciler struct {
+// StatefulSetSubReconciler manages the StatefulSet for a ConsensusCapsule.
+type StatefulSetSubReconciler struct {
 	*subreconciler.BaseSubReconciler[*operatorv1alpha1.ConsensusCapsule]
 }
 
-// NewDeploymentSubReconciler creates a new DeploymentSubReconciler
-func NewDeploymentSubReconciler(c client.Client, scheme *runtime.Scheme) *DeploymentSubReconciler {
-	return &DeploymentSubReconciler{
-		BaseSubReconciler: subreconciler.NewBaseSubReconciler[*operatorv1alpha1.ConsensusCapsule](c, scheme, "Deployment"),
+// NewStatefulSetSubReconciler creates a new StatefulSetSubReconciler.
+func NewStatefulSetSubReconciler(c client.Client, scheme *runtime.Scheme) *StatefulSetSubReconciler {
+	return &StatefulSetSubReconciler{
+		BaseSubReconciler: subreconciler.NewBaseSubReconciler[*operatorv1alpha1.ConsensusCapsule](c, scheme, "StatefulSet"),
 	}
 }
 
-// Reconcile ensures the deployment exists and is up to date
-func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
+// Reconcile ensures the StatefulSet exists and is up to date.
+func (r *StatefulSetSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	desired, err := r.buildDeployment(ctx, capsule)
+	desired, err := r.buildStatefulSet(ctx, capsule)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// Set owner reference
 	if err := controllerutil.SetControllerReference(capsule, desired, r.Scheme); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// Check if exists
-	existing := &appsv1.Deployment{}
+	existing := &appsv1.StatefulSet{}
 	err = r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("Creating deployment", "name", desired.Name, "namespace", desired.Namespace)
+			logger.Info("Creating StatefulSet", "name", desired.Name, "namespace", desired.Namespace)
 			if err := r.Client.Create(ctx, desired); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -61,9 +59,8 @@ func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, capsule *operat
 		return ctrl.Result{}, err
 	}
 
-	// Update spec if needed
 	if r.needsUpdate(existing, desired) {
-		logger.V(1).Info("Updating deployment", "name", desired.Name, "namespace", desired.Namespace)
+		logger.V(1).Info("Updating StatefulSet", "name", desired.Name, "namespace", desired.Namespace)
 		existing.Spec = desired.Spec
 		existing.Labels = desired.Labels
 		if err := r.Client.Update(ctx, existing); err != nil {
@@ -74,12 +71,11 @@ func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, capsule *operat
 	return ctrl.Result{}, nil
 }
 
-// buildDeployment builds the desired deployment
-func (r *DeploymentSubReconciler) buildDeployment(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (*appsv1.Deployment, error) {
+// buildStatefulSet builds the desired StatefulSet.
+func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (*appsv1.StatefulSet, error) {
 	replicas := int32(1)
 	labels := PodLabels(capsule)
 
-	// Build volumes and volume mounts
 	volumes, volumeMounts := r.buildVolumes(capsule)
 
 	consensusContainer, err := r.buildConsensusNodeContainer(capsule, volumeMounts)
@@ -87,17 +83,15 @@ func (r *DeploymentSubReconciler) buildDeployment(ctx context.Context, capsule *
 		return nil, err
 	}
 
-	deploy := &appsv1.Deployment{
+	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      DeploymentName(capsule),
+			Name:      StatefulSetName(capsule),
 			Namespace: capsule.Namespace,
 			Labels:    CommonLabels(capsule),
 		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
-			Strategy: appsv1.DeploymentStrategy{
-				Type: appsv1.RecreateDeploymentStrategyType,
-			},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas:    &replicas,
+			ServiceName: capsule.Name,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
@@ -107,8 +101,6 @@ func (r *DeploymentSubReconciler) buildDeployment(ctx context.Context, capsule *
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: ServiceAccountName(capsule),
-					Hostname:           capsule.Name,
-					Subdomain:          ConsensusSubdomain,
 					Containers: []corev1.Container{
 						consensusContainer,
 					},
@@ -118,31 +110,23 @@ func (r *DeploymentSubReconciler) buildDeployment(ctx context.Context, capsule *
 		},
 	}
 
-	// Resolve alloy config (orbit defaults + capsule overrides)
 	resolvedAlloy, err := ResolveAlloyConfig(ctx, r.Client, capsule)
 	if err != nil {
 		return nil, err
 	}
 
-	// Add sidecar containers
-	if err := r.addSidecarContainers(deploy, capsule, resolvedAlloy); err != nil {
+	if err := r.addSidecarContainers(sts, capsule, resolvedAlloy); err != nil {
 		return nil, err
 	}
 
-	// Apply pod properties
-	r.applyPodProperties(deploy, capsule)
+	r.applyPodProperties(sts, capsule)
+	r.applyCheetahFSGroup(sts, capsule)
 
-	// Ensure shared fsGroup when cheetah uploaders are present so that all
-	// containers in the pod share GID ownership of the stream volumes.
-	// Must run after applyPodProperties to fill the gap only when the user
-	// has not already configured fsGroup themselves.
-	r.applyCheetahFSGroup(deploy, capsule)
-
-	return deploy, nil
+	return sts, nil
 }
 
-// buildConsensusNodeContainer builds the main consensus node container
-func (r *DeploymentSubReconciler) buildConsensusNodeContainer(capsule *operatorv1alpha1.ConsensusCapsule, volumeMounts []corev1.VolumeMount) (corev1.Container, error) {
+// buildConsensusNodeContainer builds the main consensus node container.
+func (r *StatefulSetSubReconciler) buildConsensusNodeContainer(capsule *operatorv1alpha1.ConsensusCapsule, volumeMounts []corev1.VolumeMount) (corev1.Container, error) {
 	cn := capsule.Spec.PodProperties.Containers.ConsensusNode
 
 	containerName := cn.Name
@@ -155,13 +139,32 @@ func (r *DeploymentSubReconciler) buildConsensusNodeContainer(capsule *operatorv
 		return corev1.Container{}, fmt.Errorf("consensus node image is required: set spec.podProperties.containers.consensusNode.softwareVersion")
 	}
 
+	env := []corev1.EnvVar{
+		{Name: "CONSENSUS_NODE_ID", Value: fmt.Sprintf("%d", capsule.Spec.NodeId)},
+		{
+			Name: "POD_IP",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"},
+			},
+		},
+	}
+
+	if capsule.Spec.NodeAlias != "" {
+		env = append(env, corev1.EnvVar{Name: "CONSENSUS_NODE_ALIAS", Value: capsule.Spec.NodeAlias})
+	}
+
+	if cn.JavaHeapMin != "" {
+		env = append(env, corev1.EnvVar{Name: "JAVA_HEAP_MIN", Value: cn.JavaHeapMin})
+	}
+
+	if cn.JavaHeapMax != "" {
+		env = append(env, corev1.EnvVar{Name: "JAVA_HEAP_MAX", Value: cn.JavaHeapMax})
+	}
+
 	container := corev1.Container{
 		Name:  containerName,
 		Image: image,
-		Env: []corev1.EnvVar{
-			{Name: "CONSENSUS_NODE_ID", Value: fmt.Sprintf("%d", capsule.Spec.NodeId)},
-			{Name: "JAVA_OPTS", Value: fmt.Sprintf("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=%d", DebugPort)},
-		},
+		Env:   env,
 		Ports: []corev1.ContainerPort{
 			{Name: "gossip", ContainerPort: GossipPort, Protocol: corev1.ProtocolTCP},
 			{Name: "grpc", ContainerPort: GrpcPort, Protocol: corev1.ProtocolTCP},
@@ -175,12 +178,14 @@ func (r *DeploymentSubReconciler) buildConsensusNodeContainer(capsule *operatorv
 		container.ImagePullPolicy = cn.ImagePullPolicy
 	}
 
-	// Apply resources if configured
+	if cn.SecurityContext != nil {
+		container.SecurityContext = cn.SecurityContext
+	}
+
 	if cn.Resources != nil {
 		container.Resources = *cn.Resources
 	}
 
-	// Add additional volume mounts
 	if len(cn.AdditionalVolumeMounts) > 0 {
 		container.VolumeMounts = append(container.VolumeMounts, cn.AdditionalVolumeMounts...)
 	}
@@ -188,186 +193,121 @@ func (r *DeploymentSubReconciler) buildConsensusNodeContainer(capsule *operatorv
 	return container, nil
 }
 
-// buildVolumes builds the volumes and volume mounts for the deployment
-func (r *DeploymentSubReconciler) buildVolumes(capsule *operatorv1alpha1.ConsensusCapsule) ([]corev1.Volume, []corev1.VolumeMount) {
+// buildVolumes builds all volumes and volume mounts for the StatefulSet pod.
+//
+// Volume strategy:
+//   - ConfigMap-backed volumes: always created, pointing to operator-managed CMs.
+//   - emptyDir-only volumes: always created as emptyDir (populated by image or ephemeral).
+//   - PVC-optional volumes: created as PVC when configured, otherwise emptyDir fallback.
+//   - Secret volumes: created only when the relevant spec field is set.
+func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.ConsensusCapsule) ([]corev1.Volume, []corev1.VolumeMount) {
+	const hapiBase = "/opt/hgcapp/services-hedera/HapiApp2.0"
+
+	pvc := capsule.Spec.PersistentVolumeClaims
+
+	// ── ConfigMap volumes ────────────────────────────────────────────────────
 	volumes := []corev1.Volume{
 		{
-			Name: "capsule-config",
+			Name: "hapi-app-config",
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{Name: ConfigMapName(capsule)},
+					LocalObjectReference: corev1.LocalObjectReference{Name: HapiAppConfigMapName(capsule)},
 				},
 			},
 		},
 		{
-			Name: "consensus-config",
+			Name: "data-config",
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{Name: ClusterConfigMapName},
-				},
-			},
-		},
-		{
-			Name: "config-data",
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{Name: ClusterConfigMapName},
-					Items: []corev1.KeyToPath{
-						{Key: "application.properties", Path: "application.properties"},
-						{Key: "api-permission.properties", Path: "api-permission.properties"},
-						{Key: "bootstrap.properties", Path: "bootstrap.properties"},
-						{Key: "genesis-throttles.json", Path: "genesis-throttles.json"},
-					},
+					LocalObjectReference: corev1.LocalObjectReference{Name: DataConfigMapName(capsule)},
 				},
 			},
 		},
 	}
 
 	volumeMounts := []corev1.VolumeMount{
-		{Name: "capsule-config", MountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/log4j2.xml", SubPath: "log4j2.xml"},
-		{Name: "consensus-config", MountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/config.txt", SubPath: "config.txt"},
-		{Name: "consensus-config", MountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/settings.txt", SubPath: "settings.txt"},
-		{Name: "config-data", MountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/data/config"},
+		{Name: "hapi-app-config", MountPath: "/etc/network-node/config", ReadOnly: true},
+		{Name: "data-config", MountPath: hapiBase + "/data/config"},
 	}
 
-	// Add PVC-based volumes if configured
-	if capsule.Spec.PersistentVolumeClaims != nil {
-		pvcConfig := capsule.Spec.PersistentVolumeClaims
-
-		if pvcConfig.Logs != nil {
-			volumes = append(volumes, corev1.Volume{
-				Name: VolumeTypeLogs,
-				VolumeSource: corev1.VolumeSource{
-					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: PVCName(capsule, VolumeTypeLogs),
-					},
+	// block-nodes.json — only when BlockNodes is configured
+	if capsule.Spec.BlockNodes != nil {
+		volumes = append(volumes, corev1.Volume{
+			Name: "block-nodes-config",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: BlockNodesConfigMapName(capsule)},
 				},
-			})
-			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name: VolumeTypeLogs, MountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/output",
-			})
-		}
-
-		if pvcConfig.Stats != nil {
-			volumes = append(volumes, corev1.Volume{
-				Name: VolumeTypeStats,
-				VolumeSource: corev1.VolumeSource{
-					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: PVCName(capsule, VolumeTypeStats),
-					},
-				},
-			})
-			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name: VolumeTypeStats, MountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/data/stats",
-			})
-		}
-
-		if pvcConfig.States != nil {
-			volumes = append(volumes, corev1.Volume{
-				Name: VolumeTypeStates,
-				VolumeSource: corev1.VolumeSource{
-					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: PVCName(capsule, VolumeTypeStates),
-					},
-				},
-			})
-			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name: VolumeTypeStates, MountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/data/saved",
-			})
-		}
-
-		if pvcConfig.Upgrade != nil {
-			volumes = append(volumes, corev1.Volume{
-				Name: VolumeTypeUpgrade,
-				VolumeSource: corev1.VolumeSource{
-					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: PVCName(capsule, VolumeTypeUpgrade),
-					},
-				},
-			})
-			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name: VolumeTypeUpgrade, MountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade",
-			})
-		}
-
-		if pvcConfig.Streams != nil {
-			if pvcConfig.Streams.Block != nil {
-				volumes = append(volumes, corev1.Volume{
-					Name: VolumeTypeBlocks,
-					VolumeSource: corev1.VolumeSource{
-						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-							ClaimName: PVCName(capsule, VolumeTypeBlocks),
-						},
-					},
-				})
-				volumeMounts = append(volumeMounts, corev1.VolumeMount{
-					Name: VolumeTypeBlocks, MountPath: "/opt/hgcapp/blockStreams",
-				})
-			}
-
-			if pvcConfig.Streams.Record != nil {
-				volumes = append(volumes, corev1.Volume{
-					Name: VolumeTypeRecords,
-					VolumeSource: corev1.VolumeSource{
-						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-							ClaimName: PVCName(capsule, VolumeTypeRecords),
-						},
-					},
-				})
-				volumeMounts = append(volumeMounts, corev1.VolumeMount{
-					Name: VolumeTypeRecords, MountPath: "/opt/hgcapp/recordStreams",
-				})
-			}
-
-			if pvcConfig.Streams.Events != nil {
-				volumes = append(volumes, corev1.Volume{
-					Name: VolumeTypeEvents,
-					VolumeSource: corev1.VolumeSource{
-						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-							ClaimName: PVCName(capsule, VolumeTypeEvents),
-						},
-					},
-				})
-				volumeMounts = append(volumeMounts, corev1.VolumeMount{
-					Name: VolumeTypeEvents, MountPath: "/opt/hgcapp/eventsStreams",
-				})
-			}
-		}
+			},
+		})
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      "block-nodes-config",
+			MountPath: hapiBase + "/data/config/block-nodes.json",
+			SubPath:   "block-nodes.json",
+		})
 	}
 
-	// Add pod-level volumes if configured (overrides PVC volumes)
-	if capsule.Spec.PodProperties.Volumes != nil {
-		podVolumes := capsule.Spec.PodProperties.Volumes
-
-		if podVolumes.Logs != nil {
-			volumes = append(volumes, *podVolumes.Logs)
+	// ── PVC-optional volumes (emptyDir fallback) ─────────────────────────────
+	pvcSpec := func(getter func(*operatorv1alpha1.ConsensusPVCConfig) *corev1.PersistentVolumeClaimSpec) *corev1.PersistentVolumeClaimSpec {
+		if pvc == nil {
+			return nil
 		}
-		if podVolumes.Stats != nil {
-			volumes = append(volumes, *podVolumes.Stats)
+		return getter(pvc)
+	}
+	streamsSpec := func(getter func(*operatorv1alpha1.ConsensusPVCStreams) *corev1.PersistentVolumeClaimSpec) *corev1.PersistentVolumeClaimSpec {
+		if pvc == nil || pvc.Streams == nil {
+			return nil
 		}
-		if podVolumes.States != nil {
-			volumes = append(volumes, *podVolumes.States)
-		}
-		if podVolumes.Upgrade != nil {
-			volumes = append(volumes, *podVolumes.Upgrade)
-		}
-		if podVolumes.Streams != nil {
-			if podVolumes.Streams.Block != nil {
-				volumes = append(volumes, *podVolumes.Streams.Block)
-			}
-			if podVolumes.Streams.Record != nil {
-				volumes = append(volumes, *podVolumes.Streams.Record)
-			}
-			if podVolumes.Streams.Events != nil {
-				volumes = append(volumes, *podVolumes.Streams.Events)
-			}
-		}
-		if len(podVolumes.AdditionalVolumes) > 0 {
-			volumes = append(volumes, podVolumes.AdditionalVolumes...)
-		}
+		return getter(pvc.Streams)
 	}
 
-	// Add secrets volumes if configured
+	pvcVolumes := []struct {
+		name      string
+		mountPath string
+		spec      *corev1.PersistentVolumeClaimSpec
+	}{
+		{VolumeTypeLogs, hapiBase + "/output", pvcSpec(func(c *operatorv1alpha1.ConsensusPVCConfig) *corev1.PersistentVolumeClaimSpec { return c.Logs })},
+		{VolumeTypeStats, hapiBase + "/data/stats", pvcSpec(func(c *operatorv1alpha1.ConsensusPVCConfig) *corev1.PersistentVolumeClaimSpec { return c.Stats })},
+		{VolumeTypeSaved, hapiBase + "/data/saved", pvcSpec(func(c *operatorv1alpha1.ConsensusPVCConfig) *corev1.PersistentVolumeClaimSpec { return c.Saved })},
+		{VolumeTypeState, hapiBase + "/state", pvcSpec(func(c *operatorv1alpha1.ConsensusPVCConfig) *corev1.PersistentVolumeClaimSpec { return c.State })},
+		{VolumeTypeUpgrade, hapiBase + "/data/upgrade", pvcSpec(func(c *operatorv1alpha1.ConsensusPVCConfig) *corev1.PersistentVolumeClaimSpec { return c.Upgrade })},
+		{VolumeTypeBlocks, "/opt/hgcapp/blockStreams", streamsSpec(func(s *operatorv1alpha1.ConsensusPVCStreams) *corev1.PersistentVolumeClaimSpec { return s.Block })},
+		{VolumeTypeRecords, "/opt/hgcapp/recordStreams", streamsSpec(func(s *operatorv1alpha1.ConsensusPVCStreams) *corev1.PersistentVolumeClaimSpec { return s.Record })},
+		{VolumeTypeEvents, "/opt/hgcapp/eventsStreams", streamsSpec(func(s *operatorv1alpha1.ConsensusPVCStreams) *corev1.PersistentVolumeClaimSpec { return s.Events })},
+	}
+
+	for _, v := range pvcVolumes {
+		volumes = append(volumes, volumeOrEmptyDir(v.name, PVCName(capsule, v.name), v.spec))
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{Name: v.name, MountPath: v.mountPath})
+	}
+
+	// ── Secret volumes ───────────────────────────────────────────────────────
+
+	// TLS cert + key (hedera.crt, hedera.key)
+	if capsule.Spec.HapiAppSecretsName != "" {
+		volumes = append(volumes, corev1.Volume{
+			Name: "hapi-app-secrets",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: capsule.Spec.HapiAppSecretsName,
+				},
+			},
+		})
+		volumeMounts = append(volumeMounts,
+			corev1.VolumeMount{
+				Name:      "hapi-app-secrets",
+				MountPath: hapiBase + "/hedera.crt",
+				SubPath:   "hedera.crt",
+			},
+			corev1.VolumeMount{
+				Name:      "hapi-app-secrets",
+				MountPath: hapiBase + "/hedera.key",
+				SubPath:   "hedera.key",
+			},
+		)
+	}
+
+	// Node signing keys
 	if capsule.Spec.Secrets != nil {
 		if capsule.Spec.Secrets.HostPath != nil {
 			volumes = append(volumes, corev1.Volume{
@@ -377,14 +317,11 @@ func (r *DeploymentSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consens
 				},
 			})
 			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name: "keys", MountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/data/keys",
+				Name: "keys", MountPath: hapiBase + "/data/keys",
 			})
 		} else if capsule.Spec.Secrets.SecretResources != nil {
-			// Use a projected volume to combine the node's signing keys (Secret)
-			// with all nodes' public keys (ConfigMap) into a single mount
 			var projectedSources []corev1.VolumeProjection
 
-			// Add node's own signing keys from Secret
 			secretItems := []corev1.KeyToPath{}
 			if capsule.Spec.Secrets.SecretResources.SigningPrivateKey.SecretName != "" {
 				secretItems = append(secretItems, corev1.KeyToPath{
@@ -409,7 +346,6 @@ func (r *DeploymentSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consens
 				})
 			}
 
-			// Add all nodes' public keys from the genesis-created ConfigMap
 			projectedSources = append(projectedSources, corev1.VolumeProjection{
 				ConfigMap: &corev1.ConfigMapProjection{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -429,13 +365,13 @@ func (r *DeploymentSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consens
 					},
 				})
 				volumeMounts = append(volumeMounts, corev1.VolumeMount{
-					Name: "keys", MountPath: "/opt/hgcapp/services-hedera/HapiApp2.0/data/keys",
+					Name: "keys", MountPath: hapiBase + "/data/keys",
 				})
 			}
 		}
 	}
 
-	// Add config folder if configured
+	// ── Legacy hostPath config folder ────────────────────────────────────────
 	if capsule.Spec.ConfigFolder != nil {
 		volumes = append(volumes, corev1.Volume{
 			Name: "config-folder",
@@ -448,12 +384,49 @@ func (r *DeploymentSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consens
 		})
 	}
 
+	// ── Pod-level volume overrides ───────────────────────────────────────────
+	if capsule.Spec.PodProperties.Volumes != nil {
+		podVols := capsule.Spec.PodProperties.Volumes
+		for _, v := range []struct{ vol *corev1.Volume }{
+			{podVols.Logs}, {podVols.Stats}, {podVols.Saved}, {podVols.Upgrade},
+		} {
+			if v.vol != nil {
+				volumes = append(volumes, *v.vol)
+			}
+		}
+		if podVols.Streams != nil {
+			for _, v := range []struct{ vol *corev1.Volume }{
+				{podVols.Streams.Block}, {podVols.Streams.Record}, {podVols.Streams.Events},
+			} {
+				if v.vol != nil {
+					volumes = append(volumes, *v.vol)
+				}
+			}
+		}
+		volumes = append(volumes, podVols.AdditionalVolumes...)
+	}
+
 	return volumes, volumeMounts
 }
 
-// addSidecarContainers adds sidecar containers to the deployment.
-// resolvedAlloy is the effective AlloyConfig after merging orbit defaults with capsule overrides.
-func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment, capsule *operatorv1alpha1.ConsensusCapsule, resolvedAlloy *operatorv1alpha1.AlloyConfig) error {
+// volumeOrEmptyDir returns a PVC-backed volume when spec is non-nil, otherwise an emptyDir volume.
+func volumeOrEmptyDir(name, pvcName string, spec *corev1.PersistentVolumeClaimSpec) corev1.Volume {
+	if spec != nil {
+		return corev1.Volume{
+			Name: name,
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: pvcName},
+			},
+		}
+	}
+	return corev1.Volume{
+		Name:         name,
+		VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+	}
+}
+
+// addSidecarContainers adds optional sidecar containers to the StatefulSet pod template.
+func (r *StatefulSetSubReconciler) addSidecarContainers(sts *appsv1.StatefulSet, capsule *operatorv1alpha1.ConsensusCapsule, resolvedAlloy *operatorv1alpha1.AlloyConfig) error {
 	containers := capsule.Spec.PodProperties.Containers
 
 	accountId := capsule.Spec.AccountId
@@ -461,9 +434,8 @@ func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment
 		(containers.RecordsUploader != nil && containers.RecordsUploader.Enabled) ||
 		(containers.EventsUploader != nil && containers.EventsUploader.Enabled)
 
-	// Add Cheetah ConfigMap volume and init container if any cheetah uploader is enabled
 	if cheetahEnabled {
-		deploy.Spec.Template.Spec.Volumes = append(deploy.Spec.Template.Spec.Volumes, corev1.Volume{
+		sts.Spec.Template.Spec.Volumes = append(sts.Spec.Template.Spec.Volumes, corev1.Volume{
 			Name: "solo-cheetah-config",
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
@@ -473,46 +445,40 @@ func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment
 		})
 	}
 
-	// Block streams uploader
 	if containers.BlocksUploader != nil && containers.BlocksUploader.Enabled {
 		c, err := r.buildCheetahUploaderContainer(containers.BlocksUploader, "blockstream-uploader", "cheetah-block-streams.yaml", "/opt/hgcapp/blockStreams", "BLOCK_STREAMS",
 			fmt.Sprintf("blockStreams/block-%s", accountId))
 		if err != nil {
 			return fmt.Errorf("blockstream-uploader: %w", err)
 		}
-		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers, c)
+		sts.Spec.Template.Spec.Containers = append(sts.Spec.Template.Spec.Containers, c)
 	}
 
-	// Record streams uploader
 	if containers.RecordsUploader != nil && containers.RecordsUploader.Enabled {
 		c, err := r.buildCheetahUploaderContainer(containers.RecordsUploader, "record-stream-uploader", "cheetah-record-streams.yaml", "/opt/hgcapp/recordStreams", "RECORD_STREAMS",
 			fmt.Sprintf("recordstreams/record%s", accountId))
 		if err != nil {
 			return fmt.Errorf("record-stream-uploader: %w", err)
 		}
-		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers, c)
+		sts.Spec.Template.Spec.Containers = append(sts.Spec.Template.Spec.Containers, c)
 	}
 
-	// Events streams uploader
 	if containers.EventsUploader != nil && containers.EventsUploader.Enabled {
 		c, err := r.buildCheetahUploaderContainer(containers.EventsUploader, "event-stream-uploader", "cheetah-events-streams.yaml", "/opt/hgcapp/eventsStreams", "EVENTS_STREAMS",
 			fmt.Sprintf("eventsStreams/events_%s", accountId))
 		if err != nil {
 			return fmt.Errorf("event-stream-uploader: %w", err)
 		}
-		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers, c)
+		sts.Spec.Template.Spec.Containers = append(sts.Spec.Template.Spec.Containers, c)
 	}
 
-	// Legacy backup uploader (rclone-based)
 	if containers.BackupUploader != nil && containers.BackupUploader.Enabled {
-		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers,
+		sts.Spec.Template.Spec.Containers = append(sts.Spec.Template.Spec.Containers,
 			r.buildBackupUploaderContainer(containers.BackupUploader))
 	}
 
-	// Grafana Alloy telemetry sidecar (uses resolved config from orbit defaults + capsule overrides)
 	if resolvedAlloy != nil && resolvedAlloy.Enabled {
-		// Add Alloy config volume
-		deploy.Spec.Template.Spec.Volumes = append(deploy.Spec.Template.Spec.Volumes, corev1.Volume{
+		sts.Spec.Template.Spec.Volumes = append(sts.Spec.Template.Spec.Volumes, corev1.Volume{
 			Name: "alloy-config",
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
@@ -520,8 +486,7 @@ func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment
 				},
 			},
 		})
-
-		deploy.Spec.Template.Spec.Containers = append(deploy.Spec.Template.Spec.Containers,
+		sts.Spec.Template.Spec.Containers = append(sts.Spec.Template.Spec.Containers,
 			r.buildAlloyContainer(capsule, resolvedAlloy))
 	}
 
@@ -529,9 +494,7 @@ func (r *DeploymentSubReconciler) addSidecarContainers(deploy *appsv1.Deployment
 }
 
 // buildCheetahUploaderContainer builds a cheetah uploader sidecar container.
-// streamBucketPath is the stream-specific path component (e.g. "blockStreams/block-0.0.3").
-func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(uploader *operatorv1alpha1.CheetahUploader, containerName, configFile, mountPath, envPrefix, streamBucketPath string) (corev1.Container, error) {
-	// Validate blob config: URL is required when blob is enabled
+func (r *StatefulSetSubReconciler) buildCheetahUploaderContainer(uploader *operatorv1alpha1.CheetahUploader, containerName, configFile, mountPath, envPrefix, streamBucketPath string) (corev1.Container, error) {
 	if uploader.Blob != nil && uploader.Blob.Enabled && uploader.Blob.URL == "" {
 		return corev1.Container{}, fmt.Errorf("blob storage is enabled (blob.enabled=true) but blob.url is not set")
 	}
@@ -543,7 +506,6 @@ func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(uploader *operat
 		name = containerName
 	}
 
-	// Build volume mounts
 	volumeMounts := []corev1.VolumeMount{
 		{
 			Name:      "solo-cheetah-config",
@@ -557,12 +519,9 @@ func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(uploader *operat
 		},
 	}
 
-	// Build environment variables
 	env := []corev1.EnvVar{}
-
 	bucketPath := cheetahBucketPath(uploader.BucketPrefix, streamBucketPath)
 
-	// GCS configuration
 	if uploader.GCS != nil {
 		if uploader.GCS.Enabled {
 			env = append(env, corev1.EnvVar{Name: "GCS_ENABLED", Value: "true"})
@@ -586,7 +545,6 @@ func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(uploader *operat
 		env = append(env, corev1.EnvVar{Name: fmt.Sprintf("GCS_%s_BUCKET_PREFIX", envPrefix), Value: bucketPath})
 	}
 
-	// S3 configuration
 	if uploader.S3 != nil {
 		if uploader.S3.Enabled {
 			env = append(env, corev1.EnvVar{Name: "S3_ENABLED", Value: "true"})
@@ -610,7 +568,6 @@ func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(uploader *operat
 		env = append(env, corev1.EnvVar{Name: fmt.Sprintf("S3_%s_BUCKET_PREFIX", envPrefix), Value: bucketPath})
 	}
 
-	// Blob configuration (multicloud via go-cloud)
 	if uploader.Blob != nil {
 		if uploader.Blob.Enabled {
 			env = append(env, corev1.EnvVar{Name: "BLOB_ENABLED", Value: "true"})
@@ -655,7 +612,6 @@ func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(uploader *operat
 		container.Resources = *uploader.Resources
 	}
 
-	// Add envFrom for secrets
 	if uploader.EnvFromSecret != "" {
 		container.EnvFrom = []corev1.EnvFromSource{
 			{SecretRef: &corev1.SecretEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: uploader.EnvFromSecret}}},
@@ -665,12 +621,8 @@ func (r *DeploymentSubReconciler) buildCheetahUploaderContainer(uploader *operat
 	return container, nil
 }
 
-// applyCheetahFSGroup sets fsGroup on the pod security context when any cheetah uploader
-// is enabled. This ensures all containers in the pod share GID ownership of stream volumes,
-// so cheetah can delete files written by the consensus node without needing an init container
-// or a hardcoded per-container RunAsUser.
-// Only fills in fsGroup if the user has not already set one.
-func (r *DeploymentSubReconciler) applyCheetahFSGroup(deploy *appsv1.Deployment, capsule *operatorv1alpha1.ConsensusCapsule) {
+// applyCheetahFSGroup sets fsGroup on the pod security context when any Cheetah uploader is enabled.
+func (r *StatefulSetSubReconciler) applyCheetahFSGroup(sts *appsv1.StatefulSet, capsule *operatorv1alpha1.ConsensusCapsule) {
 	containers := capsule.Spec.PodProperties.Containers
 	cheetahEnabled := (containers.BlocksUploader != nil && containers.BlocksUploader.Enabled) ||
 		(containers.RecordsUploader != nil && containers.RecordsUploader.Enabled) ||
@@ -678,18 +630,16 @@ func (r *DeploymentSubReconciler) applyCheetahFSGroup(deploy *appsv1.Deployment,
 	if !cheetahEnabled {
 		return
 	}
-
-	if deploy.Spec.Template.Spec.SecurityContext == nil {
-		deploy.Spec.Template.Spec.SecurityContext = &corev1.PodSecurityContext{}
+	if sts.Spec.Template.Spec.SecurityContext == nil {
+		sts.Spec.Template.Spec.SecurityContext = &corev1.PodSecurityContext{}
 	}
-	if deploy.Spec.Template.Spec.SecurityContext.FSGroup == nil {
+	if sts.Spec.Template.Spec.SecurityContext.FSGroup == nil {
 		fsGroup := int64(2000)
-		deploy.Spec.Template.Spec.SecurityContext.FSGroup = &fsGroup
+		sts.Spec.Template.Spec.SecurityContext.FSGroup = &fsGroup
 	}
 }
 
 // cheetahBucketPath returns the full bucket object prefix for a stream.
-// If the uploader has a BucketPrefix set it is prepended; otherwise the stream-specific path is used as-is.
 func cheetahBucketPath(bucketPrefix, streamPath string) string {
 	if bucketPrefix != "" {
 		return bucketPrefix + "/" + streamPath
@@ -697,7 +647,7 @@ func cheetahBucketPath(bucketPrefix, streamPath string) string {
 	return streamPath
 }
 
-// getVolumeNameForPath returns the volume name for a given mount path
+// getVolumeNameForPath returns the volume name for a given Cheetah stream mount path.
 func getVolumeNameForPath(path string) string {
 	switch path {
 	case "/opt/hgcapp/blockStreams":
@@ -711,8 +661,8 @@ func getVolumeNameForPath(path string) string {
 	}
 }
 
-// buildBackupUploaderContainer builds the backup uploader container (rclone-based)
-func (r *DeploymentSubReconciler) buildBackupUploaderContainer(config *operatorv1alpha1.StreamUploader) corev1.Container {
+// buildBackupUploaderContainer builds the backup uploader container (rclone-based).
+func (r *StatefulSetSubReconciler) buildBackupUploaderContainer(config *operatorv1alpha1.StreamUploader) corev1.Container {
 	image := common.BuildImageOrDefault(config.SoftwareVersion, "gcr.io/hedera-registry/hedera-backups:latest")
 
 	name := config.Name
@@ -740,14 +690,13 @@ func (r *DeploymentSubReconciler) buildBackupUploaderContainer(config *operatorv
 	return container
 }
 
-// buildAlloyContainer builds the Grafana Alloy telemetry sidecar container
-func (r *DeploymentSubReconciler) buildAlloyContainer(capsule *operatorv1alpha1.ConsensusCapsule, config *operatorv1alpha1.AlloyConfig) corev1.Container {
+// buildAlloyContainer builds the Grafana Alloy telemetry sidecar container.
+func (r *StatefulSetSubReconciler) buildAlloyContainer(capsule *operatorv1alpha1.ConsensusCapsule, config *operatorv1alpha1.AlloyConfig) corev1.Container {
 	containerName := config.Name
 	if containerName == "" {
 		containerName = "alloy"
 	}
 
-	// Precedence: SoftwareVersion > Image > AlloyDefaultImage
 	image := common.BuildImageOrDefault(config.SoftwareVersion, config.Image)
 	if image == "" {
 		image = AlloyDefaultImage
@@ -761,16 +710,11 @@ func (r *DeploymentSubReconciler) buildAlloyContainer(capsule *operatorv1alpha1.
 			{Name: "alloy-metrics", ContainerPort: AlloyHTTPPort, Protocol: corev1.ProtocolTCP},
 		},
 		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      "alloy-config",
-				MountPath: "/etc/alloy",
-				ReadOnly:  true,
-			},
+			{Name: "alloy-config", MountPath: "/etc/alloy", ReadOnly: true},
 		},
 	}
 
 	// Share the logs volume with the consensus node (read-only) for log scraping.
-	// Only mount if Loki is enabled AND the logs PVC is configured, to avoid a failed mount.
 	lokiEnabled := config.Config != nil && config.Config.Exporters != nil &&
 		config.Config.Exporters.Loki != nil && config.Config.Exporters.Loki.Enabled
 	logsPVCExists := capsule.Spec.PersistentVolumeClaims != nil && capsule.Spec.PersistentVolumeClaims.Logs != nil
@@ -782,8 +726,6 @@ func (r *DeploymentSubReconciler) buildAlloyContainer(capsule *operatorv1alpha1.
 		})
 	}
 
-	// Inject Loki auth credentials from secret if configured.
-	// The River config references env("LOKI_USERNAME") and env("LOKI_PASSWORD").
 	lokiAuth := config.Config != nil && config.Config.Exporters != nil &&
 		config.Config.Exporters.Loki != nil && config.Config.Exporters.Loki.Auth != nil &&
 		config.Config.Exporters.Loki.Auth.Enabled && config.Config.Exporters.Loki.Auth.Secret != nil
@@ -826,69 +768,51 @@ func (r *DeploymentSubReconciler) buildAlloyContainer(capsule *operatorv1alpha1.
 	return container
 }
 
-// applyPodProperties applies pod-level properties to the deployment
-func (r *DeploymentSubReconciler) applyPodProperties(deploy *appsv1.Deployment, capsule *operatorv1alpha1.ConsensusCapsule) {
+// applyPodProperties applies pod-level properties to the StatefulSet pod template.
+func (r *StatefulSetSubReconciler) applyPodProperties(sts *appsv1.StatefulSet, capsule *operatorv1alpha1.ConsensusCapsule) {
 	podProps := capsule.Spec.PodProperties
 
 	if podProps.Affinity != nil {
-		deploy.Spec.Template.Spec.Affinity = podProps.Affinity
+		sts.Spec.Template.Spec.Affinity = podProps.Affinity
 	}
-
 	if podProps.NodeSelector != nil {
-		deploy.Spec.Template.Spec.NodeSelector = podProps.NodeSelector
+		sts.Spec.Template.Spec.NodeSelector = podProps.NodeSelector
 	}
-
 	if len(podProps.Tolerations) > 0 {
-		deploy.Spec.Template.Spec.Tolerations = podProps.Tolerations
+		sts.Spec.Template.Spec.Tolerations = podProps.Tolerations
 	}
-
 	if len(podProps.TopologySpreadConstraints) > 0 {
-		deploy.Spec.Template.Spec.TopologySpreadConstraints = podProps.TopologySpreadConstraints
+		sts.Spec.Template.Spec.TopologySpreadConstraints = podProps.TopologySpreadConstraints
 	}
-
 	if len(podProps.ResourceClaims) > 0 {
-		deploy.Spec.Template.Spec.ResourceClaims = podProps.ResourceClaims
+		sts.Spec.Template.Spec.ResourceClaims = podProps.ResourceClaims
 	}
-
 	if podProps.SecurityContext != nil {
-		deploy.Spec.Template.Spec.SecurityContext = podProps.SecurityContext
+		sts.Spec.Template.Spec.SecurityContext = podProps.SecurityContext
 	}
-
 	if podProps.Priority != nil {
-		deploy.Spec.Template.Spec.Priority = podProps.Priority
+		sts.Spec.Template.Spec.Priority = podProps.Priority
 	}
-
 	if podProps.PriorityClassName != "" {
-		deploy.Spec.Template.Spec.PriorityClassName = podProps.PriorityClassName
+		sts.Spec.Template.Spec.PriorityClassName = podProps.PriorityClassName
 	}
-
 	if podProps.PreemptionPolicy != "" {
 		policy := corev1.PreemptionPolicy(podProps.PreemptionPolicy)
-		deploy.Spec.Template.Spec.PreemptionPolicy = &policy
+		sts.Spec.Template.Spec.PreemptionPolicy = &policy
 	}
-
 	if podProps.TerminationGracePeriodSeconds != nil {
-		deploy.Spec.Template.Spec.TerminationGracePeriodSeconds = podProps.TerminationGracePeriodSeconds
+		sts.Spec.Template.Spec.TerminationGracePeriodSeconds = podProps.TerminationGracePeriodSeconds
 	}
 }
 
-// needsUpdate checks if the deployment needs to be updated
-func (r *DeploymentSubReconciler) needsUpdate(existing, desired *appsv1.Deployment) bool {
-	// Compare replicas
+// needsUpdate checks if the StatefulSet needs to be updated.
+func (r *StatefulSetSubReconciler) needsUpdate(existing, desired *appsv1.StatefulSet) bool {
 	if existing.Spec.Replicas == nil || *existing.Spec.Replicas != *desired.Spec.Replicas {
 		return true
 	}
-
-	// Compare strategy
-	if existing.Spec.Strategy.Type != desired.Spec.Strategy.Type {
-		return true
-	}
-
-	// Compare containers (simplified check)
 	if len(existing.Spec.Template.Spec.Containers) != len(desired.Spec.Template.Spec.Containers) {
 		return true
 	}
-
 	for i, container := range desired.Spec.Template.Spec.Containers {
 		if i >= len(existing.Spec.Template.Spec.Containers) {
 			return true
@@ -898,11 +822,5 @@ func (r *DeploymentSubReconciler) needsUpdate(existing, desired *appsv1.Deployme
 			return true
 		}
 	}
-
-	// Compare volumes (simplified check)
-	if len(existing.Spec.Template.Spec.Volumes) != len(desired.Spec.Template.Spec.Volumes) {
-		return true
-	}
-
-	return false
+	return len(existing.Spec.Template.Spec.Volumes) != len(desired.Spec.Template.Spec.Volumes)
 }

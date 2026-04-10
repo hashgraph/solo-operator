@@ -115,7 +115,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}, timeout, interval).Should(BeTrue())
 
 			By("Verifying the ConfigMap is created")
-			cmLookupKey := types.NamespacedName{Name: fmt.Sprintf("%s-cm", capsuleName), Namespace: capsuleNamespace}
+			cmLookupKey := types.NamespacedName{Name: fmt.Sprintf("%s-hapi-app-cm", capsuleName), Namespace: capsuleNamespace}
 			createdCM := &corev1.ConfigMap{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, cmLookupKey, createdCM)
@@ -131,14 +131,14 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 
-			By("Verifying the Deployment is created")
-			deployLookupKey := types.NamespacedName{Name: fmt.Sprintf("%s-consensus-node", capsuleName), Namespace: capsuleNamespace}
-			createdDeploy := &appsv1.Deployment{}
+			By("Verifying the StatefulSet is created")
+			stsLookupKey := types.NamespacedName{Name: capsuleName, Namespace: capsuleNamespace}
+			createdSts := &appsv1.StatefulSet{}
 			Eventually(func() bool {
-				err := k8sClient.Get(ctx, deployLookupKey, createdDeploy)
+				err := k8sClient.Get(ctx, stsLookupKey, createdSts)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
-			Expect(createdDeploy.Spec.Template.Spec.Containers[0].Image).To(Equal("gcr.io/hedera-registry/consensus-node:0.65.1"))
+			Expect(createdSts.Spec.Template.Spec.Containers[0].Image).To(Equal("gcr.io/hedera-registry/consensus-node:0.65.1"))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, capsule)).Should(Succeed())

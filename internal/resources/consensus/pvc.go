@@ -46,7 +46,8 @@ func (r *PVCSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alp
 	pvcSpecs := map[string]*corev1.PersistentVolumeClaimSpec{
 		VolumeTypeLogs:    pvcConfig.Logs,
 		VolumeTypeStats:   pvcConfig.Stats,
-		VolumeTypeStates:  pvcConfig.States,
+		VolumeTypeSaved:   pvcConfig.Saved,
+		VolumeTypeState:   pvcConfig.State,
 		VolumeTypeUpgrade: pvcConfig.Upgrade,
 	}
 
@@ -123,8 +124,11 @@ func GetPVCNames(capsule *operatorv1alpha1.ConsensusCapsule) []string {
 	if pvcConfig.Stats != nil {
 		names = append(names, PVCName(capsule, VolumeTypeStats))
 	}
-	if pvcConfig.States != nil {
-		names = append(names, PVCName(capsule, VolumeTypeStates))
+	if pvcConfig.Saved != nil {
+		names = append(names, PVCName(capsule, VolumeTypeSaved))
+	}
+	if pvcConfig.State != nil {
+		names = append(names, PVCName(capsule, VolumeTypeState))
 	}
 	if pvcConfig.Upgrade != nil {
 		names = append(names, PVCName(capsule, VolumeTypeUpgrade))

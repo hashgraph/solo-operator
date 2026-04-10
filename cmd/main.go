@@ -103,7 +103,7 @@ func main() {
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "solo-operator.hedera.com",
+		LeaderElectionID:       "operator.solo.hedera.com",
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")

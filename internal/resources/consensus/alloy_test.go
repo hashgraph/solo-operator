@@ -15,7 +15,7 @@ import (
 )
 
 func TestBuildAlloyContainer_Defaults(t *testing.T) {
-	reconciler := &DeploymentSubReconciler{}
+	reconciler := &StatefulSetSubReconciler{}
 	capsule := &operatorv1alpha1.ConsensusCapsule{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-node", Namespace: "test-ns"},
 	}
@@ -45,7 +45,7 @@ func TestBuildAlloyContainer_Defaults(t *testing.T) {
 }
 
 func TestBuildAlloyContainer_CustomNameAndImage(t *testing.T) {
-	reconciler := &DeploymentSubReconciler{}
+	reconciler := &StatefulSetSubReconciler{}
 	capsule := &operatorv1alpha1.ConsensusCapsule{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-node", Namespace: "test-ns"},
 	}
@@ -66,7 +66,7 @@ func TestBuildAlloyContainer_CustomNameAndImage(t *testing.T) {
 }
 
 func TestBuildAlloyContainer_ImagePullPolicy(t *testing.T) {
-	reconciler := &DeploymentSubReconciler{}
+	reconciler := &StatefulSetSubReconciler{}
 	capsule := &operatorv1alpha1.ConsensusCapsule{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-node", Namespace: "test-ns"},
 	}
@@ -83,7 +83,7 @@ func TestBuildAlloyContainer_ImagePullPolicy(t *testing.T) {
 }
 
 func TestBuildAlloyContainer_Resources(t *testing.T) {
-	reconciler := &DeploymentSubReconciler{}
+	reconciler := &StatefulSetSubReconciler{}
 	capsule := &operatorv1alpha1.ConsensusCapsule{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-node", Namespace: "test-ns"},
 	}
@@ -112,7 +112,7 @@ func TestBuildAlloyContainer_Resources(t *testing.T) {
 }
 
 func TestBuildAlloyContainer_AdditionalVolumeMounts(t *testing.T) {
-	reconciler := &DeploymentSubReconciler{}
+	reconciler := &StatefulSetSubReconciler{}
 	capsule := &operatorv1alpha1.ConsensusCapsule{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-node", Namespace: "test-ns"},
 	}
@@ -138,7 +138,7 @@ func TestBuildAlloyContainer_AdditionalVolumeMounts(t *testing.T) {
 }
 
 func TestBuildAlloyContainer_LokiEnabled_WithLogsPVC_MountsLogs(t *testing.T) {
-	reconciler := &DeploymentSubReconciler{}
+	reconciler := &StatefulSetSubReconciler{}
 	capsule := &operatorv1alpha1.ConsensusCapsule{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-node", Namespace: "test-ns"},
 		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
@@ -177,7 +177,7 @@ func TestBuildAlloyContainer_LokiEnabled_WithLogsPVC_MountsLogs(t *testing.T) {
 }
 
 func TestBuildAlloyContainer_LokiEnabled_NoLogsPVC_SkipsLogsMount(t *testing.T) {
-	reconciler := &DeploymentSubReconciler{}
+	reconciler := &StatefulSetSubReconciler{}
 	capsule := &operatorv1alpha1.ConsensusCapsule{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-node", Namespace: "test-ns"},
 	}
@@ -204,7 +204,7 @@ func TestBuildAlloyContainer_LokiEnabled_NoLogsPVC_SkipsLogsMount(t *testing.T) 
 }
 
 func TestAddSidecarContainers_Alloy(t *testing.T) {
-	reconciler := &DeploymentSubReconciler{}
+	reconciler := &StatefulSetSubReconciler{}
 
 	capsule := &operatorv1alpha1.ConsensusCapsule{
 		ObjectMeta: metav1.ObjectMeta{
@@ -230,8 +230,8 @@ func TestAddSidecarContainers_Alloy(t *testing.T) {
 		},
 	}
 
-	deploy := &appsv1.Deployment{
-		Spec: appsv1.DeploymentSpec{
+	deploy := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
@@ -273,7 +273,7 @@ func TestAddSidecarContainers_Alloy(t *testing.T) {
 }
 
 func TestAddSidecarContainers_AlloyDisabled(t *testing.T) {
-	reconciler := &DeploymentSubReconciler{}
+	reconciler := &StatefulSetSubReconciler{}
 
 	capsule := &operatorv1alpha1.ConsensusCapsule{
 		ObjectMeta: metav1.ObjectMeta{
@@ -298,8 +298,8 @@ func TestAddSidecarContainers_AlloyDisabled(t *testing.T) {
 		},
 	}
 
-	deploy := &appsv1.Deployment{
-		Spec: appsv1.DeploymentSpec{
+	deploy := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
@@ -319,7 +319,7 @@ func TestAddSidecarContainers_AlloyDisabled(t *testing.T) {
 }
 
 func TestAddSidecarContainers_AlloyNil(t *testing.T) {
-	reconciler := &DeploymentSubReconciler{}
+	reconciler := &StatefulSetSubReconciler{}
 
 	capsule := &operatorv1alpha1.ConsensusCapsule{
 		ObjectMeta: metav1.ObjectMeta{
@@ -341,8 +341,8 @@ func TestAddSidecarContainers_AlloyNil(t *testing.T) {
 		},
 	}
 
-	deploy := &appsv1.Deployment{
-		Spec: appsv1.DeploymentSpec{
+	deploy := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
