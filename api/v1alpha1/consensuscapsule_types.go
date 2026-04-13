@@ -117,6 +117,11 @@ type ConsensusSecretResources struct {
 	SigningPrivateKey        KeyReference `json:"signingPrivateKey"`
 	SigningPublicCertificate KeyReference `json:"signingPublicCertificate"`
 
+	// AdminPublicKey references the ED25519 admin public key for this node.
+	// Used when building genesis-network.json
+	// +optional
+	AdminPublicKey *KeyReference `json:"adminPublicKey,omitempty"`
+
 	// +optional
 	LedgerEncryptionKey *KeyReference `json:"ledgerEncryptionKey,omitempty"`
 

@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 )
 
 // CreateClusterConfigStep creates the cluster configuration ConfigMap
@@ -180,7 +181,7 @@ func (s *CreateClusterConfigStep) buildConfigTxt(capsules []operatorv1alpha1.Con
 
 		accountId := capsule.Spec.AccountId
 		if accountId == "" {
-			accountId = fmt.Sprintf("0.0.%d", 3+nodeId) // default account
+			accountId = common.AccountIdForNode(nodeId)
 		}
 
 		// Format: address, nodeId, nickname, selfname, weight, internalIP, internalPort, externalHost, externalPort, accountId
@@ -642,7 +643,7 @@ func (s *CreateClusterConfigStep) createOrUpdateConfigMap(ctx context.Context, n
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      ClusterConfigName,
 				Namespace: namespace,
-				Labels:    standardLabels(ClusterConfigName, orbitName),
+				Labels:    common.StandardLabels(ClusterConfigName, orbitName),
 			},
 			Data: data,
 		}
@@ -654,7 +655,7 @@ func (s *CreateClusterConfigStep) createOrUpdateConfigMap(ctx context.Context, n
 
 	// Update existing ConfigMap
 	cm.Data = data
-	cm.Labels = standardLabels(ClusterConfigName, orbitName)
+	cm.Labels = common.StandardLabels(ClusterConfigName, orbitName)
 	logger.Info("Updating cluster config ConfigMap", "namespace", namespace, "name", ClusterConfigName)
 	return s.client.Update(ctx, cm)
 }

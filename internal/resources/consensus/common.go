@@ -11,30 +11,28 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
-// Label keys
+// Label keys — generic keys alias common; consensus-specific keys defined here.
 const (
-	LabelManagedBy = "app.kubernetes.io/managed-by"
-	LabelPartOf    = "app.kubernetes.io/part-of"
-	LabelOrbit     = "operator.solo.hedera.com/orbit"
-	LabelNodeId    = "operator.solo.hedera.com/node-id"
-	LabelComponent = "app.kubernetes.io/component"
+	LabelManagedBy = common.LabelManagedBy
+	LabelPartOf    = common.LabelPartOf
+	LabelOrbit     = common.LabelOrbit
+	LabelComponent = common.LabelComponent
 
+	LabelNodeId        = "operator.solo.hedera.com/node-id"
 	LabelSoloNodeName  = "operator.solo.hedera.com/node-name"
 	LabelSoloAccountId = "operator.solo.hedera.com/account-id"
 	LabelSoloType      = "operator.solo.hedera.com/type"
 	LabelSoloPromEndpt = "operator.solo.hedera.com/prometheus-endpoint"
 )
 
-// Label values
+// Label values — generic values alias common; consensus-specific values defined here.
 const (
-	// ManagedByValue is the value for the managed-by label
-	ManagedByValue = "solo-operator"
-	// PartOfConsensusNode is the value for consensus node part-of label
+	ManagedByValue      = common.ManagedByValue
 	PartOfConsensusNode = "consensus-node"
-	// ComponentDeployment is the component value for deployment
 	ComponentDeployment = "deployment"
 )
 
@@ -55,15 +53,19 @@ const (
 	ClusterConfigMapName = "cluster-config"
 	// PublicKeysConfigMapName is the name of the public keys ConfigMap created by genesis
 	PublicKeysConfigMapName = "public-keys"
+	// GenesisConfigMapName is the namespace-scoped ConfigMap containing genesis-network.json
+	GenesisConfigMapName = "genesis-config"
+	// GenesisNetworkFileName is the key/filename for the roster JSON inside GenesisConfigMapName
+	GenesisNetworkFileName = "genesis-network.json"
 	// ConsensusSubdomain is the subdomain for consensus nodes
 	ConsensusSubdomain = "consensus"
 )
 
-// Port numbers
+// Port numbers — gossip/gRPC alias common; consensus-specific ports defined here.
 const (
-	GossipPort     = 50111
-	GrpcPort       = 50211
-	GrpcsPort      = 50212
+	GossipPort     = common.GossipPort
+	GrpcPort       = common.GrpcPort
+	GrpcsPort      = common.GrpcsPort
 	PrometheusPort = 9999
 	AlloyHTTPPort  = 12345
 	DebugPort      = 5005

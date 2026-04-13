@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 )
 
 // CreatePublicKeysStep creates the public keys ConfigMap
@@ -105,7 +106,7 @@ func (s *CreatePublicKeysStep) buildPublicKeysData(ctx context.Context, namespac
 		}
 
 		// Decode from base64 if needed (secret data is already base64 decoded by K8s)
-		nodeName := prepareNodeName(capsule.Spec.NodeId)
+		nodeName := common.NodeAlias(capsule.Spec.NodeId)
 		key := fmt.Sprintf("s-public-%s.pem", nodeName)
 		data[key] = string(encoded)
 	}
@@ -145,7 +146,7 @@ func (s *CreatePublicKeysStep) createOrUpdateConfigMap(ctx context.Context, name
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      PublicKeysName,
 				Namespace: namespace,
-				Labels:    standardLabels(PublicKeysName, orbitName),
+				Labels:    common.StandardLabels(PublicKeysName, orbitName),
 			},
 			Data: data,
 		}
@@ -157,7 +158,7 @@ func (s *CreatePublicKeysStep) createOrUpdateConfigMap(ctx context.Context, name
 
 	// Update existing ConfigMap
 	cm.Data = data
-	cm.Labels = standardLabels(PublicKeysName, orbitName)
+	cm.Labels = common.StandardLabels(PublicKeysName, orbitName)
 	logger.Info("Updating public keys ConfigMap", "namespace", namespace, "name", PublicKeysName)
 	return s.client.Update(ctx, cm)
 }
@@ -202,20 +203,4 @@ func (s *CreatePublicKeysStep) ShouldSkip(resource *operatorv1alpha1.NetworkOper
 		return true
 	}
 	return s.IsSuccessful(resource, status)
-}
-
-// prepareNodeName creates a node name from a node ID
-func prepareNodeName(nodeId int64) string {
-	return fmt.Sprintf("node%d", nodeId)
-}
-
-// standardLabels returns standard labels for the ConfigMap
-func standardLabels(name, orbitName string) map[string]string {
-	return map[string]string{
-		"app.kubernetes.io/name":       name,
-		"app.kubernetes.io/instance":   orbitName,
-		"app.kubernetes.io/managed-by": "solo-operator",
-		"app.kubernetes.io/part-of":    "consensus-node",
-		"app.kubernetes.io/component":  "config-map",
-	}
 }

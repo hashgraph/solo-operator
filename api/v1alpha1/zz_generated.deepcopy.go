@@ -961,6 +961,11 @@ func (in *ConsensusSecretResources) DeepCopyInto(out *ConsensusSecretResources) 
 	out.GrpcTlsPublicCertificate = in.GrpcTlsPublicCertificate
 	out.SigningPrivateKey = in.SigningPrivateKey
 	out.SigningPublicCertificate = in.SigningPublicCertificate
+	if in.AdminPublicKey != nil {
+		in, out := &in.AdminPublicKey, &out.AdminPublicKey
+		*out = new(KeyReference)
+		**out = **in
+	}
 	if in.LedgerEncryptionKey != nil {
 		in, out := &in.LedgerEncryptionKey, &out.LedgerEncryptionKey
 		*out = new(KeyReference)

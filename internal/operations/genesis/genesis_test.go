@@ -8,6 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 )
 
 func TestGenesisStatus_AddCondition(t *testing.T) {
@@ -95,7 +96,7 @@ func TestNewTask(t *testing.T) {
 	}
 
 	// Verify step names
-	expectedNames := []string{"CheckConsensusNodeSecrets", "CreatePublicKeysConfig", "CreateClusterConfig"}
+	expectedNames := []string{"CheckConsensusNodeSecrets", "CreatePublicKeysConfig", "CreateGenesisNetwork"}
 	for i, step := range steps {
 		if step.Name() != expectedNames[i] {
 			t.Errorf("Expected step %d to be %q, got %q", i, expectedNames[i], step.Name())
@@ -114,27 +115,9 @@ func TestPrepareNodeName(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		result := prepareNodeName(tc.nodeId)
+		result := common.NodeAlias(tc.nodeId)
 		if result != tc.expected {
-			t.Errorf("prepareNodeName(%d) = %q, expected %q", tc.nodeId, result, tc.expected)
-		}
-	}
-}
-
-func TestStandardLabels(t *testing.T) {
-	labels := standardLabels("test-config", "test-orbit")
-
-	expectedLabels := map[string]string{
-		"app.kubernetes.io/name":       "test-config",
-		"app.kubernetes.io/instance":   "test-orbit",
-		"app.kubernetes.io/managed-by": "solo-operator",
-		"app.kubernetes.io/part-of":    "consensus-node",
-		"app.kubernetes.io/component":  "config-map",
-	}
-
-	for key, expected := range expectedLabels {
-		if labels[key] != expected {
-			t.Errorf("Label %q = %q, expected %q", key, labels[key], expected)
+			t.Errorf("NodeAlias(%d) = %q, expected %q", tc.nodeId, result, tc.expected)
 		}
 	}
 }

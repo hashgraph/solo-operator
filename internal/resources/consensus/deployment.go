@@ -230,6 +230,24 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 		{Name: "data-config", MountPath: hapiBase + "/data/config"},
 	}
 
+	// genesis-network.json — namespace-scoped, optional (absent until genesis NetworkOperation runs)
+	genesisOptional := true
+	volumes = append(volumes, corev1.Volume{
+		Name: "genesis-config",
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{Name: GenesisConfigMapName},
+				Optional:             &genesisOptional,
+			},
+		},
+	})
+	volumeMounts = append(volumeMounts, corev1.VolumeMount{
+		Name:      "genesis-config",
+		MountPath: hapiBase + "/data/config/" + GenesisNetworkFileName,
+		SubPath:   GenesisNetworkFileName,
+		ReadOnly:  true,
+	})
+
 	// block-nodes.json — only when BlockNodes is configured
 	if capsule.Spec.BlockNodes != nil {
 		volumes = append(volumes, corev1.Volume{

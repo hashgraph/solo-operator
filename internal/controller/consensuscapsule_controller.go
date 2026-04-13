@@ -24,9 +24,6 @@ import (
 const (
 	ConsensusCapsuleFinalizer = "operator.solo.hedera.com/consensuscapsule-finalizer"
 
-	LabelComponent = "app.kubernetes.io/component"
-	LabelNodeId    = "operator.solo.hedera.com/node-id"
-
 	// healthCheckRequeueAfter is how long to wait before rechecking when health checks fail
 	healthCheckRequeueAfter = 10 * time.Second
 )

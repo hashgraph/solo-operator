@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 )
 
 func TestCommonLabels(t *testing.T) {
@@ -190,8 +191,8 @@ func TestDeploymentSubReconciler(t *testing.T) {
 
 	// Verify ports
 	expectedPorts := map[string]int32{
-		"grpc":    DefaultGrpcPort,
-		"grpcs":   DefaultGrpcsPort,
+		"grpc":    common.GrpcPort,
+		"grpcs":   common.GrpcsPort,
 		"metrics": DefaultMetricsPort,
 	}
 	for _, port := range container.Ports {
@@ -290,8 +291,8 @@ func TestServiceSubReconciler(t *testing.T) {
 
 	// Verify ports
 	expectedPorts := map[string]int32{
-		"grpc":    DefaultGrpcPort,
-		"grpcs":   DefaultGrpcsPort,
+		"grpc":    common.GrpcPort,
+		"grpcs":   common.GrpcsPort,
 		"metrics": DefaultMetricsPort,
 	}
 	for _, port := range svc.Spec.Ports {
@@ -419,7 +420,7 @@ func TestIngressSubReconciler_CreatesIngress(t *testing.T) {
 								Backend: networkingv1.IngressBackend{
 									Service: &networkingv1.IngressServiceBackend{
 										Name: "test-haproxy",
-										Port: networkingv1.ServiceBackendPort{Number: DefaultGrpcPort},
+										Port: networkingv1.ServiceBackendPort{Number: common.GrpcPort},
 									},
 								},
 							},
@@ -502,7 +503,7 @@ func TestIngressSubReconciler_IngressClassName(t *testing.T) {
 							{Path: "/", PathType: &pathType, Backend: networkingv1.IngressBackend{
 								Service: &networkingv1.IngressServiceBackend{
 									Name: "test-haproxy",
-									Port: networkingv1.ServiceBackendPort{Number: DefaultGrpcPort},
+									Port: networkingv1.ServiceBackendPort{Number: common.GrpcPort},
 								},
 							}},
 						},
@@ -541,7 +542,7 @@ func TestIngressSubReconciler_Labels(t *testing.T) {
 						{Path: "/", PathType: &pathType, Backend: networkingv1.IngressBackend{
 							Service: &networkingv1.IngressServiceBackend{
 								Name: "test-haproxy",
-								Port: networkingv1.ServiceBackendPort{Number: DefaultGrpcPort},
+								Port: networkingv1.ServiceBackendPort{Number: common.GrpcPort},
 							},
 						}},
 					},
@@ -582,7 +583,7 @@ func TestIngressSubReconciler_Update(t *testing.T) {
 						{Path: "/", PathType: &pathType, Backend: networkingv1.IngressBackend{
 							Service: &networkingv1.IngressServiceBackend{
 								Name: "test-haproxy",
-								Port: networkingv1.ServiceBackendPort{Number: DefaultGrpcPort},
+								Port: networkingv1.ServiceBackendPort{Number: common.GrpcPort},
 							},
 						}},
 					},
@@ -626,7 +627,7 @@ func TestIngressSubReconciler_DeletesOnServiceTypeChange(t *testing.T) {
 						{Path: "/", PathType: &pathType, Backend: networkingv1.IngressBackend{
 							Service: &networkingv1.IngressServiceBackend{
 								Name: "test-haproxy",
-								Port: networkingv1.ServiceBackendPort{Number: DefaultGrpcPort},
+								Port: networkingv1.ServiceBackendPort{Number: common.GrpcPort},
 							},
 						}},
 					},

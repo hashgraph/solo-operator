@@ -20806,6 +20806,20 @@ spec:
                     description: ConsensusSecretResources references specific key/cert
                       secrets.
                     properties:
+                      adminPublicKey:
+                        description: |-
+                          AdminPublicKey references the ED25519 admin public key for this node.
+                          Used when building genesis-network.json
+                        properties:
+                          keyName:
+                            description: KeyName is the key within the secret
+                            type: string
+                          secretName:
+                            description: SecretName is the name of the secret
+                            type: string
+                        required:
+                        - secretName
+                        type: object
                       grpcTlsPrivateKey:
                         description: KeyReference references a key in a secret
                         properties:
@@ -20892,6 +20906,8 @@ spec:
                 type: object
               serviceType:
                 default: LoadBalancer
+                description: ServiceType is the Kubernetes service type for a consensus
+                  node.
                 enum:
                 - ClusterIP
                 - LoadBalancer
