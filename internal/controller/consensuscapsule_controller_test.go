@@ -52,6 +52,14 @@ func newPodWithPhase(capsule *operatorv1alpha1.ConsensusCapsule, phase corev1.Po
 	}
 }
 
+func newReadyPodWithPhase(capsule *operatorv1alpha1.ConsensusCapsule, phase corev1.PodPhase) *corev1.Pod {
+	pod := newPodWithPhase(capsule, phase)
+	pod.Status.Conditions = []corev1.PodCondition{
+		{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+	}
+	return pod
+}
+
 func buildReconcilerForUpdateStatus(c client.Client, hc HealthChecker) *ConsensusCapsuleReconciler {
 	scheme := newControllerTestScheme()
 	r := NewConsensusCapsuleReconciler(c, scheme)
@@ -91,7 +99,7 @@ func TestUpdateStatus_PodRunning_HealthPass_PhaseRunning(t *testing.T) {
 	ctx := context.Background()
 	scheme := newControllerTestScheme()
 	capsule := newCapsuleForControllerTest()
-	pod := newPodWithPhase(capsule, corev1.PodRunning)
+	pod := newReadyPodWithPhase(capsule, corev1.PodRunning)
 	c := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(capsule, pod).

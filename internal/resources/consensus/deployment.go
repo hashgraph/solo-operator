@@ -226,7 +226,10 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 	}
 
 	volumeMounts := []corev1.VolumeMount{
-		{Name: "hapi-app-config", MountPath: "/etc/network-node/config", ReadOnly: true},
+		// The consensus node entrypoint does `cd <hapiBase>` and then checks for
+		// log4j2.xml and settings.txt relative to that directory.
+		{Name: "hapi-app-config", MountPath: hapiBase + "/log4j2.xml", SubPath: "log4j2.xml", ReadOnly: true},
+		{Name: "hapi-app-config", MountPath: hapiBase + "/settings.txt", SubPath: "settings.txt", ReadOnly: true},
 		{Name: "data-config", MountPath: hapiBase + "/data/config"},
 	}
 
@@ -457,7 +460,7 @@ func (r *StatefulSetSubReconciler) addSidecarContainers(sts *appsv1.StatefulSet,
 			Name: "solo-cheetah-config",
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{Name: CheetahConfigMapName},
+					LocalObjectReference: corev1.LocalObjectReference{Name: CheetahConfigMapName(capsule)},
 				},
 			},
 		})
@@ -680,6 +683,9 @@ func getVolumeNameForPath(path string) string {
 }
 
 // buildBackupUploaderContainer builds the backup uploader container (rclone-based).
+// The backup.sh script inside the image requires BACKUP_UPLOADER_BUCKET_1 (rclone path,
+// e.g. "backups:my-bucket") and RCLONE_CONFIG_BACKUPS_* env vars that configure the
+// rclone "backups" remote. Credentials are injected from config.Config.EnvFromSecret.
 func (r *StatefulSetSubReconciler) buildBackupUploaderContainer(config *operatorv1alpha1.StreamUploader) corev1.Container {
 	image := common.BuildImageOrDefault(config.SoftwareVersion, "gcr.io/hedera-registry/hedera-backups:latest")
 
@@ -703,6 +709,47 @@ func (r *StatefulSetSubReconciler) buildBackupUploaderContainer(config *operator
 
 	if len(config.AdditionalVolumeMounts) > 0 {
 		container.VolumeMounts = config.AdditionalVolumeMounts
+	}
+
+	if cfg := config.Config; cfg != nil {
+		var env []corev1.EnvVar
+
+		// BACKUP_UPLOADER_BUCKET_1 is the rclone destination path: "backups:<bucketName>"
+		if cfg.BucketName != "" {
+			env = append(env, corev1.EnvVar{
+				Name:  "BACKUP_UPLOADER_BUCKET_1",
+				Value: "backups:" + cfg.BucketName,
+			})
+		}
+
+		if cfg.S3 != nil && cfg.S3.Enabled {
+			env = append(env,
+				corev1.EnvVar{Name: "RCLONE_CONFIG_BACKUPS_TYPE", Value: "s3"},
+				corev1.EnvVar{Name: "RCLONE_CONFIG_BACKUPS_PROVIDER", Value: "Minio"},
+				corev1.EnvVar{Name: "RCLONE_CONFIG_BACKUPS_ENV_AUTH", Value: "true"},
+			)
+			if cfg.S3.URL != "" {
+				env = append(env, corev1.EnvVar{Name: "RCLONE_CONFIG_BACKUPS_ENDPOINT", Value: cfg.S3.URL})
+			}
+		} else if cfg.GCS != nil && cfg.GCS.Enabled {
+			env = append(env,
+				corev1.EnvVar{Name: "RCLONE_CONFIG_BACKUPS_TYPE", Value: "gcs"},
+				corev1.EnvVar{Name: "RCLONE_CONFIG_BACKUPS_ENV_AUTH", Value: "true"},
+			)
+		}
+
+		if len(env) > 0 {
+			container.Env = env
+		}
+
+		// Credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, etc.)
+		if cfg.EnvFromSecret != "" {
+			container.EnvFrom = []corev1.EnvFromSource{
+				{SecretRef: &corev1.SecretEnvSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: cfg.EnvFromSecret},
+				}},
+			}
+		}
 	}
 
 	return container

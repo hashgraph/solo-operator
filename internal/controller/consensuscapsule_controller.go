@@ -126,13 +126,20 @@ func (r *ConsensusCapsuleReconciler) handleDeletion(ctx context.Context, capsule
 	return ctrl.Result{}, nil
 }
 
-// updateStatus updates the ConsensusCapsule status based on pod state and health checks.
-// When the pod is Running, DNS resolution and a TCP connection to the gossip port are checked
-// before the phase is set to Running. If either check fails, the phase stays Pending and
-// the reconciler requeues after healthCheckRequeueAfter.
-func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
+// isPodReady returns true when the pod's PodReady condition is True.
+func isPodReady(pod corev1.Pod) bool {
+	for _, cond := range pod.Status.Conditions {
+		if cond.Type == corev1.PodReady {
+			return cond.Status == corev1.ConditionTrue
+		}
+	}
+	return false
+}
 
+// updateStatus updates the ConsensusCapsule status based on pod state.
+// Phase transitions to Running only once the pod's Ready condition is True,
+// ensuring all containers have passed their readiness checks.
+func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
 	podList := &corev1.PodList{}
 	if err := r.List(ctx, podList,
 		client.InNamespace(capsule.Namespace),
@@ -141,10 +148,21 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 	}
 
 	phase := operatorv1alpha1.PhasePending
+	requeue := false
 	if len(podList.Items) > 0 {
-		switch podList.Items[0].Status.Phase {
+		pod := podList.Items[0]
+		switch pod.Status.Phase {
 		case corev1.PodRunning:
-			phase = operatorv1alpha1.PhaseRunning
+			// Gate PhaseRunning on the pod's Ready condition so we only
+			// report Running once all containers have passed their readiness
+			// checks. This works whether the operator runs inside or outside
+			// the cluster (no TCP dial to cluster-internal DNS required).
+			if isPodReady(pod) {
+				phase = operatorv1alpha1.PhaseRunning
+			} else {
+				phase = operatorv1alpha1.PhasePending
+				requeue = true
+			}
 		case corev1.PodSucceeded:
 			phase = operatorv1alpha1.PhaseSucceeded
 		case corev1.PodFailed:
@@ -153,18 +171,6 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 			phase = operatorv1alpha1.PhasePending
 		default:
 			phase = operatorv1alpha1.PhaseUnknown
-		}
-	}
-
-	// Gate PhaseRunning on DNS + TCP health checks
-	requeue := false
-	if phase == operatorv1alpha1.PhaseRunning {
-		hostname := consensus.InternalHostname(capsule)
-		if !runHealthChecks(ctx, r.healthChecker, capsule, hostname, consensus.GossipPort) {
-			logger.Info("Health checks not yet passing, staying Pending",
-				"name", capsule.Name, "hostname", hostname)
-			phase = operatorv1alpha1.PhasePending
-			requeue = true
 		}
 	}
 

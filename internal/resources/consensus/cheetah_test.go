@@ -134,7 +134,7 @@ func TestCheetahConfigMapSubReconciler_Reconcile(t *testing.T) {
 
 			// Check if ConfigMap was created
 			cm := &corev1.ConfigMap{}
-			err = c.Get(ctx, client.ObjectKey{Name: CheetahConfigMapName, Namespace: tt.capsule.Namespace}, cm)
+			err = c.Get(ctx, client.ObjectKey{Name: CheetahConfigMapName(tt.capsule), Namespace: tt.capsule.Namespace}, cm)
 
 			if tt.expectConfigMap {
 				if err != nil {

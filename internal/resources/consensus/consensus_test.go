@@ -621,15 +621,31 @@ func TestStatefulSetVolumes_DefaultEmptyDir(t *testing.T) {
 		}
 	}
 
-	// hapi-app-config must be mounted readonly at /etc/network-node/config
-	if m, ok := mountByName["hapi-app-config"]; !ok {
-		t.Error("expected hapi-app-config mount")
-	} else {
-		if m.MountPath != "/etc/network-node/config" {
-			t.Errorf("unexpected hapi-app-config mount path: %s", m.MountPath)
+	// hapi-app-config must be subPath-mounted for log4j2.xml and settings.txt
+	// at the HapiApp2.0 directory (where the entrypoint script looks for them)
+	const hapiBase = "/opt/hgcapp/services-hedera/HapiApp2.0"
+	hapiConfigMounts := map[string]bool{}
+	for _, m := range mounts {
+		if m.Name == "hapi-app-config" {
+			hapiConfigMounts[m.SubPath] = m.ReadOnly
 		}
-		if !m.ReadOnly {
-			t.Error("expected hapi-app-config to be mounted readonly")
+	}
+	for _, subPath := range []string{"log4j2.xml", "settings.txt"} {
+		readOnly, ok := hapiConfigMounts[subPath]
+		if !ok {
+			t.Errorf("expected hapi-app-config subPath mount for %s", subPath)
+			continue
+		}
+		if !readOnly {
+			t.Errorf("expected hapi-app-config/%s to be mounted readonly", subPath)
+		}
+		// verify mount path includes hapiBase
+		for _, m := range mounts {
+			if m.Name == "hapi-app-config" && m.SubPath == subPath {
+				if m.MountPath != hapiBase+"/"+subPath {
+					t.Errorf("unexpected mount path for %s: %s", subPath, m.MountPath)
+				}
+			}
 		}
 	}
 

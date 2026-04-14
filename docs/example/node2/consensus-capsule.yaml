@@ -146,7 +146,7 @@ spec:
       resources:
         requests:
           storage: 1Gi
-    states:
+    state:
       accessModes:
         - ReadWriteOnce
       resources:
