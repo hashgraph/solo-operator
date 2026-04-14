@@ -169,7 +169,7 @@ type ConsensusPodProperties struct {
 	PriorityClassName string `json:"priorityClassName,omitempty"`
 
 	// +optional
-	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+	ServiceAccount *ServiceAccountConfig `json:"serviceAccount,omitempty"`
 
 	// +optional
 	SecurityContext *corev1.PodSecurityContext `json:"securityContext,omitempty"`
@@ -179,6 +179,17 @@ type ConsensusPodProperties struct {
 
 	// +optional
 	Volumes *ConsensusPodVolumes `json:"volumes,omitempty"`
+}
+
+type ServiceAccountConfig struct {
+	// +optional
+	Name string `json:"name,omitempty"`
+
+	// +optional
+	Labels map[string]string `json:"labels,omitempty"`
+
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 // ConsensusContainers holds the container specs for the StatefulSet.

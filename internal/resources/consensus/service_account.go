@@ -30,18 +30,20 @@ func NewServiceAccountSubReconciler(c client.Client, scheme *runtime.Scheme) *Se
 	}
 }
 
-// Reconcile ensures the service account exists
+// Reconcile ensures the ServiceAccount exists and is up to date.
 func (r *ServiceAccountSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
+	if saCfg := capsule.Spec.PodProperties.ServiceAccount; saCfg != nil && saCfg.Name != "" {
+		return ctrl.Result{}, nil
+	}
+
 	desired := r.buildServiceAccount(capsule)
 
-	// Set owner reference
 	if err := controllerutil.SetControllerReference(capsule, desired, r.Scheme); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// Check if exists
 	existing := &corev1.ServiceAccount{}
 	err := r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
@@ -55,17 +57,54 @@ func (r *ServiceAccountSubReconciler) Reconcile(ctx context.Context, capsule *op
 		return ctrl.Result{}, err
 	}
 
-	// ServiceAccount doesn't need updates typically
+	if r.needsUpdate(existing, desired) {
+		logger.V(1).Info("Updating service account", "name", desired.Name)
+		existing.Labels = desired.Labels
+		existing.Annotations = desired.Annotations
+		if err := r.Client.Update(ctx, existing); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
 	return ctrl.Result{}, nil
 }
 
-// buildServiceAccount builds the desired service account
 func (r *ServiceAccountSubReconciler) buildServiceAccount(capsule *operatorv1alpha1.ConsensusCapsule) *corev1.ServiceAccount {
+	labels := CommonLabels(capsule)
+	var annotations map[string]string
+
+	if saCfg := capsule.Spec.PodProperties.ServiceAccount; saCfg != nil {
+		for k, v := range saCfg.Labels {
+			labels[k] = v
+		}
+		if len(saCfg.Annotations) > 0 {
+			annotations = make(map[string]string, len(saCfg.Annotations))
+			for k, v := range saCfg.Annotations {
+				annotations[k] = v
+			}
+		}
+	}
+
 	return &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ServiceAccountName(capsule),
-			Namespace: capsule.Namespace,
-			Labels:    CommonLabels(capsule),
+			Name:        ServiceAccountName(capsule),
+			Namespace:   capsule.Namespace,
+			Labels:      labels,
+			Annotations: annotations,
 		},
 	}
+}
+
+func (r *ServiceAccountSubReconciler) needsUpdate(existing, desired *corev1.ServiceAccount) bool {
+	for k, v := range desired.Labels {
+		if existing.Labels[k] != v {
+			return true
+		}
+	}
+	for k, v := range desired.Annotations {
+		if existing.Annotations[k] != v {
+			return true
+		}
+	}
+	return false
 }

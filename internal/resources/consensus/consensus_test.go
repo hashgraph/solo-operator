@@ -254,6 +254,82 @@ func TestServiceAccountSubReconciler(t *testing.T) {
 	}
 }
 
+func TestServiceAccountSubReconciler_CustomName(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	capsule := newTestCapsule()
+	capsule.Spec.PodProperties.ServiceAccount = &operatorv1alpha1.ServiceAccountConfig{
+		Name: "my-custom-sa",
+	}
+	c := newTestClient(scheme, capsule)
+	reconciler := NewServiceAccountSubReconciler(c, scheme)
+
+	if _, err := reconciler.Reconcile(ctx, capsule); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	sa := &corev1.ServiceAccount{}
+	if err := c.Get(ctx, client.ObjectKey{Name: ServiceAccountName(capsule), Namespace: capsule.Namespace}, sa); err == nil {
+		t.Error("expected operator-managed SA to not be created when custom name is set")
+	}
+}
+
+func TestServiceAccountSubReconciler_LabelsAndAnnotations(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	capsule := newTestCapsule()
+	capsule.Spec.PodProperties.ServiceAccount = &operatorv1alpha1.ServiceAccountConfig{
+		Labels:      map[string]string{"custom-label": "val"},
+		Annotations: map[string]string{"eks.amazonaws.com/role-arn": "arn:aws:iam::123:role/test"},
+	}
+	c := newTestClient(scheme, capsule)
+	reconciler := NewServiceAccountSubReconciler(c, scheme)
+
+	if _, err := reconciler.Reconcile(ctx, capsule); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	sa := &corev1.ServiceAccount{}
+	if err := c.Get(ctx, client.ObjectKey{Name: ServiceAccountName(capsule), Namespace: capsule.Namespace}, sa); err != nil {
+		t.Fatalf("failed to get SA: %v", err)
+	}
+	if sa.Labels["custom-label"] != "val" {
+		t.Errorf("expected custom-label=val, got %q", sa.Labels["custom-label"])
+	}
+	if sa.Annotations["eks.amazonaws.com/role-arn"] != "arn:aws:iam::123:role/test" {
+		t.Error("expected role-arn annotation to be set")
+	}
+}
+
+func TestServiceAccountSubReconciler_UpdateAnnotations(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	capsule := newTestCapsule()
+	c := newTestClient(scheme, capsule)
+	reconciler := NewServiceAccountSubReconciler(c, scheme)
+
+	// Create without annotations
+	if _, err := reconciler.Reconcile(ctx, capsule); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// Now add an annotation and reconcile again
+	capsule.Spec.PodProperties.ServiceAccount = &operatorv1alpha1.ServiceAccountConfig{
+		Annotations: map[string]string{"iam.gke.io/gcp-service-account": "sa@project.iam.gserviceaccount.com"},
+	}
+	if _, err := reconciler.Reconcile(ctx, capsule); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	sa := &corev1.ServiceAccount{}
+	if err := c.Get(ctx, client.ObjectKey{Name: ServiceAccountName(capsule), Namespace: capsule.Namespace}, sa); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if sa.Annotations["iam.gke.io/gcp-service-account"] != "sa@project.iam.gserviceaccount.com" {
+		t.Error("expected gcp-service-account annotation after update")
+	}
+}
+
 // ── HapiAppConfigMap ──────────────────────────────────────────────────────────
 
 func TestHapiAppConfigMapSubReconciler(t *testing.T) {

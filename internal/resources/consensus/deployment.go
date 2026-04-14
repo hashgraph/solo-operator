@@ -723,19 +723,12 @@ func (r *StatefulSetSubReconciler) buildBackupUploaderContainer(config *operator
 		}
 
 		if cfg.S3 != nil && cfg.S3.Enabled {
-			env = append(env,
-				corev1.EnvVar{Name: "RCLONE_CONFIG_BACKUPS_TYPE", Value: "s3"},
-				corev1.EnvVar{Name: "RCLONE_CONFIG_BACKUPS_PROVIDER", Value: "Minio"},
-				corev1.EnvVar{Name: "RCLONE_CONFIG_BACKUPS_ENV_AUTH", Value: "true"},
-			)
+			env = append(env, corev1.EnvVar{Name: "RCLONE_CONFIG_BACKUPS_TYPE", Value: "s3"})
 			if cfg.S3.URL != "" {
 				env = append(env, corev1.EnvVar{Name: "RCLONE_CONFIG_BACKUPS_ENDPOINT", Value: cfg.S3.URL})
 			}
 		} else if cfg.GCS != nil && cfg.GCS.Enabled {
-			env = append(env,
-				corev1.EnvVar{Name: "RCLONE_CONFIG_BACKUPS_TYPE", Value: "gcs"},
-				corev1.EnvVar{Name: "RCLONE_CONFIG_BACKUPS_ENV_AUTH", Value: "true"},
-			)
+			env = append(env, corev1.EnvVar{Name: "RCLONE_CONFIG_BACKUPS_TYPE", Value: "gcs"})
 		}
 
 		if len(env) > 0 {
@@ -867,6 +860,9 @@ func (r *StatefulSetSubReconciler) applyPodProperties(sts *appsv1.StatefulSet, c
 	}
 	if podProps.TerminationGracePeriodSeconds != nil {
 		sts.Spec.Template.Spec.TerminationGracePeriodSeconds = podProps.TerminationGracePeriodSeconds
+	}
+	if podProps.ServiceAccount != nil && podProps.ServiceAccount.Name != "" {
+		sts.Spec.Template.Spec.ServiceAccountName = podProps.ServiceAccount.Name
 	}
 }
 
