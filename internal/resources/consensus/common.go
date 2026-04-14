@@ -162,8 +162,13 @@ func RenderProperties(m map[string]string) string {
 	return sb.String()
 }
 
-// InternalHostname returns the internal FQDN for a capsule
+// InternalHostname returns the internal FQDN for a capsule.
+// When InternalAddress is set on the spec, it is used directly; otherwise the
+// auto-computed Kubernetes service FQDN is returned.
 func InternalHostname(capsule *operatorv1alpha1.ConsensusCapsule) string {
+	if capsule.Spec.InternalAddress != "" {
+		return capsule.Spec.InternalAddress
+	}
 	return fmt.Sprintf("%s.%s.%s.svc.cluster.local", capsule.Name, ConsensusSubdomain, capsule.Namespace)
 }
 

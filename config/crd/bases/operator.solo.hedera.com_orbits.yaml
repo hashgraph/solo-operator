@@ -147,6 +147,11 @@ spec:
                             minimum: 0
                             type: integer
                         type: object
+                      throttlesJson:
+                        description: |-
+                          ThrottlesJson overrides the default genesis-throttles.json content written to all nodes.
+                          Must be a valid Hedera throttle definitions JSON. If empty, built-in defaults are used.
+                        type: string
                     type: object
                   genesisProperties:
                     additionalProperties:

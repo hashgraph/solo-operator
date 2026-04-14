@@ -87,6 +87,11 @@ func (s *CreateGenesisNetworkStep) Run(ctx context.Context, resource *operatorv1
 	namespace := resource.Namespace
 	orbitName := resource.Spec.Orbit
 
+	orbit := &operatorv1alpha1.Orbit{}
+	if err := s.client.Get(ctx, client.ObjectKey{Name: orbitName}, orbit); err != nil {
+		return s.fail(status, resource.Generation, fmt.Sprintf("orbit not found: %s: %v", orbitName, err))
+	}
+
 	capsuleList := &operatorv1alpha1.ConsensusCapsuleList{}
 	if err := s.client.List(ctx, capsuleList, client.InNamespace(namespace)); err != nil {
 		return s.fail(status, resource.Generation, fmt.Sprintf("failed to list capsules: %v", err))
@@ -99,14 +104,65 @@ func (s *CreateGenesisNetworkStep) Run(ctx context.Context, resource *operatorv1
 		return capsuleList.Items[i].Spec.NodeId < capsuleList.Items[j].Spec.NodeId
 	})
 
+	// Derive shard/realm from orbit address book (defaults to 0/0)
+	shardId, realmId := 0, 0
+	if orbit.Spec.Consensus.Genesis != nil && orbit.Spec.Consensus.Genesis.AddressBook != nil {
+		shardId = orbit.Spec.Consensus.Genesis.AddressBook.ShardId
+		realmId = orbit.Spec.Consensus.Genesis.AddressBook.RealmId
+	}
+
 	var metadata []genesisNodeMetadata
 	for _, capsule := range capsuleList.Items {
-		entry, err := s.buildNodeMetadata(ctx, namespace, &capsule)
+		entry, err := s.buildNodeMetadata(ctx, namespace, &capsule, shardId, realmId)
 		if err != nil {
 			logger.Error(err, "Failed to build node metadata", "capsule", capsule.Name)
 			return s.fail(status, resource.Generation, fmt.Sprintf("capsule %s: %v", capsule.Name, err))
 		}
 		metadata = append(metadata, entry)
+	}
+
+	// Append external address entries from orbit
+	if orbit.Spec.Consensus.Genesis != nil && orbit.Spec.Consensus.Genesis.AddressBook != nil {
+		for _, ext := range orbit.Spec.Consensus.Genesis.AddressBook.ExternalAddresses {
+			weight := ext.Weight
+			if weight == 0 {
+				weight = 1
+			}
+			gossipEndpoints := []genesisServiceEndpoint{{DomainName: ext.ExternalHostname, Port: ext.ExternalPort}}
+			serviceEndpoints := []genesisServiceEndpoint{{DomainName: ext.ExternalHostname, Port: consensus.GrpcPort}}
+			accountNum := common.AccountNum(ext.NodeAccount)
+
+			// gossipCaCertificate: PEM → DER → base64 (optional; empty string if not provided)
+			gossipCACert := ""
+			if ext.PublicSigningCertificate != "" {
+				derBytes, err := common.PemToDER([]byte(ext.PublicSigningCertificate))
+				if err != nil {
+					return s.fail(status, resource.Generation, fmt.Sprintf("external node %d: PEM→DER for gossipCaCertificate: %v", ext.NodeId, err))
+				}
+				gossipCACert = base64.StdEncoding.EncodeToString(derBytes)
+			}
+
+			node := genesisNodeEntry{
+				NodeId:              ext.NodeId,
+				AccountId:           genesisAccountId{RealmNum: fmt.Sprintf("%d", realmId), ShardNum: fmt.Sprintf("%d", shardId), AccountNum: accountNum},
+				Description:         ext.SelfName,
+				GossipEndpoint:      gossipEndpoints,
+				ServiceEndpoint:     serviceEndpoints,
+				GossipCaCertificate: gossipCACert,
+				Weight:              int64(weight),
+			}
+			roster := genesisRosterEntry{
+				NodeId:              ext.NodeId,
+				GossipEndpoint:      gossipEndpoints,
+				GossipCaCertificate: gossipCACert,
+				Weight:              int64(weight),
+			}
+			metadata = append(metadata, genesisNodeMetadata{Node: node, RosterEntry: roster})
+		}
+		// Re-sort by nodeId after appending external entries
+		sort.Slice(metadata, func(i, j int) bool {
+			return metadata[i].Node.NodeId < metadata[j].Node.NodeId
+		})
 	}
 
 	jsonBytes, err := json.MarshalIndent(genesisNetworkFile{NodeMetadata: metadata}, "", "  ")
@@ -125,14 +181,26 @@ func (s *CreateGenesisNetworkStep) Run(ctx context.Context, resource *operatorv1
 
 // buildNodeMetadata constructs the nodeMetadata entry for one capsule.
 // All sensitive material is read from referenced Secrets — never stored on the CR.
-func (s *CreateGenesisNetworkStep) buildNodeMetadata(ctx context.Context, namespace string, capsule *operatorv1alpha1.ConsensusCapsule) (genesisNodeMetadata, error) {
+func (s *CreateGenesisNetworkStep) buildNodeMetadata(ctx context.Context, namespace string, capsule *operatorv1alpha1.ConsensusCapsule, shardId, realmId int) (genesisNodeMetadata, error) {
 	hostname := consensus.InternalHostname(capsule)
 
-	gossipEndpoints := []genesisServiceEndpoint{{DomainName: hostname, Port: consensus.GossipPort}}
-	serviceEndpoints := []genesisServiceEndpoint{{DomainName: hostname, Port: consensus.GrpcPort}}
+	gossipPort := capsule.Spec.GossipPort
+	if gossipPort == 0 {
+		gossipPort = consensus.GossipPort
+	}
+	grpcPort := capsule.Spec.GrpcPort
+	if grpcPort == 0 {
+		grpcPort = consensus.GrpcPort
+	}
 
-	// Parse accountNum from "realm.shard.account"
+	gossipEndpoints := []genesisServiceEndpoint{{DomainName: hostname, Port: gossipPort}}
+	serviceEndpoints := []genesisServiceEndpoint{{DomainName: hostname, Port: grpcPort}}
+
+	// Parse accountNum from "shard.realm.account" — fall back to derived value
 	accountNum := common.AccountNum(capsule.Spec.AccountId)
+	if accountNum == "" {
+		accountNum = fmt.Sprintf("%d", 3+capsule.Spec.NodeId)
+	}
 
 	weight := capsule.Spec.Weight
 	if weight == 0 {
@@ -159,7 +227,7 @@ func (s *CreateGenesisNetworkStep) buildNodeMetadata(ctx context.Context, namesp
 
 	node := genesisNodeEntry{
 		NodeId:              capsule.Spec.NodeId,
-		AccountId:           genesisAccountId{RealmNum: "0", ShardNum: "0", AccountNum: accountNum},
+		AccountId:           genesisAccountId{RealmNum: fmt.Sprintf("%d", realmId), ShardNum: fmt.Sprintf("%d", shardId), AccountNum: accountNum},
 		Description:         capsule.Name,
 		GossipEndpoint:      gossipEndpoints,
 		ServiceEndpoint:     serviceEndpoints,

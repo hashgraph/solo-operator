@@ -124,6 +124,16 @@ func TestInternalHostname(t *testing.T) {
 	}
 }
 
+func TestInternalHostname_WithInternalAddress(t *testing.T) {
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "test-namespace"},
+		Spec:       operatorv1alpha1.ConsensusCapsuleSpec{InternalAddress: "10.0.0.5"},
+	}
+	if got := InternalHostname(capsule); got != "10.0.0.5" {
+		t.Errorf("expected InternalAddress override 10.0.0.5, got %s", got)
+	}
+}
+
 func TestRenderProperties(t *testing.T) {
 	m := map[string]string{
 		"zebra": "z",

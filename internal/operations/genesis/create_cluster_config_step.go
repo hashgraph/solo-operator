@@ -89,9 +89,9 @@ func (s *CreateClusterConfigStep) Run(ctx context.Context, resource *operatorv1a
 		ConfigKeyPodIPs:             strings.Join(podIPs, "\n"),
 		"settings.txt":              s.buildSettingsTxt(orbit),
 		"application.properties":    s.buildApplicationProperties(orbit),
-		"api-permission.properties": s.buildApiPermissionProperties(),
+		"api-permission.properties": s.buildApiPermissionProperties(orbit),
 		"bootstrap.properties":      s.buildBootstrapProperties(orbit),
-		"genesis-throttles.json":    s.buildGenesisThrottles(),
+		"genesis-throttles.json":    s.buildGenesisThrottles(orbit),
 	}
 
 	// Create or update the ConfigMap
@@ -143,21 +143,24 @@ func (s *CreateClusterConfigStep) collectPodIPs(podList *corev1.PodList) []strin
 func (s *CreateClusterConfigStep) buildConfigTxt(capsules []operatorv1alpha1.ConsensusCapsule, orbit *operatorv1alpha1.Orbit, namespace string) string {
 	var sb strings.Builder
 
+	// Get shardId/realmId from orbit (defaults to 0/0)
+	shardId := 0
+	realmId := 0
+
 	// Get ledger ID from orbit - use plain format for config.txt (not hex)
 	ledgerId := "0" // default
-	if orbit.Spec.Consensus.Genesis != nil &&
-		orbit.Spec.Consensus.Genesis.AddressBook != nil &&
-		orbit.Spec.Consensus.Genesis.AddressBook.LedgerId != "" {
-		// If ledgerId is in hex format (0x...), convert to decimal for config.txt
-		// Otherwise use as-is
-		ledgerId = orbit.Spec.Consensus.Genesis.AddressBook.LedgerId
-		if strings.HasPrefix(ledgerId, "0x") {
-			// For config.txt, strip 0x prefix and use the value
-			// For 0x01, just use the decimal equivalent from chainId (298)
-			if ledgerId == "0x01" {
-				ledgerId = "298"
-			} else {
-				ledgerId = strings.TrimPrefix(ledgerId, "0x")
+	if orbit.Spec.Consensus.Genesis != nil && orbit.Spec.Consensus.Genesis.AddressBook != nil {
+		ab := orbit.Spec.Consensus.Genesis.AddressBook
+		shardId = ab.ShardId
+		realmId = ab.RealmId
+		if ab.LedgerId != "" {
+			ledgerId = ab.LedgerId
+			if strings.HasPrefix(ledgerId, "0x") {
+				if ledgerId == "0x01" {
+					ledgerId = "298"
+				} else {
+					ledgerId = strings.TrimPrefix(ledgerId, "0x")
+				}
 			}
 		}
 	}
@@ -176,31 +179,37 @@ func (s *CreateClusterConfigStep) buildConfigTxt(capsules []operatorv1alpha1.Con
 
 		weight := int64(capsule.Spec.Weight)
 		if weight == 0 {
-			weight = 500 // default weight to match working deployment
+			weight = 1
 		}
 
 		accountId := capsule.Spec.AccountId
 		if accountId == "" {
-			accountId = common.AccountIdForNode(nodeId)
+			accountId = fmt.Sprintf("%d.%d.%d", shardId, realmId, 3+nodeId)
+		}
+
+		gossipPort := capsule.Spec.GossipPort
+		if gossipPort == 0 {
+			gossipPort = common.GossipPort
 		}
 
 		// Format: address, nodeId, nickname, selfname, weight, internalIP, internalPort, externalHost, externalPort, accountId
-		// Use 127.0.0.1 for internal IP and 50111 for ports to match working deployment
-		addressMap[nodeId] = fmt.Sprintf("address, %d, %s, %s, %d, 127.0.0.1, 50111, %s, 50111, %s\n",
-			nodeId, nodeName, nodeName, weight, externalAddr, accountId)
+		addressMap[nodeId] = fmt.Sprintf("address, %d, %s, %s, %d, 127.0.0.1, %d, %s, %d, %s\n",
+			nodeId, nodeName, nodeName, weight, gossipPort, externalAddr, gossipPort, accountId)
 	}
 
 	// Add external addresses from orbit if present
-	if orbit.Spec.Consensus.Genesis != nil &&
-		orbit.Spec.Consensus.Genesis.AddressBook != nil {
-
+	if orbit.Spec.Consensus.Genesis != nil && orbit.Spec.Consensus.Genesis.AddressBook != nil {
 		for _, entry := range orbit.Spec.Consensus.Genesis.AddressBook.ExternalAddresses {
 			nodeId := entry.NodeId
+			weight := entry.Weight
+			if weight == 0 {
+				weight = 1
+			}
 			addressMap[nodeId] = fmt.Sprintf("address, %d, %d, %s, %d, %s, %d, %s, %d, %s\n",
 				nodeId,
 				nodeId,
 				entry.NickName,
-				entry.Weight,
+				weight,
 				entry.InternalHostname,
 				entry.InternalPort,
 				entry.ExternalHostname,
@@ -232,198 +241,200 @@ func (s *CreateClusterConfigStep) computeNodeExternalAddress(capsule *operatorv1
 	return fmt.Sprintf("%s-svc.%s", nodeName, namespace)
 }
 
-// buildSettingsTxt builds the settings.txt content
+// buildSettingsTxt builds the settings.txt content.
+// Defaults are merged with orbit.Spec.Consensus.NetworkSettings — orbit values override defaults.
 func (s *CreateClusterConfigStep) buildSettingsTxt(orbit *operatorv1alpha1.Orbit) string {
-	return `deployment                                     hashsphere
-checkSignedStateFromDisk,                      1
-csvFileName,                                   MainNetStats
-doUpnp,                                        false
-loadKeysFromPfxFiles,                          1
-maxOutgoingSyncs,                              1
-reconnect.active,                              1
-reconnect.reconnectWindowSeconds,              -1
-showInternalStats,                             1
-state.saveStatePeriod,                         900
-useLoopbackIp,                                 false
-waitAtStartup,                                 false
-state.mainClassNameOverride,                   com.hedera.services.ServicesMain
-maxEventQueueForCons,                          1000
-merkleDb.hashesRamToDiskThreshold,             8388608
-event.creation.maxCreationRate,                20
-virtualMap.familyThrottleThreshold,            6000000000
-merkleDb.maxFileChannelsPerFileReader,	       1
-`
+	settings := map[string]string{
+		"checkSignedStateFromDisk":              "1",
+		"csvFileName":                           "MainNetStats",
+		"deployment":                            "hashsphere",
+		"doUpnp":                                "false",
+		"event.creation.maxCreationRate":        "20",
+		"loadKeysFromPfxFiles":                  "1",
+		"maxEventQueueForCons":                  "1000",
+		"maxOutgoingSyncs":                      "1",
+		"merkleDb.hashesRamToDiskThreshold":     "8388608",
+		"merkleDb.maxFileChannelsPerFileReader": "1",
+		"reconnect.active":                      "1",
+		"reconnect.reconnectWindowSeconds":      "-1",
+		"showInternalStats":                     "1",
+		"state.mainClassNameOverride":           "com.hedera.services.ServicesMain",
+		"state.saveStatePeriod":                 "900",
+		"useLoopbackIp":                         "false",
+		"virtualMap.familyThrottleThreshold":    "6000000000",
+		"waitAtStartup":                         "false",
+	}
+	for k, v := range orbit.Spec.Consensus.NetworkSettings {
+		settings[k] = v
+	}
+	return renderSettingsTxt(settings)
 }
 
-// buildApplicationProperties builds the application.properties content
+// ledgerIdToHex converts a plain ledger ID string to the hex format used by
+// application.properties / bootstrap.properties, and returns the matching chainId.
+func ledgerIdToHex(raw string) (ledgerId, chainId string) {
+	if strings.HasPrefix(raw, "0x") {
+		switch raw {
+		case "0x01":
+			return raw, "298"
+		case "0x00":
+			return raw, "0"
+		default:
+			return raw, raw[2:]
+		}
+	}
+	switch raw {
+	case "298":
+		return "0x01", "298"
+	case "0":
+		return "0x00", "0"
+	default:
+		return "0x" + raw, raw
+	}
+}
+
+// buildApplicationProperties builds the application.properties content.
+// Defaults are merged with orbit.Spec.Consensus.ApplicationConfiguration — orbit values override defaults.
 func (s *CreateClusterConfigStep) buildApplicationProperties(orbit *operatorv1alpha1.Orbit) string {
-	ledgerId := "0x00" // default hex format for application.properties
-	chainId := "0"     // default chainId
-	if orbit.Spec.Consensus.Genesis != nil && orbit.Spec.Consensus.Genesis.AddressBook != nil {
-		if orbit.Spec.Consensus.Genesis.AddressBook.LedgerId != "" {
-			rawLedgerId := orbit.Spec.Consensus.Genesis.AddressBook.LedgerId
-			// If it's a plain number, convert to hex format for application.properties
-			if !strings.HasPrefix(rawLedgerId, "0x") {
-				// Plain number like "298" - convert to hex and set chainId
-				switch rawLedgerId {
-				case "298":
-					ledgerId = "0x01" // 298 is testnet, use 0x01
-					chainId = "298"
-				case "0":
-					ledgerId = "0x00"
-					chainId = "0"
-				default:
-					ledgerId = "0x" + rawLedgerId // Simple conversion
-					chainId = rawLedgerId
-				}
-			} else {
-				ledgerId = rawLedgerId
-				// For hex format, derive chainId
-				switch rawLedgerId {
-				case "0x01":
-					chainId = "298"
-				case "0x00":
-					chainId = "0"
-				}
-			}
-		}
+	ledgerId := "0x00"
+	chainId := "0"
+	if orbit.Spec.Consensus.Genesis != nil &&
+		orbit.Spec.Consensus.Genesis.AddressBook != nil &&
+		orbit.Spec.Consensus.Genesis.AddressBook.LedgerId != "" {
+		ledgerId, chainId = ledgerIdToHex(orbit.Spec.Consensus.Genesis.AddressBook.LedgerId)
 	}
-	return fmt.Sprintf(`hedera.config.version=0
-ledger.id=%s
-netty.mode=TEST
-contracts.chainId=%s
-hedera.recordStream.logPeriod=1
-balances.exportPeriodSecs=400
-files.maxSizeKb=2048
-hedera.recordStream.compressFilesOnCreation=true
-balances.compressOnCreation=true
-contracts.maxNumWithHapiSigsAccess=0
-autoRenew.targetTypes=
-nodes.gossipFqdnRestricted=false
-hedera.profiles.active=TEST
-staking.periodMins=1
-nodes.updateAccountIdAllowed=true
-blockStream.streamMode=RECORDS
-scheduling.longTermEnabled=false
-bootstrap.throttleDefsJson.resource=data/config/genesis-throttles.json
-cache.warmThreads=6
-`, ledgerId, chainId)
+
+	props := map[string]string{
+		"hedera.config.version":                       "0",
+		"ledger.id":                                   ledgerId,
+		"netty.mode":                                  "TEST",
+		"contracts.chainId":                           chainId,
+		"hedera.recordStream.logPeriod":               "1",
+		"balances.exportPeriodSecs":                   "400",
+		"files.maxSizeKb":                             "2048",
+		"hedera.recordStream.compressFilesOnCreation": "true",
+		"balances.compressOnCreation":                 "true",
+		"contracts.maxNumWithHapiSigsAccess":          "0",
+		"autoRenew.targetTypes":                       "",
+		"nodes.gossipFqdnRestricted":                  "false",
+		"hedera.profiles.active":                      "TEST",
+		"staking.periodMins":                          "1",
+		"nodes.updateAccountIdAllowed":                "true",
+		"blockStream.streamMode":                      "RECORDS",
+		"scheduling.longTermEnabled":                  "false",
+		"bootstrap.throttleDefsJson.resource":         "data/config/genesis-throttles.json",
+		"cache.warmThreads":                           "6",
+	}
+	for k, v := range orbit.Spec.Consensus.ApplicationConfiguration {
+		props[k] = v
+	}
+	return renderPropertiesSorted(props)
 }
 
-// buildApiPermissionProperties builds the api-permission.properties content
-func (s *CreateClusterConfigStep) buildApiPermissionProperties() string {
-	return `# Crypto
-createAccount=0-*
-cryptoTransfer=0-*
-updateAccount=0-*
-cryptoGetBalance=0-*
-getAccountInfo=0-*
-cryptoDelete=0-*
-getAccountRecords=0-*
-getTxRecordByTxID=0-*
-getTransactionReceipts=0-*
-approveAllowances=0-*
-deleteAllowances=0-*
-# File
-createFile=0-*
-updateFile=0-*
-deleteFile=0-*
-appendContent=0-*
-getFileContent=0-*
-getFileInfo=0-*
-# Contract
-createContract=0-*
-updateContract=0-*
-contractCallMethod=0-*
-getContractInfo=0-*
-contractCallLocalMethod=0-*
-contractGetBytecode=0-*
-getTxRecordByContractID=0-*
-deleteContract=0-*
-# Consensus
-createTopic=0-*
-updateTopic=0-*
-deleteTopic=0-*
-submitMessage=0-*
-getTopicInfo=0-*
-# Ethereum
-ethereumTransaction=0-*
-# Scheduling
-scheduleCreate=0-*
-scheduleSign=0-*
-scheduleDelete=0-*
-scheduleGetInfo=0-*
-# Token
-tokenCreate=0-*
-tokenFreezeAccount=0-*
-tokenUnfreezeAccount=0-*
-tokenGrantKycToAccount=0-*
-tokenRevokeKycFromAccount=0-*
-tokenDelete=0-*
-tokenMint=0-*
-tokenBurn=0-*
-tokenAccountWipe=0-*
-tokenUpdate=0-*
-tokenGetInfo=0-*
-tokenGetNftInfo=0-*
-tokenGetNftInfos=0-*
-tokenGetAccountNftInfos=0-*
-tokenAssociateToAccount=0-*
-tokenDissociateFromAccount=0-*
-tokenFeeScheduleUpdate=0-*
-tokenPause=0-*
-tokenUnpause=0-*
-# Network 
-getVersionInfo=0-*
-networkGetExecutionTime=2-50
-systemDelete=2-59
-systemUndelete=2-60
-freeze=2-58
-getAccountDetails=2-50
-# Util
-utilPrng=0-*
-`
+// buildApiPermissionProperties builds the api-permission.properties content.
+// Defaults are merged with orbit.Spec.Consensus.PermissionConfiguration — orbit values override defaults.
+func (s *CreateClusterConfigStep) buildApiPermissionProperties(orbit *operatorv1alpha1.Orbit) string {
+	perms := map[string]string{
+		"appendContent":              "0-*",
+		"approveAllowances":          "0-*",
+		"contractCallLocalMethod":    "0-*",
+		"contractCallMethod":         "0-*",
+		"contractGetBytecode":        "0-*",
+		"createAccount":              "0-*",
+		"createContract":             "0-*",
+		"createFile":                 "0-*",
+		"createTopic":                "0-*",
+		"cryptoDelete":               "0-*",
+		"cryptoGetBalance":           "0-*",
+		"cryptoTransfer":             "0-*",
+		"deleteAllowances":           "0-*",
+		"deleteContract":             "0-*",
+		"deleteFile":                 "0-*",
+		"deleteTopic":                "0-*",
+		"ethereumTransaction":        "0-*",
+		"freeze":                     "2-58",
+		"getAccountDetails":          "2-50",
+		"getAccountInfo":             "0-*",
+		"getAccountRecords":          "0-*",
+		"getContractInfo":            "0-*",
+		"getFileContent":             "0-*",
+		"getFileInfo":                "0-*",
+		"getTopicInfo":               "0-*",
+		"getTransactionReceipts":     "0-*",
+		"getTxRecordByContractID":    "0-*",
+		"getTxRecordByTxID":          "0-*",
+		"getVersionInfo":             "0-*",
+		"networkGetExecutionTime":    "2-50",
+		"scheduleCreate":             "0-*",
+		"scheduleDelete":             "0-*",
+		"scheduleGetInfo":            "0-*",
+		"scheduleSign":               "0-*",
+		"submitMessage":              "0-*",
+		"systemDelete":               "2-59",
+		"systemUndelete":             "2-60",
+		"tokenAccountWipe":           "0-*",
+		"tokenAssociateToAccount":    "0-*",
+		"tokenBurn":                  "0-*",
+		"tokenCreate":                "0-*",
+		"tokenDelete":                "0-*",
+		"tokenDissociateFromAccount": "0-*",
+		"tokenFeeScheduleUpdate":     "0-*",
+		"tokenFreezeAccount":         "0-*",
+		"tokenGetAccountNftInfos":    "0-*",
+		"tokenGetInfo":               "0-*",
+		"tokenGetNftInfo":            "0-*",
+		"tokenGetNftInfos":           "0-*",
+		"tokenGrantKycToAccount":     "0-*",
+		"tokenMint":                  "0-*",
+		"tokenPause":                 "0-*",
+		"tokenRevokeKycFromAccount":  "0-*",
+		"tokenUnfreezeAccount":       "0-*",
+		"tokenUnpause":               "0-*",
+		"tokenUpdate":                "0-*",
+		"updateAccount":              "0-*",
+		"updateContract":             "0-*",
+		"updateFile":                 "0-*",
+		"updateTopic":                "0-*",
+		"utilPrng":                   "0-*",
+	}
+	for k, v := range orbit.Spec.Consensus.PermissionConfiguration {
+		perms[k] = v
+	}
+	return renderPropertiesSorted(perms)
 }
 
-// buildBootstrapProperties builds the bootstrap.properties content
+// buildBootstrapProperties builds the bootstrap.properties content.
+// Defaults are merged with orbit.Spec.Consensus.ApplicationConfiguration — orbit values override defaults.
+// bootstrap.properties shares the same override map as application.properties so that a single
+// ApplicationConfiguration entry (e.g. netty.mode) applies to both files consistently.
 func (s *CreateClusterConfigStep) buildBootstrapProperties(orbit *operatorv1alpha1.Orbit) string {
-	ledgerId := "0x00" // default hex format
+	ledgerId := "0x00"
 	chainId := "298"
-	if orbit.Spec.Consensus.Genesis != nil && orbit.Spec.Consensus.Genesis.AddressBook != nil {
-		if orbit.Spec.Consensus.Genesis.AddressBook.LedgerId != "" {
-			rawLedgerId := orbit.Spec.Consensus.Genesis.AddressBook.LedgerId
-			// If it's a plain number, convert to hex format
-			if !strings.HasPrefix(rawLedgerId, "0x") {
-				switch rawLedgerId {
-				case "298":
-					ledgerId = "0x01"
-				case "0":
-					ledgerId = "0x00"
-				default:
-					ledgerId = "0x" + rawLedgerId
-				}
-			} else {
-				ledgerId = rawLedgerId
-			}
-		}
+	if orbit.Spec.Consensus.Genesis != nil &&
+		orbit.Spec.Consensus.Genesis.AddressBook != nil &&
+		orbit.Spec.Consensus.Genesis.AddressBook.LedgerId != "" {
+		ledgerId, chainId = ledgerIdToHex(orbit.Spec.Consensus.Genesis.AddressBook.LedgerId)
 	}
-	return fmt.Sprintf(`# TODO: bootstrap.properties is scheduled to go away, will need to delete this and related code
-ledger.id=%s
-netty.mode=DEV
-# TODO: if chain ID is passed in as a flag, this is not getting updated
-contracts.chainId=%s
-hedera.recordStream.logPeriod=1
-balances.exportPeriodSecs=400
-files.maxSizeKb=2048
-hedera.recordStream.compressFilesOnCreation=true
-balances.compressOnCreation=true
-contracts.maxNumWithHapiSigsAccess=0
-`, ledgerId, chainId)
+
+	props := map[string]string{
+		"ledger.id":                                   ledgerId,
+		"netty.mode":                                  "DEV",
+		"contracts.chainId":                           chainId,
+		"hedera.recordStream.logPeriod":               "1",
+		"balances.exportPeriodSecs":                   "400",
+		"files.maxSizeKb":                             "2048",
+		"hedera.recordStream.compressFilesOnCreation": "true",
+		"balances.compressOnCreation":                 "true",
+		"contracts.maxNumWithHapiSigsAccess":          "0",
+	}
+	for k, v := range orbit.Spec.Consensus.ApplicationConfiguration {
+		props[k] = v
+	}
+	return renderPropertiesSorted(props)
 }
 
-// buildGenesisThrottles builds the genesis-throttles.json content
-func (s *CreateClusterConfigStep) buildGenesisThrottles() string {
-	return `{
+// defaultThrottlesJSON is the built-in genesis-throttles.json used when no orbit override is provided.
+const defaultThrottlesJSON = `{
   "buckets": [
     {
       "burstPeriod": 0,
@@ -628,6 +639,43 @@ func (s *CreateClusterConfigStep) buildGenesisThrottles() string {
   ]
 }
 `
+
+// buildGenesisThrottles returns the genesis-throttles.json content.
+// If orbit.Spec.Consensus.Genesis.ThrottlesJson is set it is used verbatim;
+// otherwise the built-in defaults are returned.
+func (s *CreateClusterConfigStep) buildGenesisThrottles(orbit *operatorv1alpha1.Orbit) string {
+	if orbit.Spec.Consensus.Genesis != nil && orbit.Spec.Consensus.Genesis.ThrottlesJson != "" {
+		return orbit.Spec.Consensus.Genesis.ThrottlesJson
+	}
+	return defaultThrottlesJSON
+}
+
+// renderPropertiesSorted renders a key=value properties map in sorted key order.
+func renderPropertiesSorted(props map[string]string) string {
+	keys := make([]string, 0, len(props))
+	for k := range props {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var sb strings.Builder
+	for _, k := range keys {
+		fmt.Fprintf(&sb, "%s=%s\n", k, props[k])
+	}
+	return sb.String()
+}
+
+// renderSettingsTxt renders a settings map as space-aligned settings.txt lines in sorted key order.
+func renderSettingsTxt(settings map[string]string) string {
+	keys := make([]string, 0, len(settings))
+	for k := range settings {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var sb strings.Builder
+	for _, k := range keys {
+		fmt.Fprintf(&sb, "%-46s %s\n", k+",", settings[k])
+	}
+	return sb.String()
 }
 
 // createOrUpdateConfigMap creates or updates the cluster config ConfigMap

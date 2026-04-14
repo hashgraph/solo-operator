@@ -241,6 +241,27 @@ func TestCreateClusterConfigStep_ConfigTxt_ExternalAddress(t *testing.T) {
 	}
 }
 
+func TestCreateClusterConfigStep_ConfigTxt_CustomGossipPort(t *testing.T) {
+	orbit := &operatorv1alpha1.Orbit{ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"}}
+	capsule := plainCapsule("node0", 0)
+	capsule.Spec.GossipPort = 60111
+
+	c := fake.NewClientBuilder().WithScheme(genesisTestScheme()).
+		WithObjects(orbit, capsule).Build()
+	NewCreateClusterConfigStep(c).Run(context.Background(), clusterConfigOp(), &GenesisStatus{Phase: operatorv1alpha1.PhasePending})
+
+	cm := &corev1.ConfigMap{}
+	_ = c.Get(context.Background(), client.ObjectKey{Namespace: "test", Name: ClusterConfigName}, cm)
+
+	configTxt := cm.Data[ConfigKeyConfigTxt]
+	if !strings.Contains(configTxt, "60111") {
+		t.Errorf("config.txt should contain custom gossip port 60111, got:\n%s", configTxt)
+	}
+	if strings.Contains(configTxt, "50111") {
+		t.Errorf("config.txt should not contain default port 50111 when custom port is set, got:\n%s", configTxt)
+	}
+}
+
 func TestCreateClusterConfigStep_ShouldSkip(t *testing.T) {
 	step := NewCreateClusterConfigStep(nil)
 	op := clusterConfigOp()

@@ -63,6 +63,16 @@ type ConsensusCapsuleSpec struct {
 	// +optional
 	ExternalAddress string `json:"externalAddress,omitempty"`
 
+	// gossip port; defaults to 50111 when not set
+	// +kubebuilder:default=50111
+	// +optional
+	GossipPort int32 `json:"gossipPort,omitempty"`
+
+	// gRPC port; defaults to 50211 when not set
+	// +kubebuilder:default=50211
+	// +optional
+	GrpcPort int32 `json:"grpcPort,omitempty"`
+
 	// node.properties key-value pairs
 	// +optional
 	NodeProperties map[string]string `json:"nodeProperties,omitempty"`

@@ -135,9 +135,11 @@ func TestCreateGenesisNetworkStep_Run_Success(t *testing.T) {
 		Spec:       operatorv1alpha1.NetworkOperationSpec{Orbit: "test-orbit"},
 	}
 
+	orbit := simpleOrbit("test-orbit")
+
 	c := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(capsule, sigSecret, grpcSecret, op).
+		WithObjects(orbit, capsule, sigSecret, grpcSecret, op).
 		Build()
 
 	step := NewCreateGenesisNetworkStep(c)
@@ -237,7 +239,7 @@ func TestCreateGenesisNetworkStep_Run_WithAdminKey(t *testing.T) {
 
 	c := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(capsule, sigSecret, grpcSecret, adminSecret, op).
+		WithObjects(simpleOrbit("test-orbit"), capsule, sigSecret, grpcSecret, adminSecret, op).
 		Build()
 
 	step := NewCreateGenesisNetworkStep(c)
@@ -268,7 +270,7 @@ func TestCreateGenesisNetworkStep_Run_NoCapsules(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "genesis-op", Namespace: "test", Generation: 1},
 		Spec:       operatorv1alpha1.NetworkOperationSpec{Orbit: "test-orbit"},
 	}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(op).Build()
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(simpleOrbit("test-orbit"), op).Build()
 
 	step := NewCreateGenesisNetworkStep(c)
 	status := &GenesisStatus{Phase: operatorv1alpha1.PhasePending}
@@ -290,7 +292,7 @@ func TestCreateGenesisNetworkStep_Run_MissingSecret(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "genesis-op", Namespace: "test", Generation: 1},
 		Spec:       operatorv1alpha1.NetworkOperationSpec{Orbit: "test-orbit"},
 	}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(capsule, op).Build()
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(simpleOrbit("test-orbit"), capsule, op).Build()
 
 	step := NewCreateGenesisNetworkStep(c)
 	status := &GenesisStatus{Phase: operatorv1alpha1.PhasePending}
@@ -339,7 +341,7 @@ func TestCreateGenesisNetworkStep_MultiNode_Ordered(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "genesis-op", Namespace: "test", Generation: 1},
 		Spec:       operatorv1alpha1.NetworkOperationSpec{Orbit: "test-orbit"},
 	}
-	objs = append(objs, op)
+	objs = append(objs, op, simpleOrbit("test-orbit"))
 
 	// Create 3 nodes in reverse order to verify sorting
 	for _, nodeId := range []int64{2, 0, 1} {
@@ -375,5 +377,179 @@ func TestCreateGenesisNetworkStep_MultiNode_Ordered(t *testing.T) {
 		if entry.Node.NodeId != int64(i) {
 			t.Errorf("expected node[%d].nodeId=%d, got %d", i, i, entry.Node.NodeId)
 		}
+	}
+}
+
+func TestCreateGenesisNetworkStep_CustomPorts(t *testing.T) {
+	ctx := context.Background()
+	scheme := genesisTestScheme()
+
+	sigPEM, _ := selfSignedCert(t)
+	grpcPEM, _ := selfSignedCert(t)
+
+	capsule := newGenesisTestCapsule("node0", 0, "node0-keys", "node0-tls")
+	capsule.Spec.GossipPort = 60111
+	capsule.Spec.GrpcPort = 60211
+
+	op := &operatorv1alpha1.NetworkOperation{
+		ObjectMeta: metav1.ObjectMeta{Name: "genesis-op", Namespace: "test", Generation: 1},
+		Spec:       operatorv1alpha1.NetworkOperationSpec{Orbit: "test-orbit"},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		simpleOrbit("test-orbit"), capsule, op,
+		newCertSecret("node0-keys", "s-public.pem", sigPEM),
+		newCertSecret("node0-tls", "hedera.crt", grpcPEM),
+	).Build()
+
+	result := NewCreateGenesisNetworkStep(c).Run(ctx, op, &GenesisStatus{Phase: operatorv1alpha1.PhasePending})
+	if result.Phase != operatorv1alpha1.PhaseSucceeded {
+		t.Fatalf("expected PhaseSucceeded, got %s", result.Phase)
+	}
+
+	cm := &corev1.ConfigMap{}
+	_ = c.Get(ctx, client.ObjectKey{Name: consensus.GenesisConfigMapName, Namespace: "test"}, cm)
+	var parsed genesisNetworkFile
+	_ = json.Unmarshal([]byte(cm.Data[consensus.GenesisNetworkFileName]), &parsed)
+
+	node := parsed.NodeMetadata[0].Node
+	if len(node.GossipEndpoint) != 1 || node.GossipEndpoint[0].Port != 60111 {
+		t.Errorf("expected gossipPort=60111, got %+v", node.GossipEndpoint)
+	}
+	if len(node.ServiceEndpoint) != 1 || node.ServiceEndpoint[0].Port != 60211 {
+		t.Errorf("expected grpcPort=60211, got %+v", node.ServiceEndpoint)
+	}
+}
+
+func TestCreateGenesisNetworkStep_ExternalAddress_WithCACert(t *testing.T) {
+	ctx := context.Background()
+	scheme := genesisTestScheme()
+
+	// One managed node
+	sigPEM, _ := selfSignedCert(t)
+	grpcPEM, _ := selfSignedCert(t)
+
+	// An external node with a signing cert
+	extSigPEM, extSigDER := selfSignedCert(t)
+
+	orbit := &operatorv1alpha1.Orbit{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
+		Spec: operatorv1alpha1.OrbitSpec{
+			Consensus: operatorv1alpha1.OrbitConsensus{
+				Genesis: &operatorv1alpha1.OrbitGenesis{
+					AddressBook: &operatorv1alpha1.OrbitAddressBook{
+						ExternalAddresses: []operatorv1alpha1.AddressBookEntry{
+							{
+								NodeId:                   5,
+								SelfName:                 "ext-node5",
+								NickName:                 "ext5",
+								Weight:                   200,
+								ExternalHostname:         "ext.example.com",
+								ExternalPort:             50111,
+								NodeAccount:              "0.0.8",
+								PublicSigningCertificate: string(extSigPEM),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	op := &operatorv1alpha1.NetworkOperation{
+		ObjectMeta: metav1.ObjectMeta{Name: "genesis-op", Namespace: "test", Generation: 1},
+		Spec:       operatorv1alpha1.NetworkOperationSpec{Orbit: "test-orbit"},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		orbit, op,
+		newGenesisTestCapsule("node0", 0, "node0-keys", "node0-tls"),
+		newCertSecret("node0-keys", "s-public.pem", sigPEM),
+		newCertSecret("node0-tls", "hedera.crt", grpcPEM),
+	).Build()
+
+	result := NewCreateGenesisNetworkStep(c).Run(ctx, op, &GenesisStatus{Phase: operatorv1alpha1.PhasePending})
+	if result.Phase != operatorv1alpha1.PhaseSucceeded {
+		t.Fatalf("expected PhaseSucceeded, got %s: %+v", result.Phase, result.Conditions)
+	}
+
+	cm := &corev1.ConfigMap{}
+	_ = c.Get(ctx, client.ObjectKey{Name: consensus.GenesisConfigMapName, Namespace: "test"}, cm)
+	var parsed genesisNetworkFile
+	_ = json.Unmarshal([]byte(cm.Data[consensus.GenesisNetworkFileName]), &parsed)
+
+	if len(parsed.NodeMetadata) != 2 {
+		t.Fatalf("expected 2 nodes (1 managed + 1 external), got %d", len(parsed.NodeMetadata))
+	}
+
+	// External node should be nodeId=5 (sorted last)
+	extEntry := parsed.NodeMetadata[1]
+	if extEntry.Node.NodeId != 5 {
+		t.Errorf("expected external node nodeId=5, got %d", extEntry.Node.NodeId)
+	}
+
+	wantCert := base64.StdEncoding.EncodeToString(extSigDER)
+	if extEntry.Node.GossipCaCertificate != wantCert {
+		t.Errorf("external node gossipCaCertificate mismatch")
+	}
+	if extEntry.RosterEntry.GossipCaCertificate != wantCert {
+		t.Errorf("external roster gossipCaCertificate mismatch")
+	}
+}
+
+func TestCreateGenesisNetworkStep_ExternalAddress_NoCACert(t *testing.T) {
+	ctx := context.Background()
+	scheme := genesisTestScheme()
+
+	sigPEM, _ := selfSignedCert(t)
+	grpcPEM, _ := selfSignedCert(t)
+
+	orbit := &operatorv1alpha1.Orbit{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
+		Spec: operatorv1alpha1.OrbitSpec{
+			Consensus: operatorv1alpha1.OrbitConsensus{
+				Genesis: &operatorv1alpha1.OrbitGenesis{
+					AddressBook: &operatorv1alpha1.OrbitAddressBook{
+						ExternalAddresses: []operatorv1alpha1.AddressBookEntry{
+							{
+								NodeId:           5,
+								Weight:           1,
+								ExternalHostname: "ext.example.com",
+								ExternalPort:     50111,
+								NodeAccount:      "0.0.8",
+								// PublicSigningCertificate intentionally absent
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	op := &operatorv1alpha1.NetworkOperation{
+		ObjectMeta: metav1.ObjectMeta{Name: "genesis-op", Namespace: "test", Generation: 1},
+		Spec:       operatorv1alpha1.NetworkOperationSpec{Orbit: "test-orbit"},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		orbit, op,
+		newGenesisTestCapsule("node0", 0, "node0-keys", "node0-tls"),
+		newCertSecret("node0-keys", "s-public.pem", sigPEM),
+		newCertSecret("node0-tls", "hedera.crt", grpcPEM),
+	).Build()
+
+	result := NewCreateGenesisNetworkStep(c).Run(ctx, op, &GenesisStatus{Phase: operatorv1alpha1.PhasePending})
+	if result.Phase != operatorv1alpha1.PhaseSucceeded {
+		t.Fatalf("expected PhaseSucceeded when no CACert, got %s", result.Phase)
+	}
+
+	cm := &corev1.ConfigMap{}
+	_ = c.Get(ctx, client.ObjectKey{Name: consensus.GenesisConfigMapName, Namespace: "test"}, cm)
+	var parsed genesisNetworkFile
+	_ = json.Unmarshal([]byte(cm.Data[consensus.GenesisNetworkFileName]), &parsed)
+
+	extEntry := parsed.NodeMetadata[1]
+	if extEntry.Node.GossipCaCertificate != "" {
+		t.Errorf("expected empty gossipCaCertificate when no cert provided, got %s", extEntry.Node.GossipCaCertificate)
 	}
 }

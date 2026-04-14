@@ -95,6 +95,11 @@ type OrbitGenesis struct {
 	// AddressBook contains the address book configuration
 	// +optional
 	AddressBook *OrbitAddressBook `json:"addressBook,omitempty"`
+
+	// ThrottlesJson overrides the default genesis-throttles.json content written to all nodes.
+	// Must be a valid Hedera throttle definitions JSON. If empty, built-in defaults are used.
+	// +optional
+	ThrottlesJson string `json:"throttlesJson,omitempty"`
 }
 
 // OrbitAddressBook contains address book configuration
