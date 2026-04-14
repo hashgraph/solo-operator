@@ -113,7 +113,9 @@ spec:
                   via subPath into HapiApp2.0/
                 type: string
               internalAddress:
-                description: internal FQDN or IP
+                description: |-
+                  overrides the auto-computed gossip hostname ({name}-0.consensus.{namespace}.svc.cluster.local).
+                  Useful when the node is reached via a custom DNS name, an external IP, a service mesh virtual service, or across clusters.
                 type: string
               log4j2.xml:
                 description: log4j2.xml content; mounted into the hapi-app ConfigMap
@@ -4048,6 +4050,9 @@ spec:
                             type: string
                           javaHeapMin:
                             description: sets JAVA_HEAP_MIN (e.g. "256m" → -Xms256m)
+                            type: string
+                          javaOpts:
+                            description: sets JAVA_OPTS (e.g. "-XX:+UseG1GC -XX:MaxDirectMemorySize=1500m")
                             type: string
                           name:
                             default: consensus-node

@@ -11,14 +11,15 @@ spec:
   nodeId: 0
   accountId: "0.0.3"
   weight: 500
+  serviceType: ClusterIP
   podProperties:
     containers:
       consensusNode:
         name: "consensus-node"
         softwareVersion:
-          repository: "us-central1-docker.pkg.dev/hashsphere-development/hiero-consensus-node"
+          repository: "gcr.io/hedera-registry"
           imageName: "consensus-node"
-          imageTag: "v0.71.3"
+          imageTag: "0.72.0"
           imagePullPolicy: IfNotPresent
         resources:
           limits:
@@ -27,6 +28,7 @@ spec:
           requests:
             cpu: "250m"
             memory: 1Gi
+        javaOpts: "-XX:+UseG1GC -XX:MaxDirectMemorySize=1500m --add-opens java.base/jdk.internal.misc=ALL-UNNAMED --add-opens java.base/java.nio=ALL-UNNAMED -Dio.netty.tryReflectionSetAccessible=true"
 
       # Block streams uploader (cheetah with blob/MinIO storage)
       blocksUploader:
@@ -187,10 +189,10 @@ spec:
         keyName: "hedera-node0.crt"
         secretName: "node0-grpc-tls-keys"
       signingPrivateKey:
-        keyName: "s-private-node0.pem"
+        keyName: "s-private-node1.pem"
         secretName: "node0-gossip-keys"
       signingPublicCertificate:
-        keyName: "s-public-node0.pem"
+        keyName: "s-public-node1.pem"
         secretName: "node0-gossip-keys"
 
   log4j2.xml: |
@@ -202,7 +204,7 @@ spec:
         </Console>
       </Appenders>
       <Loggers>
-        <Root level="INFO">
+        <Root level="WARN">
           <AppenderRef ref="Console"/>
         </Root>
       </Loggers>

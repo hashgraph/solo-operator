@@ -91,7 +91,7 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas:    &replicas,
-			ServiceName: capsule.Name,
+			ServiceName: ConsensusSubdomain,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
@@ -101,6 +101,7 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: ServiceAccountName(capsule),
+					InitContainers:     []corev1.Container{r.buildGenesisInitContainer()},
 					Containers: []corev1.Container{
 						consensusContainer,
 					},
@@ -123,6 +124,29 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 	r.applyCheetahFSGroup(sts, capsule)
 
 	return sts, nil
+}
+
+// buildGenesisInitContainer copies genesis-network.json from the optional ConfigMap into
+// the writable data-config-dir so the platform can archive it after the first round.
+// It uses the presence of the platform's state directory as a sentinel: if the directory
+// exists the node already has live state and skipping the copy is safe.
+func (r *StatefulSetSubReconciler) buildGenesisInitContainer() corev1.Container {
+	const stateDir = "/data/saved/" + SavedStateDir
+	return corev1.Container{
+		Name:  "genesis-init",
+		Image: GenesisInitImage,
+		Command: []string{"sh", "-c",
+			`[ -d ` + stateDir + ` ] && exit 0; ` +
+				`[ -f /tmp/genesis-config/` + GenesisNetworkFileName + ` ] && ` +
+				`cp /tmp/genesis-config/` + GenesisNetworkFileName + ` ` + HapiBase + `/data/config/; ` +
+				`exit 0`,
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: "genesis-config", MountPath: "/tmp/genesis-config"},
+			{Name: "data-config-dir", MountPath: HapiBase + "/data/config"},
+			{Name: VolumeTypeSaved, MountPath: "/data/saved"},
+		},
+	}
 }
 
 // buildConsensusNodeContainer builds the main consensus node container.
@@ -159,6 +183,10 @@ func (r *StatefulSetSubReconciler) buildConsensusNodeContainer(capsule *operator
 
 	if cn.JavaHeapMax != "" {
 		env = append(env, corev1.EnvVar{Name: "JAVA_HEAP_MAX", Value: cn.JavaHeapMax})
+	}
+
+	if cn.JavaOpts != "" {
+		env = append(env, corev1.EnvVar{Name: "JAVA_OPTS", Value: cn.JavaOpts})
 	}
 
 	container := corev1.Container{
@@ -201,11 +229,12 @@ func (r *StatefulSetSubReconciler) buildConsensusNodeContainer(capsule *operator
 //   - PVC-optional volumes: created as PVC when configured, otherwise emptyDir fallback.
 //   - Secret volumes: created only when the relevant spec field is set.
 func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.ConsensusCapsule) ([]corev1.Volume, []corev1.VolumeMount) {
-	const hapiBase = "/opt/hgcapp/services-hedera/HapiApp2.0"
+	const hapiBase = HapiBase
 
 	pvc := capsule.Spec.PersistentVolumeClaims
 
 	// ── ConfigMap volumes ────────────────────────────────────────────────────
+	genesisOptional := true
 	volumes := []corev1.Volume{
 		{
 			Name: "hapi-app-config",
@@ -223,6 +252,24 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 				},
 			},
 		},
+		// genesis-config is optional: absent until a genesis NetworkOperation runs.
+		// Mounted at a temp path; the genesis-init init container copies the file into
+		// the writable data-config-dir emptyDir so the platform can archive it after round 1.
+		{
+			Name: "genesis-config",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: GenesisConfigMapName},
+					Optional:             &genesisOptional,
+				},
+			},
+		},
+		// data-config-dir is a writable emptyDir for data/config so genesis-network.json
+		// can be archived (renamed) by the platform after the first round post-genesis.
+		{
+			Name:         "data-config-dir",
+			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+		},
 	}
 
 	volumeMounts := []corev1.VolumeMount{
@@ -230,26 +277,12 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 		// log4j2.xml and settings.txt relative to that directory.
 		{Name: "hapi-app-config", MountPath: hapiBase + "/log4j2.xml", SubPath: "log4j2.xml", ReadOnly: true},
 		{Name: "hapi-app-config", MountPath: hapiBase + "/settings.txt", SubPath: "settings.txt", ReadOnly: true},
-		{Name: "data-config", MountPath: hapiBase + "/data/config"},
+		// data-config-dir provides the writable data/config directory; individual
+		// config files are overlaid on top via subPath mounts below.
+		{Name: "data-config-dir", MountPath: hapiBase + "/data/config"},
+		{Name: "data-config", MountPath: hapiBase + "/data/config/application.properties", SubPath: "application.properties"},
+		{Name: "data-config", MountPath: hapiBase + "/data/config/api-permission.properties", SubPath: "api-permission.properties"},
 	}
-
-	// genesis-network.json — namespace-scoped, optional (absent until genesis NetworkOperation runs)
-	genesisOptional := true
-	volumes = append(volumes, corev1.Volume{
-		Name: "genesis-config",
-		VolumeSource: corev1.VolumeSource{
-			ConfigMap: &corev1.ConfigMapVolumeSource{
-				LocalObjectReference: corev1.LocalObjectReference{Name: GenesisConfigMapName},
-				Optional:             &genesisOptional,
-			},
-		},
-	})
-	volumeMounts = append(volumeMounts, corev1.VolumeMount{
-		Name:      "genesis-config",
-		MountPath: hapiBase + "/data/config/" + GenesisNetworkFileName,
-		SubPath:   GenesisNetworkFileName,
-		ReadOnly:  true,
-	})
 
 	// block-nodes.json — only when BlockNodes is configured
 	if capsule.Spec.BlockNodes != nil {
@@ -387,6 +420,36 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 				})
 				volumeMounts = append(volumeMounts, corev1.VolumeMount{
 					Name: "keys", MountPath: hapiBase + "/data/keys",
+				})
+			}
+
+			sr := capsule.Spec.Secrets.SecretResources
+			if sr.GrpcTlsPrivateKey.SecretName != "" {
+				volumes = append(volumes, corev1.Volume{
+					Name: "grpc-tls-key",
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: sr.GrpcTlsPrivateKey.SecretName,
+							Items:      []corev1.KeyToPath{{Key: sr.GrpcTlsPrivateKey.KeyName, Path: "hedera.key"}},
+						},
+					},
+				})
+				volumeMounts = append(volumeMounts, corev1.VolumeMount{
+					Name: "grpc-tls-key", MountPath: hapiBase + "/hedera.key", SubPath: "hedera.key",
+				})
+			}
+			if sr.GrpcTlsPublicCertificate.SecretName != "" {
+				volumes = append(volumes, corev1.Volume{
+					Name: "grpc-tls-cert",
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: sr.GrpcTlsPublicCertificate.SecretName,
+							Items:      []corev1.KeyToPath{{Key: sr.GrpcTlsPublicCertificate.KeyName, Path: "hedera.crt"}},
+						},
+					},
+				})
+				volumeMounts = append(volumeMounts, corev1.VolumeMount{
+					Name: "grpc-tls-cert", MountPath: hapiBase + "/hedera.crt", SubPath: "hedera.crt",
 				})
 			}
 		}

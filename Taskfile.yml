@@ -179,6 +179,37 @@ tasks:
     cmds:
       - kind load docker-image {{.IMG}} --name solo-operator
 
+  kind:metallb:
+    desc: Install MetalLB operator via Helm and configure an IP pool so LoadBalancer services get IPs on kind
+    cmds:
+      - helm repo add metallb https://metallb.github.io/metallb
+      - helm repo update
+      - helm upgrade --install --namespace metallb-system --create-namespace metallb metallb/metallb
+      - kubectl wait --namespace metallb-system --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=90s
+      - |
+        # Use .200-.250 of the kind Docker subnet for LoadBalancer IPs
+        SUBNET=$(docker network inspect kind | grep '"Subnet"' | awk -F'"' '{print $4}' | grep -v ':' | head -1)
+        PREFIX=$(echo "$SUBNET" | cut -d'/' -f1 | cut -d'.' -f1-3)
+        kubectl apply -f - <<EOF
+        apiVersion: metallb.io/v1beta1
+        kind: IPAddressPool
+        metadata:
+          name: kind-pool
+          namespace: metallb-system
+        spec:
+          addresses:
+          - ${PREFIX}.200-${PREFIX}.250
+        ---
+        apiVersion: metallb.io/v1beta1
+        kind: L2Advertisement
+        metadata:
+          name: kind-l2
+          namespace: metallb-system
+        spec:
+          ipAddressPools:
+          - kind-pool
+        EOF
+
   dev:
     desc: Run operator locally against kind cluster
     cmds:

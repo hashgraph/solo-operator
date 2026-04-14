@@ -5,6 +5,7 @@ package consensus
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -118,7 +119,7 @@ func TestInternalHostname(t *testing.T) {
 		},
 	}
 
-	expected := "node0.consensus.test-namespace.svc.cluster.local"
+	expected := "node0-0.consensus.test-namespace.svc.cluster.local"
 	if got := InternalHostname(capsule); got != expected {
 		t.Errorf("expected internal hostname %s, got %s", expected, got)
 	}
@@ -870,6 +871,105 @@ func TestStatefulSetVolumes_HapiAppSecrets(t *testing.T) {
 		if m.SubPath == "" {
 			t.Errorf("expected non-empty SubPath for %s", path)
 		}
+	}
+}
+
+func TestStatefulSetVolumes_DataConfigDir(t *testing.T) {
+	r := &StatefulSetSubReconciler{}
+	volumes, mounts := r.buildVolumes(newTestCapsule())
+
+	volByName := make(map[string]corev1.Volume)
+	for _, v := range volumes {
+		volByName[v.Name] = v
+	}
+	mountByPath := make(map[string]corev1.VolumeMount)
+	for _, m := range mounts {
+		mountByPath[m.MountPath] = m
+	}
+
+	// data-config-dir must be an emptyDir
+	v, ok := volByName["data-config-dir"]
+	if !ok {
+		t.Fatal("expected data-config-dir volume")
+	}
+	if v.EmptyDir == nil {
+		t.Error("expected data-config-dir to be emptyDir")
+	}
+
+	// data-config-dir must be mounted at data/config (writable, no subPath)
+	m, ok := mountByPath[HapiBase+"/data/config"]
+	if !ok {
+		t.Fatal("expected mount at data/config")
+	}
+	if m.Name != "data-config-dir" {
+		t.Errorf("expected data-config-dir at data/config, got %s", m.Name)
+	}
+	if m.SubPath != "" {
+		t.Error("data-config-dir must not use subPath")
+	}
+
+	// genesis-config must be an optional ConfigMap volume (for the init container)
+	gc, ok := volByName["genesis-config"]
+	if !ok {
+		t.Fatal("expected genesis-config volume")
+	}
+	if gc.ConfigMap == nil || gc.ConfigMap.Optional == nil || !*gc.ConfigMap.Optional {
+		t.Error("expected genesis-config to be an optional ConfigMap volume")
+	}
+
+	// genesis-network.json must NOT be subPath-mounted in the main container
+	for _, m := range mounts {
+		if m.SubPath == GenesisNetworkFileName {
+			t.Error("genesis-network.json must not be subPath-mounted in the main container")
+		}
+	}
+}
+
+func TestGenesisInitContainer(t *testing.T) {
+	r := &StatefulSetSubReconciler{}
+	c := r.buildGenesisInitContainer()
+
+	if c.Name != "genesis-init" {
+		t.Errorf("unexpected init container name: %s", c.Name)
+	}
+	if c.Image != GenesisInitImage {
+		t.Errorf("unexpected image: %s", c.Image)
+	}
+
+	mountByName := make(map[string]corev1.VolumeMount)
+	for _, m := range c.VolumeMounts {
+		mountByName[m.Name] = m
+	}
+
+	if m, ok := mountByName["genesis-config"]; !ok {
+		t.Error("expected genesis-config mount in init container")
+	} else if m.MountPath != "/tmp/genesis-config" {
+		t.Errorf("unexpected genesis-config mount path: %s", m.MountPath)
+	}
+
+	if m, ok := mountByName["data-config-dir"]; !ok {
+		t.Error("expected data-config-dir mount in init container")
+	} else if m.MountPath != HapiBase+"/data/config" {
+		t.Errorf("unexpected data-config-dir mount path: %s", m.MountPath)
+	}
+
+	// saved volume must be mounted so the state directory check works
+	if _, ok := mountByName[VolumeTypeSaved]; !ok {
+		t.Error("expected saved volume mount in init container")
+	}
+
+	// state-dir check must appear before the copy in the command
+	cmd := c.Command[len(c.Command)-1]
+	stateDirIdx := strings.Index(cmd, SavedStateDir)
+	cpIdx := strings.Index(cmd, "cp /tmp/genesis-config/")
+	if stateDirIdx < 0 {
+		t.Error("expected state directory reference in init container command")
+	}
+	if cpIdx < 0 {
+		t.Error("expected cp command in init container")
+	}
+	if stateDirIdx > cpIdx {
+		t.Error("state-dir check must appear before the cp command")
 	}
 }
 

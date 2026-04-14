@@ -55,7 +55,8 @@ type ConsensusCapsuleSpec struct {
 	// +optional
 	Secrets *ConsensusSecrets `json:"secrets,omitempty"`
 
-	// internal FQDN or IP
+	// overrides the auto-computed gossip hostname ({name}-0.consensus.{namespace}.svc.cluster.local).
+	// Useful when the node is reached via a custom DNS name, an external IP, a service mesh virtual service, or across clusters.
 	// +optional
 	InternalAddress string `json:"internalAddress,omitempty"`
 
@@ -233,6 +234,10 @@ type ConsensusNodeContainer struct {
 	// sets JAVA_HEAP_MAX (e.g. "8g" → -Xmx8g)
 	// +optional
 	JavaHeapMax string `json:"javaHeapMax,omitempty"`
+
+	// sets JAVA_OPTS (e.g. "-XX:+UseG1GC -XX:MaxDirectMemorySize=1500m")
+	// +optional
+	JavaOpts string `json:"javaOpts,omitempty"`
 
 	// +optional
 	SecurityContext *corev1.SecurityContext `json:"securityContext,omitempty"`

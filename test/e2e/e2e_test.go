@@ -127,7 +127,7 @@ var _ = Describe("E2E Tests", func() {
 								ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
 									Name: "consensus-node",
 									SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
-										Repository:      "us-central1-docker.pkg.dev/hashsphere-development/hiero-consensus-node",
+										Repository:      "gcr.io/hedera-registry",
 										ImageName:       "consensus-node",
 										ImageTag:        "v0.65.1",
 										ImagePullPolicy: "IfNotPresent",
@@ -209,7 +209,7 @@ var _ = Describe("E2E Tests", func() {
 									SoftwareVersionSource: &operatorv1alpha1.SoftwareVersionSource{
 										ImageRepositories: []operatorv1alpha1.ImageRepository{
 											{
-												Repository: "us-central1-docker.pkg.dev/hashsphere-development/hiero-consensus-node",
+												Repository: "gcr.io/hedera-registry",
 												ImageName:  "consensus-node",
 												ImageTag:   "v0.65.1",
 											},
@@ -565,7 +565,7 @@ var _ = Describe("E2E Tests", func() {
 								ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
 									Name: "consensus-node",
 									SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
-										Repository:      "us-central1-docker.pkg.dev/hashsphere-development/hiero-consensus-node",
+										Repository:      "gcr.io/hedera-registry",
 										ImageName:       "consensus-node",
 										ImageTag:        "v0.65.1",
 										ImagePullPolicy: "IfNotPresent",
@@ -724,7 +724,7 @@ var _ = Describe("E2E Tests", func() {
 								ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
 									Name: "consensus-node",
 									SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
-										Repository:      "us-central1-docker.pkg.dev/hashsphere-development/hiero-consensus-node",
+										Repository:      "gcr.io/hedera-registry",
 										ImageName:       "consensus-node",
 										ImageTag:        "v0.65.1",
 										ImagePullPolicy: "IfNotPresent",
@@ -850,7 +850,7 @@ var _ = Describe("Operator Reconciliation Tests", Label("operator-required"), fu
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
 								Name: "consensus-node",
 								SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
-									Repository:      "us-central1-docker.pkg.dev/hashsphere-development/hiero-consensus-node",
+									Repository:      "gcr.io/hedera-registry",
 									ImageName:       "consensus-node",
 									ImageTag:        "v0.65.1",
 									ImagePullPolicy: "IfNotPresent",
