@@ -19,6 +19,9 @@ const (
 // Standard label values.
 const (
 	ManagedByValue = "solo-operator"
+
+	// ComponentConsensusNode is the app.kubernetes.io/component value for consensus node pods.
+	ComponentConsensusNode = "consensus-node"
 )
 
 // StandardLabels returns the standard labels used on operator-managed ConfigMaps.

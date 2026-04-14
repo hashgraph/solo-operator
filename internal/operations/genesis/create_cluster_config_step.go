@@ -63,9 +63,9 @@ func (s *CreateClusterConfigStep) Run(ctx context.Context, resource *operatorv1a
 	listOpts := []client.ListOption{
 		client.InNamespace(namespace),
 		client.MatchingLabels{
-			"app.kubernetes.io/managed-by": "solo-operator",
+			"app.kubernetes.io/managed-by": common.ManagedByValue,
 			"app.kubernetes.io/part-of":    "consensus-node",
-			"app.kubernetes.io/component":  "deployment",
+			"app.kubernetes.io/component":  common.ComponentConsensusNode,
 		},
 	}
 	if err := s.client.List(ctx, podList, listOpts...); err != nil {
@@ -118,11 +118,9 @@ func (s *CreateClusterConfigStep) collectPodIPs(podList *corev1.PodList) []strin
 			continue
 		}
 
-		// Check if pod is ready but not fully ready (transitioning state we need)
-		// The Java implementation checks for Ready=False while Running
 		isReady := false
 		for _, cond := range pod.Status.Conditions {
-			if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionFalse {
+			if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
 				isReady = true
 				break
 			}
@@ -192,9 +190,10 @@ func (s *CreateClusterConfigStep) buildConfigTxt(capsules []operatorv1alpha1.Con
 			gossipPort = common.GossipPort
 		}
 
-		// Format: address, nodeId, nickname, selfname, weight, internalIP, internalPort, externalHost, externalPort, accountId
-		addressMap[nodeId] = fmt.Sprintf("address, %d, %s, %s, %d, 127.0.0.1, %d, %s, %d, %s\n",
-			nodeId, nodeName, nodeName, weight, gossipPort, externalAddr, gossipPort, accountId)
+		// Format: address, nodeId, nickname, selfname, weight, internalHost, internalPort, externalHost, externalPort, accountId
+		internalAddr := computeInternalHostname(&capsule, namespace)
+		addressMap[nodeId] = fmt.Sprintf("address, %d, %s, %s, %d, %s, %d, %s, %d, %s\n",
+			nodeId, nodeName, nodeName, weight, internalAddr, gossipPort, externalAddr, gossipPort, accountId)
 	}
 
 	// Add external addresses from orbit if present
@@ -239,6 +238,16 @@ func (s *CreateClusterConfigStep) computeNodeExternalAddress(capsule *operatorv1
 	}
 	// Default: node-svc.namespace
 	return fmt.Sprintf("%s-svc.%s", nodeName, namespace)
+}
+
+// computeInternalHostname returns the internal DNS name for a consensus node pod.
+// Uses capsule.Spec.InternalAddress when set, otherwise the StatefulSet pod DNS:
+// <name>-0.<subdomain>.<namespace>.svc.cluster.local
+func computeInternalHostname(capsule *operatorv1alpha1.ConsensusCapsule, namespace string) string {
+	if capsule.Spec.InternalAddress != "" {
+		return capsule.Spec.InternalAddress
+	}
+	return fmt.Sprintf("%s-0.consensus.%s.svc.cluster.local", capsule.Name, namespace)
 }
 
 // buildSettingsTxt builds the settings.txt content.

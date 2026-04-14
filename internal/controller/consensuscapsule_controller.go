@@ -24,8 +24,8 @@ import (
 const (
 	ConsensusCapsuleFinalizer = "operator.solo.hedera.com/consensuscapsule-finalizer"
 
-	// healthCheckRequeueAfter is how long to wait before rechecking when health checks fail
-	healthCheckRequeueAfter = 10 * time.Second
+	// podReadinessRequeueAfter is how long to wait before rechecking when the pod is not yet ready.
+	podReadinessRequeueAfter = 10 * time.Second
 )
 
 // ConsensusCapsuleReconciler reconciles a ConsensusCapsule object
@@ -33,7 +33,6 @@ type ConsensusCapsuleReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
 	subreconciler *subreconciler.Chain[*operatorv1alpha1.ConsensusCapsule]
-	healthChecker HealthChecker
 }
 
 // NewConsensusCapsuleReconciler creates a new ConsensusCapsuleReconciler
@@ -42,7 +41,6 @@ func NewConsensusCapsuleReconciler(c client.Client, scheme *runtime.Scheme) *Con
 		Client:        c,
 		Scheme:        scheme,
 		subreconciler: consensus.NewSubReconcilers(c, scheme),
-		healthChecker: &defaultHealthChecker{},
 	}
 }
 
@@ -176,9 +174,14 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 
 	if capsule.Status.Phase == phase && capsule.Status.ObservedGeneration == capsule.Generation {
 		if requeue {
-			return ctrl.Result{RequeueAfter: healthCheckRequeueAfter}, nil
+			return ctrl.Result{RequeueAfter: podReadinessRequeueAfter}, nil
 		}
 		return ctrl.Result{}, nil
+	}
+
+	gossipPort := int32(consensus.GossipPort)
+	if capsule.Spec.GossipPort != 0 {
+		gossipPort = capsule.Spec.GossipPort
 	}
 
 	capsule.Status.Phase = phase
@@ -189,9 +192,9 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 		SelfName:         capsule.Name,
 		Weight:           capsule.Spec.Weight,
 		InternalHostname: consensus.InternalHostname(capsule),
-		InternalPort:     consensus.GossipPort,
+		InternalPort:     gossipPort,
 		ExternalHostname: capsule.Spec.ExternalAddress,
-		ExternalPort:     consensus.GossipPort,
+		ExternalPort:     gossipPort,
 		NodeAccount:      capsule.Spec.AccountId,
 	}
 
@@ -200,7 +203,7 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 	}
 
 	if requeue {
-		return ctrl.Result{RequeueAfter: healthCheckRequeueAfter}, nil
+		return ctrl.Result{RequeueAfter: podReadinessRequeueAfter}, nil
 	}
 	return ctrl.Result{}, nil
 }

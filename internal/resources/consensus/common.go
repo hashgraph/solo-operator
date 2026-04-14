@@ -31,9 +31,9 @@ const (
 
 // Label values — generic values alias common; consensus-specific values defined here.
 const (
-	ManagedByValue      = common.ManagedByValue
-	PartOfConsensusNode = "consensus-node"
-	ComponentDeployment = "deployment"
+	ManagedByValue         = common.ManagedByValue
+	PartOfConsensusNode    = "consensus-node"
+	ComponentConsensusNode = common.ComponentConsensusNode
 )
 
 // Resource name suffixes
@@ -83,6 +83,13 @@ const (
 	VolumeTypeEvents  = "events"
 )
 
+// Stream mount paths — single source of truth shared by volume builders and getVolumeNameForPath.
+const (
+	PathBlockStreams  = "/opt/hgcapp/blockStreams"
+	PathRecordStreams = "/opt/hgcapp/recordStreams"
+	PathEventsStreams = "/opt/hgcapp/eventsStreams"
+)
+
 // CommonLabels returns the common labels for consensus capsule resources
 func CommonLabels(capsule *operatorv1alpha1.ConsensusCapsule) map[string]string {
 	return map[string]string{
@@ -96,7 +103,7 @@ func CommonLabels(capsule *operatorv1alpha1.ConsensusCapsule) map[string]string 
 // PodLabels returns the labels for pods
 func PodLabels(capsule *operatorv1alpha1.ConsensusCapsule) map[string]string {
 	labels := CommonLabels(capsule)
-	labels[LabelComponent] = ComponentDeployment
+	labels[LabelComponent] = ComponentConsensusNode
 	labels[LabelSoloNodeName] = capsule.Name
 	labels[LabelSoloAccountId] = capsule.Spec.AccountId
 	labels[LabelSoloType] = "network-node"
@@ -119,13 +126,6 @@ func HapiAppConfigMapName(capsule *operatorv1alpha1.ConsensusCapsule) string {
 	return capsule.Name + "-hapi-app-cm"
 }
 
-// ConfigMapName is an alias for HapiAppConfigMapName kept for backward compatibility.
-//
-// Deprecated: use HapiAppConfigMapName.
-func ConfigMapName(capsule *operatorv1alpha1.ConsensusCapsule) string {
-	return HapiAppConfigMapName(capsule)
-}
-
 // DataConfigMapName returns the data-config ConfigMap name for a capsule.
 // This ConfigMap contains application.properties and api-permission.properties sourced from the Orbit.
 func DataConfigMapName(capsule *operatorv1alpha1.ConsensusCapsule) string {
@@ -146,6 +146,24 @@ func PVCName(capsule *operatorv1alpha1.ConsensusCapsule, volumeType string) stri
 // StatefulSetName returns the StatefulSet name for a capsule.
 func StatefulSetName(capsule *operatorv1alpha1.ConsensusCapsule) string {
 	return capsule.Name
+}
+
+// RenderSettingsTxt renders a settings map in the padded-comma format expected by the Hedera platform:
+//
+//	"checkSignedStateFromDisk,              1"
+//
+// Keys are sorted for deterministic output so ConfigMap content is stable across reconciles.
+func RenderSettingsTxt(m map[string]string) string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var sb strings.Builder
+	for _, k := range keys {
+		fmt.Fprintf(&sb, "%-46s %s\n", k+",", m[k])
+	}
+	return sb.String()
 }
 
 // RenderProperties renders a map[string]string as a sorted Java-properties-style key=value file.

@@ -284,3 +284,129 @@ func TestCreateClusterConfigStep_ShouldSkip(t *testing.T) {
 		t.Error("should skip when step already succeeded")
 	}
 }
+
+// ── collectPodIPs ─────────────────────────────────────────────────────────────
+
+func makeTestPod(name, ip string, phase corev1.PodPhase, ready, deleting bool) corev1.Pod {
+	pod := corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test"},
+		Status: corev1.PodStatus{
+			Phase: phase,
+			PodIP: ip,
+		},
+	}
+	if ready {
+		pod.Status.Conditions = []corev1.PodCondition{
+			{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+		}
+	} else {
+		pod.Status.Conditions = []corev1.PodCondition{
+			{Type: corev1.PodReady, Status: corev1.ConditionFalse},
+		}
+	}
+	if deleting {
+		now := metav1.Now()
+		pod.DeletionTimestamp = &now
+	}
+	return pod
+}
+
+func TestCollectPodIPs_ReadyRunningPod(t *testing.T) {
+	step := NewCreateClusterConfigStep(nil)
+	pods := &corev1.PodList{Items: []corev1.Pod{
+		makeTestPod("node0", "10.0.0.1", corev1.PodRunning, true, false),
+	}}
+
+	ips := step.collectPodIPs(pods)
+	if len(ips) != 1 || ips[0] != "10.0.0.1" {
+		t.Errorf("expected [10.0.0.1], got %v", ips)
+	}
+}
+
+func TestCollectPodIPs_NotReadyPodExcluded(t *testing.T) {
+	step := NewCreateClusterConfigStep(nil)
+	pods := &corev1.PodList{Items: []corev1.Pod{
+		makeTestPod("node0", "10.0.0.1", corev1.PodRunning, false, false),
+	}}
+
+	ips := step.collectPodIPs(pods)
+	if len(ips) != 0 {
+		t.Errorf("expected empty slice for not-ready pod, got %v", ips)
+	}
+}
+
+func TestCollectPodIPs_PendingPodExcluded(t *testing.T) {
+	step := NewCreateClusterConfigStep(nil)
+	pods := &corev1.PodList{Items: []corev1.Pod{
+		makeTestPod("node0", "10.0.0.1", corev1.PodPending, true, false),
+	}}
+
+	ips := step.collectPodIPs(pods)
+	if len(ips) != 0 {
+		t.Errorf("expected empty slice for pending pod, got %v", ips)
+	}
+}
+
+func TestCollectPodIPs_DeletingPodExcluded(t *testing.T) {
+	step := NewCreateClusterConfigStep(nil)
+	pods := &corev1.PodList{Items: []corev1.Pod{
+		makeTestPod("node0", "10.0.0.1", corev1.PodRunning, true, true),
+	}}
+
+	ips := step.collectPodIPs(pods)
+	if len(ips) != 0 {
+		t.Errorf("expected empty slice for deleting pod, got %v", ips)
+	}
+}
+
+func TestCollectPodIPs_MixedPods(t *testing.T) {
+	step := NewCreateClusterConfigStep(nil)
+	pods := &corev1.PodList{Items: []corev1.Pod{
+		makeTestPod("node0", "10.0.0.1", corev1.PodRunning, true, false),  // included
+		makeTestPod("node1", "10.0.0.2", corev1.PodRunning, false, false), // not ready
+		makeTestPod("node2", "10.0.0.3", corev1.PodPending, true, false),  // pending phase
+		makeTestPod("node3", "10.0.0.4", corev1.PodRunning, true, true),   // deleting
+	}}
+
+	ips := step.collectPodIPs(pods)
+	if len(ips) != 1 || ips[0] != "10.0.0.1" {
+		t.Errorf("expected only node0 IP, got %v", ips)
+	}
+}
+
+// ── computeInternalHostname ───────────────────────────────────────────────────
+
+func TestComputeInternalHostname_DefaultsDNS(t *testing.T) {
+	capsule := plainCapsule("node0", 0)
+	got := computeInternalHostname(capsule, "test-ns")
+	want := "node0-0.consensus.test-ns.svc.cluster.local"
+	if got != want {
+		t.Errorf("want %q, got %q", want, got)
+	}
+}
+
+func TestComputeInternalHostname_OverrideUsed(t *testing.T) {
+	capsule := plainCapsule("node0", 0)
+	capsule.Spec.InternalAddress = "10.0.0.5"
+	got := computeInternalHostname(capsule, "test-ns")
+	if got != "10.0.0.5" {
+		t.Errorf("expected InternalAddress override, got %q", got)
+	}
+}
+
+func TestConfigTxt_UsesInternalHostname(t *testing.T) {
+	orbit := &operatorv1alpha1.Orbit{ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"}}
+	capsule := plainCapsule("node0", 0)
+	capsule.Spec.InternalAddress = "192.168.1.10"
+
+	c := fake.NewClientBuilder().WithScheme(genesisTestScheme()).
+		WithObjects(orbit, capsule).Build()
+	NewCreateClusterConfigStep(c).Run(context.Background(), clusterConfigOp(), &GenesisStatus{Phase: operatorv1alpha1.PhasePending})
+
+	cm := &corev1.ConfigMap{}
+	_ = c.Get(context.Background(), client.ObjectKey{Namespace: "test", Name: ClusterConfigName}, cm)
+
+	if !strings.Contains(cm.Data[ConfigKeyConfigTxt], "192.168.1.10") {
+		t.Errorf("config.txt should use InternalAddress override, got:\n%s", cm.Data[ConfigKeyConfigTxt])
+	}
+}

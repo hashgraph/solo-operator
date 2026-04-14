@@ -94,6 +94,15 @@ func (r *ServiceSubReconciler) buildService(capsule *operatorv1alpha1.ConsensusC
 		svcType = corev1.ServiceType(capsule.Spec.ServiceType)
 	}
 
+	gossipPort := int32(GossipPort)
+	if capsule.Spec.GossipPort != 0 {
+		gossipPort = capsule.Spec.GossipPort
+	}
+	grpcPort := int32(GrpcPort)
+	if capsule.Spec.GrpcPort != 0 {
+		grpcPort = capsule.Spec.GrpcPort
+	}
+
 	labels := CommonLabels(capsule)
 	labels[LabelSoloType] = "network-node-svc"
 	labels[LabelSoloPromEndpt] = "active"
@@ -115,14 +124,14 @@ func (r *ServiceSubReconciler) buildService(capsule *operatorv1alpha1.ConsensusC
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "gossip",
-					Port:       GossipPort,
-					TargetPort: intstr.FromInt32(GossipPort),
+					Port:       gossipPort,
+					TargetPort: intstr.FromInt32(gossipPort),
 					Protocol:   corev1.ProtocolTCP,
 				},
 				{
 					Name:       "grpc",
-					Port:       GrpcPort,
-					TargetPort: intstr.FromInt32(GrpcPort),
+					Port:       grpcPort,
+					TargetPort: intstr.FromInt32(grpcPort),
 					Protocol:   corev1.ProtocolTCP,
 				},
 				{

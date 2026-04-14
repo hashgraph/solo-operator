@@ -4,7 +4,6 @@ package controller
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -60,11 +59,9 @@ func newReadyPodWithPhase(capsule *operatorv1alpha1.ConsensusCapsule, phase core
 	return pod
 }
 
-func buildReconcilerForUpdateStatus(c client.Client, hc HealthChecker) *ConsensusCapsuleReconciler {
+func buildReconcilerForUpdateStatus(c client.Client) *ConsensusCapsuleReconciler {
 	scheme := newControllerTestScheme()
-	r := NewConsensusCapsuleReconciler(c, scheme)
-	r.healthChecker = hc
-	return r
+	return NewConsensusCapsuleReconciler(c, scheme)
 }
 
 func TestUpdateStatus_NoPods_PhasePending(t *testing.T) {
@@ -81,7 +78,7 @@ func TestUpdateStatus_NoPods_PhasePending(t *testing.T) {
 		t.Fatalf("get capsule: %v", err)
 	}
 
-	r := buildReconcilerForUpdateStatus(c, &stubHealthChecker{})
+	r := buildReconcilerForUpdateStatus(c)
 
 	result, err := r.updateStatus(ctx, capsule)
 	if err != nil {
@@ -95,7 +92,7 @@ func TestUpdateStatus_NoPods_PhasePending(t *testing.T) {
 	}
 }
 
-func TestUpdateStatus_PodRunning_HealthPass_PhaseRunning(t *testing.T) {
+func TestUpdateStatus_PodRunning_Ready_PhaseRunning(t *testing.T) {
 	ctx := context.Background()
 	scheme := newControllerTestScheme()
 	capsule := newCapsuleForControllerTest()
@@ -109,7 +106,7 @@ func TestUpdateStatus_PodRunning_HealthPass_PhaseRunning(t *testing.T) {
 		t.Fatalf("get capsule: %v", err)
 	}
 
-	r := buildReconcilerForUpdateStatus(c, &stubHealthChecker{}) // both checks pass
+	r := buildReconcilerForUpdateStatus(c)
 
 	result, err := r.updateStatus(ctx, capsule)
 	if err != nil {
@@ -123,11 +120,14 @@ func TestUpdateStatus_PodRunning_HealthPass_PhaseRunning(t *testing.T) {
 	}
 }
 
-func TestUpdateStatus_PodRunning_HealthFail_StaysPending(t *testing.T) {
+// TestUpdateStatus_PodRunning_NotReady_StaysPending verifies that a Running pod
+// whose Ready condition is not yet True keeps the capsule in PhasePending and
+// schedules a requeue so the controller re-checks readiness.
+func TestUpdateStatus_PodRunning_NotReady_StaysPending(t *testing.T) {
 	ctx := context.Background()
 	scheme := newControllerTestScheme()
 	capsule := newCapsuleForControllerTest()
-	pod := newPodWithPhase(capsule, corev1.PodRunning)
+	pod := newPodWithPhase(capsule, corev1.PodRunning) // no Ready condition
 	c := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(capsule, pod).
@@ -137,17 +137,17 @@ func TestUpdateStatus_PodRunning_HealthFail_StaysPending(t *testing.T) {
 		t.Fatalf("get capsule: %v", err)
 	}
 
-	r := buildReconcilerForUpdateStatus(c, &stubHealthChecker{dnsErr: errors.New("no such host")})
+	r := buildReconcilerForUpdateStatus(c)
 
 	result, err := r.updateStatus(ctx, capsule)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.RequeueAfter != healthCheckRequeueAfter {
-		t.Errorf("expected requeue after %v, got %v", healthCheckRequeueAfter, result.RequeueAfter)
+	if result.RequeueAfter != podReadinessRequeueAfter {
+		t.Errorf("expected requeue after %v, got %v", podReadinessRequeueAfter, result.RequeueAfter)
 	}
 	if capsule.Status.Phase != operatorv1alpha1.PhasePending {
-		t.Errorf("expected PhasePending when health checks fail, got %s", capsule.Status.Phase)
+		t.Errorf("expected PhasePending when pod not ready, got %s", capsule.Status.Phase)
 	}
 }
 
@@ -165,7 +165,7 @@ func TestUpdateStatus_PodFailed_PhaseFailed(t *testing.T) {
 		t.Fatalf("get capsule: %v", err)
 	}
 
-	r := buildReconcilerForUpdateStatus(c, &stubHealthChecker{})
+	r := buildReconcilerForUpdateStatus(c)
 
 	result, err := r.updateStatus(ctx, capsule)
 	if err != nil {
@@ -194,7 +194,7 @@ func TestUpdateStatus_NoChangeWhenPhaseUnchanged(t *testing.T) {
 		t.Fatalf("get capsule: %v", err)
 	}
 
-	r := buildReconcilerForUpdateStatus(c, &stubHealthChecker{})
+	r := buildReconcilerForUpdateStatus(c)
 
 	// No pods → phase stays Pending; ObservedGeneration matches → early return, no Status().Update()
 	result, err := r.updateStatus(ctx, capsule)

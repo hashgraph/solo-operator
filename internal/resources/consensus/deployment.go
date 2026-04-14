@@ -229,8 +229,6 @@ func (r *StatefulSetSubReconciler) buildConsensusNodeContainer(capsule *operator
 //   - PVC-optional volumes: created as PVC when configured, otherwise emptyDir fallback.
 //   - Secret volumes: created only when the relevant spec field is set.
 func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.ConsensusCapsule) ([]corev1.Volume, []corev1.VolumeMount) {
-	const hapiBase = HapiBase
-
 	pvc := capsule.Spec.PersistentVolumeClaims
 
 	// ── ConfigMap volumes ────────────────────────────────────────────────────
@@ -275,13 +273,13 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 	volumeMounts := []corev1.VolumeMount{
 		// The consensus node entrypoint does `cd <hapiBase>` and then checks for
 		// log4j2.xml and settings.txt relative to that directory.
-		{Name: "hapi-app-config", MountPath: hapiBase + "/log4j2.xml", SubPath: "log4j2.xml", ReadOnly: true},
-		{Name: "hapi-app-config", MountPath: hapiBase + "/settings.txt", SubPath: "settings.txt", ReadOnly: true},
+		{Name: "hapi-app-config", MountPath: HapiBase + "/log4j2.xml", SubPath: "log4j2.xml", ReadOnly: true},
+		{Name: "hapi-app-config", MountPath: HapiBase + "/settings.txt", SubPath: "settings.txt", ReadOnly: true},
 		// data-config-dir provides the writable data/config directory; individual
 		// config files are overlaid on top via subPath mounts below.
-		{Name: "data-config-dir", MountPath: hapiBase + "/data/config"},
-		{Name: "data-config", MountPath: hapiBase + "/data/config/application.properties", SubPath: "application.properties"},
-		{Name: "data-config", MountPath: hapiBase + "/data/config/api-permission.properties", SubPath: "api-permission.properties"},
+		{Name: "data-config-dir", MountPath: HapiBase + "/data/config"},
+		{Name: "data-config", MountPath: HapiBase + "/data/config/application.properties", SubPath: "application.properties"},
+		{Name: "data-config", MountPath: HapiBase + "/data/config/api-permission.properties", SubPath: "api-permission.properties"},
 	}
 
 	// block-nodes.json — only when BlockNodes is configured
@@ -296,7 +294,7 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 		})
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      "block-nodes-config",
-			MountPath: hapiBase + "/data/config/block-nodes.json",
+			MountPath: HapiBase + "/data/config/block-nodes.json",
 			SubPath:   "block-nodes.json",
 		})
 	}
@@ -320,14 +318,14 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 		mountPath string
 		spec      *corev1.PersistentVolumeClaimSpec
 	}{
-		{VolumeTypeLogs, hapiBase + "/output", pvcSpec(func(c *operatorv1alpha1.ConsensusPVCConfig) *corev1.PersistentVolumeClaimSpec { return c.Logs })},
-		{VolumeTypeStats, hapiBase + "/data/stats", pvcSpec(func(c *operatorv1alpha1.ConsensusPVCConfig) *corev1.PersistentVolumeClaimSpec { return c.Stats })},
-		{VolumeTypeSaved, hapiBase + "/data/saved", pvcSpec(func(c *operatorv1alpha1.ConsensusPVCConfig) *corev1.PersistentVolumeClaimSpec { return c.Saved })},
-		{VolumeTypeState, hapiBase + "/state", pvcSpec(func(c *operatorv1alpha1.ConsensusPVCConfig) *corev1.PersistentVolumeClaimSpec { return c.State })},
-		{VolumeTypeUpgrade, hapiBase + "/data/upgrade", pvcSpec(func(c *operatorv1alpha1.ConsensusPVCConfig) *corev1.PersistentVolumeClaimSpec { return c.Upgrade })},
-		{VolumeTypeBlocks, "/opt/hgcapp/blockStreams", streamsSpec(func(s *operatorv1alpha1.ConsensusPVCStreams) *corev1.PersistentVolumeClaimSpec { return s.Block })},
-		{VolumeTypeRecords, "/opt/hgcapp/recordStreams", streamsSpec(func(s *operatorv1alpha1.ConsensusPVCStreams) *corev1.PersistentVolumeClaimSpec { return s.Record })},
-		{VolumeTypeEvents, "/opt/hgcapp/eventsStreams", streamsSpec(func(s *operatorv1alpha1.ConsensusPVCStreams) *corev1.PersistentVolumeClaimSpec { return s.Events })},
+		{VolumeTypeLogs, HapiBase + "/output", pvcSpec(func(c *operatorv1alpha1.ConsensusPVCConfig) *corev1.PersistentVolumeClaimSpec { return c.Logs })},
+		{VolumeTypeStats, HapiBase + "/data/stats", pvcSpec(func(c *operatorv1alpha1.ConsensusPVCConfig) *corev1.PersistentVolumeClaimSpec { return c.Stats })},
+		{VolumeTypeSaved, HapiBase + "/data/saved", pvcSpec(func(c *operatorv1alpha1.ConsensusPVCConfig) *corev1.PersistentVolumeClaimSpec { return c.Saved })},
+		{VolumeTypeState, HapiBase + "/state", pvcSpec(func(c *operatorv1alpha1.ConsensusPVCConfig) *corev1.PersistentVolumeClaimSpec { return c.State })},
+		{VolumeTypeUpgrade, HapiBase + "/data/upgrade", pvcSpec(func(c *operatorv1alpha1.ConsensusPVCConfig) *corev1.PersistentVolumeClaimSpec { return c.Upgrade })},
+		{VolumeTypeBlocks, PathBlockStreams, streamsSpec(func(s *operatorv1alpha1.ConsensusPVCStreams) *corev1.PersistentVolumeClaimSpec { return s.Block })},
+		{VolumeTypeRecords, PathRecordStreams, streamsSpec(func(s *operatorv1alpha1.ConsensusPVCStreams) *corev1.PersistentVolumeClaimSpec { return s.Record })},
+		{VolumeTypeEvents, PathEventsStreams, streamsSpec(func(s *operatorv1alpha1.ConsensusPVCStreams) *corev1.PersistentVolumeClaimSpec { return s.Events })},
 	}
 
 	for _, v := range pvcVolumes {
@@ -350,12 +348,12 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{
 				Name:      "hapi-app-secrets",
-				MountPath: hapiBase + "/hedera.crt",
+				MountPath: HapiBase + "/hedera.crt",
 				SubPath:   "hedera.crt",
 			},
 			corev1.VolumeMount{
 				Name:      "hapi-app-secrets",
-				MountPath: hapiBase + "/hedera.key",
+				MountPath: HapiBase + "/hedera.key",
 				SubPath:   "hedera.key",
 			},
 		)
@@ -371,7 +369,7 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 				},
 			})
 			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name: "keys", MountPath: hapiBase + "/data/keys",
+				Name: "keys", MountPath: HapiBase + "/data/keys",
 			})
 		} else if capsule.Spec.Secrets.SecretResources != nil {
 			var projectedSources []corev1.VolumeProjection
@@ -419,7 +417,7 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 					},
 				})
 				volumeMounts = append(volumeMounts, corev1.VolumeMount{
-					Name: "keys", MountPath: hapiBase + "/data/keys",
+					Name: "keys", MountPath: HapiBase + "/data/keys",
 				})
 			}
 
@@ -435,7 +433,7 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 					},
 				})
 				volumeMounts = append(volumeMounts, corev1.VolumeMount{
-					Name: "grpc-tls-key", MountPath: hapiBase + "/hedera.key", SubPath: "hedera.key",
+					Name: "grpc-tls-key", MountPath: HapiBase + "/hedera.key", SubPath: "hedera.key",
 				})
 			}
 			if sr.GrpcTlsPublicCertificate.SecretName != "" {
@@ -449,7 +447,7 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 					},
 				})
 				volumeMounts = append(volumeMounts, corev1.VolumeMount{
-					Name: "grpc-tls-cert", MountPath: hapiBase + "/hedera.crt", SubPath: "hedera.crt",
+					Name: "grpc-tls-cert", MountPath: HapiBase + "/hedera.crt", SubPath: "hedera.crt",
 				})
 			}
 		}
@@ -469,25 +467,39 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 	}
 
 	// ── Pod-level volume overrides ───────────────────────────────────────────
+	// replaceOrAppend replaces an existing volume with the same name or appends it,
+	// preventing duplicate volume names that the Kubernetes API would reject.
+	replaceOrAppend := func(vols []corev1.Volume, v corev1.Volume) []corev1.Volume {
+		for i, existing := range vols {
+			if existing.Name == v.Name {
+				vols[i] = v
+				return vols
+			}
+		}
+		return append(vols, v)
+	}
+
 	if capsule.Spec.PodProperties.Volumes != nil {
 		podVols := capsule.Spec.PodProperties.Volumes
-		for _, v := range []struct{ vol *corev1.Volume }{
-			{podVols.Logs}, {podVols.Stats}, {podVols.Saved}, {podVols.Upgrade},
+		for _, v := range []*corev1.Volume{
+			podVols.Logs, podVols.Stats, podVols.Saved, podVols.Upgrade,
 		} {
-			if v.vol != nil {
-				volumes = append(volumes, *v.vol)
+			if v != nil {
+				volumes = replaceOrAppend(volumes, *v)
 			}
 		}
 		if podVols.Streams != nil {
-			for _, v := range []struct{ vol *corev1.Volume }{
-				{podVols.Streams.Block}, {podVols.Streams.Record}, {podVols.Streams.Events},
+			for _, v := range []*corev1.Volume{
+				podVols.Streams.Block, podVols.Streams.Record, podVols.Streams.Events,
 			} {
-				if v.vol != nil {
-					volumes = append(volumes, *v.vol)
+				if v != nil {
+					volumes = replaceOrAppend(volumes, *v)
 				}
 			}
 		}
-		volumes = append(volumes, podVols.AdditionalVolumes...)
+		for _, v := range podVols.AdditionalVolumes {
+			volumes = replaceOrAppend(volumes, v)
+		}
 	}
 
 	return volumes, volumeMounts
@@ -530,7 +542,7 @@ func (r *StatefulSetSubReconciler) addSidecarContainers(sts *appsv1.StatefulSet,
 	}
 
 	if containers.BlocksUploader != nil && containers.BlocksUploader.Enabled {
-		c, err := r.buildCheetahUploaderContainer(containers.BlocksUploader, "blockstream-uploader", "cheetah-block-streams.yaml", "/opt/hgcapp/blockStreams", "BLOCK_STREAMS",
+		c, err := r.buildCheetahUploaderContainer(containers.BlocksUploader, "blockstream-uploader", "cheetah-block-streams.yaml", PathBlockStreams, "BLOCK_STREAMS",
 			fmt.Sprintf("blockStreams/block-%s", accountId))
 		if err != nil {
 			return fmt.Errorf("blockstream-uploader: %w", err)
@@ -539,7 +551,7 @@ func (r *StatefulSetSubReconciler) addSidecarContainers(sts *appsv1.StatefulSet,
 	}
 
 	if containers.RecordsUploader != nil && containers.RecordsUploader.Enabled {
-		c, err := r.buildCheetahUploaderContainer(containers.RecordsUploader, "record-stream-uploader", "cheetah-record-streams.yaml", "/opt/hgcapp/recordStreams", "RECORD_STREAMS",
+		c, err := r.buildCheetahUploaderContainer(containers.RecordsUploader, "record-stream-uploader", "cheetah-record-streams.yaml", PathRecordStreams, "RECORD_STREAMS",
 			fmt.Sprintf("recordstreams/record%s", accountId))
 		if err != nil {
 			return fmt.Errorf("record-stream-uploader: %w", err)
@@ -548,7 +560,7 @@ func (r *StatefulSetSubReconciler) addSidecarContainers(sts *appsv1.StatefulSet,
 	}
 
 	if containers.EventsUploader != nil && containers.EventsUploader.Enabled {
-		c, err := r.buildCheetahUploaderContainer(containers.EventsUploader, "event-stream-uploader", "cheetah-events-streams.yaml", "/opt/hgcapp/eventsStreams", "EVENTS_STREAMS",
+		c, err := r.buildCheetahUploaderContainer(containers.EventsUploader, "event-stream-uploader", "cheetah-events-streams.yaml", PathEventsStreams, "EVENTS_STREAMS",
 			fmt.Sprintf("eventsStreams/events_%s", accountId))
 		if err != nil {
 			return fmt.Errorf("event-stream-uploader: %w", err)
@@ -732,13 +744,14 @@ func cheetahBucketPath(bucketPrefix, streamPath string) string {
 }
 
 // getVolumeNameForPath returns the volume name for a given Cheetah stream mount path.
+// Path constants are defined alongside the volume type constants in common.go.
 func getVolumeNameForPath(path string) string {
 	switch path {
-	case "/opt/hgcapp/blockStreams":
+	case PathBlockStreams:
 		return VolumeTypeBlocks
-	case "/opt/hgcapp/recordStreams":
+	case PathRecordStreams:
 		return VolumeTypeRecords
-	case "/opt/hgcapp/eventsStreams":
+	case PathEventsStreams:
 		return VolumeTypeEvents
 	default:
 		return "unknown"
@@ -930,21 +943,58 @@ func (r *StatefulSetSubReconciler) applyPodProperties(sts *appsv1.StatefulSet, c
 }
 
 // needsUpdate checks if the StatefulSet needs to be updated.
+// It compares replicas, init containers, containers (image/name/env), and volume names.
 func (r *StatefulSetSubReconciler) needsUpdate(existing, desired *appsv1.StatefulSet) bool {
 	if existing.Spec.Replicas == nil || *existing.Spec.Replicas != *desired.Spec.Replicas {
 		return true
 	}
-	if len(existing.Spec.Template.Spec.Containers) != len(desired.Spec.Template.Spec.Containers) {
+
+	// Init containers
+	existingInits := existing.Spec.Template.Spec.InitContainers
+	desiredInits := desired.Spec.Template.Spec.InitContainers
+	if len(existingInits) != len(desiredInits) {
 		return true
 	}
-	for i, container := range desired.Spec.Template.Spec.Containers {
-		if i >= len(existing.Spec.Template.Spec.Containers) {
-			return true
-		}
-		existingContainer := existing.Spec.Template.Spec.Containers[i]
-		if container.Image != existingContainer.Image || container.Name != existingContainer.Name {
+	for i, ic := range desiredInits {
+		if ic.Image != existingInits[i].Image || ic.Name != existingInits[i].Name {
 			return true
 		}
 	}
-	return len(existing.Spec.Template.Spec.Volumes) != len(desired.Spec.Template.Spec.Volumes)
+
+	// Containers: image, name, and env vars
+	existingContainers := existing.Spec.Template.Spec.Containers
+	desiredContainers := desired.Spec.Template.Spec.Containers
+	if len(existingContainers) != len(desiredContainers) {
+		return true
+	}
+	for i, c := range desiredContainers {
+		ec := existingContainers[i]
+		if c.Image != ec.Image || c.Name != ec.Name {
+			return true
+		}
+		if len(c.Env) != len(ec.Env) {
+			return true
+		}
+		for j, env := range c.Env {
+			if env.Name != ec.Env[j].Name || env.Value != ec.Env[j].Value {
+				return true
+			}
+		}
+	}
+
+	// Volumes: compare by name set (catches renames and additions)
+	existingVolNames := make(map[string]struct{}, len(existing.Spec.Template.Spec.Volumes))
+	for _, v := range existing.Spec.Template.Spec.Volumes {
+		existingVolNames[v.Name] = struct{}{}
+	}
+	if len(existingVolNames) != len(desired.Spec.Template.Spec.Volumes) {
+		return true
+	}
+	for _, v := range desired.Spec.Template.Spec.Volumes {
+		if _, ok := existingVolNames[v.Name]; !ok {
+			return true
+		}
+	}
+
+	return false
 }

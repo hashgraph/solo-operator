@@ -53,8 +53,8 @@ func TestPodLabels(t *testing.T) {
 	labels := PodLabels(capsule)
 
 	// operator labels
-	if labels[LabelComponent] != ComponentDeployment {
-		t.Errorf("expected component %s, got %s", ComponentDeployment, labels[LabelComponent])
+	if labels[LabelComponent] != ComponentConsensusNode {
+		t.Errorf("expected component %s, got %s", ComponentConsensusNode, labels[LabelComponent])
 	}
 	if labels[LabelOrbit] != "test-orbit" {
 		t.Errorf("expected orbit test-orbit, got %s", labels[LabelOrbit])
@@ -362,7 +362,12 @@ func TestHapiAppConfigMapSubReconciler(t *testing.T) {
 	if cm.Data["settings.txt"] == "" {
 		t.Error("expected settings.txt to be populated from Orbit")
 	}
-	if got := cm.Data["settings.txt"]; got != "maxTransactionBytesPerSec=2097152\nuseTLS=1\n" {
+	// settings.txt uses the padded-comma format: "key,                 value"
+	wantSettings := RenderSettingsTxt(map[string]string{
+		"maxTransactionBytesPerSec": "2097152",
+		"useTLS":                    "1",
+	})
+	if got := cm.Data["settings.txt"]; got != wantSettings {
 		t.Errorf("unexpected settings.txt content: %q", got)
 	}
 }

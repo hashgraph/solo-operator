@@ -80,7 +80,7 @@ func (r *HapiAppConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1
 	}
 
 	if orbit != nil {
-		data["settings.txt"] = RenderProperties(orbit.Spec.Consensus.NetworkSettings)
+		data["settings.txt"] = RenderSettingsTxt(orbit.Spec.Consensus.NetworkSettings)
 	}
 
 	return &corev1.ConfigMap{
