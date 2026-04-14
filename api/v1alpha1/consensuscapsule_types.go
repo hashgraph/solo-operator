@@ -65,11 +65,15 @@ type ConsensusCapsuleSpec struct {
 	ExternalAddress string `json:"externalAddress,omitempty"`
 
 	// gossip port; defaults to 50111 when not set
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
 	// +kubebuilder:default=50111
 	// +optional
 	GossipPort int32 `json:"gossipPort,omitempty"`
 
 	// gRPC port; defaults to 50211 when not set
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
 	// +kubebuilder:default=50211
 	// +optional
 	GrpcPort int32 `json:"grpcPort,omitempty"`

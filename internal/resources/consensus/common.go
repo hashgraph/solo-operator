@@ -68,8 +68,23 @@ const (
 	GrpcsPort      = common.GrpcsPort
 	PrometheusPort = 9999
 	AlloyHTTPPort  = 12345
-	DebugPort      = 5005
 )
+
+// ResolveGossipPort returns the gossip port from the capsule spec, falling back to the default.
+func ResolveGossipPort(capsule *operatorv1alpha1.ConsensusCapsule) int32 {
+	if capsule.Spec.GossipPort != 0 {
+		return capsule.Spec.GossipPort
+	}
+	return GossipPort
+}
+
+// ResolveGrpcPort returns the gRPC port from the capsule spec, falling back to the default.
+func ResolveGrpcPort(capsule *operatorv1alpha1.ConsensusCapsule) int32 {
+	if capsule.Spec.GrpcPort != 0 {
+		return capsule.Spec.GrpcPort
+	}
+	return GrpcPort
+}
 
 // Volume types
 const (

@@ -76,13 +76,8 @@ func (r *DataConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *ope
 // buildConfigMap constructs the desired data-config ConfigMap.
 func (r *DataConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1.ConsensusCapsule, orbit *operatorv1alpha1.Orbit) *corev1.ConfigMap {
 	data := map[string]string{
-		"application.properties":    "",
-		"api-permission.properties": "",
-	}
-
-	if orbit != nil {
-		data["application.properties"] = RenderProperties(orbit.Spec.Consensus.ApplicationConfiguration)
-		data["api-permission.properties"] = RenderProperties(orbit.Spec.Consensus.PermissionConfiguration)
+		"application.properties":    RenderProperties(orbit.Spec.Consensus.ApplicationConfiguration),
+		"api-permission.properties": RenderProperties(orbit.Spec.Consensus.PermissionConfiguration),
 	}
 
 	return &corev1.ConfigMap{

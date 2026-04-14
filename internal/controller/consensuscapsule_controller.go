@@ -179,10 +179,7 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 		return ctrl.Result{}, nil
 	}
 
-	gossipPort := int32(consensus.GossipPort)
-	if capsule.Spec.GossipPort != 0 {
-		gossipPort = capsule.Spec.GossipPort
-	}
+	gossipPort := consensus.ResolveGossipPort(capsule)
 
 	capsule.Status.Phase = phase
 	capsule.Status.ObservedGeneration = capsule.Generation

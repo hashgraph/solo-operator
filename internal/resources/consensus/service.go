@@ -94,14 +94,8 @@ func (r *ServiceSubReconciler) buildService(capsule *operatorv1alpha1.ConsensusC
 		svcType = corev1.ServiceType(capsule.Spec.ServiceType)
 	}
 
-	gossipPort := int32(GossipPort)
-	if capsule.Spec.GossipPort != 0 {
-		gossipPort = capsule.Spec.GossipPort
-	}
-	grpcPort := int32(GrpcPort)
-	if capsule.Spec.GrpcPort != 0 {
-		grpcPort = capsule.Spec.GrpcPort
-	}
+	gossipPort := ResolveGossipPort(capsule)
+	grpcPort := ResolveGrpcPort(capsule)
 
 	labels := CommonLabels(capsule)
 	labels[LabelSoloType] = "network-node-svc"

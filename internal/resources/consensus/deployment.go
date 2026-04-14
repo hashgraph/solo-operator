@@ -128,17 +128,29 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 
 // buildGenesisInitContainer copies genesis-network.json from the optional ConfigMap into
 // the writable data-config-dir so the platform can archive it after the first round.
-// It uses the presence of the platform's state directory as a sentinel: if the directory
-// exists the node already has live state and skipping the copy is safe.
+//
+// Two sentinels guard the copy so it runs exactly once per node lifetime:
+//  1. Platform state directory (/data/saved/SavedStateDir) — present once the node
+//     has completed at least one round; reliable after first successful startup.
+//  2. Dot-file (/data/saved/.genesis-init-done) — written by this container after a
+//     successful copy; guards restarts that happen before the platform creates its own
+//     state directory (e.g. pod restarts during genesis itself).
+//
+// The container always exits 0: absence of genesis-network.json is normal (non-genesis nodes).
 func (r *StatefulSetSubReconciler) buildGenesisInitContainer() corev1.Container {
-	const stateDir = "/data/saved/" + SavedStateDir
+	const (
+		stateDir    = "/data/saved/" + SavedStateDir
+		sentinelFile = "/data/saved/.genesis-init-done"
+	)
 	return corev1.Container{
 		Name:  "genesis-init",
 		Image: GenesisInitImage,
 		Command: []string{"sh", "-c",
 			`[ -d ` + stateDir + ` ] && exit 0; ` +
+				`[ -f ` + sentinelFile + ` ] && exit 0; ` +
 				`[ -f /tmp/genesis-config/` + GenesisNetworkFileName + ` ] && ` +
-				`cp /tmp/genesis-config/` + GenesisNetworkFileName + ` ` + HapiBase + `/data/config/; ` +
+				`cp /tmp/genesis-config/` + GenesisNetworkFileName + ` ` + HapiBase + `/data/config/ && ` +
+				`touch ` + sentinelFile + `; ` +
 				`exit 0`,
 		},
 		VolumeMounts: []corev1.VolumeMount{

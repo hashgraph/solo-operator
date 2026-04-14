@@ -380,23 +380,10 @@ func TestHapiAppConfigMapSubReconciler_OrbitNotFound(t *testing.T) {
 
 	reconciler := NewHapiAppConfigMapSubReconciler(c, scheme)
 
-	// Should succeed (orbit not found is handled gracefully)
+	// Orbit not found must be a hard failure so the reconciler requeues.
 	_, err := reconciler.Reconcile(ctx, capsule)
-	if err != nil {
-		t.Fatalf("unexpected error when orbit is missing: %v", err)
-	}
-
-	cm := &corev1.ConfigMap{}
-	if err := c.Get(ctx, client.ObjectKey{Name: "node0-hapi-app-cm", Namespace: "test-namespace"}, cm); err != nil {
-		t.Fatalf("failed to get hapi-app ConfigMap: %v", err)
-	}
-
-	// log4j2.xml should be present; settings.txt absent (no orbit)
-	if cm.Data["log4j2.xml"] != "<Configuration></Configuration>" {
-		t.Errorf("unexpected log4j2.xml: %s", cm.Data["log4j2.xml"])
-	}
-	if _, ok := cm.Data["settings.txt"]; ok {
-		t.Error("expected settings.txt to be absent when orbit is not found")
+	if err == nil {
+		t.Fatal("expected error when orbit is missing, got nil")
 	}
 }
 
@@ -436,6 +423,21 @@ func TestDataConfigMapSubReconciler(t *testing.T) {
 	}
 	if got := cm.Data["api-permission.properties"]; got != "getVersionInfo=EVERYBODY\n" {
 		t.Errorf("unexpected api-permission.properties: %q", got)
+	}
+}
+
+func TestDataConfigMapSubReconciler_OrbitNotFound(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	capsule := newTestCapsule() // orbit "test-orbit" not in client
+	c := newTestClient(scheme, capsule)
+
+	reconciler := NewDataConfigMapSubReconciler(c, scheme)
+
+	// Orbit not found must be a hard failure so the reconciler requeues.
+	_, err := reconciler.Reconcile(ctx, capsule)
+	if err == nil {
+		t.Fatal("expected error when orbit is missing, got nil")
 	}
 }
 
@@ -967,6 +969,9 @@ func TestGenesisInitContainer(t *testing.T) {
 	cmd := c.Command[len(c.Command)-1]
 	stateDirIdx := strings.Index(cmd, SavedStateDir)
 	cpIdx := strings.Index(cmd, "cp /tmp/genesis-config/")
+	sentinelIdx := strings.Index(cmd, ".genesis-init-done")
+	touchIdx := strings.Index(cmd, "touch ")
+
 	if stateDirIdx < 0 {
 		t.Error("expected state directory reference in init container command")
 	}
@@ -975,6 +980,19 @@ func TestGenesisInitContainer(t *testing.T) {
 	}
 	if stateDirIdx > cpIdx {
 		t.Error("state-dir check must appear before the cp command")
+	}
+	// dot-file sentinel: must be checked before the copy and written after
+	if sentinelIdx < 0 {
+		t.Error("expected .genesis-init-done dot-file reference in init container command")
+	}
+	if touchIdx < 0 {
+		t.Error("expected touch command to write dot-file sentinel")
+	}
+	if sentinelIdx > cpIdx {
+		t.Error("dot-file check must appear before the cp command")
+	}
+	if touchIdx < cpIdx {
+		t.Error("touch (write dot-file) must appear after the cp command")
 	}
 }
 

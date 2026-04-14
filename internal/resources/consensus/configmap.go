@@ -4,6 +4,7 @@ package consensus
 
 import (
 	"context"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -76,11 +77,8 @@ func (r *HapiAppConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *
 // buildConfigMap constructs the desired hapi-app ConfigMap.
 func (r *HapiAppConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1.ConsensusCapsule, orbit *operatorv1alpha1.Orbit) *corev1.ConfigMap {
 	data := map[string]string{
-		"log4j2.xml": capsule.Spec.Log4j2XML,
-	}
-
-	if orbit != nil {
-		data["settings.txt"] = RenderSettingsTxt(orbit.Spec.Consensus.NetworkSettings)
+		"log4j2.xml":   capsule.Spec.Log4j2XML,
+		"settings.txt": RenderSettingsTxt(orbit.Spec.Consensus.NetworkSettings),
 	}
 
 	return &corev1.ConfigMap{
@@ -93,17 +91,16 @@ func (r *HapiAppConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1
 	}
 }
 
-// fetchOrbit fetches the Orbit CR by name. Returns nil (no error) when the orbit does not exist
-// yet so the reconciler can still create a partial ConfigMap and be corrected on the next cycle.
+// fetchOrbit fetches the Orbit CR by name. Returns an error when the orbit does not exist
+// so the reconciler requeues and the ConfigMap is only created once the orbit is ready.
 func fetchOrbit(ctx context.Context, c client.Client, orbitName string) (*operatorv1alpha1.Orbit, error) {
 	if orbitName == "" {
-		return nil, nil
+		return nil, fmt.Errorf("capsule has no orbit name set")
 	}
 	orbit := &operatorv1alpha1.Orbit{}
 	if err := c.Get(ctx, client.ObjectKey{Name: orbitName}, orbit); err != nil {
 		if apierrors.IsNotFound(err) {
-			log.FromContext(ctx).V(1).Info("Orbit not found, ConfigMap will be updated on next reconcile", "orbit", orbitName)
-			return nil, nil
+			return nil, fmt.Errorf("orbit %q not found: will retry once Orbit is created", orbitName)
 		}
 		return nil, err
 	}

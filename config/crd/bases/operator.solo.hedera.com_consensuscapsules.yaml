@@ -102,11 +102,15 @@ spec:
                 default: 50111
                 description: gossip port; defaults to 50111 when not set
                 format: int32
+                maximum: 65535
+                minimum: 1
                 type: integer
               grpcPort:
                 default: 50211
                 description: gRPC port; defaults to 50211 when not set
                 format: int32
+                maximum: 65535
+                minimum: 1
                 type: integer
               hapiAppSecretsName:
                 description: secret containing hedera.crt and hedera.key; mounted
