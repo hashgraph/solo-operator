@@ -75,7 +75,8 @@ func (r *StatefulSetSubReconciler) Reconcile(ctx context.Context, capsule *opera
 // buildStatefulSet builds the desired StatefulSet.
 func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (*appsv1.StatefulSet, error) {
 	replicas := int32(1)
-	labels := PodLabels(capsule)
+	selectorLabels := SelectorLabels(capsule)
+	podLabels := PodLabels(capsule)
 
 	volumes, volumeMounts := r.buildVolumes(capsule)
 
@@ -97,11 +98,11 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 			// Switch to OnDeleteStatefulSetStrategyType to require manual pod deletion before updates are applied.
 			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{Type: appsv1.RollingUpdateStatefulSetStrategyType},
 			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
+				MatchLabels: selectorLabels,
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels: podLabels,
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: ServiceAccountName(capsule),

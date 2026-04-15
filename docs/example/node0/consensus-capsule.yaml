@@ -189,10 +189,10 @@ spec:
         keyName: "hedera-node0.crt"
         secretName: "node0-grpc-tls-keys"
       signingPrivateKey:
-        keyName: "s-private-node1.pem"
+        keyName: "s-private-node0.pem"
         secretName: "node0-gossip-keys"
       signingPublicCertificate:
-        keyName: "s-public-node1.pem"
+        keyName: "s-public-node0.pem"
         secretName: "node0-gossip-keys"
 
   log4j2.xml: |

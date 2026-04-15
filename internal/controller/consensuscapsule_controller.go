@@ -141,7 +141,7 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 	podList := &corev1.PodList{}
 	if err := r.List(ctx, podList,
 		client.InNamespace(capsule.Namespace),
-		client.MatchingLabels(consensus.PodLabels(capsule))); err != nil {
+		client.MatchingLabels(consensus.SelectorLabels(capsule))); err != nil {
 		return ctrl.Result{}, err
 	}
 
