@@ -5,6 +5,8 @@ package common
 import (
 	"fmt"
 	"strings"
+
+	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
 // NodeAlias returns the canonical alias for a node given its ID (e.g. 0 → "node0").
@@ -28,4 +30,12 @@ func AccountNum(accountId string) string {
 		return parts[2]
 	}
 	return accountId
+}
+
+// InternalHostname returns the pod FQDN for a capsule, or InternalAddress if set.
+func InternalHostname(capsule *operatorv1alpha1.ConsensusCapsule, subdomain string) string {
+	if capsule.Spec.InternalAddress != "" {
+		return capsule.Spec.InternalAddress
+	}
+	return fmt.Sprintf("%s-0.%s.%s.svc.cluster.local", capsule.Name, subdomain, capsule.Namespace)
 }

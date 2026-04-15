@@ -274,6 +274,70 @@ func TestNeedsUpdate_VolumeAdded(t *testing.T) {
 	}
 }
 
+func TestNeedsUpdate_VolumeSourceChanged(t *testing.T) {
+	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme())
+	existing := makeSts("v0.50.0", nil)
+	desired := makeSts("v0.50.0", nil)
+	// Same volume name, different ConfigMap backing — old code missed this.
+	desired.Spec.Template.Spec.Volumes[0] = corev1.Volume{
+		Name: existing.Spec.Template.Spec.Volumes[0].Name,
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "new-cm"},
+			},
+		},
+	}
+	if !r.needsUpdate(existing, desired) {
+		t.Error("volume source change should trigger update")
+	}
+}
+
+func TestNeedsUpdate_EnvValueFromChanged(t *testing.T) {
+	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme())
+	existing := makeSts("v0.50.0", []corev1.EnvVar{
+		{
+			Name: "POD_IP",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"},
+			},
+		},
+	})
+	desired := makeSts("v0.50.0", []corev1.EnvVar{
+		{
+			Name: "POD_IP",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.hostIP"},
+			},
+		},
+	})
+	if !r.needsUpdate(existing, desired) {
+		t.Error("ValueFrom FieldRef change should trigger update")
+	}
+}
+
+func TestNeedsUpdate_InitContainerCommandChanged(t *testing.T) {
+	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme())
+	existing := makeSts("v0.50.0", nil)
+	desired := makeSts("v0.50.0", nil)
+	desired.Spec.Template.Spec.InitContainers[0].Command = []string{"sh", "-c", "echo updated"}
+	if !r.needsUpdate(existing, desired) {
+		t.Error("init container command change should trigger update")
+	}
+}
+
+func TestNeedsUpdate_ContainerSecurityContextChanged(t *testing.T) {
+	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme())
+	existing := makeSts("v0.50.0", nil)
+	desired := makeSts("v0.50.0", nil)
+	privileged := true
+	desired.Spec.Template.Spec.Containers[0].SecurityContext = &corev1.SecurityContext{
+		Privileged: &privileged,
+	}
+	if !r.needsUpdate(existing, desired) {
+		t.Error("container SecurityContext change should trigger update")
+	}
+}
+
 // ── pod-level volume deduplication ───────────────────────────────────────────
 
 func TestBuildVolumes_PodVolumeOverrideReplacesExisting(t *testing.T) {

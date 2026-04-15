@@ -127,9 +127,13 @@ type ConsensusSecrets struct {
 
 // ConsensusSecretResources references specific key/cert secrets.
 type ConsensusSecretResources struct {
-	GrpcTlsPrivateKey        KeyReference `json:"grpcTlsPrivateKey"`
+	// +kubebuilder:validation:Required
+	GrpcTlsPrivateKey KeyReference `json:"grpcTlsPrivateKey"`
+	// +kubebuilder:validation:Required
 	GrpcTlsPublicCertificate KeyReference `json:"grpcTlsPublicCertificate"`
-	SigningPrivateKey        KeyReference `json:"signingPrivateKey"`
+	// +kubebuilder:validation:Required
+	SigningPrivateKey KeyReference `json:"signingPrivateKey"`
+	// +kubebuilder:validation:Required
 	SigningPublicCertificate KeyReference `json:"signingPublicCertificate"`
 
 	// AdminPublicKey references the ED25519 admin public key for this node.

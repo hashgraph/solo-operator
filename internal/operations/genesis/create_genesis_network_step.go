@@ -124,6 +124,10 @@ func (s *CreateGenesisNetworkStep) Run(ctx context.Context, resource *operatorv1
 	// Append external address entries from orbit
 	if orbit.Spec.Consensus.Genesis != nil && orbit.Spec.Consensus.Genesis.AddressBook != nil {
 		for _, ext := range orbit.Spec.Consensus.Genesis.AddressBook.ExternalAddresses {
+			if ext.ExternalHostname == "" || ext.NodeAccount == "" {
+				return s.fail(status, resource.Generation,
+					fmt.Sprintf("external node %d: ExternalHostname and NodeAccount are required", ext.NodeId))
+			}
 			weight := ext.Weight
 			if weight == 0 {
 				weight = 1

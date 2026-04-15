@@ -16,6 +16,7 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
+	"github.com/hashgraph/solo-operator/internal/resources/consensus"
 )
 
 // CreateClusterConfigStep creates the cluster configuration ConfigMap
@@ -177,7 +178,7 @@ func (s *CreateClusterConfigStep) buildConfigTxt(capsules []operatorv1alpha1.Con
 
 		weight := int64(capsule.Spec.Weight)
 		if weight == 0 {
-			weight = 1
+			weight = 1 // relative; 1 keeps all nodes equal by default
 		}
 
 		accountId := capsule.Spec.AccountId
@@ -191,7 +192,7 @@ func (s *CreateClusterConfigStep) buildConfigTxt(capsules []operatorv1alpha1.Con
 		}
 
 		// Format: address, nodeId, nickname, selfname, weight, internalHost, internalPort, externalHost, externalPort, accountId
-		internalAddr := computeInternalHostname(&capsule, namespace)
+		internalAddr := consensus.InternalHostname(&capsule)
 		addressMap[nodeId] = fmt.Sprintf("address, %d, %s, %s, %d, %s, %d, %s, %d, %s\n",
 			nodeId, nodeName, nodeName, weight, internalAddr, gossipPort, externalAddr, gossipPort, accountId)
 	}
@@ -202,7 +203,7 @@ func (s *CreateClusterConfigStep) buildConfigTxt(capsules []operatorv1alpha1.Con
 			nodeId := entry.NodeId
 			weight := entry.Weight
 			if weight == 0 {
-				weight = 1
+				weight = 1 // relative; 1 keeps all nodes equal by default
 			}
 			addressMap[nodeId] = fmt.Sprintf("address, %d, %d, %s, %d, %s, %d, %s, %d, %s\n",
 				nodeId,
@@ -238,16 +239,6 @@ func (s *CreateClusterConfigStep) computeNodeExternalAddress(capsule *operatorv1
 	}
 	// Default: node-svc.namespace
 	return fmt.Sprintf("%s-svc.%s", nodeName, namespace)
-}
-
-// computeInternalHostname returns the internal DNS name for a consensus node pod.
-// Uses capsule.Spec.InternalAddress when set, otherwise the StatefulSet pod DNS:
-// <name>-0.<subdomain>.<namespace>.svc.cluster.local
-func computeInternalHostname(capsule *operatorv1alpha1.ConsensusCapsule, namespace string) string {
-	if capsule.Spec.InternalAddress != "" {
-		return capsule.Spec.InternalAddress
-	}
-	return fmt.Sprintf("%s-0.consensus.%s.svc.cluster.local", capsule.Name, namespace)
 }
 
 // buildSettingsTxt builds the settings.txt content.

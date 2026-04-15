@@ -195,13 +195,9 @@ func RenderProperties(m map[string]string) string {
 	return sb.String()
 }
 
-// InternalHostname returns the internal FQDN for a capsule.
-// InternalAddress overrides the auto-computed StatefulSet pod DNS.
+// InternalHostname returns the pod FQDN for a capsule, or InternalAddress if set.
 func InternalHostname(capsule *operatorv1alpha1.ConsensusCapsule) string {
-	if capsule.Spec.InternalAddress != "" {
-		return capsule.Spec.InternalAddress
-	}
-	return fmt.Sprintf("%s-0.%s.%s.svc.cluster.local", capsule.Name, ConsensusSubdomain, capsule.Namespace)
+	return common.InternalHostname(capsule, ConsensusSubdomain)
 }
 
 // NewSubReconcilers creates all consensus capsule subreconcilers in execution order

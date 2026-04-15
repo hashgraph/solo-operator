@@ -8,6 +8,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -139,7 +140,7 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 // The container always exits 0: absence of genesis-network.json is normal (non-genesis nodes).
 func (r *StatefulSetSubReconciler) buildGenesisInitContainer() corev1.Container {
 	const (
-		stateDir    = "/data/saved/" + SavedStateDir
+		stateDir     = "/data/saved/" + SavedStateDir
 		sentinelFile = "/data/saved/.genesis-init-done"
 	)
 	return corev1.Container{
@@ -954,59 +955,7 @@ func (r *StatefulSetSubReconciler) applyPodProperties(sts *appsv1.StatefulSet, c
 	}
 }
 
-// needsUpdate checks if the StatefulSet needs to be updated.
-// It compares replicas, init containers, containers (image/name/env), and volume names.
 func (r *StatefulSetSubReconciler) needsUpdate(existing, desired *appsv1.StatefulSet) bool {
-	if existing.Spec.Replicas == nil || *existing.Spec.Replicas != *desired.Spec.Replicas {
-		return true
-	}
-
-	// Init containers
-	existingInits := existing.Spec.Template.Spec.InitContainers
-	desiredInits := desired.Spec.Template.Spec.InitContainers
-	if len(existingInits) != len(desiredInits) {
-		return true
-	}
-	for i, ic := range desiredInits {
-		if ic.Image != existingInits[i].Image || ic.Name != existingInits[i].Name {
-			return true
-		}
-	}
-
-	// Containers: image, name, and env vars
-	existingContainers := existing.Spec.Template.Spec.Containers
-	desiredContainers := desired.Spec.Template.Spec.Containers
-	if len(existingContainers) != len(desiredContainers) {
-		return true
-	}
-	for i, c := range desiredContainers {
-		ec := existingContainers[i]
-		if c.Image != ec.Image || c.Name != ec.Name {
-			return true
-		}
-		if len(c.Env) != len(ec.Env) {
-			return true
-		}
-		for j, env := range c.Env {
-			if env.Name != ec.Env[j].Name || env.Value != ec.Env[j].Value {
-				return true
-			}
-		}
-	}
-
-	// Volumes: compare by name set (catches renames and additions)
-	existingVolNames := make(map[string]struct{}, len(existing.Spec.Template.Spec.Volumes))
-	for _, v := range existing.Spec.Template.Spec.Volumes {
-		existingVolNames[v.Name] = struct{}{}
-	}
-	if len(existingVolNames) != len(desired.Spec.Template.Spec.Volumes) {
-		return true
-	}
-	for _, v := range desired.Spec.Template.Spec.Volumes {
-		if _, ok := existingVolNames[v.Name]; !ok {
-			return true
-		}
-	}
-
-	return false
+	return !apiequality.Semantic.DeepEqual(existing.Spec, desired.Spec) ||
+		!apiequality.Semantic.DeepEqual(existing.Labels, desired.Labels)
 }
