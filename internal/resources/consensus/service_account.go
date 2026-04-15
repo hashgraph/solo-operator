@@ -96,10 +96,16 @@ func (r *ServiceAccountSubReconciler) buildServiceAccount(capsule *operatorv1alp
 }
 
 func (r *ServiceAccountSubReconciler) needsUpdate(existing, desired *corev1.ServiceAccount) bool {
+	if len(existing.Labels) != len(desired.Labels) {
+		return true
+	}
 	for k, v := range desired.Labels {
 		if existing.Labels[k] != v {
 			return true
 		}
+	}
+	if len(existing.Annotations) != len(desired.Annotations) {
+		return true
 	}
 	for k, v := range desired.Annotations {
 		if existing.Annotations[k] != v {

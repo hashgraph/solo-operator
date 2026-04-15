@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 )
 
 func newStsTestScheme() *runtime.Scheme {
@@ -188,8 +189,8 @@ func TestBuildStatefulSet_ServiceName(t *testing.T) {
 		t.Fatalf("buildStatefulSet: %v", err)
 	}
 
-	if sts.Spec.ServiceName != ConsensusSubdomain {
-		t.Errorf("expected ServiceName %q, got %q", ConsensusSubdomain, sts.Spec.ServiceName)
+	if sts.Spec.ServiceName != common.ConsensusSubdomain {
+		t.Errorf("expected ServiceName %q, got %q", common.ConsensusSubdomain, sts.Spec.ServiceName)
 	}
 }
 

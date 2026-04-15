@@ -57,8 +57,6 @@ const (
 	GenesisConfigMapName = "genesis-config"
 	// GenesisNetworkFileName is the key/filename for the roster JSON inside GenesisConfigMapName
 	GenesisNetworkFileName = "genesis-network.json"
-	// ConsensusSubdomain is the subdomain for consensus nodes
-	ConsensusSubdomain = "consensus"
 )
 
 // Port numbers — gossip/gRPC alias common; consensus-specific ports defined here.
@@ -197,7 +195,7 @@ func RenderProperties(m map[string]string) string {
 
 // InternalHostname returns the pod FQDN for a capsule, or InternalAddress if set.
 func InternalHostname(capsule *operatorv1alpha1.ConsensusCapsule) string {
-	return common.InternalHostname(capsule, ConsensusSubdomain)
+	return common.InternalHostname(capsule, common.ConsensusSubdomain)
 }
 
 // NewSubReconcilers creates all consensus capsule subreconcilers in execution order

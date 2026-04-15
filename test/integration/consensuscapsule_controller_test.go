@@ -29,30 +29,31 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 		ctx := context.Background()
 
 		BeforeEach(func() {
-			// Create namespace
-			ns := &corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: capsuleNamespace,
-				},
-			}
+			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: capsuleNamespace}}
 			err := k8sClient.Create(ctx, ns)
 			if err != nil {
-				// Namespace might already exist
 				Expect(err.Error()).To(ContainSubstring("already exists"))
 			}
 
-			// Create the Role that the RoleBinding references
-			role := &rbacv1.Role{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "consensus-capsule-role",
-					Namespace: capsuleNamespace,
-				},
-				Rules: []rbacv1.PolicyRule{
-					{
-						APIGroups: []string{""},
-						Resources: []string{"pods"},
-						Verbs:     []string{"get", "list", "watch"},
+			orbit := &operatorv1alpha1.Orbit{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
+				Spec: operatorv1alpha1.OrbitSpec{
+					Consensus: operatorv1alpha1.OrbitConsensus{
+						NetworkSettings:          map[string]string{},
+						ApplicationConfiguration: map[string]string{},
+						PermissionConfiguration:  map[string]string{},
 					},
+				},
+			}
+			err = k8sClient.Create(ctx, orbit)
+			if err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
+
+			role := &rbacv1.Role{
+				ObjectMeta: metav1.ObjectMeta{Name: "consensus-capsule-role", Namespace: capsuleNamespace},
+				Rules: []rbacv1.PolicyRule{
+					{APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"get", "list", "watch"}},
 				},
 			}
 			err = k8sClient.Create(ctx, role)
@@ -154,29 +155,31 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 		ctx := context.Background()
 
 		BeforeEach(func() {
-			// Create namespace
-			ns := &corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: capsuleNamespace,
-				},
-			}
+			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: capsuleNamespace}}
 			err := k8sClient.Create(ctx, ns)
 			if err != nil {
 				Expect(err.Error()).To(ContainSubstring("already exists"))
 			}
 
-			// Create the Role
-			role := &rbacv1.Role{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "consensus-capsule-role",
-					Namespace: capsuleNamespace,
-				},
-				Rules: []rbacv1.PolicyRule{
-					{
-						APIGroups: []string{""},
-						Resources: []string{"pods"},
-						Verbs:     []string{"get", "list", "watch"},
+			orbit := &operatorv1alpha1.Orbit{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
+				Spec: operatorv1alpha1.OrbitSpec{
+					Consensus: operatorv1alpha1.OrbitConsensus{
+						NetworkSettings:          map[string]string{},
+						ApplicationConfiguration: map[string]string{},
+						PermissionConfiguration:  map[string]string{},
 					},
+				},
+			}
+			err = k8sClient.Create(ctx, orbit)
+			if err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
+
+			role := &rbacv1.Role{
+				ObjectMeta: metav1.ObjectMeta{Name: "consensus-capsule-role", Namespace: capsuleNamespace},
+				Rules: []rbacv1.PolicyRule{
+					{APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"get", "list", "watch"}},
 				},
 			}
 			err = k8sClient.Create(ctx, role)

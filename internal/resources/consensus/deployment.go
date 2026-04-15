@@ -92,7 +92,10 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas:    &replicas,
-			ServiceName: ConsensusSubdomain,
+			ServiceName: common.ConsensusSubdomain,
+			// RollingUpdate terminates the pod and starts a new one on spec change (single replica = same as Recreate).
+			// Switch to OnDeleteStatefulSetStrategyType to require manual pod deletion before updates are applied.
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{Type: appsv1.RollingUpdateStatefulSetStrategyType},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},

@@ -30,8 +30,6 @@ const (
 	ConsensusConfigMapName = "consensus-config"
 	// ConsensusCapsuleRoleName is the name of the consensus capsule role
 	ConsensusCapsuleRoleName = "consensus-capsule-role"
-	// ConsensusServiceName is the name of the consensus headless service
-	ConsensusServiceName = "consensus"
 )
 
 // Port numbers — alias common.
