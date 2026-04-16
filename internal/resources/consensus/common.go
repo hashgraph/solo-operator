@@ -114,9 +114,12 @@ func CommonLabels(capsule *operatorv1alpha1.ConsensusCapsule) map[string]string 
 }
 
 // SelectorLabels returns the minimal stable labels used for StatefulSet MatchLabels and pod listing.
-// These must never include mutable fields (e.g. AccountId) as StatefulSet selectors are immutable.
+// Kept independent from CommonLabels so additions to CommonLabels never corrupt the immutable selector.
 func SelectorLabels(capsule *operatorv1alpha1.ConsensusCapsule) map[string]string {
-	return CommonLabels(capsule)
+	return map[string]string{
+		LabelOrbit:  capsule.Spec.Orbit,
+		LabelNodeId: fmt.Sprintf("%d", capsule.Spec.NodeId),
+	}
 }
 
 // PodLabels returns the full label set for pod template metadata.
