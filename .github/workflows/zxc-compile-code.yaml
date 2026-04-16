@@ -52,7 +52,7 @@ jobs:
     runs-on: solo-linux-medium
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e3f713f2d8f53843e71c69a996d56f51aa9adfb9 # v2.14.1
+        uses: step-security/harden-runner@6c3c2f2c1c457b00c10c4848d6f5491db3b629df # v2.18.0
         with:
           egress-policy: audit
 
@@ -63,7 +63,7 @@ jobs:
 
       - name: Setup Go
         id: setup-go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: go.mod
           cache: true
@@ -93,7 +93,7 @@ jobs:
         run: task test:unit
 
       - name: Publish Unit Test Coverage Reports
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ inputs.enable-unit-tests && !cancelled() }}
         with:
           name: Unit Test Coverage Reports
@@ -103,7 +103,7 @@ jobs:
 
       - name: Set up QEMU
         if: ${{ (inputs.enable-docker-build || inputs.enable-unit-tests) && !cancelled() && !failure() }}
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
 
       - name: Set up Docker Buildx
         if: ${{ (inputs.enable-docker-build || inputs.enable-unit-tests) && !cancelled() && !failure() }}
@@ -114,10 +114,10 @@ jobs:
 
       - name: Set up Helm
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
-        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
 
       - name: Setup Kind
-        uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
         if: ${{ (inputs.enable-docker-build || inputs.enable-unit-tests) && !cancelled() && !failure() }}
         with:
           install_only: true
@@ -138,7 +138,7 @@ jobs:
 
       - name: Build and Push to Local Registry
         if: ${{ (inputs.enable-docker-build || inputs.enable-unit-tests) && !cancelled() && !failure() }}
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -187,7 +187,7 @@ jobs:
           kubectl -n solo-operator logs -l app.kubernetes.io/name=solo-operator --tail -1 --timestamps > operator.log || true
 
       - name: Publish Operator Log
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ inputs.enable-unit-tests && !cancelled() }}
         with:
           name: "Operator Log"
