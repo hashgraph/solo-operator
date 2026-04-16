@@ -461,20 +461,8 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 				}
 			}
 
-			// Check container ports
-			if len(container.Ports) != 2 {
-				t.Errorf("expected 2 ports, got %d", len(container.Ports))
-			} else {
-				portMap := make(map[string]int32)
-				for _, p := range container.Ports {
-					portMap[p.Name] = p.ContainerPort
-				}
-				if portMap["pprof"] != 6061 {
-					t.Errorf("expected pprof port 6061, got %d", portMap["pprof"])
-				}
-				if portMap["stats"] != 6060 {
-					t.Errorf("expected stats port 6060, got %d", portMap["stats"])
-				}
+			if len(container.Ports) != 0 {
+				t.Errorf("expected no ports, got %d", len(container.Ports))
 			}
 
 			// Check environment variables exist and prefix value is correct

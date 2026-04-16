@@ -12,9 +12,11 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/resources/consensus"
@@ -207,14 +209,16 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 
 // SetupWithManager sets up the controller with the Manager
 func (r *ConsensusCapsuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// Skip status-only updates (LoadBalancer IP, PVC binding, STS readyReplicas, etc.)
+	genChanged := builder.WithPredicates(predicate.GenerationChangedPredicate{})
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&operatorv1alpha1.ConsensusCapsule{}).
-		Owns(&corev1.ServiceAccount{}).
-		Owns(&corev1.ConfigMap{}).
-		Owns(&corev1.Service{}).
-		Owns(&corev1.PersistentVolumeClaim{}).
-		Owns(&appsv1.StatefulSet{}).
-		Owns(&rbacv1.RoleBinding{}).
+		For(&operatorv1alpha1.ConsensusCapsule{}, genChanged).
+		Owns(&corev1.ServiceAccount{}, genChanged).
+		Owns(&corev1.ConfigMap{}, genChanged).
+		Owns(&corev1.Service{}, genChanged).
+		Owns(&corev1.PersistentVolumeClaim{}, genChanged).
+		Owns(&appsv1.StatefulSet{}, genChanged).
+		Owns(&rbacv1.RoleBinding{}, genChanged).
 		Named("consensuscapsule").
 		Complete(r)
 }

@@ -33,7 +33,7 @@ tasks:
   run:
     desc: Run the operator locally
     cmds:
-      - go run cmd/main.go
+      - go run cmd/main.go --zap-log-level=debug
 
   test:setup:
     desc: Setup envtest binaries for integration tests
@@ -184,8 +184,7 @@ tasks:
     cmds:
       - helm repo add metallb https://metallb.github.io/metallb
       - helm repo update
-      - helm upgrade --install --namespace metallb-system --create-namespace metallb metallb/metallb
-      - kubectl wait --namespace metallb-system --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=90s
+      - helm upgrade --install --namespace metallb-system --create-namespace metallb metallb/metallb --wait --timeout 90s
       - |
         # Use .200-.250 of the kind Docker subnet for LoadBalancer IPs
         SUBNET=$(docker network inspect kind | grep '"Subnet"' | awk -F'"' '{print $4}' | grep -v ':' | head -1)
@@ -211,17 +210,17 @@ tasks:
         EOF
 
   dev:
-    desc: Run operator locally against kind cluster
+    desc: Reset kind cluster, install CRDs, and run operator locally
     cmds:
-      - task: kind:create
-      - task: install
+      - task: kind:reset
       - task: run
 
   kind:reset:
-    desc: Reset kind cluster with fresh CRDs
+    desc: Reset kind cluster with fresh CRDs (delete+generate run in parallel)
+    deps:
+      - kind:delete
+      - generate:all
     cmds:
-      - task: kind:delete
-      - task: generate:all
       - task: kind:create
       - task: install
 

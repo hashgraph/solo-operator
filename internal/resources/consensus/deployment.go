@@ -85,6 +85,9 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 		return nil, err
 	}
 
+	revisionHistoryLimit := int32(10)
+	terminationGracePeriod := int64(30)
+
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      StatefulSetName(capsule),
@@ -96,7 +99,13 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 			ServiceName: common.ConsensusSubdomain,
 			// RollingUpdate terminates the pod and starts a new one on spec change (single replica = same as Recreate).
 			// Switch to OnDeleteStatefulSetStrategyType to require manual pod deletion before updates are applied.
-			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{Type: appsv1.RollingUpdateStatefulSetStrategyType},
+			UpdateStrategy:       appsv1.StatefulSetUpdateStrategy{Type: appsv1.RollingUpdateStatefulSetStrategyType},
+			PodManagementPolicy:  appsv1.OrderedReadyPodManagement,
+			RevisionHistoryLimit: &revisionHistoryLimit,
+			PersistentVolumeClaimRetentionPolicy: &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
+				WhenDeleted: "Retain",
+				WhenScaled:  "Retain",
+			},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: selectorLabels,
 			},
@@ -105,8 +114,12 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 					Labels: podLabels,
 				},
 				Spec: corev1.PodSpec{
-					ServiceAccountName: ServiceAccountName(capsule),
-					InitContainers:     []corev1.Container{r.buildGenesisInitContainer()},
+					ServiceAccountName:            ServiceAccountName(capsule),
+					RestartPolicy:                 corev1.RestartPolicyAlways,
+					DNSPolicy:                     corev1.DNSClusterFirst,
+					TerminationGracePeriodSeconds: &terminationGracePeriod,
+					SchedulerName:                 corev1.DefaultSchedulerName,
+					InitContainers:                []corev1.Container{r.buildGenesisInitContainer()},
 					Containers: []corev1.Container{
 						consensusContainer,
 					},
@@ -127,6 +140,9 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 
 	r.applyPodProperties(sts, capsule)
 	r.applyCheetahFSGroup(sts, capsule)
+	// DeprecatedServiceAccount must mirror ServiceAccountName (set after applyPodProperties
+	// which may override ServiceAccountName).
+	sts.Spec.Template.Spec.DeprecatedServiceAccount = sts.Spec.Template.Spec.ServiceAccountName
 
 	return sts, nil
 }
@@ -163,6 +179,9 @@ func (r *StatefulSetSubReconciler) buildGenesisInitContainer() corev1.Container 
 			{Name: "data-config-dir", MountPath: HapiBase + "/data/config"},
 			{Name: VolumeTypeSaved, MountPath: "/data/saved"},
 		},
+		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
+		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+		ImagePullPolicy:          corev1.PullIfNotPresent,
 	}
 }
 
@@ -185,7 +204,7 @@ func (r *StatefulSetSubReconciler) buildConsensusNodeContainer(capsule *operator
 		{
 			Name: "POD_IP",
 			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"},
+				FieldRef: &corev1.ObjectFieldSelector{APIVersion: "v1", FieldPath: "status.podIP"},
 			},
 		},
 	}
@@ -216,7 +235,10 @@ func (r *StatefulSetSubReconciler) buildConsensusNodeContainer(capsule *operator
 			{Name: "grpcs", ContainerPort: GrpcsPort, Protocol: corev1.ProtocolTCP},
 			{Name: "metrics", ContainerPort: PrometheusPort, Protocol: corev1.ProtocolTCP},
 		},
-		VolumeMounts: volumeMounts,
+		VolumeMounts:             volumeMounts,
+		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
+		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+		ImagePullPolicy:          corev1.PullIfNotPresent,
 	}
 
 	if cn.ImagePullPolicy != "" {
@@ -250,12 +272,14 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 
 	// ── ConfigMap volumes ────────────────────────────────────────────────────
 	genesisOptional := true
+	defaultMode := int32(420) // 0644
 	volumes := []corev1.Volume{
 		{
 			Name: "hapi-app-config",
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{Name: HapiAppConfigMapName(capsule)},
+					DefaultMode:          &defaultMode,
 				},
 			},
 		},
@@ -264,6 +288,7 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{Name: DataConfigMapName(capsule)},
+					DefaultMode:          &defaultMode,
 				},
 			},
 		},
@@ -275,6 +300,7 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{Name: GenesisConfigMapName},
+					DefaultMode:          &defaultMode,
 					Optional:             &genesisOptional,
 				},
 			},
@@ -306,6 +332,7 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{Name: BlockNodesConfigMapName(capsule)},
+					DefaultMode:          &defaultMode,
 				},
 			},
 		})
@@ -358,7 +385,8 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 			Name: "hapi-app-secrets",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: capsule.Spec.HapiAppSecretsName,
+					SecretName:  capsule.Spec.HapiAppSecretsName,
+					DefaultMode: &defaultMode,
 				},
 			},
 		})
@@ -429,7 +457,8 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 					Name: "keys",
 					VolumeSource: corev1.VolumeSource{
 						Projected: &corev1.ProjectedVolumeSource{
-							Sources: projectedSources,
+							Sources:     projectedSources,
+							DefaultMode: &defaultMode,
 						},
 					},
 				})
@@ -444,8 +473,9 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 					Name: "grpc-tls-key",
 					VolumeSource: corev1.VolumeSource{
 						Secret: &corev1.SecretVolumeSource{
-							SecretName: sr.GrpcTlsPrivateKey.SecretName,
-							Items:      []corev1.KeyToPath{{Key: sr.GrpcTlsPrivateKey.KeyName, Path: "hedera.key"}},
+							SecretName:  sr.GrpcTlsPrivateKey.SecretName,
+							Items:       []corev1.KeyToPath{{Key: sr.GrpcTlsPrivateKey.KeyName, Path: "hedera.key"}},
+							DefaultMode: &defaultMode,
 						},
 					},
 				})
@@ -458,8 +488,9 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 					Name: "grpc-tls-cert",
 					VolumeSource: corev1.VolumeSource{
 						Secret: &corev1.SecretVolumeSource{
-							SecretName: sr.GrpcTlsPublicCertificate.SecretName,
-							Items:      []corev1.KeyToPath{{Key: sr.GrpcTlsPublicCertificate.KeyName, Path: "hedera.crt"}},
+							SecretName:  sr.GrpcTlsPublicCertificate.SecretName,
+							Items:       []corev1.KeyToPath{{Key: sr.GrpcTlsPublicCertificate.KeyName, Path: "hedera.crt"}},
+							DefaultMode: &defaultMode,
 						},
 					},
 				})
@@ -548,11 +579,13 @@ func (r *StatefulSetSubReconciler) addSidecarContainers(sts *appsv1.StatefulSet,
 		(containers.EventsUploader != nil && containers.EventsUploader.Enabled)
 
 	if cheetahEnabled {
+		dm := int32(420)
 		sts.Spec.Template.Spec.Volumes = append(sts.Spec.Template.Spec.Volumes, corev1.Volume{
 			Name: "solo-cheetah-config",
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{Name: CheetahConfigMapName(capsule)},
+					DefaultMode:          &dm,
 				},
 			},
 		})
@@ -591,11 +624,13 @@ func (r *StatefulSetSubReconciler) addSidecarContainers(sts *appsv1.StatefulSet,
 	}
 
 	if resolvedAlloy != nil && resolvedAlloy.Enabled {
+		dm := int32(420)
 		sts.Spec.Template.Spec.Volumes = append(sts.Spec.Template.Spec.Volumes, corev1.Volume{
 			Name: "alloy-config",
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{Name: AlloyConfigMapName(capsule)},
+					DefaultMode:          &dm,
 				},
 			},
 		})
@@ -709,12 +744,11 @@ func (r *StatefulSetSubReconciler) buildCheetahUploaderContainer(uploader *opera
 			"--config-check-interval",
 			configCheckInterval,
 		},
-		Env:          env,
-		VolumeMounts: volumeMounts,
-		Ports: []corev1.ContainerPort{
-			{Name: "pprof", ContainerPort: CheetahPprofPort, Protocol: corev1.ProtocolTCP},
-			{Name: "stats", ContainerPort: CheetahStatsPort, Protocol: corev1.ProtocolTCP},
-		},
+		Env:                      env,
+		VolumeMounts:             volumeMounts,
+		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
+		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+		ImagePullPolicy:          corev1.PullIfNotPresent,
 	}
 
 	if uploader.ImagePullPolicy != "" {
@@ -788,8 +822,11 @@ func (r *StatefulSetSubReconciler) buildBackupUploaderContainer(config *operator
 	}
 
 	container := corev1.Container{
-		Name:  name,
-		Image: image,
+		Name:                     name,
+		Image:                    image,
+		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
+		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+		ImagePullPolicy:          corev1.PullIfNotPresent,
 	}
 
 	if config.ImagePullPolicy != "" {
@@ -863,6 +900,9 @@ func (r *StatefulSetSubReconciler) buildAlloyContainer(capsule *operatorv1alpha1
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: "alloy-config", MountPath: "/etc/alloy", ReadOnly: true},
 		},
+		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
+		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+		ImagePullPolicy:          corev1.PullIfNotPresent,
 	}
 
 	// Share the logs volume with the consensus node (read-only) for log scraping.

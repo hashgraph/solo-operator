@@ -83,6 +83,10 @@ var _ = Describe("Orbit Controller", func() {
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, orbit)).Should(Succeed())
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, orbitLookupKey, &operatorv1alpha1.Orbit{})
+				return err != nil
+			}, timeout, interval).Should(BeTrue())
 		})
 	})
 
