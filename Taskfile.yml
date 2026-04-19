@@ -5,6 +5,8 @@ version: '3'
 vars:
   BINARY_NAME: manager
   IMG: ghcr.io/hashgraph/solo-operator:latest
+  DEV_IMG: us-central1-docker.pkg.dev/hashsphere-development/solo-operator/solo-operator
+  DEV_TAG: dev
   ENVTEST_K8S_VERSION: "1.32.0"
   COVERAGE_FILE: coverage.out
   COVERAGE_HTML: coverage.html
@@ -118,6 +120,7 @@ tasks:
       - task: generate:deepcopy
       - task: generate:manifests
       - task: generate:rbac
+      - task: helm:sync-rbac
 
   generate:manifests:
     desc: Generate CRD manifests
@@ -135,14 +138,21 @@ tasks:
       - controller-gen rbac:roleName=manager-role paths="./..." output:rbac:artifacts:config=config/rbac
 
   docker:build:
-    desc: Build Docker image
+    desc: Build Docker image (linux/amd64 for GKE)
     cmds:
-      - docker build -t {{.IMG}} .
+      - docker build --platform linux/amd64 -t {{.IMG}} .
 
   docker:push:
     desc: Push Docker image
     cmds:
       - docker push {{.IMG}}
+
+  docker:dev:
+    desc: Build, tag, and push to dev GKE registry (override DEV_IMG/DEV_TAG as needed)
+    cmds:
+      - task: docker:build
+      - docker tag {{.IMG}} {{.DEV_IMG}}:{{.DEV_TAG}}
+      - docker push {{.DEV_IMG}}:{{.DEV_TAG}}
 
   install:
     desc: Install CRDs into cluster
@@ -231,9 +241,10 @@ tasks:
       - rm -f {{.COVERAGE_FILE}} {{.COVERAGE_HTML}}
 
   helm:build:
-    desc: Sync CRD templates and package the Helm chart
+    desc: Sync CRD templates, sync RBAC, and package the Helm chart
     cmds:
       - task: helm:sync-crds
+      - task: helm:sync-rbac
       - helm package charts/solo-operator
 
   helm:sync-crds:
@@ -256,6 +267,33 @@ tasks:
           echo "  synced: $(basename "${src}")"
         done
         [ "${found_crds}" = true ] || { echo "no CRD manifests found in config/crd/bases" >&2; exit 1; }
+
+  helm:sync-rbac:
+    desc: Sync RBAC rules from config/rbac/role.yaml into charts/solo-operator/templates/rbac.yaml
+    cmds:
+      - |
+        set -eu
+        SRC="config/rbac/role.yaml"
+        DEST="charts/solo-operator/templates/rbac.yaml"
+        [ -f "${SRC}" ] || { echo "missing ${SRC} — run 'task generate:rbac' first" >&2; exit 1; }
+
+        # Preserve everything up to and including "rules:" (Helm boilerplate header)
+        rules_line="$(grep -n "^rules:" "${DEST}" | head -1 | cut -d: -f1)"
+        [ -n "${rules_line}" ] || { echo "'rules:' marker not found in ${DEST}" >&2; exit 1; }
+
+        # Preserve everything from the first "---" separator after rules: (ClusterRoleBinding + leader election)
+        sep_line="$(awk "NR>${rules_line} && /^---/ {print NR; exit}" "${DEST}")"
+        [ -n "${sep_line}" ] || { echo "'---' separator not found after rules in ${DEST}" >&2; exit 1; }
+
+        # Splice: header + generated rules + tail
+        head -n "${rules_line}" "${DEST}" > /tmp/rbac_header.txt
+        tail -n +"${sep_line}" "${DEST}" > /tmp/rbac_tail.txt
+        {
+          cat /tmp/rbac_header.txt
+          yq '.rules[] | "- apiGroups: [\"" + (.apiGroups | join("\", \"")) + "\"]\n  resources: [\"" + (.resources | join("\", \"")) + "\"]\n  verbs: [\"" + (.verbs | join("\", \"")) + "\"]"' "${SRC}"
+          cat /tmp/rbac_tail.txt
+        } > "${DEST}"
+        echo "  synced RBAC rules from ${SRC} → ${DEST}"
 
   tools:
     desc: Install required tools

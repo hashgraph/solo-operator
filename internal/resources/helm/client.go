@@ -29,6 +29,10 @@ import (
 const (
 	DefaultTimeout    = 5 * time.Minute
 	helmStorageDriver = "secrets"
+
+	// helmTmpDir is the writable base for all Helm SDK cache/config directories.
+	// The operator runs with readOnlyRootFilesystem=true, so only /tmp is writable.
+	helmTmpDir = "/tmp/helm"
 )
 
 var (
@@ -89,8 +93,19 @@ func NewHelmSDKClient(restConfig *rest.Config) Client {
 	return &helmSDKClient{restConfig: restConfig}
 }
 
+// writableHelmEnv returns Helm env settings with all cache/config directories
+// rooted under /tmp so they are writable when readOnlyRootFilesystem=true.
+func writableHelmEnv() *cli.EnvSettings {
+	env := cli.New()
+	env.RepositoryConfig = helmTmpDir + "/repositories.yaml"
+	env.RepositoryCache = helmTmpDir + "/cache"
+	return env
+}
+
 func (h *helmSDKClient) actionConfig(namespace string) (*action.Configuration, error) {
-	registryClient, err := registry.NewClient()
+	registryClient, err := registry.NewClient(
+		registry.ClientOptCredentialsFile(helmTmpDir + "/registry/config.json"),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("creating helm registry client: %w", err)
 	}
@@ -162,7 +177,7 @@ func (h *helmSDKClient) install(ctx context.Context, releaseName, namespace stri
 	if err != nil {
 		return nil, err
 	}
-	chartPath, err := install.LocateChart(ref, cli.New())
+	chartPath, err := install.LocateChart(ref, writableHelmEnv())
 	if err != nil {
 		return nil, fmt.Errorf("%w: locating chart %s: %v", ErrChartFetch, ref, err)
 	}
@@ -200,7 +215,7 @@ func (h *helmSDKClient) upgrade(ctx context.Context, releaseName, namespace stri
 	if err != nil {
 		return nil, err
 	}
-	chartPath, err := upgrade.LocateChart(ref, cli.New())
+	chartPath, err := upgrade.LocateChart(ref, writableHelmEnv())
 	if err != nil {
 		return nil, fmt.Errorf("%w: locating chart %s: %v", ErrChartFetch, ref, err)
 	}
