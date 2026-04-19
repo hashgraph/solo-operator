@@ -5,6 +5,7 @@ package helm
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -131,7 +132,7 @@ func mirrorValues(ctx context.Context, c client.Client, namespace string, capsul
 		return nil, fmt.Errorf("addressbook-bin secret missing key addressbook.bin")
 	}
 	vals["importer"] = map[string]interface{}{
-		"addressBook": bin,
+		"addressBook": base64.StdEncoding.EncodeToString(bin),
 	}
 
 	return vals, nil
