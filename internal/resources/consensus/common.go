@@ -123,8 +123,11 @@ func SelectorLabels(capsule *operatorv1alpha1.ConsensusCapsule) map[string]strin
 }
 
 // PodLabels returns the full label set for pod template metadata.
+// LabelManagedBy + LabelPartOf are required for the consensus headless service selector to match.
 func PodLabels(capsule *operatorv1alpha1.ConsensusCapsule) map[string]string {
 	labels := SelectorLabels(capsule)
+	labels[LabelManagedBy] = ManagedByValue
+	labels[LabelPartOf] = PartOfConsensusNode
 	labels[LabelComponent] = ComponentConsensusNode
 	labels[LabelSoloNodeName] = capsule.Name
 	labels[LabelSoloAccountId] = capsule.Spec.AccountId
