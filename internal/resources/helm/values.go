@@ -90,7 +90,7 @@ func injectComponentValues(ctx context.Context, c client.Client, namespace strin
 		if err != nil {
 			return nil, err
 		}
-		return mirrorValues(capsules, orbit), nil
+		return mirrorValues(ctx, c, namespace, capsules, orbit)
 	case operatorv1alpha1.HelmComponentRelay, operatorv1alpha1.HelmComponentRelayWebSocket:
 		capsules, err := listConsensusCapsules(ctx, c, namespace, spec.OrbitRef.Name)
 		if err != nil {
@@ -110,8 +110,8 @@ func injectComponentValues(ctx context.Context, c client.Client, namespace strin
 	}
 }
 
-func mirrorValues(capsules []operatorv1alpha1.ConsensusCapsule, orbit *operatorv1alpha1.Orbit) map[string]interface{} {
-	return map[string]interface{}{
+func mirrorValues(ctx context.Context, c client.Client, namespace string, capsules []operatorv1alpha1.ConsensusCapsule, orbit *operatorv1alpha1.Orbit) (map[string]interface{}, error) {
+	vals := map[string]interface{}{
 		"hedera": map[string]interface{}{
 			"mirror": map[string]interface{}{
 				"importer": map[string]interface{}{
@@ -121,6 +121,20 @@ func mirrorValues(capsules []operatorv1alpha1.ConsensusCapsule, orbit *operatorv
 			},
 		},
 	}
+
+	secret := &corev1.Secret{}
+	if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: "addressbook-bin"}, secret); err != nil {
+		return nil, fmt.Errorf("reading addressbook-bin secret: %w", err)
+	}
+	bin := secret.Data["addressbook.bin"]
+	if len(bin) == 0 {
+		return nil, fmt.Errorf("addressbook-bin secret missing key addressbook.bin")
+	}
+	vals["importer"] = map[string]interface{}{
+		"addressBook": bin,
+	}
+
+	return vals, nil
 }
 
 func relayValues(ctx context.Context, capsules []operatorv1alpha1.ConsensusCapsule, namespace, ledgerID string) (map[string]interface{}, error) {

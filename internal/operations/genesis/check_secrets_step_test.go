@@ -73,8 +73,9 @@ func TestCheckSecretsStep_Run_NoCapsules(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(genesisTestScheme()).Build()
 	status := NewCheckSecretsStep(c).Run(context.Background(), checkSecretsOp(), &GenesisStatus{})
 
-	if status.Phase != operatorv1alpha1.PhaseFailed {
-		t.Error("expected PhaseFailed when no capsules exist")
+	// No capsules yet → step returns pending status (will retry) rather than failing.
+	if status.Phase == operatorv1alpha1.PhaseFailed {
+		t.Error("expected pending (retry) when no capsules exist, got PhaseFailed")
 	}
 }
 

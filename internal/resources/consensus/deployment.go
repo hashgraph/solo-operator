@@ -150,30 +150,41 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 // buildGenesisInitContainer copies genesis-network.json from the optional ConfigMap into
 // the writable data-config-dir so the platform can archive it after the first round.
 //
-// Two sentinels guard the copy so it runs exactly once per node lifetime:
-//  1. Platform state directory (/data/saved/SavedStateDir) — present once the node
-//     has completed at least one round; reliable after first successful startup.
-//  2. Dot-file (/data/saved/.genesis-init-done) — written by this container after a
-//     successful copy; guards restarts that happen before the platform creates its own
-//     state directory (e.g. pod restarts during genesis itself).
+// Two sentinels detect whether this is a fresh cluster:
+//  1. Platform state directory (/data/saved/SavedStateDir) — present on non-fresh nodes
+//     (written after completing at least one round); exit immediately if present.
+//  2. Dot-file (/data/saved/.genesis-init-done) — written after successful copy; guards
+//     pod restarts before the platform creates its own state directory.
 //
-// The container always exits 0: absence of genesis-network.json is normal (non-genesis nodes).
+// If neither sentinel is present the cluster is fresh: we wait up to 10 minutes for the
+// genesis-network.json ConfigMap to be mounted (the genesis NetworkOperation may still be
+// in progress). Exits non-zero on timeout so the pod is restarted rather than starting
+// without genesis configuration.
 func (r *StatefulSetSubReconciler) buildGenesisInitContainer() corev1.Container {
 	const (
 		stateDir     = "/data/saved/" + SavedStateDir
 		sentinelFile = "/data/saved/.genesis-init-done"
+		genesisFile  = "/tmp/genesis-config/" + GenesisNetworkFileName
+		destDir      = HapiBase + "/data/config/"
 	)
+	script := `[ -d ` + stateDir + ` ] && exit 0
+[ -f ` + sentinelFile + ` ] && exit 0
+echo "genesis-init: fresh cluster, waiting for genesis-network.json (up to 10m)"
+i=0
+while [ ! -f ` + genesisFile + ` ]; do
+  i=$((i+1))
+  if [ $i -ge 60 ]; then
+    echo "genesis-init: timed out waiting for genesis-network.json"
+    exit 1
+  fi
+  sleep 10
+done
+cp ` + genesisFile + ` ` + destDir + ` && touch ` + sentinelFile + `
+echo "genesis-init: done"`
 	return corev1.Container{
-		Name:  "genesis-init",
-		Image: GenesisInitImage,
-		Command: []string{"sh", "-c",
-			`[ -d ` + stateDir + ` ] && exit 0; ` +
-				`[ -f ` + sentinelFile + ` ] && exit 0; ` +
-				`[ -f /tmp/genesis-config/` + GenesisNetworkFileName + ` ] && ` +
-				`cp /tmp/genesis-config/` + GenesisNetworkFileName + ` ` + HapiBase + `/data/config/ && ` +
-				`touch ` + sentinelFile + `; ` +
-				`exit 0`,
-		},
+		Name:    "genesis-init",
+		Image:   GenesisInitImage,
+		Command: []string{"sh", "-c", script},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: "genesis-config", MountPath: "/tmp/genesis-config"},
 			{Name: "data-config-dir", MountPath: HapiBase + "/data/config"},
@@ -207,10 +218,6 @@ func (r *StatefulSetSubReconciler) buildConsensusNodeContainer(capsule *operator
 				FieldRef: &corev1.ObjectFieldSelector{APIVersion: "v1", FieldPath: "status.podIP"},
 			},
 		},
-	}
-
-	if capsule.Spec.NodeAlias != "" {
-		env = append(env, corev1.EnvVar{Name: "CONSENSUS_NODE_ALIAS", Value: capsule.Spec.NodeAlias})
 	}
 
 	if cn.JavaHeapMin != "" {
@@ -419,38 +426,19 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 		} else if capsule.Spec.Secrets.SecretResources != nil {
 			var projectedSources []corev1.VolumeProjection
 
-			secretItems := []corev1.KeyToPath{}
 			if capsule.Spec.Secrets.SecretResources.SigningPrivateKey.SecretName != "" {
-				secretItems = append(secretItems, corev1.KeyToPath{
-					Key:  capsule.Spec.Secrets.SecretResources.SigningPrivateKey.KeyName,
-					Path: capsule.Spec.Secrets.SecretResources.SigningPrivateKey.KeyName,
-				})
-			}
-			if capsule.Spec.Secrets.SecretResources.SigningPublicCertificate.SecretName != "" {
-				secretItems = append(secretItems, corev1.KeyToPath{
-					Key:  capsule.Spec.Secrets.SecretResources.SigningPublicCertificate.KeyName,
-					Path: capsule.Spec.Secrets.SecretResources.SigningPublicCertificate.KeyName,
-				})
-			}
-			if len(secretItems) > 0 && capsule.Spec.Secrets.SecretResources.SigningPrivateKey.SecretName != "" {
 				projectedSources = append(projectedSources, corev1.VolumeProjection{
 					Secret: &corev1.SecretProjection{
 						LocalObjectReference: corev1.LocalObjectReference{
 							Name: capsule.Spec.Secrets.SecretResources.SigningPrivateKey.SecretName,
 						},
-						Items: secretItems,
+						Items: []corev1.KeyToPath{{
+							Key:  capsule.Spec.Secrets.SecretResources.SigningPrivateKey.KeyName,
+							Path: fmt.Sprintf("s-private-node%d.pem", capsule.Spec.NodeId+1),
+						}},
 					},
 				})
 			}
-
-			projectedSources = append(projectedSources, corev1.VolumeProjection{
-				ConfigMap: &corev1.ConfigMapProjection{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: PublicKeysConfigMapName,
-					},
-					Optional: func() *bool { t := true; return &t }(),
-				},
-			})
 
 			if len(projectedSources) > 0 {
 				volumes = append(volumes, corev1.Volume{

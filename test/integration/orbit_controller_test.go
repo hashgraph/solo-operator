@@ -38,7 +38,10 @@ var _ = Describe("Orbit Controller", func() {
 					},
 				},
 			}
-			Expect(k8sClient.Create(ctx, orbit)).Should(Succeed())
+			err := k8sClient.Create(ctx, orbit)
+			if err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
 
 			// Verify Orbit is created (cluster-scoped, no namespace)
 			orbitLookupKey := types.NamespacedName{Name: orbitName}

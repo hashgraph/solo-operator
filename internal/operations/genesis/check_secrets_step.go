@@ -53,7 +53,8 @@ func (s *CheckSecretsStep) Run(ctx context.Context, resource *operatorv1alpha1.N
 	}
 
 	if len(capsuleList.Items) == 0 {
-		return s.markFailed(status, resource.Generation, fmt.Sprintf("No consensus capsules found in namespace: %s", namespace))
+		logger.Info("No consensus capsules yet, will retry", "namespace", namespace)
+		return status
 	}
 
 	// Validate secrets for each capsule

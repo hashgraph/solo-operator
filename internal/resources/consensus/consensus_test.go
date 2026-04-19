@@ -1016,9 +1016,6 @@ func TestStatefulSetEnvVars(t *testing.T) {
 	if v, ok := envByName["CONSENSUS_NODE_ID"]; !ok || v.Value != "0" {
 		t.Errorf("expected CONSENSUS_NODE_ID=0, got %+v", envByName["CONSENSUS_NODE_ID"])
 	}
-	if v, ok := envByName["CONSENSUS_NODE_ALIAS"]; !ok || v.Value != "node1" {
-		t.Errorf("expected CONSENSUS_NODE_ALIAS=node1, got %+v", envByName["CONSENSUS_NODE_ALIAS"])
-	}
 	if v, ok := envByName["JAVA_HEAP_MIN"]; !ok || v.Value != "256m" {
 		t.Errorf("expected JAVA_HEAP_MIN=256m, got %+v", envByName["JAVA_HEAP_MIN"])
 	}
