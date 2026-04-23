@@ -4,6 +4,7 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -11,9 +12,11 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/resources/consensus"
@@ -21,14 +24,10 @@ import (
 )
 
 const (
-	// ConsensusCapsuleFinalizer is the finalizer for ConsensusCapsule resources
 	ConsensusCapsuleFinalizer = "operator.solo.hedera.com/consensuscapsule-finalizer"
 
-	// LabelComponent is the component label
-	LabelComponent = "app.kubernetes.io/component"
-
-	// LabelNodeId is the node ID label
-	LabelNodeId = "operator.solo.hedera.com/node-id"
+	// podReadinessRequeueAfter is how long to wait before rechecking when the pod is not yet ready.
+	podReadinessRequeueAfter = 10 * time.Second
 )
 
 // ConsensusCapsuleReconciler reconciles a ConsensusCapsule object
@@ -56,7 +55,7 @@ func NewConsensusCapsuleReconciler(c client.Client, scheme *runtime.Scheme) *Con
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
-// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is the main reconciliation loop for ConsensusCapsule resources
@@ -70,7 +69,6 @@ func (r *ConsensusCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		"namespace", req.Namespace,
 		"name", req.Name)
 
-	// Fetch the ConsensusCapsule instance
 	capsule := &operatorv1alpha1.ConsensusCapsule{}
 	if err := r.Get(ctx, req.NamespacedName, capsule); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -81,12 +79,10 @@ func (r *ConsensusCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	// Handle deletion
 	if !capsule.DeletionTimestamp.IsZero() {
 		return r.handleDeletion(ctx, capsule)
 	}
 
-	// Add finalizer if not present
 	if !controllerutil.ContainsFinalizer(capsule, ConsensusCapsuleFinalizer) {
 		controllerutil.AddFinalizer(capsule, ConsensusCapsuleFinalizer)
 		if err := r.Update(ctx, capsule); err != nil {
@@ -95,7 +91,6 @@ func (r *ConsensusCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	// Run subreconcilers
 	result, err := r.subreconciler.Reconcile(ctx, capsule)
 	if err != nil {
 		return result, err
@@ -104,19 +99,17 @@ func (r *ConsensusCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return result, nil
 	}
 
-	// Update status based on pod state
-	if err := r.updateStatus(ctx, capsule); err != nil {
+	result, err = r.updateStatus(ctx, capsule)
+	if err != nil {
 		if apierrors.IsConflict(err) {
-			// Conflict errors are expected and will be retried
 			return ctrl.Result{Requeue: true}, nil
 		}
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, nil
+	return result, nil
 }
 
-// handleDeletion handles the deletion of a ConsensusCapsule resource
 func (r *ConsensusCapsuleReconciler) handleDeletion(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -124,8 +117,6 @@ func (r *ConsensusCapsuleReconciler) handleDeletion(ctx context.Context, capsule
 		logger.Info("Deleting ConsensusCapsule",
 			"namespace", capsule.Namespace,
 			"name", capsule.Name)
-
-		// Remove finalizer
 		controllerutil.RemoveFinalizer(capsule, ConsensusCapsuleFinalizer)
 		if err := r.Update(ctx, capsule); err != nil {
 			return ctrl.Result{}, err
@@ -135,23 +126,43 @@ func (r *ConsensusCapsuleReconciler) handleDeletion(ctx context.Context, capsule
 	return ctrl.Result{}, nil
 }
 
-// updateStatus updates the ConsensusCapsule status based on pod state
-func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) error {
-	// List pods matching the deployment
+// isPodReady returns true when the pod's PodReady condition is True.
+func isPodReady(pod corev1.Pod) bool {
+	for _, cond := range pod.Status.Conditions {
+		if cond.Type == corev1.PodReady {
+			return cond.Status == corev1.ConditionTrue
+		}
+	}
+	return false
+}
+
+// updateStatus updates the ConsensusCapsule status based on pod state.
+// Phase transitions to Running only once the pod's Ready condition is True,
+// ensuring all containers have passed their readiness checks.
+func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
 	podList := &corev1.PodList{}
 	if err := r.List(ctx, podList,
 		client.InNamespace(capsule.Namespace),
-		client.MatchingLabels(consensus.PodLabels(capsule))); err != nil {
-		return err
+		client.MatchingLabels(consensus.SelectorLabels(capsule))); err != nil {
+		return ctrl.Result{}, err
 	}
 
-	// Determine phase from pod status
 	phase := operatorv1alpha1.PhasePending
+	requeue := false
 	if len(podList.Items) > 0 {
 		pod := podList.Items[0]
 		switch pod.Status.Phase {
 		case corev1.PodRunning:
-			phase = operatorv1alpha1.PhaseRunning
+			// Gate PhaseRunning on the pod's Ready condition so we only
+			// report Running once all containers have passed their readiness
+			// checks. This works whether the operator runs inside or outside
+			// the cluster (no TCP dial to cluster-internal DNS required).
+			if isPodReady(pod) {
+				phase = operatorv1alpha1.PhaseRunning
+			} else {
+				phase = operatorv1alpha1.PhasePending
+				requeue = true
+			}
 		case corev1.PodSucceeded:
 			phase = operatorv1alpha1.PhaseSucceeded
 		case corev1.PodFailed:
@@ -163,40 +174,51 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 		}
 	}
 
-	// Check if status needs update
 	if capsule.Status.Phase == phase && capsule.Status.ObservedGeneration == capsule.Generation {
-		return nil
+		if requeue {
+			return ctrl.Result{RequeueAfter: podReadinessRequeueAfter}, nil
+		}
+		return ctrl.Result{}, nil
 	}
+
+	gossipPort := consensus.ResolveGossipPort(capsule)
 
 	capsule.Status.Phase = phase
 	capsule.Status.ObservedGeneration = capsule.Generation
-
-	// Update address book entry
 	capsule.Status.AddressBookEntry = &operatorv1alpha1.AddressBookEntry{
 		NodeId:           capsule.Spec.NodeId,
 		NickName:         capsule.Name,
 		SelfName:         capsule.Name,
 		Weight:           capsule.Spec.Weight,
 		InternalHostname: consensus.InternalHostname(capsule),
-		InternalPort:     consensus.GossipPort,
+		InternalPort:     gossipPort,
 		ExternalHostname: capsule.Spec.ExternalAddress,
-		ExternalPort:     consensus.GossipPort,
+		ExternalPort:     gossipPort,
 		NodeAccount:      capsule.Spec.AccountId,
 	}
 
-	return r.Status().Update(ctx, capsule)
+	if err := r.Status().Update(ctx, capsule); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if requeue {
+		return ctrl.Result{RequeueAfter: podReadinessRequeueAfter}, nil
+	}
+	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager
 func (r *ConsensusCapsuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// Skip status-only updates (LoadBalancer IP, PVC binding, STS readyReplicas, etc.)
+	genChanged := builder.WithPredicates(predicate.GenerationChangedPredicate{})
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&operatorv1alpha1.ConsensusCapsule{}).
-		Owns(&corev1.ServiceAccount{}).
-		Owns(&corev1.ConfigMap{}).
-		Owns(&corev1.Service{}).
-		Owns(&corev1.PersistentVolumeClaim{}).
-		Owns(&appsv1.Deployment{}).
-		Owns(&rbacv1.RoleBinding{}).
+		For(&operatorv1alpha1.ConsensusCapsule{}, genChanged).
+		Owns(&corev1.ServiceAccount{}, genChanged).
+		Owns(&corev1.ConfigMap{}, genChanged).
+		Owns(&corev1.Service{}, genChanged).
+		Owns(&corev1.PersistentVolumeClaim{}, genChanged).
+		Owns(&appsv1.StatefulSet{}, genChanged).
+		Owns(&rbacv1.RoleBinding{}, genChanged).
 		Named("consensuscapsule").
 		Complete(r)
 }

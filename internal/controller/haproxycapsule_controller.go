@@ -45,6 +45,7 @@ func NewHAProxyCapsuleReconciler(c client.Client, scheme *runtime.Scheme) *HAPro
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=haproxycapsules/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=haproxycapsules/finalizers,verbs=update
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is the main reconciliation loop for HAProxyCapsule resources
 func (r *HAProxyCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

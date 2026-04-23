@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -67,7 +68,7 @@ func (r *HeadlessServiceSubReconciler) Reconcile(ctx context.Context, orbit *ope
 func (r *HeadlessServiceSubReconciler) buildService(orbit *operatorv1alpha1.Orbit) *corev1.Service {
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ConsensusServiceName,
+			Name:      common.ConsensusSubdomain,
 			Namespace: orbit.Name,
 			Labels:    StandardLabels(orbit),
 		},

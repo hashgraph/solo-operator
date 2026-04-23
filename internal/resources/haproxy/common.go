@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -29,18 +30,16 @@ type haproxyConfigData struct {
 }
 
 const (
-	LabelManagedBy  = "app.kubernetes.io/managed-by"
-	LabelPartOf     = "app.kubernetes.io/part-of"
+	LabelManagedBy  = common.LabelManagedBy
+	LabelPartOf     = common.LabelPartOf
 	LabelApp        = "app"
-	ManagedByValue  = "solo-operator"
+	ManagedByValue  = common.ManagedByValue
 	PartOfHAProxy   = "haproxy"
 	ConfigMapSuffix = "-config"
 	DefaultImage    = "haproxy:2.8.10-alpine3.20"
 )
 
 const (
-	DefaultGrpcPort    = int32(50211)
-	DefaultGrpcsPort   = int32(50212)
 	DefaultMetricsPort = int32(9090)
 )
 
@@ -48,14 +47,14 @@ func GetGrpcPort(haproxy *operatorv1alpha1.HAProxyCapsule) int32 {
 	if haproxy.Spec.GrpcPort != 0 {
 		return haproxy.Spec.GrpcPort
 	}
-	return DefaultGrpcPort
+	return common.GrpcPort
 }
 
 func GetGrpcsPort(haproxy *operatorv1alpha1.HAProxyCapsule) int32 {
 	if haproxy.Spec.GrpcsPort != 0 {
 		return haproxy.Spec.GrpcsPort
 	}
-	return DefaultGrpcsPort
+	return common.GrpcsPort
 }
 
 func GetMetricsPort(haproxy *operatorv1alpha1.HAProxyCapsule) int32 {

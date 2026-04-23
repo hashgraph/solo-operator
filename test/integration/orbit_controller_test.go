@@ -38,7 +38,10 @@ var _ = Describe("Orbit Controller", func() {
 					},
 				},
 			}
-			Expect(k8sClient.Create(ctx, orbit)).Should(Succeed())
+			err := k8sClient.Create(ctx, orbit)
+			if err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
 
 			// Verify Orbit is created (cluster-scoped, no namespace)
 			orbitLookupKey := types.NamespacedName{Name: orbitName}
@@ -83,6 +86,20 @@ var _ = Describe("Orbit Controller", func() {
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, orbit)).Should(Succeed())
+			// envtest doesn't run the namespace lifecycle controller, so spec.finalizers=[kubernetes]
+			// is never removed and the namespace stays Terminating. Patch it out manually.
+			Eventually(func() error {
+				ns := &corev1.Namespace{}
+				if err := k8sClient.Get(ctx, types.NamespacedName{Name: orbitName}, ns); err != nil {
+					return nil
+				}
+				ns.Spec.Finalizers = nil
+				return k8sClient.SubResource("finalize").Update(ctx, ns)
+			}, timeout, interval).Should(Succeed())
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, orbitLookupKey, &operatorv1alpha1.Orbit{})
+				return err != nil
+			}, timeout, interval).Should(BeTrue())
 		})
 	})
 

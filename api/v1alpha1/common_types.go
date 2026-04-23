@@ -206,6 +206,7 @@ type AddressBookEntry struct {
 // KeyReference references a key in a secret
 type KeyReference struct {
 	// SecretName is the name of the secret
+	// +kubebuilder:validation:Required
 	SecretName string `json:"secretName"`
 
 	// KeyName is the key within the secret

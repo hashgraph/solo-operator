@@ -19,7 +19,12 @@ import (
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
-const CheetahConfigMapName = "solo-cheetah-config"
+// CheetahConfigMapName returns the per-capsule Cheetah ConfigMap name.
+// Each capsule has its own ConfigMap so reconcilers for different nodes
+// do not overwrite each other's config, which would cause an infinite update loop.
+func CheetahConfigMapName(capsule *operatorv1alpha1.ConsensusCapsule) string {
+	return capsule.Name + "-cheetah-cm"
+}
 
 // CheetahConfigMapSubReconciler manages the Cheetah ConfigMap
 type CheetahConfigMapSubReconciler struct {
@@ -100,7 +105,7 @@ func (r *CheetahConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1
 
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      CheetahConfigMapName,
+			Name:      CheetahConfigMapName(capsule),
 			Namespace: capsule.Namespace,
 			Labels:    CommonLabels(capsule),
 		},

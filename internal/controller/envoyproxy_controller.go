@@ -45,6 +45,7 @@ func NewEnvoyProxyReconciler(c client.Client, scheme *runtime.Scheme) *EnvoyProx
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=envoyproxies/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=envoyproxies/finalizers,verbs=update
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is the main reconciliation loop for EnvoyProxy resources
 func (r *EnvoyProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

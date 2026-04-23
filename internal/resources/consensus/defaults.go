@@ -2,6 +2,20 @@
 
 package consensus
 
+const (
+	// HapiBase is the working directory inside the consensus-node container.
+	HapiBase = "/opt/hgcapp/services-hedera/HapiApp2.0"
+
+	// GenesisInitImage is the image used by the genesis-config init container.
+	// It only needs sh and cp.
+	GenesisInitImage = "busybox:1.36.1"
+
+	// SavedStateDir is the subdirectory written by the platform under data/saved
+	// once the first round completes. Its presence means the node has live state
+	// and does not need genesis-network.json on the next restart.
+	SavedStateDir = "com.hedera.services.ServicesMain"
+)
+
 // Alloy telemetry sidecar defaults.
 const (
 	// AlloyDefaultImage is the fallback Grafana Alloy sidecar container image.

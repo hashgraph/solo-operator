@@ -2,6 +2,42 @@ version: '3'
 
 tasks:
   setup:
+    desc: Install MetalLB (kind LB support), MinIO operator and tenant
+    cmds:
+      - task: setup:metallb
+      - task: setup:minio
+
+  setup:metallb:
+    desc: Install MetalLB operator via Helm and configure an IP pool for LoadBalancer support on kind
+    cmds:
+      - helm repo add metallb https://metallb.github.io/metallb
+      - helm repo update
+      - helm upgrade --install --namespace metallb-system --create-namespace metallb metallb/metallb --wait --timeout 90s
+      - |
+        # Use .200-.250 of the kind Docker subnet for LoadBalancer IPs
+        SUBNET=$(docker network inspect kind | grep '"Subnet"' | awk -F'"' '{print $4}' | grep -v ':' | head -1)
+        PREFIX=$(echo "$SUBNET" | cut -d'/' -f1 | cut -d'.' -f1-3)
+        kubectl apply -f - <<EOF
+        apiVersion: metallb.io/v1beta1
+        kind: IPAddressPool
+        metadata:
+          name: kind-pool
+          namespace: metallb-system
+        spec:
+          addresses:
+          - ${PREFIX}.200-${PREFIX}.250
+        ---
+        apiVersion: metallb.io/v1beta1
+        kind: L2Advertisement
+        metadata:
+          name: kind-l2
+          namespace: metallb-system
+        spec:
+          ipAddressPools:
+          - kind-pool
+        EOF
+
+  setup:minio:
     desc: Install MinIO operator and tenant
     cmds:
       - helm repo add minio-operator https://operator.min.io/
@@ -11,7 +47,7 @@ tasks:
       - echo ">> Waiting for MinIO to be ready..."
       - |
         until kubectl get pod -l v1.min.io/tenant=minio-tenant -n minio-tenant --no-headers 2>/dev/null | grep -q .; do
-          echo ">> Waiting for MinIO pods to appear..."
+          echo ">> Waiting for MinIO pods..."
           sleep 5
         done
       - kubectl wait --for=condition=ready pod -l v1.min.io/tenant=minio-tenant -n minio-tenant --timeout=60s
@@ -53,12 +89,15 @@ tasks:
       - kubectl apply -f network-operation/network-genesis.yaml
       - echo ">> Waiting for genesis to complete..."
       - kubectl wait --for=jsonpath='{.status.phase}'=Succeeded networkoperation/network-genesis -n solo-orbit --timeout=300s
+      - echo ">> Genesis completed successfully"
 
   deploy:
-    desc: Deploy full 4-node network (orbit + nodes + genesis)
+    desc: Deploy full 4-node network (orbit + nodes + genesis), wait for pods ready
     cmds:
       - task: deploy:genesis
-      - echo ">> All 4 nodes deployed and genesis completed"
+      - echo ">> Waiting for all consensus node pods to be ready..."
+      - kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=consensus-node -n solo-orbit --timeout=300s
+      - echo ">> All 4 nodes deployed, genesis completed, and pods ready"
 
   status:
     desc: Show status of all consensus capsules, pods, and services
@@ -176,9 +215,11 @@ tasks:
       - task: destroy:orbit
 
   cleanup:
-    desc: Uninstall MinIO operator and tenant
+    desc: Uninstall MetalLB, MinIO operator and tenant
     cmds:
       - helm uninstall minio-operator -n minio-operator || true
       - helm uninstall minio-tenant -n minio-tenant || true
       - kubectl delete namespace minio-tenant --ignore-not-found
       - kubectl delete namespace minio-operator --ignore-not-found
+      - helm uninstall metallb -n metallb-system || true
+      - kubectl delete namespace metallb-system --ignore-not-found

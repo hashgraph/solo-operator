@@ -8,6 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 )
 
 func TestStandardLabels(t *testing.T) {
@@ -191,8 +192,8 @@ func TestHeadlessServiceSubReconciler_buildService(t *testing.T) {
 
 	svc := sr.buildService(orbit)
 
-	if svc.Name != ConsensusServiceName {
-		t.Errorf("Expected Service name %s, got %s", ConsensusServiceName, svc.Name)
+	if svc.Name != common.ConsensusSubdomain {
+		t.Errorf("Expected Service name %s, got %s", common.ConsensusSubdomain, svc.Name)
 	}
 
 	if svc.Namespace != "test-orbit" {
