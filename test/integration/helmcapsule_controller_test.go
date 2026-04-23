@@ -210,6 +210,15 @@ var _ = Describe("HelmCapsule Controller", func() {
 					Expect(err.Error()).To(ContainSubstring("already exists"))
 				}
 			}
+
+			addressbookSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "addressbook-bin", Namespace: hcNS},
+				Data:       map[string][]byte{"addressbook.bin": []byte("fake-addressbook")},
+			}
+			err = k8sClient.Create(ctx, addressbookSecret)
+			if err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
 		})
 
 		It("Should reconcile successfully with auto-injected mirror values", func() {

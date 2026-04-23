@@ -33,11 +33,11 @@ spec:
           #   enabled: true
           #   endpoint: "http://prometheus.observability:9090/api/v1/write"
           #   scrapeInterval: "15s"
-  consensus: # FIXME use valid consensus block
+  consensus:
     applicationConfiguration:
       ledger.id: "0x00"
     genesis:
-      addressBook: # FIXME use valid address book
+      addressBook:
         ledgerId: "298"
         externalAddresses: []
     networkSettings:

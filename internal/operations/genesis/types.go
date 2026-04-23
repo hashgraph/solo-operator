@@ -4,7 +4,6 @@ package genesis
 
 import (
 	"context"
-	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -25,13 +24,19 @@ const (
 	StepConditionReasonClusterConfig = "ClusterConfig"
 	// StepConditionReasonPublicKeyConfig is the condition reason for public key config
 	StepConditionReasonPublicKeyConfig = "PublicKeyConfig"
+	// StepConditionReasonGenesisNetwork is the condition reason for genesis-network.json creation
+	StepConditionReasonGenesisNetwork = "GenesisNetworkConfig"
 
-	// ClusterConfigName is the name of the cluster config ConfigMap
+	// ClusterConfigName is the name of the cluster config ConfigMap.
+	//
+	// Deprecated: use the genesis-config ConfigMap instead.
 	ClusterConfigName = "cluster-config"
 	// PublicKeysName is the name of the public keys ConfigMap
 	PublicKeysName = "public-keys"
 
-	// ConfigKeyConfigTxt is the key for config.txt in the ConfigMap
+	// ConfigKeyConfigTxt is the key for config.txt in the ConfigMap.
+	//
+	// Deprecated: Hedera consensus nodes ≥ v0.56 use genesis-network.json instead.
 	ConfigKeyConfigTxt = "config.txt"
 	// ConfigKeyPodIPs is the key for pod IPs in the ConfigMap
 	ConfigKeyPodIPs = "pod-ips"
@@ -102,11 +107,7 @@ func NewTask(c client.Client) *Task {
 		steps: []processor.ProcessorStep[*operatorv1alpha1.NetworkOperation, *GenesisStatus]{
 			NewCheckSecretsStep(c),
 			NewCreatePublicKeysStep(c),
-			processor.NewRetryStepWithConfig[*operatorv1alpha1.NetworkOperation, *GenesisStatus](
-				NewCreateClusterConfigStep(c),
-				2*time.Second,
-				150, // ~5 minutes of retries
-			),
+			NewCreateGenesisNetworkStep(c),
 		},
 		statusGetter: func(op *operatorv1alpha1.NetworkOperation) *GenesisStatus {
 			return &GenesisStatus{

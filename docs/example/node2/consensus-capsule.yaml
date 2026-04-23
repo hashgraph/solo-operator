@@ -10,25 +10,27 @@ spec:
   orbit: solo-orbit
   nodeId: 2
   accountId: "0.0.5"
-  weight: 1
+  weight: 500
+  serviceType: LoadBalancer
   podProperties:
     containers:
       consensusNode:
         name: "consensus-node"
         softwareVersion:
-          repository: "us-central1-docker.pkg.dev/hashsphere-development/hiero-consensus-node"
+          repository: "gcr.io/hedera-registry"
           imageName: "consensus-node"
-          imageTag: "v0.65.1"
+          imageTag: "0.72.0"
           imagePullPolicy: IfNotPresent
         resources:
           limits:
-            cpu: "2"
-            memory: 4Gi
-          requests:
-            cpu: "500m"
+            cpu: "1"
             memory: 2Gi
-      
-      # Block streams uploader (cheetah 0.6.0 with blob storage)
+          requests:
+            cpu: "250m"
+            memory: 1Gi
+        javaOpts: "-XX:+UseG1GC -XX:MaxDirectMemorySize=1500m --add-opens java.base/jdk.internal.misc=ALL-UNNAMED --add-opens java.base/java.nio=ALL-UNNAMED -Dio.netty.tryReflectionSetAccessible=true"
+
+      # Block streams uploader (cheetah with blob/MinIO storage)
       blocksUploader:
         enabled: true
         name: "blockstream-uploader"
@@ -40,7 +42,6 @@ spec:
         logLevel: Debug
         maxProcessors: 10
         stopOnError: false
-        # bucketPrefix: "mynetwork/testnet"  # optional — prepended to stream object paths
         resources:
           limits:
             cpu: 400m
@@ -100,8 +101,8 @@ spec:
           enabled: true
           url: "s3://solo-streams?region=us-east-1&endpoint=http://minio.minio-tenant.svc.cluster.local&use_path_style=true&disable_https=true"
         envFromSecret: "uploader-mirror-secrets"  # provides AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY for MinIO
-      
-      # Backup uploader (rclone-based, not cheetah)
+
+      # Backup uploader (rclone-based)
       backupUploader:
         enabled: true
         name: "backup-uploader"
@@ -125,59 +126,60 @@ spec:
           gcs:
             enabled: false
           envFromSecret: "backup-uploader-secrets"
-      
-      # Grafana Alloy telemetry sidecar — defaults inherited from Orbit spec.telemetry.alloy.
+
+      # Alloy enabled — scrapes Prometheus metrics at :9999.
+      # Loki log shipping is disabled by default; enable via exporters.loki in common/orbit.yaml.
       alloy:
         enabled: true
         config:
           labels:
             zone: "us-west-2a"
-  
+
   persistentVolumeClaims:
     logs:
       accessModes:
         - ReadWriteOnce
       resources:
         requests:
-          storage: 5Gi
+          storage: 1Gi
     stats:
       accessModes:
         - ReadWriteOnce
       resources:
         requests:
-          storage: 5Gi
-    states:
+          storage: 1Gi
+    state:
       accessModes:
         - ReadWriteOnce
       resources:
         requests:
-          storage: 10Gi
+          storage: 2Gi
     upgrade:
       accessModes:
         - ReadWriteOnce
       resources:
         requests:
-          storage: 5Gi
+          storage: 1Gi
     streams:
       block:
         accessModes:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 5Gi
+            storage: 1Gi
       record:
         accessModes:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 5Gi
+            storage: 1Gi
       events:
         accessModes:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 5Gi
-  
+            storage: 1Gi
+
   secrets:
     secretResources:
       grpcTlsPrivateKey:
@@ -192,7 +194,7 @@ spec:
       signingPublicCertificate:
         keyName: "s-public-node2.pem"
         secretName: "node2-gossip-keys"
-  
+
   log4j2.xml: |
     <?xml version="1.0" encoding="UTF-8"?>
     <Configuration status="WARN" monitorInterval="600">
@@ -202,7 +204,7 @@ spec:
         </Console>
       </Appenders>
       <Loggers>
-        <Root level="INFO">
+        <Root level="WARN">
           <AppenderRef ref="Console"/>
         </Root>
       </Loggers>

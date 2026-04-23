@@ -250,6 +250,10 @@ func TestMirrorValues_endpointsInjected(t *testing.T) {
 	orbit := makeOrbit("test-orbit", "03")
 	cap1 := makeCapsule("node1", "test-ns", "test-orbit", "node1.test-ns.svc", 50211)
 	cap2 := makeCapsule("node2", "test-ns", "test-orbit", "node2.test-ns.svc", 50211)
+	addressbookSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "addressbook-bin", Namespace: "test-ns"},
+		Data:       map[string][]byte{"addressbook.bin": []byte("fake-addressbook")},
+	}
 
 	comp := operatorv1alpha1.HelmComponentMirror
 	spec := &operatorv1alpha1.HelmCapsuleSpec{
@@ -259,7 +263,7 @@ func TestMirrorValues_endpointsInjected(t *testing.T) {
 	}
 
 	c := fake.NewClientBuilder().WithScheme(scheme).
-		WithObjects(orbit, cap1, cap2).
+		WithObjects(orbit, cap1, cap2, addressbookSecret).
 		WithStatusSubresource(cap1, cap2).
 		Build()
 
@@ -388,6 +392,10 @@ func TestMergeValues_componentValuesOverriddenByInline(t *testing.T) {
 	scheme := newTestScheme()
 	orbit := makeOrbit("test-orbit", "03")
 	cap1 := makeCapsule("node1", "test-ns", "test-orbit", "node1.svc", 50211)
+	addressbookSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "addressbook-bin", Namespace: "test-ns"},
+		Data:       map[string][]byte{"addressbook.bin": []byte("fake-addressbook")},
+	}
 
 	// Inline Values override the auto-injected network value.
 	inlineRaw, _ := json.Marshal(map[string]interface{}{
@@ -409,7 +417,7 @@ func TestMergeValues_componentValuesOverriddenByInline(t *testing.T) {
 	}
 
 	c := fake.NewClientBuilder().WithScheme(scheme).
-		WithObjects(orbit, cap1).
+		WithObjects(orbit, cap1, addressbookSecret).
 		WithStatusSubresource(cap1).
 		Build()
 

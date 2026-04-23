@@ -113,16 +113,22 @@ func (r *OrbitReconciler) handleDeletion(ctx context.Context, orbitObj *operator
 	if controllerutil.ContainsFinalizer(orbitObj, OrbitFinalizer) {
 		logger.Info("Deleting Orbit", "name", orbitObj.Name)
 
-		// Delete the namespace (this cascades to all namespaced resources)
 		ns := &corev1.Namespace{}
-		if err := r.Get(ctx, client.ObjectKey{Name: orbitObj.Name}, ns); err == nil {
-			logger.Info("Deleting orbit namespace", "name", orbitObj.Name)
-			if err := r.Delete(ctx, ns); err != nil && !apierrors.IsNotFound(err) {
-				return ctrl.Result{}, err
+		err := r.Get(ctx, client.ObjectKey{Name: orbitObj.Name}, ns)
+		if err != nil && !apierrors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
+		if err == nil {
+			if ns.DeletionTimestamp.IsZero() {
+				logger.Info("Deleting orbit namespace", "name", orbitObj.Name)
+				if err := r.Delete(ctx, ns); err != nil && !apierrors.IsNotFound(err) {
+					return ctrl.Result{}, err
+				}
 			}
+			// Namespace still exists (Terminating) — wait for all resources to drain.
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 
-		// Remove finalizer
 		controllerutil.RemoveFinalizer(orbitObj, OrbitFinalizer)
 		if err := r.Update(ctx, orbitObj); err != nil {
 			return ctrl.Result{}, err

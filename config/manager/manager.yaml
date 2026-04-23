@@ -33,6 +33,9 @@ spec:
           capabilities:
             drop:
             - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
         livenessProbe:
           httpGet:
             path: /healthz
@@ -52,5 +55,8 @@ spec:
           requests:
             cpu: 100m
             memory: 64Mi
+      volumes:
+      - name: tmp
+        emptyDir: {}
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10

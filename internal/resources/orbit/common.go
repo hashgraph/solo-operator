@@ -7,24 +7,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
-// Label keys
+// Label keys — alias common.
 const (
-	// LabelManagedBy indicates the resource is managed by solo-operator
-	LabelManagedBy = "app.kubernetes.io/managed-by"
-	// LabelPartOf indicates the component the resource is part of
-	LabelPartOf = "app.kubernetes.io/part-of"
-	// LabelOrbit indicates the orbit name
-	LabelOrbit = "operator.solo.hedera.com/orbit"
+	LabelManagedBy = common.LabelManagedBy
+	LabelPartOf    = common.LabelPartOf
+	LabelOrbit     = common.LabelOrbit
 )
 
-// Label values
+// Label values — alias common; orbit-specific values defined here.
 const (
-	// ManagedByValue is the value for the managed-by label
-	ManagedByValue = "solo-operator"
-	// PartOfConsensusNode is the value for consensus node part-of label
+	ManagedByValue      = common.ManagedByValue
 	PartOfConsensusNode = "consensus-node"
 )
 
@@ -34,15 +30,13 @@ const (
 	ConsensusConfigMapName = "consensus-config"
 	// ConsensusCapsuleRoleName is the name of the consensus capsule role
 	ConsensusCapsuleRoleName = "consensus-capsule-role"
-	// ConsensusServiceName is the name of the consensus headless service
-	ConsensusServiceName = "consensus"
 )
 
-// Port numbers
+// Port numbers — alias common.
 const (
-	GossipPort = 50111
-	GrpcPort   = 50211
-	GrpcsPort  = 50212
+	GossipPort = common.GossipPort
+	GrpcPort   = common.GrpcPort
+	GrpcsPort  = common.GrpcsPort
 )
 
 // StandardLabels returns the standard labels for orbit-managed resources

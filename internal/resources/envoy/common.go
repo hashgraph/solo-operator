@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -53,10 +54,10 @@ type envoyConfigData struct {
 }
 
 const (
-	LabelManagedBy   = "app.kubernetes.io/managed-by"
-	LabelPartOf      = "app.kubernetes.io/part-of"
+	LabelManagedBy   = common.LabelManagedBy
+	LabelPartOf      = common.LabelPartOf
 	LabelApp         = "app"
-	ManagedByValue   = "solo-operator"
+	ManagedByValue   = common.ManagedByValue
 	PartOfEnvoyProxy = "envoy-proxy"
 	ConfigMapSuffix  = "-config"
 )

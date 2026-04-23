@@ -56,9 +56,26 @@ func NewHelmCapsuleReconciler(c client.Client, scheme *runtime.Scheme, helmClien
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=helmcapsules/finalizers,verbs=update
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=orbits,verbs=get;list;watch
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=consensuscapsules,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // Secrets: read for ValuesFrom/CredentialsRef; full CRUD for Helm release storage (driver=secrets).
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// Core resources created/managed by Helm charts (services, serviceaccounts, pvcs, pods).
+// +kubebuilder:rbac:groups="",resources=services;serviceaccounts;persistentvolumeclaims;endpoints,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
+// Workload resources created by Helm charts.
+// +kubebuilder:rbac:groups=apps,resources=deployments;statefulsets;replicasets;daemonsets,verbs=get;list;watch;create;update;patch;delete
+// Batch resources created by Helm charts.
+// +kubebuilder:rbac:groups=batch,resources=jobs;cronjobs,verbs=get;list;watch;create;update;patch;delete
+// RBAC resources that charts may create (e.g. mirror importer role).
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
+// Network resources created by Helm charts.
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies;ingresses,verbs=get;list;watch;create;update;patch;delete
+// PodDisruptionBudgets (policy API group) created by charts such as mirror/redis.
+// +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
+// HorizontalPodAutoscalers created by charts.
+// +kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=get;list;watch;create;update;patch;delete
+// Flux HelmRelease CRD: mirror-monitor Role grants GET on helmreleases; operator must hold this to avoid RBAC escalation.
+// +kubebuilder:rbac:groups=helm.toolkit.fluxcd.io,resources=helmreleases,verbs=get;list;watch
 
 func (r *HelmCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
