@@ -4,6 +4,7 @@ package common
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
@@ -30,6 +31,22 @@ func AccountNum(accountId string) string {
 		return parts[2]
 	}
 	return accountId
+}
+
+// ParseAccountIDParts splits a "shard.realm.account" string into its int64 components.
+// Falls back to shard=0, realm=0, account=3+nodeId when the format is not recognised.
+func ParseAccountIDParts(accountId string, nodeId int64) (shard, realm, account int64) {
+	parts := strings.Split(accountId, ".")
+	if len(parts) == 3 {
+		if s, err := strconv.ParseInt(parts[0], 10, 64); err == nil {
+			if r, err := strconv.ParseInt(parts[1], 10, 64); err == nil {
+				if a, err := strconv.ParseInt(parts[2], 10, 64); err == nil {
+					return s, r, a
+				}
+			}
+		}
+	}
+	return 0, 0, 3 + nodeId
 }
 
 // InternalHostname returns the pod FQDN for a capsule, or InternalAddress if set.

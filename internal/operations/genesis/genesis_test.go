@@ -91,12 +91,12 @@ func TestNewTask(t *testing.T) {
 	}
 
 	steps := task.Steps()
-	if len(steps) != 3 {
-		t.Errorf("Expected 3 steps, got %d", len(steps))
+	if len(steps) != 4 {
+		t.Errorf("Expected 4 steps, got %d", len(steps))
 	}
 
 	// Verify step names
-	expectedNames := []string{"CheckConsensusNodeSecrets", "CreatePublicKeysConfig", "CreateGenesisNetwork"}
+	expectedNames := []string{"CheckConsensusNodeSecrets", "CreatePublicKeysConfig", "CreateGenesisNetwork", "CreateAddressBook"}
 	for i, step := range steps {
 		if step.Name() != expectedNames[i] {
 			t.Errorf("Expected step %d to be %q, got %q", i, expectedNames[i], step.Name())

@@ -7,6 +7,8 @@
 #   hedera.mirror.importer.consensusNodeEndpoints  — list of "host:port" from
 #       ConsensusCapsule.status.addressBookEntry.{internalHostname,internalPort}
 #   hedera.mirror.importer.network                 — set to the Orbit name
+#   hedera.mirror.importer.addressBook             — base64-encoded binary NodeAddressBook proto,
+#       injected from the addressbook-bin ConfigMap created by genesis (when present).
 #
 # The Values section below overrides or extends the auto-injected values.
 # All three layers are merged (auto-inject → ValuesFrom → Values).
