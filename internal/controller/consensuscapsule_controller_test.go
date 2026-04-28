@@ -269,6 +269,39 @@ func TestUpdateStatus_PodRunning_PatchesCheckpoint(t *testing.T) {
 	}
 }
 
+func TestUpdateStatus_PodRunning_GenChange_DoesNotOverwriteCheckpoint(t *testing.T) {
+	ctx := context.Background()
+	scheme := newControllerTestScheme()
+	capsule := newCapsuleForControllerTest()
+	// Status already Running from a previous reconcile.
+	capsule.Status.Phase = operatorv1alpha1.PhaseRunning
+	capsule.Status.ObservedGeneration = 0 // gen changed → no early-return
+	pod := newReadyPodWithPhase(capsule, corev1.PodRunning)
+	// Checkpoint was manually reset to false (user wants re-genesis).
+	cm := newCheckpointCM(capsule, consensus.CheckpointValueFalse)
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(capsule, pod, cm).
+		WithStatusSubresource(capsule).
+		Build()
+	if err := c.Get(ctx, client.ObjectKey{Name: capsule.Name, Namespace: capsule.Namespace}, capsule); err != nil {
+		t.Fatalf("get capsule: %v", err)
+	}
+
+	r := buildReconcilerForUpdateStatus(c)
+	if _, err := r.updateStatus(ctx, capsule); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := &corev1.ConfigMap{}
+	if err := c.Get(ctx, client.ObjectKey{Name: cm.Name, Namespace: cm.Namespace}, got); err != nil {
+		t.Fatalf("get checkpoint: %v", err)
+	}
+	if got.Data[consensus.CheckpointKeyGenesisInitialized] != consensus.CheckpointValueFalse {
+		t.Errorf("checkpoint must not be overwritten on gen-change reconcile: got %q", got.Data[consensus.CheckpointKeyGenesisInitialized])
+	}
+}
+
 func TestUpdateStatus_NoChangeWhenPhaseUnchanged(t *testing.T) {
 	ctx := context.Background()
 	scheme := newControllerTestScheme()

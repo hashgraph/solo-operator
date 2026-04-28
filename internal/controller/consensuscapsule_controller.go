@@ -182,8 +182,9 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 		return ctrl.Result{}, nil
 	}
 
-	// Only fires on transitions (after the early-return above), not steady-state.
-	if phase == operatorv1alpha1.PhaseRunning {
+	// Only on non-Running→Running transitions; a gen-change reconcile while already Running
+	// must not overwrite a manually-reset checkpoint before the pod restarts.
+	if phase == operatorv1alpha1.PhaseRunning && capsule.Status.Phase != operatorv1alpha1.PhaseRunning {
 		if err := r.markGenesisInitialized(ctx, capsule); err != nil {
 			logger.Error(err, "failed to update checkpoint")
 		}
