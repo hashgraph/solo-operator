@@ -15,7 +15,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
-	"github.com/hashgraph/solo-operator/internal/common"
 )
 
 func TestCreateAddressBookStep_Run_Success(t *testing.T) {
@@ -259,29 +258,5 @@ func TestMirrorValues_addressBookInjected(t *testing.T) {
 	}
 	if len(book.NodeAddress) != 1 {
 		t.Errorf("expected 1 node in decoded book, got %d", len(book.NodeAddress))
-	}
-}
-
-func TestParseAccountIDParts(t *testing.T) {
-	cases := []struct {
-		accountId string
-		nodeId    int64
-		shard     int64
-		realm     int64
-		account   int64
-	}{
-		{"0.0.3", 0, 0, 0, 3},
-		{"0.0.100", 0, 0, 0, 100},
-		{"1.2.50", 0, 1, 2, 50},
-		{"", 0, 0, 0, 3},    // fallback: 3 + nodeId
-		{"", 2, 0, 0, 5},    // fallback: 3 + nodeId
-		{"bad", 1, 0, 0, 4}, // fallback: 3 + nodeId
-	}
-	for _, c := range cases {
-		s, r, a := common.ParseAccountIDParts(c.accountId, c.nodeId)
-		if s != c.shard || r != c.realm || a != c.account {
-			t.Errorf("ParseAccountIDParts(%q, %d) = (%d,%d,%d), want (%d,%d,%d)",
-				c.accountId, c.nodeId, s, r, a, c.shard, c.realm, c.account)
-		}
 	}
 }

@@ -31,9 +31,6 @@ task setup
 # Deploy full 4-node network (orbit + all nodes + genesis)
 task deploy
 
-# Verify the binary address book was created by genesis
-task verify:addressbook
-
 # Check status
 task status
 

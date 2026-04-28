@@ -112,25 +112,31 @@ func injectComponentValues(ctx context.Context, c client.Client, namespace strin
 }
 
 func mirrorValues(ctx context.Context, c client.Client, namespace string, capsules []operatorv1alpha1.ConsensusCapsule, orbit *operatorv1alpha1.Orbit) (map[string]interface{}, error) {
-	importerVals := map[string]interface{}{
-		"consensusNodeEndpoints": consensusEndpoints(capsules),
-		"network":                orbit.Name,
+	logger := log.FromContext(ctx)
+	vals := map[string]interface{}{
+		"hedera": map[string]interface{}{
+			"mirror": map[string]interface{}{
+				"importer": map[string]interface{}{
+					"consensusNodeEndpoints": consensusEndpoints(capsules),
+					"network":                orbit.Name,
+				},
+			},
+		},
 	}
 
+	// addressBook is a top-level importer sub-chart value, not an application config property.
 	cm := &corev1.ConfigMap{}
 	if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: "addressbook-bin"}, cm); err == nil {
 		if bin := cm.BinaryData["addressbook.bin"]; len(bin) > 0 {
-			importerVals["addressBook"] = base64.StdEncoding.EncodeToString(bin)
+			vals["importer"] = map[string]interface{}{
+				"addressBook": base64.StdEncoding.EncodeToString(bin),
+			}
 		}
+	} else if !apierrors.IsNotFound(err) {
+		logger.Error(err, "failed to read addressbook-bin ConfigMap")
 	}
 
-	return map[string]interface{}{
-		"hedera": map[string]interface{}{
-			"mirror": map[string]interface{}{
-				"importer": importerVals,
-			},
-		},
-	}, nil
+	return vals, nil
 }
 
 func relayValues(ctx context.Context, capsules []operatorv1alpha1.ConsensusCapsule, namespace, ledgerID string) (map[string]interface{}, error) {

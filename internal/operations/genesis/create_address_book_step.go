@@ -21,16 +21,11 @@ import (
 )
 
 const (
-	// AddressBookBinConfigMapName is the ConfigMap holding the binary address book for the mirror importer.
-	AddressBookBinConfigMapName = "addressbook-bin"
-	// AddressBookBinKey is the key within the ConfigMap.
-	AddressBookBinKey = "addressbook.bin"
-
+	AddressBookBinConfigMapName    = "addressbook-bin"
+	AddressBookBinKey              = "addressbook.bin"
 	StepConditionReasonAddressBook = "AddressBookBin"
 )
 
-// CreateAddressBookStep builds a binary NodeAddressBook protobuf from ConsensusCapsule secrets
-// and stores it in the addressbook-bin ConfigMap for the mirror importer bootstrap.
 type CreateAddressBookStep struct {
 	client client.Client
 }
@@ -210,6 +205,3 @@ func (s *CreateAddressBookStep) ShouldSkip(resource *operatorv1alpha1.NetworkOpe
 	}
 	return s.IsSuccessful(resource, status)
 }
-
-// ── helpers ──────────────────────────────────────────────────────────────────
-// (cert and account helpers live in internal/common)

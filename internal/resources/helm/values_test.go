@@ -283,6 +283,12 @@ func TestMirrorValues_endpointsInjected(t *testing.T) {
 	if importer["network"] != "test-orbit" {
 		t.Errorf("expected network=test-orbit, got %v", importer["network"])
 	}
+
+	// addressBook is injected as a top-level importer sub-chart value.
+	importerSubchart, _ := result["importer"].(map[string]interface{})
+	if importerSubchart["addressBook"] == nil {
+		t.Error("expected addressBook to be set at importer.addressBook")
+	}
 }
 
 func TestMirrorValues_noAddressBook(t *testing.T) {
@@ -307,12 +313,11 @@ func TestMirrorValues_noAddressBook(t *testing.T) {
 		t.Fatalf("expected no error when addressbook-bin absent, got: %v", err)
 	}
 
-	hedera, _ := result["hedera"].(map[string]interface{})
-	mirror, _ := hedera["mirror"].(map[string]interface{})
-	importer, _ := mirror["importer"].(map[string]interface{})
-
-	if importer["addressBook"] != nil {
-		t.Error("expected addressBook to be absent when ConfigMap missing")
+	if result["importer"] != nil {
+		importerSubchart, _ := result["importer"].(map[string]interface{})
+		if importerSubchart["addressBook"] != nil {
+			t.Error("expected addressBook to be absent when ConfigMap missing")
+		}
 	}
 }
 
