@@ -179,6 +179,96 @@ func TestUpdateStatus_PodFailed_PhaseFailed(t *testing.T) {
 	}
 }
 
+// ── markGenesisInitialized ────────────────────────────────────────────────────
+
+func newCheckpointCM(capsule *operatorv1alpha1.ConsensusCapsule, value string) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      consensus.CheckpointConfigMapName(capsule),
+			Namespace: capsule.Namespace,
+		},
+		Data: map[string]string{
+			consensus.CheckpointKeyGenesisInitialized: value,
+		},
+	}
+}
+
+func TestMarkGenesisInitialized_PatchesCheckpoint(t *testing.T) {
+	ctx := context.Background()
+	scheme := newControllerTestScheme()
+	capsule := newCapsuleForControllerTest()
+	cm := newCheckpointCM(capsule, consensus.CheckpointValueFalse)
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(capsule, cm).Build()
+
+	r := buildReconcilerForUpdateStatus(c)
+	if err := r.markGenesisInitialized(ctx, capsule); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := &corev1.ConfigMap{}
+	if err := c.Get(ctx, client.ObjectKey{Name: cm.Name, Namespace: cm.Namespace}, got); err != nil {
+		t.Fatalf("get checkpoint: %v", err)
+	}
+	if got.Data[consensus.CheckpointKeyGenesisInitialized] != consensus.CheckpointValueTrue {
+		t.Errorf("expected genesis-initialized=true after patch, got %q", got.Data[consensus.CheckpointKeyGenesisInitialized])
+	}
+}
+
+func TestMarkGenesisInitialized_Idempotent(t *testing.T) {
+	ctx := context.Background()
+	scheme := newControllerTestScheme()
+	capsule := newCapsuleForControllerTest()
+	cm := newCheckpointCM(capsule, consensus.CheckpointValueTrue)
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(capsule, cm).Build()
+
+	r := buildReconcilerForUpdateStatus(c)
+	if err := r.markGenesisInitialized(ctx, capsule); err != nil {
+		t.Fatalf("unexpected error on already-true checkpoint: %v", err)
+	}
+}
+
+func TestMarkGenesisInitialized_CheckpointMissing(t *testing.T) {
+	ctx := context.Background()
+	scheme := newControllerTestScheme()
+	capsule := newCapsuleForControllerTest()
+	// No checkpoint ConfigMap in the store — should be a no-op, not an error.
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(capsule).Build()
+
+	r := buildReconcilerForUpdateStatus(c)
+	if err := r.markGenesisInitialized(ctx, capsule); err != nil {
+		t.Fatalf("expected nil when checkpoint is missing, got: %v", err)
+	}
+}
+
+func TestUpdateStatus_PodRunning_PatchesCheckpoint(t *testing.T) {
+	ctx := context.Background()
+	scheme := newControllerTestScheme()
+	capsule := newCapsuleForControllerTest()
+	pod := newReadyPodWithPhase(capsule, corev1.PodRunning)
+	cm := newCheckpointCM(capsule, consensus.CheckpointValueFalse)
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(capsule, pod, cm).
+		WithStatusSubresource(capsule).
+		Build()
+	if err := c.Get(ctx, client.ObjectKey{Name: capsule.Name, Namespace: capsule.Namespace}, capsule); err != nil {
+		t.Fatalf("get capsule: %v", err)
+	}
+
+	r := buildReconcilerForUpdateStatus(c)
+	if _, err := r.updateStatus(ctx, capsule); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := &corev1.ConfigMap{}
+	if err := c.Get(ctx, client.ObjectKey{Name: cm.Name, Namespace: cm.Namespace}, got); err != nil {
+		t.Fatalf("get checkpoint: %v", err)
+	}
+	if got.Data[consensus.CheckpointKeyGenesisInitialized] != consensus.CheckpointValueTrue {
+		t.Errorf("expected checkpoint patched to true when pod running, got %q", got.Data[consensus.CheckpointKeyGenesisInitialized])
+	}
+}
+
 func TestUpdateStatus_NoChangeWhenPhaseUnchanged(t *testing.T) {
 	ctx := context.Background()
 	scheme := newControllerTestScheme()
