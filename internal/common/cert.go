@@ -3,7 +3,9 @@
 package common
 
 import (
+	"crypto/sha512"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/pem"
 	"fmt"
 )
@@ -19,4 +21,27 @@ func PemToDER(pemBytes []byte) ([]byte, error) {
 		return nil, fmt.Errorf("invalid X.509 certificate: %w", err)
 	}
 	return block.Bytes, nil
+}
+
+// ExtractPubKeyHex parses a PEM certificate and returns the hex-encoded SubjectPublicKeyInfo bytes.
+func ExtractPubKeyHex(pemBytes []byte) (string, error) {
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		return "", fmt.Errorf("no PEM block found")
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return "", fmt.Errorf("parse cert: %w", err)
+	}
+	return hex.EncodeToString(cert.RawSubjectPublicKeyInfo), nil
+}
+
+// CertHashHex returns the hex-encoded SHA-384 hash of the DER bytes of a PEM certificate.
+func CertHashHex(pemBytes []byte) (string, error) {
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		return "", fmt.Errorf("no PEM block found")
+	}
+	sum := sha512.Sum384(block.Bytes)
+	return hex.EncodeToString(sum[:]), nil
 }
