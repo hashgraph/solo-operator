@@ -30,8 +30,6 @@ func NewCheckpointSubReconciler(c client.Client, scheme *runtime.Scheme) *Checkp
 	}
 }
 
-// Reconcile creates the checkpoint ConfigMap when it does not yet exist.
-// An existing checkpoint is left untouched to preserve its genesis-initialized state.
 func (r *CheckpointSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 

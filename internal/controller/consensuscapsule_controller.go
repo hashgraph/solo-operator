@@ -182,8 +182,7 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 		return ctrl.Result{}, nil
 	}
 
-	// Status is changing — mark genesis initialized on the Running transition so
-	// the init container skips the copy on all subsequent pod restarts.
+	// Only fires on transitions (after the early-return above), not steady-state.
 	if phase == operatorv1alpha1.PhaseRunning {
 		if err := r.markGenesisInitialized(ctx, capsule); err != nil {
 			logger.Error(err, "failed to update checkpoint")
@@ -216,8 +215,7 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 	return ctrl.Result{}, nil
 }
 
-// markGenesisInitialized patches the checkpoint ConfigMap to record that genesis
-// has been applied. Idempotent: returns nil when already "true" or not yet created.
+// markGenesisInitialized is a no-op if the checkpoint is missing or already true.
 func (r *ConsensusCapsuleReconciler) markGenesisInitialized(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) error {
 	cm := &corev1.ConfigMap{}
 	key := client.ObjectKey{Name: consensus.CheckpointConfigMapName(capsule), Namespace: capsule.Namespace}

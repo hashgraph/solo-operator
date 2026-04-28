@@ -59,16 +59,10 @@ const (
 	GenesisNetworkFileName = "genesis-network.json"
 )
 
-// Checkpoint ConfigMap keys and values — stored in [capsule-name]-checkpoint.
+// Checkpoint ConfigMap constants — [capsule-name]-checkpoint.
 const (
-	// CheckpointKeyGenesisInitialized is the key that records whether the genesis
-	// file has been applied. The genesis-init container reads it via an env var
-	// and exits immediately when the value is CheckpointValueTrue.
 	CheckpointKeyGenesisInitialized = "genesis-initialized"
-
-	// CheckpointValueTrue / CheckpointValueFalse are the canonical string values
-	// for boolean checkpoint keys. Using constants ensures the shell-script
-	// comparison ("true") and the Go comparisons stay in sync.
+	// Keep these in sync with the shell-script comparison in buildGenesisInitContainer.
 	CheckpointValueTrue  = "true"
 	CheckpointValueFalse = "false"
 )

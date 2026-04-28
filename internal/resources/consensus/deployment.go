@@ -167,11 +167,8 @@ func (r *StatefulSetSubReconciler) buildGenesisInitContainer(capsule *operatorv1
 		genesisFile  = "/tmp/genesis-config/" + GenesisNetworkFileName
 		destDir      = HapiBase + "/data/config/"
 	)
-	// Checkpoint env var is checked first so that a pod restart after genesis
-	// completes exits immediately without touching the disk sentinels. This
-	// survives image upgrades and spec changes that would otherwise retrigger
-	// the copy. The ConfigMapKeyRef is optional so a missing checkpoint (race
-	// on first creation) falls through to the disk-based sentinel checks.
+	// Three sentinels in priority order: checkpoint CM (survives pod restarts),
+	// platform state dir (written after round 1), dot-file (written after copy).
 	script := `[ "$GENESIS_INITIALIZED" = "true" ] && { echo "genesis-init: checkpoint set, skipping"; exit 0; }
 [ -d ` + stateDir + ` ] && exit 0
 [ -f ` + sentinelFile + ` ] && exit 0
