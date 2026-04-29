@@ -55,6 +55,7 @@ func (r *HeadlessServiceSubReconciler) Reconcile(ctx context.Context, orbit *ope
 		logger.V(1).Info("Updating consensus headless service", "name", desired.Name, "namespace", desired.Namespace)
 		existing.Spec.Selector = desired.Spec.Selector
 		existing.Spec.Ports = desired.Spec.Ports
+		existing.Spec.PublishNotReadyAddresses = desired.Spec.PublishNotReadyAddresses
 		existing.Labels = desired.Labels
 		if err := r.Client.Update(ctx, existing); err != nil {
 			return ctrl.Result{}, err
@@ -73,7 +74,8 @@ func (r *HeadlessServiceSubReconciler) buildService(orbit *operatorv1alpha1.Orbi
 			Labels:    StandardLabels(orbit),
 		},
 		Spec: corev1.ServiceSpec{
-			ClusterIP: corev1.ClusterIPNone, // Headless service
+			ClusterIP:                corev1.ClusterIPNone,
+			PublishNotReadyAddresses: true,
 			Selector: map[string]string{
 				LabelManagedBy: ManagedByValue,
 				LabelPartOf:    PartOfConsensusNode,
@@ -105,8 +107,10 @@ func (r *HeadlessServiceSubReconciler) needsUpdate(existing, desired *corev1.Ser
 	if !mapsEqual(existing.Spec.Selector, desired.Spec.Selector) {
 		return true
 	}
-	// Check ports equality
 	if !portsEqual(existing.Spec.Ports, desired.Spec.Ports) {
+		return true
+	}
+	if existing.Spec.PublishNotReadyAddresses != desired.Spec.PublishNotReadyAddresses {
 		return true
 	}
 	// Check labels

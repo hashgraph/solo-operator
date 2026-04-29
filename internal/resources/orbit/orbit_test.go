@@ -204,6 +204,10 @@ func TestHeadlessServiceSubReconciler_buildService(t *testing.T) {
 		t.Errorf("Expected headless service (ClusterIP=None), got %s", svc.Spec.ClusterIP)
 	}
 
+	if !svc.Spec.PublishNotReadyAddresses {
+		t.Error("Expected PublishNotReadyAddresses=true so pods are DNS-resolvable before they are Ready")
+	}
+
 	if len(svc.Spec.Ports) != 3 {
 		t.Errorf("Expected 3 ports, got %d", len(svc.Spec.Ports))
 	}
@@ -222,6 +226,22 @@ func TestHeadlessServiceSubReconciler_buildService(t *testing.T) {
 	}
 	if !portNames["grpcs"] {
 		t.Error("Expected grpcs port")
+	}
+}
+
+func TestHeadlessServiceSubReconciler_needsUpdate(t *testing.T) {
+	sr := NewHeadlessServiceSubReconciler(nil, nil)
+	orbit := &operatorv1alpha1.Orbit{ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"}}
+	desired := sr.buildService(orbit)
+
+	existing := sr.buildService(orbit)
+	if sr.needsUpdate(existing, desired) {
+		t.Error("identical services should not need update")
+	}
+
+	existing.Spec.PublishNotReadyAddresses = false
+	if !sr.needsUpdate(existing, desired) {
+		t.Error("expected needsUpdate=true when PublishNotReadyAddresses differs")
 	}
 }
 
