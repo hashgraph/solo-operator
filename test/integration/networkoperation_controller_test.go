@@ -4,16 +4,50 @@ package integration
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"fmt"
+	"math/big"
+	"time"
 
+	services "github.com/hiero-ledger/hiero-sdk-go/v2/proto/services"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
+	"google.golang.org/protobuf/proto"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
+
+func genSelfSignedCert() (pemBytes, derBytes []byte) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		panic(err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "test"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+	}
+	derBytes, err = x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		panic(err)
+	}
+	pemBytes = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
+	return
+}
+
+func randSuffix() string {
+	b := make([]byte, 4)
+	_, _ = rand.Read(b)
+	return fmt.Sprintf("%x", b)
+}
 
 var _ = Describe("NetworkOperation Controller", func() {
 	Context("When creating a NetworkOperation for genesis", func() {
@@ -351,6 +385,178 @@ var _ = Describe("NetworkOperation Controller", func() {
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, netOp)).Should(Succeed())
+		})
+	})
+})
+
+var _ = Describe("NetworkOperation Genesis — AddressBook", func() {
+	const (
+		ns        = "netop-addressbook-test"
+		orbitName = "addressbook-orbit"
+	)
+
+	ctx := context.Background()
+
+	BeforeEach(func() {
+		ns_ := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}}
+		err := k8sClient.Create(ctx, ns_)
+		if err != nil {
+			Expect(err.Error()).To(ContainSubstring("already exists"))
+		}
+
+		orbit := &operatorv1alpha1.Orbit{
+			ObjectMeta: metav1.ObjectMeta{Name: orbitName},
+			Spec: operatorv1alpha1.OrbitSpec{
+				Consensus: operatorv1alpha1.OrbitConsensus{
+					NetworkSettings:          map[string]string{},
+					ApplicationConfiguration: map[string]string{},
+					PermissionConfiguration:  map[string]string{},
+				},
+			},
+		}
+		err = k8sClient.Create(ctx, orbit)
+		if err != nil {
+			Expect(err.Error()).To(ContainSubstring("already exists"))
+		}
+	})
+
+	Context("When a genesis NetworkOperation completes with valid capsule secrets", func() {
+		It("Should create the addressbook-bin ConfigMap with valid proto content", func() {
+			suffix := randSuffix()
+			netOpName := "genesis-ab-" + suffix
+			sigSecretName := "ab-sig-" + suffix
+			tlsSecretName := "ab-tls-" + suffix
+			capsuleName := "ab-node-" + suffix
+
+			sigPEM, _ := genSelfSignedCert()
+			grpcPEM, _ := genSelfSignedCert()
+
+			By("Creating capsule secrets")
+			Expect(k8sClient.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: sigSecretName, Namespace: ns},
+				Data: map[string][]byte{
+					"s-public.pem":  sigPEM,
+					"s-private.pem": []byte("placeholder"),
+				},
+			})).Should(Succeed())
+			Expect(k8sClient.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: tlsSecretName, Namespace: ns},
+				Data: map[string][]byte{
+					"hedera.crt": grpcPEM,
+					"hedera.key": []byte("placeholder"),
+				},
+			})).Should(Succeed())
+
+			By("Creating ConsensusCapsule")
+			Expect(k8sClient.Create(ctx, &operatorv1alpha1.ConsensusCapsule{
+				ObjectMeta: metav1.ObjectMeta{Name: capsuleName, Namespace: ns},
+				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+					Orbit:     orbitName,
+					NodeId:    0,
+					AccountId: "0.0.3",
+					Weight:    1,
+					PodProperties: operatorv1alpha1.ConsensusPodProperties{
+						Containers: operatorv1alpha1.ConsensusContainers{
+							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
+								SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+									Repository: "docker.io/hashgraph",
+									ImageName:  "hedera-services",
+									ImageTag:   "0.58.0",
+								},
+							},
+						},
+					},
+					Secrets: &operatorv1alpha1.ConsensusSecrets{
+						SecretResources: &operatorv1alpha1.ConsensusSecretResources{
+							SigningPublicCertificate: operatorv1alpha1.KeyReference{SecretName: sigSecretName, KeyName: "s-public.pem"},
+							SigningPrivateKey:        operatorv1alpha1.KeyReference{SecretName: sigSecretName, KeyName: "s-private.pem"},
+							GrpcTlsPublicCertificate: operatorv1alpha1.KeyReference{SecretName: tlsSecretName, KeyName: "hedera.crt"},
+							GrpcTlsPrivateKey:        operatorv1alpha1.KeyReference{SecretName: tlsSecretName, KeyName: "hedera.key"},
+						},
+					},
+				},
+			})).Should(Succeed())
+
+			By("Creating genesis NetworkOperation")
+			Expect(k8sClient.Create(ctx, &operatorv1alpha1.NetworkOperation{
+				ObjectMeta: metav1.ObjectMeta{Name: netOpName, Namespace: ns},
+				Spec: operatorv1alpha1.NetworkOperationSpec{
+					Orbit: orbitName,
+					Mode:  operatorv1alpha1.NetworkOperationModeNetworkGenesis,
+				},
+			})).Should(Succeed())
+
+			By("Waiting for NetworkOperation to reach Succeeded")
+			Eventually(func() operatorv1alpha1.Phase {
+				op := &operatorv1alpha1.NetworkOperation{}
+				_ = k8sClient.Get(ctx, types.NamespacedName{Name: netOpName, Namespace: ns}, op)
+				return op.Status.Phase
+			}, timeout, interval).Should(Equal(operatorv1alpha1.PhaseSucceeded))
+
+			By("Verifying addressbook-bin ConfigMap exists with binary data")
+			cm := &corev1.ConfigMap{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "addressbook-bin", Namespace: ns}, cm)).Should(Succeed())
+			Expect(cm.BinaryData).To(HaveKey("addressbook.bin"))
+			Expect(cm.BinaryData["addressbook.bin"]).NotTo(BeEmpty())
+
+			By("Verifying the binary data is a valid NodeAddressBook proto")
+			var book services.NodeAddressBook
+			Expect(proto.Unmarshal(cm.BinaryData["addressbook.bin"], &book)).Should(Succeed())
+			Expect(book.NodeAddress).To(HaveLen(1))
+			Expect(book.NodeAddress[0].NodeId).To(Equal(int64(0)))
+			Expect(book.NodeAddress[0].NodeAccountId.GetAccountNum()).To(Equal(int64(3)))
+			Expect(book.NodeAddress[0].RSA_PubKey).NotTo(BeEmpty())
+			Expect(book.NodeAddress[0].NodeCertHash).NotTo(BeEmpty())
+		})
+	})
+
+	Context("When a genesis NetworkOperation runs without capsule secrets", func() {
+		It("Should fail and not create the addressbook-bin ConfigMap", func() {
+			suffix := randSuffix()
+			netOpName := "genesis-ab-nosec-" + suffix
+			capsuleName := "ab-nosec-" + suffix
+
+			By("Creating ConsensusCapsule without secrets")
+			Expect(k8sClient.Create(ctx, &operatorv1alpha1.ConsensusCapsule{
+				ObjectMeta: metav1.ObjectMeta{Name: capsuleName, Namespace: ns},
+				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+					Orbit:  orbitName,
+					NodeId: 0,
+					Weight: 1,
+					PodProperties: operatorv1alpha1.ConsensusPodProperties{
+						Containers: operatorv1alpha1.ConsensusContainers{
+							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
+								SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+									Repository: "docker.io/hashgraph",
+									ImageName:  "hedera-services",
+									ImageTag:   "0.58.0",
+								},
+							},
+						},
+					},
+				},
+			})).Should(Succeed())
+
+			By("Creating genesis NetworkOperation")
+			Expect(k8sClient.Create(ctx, &operatorv1alpha1.NetworkOperation{
+				ObjectMeta: metav1.ObjectMeta{Name: netOpName, Namespace: ns},
+				Spec: operatorv1alpha1.NetworkOperationSpec{
+					Orbit: orbitName,
+					Mode:  operatorv1alpha1.NetworkOperationModeNetworkGenesis,
+				},
+			})).Should(Succeed())
+
+			By("Waiting for NetworkOperation to reach Failed")
+			Eventually(func() operatorv1alpha1.Phase {
+				op := &operatorv1alpha1.NetworkOperation{}
+				_ = k8sClient.Get(ctx, types.NamespacedName{Name: netOpName, Namespace: ns}, op)
+				return op.Status.Phase
+			}, timeout, interval).Should(Equal(operatorv1alpha1.PhaseFailed))
+
+			By("Verifying addressbook-bin ConfigMap was not created")
+			cm := &corev1.ConfigMap{}
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: "addressbook-bin", Namespace: ns}, cm)
+			Expect(err).To(HaveOccurred())
 		})
 	})
 })

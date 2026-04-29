@@ -250,9 +250,9 @@ func TestMirrorValues_endpointsInjected(t *testing.T) {
 	orbit := makeOrbit("test-orbit", "03")
 	cap1 := makeCapsule("node1", "test-ns", "test-orbit", "node1.test-ns.svc", 50211)
 	cap2 := makeCapsule("node2", "test-ns", "test-orbit", "node2.test-ns.svc", 50211)
-	addressbookSecret := &corev1.Secret{
+	addressbookSecret := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: "addressbook-bin", Namespace: "test-ns"},
-		Data:       map[string][]byte{"addressbook.bin": []byte("fake-addressbook")},
+		BinaryData: map[string][]byte{"addressbook.bin": []byte("fake-addressbook")},
 	}
 
 	comp := operatorv1alpha1.HelmComponentMirror
@@ -282,6 +282,42 @@ func TestMirrorValues_endpointsInjected(t *testing.T) {
 	}
 	if importer["network"] != "test-orbit" {
 		t.Errorf("expected network=test-orbit, got %v", importer["network"])
+	}
+
+	// addressBook is injected as a top-level importer sub-chart value.
+	importerSubchart, _ := result["importer"].(map[string]interface{})
+	if importerSubchart["addressBook"] == nil {
+		t.Error("expected addressBook to be set at importer.addressBook")
+	}
+}
+
+func TestMirrorValues_noAddressBook(t *testing.T) {
+	scheme := newTestScheme()
+	orbit := makeOrbit("test-orbit", "")
+	cap1 := makeCapsule("node1", "test-ns", "test-orbit", "node1.svc", 50211)
+
+	comp := operatorv1alpha1.HelmComponentMirror
+	spec := &operatorv1alpha1.HelmCapsuleSpec{
+		Chart:     operatorv1alpha1.HelmChartSpec{Repo: "oci://example.com", Chart: "hedera-mirror", Version: "0.129.1"},
+		Component: &comp,
+		OrbitRef:  &corev1.LocalObjectReference{Name: "test-orbit"},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(orbit, cap1).
+		WithStatusSubresource(cap1).
+		Build()
+
+	result, err := MergeValues(context.Background(), c, "test-ns", spec)
+	if err != nil {
+		t.Fatalf("expected no error when addressbook-bin absent, got: %v", err)
+	}
+
+	if result["importer"] != nil {
+		importerSubchart, _ := result["importer"].(map[string]interface{})
+		if importerSubchart["addressBook"] != nil {
+			t.Error("expected addressBook to be absent when ConfigMap missing")
+		}
 	}
 }
 
@@ -392,9 +428,9 @@ func TestMergeValues_componentValuesOverriddenByInline(t *testing.T) {
 	scheme := newTestScheme()
 	orbit := makeOrbit("test-orbit", "03")
 	cap1 := makeCapsule("node1", "test-ns", "test-orbit", "node1.svc", 50211)
-	addressbookSecret := &corev1.Secret{
+	addressbookSecret := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: "addressbook-bin", Namespace: "test-ns"},
-		Data:       map[string][]byte{"addressbook.bin": []byte("fake-addressbook")},
+		BinaryData: map[string][]byte{"addressbook.bin": []byte("fake-addressbook")},
 	}
 
 	// Inline Values override the auto-injected network value.

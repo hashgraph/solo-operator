@@ -108,6 +108,7 @@ func NewTask(c client.Client) *Task {
 			NewCheckSecretsStep(c),
 			NewCreatePublicKeysStep(c),
 			NewCreateGenesisNetworkStep(c),
+			NewCreateAddressBookStep(c),
 		},
 		statusGetter: func(op *operatorv1alpha1.NetworkOperation) *GenesisStatus {
 			return &GenesisStatus{
