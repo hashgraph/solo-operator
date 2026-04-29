@@ -119,7 +119,7 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 					DNSPolicy:                     corev1.DNSClusterFirst,
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					SchedulerName:                 corev1.DefaultSchedulerName,
-					InitContainers:                []corev1.Container{r.buildGenesisInitContainer()},
+					InitContainers:                []corev1.Container{r.buildGenesisInitContainer(capsule)},
 					Containers: []corev1.Container{
 						consensusContainer,
 					},
@@ -160,14 +160,17 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 // genesis-network.json ConfigMap to be mounted (the genesis NetworkOperation may still be
 // in progress). Exits non-zero on timeout so the pod is restarted rather than starting
 // without genesis configuration.
-func (r *StatefulSetSubReconciler) buildGenesisInitContainer() corev1.Container {
+func (r *StatefulSetSubReconciler) buildGenesisInitContainer(capsule *operatorv1alpha1.ConsensusCapsule) corev1.Container {
 	const (
 		stateDir     = "/data/saved/" + SavedStateDir
 		sentinelFile = "/data/saved/.genesis-init-done"
 		genesisFile  = "/tmp/genesis-config/" + GenesisNetworkFileName
 		destDir      = HapiBase + "/data/config/"
 	)
-	script := `[ -d ` + stateDir + ` ] && exit 0
+	// Three sentinels in priority order: checkpoint CM (survives pod restarts),
+	// platform state dir (written after round 1), dot-file (written after copy).
+	script := `[ "$GENESIS_INITIALIZED" = "true" ] && { echo "genesis-init: checkpoint set, skipping"; exit 0; }
+[ -d ` + stateDir + ` ] && exit 0
 [ -f ` + sentinelFile + ` ] && exit 0
 echo "genesis-init: fresh cluster, waiting for genesis-network.json (up to 10m)"
 i=0
@@ -181,10 +184,26 @@ while [ ! -f ` + genesisFile + ` ]; do
 done
 cp ` + genesisFile + ` ` + destDir + ` && touch ` + sentinelFile + `
 echo "genesis-init: done"`
+
+	optional := true
 	return corev1.Container{
 		Name:    "genesis-init",
 		Image:   GenesisInitImage,
 		Command: []string{"sh", "-c", script},
+		Env: []corev1.EnvVar{
+			{
+				Name: "GENESIS_INITIALIZED",
+				ValueFrom: &corev1.EnvVarSource{
+					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: CheckpointConfigMapName(capsule),
+						},
+						Key:      CheckpointKeyGenesisInitialized,
+						Optional: &optional,
+					},
+				},
+			},
+		},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: "genesis-config", MountPath: "/tmp/genesis-config"},
 			{Name: "data-config-dir", MountPath: HapiBase + "/data/config"},

@@ -59,6 +59,14 @@ const (
 	GenesisNetworkFileName = "genesis-network.json"
 )
 
+// Checkpoint ConfigMap constants — [capsule-name]-checkpoint.
+const (
+	CheckpointKeyGenesisInitialized = "genesis-initialized"
+	// Keep these in sync with the shell-script comparison in buildGenesisInitContainer.
+	CheckpointValueTrue  = "true"
+	CheckpointValueFalse = "false"
+)
+
 // Port numbers — gossip/gRPC alias common; consensus-specific ports defined here.
 const (
 	GossipPort     = common.GossipPort
@@ -163,6 +171,11 @@ func BlockNodesConfigMapName(capsule *operatorv1alpha1.ConsensusCapsule) string 
 	return capsule.Name + "-block-nodes-cm"
 }
 
+// CheckpointConfigMapName returns the checkpoint ConfigMap name for a capsule.
+func CheckpointConfigMapName(capsule *operatorv1alpha1.ConsensusCapsule) string {
+	return capsule.Name + "-checkpoint"
+}
+
 // PVCName returns the PVC name for a capsule and volume type
 func PVCName(capsule *operatorv1alpha1.ConsensusCapsule, volumeType string) string {
 	return fmt.Sprintf("%s-%s", capsule.Name, volumeType)
@@ -222,6 +235,9 @@ func NewSubReconcilers(c client.Client, scheme *runtime.Scheme) *subreconciler.C
 		NewAlloyConfigMapSubReconciler(c, scheme),
 		NewServiceSubReconciler(c, scheme),
 		NewPVCSubReconciler(c, scheme),
+		// Checkpoint must precede StatefulSet so the ConfigMap exists before the
+		// init container tries to resolve the GENESIS_INITIALIZED env var.
+		NewCheckpointSubReconciler(c, scheme),
 		NewStatefulSetSubReconciler(c, scheme),
 	)
 }
