@@ -119,7 +119,7 @@ func TestInternalHostname(t *testing.T) {
 		},
 	}
 
-	expected := "node0-0.consensus.test-namespace.svc.cluster.local"
+	expected := "node0.test-namespace.svc.cluster.local"
 	if got := InternalHostname(capsule); got != expected {
 		t.Errorf("expected internal hostname %s, got %s", expected, got)
 	}
@@ -152,6 +152,39 @@ func TestRenderProperties_Empty(t *testing.T) {
 	got := RenderProperties(nil)
 	if got != "" {
 		t.Errorf("expected empty string for nil map, got %q", got)
+	}
+}
+
+func TestDefaultApplicationProperties(t *testing.T) {
+	defaults := DefaultApplicationProperties()
+	required := map[string]string{
+		"nodes.gossipFqdnRestricted":   "false",
+		"hedera.profiles.active":       "TEST",
+		"netty.mode":                   "TEST",
+		"blockStream.streamMode":       "RECORDS",
+		"nodes.updateAccountIdAllowed": "true",
+	}
+	for k, want := range required {
+		if got, ok := defaults[k]; !ok || got != want {
+			t.Errorf("defaults[%q] = %q (present=%v), want %q", k, got, ok, want)
+		}
+	}
+}
+
+func TestMergeApplicationProperties(t *testing.T) {
+	// user override wins over default
+	got := MergeApplicationProperties(map[string]string{"nodes.gossipFqdnRestricted": "true", "myKey": "myVal"})
+	if !strings.Contains(got, "nodes.gossipFqdnRestricted=true\n") {
+		t.Errorf("user override should win, got %q", got)
+	}
+	if !strings.Contains(got, "myKey=myVal\n") {
+		t.Errorf("user key missing, got %q", got)
+	}
+
+	// default applied when not overridden
+	got = MergeApplicationProperties(nil)
+	if !strings.Contains(got, "nodes.gossipFqdnRestricted=false\n") {
+		t.Errorf("expected default nodes.gossipFqdnRestricted=false, got %q", got)
 	}
 }
 
@@ -411,11 +444,20 @@ func TestDataConfigMapSubReconciler(t *testing.T) {
 		t.Fatalf("failed to get data-config ConfigMap: %v", err)
 	}
 
-	if cm.Data["application.properties"] == "" {
-		t.Error("expected application.properties to be populated from Orbit")
+	appProps := cm.Data["application.properties"]
+	if appProps == "" {
+		t.Error("expected application.properties to be populated")
 	}
-	if got := cm.Data["application.properties"]; got != "blockStream.streamMode=BOTH\nhedera.shard=0\n" {
-		t.Errorf("unexpected application.properties: %q", got)
+	for _, want := range []string{
+		"nodes.gossipFqdnRestricted=false\n",
+		"hedera.profiles.active=TEST\n",
+		"netty.mode=TEST\n",
+		"blockStream.streamMode=BOTH\n", // user override of default RECORDS
+		"hedera.shard=0\n",
+	} {
+		if !strings.Contains(appProps, want) {
+			t.Errorf("application.properties missing %q", want)
+		}
 	}
 
 	if cm.Data["api-permission.properties"] == "" {

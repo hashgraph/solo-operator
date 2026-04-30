@@ -19,7 +19,7 @@ spec:
         softwareVersion:
           repository: "gcr.io/hedera-registry"
           imageName: "consensus-node"
-          imageTag: "0.72.0"
+          imageTag: "0.72.1"
           imagePullPolicy: IfNotPresent
         resources:
           limits:
@@ -204,6 +204,9 @@ spec:
         </Console>
       </Appenders>
       <Loggers>
+        <Logger name="com.swirlds.platform.system.status" level="INFO" additivity="false">
+          <AppenderRef ref="Console"/>
+        </Logger>
         <Root level="WARN">
           <AppenderRef ref="Console"/>
         </Root>

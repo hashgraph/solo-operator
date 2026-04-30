@@ -267,7 +267,7 @@ func (s *CreateClusterConfigStep) buildSettingsTxt(orbit *operatorv1alpha1.Orbit
 	for k, v := range orbit.Spec.Consensus.NetworkSettings {
 		settings[k] = v
 	}
-	return renderSettingsTxt(settings)
+	return consensus.RenderSettingsTxt(settings)
 }
 
 // ledgerIdToHex converts a plain ledger ID string to the hex format used by
@@ -304,31 +304,11 @@ func (s *CreateClusterConfigStep) buildApplicationProperties(orbit *operatorv1al
 		ledgerId, chainId = ledgerIdToHex(orbit.Spec.Consensus.Genesis.AddressBook.LedgerId)
 	}
 
-	props := map[string]string{
-		"hedera.config.version":                       "0",
-		"ledger.id":                                   ledgerId,
-		"netty.mode":                                  "TEST",
-		"contracts.chainId":                           chainId,
-		"hedera.recordStream.logPeriod":               "1",
-		"balances.exportPeriodSecs":                   "400",
-		"files.maxSizeKb":                             "2048",
-		"hedera.recordStream.compressFilesOnCreation": "true",
-		"balances.compressOnCreation":                 "true",
-		"contracts.maxNumWithHapiSigsAccess":          "0",
-		"autoRenew.targetTypes":                       "",
-		"nodes.gossipFqdnRestricted":                  "false",
-		"hedera.profiles.active":                      "TEST",
-		"staking.periodMins":                          "1",
-		"nodes.updateAccountIdAllowed":                "true",
-		"blockStream.streamMode":                      "RECORDS",
-		"scheduling.longTermEnabled":                  "false",
-		"bootstrap.throttleDefsJson.resource":         "data/config/genesis-throttles.json",
-		"cache.warmThreads":                           "6",
-	}
+	overrides := map[string]string{"ledger.id": ledgerId, "contracts.chainId": chainId}
 	for k, v := range orbit.Spec.Consensus.ApplicationConfiguration {
-		props[k] = v
+		overrides[k] = v
 	}
-	return renderPropertiesSorted(props)
+	return consensus.MergeApplicationProperties(overrides)
 }
 
 // buildApiPermissionProperties builds the api-permission.properties content.
@@ -400,7 +380,7 @@ func (s *CreateClusterConfigStep) buildApiPermissionProperties(orbit *operatorv1
 	for k, v := range orbit.Spec.Consensus.PermissionConfiguration {
 		perms[k] = v
 	}
-	return renderPropertiesSorted(perms)
+	return consensus.RenderProperties(perms)
 }
 
 // buildBootstrapProperties builds the bootstrap.properties content.
@@ -430,7 +410,7 @@ func (s *CreateClusterConfigStep) buildBootstrapProperties(orbit *operatorv1alph
 	for k, v := range orbit.Spec.Consensus.ApplicationConfiguration {
 		props[k] = v
 	}
-	return renderPropertiesSorted(props)
+	return consensus.RenderProperties(props)
 }
 
 // defaultThrottlesJSON is the built-in genesis-throttles.json used when no orbit override is provided.
@@ -648,34 +628,6 @@ func (s *CreateClusterConfigStep) buildGenesisThrottles(orbit *operatorv1alpha1.
 		return orbit.Spec.Consensus.Genesis.ThrottlesJson
 	}
 	return defaultThrottlesJSON
-}
-
-// renderPropertiesSorted renders a key=value properties map in sorted key order.
-func renderPropertiesSorted(props map[string]string) string {
-	keys := make([]string, 0, len(props))
-	for k := range props {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	var sb strings.Builder
-	for _, k := range keys {
-		fmt.Fprintf(&sb, "%s=%s\n", k, props[k])
-	}
-	return sb.String()
-}
-
-// renderSettingsTxt renders a settings map as space-aligned settings.txt lines in sorted key order.
-func renderSettingsTxt(settings map[string]string) string {
-	keys := make([]string, 0, len(settings))
-	for k := range settings {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	var sb strings.Builder
-	for _, k := range keys {
-		fmt.Fprintf(&sb, "%-46s %s\n", k+",", settings[k])
-	}
-	return sb.String()
 }
 
 // createOrUpdateConfigMap creates or updates the cluster config ConfigMap
