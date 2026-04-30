@@ -14,7 +14,7 @@ func TestInternalHostname(t *testing.T) {
 	capsule := &operatorv1alpha1.ConsensusCapsule{
 		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "test-ns"},
 	}
-	if got, want := InternalHostname(capsule, "consensus"), "node0-0.consensus.test-ns.svc.cluster.local"; got != want {
+	if got, want := InternalHostname(capsule), "node0.test-ns.svc.cluster.local"; got != want {
 		t.Errorf("want %q, got %q", want, got)
 	}
 }
@@ -24,7 +24,7 @@ func TestInternalHostname_Override(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "test-ns"},
 		Spec:       operatorv1alpha1.ConsensusCapsuleSpec{InternalAddress: "10.0.0.5"},
 	}
-	if got := InternalHostname(capsule, "consensus"); got != "10.0.0.5" {
+	if got := InternalHostname(capsule); got != "10.0.0.5" {
 		t.Errorf("expected override, got %q", got)
 	}
 }
@@ -75,6 +75,30 @@ func TestAccountNum(t *testing.T) {
 	for _, tc := range tests {
 		if got := AccountNum(tc.input); got != tc.expected {
 			t.Errorf("AccountNum(%q) = %q, want %q", tc.input, got, tc.expected)
+		}
+	}
+}
+
+func TestParseAccountIDParts(t *testing.T) {
+	cases := []struct {
+		accountId string
+		nodeId    int64
+		shard     int64
+		realm     int64
+		account   int64
+	}{
+		{"0.0.3", 0, 0, 0, 3},
+		{"0.0.100", 0, 0, 0, 100},
+		{"1.2.50", 0, 1, 2, 50},
+		{"", 0, 0, 0, 3},    // fallback: 3 + nodeId
+		{"", 2, 0, 0, 5},    // fallback: 3 + nodeId
+		{"bad", 1, 0, 0, 4}, // fallback: 3 + nodeId
+	}
+	for _, c := range cases {
+		s, r, a := ParseAccountIDParts(c.accountId, c.nodeId)
+		if s != c.shard || r != c.realm || a != c.account {
+			t.Errorf("ParseAccountIDParts(%q, %d) = (%d,%d,%d), want (%d,%d,%d)",
+				c.accountId, c.nodeId, s, r, a, c.shard, c.realm, c.account)
 		}
 	}
 }

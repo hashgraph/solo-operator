@@ -378,8 +378,8 @@ func TestCollectPodIPs_MixedPods(t *testing.T) {
 
 func TestInternalHostname_DefaultsDNS(t *testing.T) {
 	capsule := plainCapsule("node0", 0) // Namespace: "test"
-	got := common.InternalHostname(capsule, "consensus")
-	want := "node0-0.consensus.test.svc.cluster.local"
+	got := common.InternalHostname(capsule)
+	want := "node0.test.svc.cluster.local"
 	if got != want {
 		t.Errorf("want %q, got %q", want, got)
 	}
@@ -388,7 +388,7 @@ func TestInternalHostname_DefaultsDNS(t *testing.T) {
 func TestInternalHostname_OverrideUsed(t *testing.T) {
 	capsule := plainCapsule("node0", 0)
 	capsule.Spec.InternalAddress = "10.0.0.5"
-	if got := common.InternalHostname(capsule, "consensus"); got != "10.0.0.5" {
+	if got := common.InternalHostname(capsule); got != "10.0.0.5" {
 		t.Errorf("expected InternalAddress override, got %q", got)
 	}
 }

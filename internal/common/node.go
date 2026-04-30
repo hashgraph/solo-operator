@@ -4,6 +4,7 @@ package common
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
@@ -14,10 +15,7 @@ func NodeAlias(nodeId int64) string {
 	return fmt.Sprintf("node%d", nodeId)
 }
 
-// AccountIdForNode returns the default Hedera account ID for a node.
-// The account number is derived as 3 + nodeId, which matches the Hedera genesis convention
-// where node 0 → 0.0.3, node 1 → 0.0.4, etc.
-// An explicit accountId on the capsule spec should always take precedence over this default.
+// AccountIdForNode returns the default Hedera account ID for a node (3 + nodeId).
 func AccountIdForNode(nodeId int64) string {
 	return fmt.Sprintf("0.0.%d", 3+nodeId)
 }
@@ -32,10 +30,26 @@ func AccountNum(accountId string) string {
 	return accountId
 }
 
-// InternalHostname returns the pod FQDN for a capsule, or InternalAddress if set.
-func InternalHostname(capsule *operatorv1alpha1.ConsensusCapsule, subdomain string) string {
+// ParseAccountIDParts splits a "shard.realm.account" string into its int64 components.
+// Falls back to shard=0, realm=0, account=3+nodeId when the format is not recognised.
+func ParseAccountIDParts(accountId string, nodeId int64) (shard, realm, account int64) {
+	parts := strings.Split(accountId, ".")
+	if len(parts) == 3 {
+		if s, err := strconv.ParseInt(parts[0], 10, 64); err == nil {
+			if r, err := strconv.ParseInt(parts[1], 10, 64); err == nil {
+				if a, err := strconv.ParseInt(parts[2], 10, 64); err == nil {
+					return s, r, a
+				}
+			}
+		}
+	}
+	return 0, 0, 3 + nodeId
+}
+
+// InternalHostname returns the per-capsule ClusterIP service FQDN, or InternalAddress if set.
+func InternalHostname(capsule *operatorv1alpha1.ConsensusCapsule) string {
 	if capsule.Spec.InternalAddress != "" {
 		return capsule.Spec.InternalAddress
 	}
-	return fmt.Sprintf("%s-0.%s.%s.svc.cluster.local", capsule.Name, subdomain, capsule.Namespace)
+	return fmt.Sprintf("%s.%s.svc.cluster.local", capsule.Name, capsule.Namespace)
 }
