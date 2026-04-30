@@ -15,10 +15,7 @@ func NodeAlias(nodeId int64) string {
 	return fmt.Sprintf("node%d", nodeId)
 }
 
-// AccountIdForNode returns the default Hedera account ID for a node.
-// The account number is derived as 3 + nodeId, which matches the Hedera genesis convention
-// where node 0 → 0.0.3, node 1 → 0.0.4, etc.
-// An explicit accountId on the capsule spec should always take precedence over this default.
+// AccountIdForNode returns the default Hedera account ID for a node (3 + nodeId).
 func AccountIdForNode(nodeId int64) string {
 	return fmt.Sprintf("0.0.%d", 3+nodeId)
 }
@@ -49,10 +46,10 @@ func ParseAccountIDParts(accountId string, nodeId int64) (shard, realm, account 
 	return 0, 0, 3 + nodeId
 }
 
-// InternalHostname returns the pod FQDN for a capsule, or InternalAddress if set.
-func InternalHostname(capsule *operatorv1alpha1.ConsensusCapsule, subdomain string) string {
+// InternalHostname returns the per-capsule ClusterIP service FQDN, or InternalAddress if set.
+func InternalHostname(capsule *operatorv1alpha1.ConsensusCapsule) string {
 	if capsule.Spec.InternalAddress != "" {
 		return capsule.Spec.InternalAddress
 	}
-	return fmt.Sprintf("%s-0.%s.%s.svc.cluster.local", capsule.Name, subdomain, capsule.Namespace)
+	return fmt.Sprintf("%s.%s.svc.cluster.local", capsule.Name, capsule.Namespace)
 }

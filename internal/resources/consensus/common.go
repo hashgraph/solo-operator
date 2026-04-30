@@ -154,19 +154,16 @@ func RoleBindingName(capsule *operatorv1alpha1.ConsensusCapsule) string {
 }
 
 // HapiAppConfigMapName returns the hapi-app ConfigMap name for a capsule.
-// This ConfigMap contains log4j2.xml (from the capsule spec) and settings.txt (from the Orbit).
 func HapiAppConfigMapName(capsule *operatorv1alpha1.ConsensusCapsule) string {
 	return capsule.Name + "-hapi-app-cm"
 }
 
 // DataConfigMapName returns the data-config ConfigMap name for a capsule.
-// This ConfigMap contains application.properties and api-permission.properties sourced from the Orbit.
 func DataConfigMapName(capsule *operatorv1alpha1.ConsensusCapsule) string {
 	return capsule.Name + "-data-config-cm"
 }
 
 // BlockNodesConfigMapName returns the block-nodes ConfigMap name for a capsule.
-// Only created when capsule.Spec.BlockNodes is non-nil.
 func BlockNodesConfigMapName(capsule *operatorv1alpha1.ConsensusCapsule) string {
 	return capsule.Name + "-block-nodes-cm"
 }
@@ -204,6 +201,30 @@ func RenderSettingsTxt(m map[string]string) string {
 	return sb.String()
 }
 
+// DefaultApplicationProperties returns the baseline application.properties values required by Solo.
+func DefaultApplicationProperties() map[string]string {
+	return map[string]string{
+		"hedera.config.version":                       "0",
+		"netty.mode":                                  "TEST",
+		"hedera.recordStream.logPeriod":               "1",
+		"balances.exportPeriodSecs":                   "400",
+		"files.maxSizeKb":                             "2048",
+		"hedera.recordStream.compressFilesOnCreation": "true",
+		"balances.compressOnCreation":                 "true",
+		"contracts.maxNumWithHapiSigsAccess":          "0",
+		"autoRenew.targetTypes":                       "",
+		// FQDNs are required for gossip in Kubernetes — the CN default (true) breaks genesis.
+		"nodes.gossipFqdnRestricted":          "false",
+		"hedera.profiles.active":              "TEST",
+		"staking.periodMins":                  "1",
+		"nodes.updateAccountIdAllowed":        "true",
+		"blockStream.streamMode":              "RECORDS",
+		"scheduling.longTermEnabled":          "false",
+		"bootstrap.throttleDefsJson.resource": "data/config/genesis-throttles.json",
+		"cache.warmThreads":                   "6",
+	}
+}
+
 // RenderProperties renders a map[string]string as a sorted Java-properties-style key=value file.
 func RenderProperties(m map[string]string) string {
 	keys := make([]string, 0, len(m))
@@ -218,9 +239,9 @@ func RenderProperties(m map[string]string) string {
 	return sb.String()
 }
 
-// InternalHostname returns the pod FQDN for a capsule, or InternalAddress if set.
+// InternalHostname returns the per-capsule service FQDN for a capsule, or InternalAddress if set.
 func InternalHostname(capsule *operatorv1alpha1.ConsensusCapsule) string {
-	return common.InternalHostname(capsule, common.ConsensusSubdomain)
+	return common.InternalHostname(capsule)
 }
 
 // NewSubReconcilers creates all consensus capsule subreconcilers in execution order

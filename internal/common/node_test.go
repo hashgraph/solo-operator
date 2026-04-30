@@ -14,7 +14,7 @@ func TestInternalHostname(t *testing.T) {
 	capsule := &operatorv1alpha1.ConsensusCapsule{
 		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "test-ns"},
 	}
-	if got, want := InternalHostname(capsule, "consensus"), "node0-0.consensus.test-ns.svc.cluster.local"; got != want {
+	if got, want := InternalHostname(capsule), "node0.test-ns.svc.cluster.local"; got != want {
 		t.Errorf("want %q, got %q", want, got)
 	}
 }
@@ -24,7 +24,7 @@ func TestInternalHostname_Override(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "test-ns"},
 		Spec:       operatorv1alpha1.ConsensusCapsuleSpec{InternalAddress: "10.0.0.5"},
 	}
-	if got := InternalHostname(capsule, "consensus"); got != "10.0.0.5" {
+	if got := InternalHostname(capsule); got != "10.0.0.5" {
 		t.Errorf("expected override, got %q", got)
 	}
 }
