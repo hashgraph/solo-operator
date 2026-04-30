@@ -211,11 +211,11 @@ var _ = Describe("HelmCapsule Controller", func() {
 				}
 			}
 
-			addressbookSecret := &corev1.Secret{
+			addressbookCM := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{Name: "addressbook-bin", Namespace: hcNS},
-				Data:       map[string][]byte{"addressbook.bin": []byte("fake-addressbook")},
+				BinaryData: map[string][]byte{"addressbook.bin": []byte("fake-addressbook")},
 			}
-			err = k8sClient.Create(ctx, addressbookSecret)
+			err = k8sClient.Create(ctx, addressbookCM)
 			if err != nil {
 				Expect(err.Error()).To(ContainSubstring("already exists"))
 			}

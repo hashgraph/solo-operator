@@ -140,6 +140,7 @@ func isPodReady(pod corev1.Pod) bool {
 // Phase transitions to Running only once the pod's Ready condition is True,
 // ensuring all containers have passed their readiness checks.
 func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
 	podList := &corev1.PodList{}
 	if err := r.List(ctx, podList,
 		client.InNamespace(capsule.Namespace),
@@ -181,6 +182,14 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 		return ctrl.Result{}, nil
 	}
 
+	// Only on non-Running→Running transitions; a gen-change reconcile while already Running
+	// must not overwrite a manually-reset checkpoint before the pod restarts.
+	if phase == operatorv1alpha1.PhaseRunning && capsule.Status.Phase != operatorv1alpha1.PhaseRunning {
+		if err := r.markGenesisInitialized(ctx, capsule); err != nil {
+			logger.Error(err, "failed to update checkpoint")
+		}
+	}
+
 	gossipPort := consensus.ResolveGossipPort(capsule)
 
 	capsule.Status.Phase = phase
@@ -205,6 +214,21 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 		return ctrl.Result{RequeueAfter: podReadinessRequeueAfter}, nil
 	}
 	return ctrl.Result{}, nil
+}
+
+// markGenesisInitialized is a no-op if the checkpoint is missing or already true.
+func (r *ConsensusCapsuleReconciler) markGenesisInitialized(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) error {
+	cm := &corev1.ConfigMap{}
+	key := client.ObjectKey{Name: consensus.CheckpointConfigMapName(capsule), Namespace: capsule.Namespace}
+	if err := r.Get(ctx, key, cm); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+	if cm.Data[consensus.CheckpointKeyGenesisInitialized] == consensus.CheckpointValueTrue {
+		return nil
+	}
+	patch := client.MergeFrom(cm.DeepCopy())
+	cm.Data[consensus.CheckpointKeyGenesisInitialized] = consensus.CheckpointValueTrue
+	return r.Patch(ctx, cm, patch)
 }
 
 // SetupWithManager sets up the controller with the Manager

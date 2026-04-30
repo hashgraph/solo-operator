@@ -112,6 +112,7 @@ func injectComponentValues(ctx context.Context, c client.Client, namespace strin
 }
 
 func mirrorValues(ctx context.Context, c client.Client, namespace string, capsules []operatorv1alpha1.ConsensusCapsule, orbit *operatorv1alpha1.Orbit) (map[string]interface{}, error) {
+	logger := log.FromContext(ctx)
 	vals := map[string]interface{}{
 		"hedera": map[string]interface{}{
 			"mirror": map[string]interface{}{
@@ -123,16 +124,16 @@ func mirrorValues(ctx context.Context, c client.Client, namespace string, capsul
 		},
 	}
 
-	secret := &corev1.Secret{}
-	if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: "addressbook-bin"}, secret); err != nil {
-		return nil, fmt.Errorf("reading addressbook-bin secret: %w", err)
-	}
-	bin := secret.Data["addressbook.bin"]
-	if len(bin) == 0 {
-		return nil, fmt.Errorf("addressbook-bin secret missing key addressbook.bin")
-	}
-	vals["importer"] = map[string]interface{}{
-		"addressBook": base64.StdEncoding.EncodeToString(bin),
+	// addressBook is a top-level importer sub-chart value, not an application config property.
+	cm := &corev1.ConfigMap{}
+	if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: "addressbook-bin"}, cm); err == nil {
+		if bin := cm.BinaryData["addressbook.bin"]; len(bin) > 0 {
+			vals["importer"] = map[string]interface{}{
+				"addressBook": base64.StdEncoding.EncodeToString(bin),
+			}
+		}
+	} else if !apierrors.IsNotFound(err) {
+		logger.Error(err, "failed to read addressbook-bin ConfigMap")
 	}
 
 	return vals, nil

@@ -73,10 +73,19 @@ func (r *DataConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *ope
 	return ctrl.Result{}, nil
 }
 
+// MergeApplicationProperties merges overrides on top of the Solo defaults and renders the result.
+func MergeApplicationProperties(overrides map[string]string) string {
+	merged := DefaultApplicationProperties()
+	for k, v := range overrides {
+		merged[k] = v
+	}
+	return RenderProperties(merged)
+}
+
 // buildConfigMap constructs the desired data-config ConfigMap.
 func (r *DataConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1.ConsensusCapsule, orbit *operatorv1alpha1.Orbit) *corev1.ConfigMap {
 	data := map[string]string{
-		"application.properties":    RenderProperties(orbit.Spec.Consensus.ApplicationConfiguration),
+		"application.properties":    MergeApplicationProperties(orbit.Spec.Consensus.ApplicationConfiguration),
 		"api-permission.properties": RenderProperties(orbit.Spec.Consensus.PermissionConfiguration),
 	}
 

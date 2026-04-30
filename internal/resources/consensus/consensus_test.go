@@ -119,7 +119,7 @@ func TestInternalHostname(t *testing.T) {
 		},
 	}
 
-	expected := "node0-0.consensus.test-namespace.svc.cluster.local"
+	expected := "node0.test-namespace.svc.cluster.local"
 	if got := InternalHostname(capsule); got != expected {
 		t.Errorf("expected internal hostname %s, got %s", expected, got)
 	}
@@ -152,6 +152,39 @@ func TestRenderProperties_Empty(t *testing.T) {
 	got := RenderProperties(nil)
 	if got != "" {
 		t.Errorf("expected empty string for nil map, got %q", got)
+	}
+}
+
+func TestDefaultApplicationProperties(t *testing.T) {
+	defaults := DefaultApplicationProperties()
+	required := map[string]string{
+		"nodes.gossipFqdnRestricted":   "false",
+		"hedera.profiles.active":       "TEST",
+		"netty.mode":                   "TEST",
+		"blockStream.streamMode":       "RECORDS",
+		"nodes.updateAccountIdAllowed": "true",
+	}
+	for k, want := range required {
+		if got, ok := defaults[k]; !ok || got != want {
+			t.Errorf("defaults[%q] = %q (present=%v), want %q", k, got, ok, want)
+		}
+	}
+}
+
+func TestMergeApplicationProperties(t *testing.T) {
+	// user override wins over default
+	got := MergeApplicationProperties(map[string]string{"nodes.gossipFqdnRestricted": "true", "myKey": "myVal"})
+	if !strings.Contains(got, "nodes.gossipFqdnRestricted=true\n") {
+		t.Errorf("user override should win, got %q", got)
+	}
+	if !strings.Contains(got, "myKey=myVal\n") {
+		t.Errorf("user key missing, got %q", got)
+	}
+
+	// default applied when not overridden
+	got = MergeApplicationProperties(nil)
+	if !strings.Contains(got, "nodes.gossipFqdnRestricted=false\n") {
+		t.Errorf("expected default nodes.gossipFqdnRestricted=false, got %q", got)
 	}
 }
 
@@ -411,11 +444,20 @@ func TestDataConfigMapSubReconciler(t *testing.T) {
 		t.Fatalf("failed to get data-config ConfigMap: %v", err)
 	}
 
-	if cm.Data["application.properties"] == "" {
-		t.Error("expected application.properties to be populated from Orbit")
+	appProps := cm.Data["application.properties"]
+	if appProps == "" {
+		t.Error("expected application.properties to be populated")
 	}
-	if got := cm.Data["application.properties"]; got != "blockStream.streamMode=BOTH\nhedera.shard=0\n" {
-		t.Errorf("unexpected application.properties: %q", got)
+	for _, want := range []string{
+		"nodes.gossipFqdnRestricted=false\n",
+		"hedera.profiles.active=TEST\n",
+		"netty.mode=TEST\n",
+		"blockStream.streamMode=BOTH\n", // user override of default RECORDS
+		"hedera.shard=0\n",
+	} {
+		if !strings.Contains(appProps, want) {
+			t.Errorf("application.properties missing %q", want)
+		}
 	}
 
 	if cm.Data["api-permission.properties"] == "" {
@@ -934,7 +976,8 @@ func TestStatefulSetVolumes_DataConfigDir(t *testing.T) {
 
 func TestGenesisInitContainer(t *testing.T) {
 	r := &StatefulSetSubReconciler{}
-	c := r.buildGenesisInitContainer()
+	capsule := newTestCapsule()
+	c := r.buildGenesisInitContainer(capsule)
 
 	if c.Name != "genesis-init" {
 		t.Errorf("unexpected init container name: %s", c.Name)
@@ -965,18 +1008,48 @@ func TestGenesisInitContainer(t *testing.T) {
 		t.Error("expected saved volume mount in init container")
 	}
 
-	// state-dir check must appear before the copy in the command
+	// GENESIS_INITIALIZED must be sourced from the checkpoint ConfigMap
+	envByName := make(map[string]corev1.EnvVar)
+	for _, e := range c.Env {
+		envByName[e.Name] = e
+	}
+	genesisEnv, ok := envByName["GENESIS_INITIALIZED"]
+	if !ok {
+		t.Fatal("expected GENESIS_INITIALIZED env var in genesis-init container")
+	}
+	if genesisEnv.ValueFrom == nil || genesisEnv.ValueFrom.ConfigMapKeyRef == nil {
+		t.Fatal("expected GENESIS_INITIALIZED to use configMapKeyRef")
+	}
+	ref := genesisEnv.ValueFrom.ConfigMapKeyRef
+	if ref.Name != CheckpointConfigMapName(capsule) {
+		t.Errorf("unexpected checkpoint ConfigMap name: %s", ref.Name)
+	}
+	if ref.Key != CheckpointKeyGenesisInitialized {
+		t.Errorf("unexpected checkpoint key: %s", ref.Key)
+	}
+	if ref.Optional == nil || !*ref.Optional {
+		t.Error("expected GENESIS_INITIALIZED configMapKeyRef to be optional")
+	}
+
+	// command ordering: checkpoint check → state-dir check → dot-file → cp → touch
 	cmd := c.Command[len(c.Command)-1]
+	checkpointIdx := strings.Index(cmd, "GENESIS_INITIALIZED")
 	stateDirIdx := strings.Index(cmd, SavedStateDir)
 	cpIdx := strings.Index(cmd, "cp /tmp/genesis-config/")
 	sentinelIdx := strings.Index(cmd, ".genesis-init-done")
 	touchIdx := strings.Index(cmd, "touch ")
 
+	if checkpointIdx < 0 {
+		t.Error("expected GENESIS_INITIALIZED check in init container command")
+	}
 	if stateDirIdx < 0 {
 		t.Error("expected state directory reference in init container command")
 	}
 	if cpIdx < 0 {
 		t.Error("expected cp command in init container")
+	}
+	if checkpointIdx > stateDirIdx {
+		t.Error("checkpoint check must appear before state-dir check")
 	}
 	if stateDirIdx > cpIdx {
 		t.Error("state-dir check must appear before the cp command")
@@ -993,6 +1066,100 @@ func TestGenesisInitContainer(t *testing.T) {
 	}
 	if touchIdx < cpIdx {
 		t.Error("touch (write dot-file) must appear after the cp command")
+	}
+}
+
+// ── Checkpoint ────────────────────────────────────────────────────────────────
+
+func TestCheckpointSubReconciler_Creates(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	capsule := newTestCapsule()
+	c := newTestClient(scheme, capsule)
+
+	r := NewCheckpointSubReconciler(c, scheme)
+
+	result, err := r.Reconcile(ctx, capsule)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Requeue {
+		t.Error("unexpected requeue")
+	}
+
+	cm := &corev1.ConfigMap{}
+	if err := c.Get(ctx, client.ObjectKey{Name: CheckpointConfigMapName(capsule), Namespace: capsule.Namespace}, cm); err != nil {
+		t.Fatalf("failed to get checkpoint ConfigMap: %v", err)
+	}
+	if cm.Data[CheckpointKeyGenesisInitialized] != CheckpointValueFalse {
+		t.Errorf("expected genesis-initialized=false on creation, got %q", cm.Data[CheckpointKeyGenesisInitialized])
+	}
+}
+
+func TestCheckpointSubReconciler_DoesNotOverwrite(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	capsule := newTestCapsule()
+
+	// Pre-create checkpoint with genesis-initialized=true (simulates post-genesis state).
+	existing := &corev1.ConfigMap{}
+	existing.Name = CheckpointConfigMapName(capsule)
+	existing.Namespace = capsule.Namespace
+	existing.Data = map[string]string{CheckpointKeyGenesisInitialized: CheckpointValueTrue}
+	c := newTestClient(scheme, capsule, existing)
+
+	r := NewCheckpointSubReconciler(c, scheme)
+
+	if _, err := r.Reconcile(ctx, capsule); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cm := &corev1.ConfigMap{}
+	if err := c.Get(ctx, client.ObjectKey{Name: CheckpointConfigMapName(capsule), Namespace: capsule.Namespace}, cm); err != nil {
+		t.Fatalf("failed to get checkpoint: %v", err)
+	}
+	if cm.Data[CheckpointKeyGenesisInitialized] != CheckpointValueTrue {
+		t.Errorf("reconciler must not overwrite checkpoint; expected true, got %q", cm.Data[CheckpointKeyGenesisInitialized])
+	}
+}
+
+func TestCheckpointConfigMapName(t *testing.T) {
+	capsule := newTestCapsule()
+	if got := CheckpointConfigMapName(capsule); got != "node0-checkpoint" {
+		t.Errorf("expected node0-checkpoint, got %s", got)
+	}
+}
+
+func TestCheckpointSubReconciler_ShouldReconcile(t *testing.T) {
+	ctx := context.Background()
+	capsule := newTestCapsule()
+	r := NewCheckpointSubReconciler(nil, nil)
+	if !r.ShouldReconcile(ctx, capsule) {
+		t.Error("expected ShouldReconcile to always return true")
+	}
+}
+
+// TestPodLabels_StableUnderCRLabelChange verifies that adding arbitrary labels
+// to the ConsensusCapsule CR does not propagate into the pod template labels.
+// Pod template labels are immutable with respect to CR metadata.
+func TestPodLabels_StableUnderCRLabelChange(t *testing.T) {
+	base := newTestCapsule()
+	withLabel := newTestCapsule()
+	withLabel.Labels = map[string]string{"custom": "value", "team": "platform"}
+
+	baseLabels := PodLabels(base)
+	changedLabels := PodLabels(withLabel)
+
+	if len(baseLabels) != len(changedLabels) {
+		t.Errorf("pod label count changed after adding CR labels: base=%d changed=%d", len(baseLabels), len(changedLabels))
+	}
+	for k, v := range baseLabels {
+		if changedLabels[k] != v {
+			t.Errorf("pod label %s changed: want %q got %q", k, v, changedLabels[k])
+		}
+	}
+	if _, ok := changedLabels["custom"]; ok {
+		t.Error("CR label 'custom' must not appear in pod template labels")
 	}
 }
 

@@ -5,8 +5,10 @@ package common
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha512"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/pem"
 	"math/big"
 	"testing"
@@ -56,5 +58,43 @@ func TestPemToDER_InvalidCert(t *testing.T) {
 	_, err := PemToDER(garbage)
 	if err == nil {
 		t.Error("expected error for invalid X.509 bytes")
+	}
+}
+
+func TestExtractPubKeyHex_Valid(t *testing.T) {
+	pemBytes, _ := selfSignedCert(t)
+	got, err := ExtractPubKeyHex(pemBytes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) == 0 {
+		t.Error("expected non-empty hex string")
+	}
+}
+
+func TestExtractPubKeyHex_NoPEMBlock(t *testing.T) {
+	_, err := ExtractPubKeyHex([]byte("not a pem"))
+	if err == nil {
+		t.Error("expected error for non-PEM input")
+	}
+}
+
+func TestCertHashHex_Valid(t *testing.T) {
+	pemBytes, derBytes := selfSignedCert(t)
+	got, err := CertHashHex(pemBytes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	sum := sha512.Sum384(derBytes)
+	want := hex.EncodeToString(sum[:])
+	if got != want {
+		t.Errorf("CertHashHex mismatch: got %s, want %s", got, want)
+	}
+}
+
+func TestCertHashHex_NoPEMBlock(t *testing.T) {
+	_, err := CertHashHex([]byte("not a pem"))
+	if err == nil {
+		t.Error("expected error for non-PEM input")
 	}
 }
