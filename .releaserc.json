@@ -20,7 +20,7 @@
     [
       "@semantic-release/exec",
       {
-        "cmd": "set -e\n# Update version in Chart.yaml\nsed -i \"s/^version:.*/version: ${nextRelease.version}/\" charts/solo-operator/Chart.yaml\nsed -i \"s/^appVersion:.*/appVersion: \\\"${nextRelease.version}\\\"/\" charts/solo-operator/Chart.yaml\n# Package Helm chart\nhelm package charts/solo-operator\n# Output version for subsequent workflow steps\necho \"${nextRelease.version}\" > .release-version"
+        "cmd": "set -e\n# Update version in Chart.yaml\nsed -i \"s/^version:.*/version: ${nextRelease.version}/\" charts/solo-operator/Chart.yaml\nsed -i \"s/^appVersion:.*/appVersion: \\\"${nextRelease.version}\\\"/\" charts/solo-operator/Chart.yaml\n# Output version for subsequent workflow steps\necho \"${nextRelease.version}\" > .release-version"
       }
     ],
     [
@@ -28,7 +28,8 @@
       {
         "assets": [
           "charts/solo-operator/Chart.yaml"
-        ]
+        ],
+        "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
       }
     ]
   ],
@@ -37,8 +38,7 @@
       "@semantic-release/github",
       {
         "assets": [
-          "config/crd/bases/*",
-          "solo-operator-*.tgz"
+          "config/crd/bases/*"
         ]
       }
     ]
