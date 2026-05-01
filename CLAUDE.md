@@ -1,0 +1,148 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+**solo-operator** is a Go-based Kubernetes operator built with [controller-runtime](https://github.com/kubernetes-sigs/controller-runtime) that automates deployment and lifecycle management of Hedera consensus networks on Kubernetes. It provides Custom Resource Definitions (CRDs) for managing all components of a Hedera Solo network.
+
+**Managed custom resources:**
+- `Orbit` — cluster-scoped network configuration
+- `ConsensusCapsule` — namespace-scoped Hedera consensus node
+- `NetworkOperation` — namespace-scoped genesis/upgrade operations
+- `HAProxyCapsule` — namespace-scoped HAProxy load balancer
+- `EnvoyProxy` — namespace-scoped Envoy proxy
+- `HelmCapsule` — Helm-managed deployments
+
+## Workflow Reminders
+
+> These rules apply every time code is changed in this repository.
+
+0. **When starting a new PR**, automatically:
+   1. Fetch and check out the latest `main`: `git fetch origin && git checkout main && git pull origin main`
+   2. Create and switch to a new branch following the pattern `<type>/<short-description>` (e.g. `feat/consensus-capsule-ha`, `fix/orbit-finalizer-race`)
+
+1. **After every code change** that touches `api/v1alpha1/` or `config/rbac/`, run:
+   ```bash
+   task generate        # regenerates CRD manifests and deepcopy methods
+   task helm:sync-crds  # syncs generated CRDs into the Helm subchart
+   task helm:sync-rbac  # syncs RBAC rules into the Helm chart
+   ```
+
+2. **Before committing**, run `task lint` to auto-format code.
+
+3. **Every commit** must use a [Conventional Commits](https://www.conventionalcommits.org/) subject line and be signed with both `-s` (DCO sign-off) and `-S` (GPG sign):
+   ```bash
+   git commit -sS -m "type(scope): short description"
+   ```
+
+4. **License headers** (SPDX) are required on all new Go source files:
+   ```go
+   // SPDX-License-Identifier: Apache-2.0
+   ```
+
+## Build & Development Commands
+
+This project uses [Task](https://taskfile.dev) as the build system.
+
+```bash
+# Build
+task build               # build all packages (go build -v ./...)
+task build:binary        # build manager binary to bin/manager
+
+# Testing
+task test:unit           # unit tests with coverage
+task test:integration    # integration tests with envtest
+task test:e2e            # E2E tests against a kind cluster
+
+# Code generation (run after modifying api/v1alpha1/ types)
+task generate            # run all generators (manifests + deepcopy + rbac)
+task generate:manifests  # generate CRD manifests via controller-gen
+task generate:deepcopy   # generate DeepCopy methods
+task generate:rbac       # generate RBAC manifests
+
+# Helm chart
+task helm:build          # sync CRDs + RBAC, then package chart → solo-operator-*.tgz
+task helm:sync-crds      # sync config/crd/bases/ → charts/solo-operator/charts/crds/templates/
+task helm:sync-rbac      # sync config/rbac/role.yaml → charts/solo-operator/templates/rbac.yaml
+
+# Linting
+task lint                # run golangci-lint (auto-fix where possible)
+task lint:fix            # run golangci-lint with --fix
+
+# Local development
+task dev                 # reset kind cluster + run operator locally
+task kind:create         # create kind cluster
+task kind:delete         # delete kind cluster
+task kind:load           # load Docker image into kind
+
+# CRD lifecycle (uses kubectl + kustomize)
+task install             # install CRDs into current cluster
+task uninstall           # uninstall CRDs
+task deploy              # deploy operator with kustomize
+task undeploy            # undeploy operator
+
+# Docker
+task docker:build        # build Docker image (linux/amd64)
+task docker:push         # push Docker image
+```
+
+## Architecture
+
+### API Layer (`api/v1alpha1/`)
+
+Go type definitions for all CRDs. After modifying types here, always run `task generate` to regenerate manifests and DeepCopy methods.
+
+### Controller Layer (`internal/controller/`)
+
+Reconciler implementations. Each CRD has a corresponding reconciler. Uses the subreconciler pattern (`internal/subreconciler/`) for managing dependent resources.
+
+### Key Internal Packages
+
+| Package | Purpose |
+|---------|---------|
+| `internal/controller/` | Reconciler implementations (one per CRD) |
+| `internal/subreconciler/` | Dependent resource pattern (owned object reconciliation) |
+| `internal/resources/` | Kubernetes resource builders (Deployments, Services, etc.) |
+| `internal/operations/` | `NetworkOperation` step processors (genesis, upgrade) |
+| `internal/processor/` | Generic step-based task execution framework |
+| `internal/sequencer/` | Operation queue and ordering management |
+| `internal/common/` | Shared utilities (labels, annotations, conditions) |
+
+### Config & Manifests (`config/`)
+
+| Path | Purpose |
+|------|---------|
+| `config/crd/bases/` | **Source of truth** for CRD manifests — generated by `controller-gen`, synced into the Helm chart by `task helm:sync-crds` |
+| `config/rbac/` | RBAC role/binding manifests — synced into the Helm chart by `task helm:sync-rbac` |
+| `config/manager/` | Manager Deployment manifest |
+| `config/default/` | Kustomize default overlay |
+
+### Helm Chart (`charts/solo-operator/`)
+
+| Path | Purpose |
+|------|---------|
+| `charts/solo-operator/Chart.yaml` | Chart metadata (version managed by semantic-release) |
+| `charts/solo-operator/values.yaml` | Default values |
+| `charts/solo-operator/templates/` | Deployment, Service, ServiceAccount, RBAC, ServiceMonitor |
+| `charts/solo-operator/charts/crds/` | CRD subchart — templates are generated, not hand-written |
+
+The chart is published to `oci://ghcr.io/hashgraph/charts/solo-operator` on every release.
+
+### CI/CD
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `flow-pull-request-checks.yaml` | PR | Build, lint, unit tests, helm lint/template, Snyk |
+| `flow-release-deploy-artifact.yaml` | `workflow_dispatch` | Semantic release → helm publish → docker publish |
+| `zxc-helm-check.yaml` | reusable | Helm lint + template validation |
+| `zxc-release.yaml` | reusable | Semantic release + helm package/push |
+| `flow-nightly-test.yaml` | schedule | Nightly E2E tests |
+
+## Key Conventions
+
+- Go version is specified in `go.mod`; use `actions/setup-go` with `go-version-file: go.mod`
+- Kubernetes ≥ 1.27.0 required (enforced in `Chart.yaml` via `kubeVersion`)
+- Operator image: `ghcr.io/hashgraph/solo-operator` (multi-platform: `linux/amd64`, `linux/arm64`)
+- Release branches: `main`, `release/X.Y`, pre-release channels: `alpha/*`, `beta/*`, `rc/*`, `ci/*`
+- Conventional commits are enforced — semantic-release uses them to determine version bumps
