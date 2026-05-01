@@ -55,13 +55,13 @@ The Solo Operator Helm chart is published to two OCI registries on each release:
 
 | Registry | URL |
 |----------|-----|
-| GitHub Container Registry (GHCR) | `oci://ghcr.io/hashgraph/solo-operator` |
+| GitHub Container Registry (GHCR) | `oci://ghcr.io/hashgraph/charts` |
 | JFrog Artifactory | `oci://artifacts.hashgraph.io/solo-operator-helm-release` |
 
 #### Helm Install (Latest Version)
 ```shell
 # From GHCR (public)
-helm install solo-operator oci://ghcr.io/hashgraph/solo-operator/solo-operator --namespace solo-operator --create-namespace
+helm install solo-operator oci://ghcr.io/hashgraph/charts/solo-operator --namespace solo-operator --create-namespace
 
 # From JFrog Artifactory
 helm install solo-operator oci://artifacts.hashgraph.io/solo-operator-helm-release/solo-operator --namespace solo-operator --create-namespace
@@ -70,7 +70,7 @@ helm install solo-operator oci://artifacts.hashgraph.io/solo-operator-helm-relea
 #### Helm Install (Specific Version)
 ```shell
 # From GHCR (public)
-helm install solo-operator oci://ghcr.io/hashgraph/solo-operator/solo-operator --version 0.2.0 --namespace solo-operator --create-namespace
+helm install solo-operator oci://ghcr.io/hashgraph/charts/solo-operator --version 0.2.0 --namespace solo-operator --create-namespace
 
 # From JFrog Artifactory
 helm install solo-operator oci://artifacts.hashgraph.io/solo-operator-helm-release/solo-operator --version 0.2.0 --namespace solo-operator --create-namespace
@@ -223,7 +223,7 @@ versioning and release processes. Version increments are determined by the
    - Determine the next version using semantic-release
    - Create a release tag and GitHub release
    - Build and publish container images to `ghcr.io/hashgraph/solo-operator` and `artifacts.hashgraph.io/solo-operator-docker-release/solo-operator`
-   - Publish Helm chart to `oci://ghcr.io/hashgraph/solo-operator` and `oci://artifacts.hashgraph.io/solo-operator-helm-release`
+   - Publish Helm chart to `oci://ghcr.io/hashgraph/charts/solo-operator` and `oci://artifacts.hashgraph.io/solo-operator-helm-release/solo-operator`
 
 ## Support
 
