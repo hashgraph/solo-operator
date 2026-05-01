@@ -22,7 +22,9 @@ env:
   JF_OCI_GROUP: solo-operator-docker-release
 
 permissions:
-  contents: read
+  contents: write
+  issues: write
+  pull-requests: write
   packages: write
 
 jobs:

@@ -26,6 +26,19 @@ on:
         type: string
         required: false
         default: "charts/solo-operator"
+    secrets:
+      GH_ACCESS_TOKEN:
+        required: false
+      GPG_KEY_CONTENTS:
+        required: false
+      GPG_KEY_PASSPHRASE:
+        required: false
+      GIT_USER_NAME:
+        required: false
+      GIT_USER_EMAIL:
+        required: false
+      JF_ACCESS_TOKEN:
+        required: false
     outputs:
       version:
         description: "Version produced by semantic-release (empty if no release)"
@@ -201,8 +214,11 @@ jobs:
         id: package
         run: |
           set -euo pipefail
-          helm package ${{ inputs.helm-chart-path }} --destination "${RUNNER_TEMP}"
-          PKG="$(ls "${RUNNER_TEMP}"/solo-operator-*.tgz | head -n1)"
+          PACKAGE_OUTPUT="$(helm package ${{ inputs.helm-chart-path }} --destination "${RUNNER_TEMP}")"
+          printf '%s\n' "${PACKAGE_OUTPUT}"
+          PKG="$(printf '%s\n' "${PACKAGE_OUTPUT}" | sed -n 's/^Successfully packaged chart and saved it to: //p' | tail -n1)"
+          test -n "${PKG}"
+          test -f "${PKG}"
           echo "path=${PKG}" >> "${GITHUB_OUTPUT}"
           echo "name=$(basename "${PKG}")" >> "${GITHUB_OUTPUT}"
           DIGEST="$(sha256sum "${PKG}" | awk '{print $1}')"
@@ -219,9 +235,10 @@ jobs:
       - name: Helm Registry Login (JFrog)
         if: ${{ !inputs.dry-run }}
         run: |
-          helm registry login ${{ vars.JF_HELM_REGISTRY }} \
-            --username ${{ vars.JF_USERNAME }} \
-            --password "${{ secrets.JF_ACCESS_TOKEN }}"
+          echo "${{ secrets.JF_ACCESS_TOKEN }}" | \
+            helm registry login ${{ vars.JF_HELM_REGISTRY }} \
+              --username ${{ vars.JF_USERNAME }} \
+              --password-stdin
 
       - name: Helm Push (GitHub)
         if: ${{ !inputs.dry-run }}
