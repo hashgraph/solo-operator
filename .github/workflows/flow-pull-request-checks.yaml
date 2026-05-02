@@ -68,6 +68,10 @@ jobs:
 #    secrets:
 #      codacy-project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
 
+  helm-check:
+    name: Helm Check
+    uses: ./.github/workflows/zxc-helm-check.yaml
+
   snyk:
     name: Snyk Scan
     uses: ./.github/workflows/zxc-code-analysis.yaml

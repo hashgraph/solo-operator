@@ -1,0 +1,264 @@
+# SPDX-License-Identifier: Apache-2.0
+
+---
+name: "ZXC: Semantic Release"
+
+on:
+  workflow_call:
+    inputs:
+      dry-run:
+        description: "Run semantic-release in dry-run mode"
+        type: boolean
+        required: false
+        default: false
+      node-version:
+        description: "Node.js version"
+        type: string
+        required: false
+        default: "22"
+      helm-version:
+        description: "Helm version"
+        type: string
+        required: false
+        default: "v3.18.0"
+      helm-chart-path:
+        description: "Path to the Helm chart directory"
+        type: string
+        required: false
+        default: "charts/solo-operator"
+    secrets:
+      GH_ACCESS_TOKEN:
+        required: false
+      GPG_KEY_CONTENTS:
+        required: false
+      GPG_KEY_PASSPHRASE:
+        required: false
+      GIT_USER_NAME:
+        required: false
+      GIT_USER_EMAIL:
+        required: false
+      JF_ACCESS_TOKEN:
+        required: false
+    outputs:
+      version:
+        description: "Version produced by semantic-release (empty if no release)"
+        value: ${{ jobs.release.outputs.version }}
+      released:
+        description: "true if semantic-release produced a new version"
+        value: ${{ jobs.release.outputs.released }}
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: "Semantic Release"
+    runs-on: solo-linux-medium
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      version: ${{ steps.semantic-release.outputs.version }}
+      released: ${{ steps.semantic-release.outputs.released }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout Code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          token: ${{ secrets.GH_ACCESS_TOKEN }}
+
+      - name: Install GnuPG Tools
+        run: |
+          if ! command -v gpg2 >/dev/null 2>&1; then
+            echo "::group::Updating APT Repository Indices"
+              sudo apt update
+            echo "::endgroup::"
+            echo "::group::Installing GnuPG Tools"
+              sudo apt install -y gnupg2
+            echo "::endgroup::"
+          fi
+
+      - name: Import GPG Key
+        id: gpg_key
+        uses: step-security/ghaction-import-gpg@c0b4a334b9b72bfaaebec86ef022a78a5b17f828 # v7.0.0
+        with:
+          gpg_private_key: ${{ secrets.GPG_KEY_CONTENTS }}
+          passphrase: ${{ secrets.GPG_KEY_PASSPHRASE }}
+          git_config_global: true
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+          git_tag_gpgsign: true
+
+      - name: Install DCO Sign-off Hook
+        run: |
+          cat > .git/hooks/prepare-commit-msg <<'HOOK'
+          #!/bin/sh
+          msg="$1"
+          if ! grep -q "^Signed-off-by:" "$msg"; then
+            name="${GIT_AUTHOR_NAME:-$(git config user.name)}"
+            email="${GIT_AUTHOR_EMAIL:-$(git config user.email)}"
+            printf "\nSigned-off-by: %s <%s>\n" "$name" "$email" >> "$msg"
+          fi
+          HOOK
+          chmod +x .git/hooks/prepare-commit-msg
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Install Semantic Release
+        run: |
+          npm install -g \
+            semantic-release@24.2.4 \
+            @semantic-release/commit-analyzer@13.0.1 \
+            @semantic-release/release-notes-generator@14.0.3 \
+            @semantic-release/exec@7.1.0 \
+            @semantic-release/git@10.0.1 \
+            @semantic-release/github@11.0.1 \
+            conventional-changelog-conventionalcommits@8.0.0
+
+      - name: Run Semantic Release
+        id: semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
+          GIT_AUTHOR_NAME: ${{ secrets.GIT_USER_NAME }}
+          GIT_AUTHOR_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
+          GIT_COMMITTER_NAME: ${{ secrets.GIT_USER_NAME }}
+          GIT_COMMITTER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
+        run: |
+          set -euo pipefail
+          FLAGS=""
+          if [[ "${{ inputs.dry-run }}" == "true" ]]; then
+            FLAGS="--dry-run"
+          fi
+          npx semantic-release ${FLAGS}
+          if [[ -s .release-version ]]; then
+            VERSION="$(cat .release-version | tr -d '[:space:]')"
+            echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+            echo "released=true" >> "${GITHUB_OUTPUT}"
+            echo "Semantic release produced version: ${VERSION}"
+          else
+            echo "version=" >> "${GITHUB_OUTPUT}"
+            echo "released=false" >> "${GITHUB_OUTPUT}"
+            echo "Semantic release did not produce a new version."
+          fi
+
+  helm-publish:
+    name: "Helm Publish"
+    needs: release
+    if: ${{ needs.release.outputs.released == 'true' }}
+    runs-on: solo-linux-medium
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout Code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install yq
+        run: go install github.com/mikefarah/yq/v4@latest
+
+      - name: Setup Task
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Helm
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+        with:
+          version: ${{ inputs.helm-version }}
+
+      - name: Sync CRD Templates into Subchart
+        run: task helm:sync-crds
+
+      - name: Sync Chart.yaml version
+        run: |
+          set -euo pipefail
+          V="${{ needs.release.outputs.version }}"
+          sed -i -E "s/^version: .*/version: ${V}/" ${{ inputs.helm-chart-path }}/Chart.yaml
+          sed -i -E "s/^appVersion: .*/appVersion: \"${V}\"/" ${{ inputs.helm-chart-path }}/Chart.yaml
+          grep -qE "^version: ${V}$" ${{ inputs.helm-chart-path }}/Chart.yaml
+          grep -qE "^appVersion: \"${V}\"$" ${{ inputs.helm-chart-path }}/Chart.yaml
+          grep -E '^(version|appVersion):' ${{ inputs.helm-chart-path }}/Chart.yaml
+
+      - name: Helm lint
+        run: helm lint ${{ inputs.helm-chart-path }}
+
+      - name: Helm package
+        id: package
+        run: |
+          set -euo pipefail
+          PACKAGE_OUTPUT="$(helm package ${{ inputs.helm-chart-path }} --destination "${RUNNER_TEMP}")"
+          printf '%s\n' "${PACKAGE_OUTPUT}"
+          PKG="$(printf '%s\n' "${PACKAGE_OUTPUT}" | sed -n 's/^Successfully packaged chart and saved it to: //p' | tail -n1)"
+          test -n "${PKG}"
+          test -f "${PKG}"
+          echo "path=${PKG}" >> "${GITHUB_OUTPUT}"
+          echo "name=$(basename "${PKG}")" >> "${GITHUB_OUTPUT}"
+          DIGEST="$(sha256sum "${PKG}" | awk '{print $1}')"
+          echo "digest=sha256:${DIGEST}" >> "${GITHUB_OUTPUT}"
+
+      - name: Helm Registry Login (GitHub)
+        if: ${{ !inputs.dry-run }}
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | \
+            helm registry login ghcr.io \
+              --username ${{ github.actor }} \
+              --password-stdin
+
+      - name: Helm Registry Login (JFrog)
+        if: ${{ !inputs.dry-run }}
+        run: |
+          echo "${{ secrets.JF_ACCESS_TOKEN }}" | \
+            helm registry login ${{ vars.JF_HELM_REGISTRY }} \
+              --username ${{ vars.JF_USERNAME }} \
+              --password-stdin
+
+      - name: Helm Push (GitHub)
+        if: ${{ !inputs.dry-run }}
+        run: |
+          set -euo pipefail
+          helm push "${{ steps.package.outputs.path }}" \
+            "oci://ghcr.io/hashgraph/charts"
+
+      - name: Helm Push (JFrog)
+        if: ${{ !inputs.dry-run }}
+        run: |
+          set -euo pipefail
+          helm push "${{ steps.package.outputs.path }}" \
+            "oci://${{ vars.JF_HELM_REGISTRY }}/solo-operator-helm-release"
+
+      - name: Upload chart artifact (dry-run)
+        if: ${{ inputs.dry-run }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: helm-chart-${{ needs.release.outputs.version }}
+          path: ${{ steps.package.outputs.path }}
+          if-no-files-found: error
+          retention-days: 7
