@@ -31,7 +31,9 @@ var _ = Describe("E2E Tests", func() {
 						Name: "e2e-test-orbit",
 					},
 					Spec: operatorv1alpha1.OrbitSpec{
-						Lifetime: "24h",
+						Namespace:       "e2e-test-orbit",
+						CreateNamespace: true,
+						Lifetime:        "24h",
 						Consensus: operatorv1alpha1.OrbitConsensus{
 							NetworkSettings:          map[string]string{"ledger.id": "0x03"},
 							ApplicationConfiguration: map[string]string{"hedera.realm": "0"},
@@ -59,6 +61,8 @@ var _ = Describe("E2E Tests", func() {
 						Name: "e2e-orbit-telemetry",
 					},
 					Spec: operatorv1alpha1.OrbitSpec{
+						Namespace:       "e2e-orbit-telemetry",
+						CreateNamespace: true,
 						Telemetry: &operatorv1alpha1.OrbitTelemetry{
 							Alloy: &operatorv1alpha1.OrbitAlloyDefaults{
 								Enabled: true,
@@ -514,7 +518,8 @@ var _ = Describe("E2E Tests", func() {
 					Name: orbitName,
 				},
 				Spec: operatorv1alpha1.OrbitSpec{
-					Lifetime: "1h",
+					Namespace: testNamespace,
+					Lifetime:  "1h",
 					Consensus: operatorv1alpha1.OrbitConsensus{
 						NetworkSettings: map[string]string{
 							"ledger.id":           "0x03",
@@ -675,12 +680,15 @@ var _ = Describe("E2E Tests", func() {
 			)
 
 			BeforeEach(func() {
-				// Create orbit first
+				// Create namespace first so Orbit can reference it.
+				_ = createNamespace(ctx, testNamespace)
+
 				orbit := &operatorv1alpha1.Orbit{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: orbitName,
 					},
 					Spec: operatorv1alpha1.OrbitSpec{
+						Namespace: testNamespace,
 						Consensus: operatorv1alpha1.OrbitConsensus{
 							NetworkSettings:          map[string]string{"ledger.id": "0x03"},
 							ApplicationConfiguration: map[string]string{"hedera.realm": "0"},
@@ -689,9 +697,6 @@ var _ = Describe("E2E Tests", func() {
 					},
 				}
 				_ = k8sClient.Create(ctx, orbit)
-
-				// Create namespace
-				_ = createNamespace(ctx, testNamespace)
 			})
 
 			AfterEach(func() {
@@ -768,6 +773,8 @@ var _ = Describe("Operator Reconciliation Tests", Label("operator-required"), fu
 					Name: orbitName,
 				},
 				Spec: operatorv1alpha1.OrbitSpec{
+					Namespace:       orbitName,
+					CreateNamespace: true,
 					Consensus: operatorv1alpha1.OrbitConsensus{
 						NetworkSettings:          map[string]string{"ledger.id": "0x03"},
 						ApplicationConfiguration: map[string]string{"hedera.realm": "0"},

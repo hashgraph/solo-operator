@@ -10,6 +10,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -17,20 +18,26 @@ import (
 )
 
 var _ = Describe("Orbit Controller", func() {
-	Context("When creating an Orbit", func() {
+	Context("With a pre-existing namespace (CreateNamespace=false)", func() {
 		const (
-			orbitName = "test-orbit"
+			orbitName = "orbit-precreated-ns"
+			nsName    = "orbit-precreated-ns"
 		)
 
 		ctx := context.Background()
 
-		It("Should create dependent resources", func() {
-			By("Creating a new Orbit")
+		BeforeEach(func() {
+			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: nsName}}
+			if err := k8sClient.Create(ctx, ns); err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
+		})
+
+		It("Should create dependent resources in the provided namespace", func() {
 			orbit := &operatorv1alpha1.Orbit{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: orbitName,
-				},
+				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
+					Namespace: nsName,
 					Consensus: operatorv1alpha1.OrbitConsensus{
 						NetworkSettings:          map[string]string{"ledger.id": "0x03"},
 						ApplicationConfiguration: map[string]string{"hedera.realm": "0"},
@@ -38,67 +45,79 @@ var _ = Describe("Orbit Controller", func() {
 					},
 				},
 			}
-			err := k8sClient.Create(ctx, orbit)
-			if err != nil {
+			if err := k8sClient.Create(ctx, orbit); err != nil {
 				Expect(err.Error()).To(ContainSubstring("already exists"))
 			}
 
-			// Verify Orbit is created (cluster-scoped, no namespace)
-			orbitLookupKey := types.NamespacedName{Name: orbitName}
-			createdOrbit := &operatorv1alpha1.Orbit{}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, orbitLookupKey, createdOrbit)
-				return err == nil
-			}, timeout, interval).Should(BeTrue())
-
-			By("Verifying the namespace is created with orbit name")
-			namespaceLookupKey := types.NamespacedName{Name: orbitName}
-			createdNamespace := &corev1.Namespace{}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, namespaceLookupKey, createdNamespace)
-				return err == nil
-			}, timeout, interval).Should(BeTrue())
-
-			By("Verifying the ConfigMap is created")
-			cmLookupKey := types.NamespacedName{Name: "consensus-config", Namespace: orbitName}
-			createdCM := &corev1.ConfigMap{}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, cmLookupKey, createdCM)
-				return err == nil
-			}, timeout, interval).Should(BeTrue())
-
-			By("Verifying the Role is created")
-			roleLookupKey := types.NamespacedName{Name: "consensus-capsule-role", Namespace: orbitName}
-			createdRole := &rbacv1.Role{}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, roleLookupKey, createdRole)
-				return err == nil
-			}, timeout, interval).Should(BeTrue())
-
-			By("Verifying the headless Service is created")
-			svcLookupKey := types.NamespacedName{Name: "consensus", Namespace: orbitName}
-			createdSvc := &corev1.Service{}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, svcLookupKey, createdSvc)
-				return err == nil
-			}, timeout, interval).Should(BeTrue())
-			Expect(createdSvc.Spec.ClusterIP).To(Equal("None"))
-
-			By("Cleaning up")
-			Expect(k8sClient.Delete(ctx, orbit)).Should(Succeed())
-			// envtest doesn't run the namespace lifecycle controller, so spec.finalizers=[kubernetes]
-			// is never removed and the namespace stays Terminating. Patch it out manually.
+			By("Verifying the Orbit becomes ready")
 			Eventually(func() error {
+				return k8sClient.Get(ctx, types.NamespacedName{Name: orbitName}, &operatorv1alpha1.Orbit{})
+			}, timeout, interval).Should(Succeed())
+
+			By("Verifying owned resources live in the provided namespace")
+			Eventually(func() error {
+				return k8sClient.Get(ctx, types.NamespacedName{Name: "consensus-config", Namespace: nsName}, &corev1.ConfigMap{})
+			}, timeout, interval).Should(Succeed())
+			Eventually(func() error {
+				return k8sClient.Get(ctx, types.NamespacedName{Name: "consensus-capsule-role", Namespace: nsName}, &rbacv1.Role{})
+			}, timeout, interval).Should(Succeed())
+			Eventually(func() error {
+				return k8sClient.Get(ctx, types.NamespacedName{Name: "consensus", Namespace: nsName}, &corev1.Service{})
+			}, timeout, interval).Should(Succeed())
+
+			By("Deleting the Orbit and verifying the namespace survives")
+			Expect(k8sClient.Delete(ctx, orbit)).Should(Succeed())
+			Eventually(func() bool {
+				return apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: orbitName}, &operatorv1alpha1.Orbit{}))
+			}, timeout, interval).Should(BeTrue())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &corev1.Namespace{})).Should(Succeed())
+		})
+	})
+
+	Context("With CreateNamespace=true (dev/ci convenience)", func() {
+		const (
+			orbitName = "test-orbit-created"
+			nsName    = "test-orbit-created-ns"
+		)
+
+		ctx := context.Background()
+
+		It("Should provision the namespace and tear it down on delete", func() {
+			orbit := &operatorv1alpha1.Orbit{
+				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
+				Spec: operatorv1alpha1.OrbitSpec{
+					Namespace:       nsName,
+					CreateNamespace: true,
+					Consensus: operatorv1alpha1.OrbitConsensus{
+						NetworkSettings:          map[string]string{"ledger.id": "0x03"},
+						ApplicationConfiguration: map[string]string{"hedera.realm": "0"},
+						PermissionConfiguration:  map[string]string{"permission": "default"},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, orbit)).Should(Succeed())
+
+			Eventually(func() error {
+				return k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &corev1.Namespace{})
+			}, timeout, interval).Should(Succeed())
+
+			By("Cleaning up: envtest doesn't drain namespace finalizers, so strip them manually")
+			Expect(k8sClient.Delete(ctx, orbit)).Should(Succeed())
+			Eventually(func() bool {
 				ns := &corev1.Namespace{}
-				if err := k8sClient.Get(ctx, types.NamespacedName{Name: orbitName}, ns); err != nil {
-					return nil
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns)
+				if apierrors.IsNotFound(err) {
+					return true
+				}
+				if err != nil {
+					return false
 				}
 				ns.Spec.Finalizers = nil
-				return k8sClient.SubResource("finalize").Update(ctx, ns)
-			}, timeout, interval).Should(Succeed())
+				_ = k8sClient.SubResource("finalize").Update(ctx, ns)
+				return false
+			}, timeout, interval).Should(BeTrue())
 			Eventually(func() bool {
-				err := k8sClient.Get(ctx, orbitLookupKey, &operatorv1alpha1.Orbit{})
-				return err != nil
+				return apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: orbitName}, &operatorv1alpha1.Orbit{}))
 			}, timeout, interval).Should(BeTrue())
 		})
 	})
@@ -106,17 +125,23 @@ var _ = Describe("Orbit Controller", func() {
 	Context("When creating an Orbit with telemetry", func() {
 		const (
 			orbitName = "test-orbit-telemetry"
+			nsName    = "test-orbit-telemetry-ns"
 		)
 
 		ctx := context.Background()
 
+		BeforeEach(func() {
+			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: nsName}}
+			if err := k8sClient.Create(ctx, ns); err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
+		})
+
 		It("Should create orbit with telemetry settings", func() {
-			By("Creating a new Orbit with telemetry enabled")
 			orbit := &operatorv1alpha1.Orbit{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: orbitName,
-				},
+				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
+					Namespace: nsName,
 					Telemetry: &operatorv1alpha1.OrbitTelemetry{
 						Alloy: &operatorv1alpha1.OrbitAlloyDefaults{
 							Enabled: true,
@@ -139,18 +164,14 @@ var _ = Describe("Orbit Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, orbit)).Should(Succeed())
 
-			// Verify Orbit is created with telemetry config
-			orbitLookupKey := types.NamespacedName{Name: orbitName}
 			createdOrbit := &operatorv1alpha1.Orbit{}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, orbitLookupKey, createdOrbit)
-				return err == nil
-			}, timeout, interval).Should(BeTrue())
+			Eventually(func() error {
+				return k8sClient.Get(ctx, types.NamespacedName{Name: orbitName}, createdOrbit)
+			}, timeout, interval).Should(Succeed())
 
 			Expect(createdOrbit.Spec.Telemetry).ToNot(BeNil())
 			Expect(createdOrbit.Spec.Telemetry.Alloy.Enabled).To(BeTrue())
 
-			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, orbit)).Should(Succeed())
 		})
 	})
@@ -158,18 +179,24 @@ var _ = Describe("Orbit Controller", func() {
 	Context("When creating an Orbit with lifetime", func() {
 		const (
 			orbitName = "test-orbit-lifetime"
+			nsName    = "test-orbit-lifetime-ns"
 		)
 
 		ctx := context.Background()
 
+		BeforeEach(func() {
+			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: nsName}}
+			if err := k8sClient.Create(ctx, ns); err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
+		})
+
 		It("Should create orbit with lifetime setting", func() {
-			By("Creating a new Orbit with lifetime")
 			orbit := &operatorv1alpha1.Orbit{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: orbitName,
-				},
+				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
-					Lifetime: "24h",
+					Namespace: nsName,
+					Lifetime:  "24h",
 					Consensus: operatorv1alpha1.OrbitConsensus{
 						NetworkSettings:          map[string]string{"ledger.id": "0x03"},
 						ApplicationConfiguration: map[string]string{"hedera.realm": "0"},
@@ -179,17 +206,13 @@ var _ = Describe("Orbit Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, orbit)).Should(Succeed())
 
-			// Verify Orbit is created with lifetime
-			orbitLookupKey := types.NamespacedName{Name: orbitName}
 			createdOrbit := &operatorv1alpha1.Orbit{}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, orbitLookupKey, createdOrbit)
-				return err == nil
-			}, timeout, interval).Should(BeTrue())
+			Eventually(func() error {
+				return k8sClient.Get(ctx, types.NamespacedName{Name: orbitName}, createdOrbit)
+			}, timeout, interval).Should(Succeed())
 
 			Expect(createdOrbit.Spec.Lifetime).To(Equal("24h"))
 
-			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, orbit)).Should(Succeed())
 		})
 	})

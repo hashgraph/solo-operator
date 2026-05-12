@@ -9,6 +9,17 @@ import (
 
 // OrbitSpec defines the desired state of an Orbit
 type OrbitSpec struct {
+	// Namespace where this Orbit's resources and Capsules live.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="namespace is immutable"
+	Namespace string `json:"namespace"`
+
+	// CreateNamespace makes the operator provision the namespace itself.
+	// +kubebuilder:default=false
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="createNamespace is immutable"
+	// +optional
+	CreateNamespace bool `json:"createNamespace,omitempty"`
+
 	// DeploymentModel specifies whether this is a single or multi-cluster deployment
 	// +kubebuilder:validation:Enum=SingleKubernetesCluster;MultipleKubernetesClusters
 	// +optional

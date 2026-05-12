@@ -4,6 +4,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -45,6 +46,8 @@ func NewOrbitReconciler(c client.Client, scheme *runtime.Scheme) *OrbitReconcile
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=orbits,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=orbits/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=orbits/finalizers,verbs=update
+// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=consensuscapsules,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=helmcapsules,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
@@ -92,6 +95,9 @@ func (r *OrbitReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// Reconcile all dependent resources using subreconciler chain
 	result, err := r.subreconcilers.Reconcile(ctx, orbitObj)
 	if err != nil {
+		if errors.Is(err, orbit.ErrNamespaceConflict) {
+			_ = r.markNotReady(ctx, orbitObj, "NamespaceConflict", err.Error())
+		}
 		return result, err
 	}
 	if result.Requeue || result.RequeueAfter > 0 {
@@ -106,36 +112,113 @@ func (r *OrbitReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	return ctrl.Result{}, nil
 }
 
-// handleDeletion handles the deletion of an Orbit resource
 func (r *OrbitReconciler) handleDeletion(ctx context.Context, orbitObj *operatorv1alpha1.Orbit) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	if controllerutil.ContainsFinalizer(orbitObj, OrbitFinalizer) {
-		logger.Info("Deleting Orbit", "name", orbitObj.Name)
+	if !controllerutil.ContainsFinalizer(orbitObj, OrbitFinalizer) {
+		return ctrl.Result{}, nil
+	}
+	logger.Info("Deleting Orbit", "name", orbitObj.Name)
 
+	remaining, err := r.deleteOwnedCapsules(ctx, orbitObj)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if remaining > 0 {
+		logger.Info("Waiting for owned capsules to be deleted", "remaining", remaining)
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	if orbitObj.Spec.CreateNamespace {
 		ns := &corev1.Namespace{}
-		err := r.Get(ctx, client.ObjectKey{Name: orbitObj.Name}, ns)
+		err := r.Get(ctx, client.ObjectKey{Name: orbitObj.Spec.Namespace}, ns)
 		if err != nil && !apierrors.IsNotFound(err) {
 			return ctrl.Result{}, err
 		}
 		if err == nil {
 			if ns.DeletionTimestamp.IsZero() {
-				logger.Info("Deleting orbit namespace", "name", orbitObj.Name)
+				logger.Info("Deleting orbit namespace", "namespace", orbitObj.Spec.Namespace)
 				if err := r.Delete(ctx, ns); err != nil && !apierrors.IsNotFound(err) {
 					return ctrl.Result{}, err
 				}
 			}
-			// Namespace still exists (Terminating) — wait for all resources to drain.
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-		}
-
-		controllerutil.RemoveFinalizer(orbitObj, OrbitFinalizer)
-		if err := r.Update(ctx, orbitObj); err != nil {
-			return ctrl.Result{}, err
 		}
 	}
 
+	controllerutil.RemoveFinalizer(orbitObj, OrbitFinalizer)
+	if err := r.Update(ctx, orbitObj); err != nil {
+		return ctrl.Result{}, err
+	}
 	return ctrl.Result{}, nil
+}
+
+// markNotReady sets Ready=False with the given reason/message on the Orbit's status.
+func (r *OrbitReconciler) markNotReady(ctx context.Context, orbitObj *operatorv1alpha1.Orbit, reason, message string) error {
+	now := metav1.Now()
+	cond := metav1.Condition{
+		Type:               "Ready",
+		Status:             metav1.ConditionFalse,
+		LastTransitionTime: now,
+		Reason:             reason,
+		Message:            message,
+	}
+	found := false
+	for i, c := range orbitObj.Status.Conditions {
+		if c.Type == "Ready" {
+			orbitObj.Status.Conditions[i] = cond
+			found = true
+			break
+		}
+	}
+	if !found {
+		orbitObj.Status.Conditions = append(orbitObj.Status.Conditions, cond)
+	}
+	orbitObj.Status.ObservedGeneration = orbitObj.Generation
+	return r.Status().Update(ctx, orbitObj)
+}
+
+// deleteOwnedCapsules issues Delete for every Capsule that references this Orbit
+// and returns how many are still present (including those already terminating).
+func (r *OrbitReconciler) deleteOwnedCapsules(ctx context.Context, orbitObj *operatorv1alpha1.Orbit) (int, error) {
+	ns := orbitObj.Spec.Namespace
+	remaining := 0
+
+	consensus := &operatorv1alpha1.ConsensusCapsuleList{}
+	if err := r.List(ctx, consensus, client.InNamespace(ns)); err != nil {
+		return 0, err
+	}
+	for i := range consensus.Items {
+		cc := &consensus.Items[i]
+		if cc.Spec.Orbit != orbitObj.Name {
+			continue
+		}
+		remaining++
+		if cc.DeletionTimestamp.IsZero() {
+			if err := r.Delete(ctx, cc); err != nil && !apierrors.IsNotFound(err) {
+				return remaining, err
+			}
+		}
+	}
+
+	helm := &operatorv1alpha1.HelmCapsuleList{}
+	if err := r.List(ctx, helm, client.InNamespace(ns)); err != nil {
+		return remaining, err
+	}
+	for i := range helm.Items {
+		hc := &helm.Items[i]
+		if hc.Spec.OrbitRef == nil || hc.Spec.OrbitRef.Name != orbitObj.Name {
+			continue
+		}
+		remaining++
+		if hc.DeletionTimestamp.IsZero() {
+			if err := r.Delete(ctx, hc); err != nil && !apierrors.IsNotFound(err) {
+				return remaining, err
+			}
+		}
+	}
+
+	return remaining, nil
 }
 
 // updateStatus updates the Orbit status

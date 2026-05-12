@@ -169,6 +169,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 			orbit := &operatorv1alpha1.Orbit{
 				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
+					Namespace: hcNS,
 					Consensus: operatorv1alpha1.OrbitConsensus{
 						NetworkSettings:          map[string]string{"ledger.id": "03"},
 						ApplicationConfiguration: map[string]string{},
@@ -434,6 +435,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 			orbit := &operatorv1alpha1.Orbit{
 				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
+					Namespace: hcNS,
 					Consensus: operatorv1alpha1.OrbitConsensus{
 						NetworkSettings:          map[string]string{"ledger.id": "04"},
 						ApplicationConfiguration: map[string]string{},
@@ -521,6 +523,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 			orbit := &operatorv1alpha1.Orbit{
 				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
+					Namespace: hcNS,
 					Consensus: operatorv1alpha1.OrbitConsensus{
 						NetworkSettings:          map[string]string{"ledger.id": "05"},
 						ApplicationConfiguration: map[string]string{},
@@ -583,6 +586,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 			orbit := &operatorv1alpha1.Orbit{
 				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
+					Namespace: hcNS,
 					Consensus: operatorv1alpha1.OrbitConsensus{
 						NetworkSettings:          map[string]string{"ledger.id": "06"},
 						ApplicationConfiguration: map[string]string{},

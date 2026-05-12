@@ -16,6 +16,7 @@ func TestStandardLabels(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-orbit",
 		},
+		Spec: operatorv1alpha1.OrbitSpec{Namespace: "test-orbit"},
 	}
 
 	labels := StandardLabels(orbit)
@@ -97,6 +98,7 @@ func TestNamespaceSubReconciler_buildNamespace(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-orbit",
 		},
+		Spec: operatorv1alpha1.OrbitSpec{Namespace: "test-orbit"},
 	}
 
 	ns := sr.buildNamespace(orbit)
@@ -120,6 +122,7 @@ func TestConfigMapSubReconciler_buildConfigMap(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-orbit",
 		},
+		Spec: operatorv1alpha1.OrbitSpec{Namespace: "test-orbit"},
 	}
 
 	cm := sr.buildConfigMap(orbit)
@@ -143,6 +146,7 @@ func TestRoleSubReconciler_buildRole(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-orbit",
 		},
+		Spec: operatorv1alpha1.OrbitSpec{Namespace: "test-orbit"},
 	}
 
 	role := sr.buildRole(orbit)
@@ -188,6 +192,7 @@ func TestHeadlessServiceSubReconciler_buildService(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-orbit",
 		},
+		Spec: operatorv1alpha1.OrbitSpec{Namespace: "test-orbit"},
 	}
 
 	svc := sr.buildService(orbit)

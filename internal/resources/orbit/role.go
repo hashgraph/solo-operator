@@ -67,7 +67,7 @@ func (r *RoleSubReconciler) buildRole(orbit *operatorv1alpha1.Orbit) *rbacv1.Rol
 	return &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ConsensusCapsuleRoleName,
-			Namespace: orbit.Name,
+			Namespace: orbit.Spec.Namespace,
 			Labels:    StandardLabels(orbit),
 		},
 		Rules: []rbacv1.PolicyRule{

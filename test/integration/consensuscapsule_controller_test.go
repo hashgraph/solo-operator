@@ -38,6 +38,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			orbit := &operatorv1alpha1.Orbit{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
 				Spec: operatorv1alpha1.OrbitSpec{
+					Namespace: capsuleNamespace,
 					Consensus: operatorv1alpha1.OrbitConsensus{
 						NetworkSettings:          map[string]string{},
 						ApplicationConfiguration: map[string]string{},
@@ -164,6 +165,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			orbit := &operatorv1alpha1.Orbit{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
 				Spec: operatorv1alpha1.OrbitSpec{
+					Namespace: capsuleNamespace,
 					Consensus: operatorv1alpha1.OrbitConsensus{
 						NetworkSettings:          map[string]string{},
 						ApplicationConfiguration: map[string]string{},

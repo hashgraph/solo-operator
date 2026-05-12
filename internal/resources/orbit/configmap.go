@@ -67,7 +67,7 @@ func (r *ConfigMapSubReconciler) buildConfigMap(orbit *operatorv1alpha1.Orbit) *
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ConsensusConfigMapName,
-			Namespace: orbit.Name,
+			Namespace: orbit.Spec.Namespace,
 			Labels:    StandardLabels(orbit),
 		},
 		Data: buildConsensusConfigData(),

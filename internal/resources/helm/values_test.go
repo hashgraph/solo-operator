@@ -216,6 +216,7 @@ func makeOrbit(name, ledgerID string) *operatorv1alpha1.Orbit {
 	o := &operatorv1alpha1.Orbit{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Spec: operatorv1alpha1.OrbitSpec{
+			Namespace: "test-ns",
 			Consensus: operatorv1alpha1.OrbitConsensus{
 				NetworkSettings: map[string]string{},
 			},

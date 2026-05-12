@@ -407,6 +407,7 @@ var _ = Describe("NetworkOperation Genesis — AddressBook", func() {
 		orbit := &operatorv1alpha1.Orbit{
 			ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 			Spec: operatorv1alpha1.OrbitSpec{
+				Namespace: ns,
 				Consensus: operatorv1alpha1.OrbitConsensus{
 					NetworkSettings:          map[string]string{},
 					ApplicationConfiguration: map[string]string{},

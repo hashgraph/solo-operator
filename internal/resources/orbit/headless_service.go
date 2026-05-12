@@ -70,7 +70,7 @@ func (r *HeadlessServiceSubReconciler) buildService(orbit *operatorv1alpha1.Orbi
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      common.ConsensusSubdomain,
-			Namespace: orbit.Name,
+			Namespace: orbit.Spec.Namespace,
 			Labels:    StandardLabels(orbit),
 		},
 		Spec: corev1.ServiceSpec{

@@ -4,6 +4,9 @@ package orbit
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -17,47 +20,58 @@ import (
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
-// NamespaceSubReconciler manages the namespace for an Orbit
+// missingNamespaceRequeue is how long we wait before re-checking a namespace
+// that hasn't been created out-of-band yet.
+const missingNamespaceRequeue = 10 * time.Second
+
+// ErrNamespaceConflict is returned when the target namespace is already claimed
+// by a different Orbit (per the operator.solo.hedera.com/orbit label).
+var ErrNamespaceConflict = errors.New("namespace already claimed by another Orbit")
+
 type NamespaceSubReconciler struct {
 	*subreconciler.BaseSubReconciler[*operatorv1alpha1.Orbit]
 }
 
-// NewNamespaceSubReconciler creates a new NamespaceSubReconciler
 func NewNamespaceSubReconciler(c client.Client, scheme *runtime.Scheme) *NamespaceSubReconciler {
 	return &NamespaceSubReconciler{
 		BaseSubReconciler: subreconciler.NewBaseSubReconciler[*operatorv1alpha1.Orbit](c, scheme, "OrbitNamespace"),
 	}
 }
 
-// Reconcile ensures the orbit namespace exists
 func (r *NamespaceSubReconciler) Reconcile(ctx context.Context, orbit *operatorv1alpha1.Orbit) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	desired := r.buildNamespace(orbit)
-
-	// Check if namespace exists
 	existing := &corev1.Namespace{}
-	err := r.Client.Get(ctx, client.ObjectKey{Name: orbit.Name}, existing)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			logger.Info("Creating namespace", "name", orbit.Name)
-			// Note: We don't set owner reference for cluster-scoped resources
-			// The namespace lifecycle is managed by the Orbit finalizer
-			if err := r.Client.Create(ctx, desired); err != nil {
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{}, nil
+	err := r.Client.Get(ctx, client.ObjectKey{Name: orbit.Spec.Namespace}, existing)
+	if apierrors.IsNotFound(err) {
+		if !orbit.Spec.CreateNamespace {
+			logger.Info("Waiting for namespace to be created out-of-band",
+				"namespace", orbit.Spec.Namespace)
+			return ctrl.Result{RequeueAfter: missingNamespaceRequeue}, nil
 		}
+		logger.Info("Creating namespace", "namespace", orbit.Spec.Namespace)
+		// Cluster-scoped owner refs aren't valid; we clean the namespace up via the finalizer.
+		if err := r.Client.Create(ctx, r.buildNamespace(orbit)); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// Update labels if needed
-	if r.needsUpdate(existing, desired) {
-		logger.V(1).Info("Updating namespace labels", "name", orbit.Name)
+	if owner, ok := existing.Labels[LabelOrbit]; ok && owner != orbit.Name {
+		return ctrl.Result{}, fmt.Errorf("%w: namespace %q claimed by Orbit %q",
+			ErrNamespaceConflict, orbit.Spec.Namespace, owner)
+	}
+
+	desiredLabels := StandardLabels(orbit)
+	if !labelsMatch(existing.Labels, desiredLabels) {
+		logger.V(1).Info("Updating namespace labels", "namespace", orbit.Spec.Namespace)
 		if existing.Labels == nil {
 			existing.Labels = make(map[string]string)
 		}
-		for k, v := range desired.Labels {
+		for k, v := range desiredLabels {
 			existing.Labels[k] = v
 		}
 		if err := r.Client.Update(ctx, existing); err != nil {
@@ -68,22 +82,20 @@ func (r *NamespaceSubReconciler) Reconcile(ctx context.Context, orbit *operatorv
 	return ctrl.Result{}, nil
 }
 
-// buildNamespace builds the desired namespace
 func (r *NamespaceSubReconciler) buildNamespace(orbit *operatorv1alpha1.Orbit) *corev1.Namespace {
 	return &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   orbit.Name,
+			Name:   orbit.Spec.Namespace,
 			Labels: StandardLabels(orbit),
 		},
 	}
 }
 
-// needsUpdate checks if the namespace needs to be updated
-func (r *NamespaceSubReconciler) needsUpdate(existing, desired *corev1.Namespace) bool {
-	for k, v := range desired.Labels {
-		if existing.Labels[k] != v {
-			return true
+func labelsMatch(existing, desired map[string]string) bool {
+	for k, v := range desired {
+		if existing[k] != v {
+			return false
 		}
 	}
-	return false
+	return true
 }

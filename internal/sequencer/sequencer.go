@@ -208,9 +208,14 @@ func (s *Sequencer[T]) CheckNext(request Request[T]) Response {
 
 	resource := request.Resource
 
-	// Find or refresh
+	// Refresh on cache miss so brand-new resources don't have to wait out the
+	// MaxRefreshInterval before being picked up.
 	s.refreshIfNeededLocked()
 	sequencedItem := s.cache.FindItem(resource)
+	if sequencedItem == nil {
+		s.refreshLocked()
+		sequencedItem = s.cache.FindItem(resource)
+	}
 	if sequencedItem == nil {
 		logger.V(1).Info("Resource not found in cache",
 			"namespace", resource.GetNamespace(),
