@@ -4,6 +4,7 @@ metadata:
   name: haproxy-node2
   namespace: solo-orbit
 spec:
+  orbit: solo-orbit
   image: haproxy:2.8.10-alpine3.20
 
   # Ports — shown values are defaults.

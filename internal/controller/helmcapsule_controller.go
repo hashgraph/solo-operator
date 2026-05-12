@@ -259,17 +259,13 @@ func (r *HelmCapsuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 // mapOrbitToHelmCapsules re-enqueues HelmCapsules that reference the changed Orbit.
 func (r *HelmCapsuleReconciler) mapOrbitToHelmCapsules(ctx context.Context, obj client.Object) []reconcile.Request {
-	orbit, ok := obj.(*operatorv1alpha1.Orbit)
-	if !ok {
-		return nil
-	}
 	list := &operatorv1alpha1.HelmCapsuleList{}
-	if err := r.List(ctx, list, client.InNamespace(orbit.Spec.Namespace)); err != nil {
+	if err := r.List(ctx, list); err != nil {
 		return nil
 	}
 	var reqs []reconcile.Request
 	for _, hc := range list.Items {
-		if hc.Spec.OrbitRef != nil && hc.Spec.OrbitRef.Name == orbit.Name {
+		if hc.Spec.OrbitRef != nil && hc.Spec.OrbitRef.Name == obj.GetName() {
 			reqs = append(reqs, reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: hc.Name, Namespace: hc.Namespace},
 			})

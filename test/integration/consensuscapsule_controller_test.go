@@ -38,7 +38,6 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			orbit := &operatorv1alpha1.Orbit{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
 				Spec: operatorv1alpha1.OrbitSpec{
-					Namespace: capsuleNamespace,
 					Consensus: operatorv1alpha1.OrbitConsensus{
 						NetworkSettings:          map[string]string{},
 						ApplicationConfiguration: map[string]string{},
@@ -47,17 +46,6 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 				},
 			}
 			err = k8sClient.Create(ctx, orbit)
-			if err != nil {
-				Expect(err.Error()).To(ContainSubstring("already exists"))
-			}
-
-			role := &rbacv1.Role{
-				ObjectMeta: metav1.ObjectMeta{Name: "consensus-capsule-role", Namespace: capsuleNamespace},
-				Rules: []rbacv1.PolicyRule{
-					{APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"get", "list", "watch"}},
-				},
-			}
-			err = k8sClient.Create(ctx, role)
 			if err != nil {
 				Expect(err.Error()).To(ContainSubstring("already exists"))
 			}
@@ -165,7 +153,6 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			orbit := &operatorv1alpha1.Orbit{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
 				Spec: operatorv1alpha1.OrbitSpec{
-					Namespace: capsuleNamespace,
 					Consensus: operatorv1alpha1.OrbitConsensus{
 						NetworkSettings:          map[string]string{},
 						ApplicationConfiguration: map[string]string{},
@@ -174,17 +161,6 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 				},
 			}
 			err = k8sClient.Create(ctx, orbit)
-			if err != nil {
-				Expect(err.Error()).To(ContainSubstring("already exists"))
-			}
-
-			role := &rbacv1.Role{
-				ObjectMeta: metav1.ObjectMeta{Name: "consensus-capsule-role", Namespace: capsuleNamespace},
-				Rules: []rbacv1.PolicyRule{
-					{APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"get", "list", "watch"}},
-				},
-			}
-			err = k8sClient.Create(ctx, role)
 			if err != nil {
 				Expect(err.Error()).To(ContainSubstring("already exists"))
 			}

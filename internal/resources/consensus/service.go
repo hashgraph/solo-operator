@@ -110,6 +110,9 @@ func (r *ServiceSubReconciler) buildService(capsule *operatorv1alpha1.ConsensusC
 		},
 		Spec: corev1.ServiceSpec{
 			Type: svcType,
+			// Resolve DNS to the pod even before it's Ready so peers can find
+			// each other during gossip startup (the chicken-and-egg case).
+			PublishNotReadyAddresses: true,
 			Selector: map[string]string{
 				LabelManagedBy: ManagedByValue,
 				LabelPartOf:    PartOfConsensusNode,

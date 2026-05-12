@@ -181,14 +181,6 @@ spec:
                 - networkSettings
                 - permissionConfiguration
                 type: object
-              createNamespace:
-                default: false
-                description: CreateNamespace makes the operator provision the namespace
-                  itself.
-                type: boolean
-                x-kubernetes-validations:
-                - message: createNamespace is immutable
-                  rule: self == oldSelf
               deploymentModel:
                 description: DeploymentModel specifies whether this is a single or
                   multi-cluster deployment
@@ -206,13 +198,6 @@ spec:
                 description: Lifetime specifies the duration for this Orbit (e.g.,
                   "P2DT15H" or "2 days 15 hours")
                 type: string
-              namespace:
-                description: Namespace where this Orbit's resources and Capsules live.
-                minLength: 1
-                type: string
-                x-kubernetes-validations:
-                - message: namespace is immutable
-                  rule: self == oldSelf
               telemetry:
                 description: Telemetry contains telemetry configuration
                 properties:
@@ -404,7 +389,6 @@ spec:
                 type: object
             required:
             - consensus
-            - namespace
             type: object
           status:
             description: OrbitStatus defines the observed state of Orbit

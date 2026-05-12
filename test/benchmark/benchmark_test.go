@@ -20,7 +20,6 @@ import (
 	"github.com/hashgraph/solo-operator/internal/resources/consensus"
 	"github.com/hashgraph/solo-operator/internal/resources/envoy"
 	"github.com/hashgraph/solo-operator/internal/resources/haproxy"
-	"github.com/hashgraph/solo-operator/internal/resources/orbit"
 	"github.com/hashgraph/solo-operator/internal/sequencer"
 )
 
@@ -140,37 +139,6 @@ func BenchmarkSequencerMarkAsCompleted(b *testing.B) {
 // =============================================================================
 // Subreconciler Benchmarks
 // =============================================================================
-
-func BenchmarkOrbitSubReconcilers(b *testing.B) {
-	ctx := context.Background()
-
-	orbitObj := &operatorv1alpha1.Orbit{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "bench-orbit",
-		},
-		Spec: operatorv1alpha1.OrbitSpec{
-			Namespace:       "bench-orbit",
-			CreateNamespace: true,
-			Consensus: operatorv1alpha1.OrbitConsensus{
-				NetworkSettings:          map[string]string{"ledger.id": "0x03"},
-				ApplicationConfiguration: map[string]string{"hedera.realm": "0"},
-				PermissionConfiguration:  map[string]string{"permission": "default"},
-			},
-		},
-	}
-
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(scheme.Scheme).
-		WithObjects(orbitObj).
-		Build()
-
-	chain := orbit.NewSubReconcilers(fakeClient, scheme.Scheme)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = chain.Reconcile(ctx, orbitObj)
-	}
-}
 
 func BenchmarkConsensusCapsuleSubReconcilers(b *testing.B) {
 	ctx := context.Background()
@@ -302,8 +270,7 @@ func BenchmarkMemoryOrbitCreation(b *testing.B) {
 				Name: fmt.Sprintf("orbit-%d", i),
 			},
 			Spec: operatorv1alpha1.OrbitSpec{
-				Namespace: fmt.Sprintf("ns-%d", i),
-				Lifetime:  "24h",
+				Lifetime: "24h",
 				Consensus: operatorv1alpha1.OrbitConsensus{
 					NetworkSettings:          map[string]string{"ledger.id": "0x03", "hedera.realm": "0"},
 					ApplicationConfiguration: map[string]string{"hedera.realm": "0", "hedera.shard": "0"},
@@ -414,7 +381,6 @@ func BenchmarkFakeClientCreate(b *testing.B) {
 				Name: fmt.Sprintf("orbit-%d", i),
 			},
 			Spec: operatorv1alpha1.OrbitSpec{
-				Namespace: fmt.Sprintf("ns-%d", i),
 				Consensus: operatorv1alpha1.OrbitConsensus{
 					NetworkSettings:          map[string]string{"ledger.id": "0x03"},
 					ApplicationConfiguration: map[string]string{"hedera.realm": "0"},
@@ -434,7 +400,6 @@ func BenchmarkFakeClientGet(b *testing.B) {
 			Name: "test-orbit",
 		},
 		Spec: operatorv1alpha1.OrbitSpec{
-			Namespace: "test-orbit",
 			Consensus: operatorv1alpha1.OrbitConsensus{
 				NetworkSettings:          map[string]string{"ledger.id": "0x03"},
 				ApplicationConfiguration: map[string]string{"hedera.realm": "0"},
@@ -501,8 +466,7 @@ func BenchmarkOrbitDeepCopy(b *testing.B) {
 			},
 		},
 		Spec: operatorv1alpha1.OrbitSpec{
-			Namespace: "test-orbit",
-			Lifetime:  "24h",
+			Lifetime: "24h",
 			Consensus: operatorv1alpha1.OrbitConsensus{
 				NetworkSettings: map[string]string{
 					"ledger.id":    "0x03",

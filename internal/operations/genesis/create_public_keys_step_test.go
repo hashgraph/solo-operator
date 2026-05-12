@@ -166,7 +166,6 @@ func TestCreatePublicKeysStep_Run_ExternalAddress_PlainPEM(t *testing.T) {
 	orbit := &operatorv1alpha1.Orbit{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
 		Spec: operatorv1alpha1.OrbitSpec{
-			Namespace: "test",
 			Consensus: operatorv1alpha1.OrbitConsensus{
 				Genesis: &operatorv1alpha1.OrbitGenesis{
 					AddressBook: &operatorv1alpha1.OrbitAddressBook{
@@ -207,7 +206,6 @@ func TestCreatePublicKeysStep_Run_ExternalAddress_Base64PEM(t *testing.T) {
 	orbit := &operatorv1alpha1.Orbit{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
 		Spec: operatorv1alpha1.OrbitSpec{
-			Namespace: "test",
 			Consensus: operatorv1alpha1.OrbitConsensus{
 				Genesis: &operatorv1alpha1.OrbitGenesis{
 					AddressBook: &operatorv1alpha1.OrbitAddressBook{

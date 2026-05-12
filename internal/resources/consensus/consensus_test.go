@@ -210,7 +210,6 @@ func newTestOrbit() *operatorv1alpha1.Orbit {
 			Name: "test-orbit",
 		},
 		Spec: operatorv1alpha1.OrbitSpec{
-			Namespace: "test-namespace",
 			Consensus: operatorv1alpha1.OrbitConsensus{
 				NetworkSettings: map[string]string{
 					"maxTransactionBytesPerSec": "2097152",

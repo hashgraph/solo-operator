@@ -4,7 +4,6 @@ package consensus
 
 import (
 	"context"
-	"time"
 
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -34,19 +33,6 @@ func NewRoleBindingSubReconciler(c client.Client, scheme *runtime.Scheme) *RoleB
 // Reconcile ensures the role binding exists
 func (r *RoleBindingSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-
-	// The Role is created by the Orbit controller. If it doesn't exist yet (race
-	// between Orbit and ConsensusCapsule reconciliation), requeue silently rather
-	// than propagating an error — Kubernetes RBAC admission rejects RoleBinding
-	// creation when the referenced Role is absent.
-	role := &rbacv1.Role{}
-	if err := r.Client.Get(ctx, client.ObjectKey{Name: ConsensusCapsuleRoleName, Namespace: capsule.Namespace}, role); err != nil {
-		if apierrors.IsNotFound(err) {
-			logger.Info("Waiting for consensus-capsule-role to be created by Orbit controller")
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-		}
-		return ctrl.Result{}, err
-	}
 
 	desired := r.buildRoleBinding(capsule)
 
@@ -94,7 +80,7 @@ func (r *RoleBindingSubReconciler) buildRoleBinding(capsule *operatorv1alpha1.Co
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "Role",
-			Name:     ConsensusCapsuleRoleName,
+			Name:     RoleName(capsule),
 		},
 		Subjects: []rbacv1.Subject{
 			{

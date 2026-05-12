@@ -4,43 +4,34 @@ package controller
 
 import (
 	"context"
-	"errors"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
-	"github.com/hashgraph/solo-operator/internal/resources/orbit"
-	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
-const (
-	// OrbitFinalizer is the finalizer for Orbit resources
-	OrbitFinalizer = "operator.solo.hedera.com/orbit-finalizer"
-)
+const OrbitFinalizer = "operator.solo.hedera.com/orbit-finalizer"
 
-// OrbitReconciler reconciles an Orbit object
+// OrbitReconciler holds Orbit configuration and cascade-deletes referencing
+// Capsules on delete. It does not create or own any namespace-scoped resources;
+// each Capsule reconciler owns the resources it needs in its own namespace.
 type OrbitReconciler struct {
 	client.Client
-	Scheme         *runtime.Scheme
-	subreconcilers *subreconciler.Chain[*operatorv1alpha1.Orbit]
+	Scheme *runtime.Scheme
 }
 
-// NewOrbitReconciler creates a new OrbitReconciler with subreconcilers initialized
 func NewOrbitReconciler(c client.Client, scheme *runtime.Scheme) *OrbitReconciler {
-	return &OrbitReconciler{
-		Client:         c,
-		Scheme:         scheme,
-		subreconcilers: orbit.NewSubReconcilers(c, scheme),
-	}
+	return &OrbitReconciler{Client: c, Scheme: scheme}
 }
 
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=orbits,verbs=get;list;watch;create;update;patch;delete
@@ -48,37 +39,26 @@ func NewOrbitReconciler(c client.Client, scheme *runtime.Scheme) *OrbitReconcile
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=orbits/finalizers,verbs=update
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=consensuscapsules,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=helmcapsules,verbs=get;list;watch;delete
-// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch;create;update;patch;delete;deletecollection
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=haproxycapsules,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=envoyproxies,verbs=get;list;watch;delete
 
-// Reconcile is the main reconciliation loop for Orbit resources
 func (r *OrbitReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-
 	logger.Info("Starting Orbit reconciliation", "name", req.Name)
 	defer logger.Info("Finished Orbit reconciliation", "name", req.Name)
 
-	// Fetch the Orbit instance
 	orbitObj := &operatorv1alpha1.Orbit{}
 	if err := r.Get(ctx, req.NamespacedName, orbitObj); err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("Orbit resource not found, ignoring since it must be deleted")
 			return ctrl.Result{}, nil
 		}
-		logger.Error(err, "Failed to get Orbit")
 		return ctrl.Result{}, err
 	}
 
-	// Handle deletion
 	if !orbitObj.DeletionTimestamp.IsZero() {
 		return r.handleDeletion(ctx, orbitObj)
 	}
 
-	// Add finalizer if not present
 	if !controllerutil.ContainsFinalizer(orbitObj, OrbitFinalizer) {
 		controllerutil.AddFinalizer(orbitObj, OrbitFinalizer)
 		if err := r.Update(ctx, orbitObj); err != nil {
@@ -87,34 +67,11 @@ func (r *OrbitReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	// Initialize subreconcilers if not done (for backward compatibility)
-	if r.subreconcilers == nil {
-		r.subreconcilers = orbit.NewSubReconcilers(r.Client, r.Scheme)
-	}
-
-	// Reconcile all dependent resources using subreconciler chain
-	result, err := r.subreconcilers.Reconcile(ctx, orbitObj)
-	if err != nil {
-		if errors.Is(err, orbit.ErrNamespaceConflict) {
-			_ = r.markNotReady(ctx, orbitObj, "NamespaceConflict", err.Error())
-		}
-		return result, err
-	}
-	if result.Requeue || result.RequeueAfter > 0 {
-		return result, nil
-	}
-
-	// Update status
-	if err := r.updateStatus(ctx, orbitObj); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	return ctrl.Result{}, nil
+	return ctrl.Result{}, r.updateStatus(ctx, orbitObj)
 }
 
 func (r *OrbitReconciler) handleDeletion(ctx context.Context, orbitObj *operatorv1alpha1.Orbit) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-
 	if !controllerutil.ContainsFinalizer(orbitObj, OrbitFinalizer) {
 		return ctrl.Result{}, nil
 	}
@@ -129,63 +86,17 @@ func (r *OrbitReconciler) handleDeletion(ctx context.Context, orbitObj *operator
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
-	if orbitObj.Spec.CreateNamespace {
-		ns := &corev1.Namespace{}
-		err := r.Get(ctx, client.ObjectKey{Name: orbitObj.Spec.Namespace}, ns)
-		if err != nil && !apierrors.IsNotFound(err) {
-			return ctrl.Result{}, err
-		}
-		if err == nil {
-			if ns.DeletionTimestamp.IsZero() {
-				logger.Info("Deleting orbit namespace", "namespace", orbitObj.Spec.Namespace)
-				if err := r.Delete(ctx, ns); err != nil && !apierrors.IsNotFound(err) {
-					return ctrl.Result{}, err
-				}
-			}
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-		}
-	}
-
 	controllerutil.RemoveFinalizer(orbitObj, OrbitFinalizer)
-	if err := r.Update(ctx, orbitObj); err != nil {
-		return ctrl.Result{}, err
-	}
-	return ctrl.Result{}, nil
+	return ctrl.Result{}, r.Update(ctx, orbitObj)
 }
 
-// markNotReady sets Ready=False with the given reason/message on the Orbit's status.
-func (r *OrbitReconciler) markNotReady(ctx context.Context, orbitObj *operatorv1alpha1.Orbit, reason, message string) error {
-	now := metav1.Now()
-	cond := metav1.Condition{
-		Type:               "Ready",
-		Status:             metav1.ConditionFalse,
-		LastTransitionTime: now,
-		Reason:             reason,
-		Message:            message,
-	}
-	found := false
-	for i, c := range orbitObj.Status.Conditions {
-		if c.Type == "Ready" {
-			orbitObj.Status.Conditions[i] = cond
-			found = true
-			break
-		}
-	}
-	if !found {
-		orbitObj.Status.Conditions = append(orbitObj.Status.Conditions, cond)
-	}
-	orbitObj.Status.ObservedGeneration = orbitObj.Generation
-	return r.Status().Update(ctx, orbitObj)
-}
-
-// deleteOwnedCapsules issues Delete for every Capsule that references this Orbit
-// and returns how many are still present (including those already terminating).
+// deleteOwnedCapsules issues Delete for every Capsule that references this Orbit,
+// cluster-wide (no namespace filter), and returns how many are still present.
 func (r *OrbitReconciler) deleteOwnedCapsules(ctx context.Context, orbitObj *operatorv1alpha1.Orbit) (int, error) {
-	ns := orbitObj.Spec.Namespace
 	remaining := 0
 
 	consensus := &operatorv1alpha1.ConsensusCapsuleList{}
-	if err := r.List(ctx, consensus, client.InNamespace(ns)); err != nil {
+	if err := r.List(ctx, consensus); err != nil {
 		return 0, err
 	}
 	for i := range consensus.Items {
@@ -202,7 +113,7 @@ func (r *OrbitReconciler) deleteOwnedCapsules(ctx context.Context, orbitObj *ope
 	}
 
 	helm := &operatorv1alpha1.HelmCapsuleList{}
-	if err := r.List(ctx, helm, client.InNamespace(ns)); err != nil {
+	if err := r.List(ctx, helm); err != nil {
 		return remaining, err
 	}
 	for i := range helm.Items {
@@ -218,70 +129,119 @@ func (r *OrbitReconciler) deleteOwnedCapsules(ctx context.Context, orbitObj *ope
 		}
 	}
 
-	return remaining, nil
-}
-
-// updateStatus updates the Orbit status
-func (r *OrbitReconciler) updateStatus(ctx context.Context, orbitObj *operatorv1alpha1.Orbit) error {
-	now := metav1.Now()
-
-	// Initialize status if needed
-	if orbitObj.Status.Phase == "" {
-		orbitObj.Status.Phase = operatorv1alpha1.PhaseRunning
+	haproxy := &operatorv1alpha1.HAProxyCapsuleList{}
+	if err := r.List(ctx, haproxy); err != nil {
+		return remaining, err
 	}
-
-	if orbitObj.Status.StartTime == "" {
-		orbitObj.Status.StartTime = now.Format(time.RFC3339)
-	}
-
-	// Calculate expiration time if lifetime is set
-	if orbitObj.Status.ExpirationTime == "" && orbitObj.Spec.Lifetime != "" {
-		dur, err := time.ParseDuration(orbitObj.Spec.Lifetime)
-		if err == nil {
-			expiration := now.Add(dur)
-			orbitObj.Status.ExpirationTime = expiration.Format(time.RFC3339)
+	for i := range haproxy.Items {
+		hp := &haproxy.Items[i]
+		if hp.Spec.Orbit != orbitObj.Name {
+			continue
+		}
+		remaining++
+		if hp.DeletionTimestamp.IsZero() {
+			if err := r.Delete(ctx, hp); err != nil && !apierrors.IsNotFound(err) {
+				return remaining, err
+			}
 		}
 	}
 
-	// Update conditions
-	readyCondition := metav1.Condition{
+	envoy := &operatorv1alpha1.EnvoyProxyList{}
+	if err := r.List(ctx, envoy); err != nil {
+		return remaining, err
+	}
+	for i := range envoy.Items {
+		ep := &envoy.Items[i]
+		if ep.Spec.Orbit != orbitObj.Name {
+			continue
+		}
+		remaining++
+		if ep.DeletionTimestamp.IsZero() {
+			if err := r.Delete(ctx, ep); err != nil && !apierrors.IsNotFound(err) {
+				return remaining, err
+			}
+		}
+	}
+
+	return remaining, nil
+}
+
+func (r *OrbitReconciler) updateStatus(ctx context.Context, orbitObj *operatorv1alpha1.Orbit) error {
+	now := metav1.Now()
+
+	if orbitObj.Status.Phase == "" {
+		orbitObj.Status.Phase = operatorv1alpha1.PhaseRunning
+	}
+	if orbitObj.Status.StartTime == "" {
+		orbitObj.Status.StartTime = now.Format(time.RFC3339)
+	}
+	if orbitObj.Status.ExpirationTime == "" && orbitObj.Spec.Lifetime != "" {
+		if dur, err := time.ParseDuration(orbitObj.Spec.Lifetime); err == nil {
+			orbitObj.Status.ExpirationTime = now.Add(dur).Format(time.RFC3339)
+		}
+	}
+
+	ready := metav1.Condition{
 		Type:               "Ready",
 		Status:             metav1.ConditionTrue,
 		LastTransitionTime: now,
 		Reason:             "ReconcileSuccess",
 		Message:            "Orbit is ready",
 	}
-
-	// Update or add the condition
 	found := false
 	for i, c := range orbitObj.Status.Conditions {
 		if c.Type == "Ready" {
-			orbitObj.Status.Conditions[i] = readyCondition
+			orbitObj.Status.Conditions[i] = ready
 			found = true
 			break
 		}
 	}
 	if !found {
-		orbitObj.Status.Conditions = append(orbitObj.Status.Conditions, readyCondition)
+		orbitObj.Status.Conditions = append(orbitObj.Status.Conditions, ready)
 	}
-
 	orbitObj.Status.ObservedGeneration = orbitObj.Generation
-
 	return r.Status().Update(ctx, orbitObj)
 }
 
-// SetupWithManager sets up the controller with the Manager
 func (r *OrbitReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	// Initialize subreconcilers if not done
-	if r.subreconcilers == nil {
-		r.subreconcilers = orbit.NewSubReconcilers(r.Client, r.Scheme)
-	}
-
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.Orbit{}).
-		Owns(&corev1.ConfigMap{}).
-		Owns(&corev1.Service{}).
-		Owns(&rbacv1.Role{}).
+		Watches(&operatorv1alpha1.ConsensusCapsule{}, handler.EnqueueRequestsFromMapFunc(r.mapConsensusCapsuleToOrbit)).
+		Watches(&operatorv1alpha1.HelmCapsule{}, handler.EnqueueRequestsFromMapFunc(r.mapHelmCapsuleToOrbit)).
+		Watches(&operatorv1alpha1.HAProxyCapsule{}, handler.EnqueueRequestsFromMapFunc(r.mapHAProxyCapsuleToOrbit)).
+		Watches(&operatorv1alpha1.EnvoyProxy{}, handler.EnqueueRequestsFromMapFunc(r.mapEnvoyProxyToOrbit)).
 		Named("orbit").
 		Complete(r)
+}
+
+func (r *OrbitReconciler) mapConsensusCapsuleToOrbit(_ context.Context, obj client.Object) []reconcile.Request {
+	cc, ok := obj.(*operatorv1alpha1.ConsensusCapsule)
+	if !ok || cc.Spec.Orbit == "" {
+		return nil
+	}
+	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: cc.Spec.Orbit}}}
+}
+
+func (r *OrbitReconciler) mapHelmCapsuleToOrbit(_ context.Context, obj client.Object) []reconcile.Request {
+	hc, ok := obj.(*operatorv1alpha1.HelmCapsule)
+	if !ok || hc.Spec.OrbitRef == nil || hc.Spec.OrbitRef.Name == "" {
+		return nil
+	}
+	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: hc.Spec.OrbitRef.Name}}}
+}
+
+func (r *OrbitReconciler) mapHAProxyCapsuleToOrbit(_ context.Context, obj client.Object) []reconcile.Request {
+	hp, ok := obj.(*operatorv1alpha1.HAProxyCapsule)
+	if !ok || hp.Spec.Orbit == "" {
+		return nil
+	}
+	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: hp.Spec.Orbit}}}
+}
+
+func (r *OrbitReconciler) mapEnvoyProxyToOrbit(_ context.Context, obj client.Object) []reconcile.Request {
+	ep, ok := obj.(*operatorv1alpha1.EnvoyProxy)
+	if !ok || ep.Spec.Orbit == "" {
+		return nil
+	}
+	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: ep.Spec.Orbit}}}
 }
