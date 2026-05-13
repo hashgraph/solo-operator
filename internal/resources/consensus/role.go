@@ -46,7 +46,7 @@ func (r *RoleSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1al
 		return ctrl.Result{}, err
 	}
 
-	if !rulesEqual(existing.Rules, desired.Rules) || !labelsContain(existing.Labels, desired.Labels) {
+	if !rulesEqual(existing.Rules, desired.Rules) || !labelsMatch(existing.Labels, desired.Labels) {
 		existing.Rules = desired.Rules
 		existing.Labels = desired.Labels
 		if err := r.Client.Update(ctx, existing); err != nil {
@@ -96,7 +96,7 @@ func stringSliceEq(a, b []string) bool {
 	return true
 }
 
-func labelsContain(existing, desired map[string]string) bool {
+func labelsMatch(existing, desired map[string]string) bool {
 	for k, v := range desired {
 		if existing[k] != v {
 			return false
