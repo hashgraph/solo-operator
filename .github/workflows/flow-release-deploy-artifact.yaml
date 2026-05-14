@@ -63,6 +63,18 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Install Task
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
+        with:
+          version: 3.39.2
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Binaries
+        run: task build:binary:all
+
+      - name: Generate Checksums
+        run: task hash
+
       - name: Setup QEMU
         uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
 

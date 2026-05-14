@@ -1,33 +1,24 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# Build stage
-ARG GO_VERSION=1.26.2
-FROM golang:${GO_VERSION}-trixie AS builder
+# Selector stage: pick the pre-compiled binary for the target architecture
+FROM debian:bookworm-slim AS selector
 
-ARG TARGETARCH
+COPY bin/manager-linux-* /tmp/
 
-WORKDIR /workspace
-
-# Copy go mod files
-COPY go.mod go.sum ./
-
-# Download dependencies
-RUN go mod download
-
-# Copy source code
-COPY cmd/ cmd/
-COPY api/ api/
-COPY internal/ internal/
-
-# Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
+RUN ARCH=$(uname -m) && \
+    if [ "${ARCH}" = "x86_64" ]; then ARCH="amd64"; \
+    elif [ "${ARCH}" = "aarch64" ]; then ARCH="arm64"; fi && \
+    cd /tmp && \
+    sha256sum -c manager-linux-${ARCH}.sha256 && \
+    cp manager-linux-${ARCH} /manager && \
+    chmod +x /manager
 
 # Final stage
 FROM gcr.io/distroless/static-debian13:nonroot
 
 WORKDIR /
 
-COPY --from=builder /workspace/manager .
+COPY --from=selector /manager .
 
 USER 65532:65532
 
