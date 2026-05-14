@@ -4,6 +4,8 @@
 ARG GO_VERSION=1.26.2
 FROM golang:${GO_VERSION}-trixie AS builder
 
+ARG TARGETARCH
+
 WORKDIR /workspace
 
 # Copy go mod files
@@ -18,7 +20,7 @@ COPY api/ api/
 COPY internal/ internal/
 
 # Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager cmd/main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
 
 # Final stage
 FROM gcr.io/distroless/static-debian13:nonroot
