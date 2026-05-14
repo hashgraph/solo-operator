@@ -136,6 +136,14 @@ jobs:
           registry: true
           node_image: ${{ env.KIND_NODE_IMAGE }}
 
+      - name: Build Binaries
+        if: ${{ (inputs.enable-docker-build || inputs.enable-unit-tests) && !cancelled() && !failure() }}
+        run: task build:binary:all
+
+      - name: Generate Checksums
+        if: ${{ (inputs.enable-docker-build || inputs.enable-unit-tests) && !cancelled() && !failure() }}
+        run: task hash
+
       - name: Build and Push to Local Registry
         if: ${{ (inputs.enable-docker-build || inputs.enable-unit-tests) && !cancelled() && !failure() }}
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
@@ -145,7 +153,6 @@ jobs:
           push: true
           provenance: false
           tags: localhost:5000/solo-operator:0.0.0-${{ github.sha }}
-          build-args: GO_VERSION=${{ steps.setup-go.outputs.go-version }}
 
       - name: Install yq
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
