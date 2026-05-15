@@ -28,9 +28,23 @@ tasks:
       - go build -v ./...
 
   build:binary:
-    desc: Build the operator binary
+    desc: Build the operator binary for the current platform
     cmds:
       - go build -o bin/{{.BINARY_NAME}} cmd/main.go
+
+  build:binary:all:
+    desc: Cross-compile operator binary for all supported platforms (linux/amd64, linux/arm64)
+    cmds:
+      - CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -trimpath -o bin/manager-linux-amd64 cmd/main.go
+      - CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-w -s" -trimpath -o bin/manager-linux-arm64 cmd/main.go
+      - chmod +x bin/manager-linux-amd64 bin/manager-linux-arm64
+
+  hash:
+    desc: Generate SHA256 checksums for all platform binaries
+    deps: [ build:binary:all ]
+    cmds:
+      - cd bin && sha256sum manager-linux-amd64 > manager-linux-amd64.sha256
+      - cd bin && sha256sum manager-linux-arm64 > manager-linux-arm64.sha256
 
   run:
     desc: Run the operator locally
@@ -138,9 +152,10 @@ tasks:
       - controller-gen rbac:roleName=manager-role paths="./..." output:rbac:artifacts:config=config/rbac
 
   docker:build:
-    desc: Build Docker image (linux/amd64 for GKE)
+    desc: Build Docker image for the current platform (pre-compiles binaries first)
+    deps: [ hash ]
     cmds:
-      - docker build --platform linux/amd64 -t {{.IMG}} .
+      - docker build -t {{.IMG}} .
 
   docker:push:
     desc: Push Docker image
@@ -239,6 +254,7 @@ tasks:
     cmds:
       - rm -rf bin/
       - rm -f {{.COVERAGE_FILE}} {{.COVERAGE_HTML}}
+      - rm -f manager-*.sha256
 
   helm:build:
     desc: Sync CRD templates, sync RBAC, and package the Helm chart
