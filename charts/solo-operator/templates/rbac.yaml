@@ -7,11 +7,8 @@ metadata:
     {{- include "solo-operator.labels" . | nindent 4 }}
 rules:
 - apiGroups: [""]
-  resources: ["configmaps", "endpoints", "namespaces", "persistentvolumeclaims", "secrets", "serviceaccounts", "services"]
+  resources: ["configmaps", "endpoints", "persistentvolumeclaims", "secrets", "serviceaccounts", "services"]
   verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
-- apiGroups: [""]
-  resources: ["events"]
-  verbs: ["create", "delete", "deletecollection", "get", "list", "patch", "update", "watch"]
 - apiGroups: [""]
   resources: ["pods"]
   verbs: ["get", "list", "watch"]

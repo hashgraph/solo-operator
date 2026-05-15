@@ -64,6 +64,10 @@ type HAProxyHealthCheckSpec struct {
 // HAProxyCapsuleSpec defines the desired state of HAProxyCapsule
 // +kubebuilder:validation:XValidation:rule="self.serviceType != 'Ingress' || has(self.ingressSpec)",message="ingressSpec is required when serviceType is Ingress"
 type HAProxyCapsuleSpec struct {
+	// Orbit is the owning Orbit's name. Set so the Orbit can cascade-delete this proxy.
+	// +optional
+	Orbit string `json:"orbit,omitempty"`
+
 	// Image is the HAProxy container image.
 	// +kubebuilder:default="haproxy:2.8.10-alpine3.20"
 	// +optional

@@ -8,8 +8,3 @@ const (
 	GrpcPort   = 50211
 	GrpcsPort  = 50212
 )
-
-// ConsensusSubdomain is the headless service name / StatefulSet subdomain for consensus nodes.
-// Both the Orbit controller (headless service) and the ConsensusCapsule controller (StatefulSet)
-// must use the same value for pod DNS to resolve correctly.
-const ConsensusSubdomain = "consensus"

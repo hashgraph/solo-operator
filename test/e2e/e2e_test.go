@@ -675,7 +675,9 @@ var _ = Describe("E2E Tests", func() {
 			)
 
 			BeforeEach(func() {
-				// Create orbit first
+				// Create namespace first so Orbit can reference it.
+				_ = createNamespace(ctx, testNamespace)
+
 				orbit := &operatorv1alpha1.Orbit{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: orbitName,
@@ -689,9 +691,6 @@ var _ = Describe("E2E Tests", func() {
 					},
 				}
 				_ = k8sClient.Create(ctx, orbit)
-
-				// Create namespace
-				_ = createNamespace(ctx, testNamespace)
 			})
 
 			AfterEach(func() {
@@ -757,55 +756,6 @@ var _ = Describe("Operator Reconciliation Tests", Label("operator-required"), fu
 		// Skip if operator is not running
 		// In a real setup, you would check if the operator pod is running
 		Skip("Operator not running - skipping reconciliation tests")
-	})
-
-	Context("When Orbit is created", func() {
-		It("should create namespace, ConfigMap, Role, and Service", func() {
-			const orbitName = "reconcile-test-orbit"
-
-			orbit := &operatorv1alpha1.Orbit{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: orbitName,
-				},
-				Spec: operatorv1alpha1.OrbitSpec{
-					Consensus: operatorv1alpha1.OrbitConsensus{
-						NetworkSettings:          map[string]string{"ledger.id": "0x03"},
-						ApplicationConfiguration: map[string]string{"hedera.realm": "0"},
-						PermissionConfiguration:  map[string]string{"permission": "default"},
-					},
-				},
-			}
-
-			Expect(k8sClient.Create(ctx, orbit)).To(Succeed())
-
-			// Wait for namespace
-			ns := &corev1.Namespace{}
-			Eventually(func() error {
-				return k8sClient.Get(ctx, client.ObjectKey{Name: orbitName}, ns)
-			}, timeout, interval).Should(Succeed())
-
-			// Wait for ConfigMap
-			cm := &corev1.ConfigMap{}
-			Eventually(func() error {
-				return k8sClient.Get(ctx, client.ObjectKey{Name: "consensus-config", Namespace: orbitName}, cm)
-			}, timeout, interval).Should(Succeed())
-
-			// Wait for Role
-			role := &rbacv1.Role{}
-			Eventually(func() error {
-				return k8sClient.Get(ctx, client.ObjectKey{Name: "consensus-capsule-role", Namespace: orbitName}, role)
-			}, timeout, interval).Should(Succeed())
-
-			// Wait for Service
-			svc := &corev1.Service{}
-			Eventually(func() error {
-				return k8sClient.Get(ctx, client.ObjectKey{Name: "consensus", Namespace: orbitName}, svc)
-			}, timeout, interval).Should(Succeed())
-			Expect(svc.Spec.ClusterIP).To(Equal("None"))
-
-			// Cleanup
-			Expect(k8sClient.Delete(ctx, orbit)).To(Succeed())
-		})
 	})
 
 	Context("When ConsensusCapsule is created", func() {

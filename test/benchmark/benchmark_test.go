@@ -20,7 +20,6 @@ import (
 	"github.com/hashgraph/solo-operator/internal/resources/consensus"
 	"github.com/hashgraph/solo-operator/internal/resources/envoy"
 	"github.com/hashgraph/solo-operator/internal/resources/haproxy"
-	"github.com/hashgraph/solo-operator/internal/resources/orbit"
 	"github.com/hashgraph/solo-operator/internal/sequencer"
 )
 
@@ -140,35 +139,6 @@ func BenchmarkSequencerMarkAsCompleted(b *testing.B) {
 // =============================================================================
 // Subreconciler Benchmarks
 // =============================================================================
-
-func BenchmarkOrbitSubReconcilers(b *testing.B) {
-	ctx := context.Background()
-
-	orbitObj := &operatorv1alpha1.Orbit{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "bench-orbit",
-		},
-		Spec: operatorv1alpha1.OrbitSpec{
-			Consensus: operatorv1alpha1.OrbitConsensus{
-				NetworkSettings:          map[string]string{"ledger.id": "0x03"},
-				ApplicationConfiguration: map[string]string{"hedera.realm": "0"},
-				PermissionConfiguration:  map[string]string{"permission": "default"},
-			},
-		},
-	}
-
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(scheme.Scheme).
-		WithObjects(orbitObj).
-		Build()
-
-	chain := orbit.NewSubReconcilers(fakeClient, scheme.Scheme)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = chain.Reconcile(ctx, orbitObj)
-	}
-}
 
 func BenchmarkConsensusCapsuleSubReconcilers(b *testing.B) {
 	ctx := context.Background()

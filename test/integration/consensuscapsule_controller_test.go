@@ -49,17 +49,6 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			if err != nil {
 				Expect(err.Error()).To(ContainSubstring("already exists"))
 			}
-
-			role := &rbacv1.Role{
-				ObjectMeta: metav1.ObjectMeta{Name: "consensus-capsule-role", Namespace: capsuleNamespace},
-				Rules: []rbacv1.PolicyRule{
-					{APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"get", "list", "watch"}},
-				},
-			}
-			err = k8sClient.Create(ctx, role)
-			if err != nil {
-				Expect(err.Error()).To(ContainSubstring("already exists"))
-			}
 		})
 
 		It("Should create all dependent resources", func() {
@@ -172,17 +161,6 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 				},
 			}
 			err = k8sClient.Create(ctx, orbit)
-			if err != nil {
-				Expect(err.Error()).To(ContainSubstring("already exists"))
-			}
-
-			role := &rbacv1.Role{
-				ObjectMeta: metav1.ObjectMeta{Name: "consensus-capsule-role", Namespace: capsuleNamespace},
-				Rules: []rbacv1.PolicyRule{
-					{APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"get", "list", "watch"}},
-				},
-			}
-			err = k8sClient.Create(ctx, role)
 			if err != nil {
 				Expect(err.Error()).To(ContainSubstring("already exists"))
 			}

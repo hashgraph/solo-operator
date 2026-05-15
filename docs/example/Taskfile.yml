@@ -53,14 +53,10 @@ tasks:
       - kubectl wait --for=condition=ready pod -l v1.min.io/tenant=minio-tenant -n minio-tenant --timeout=60s
 
   deploy:orbit:
-    desc: Deploy Orbit and wait for namespace
+    desc: Create the solo-orbit namespace and deploy Orbit
     cmds:
+      - kubectl create namespace solo-orbit --dry-run=client -o yaml | kubectl apply -f -
       - kubectl apply -f common/orbit.yaml
-      - |
-        until kubectl get namespace solo-orbit &> /dev/null; do
-          echo ">> Waiting for solo-orbit namespace to be ready..."
-          sleep 5
-        done
 
   deploy:common:
     desc: Deploy common configs and secrets

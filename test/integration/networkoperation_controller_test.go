@@ -418,6 +418,12 @@ var _ = Describe("NetworkOperation Genesis — AddressBook", func() {
 		if err != nil {
 			Expect(err.Error()).To(ContainSubstring("already exists"))
 		}
+
+		// Drop any addressbook-bin ConfigMap left over from a previous spec so
+		// the "should not exist" assertions aren't polluted by prior state.
+		_ = k8sClient.Delete(ctx, &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "addressbook-bin", Namespace: ns},
+		})
 	})
 
 	Context("When a genesis NetworkOperation completes with valid capsule secrets", func() {

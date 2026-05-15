@@ -1460,6 +1460,10 @@ spec:
                   type: string
                 description: NodeSelector pins pods to specific nodes.
                 type: object
+              orbit:
+                description: Orbit is the owning Orbit's name. Set so the Orbit can
+                  cascade-delete this proxy.
+                type: string
               proxyPort:
                 default: 8081
                 description: ProxyPort is the gRPC-Web listener port.

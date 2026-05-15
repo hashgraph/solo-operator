@@ -4,6 +4,7 @@ metadata:
   name: envoy-node2
   namespace: solo-orbit
 spec:
+  orbit: solo-orbit
   image: envoyproxy/envoy-distroless:v1.21.6
   replicas: 1
   proxyPort: 8080

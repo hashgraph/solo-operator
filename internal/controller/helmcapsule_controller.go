@@ -258,10 +258,9 @@ func (r *HelmCapsuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // mapOrbitToHelmCapsules re-enqueues HelmCapsules that reference the changed Orbit.
-// Scoped to orbit.Name namespace (Orbit creates a same-named namespace).
 func (r *HelmCapsuleReconciler) mapOrbitToHelmCapsules(ctx context.Context, obj client.Object) []reconcile.Request {
 	list := &operatorv1alpha1.HelmCapsuleList{}
-	if err := r.List(ctx, list, client.InNamespace(obj.GetName())); err != nil {
+	if err := r.List(ctx, list); err != nil {
 		return nil
 	}
 	var reqs []reconcile.Request

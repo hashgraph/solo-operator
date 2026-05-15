@@ -39,16 +39,13 @@ const (
 // Resource name suffixes
 const (
 	ServiceAccountSuffix = "-sa"
+	RoleSuffix           = "-role"
 	RoleBindingSuffix    = "-rb"
 	ConfigMapSuffix      = "-cm"
 )
 
 // Resource names
 const (
-	// ConsensusCapsuleRoleName is the name of the role created by Orbit
-	ConsensusCapsuleRoleName = "consensus-capsule-role"
-	// ConsensusConfigMapName is the name of the ConfigMap created by Orbit
-	ConsensusConfigMapName = "consensus-config"
 	// ClusterConfigMapName is the name of the ConfigMap created by genesis
 	ClusterConfigMapName = "cluster-config"
 	// PublicKeysConfigMapName is the name of the public keys ConfigMap created by genesis
@@ -146,6 +143,11 @@ func PodLabels(capsule *operatorv1alpha1.ConsensusCapsule) map[string]string {
 // ServiceAccountName returns the service account name for a capsule
 func ServiceAccountName(capsule *operatorv1alpha1.ConsensusCapsule) string {
 	return capsule.Name + ServiceAccountSuffix
+}
+
+// RoleName returns the per-capsule Role name.
+func RoleName(capsule *operatorv1alpha1.ConsensusCapsule) string {
+	return capsule.Name + RoleSuffix
 }
 
 // RoleBindingName returns the role binding name for a capsule
@@ -248,6 +250,7 @@ func InternalHostname(capsule *operatorv1alpha1.ConsensusCapsule) string {
 func NewSubReconcilers(c client.Client, scheme *runtime.Scheme) *subreconciler.Chain[*operatorv1alpha1.ConsensusCapsule] {
 	return subreconciler.NewChain(
 		NewServiceAccountSubReconciler(c, scheme),
+		NewRoleSubReconciler(c, scheme),
 		NewRoleBindingSubReconciler(c, scheme),
 		NewHapiAppConfigMapSubReconciler(c, scheme),
 		NewDataConfigMapSubReconciler(c, scheme),

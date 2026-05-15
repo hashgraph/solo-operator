@@ -35,6 +35,10 @@ type CORSConfig struct {
 // EnvoyProxySpec defines the desired state of EnvoyProxy
 // +kubebuilder:validation:XValidation:rule="self.serviceType != 'Ingress' || has(self.ingressSpec)",message="ingressSpec is required when serviceType is Ingress"
 type EnvoyProxySpec struct {
+	// Orbit is the owning Orbit's name. Set so the Orbit can cascade-delete this proxy.
+	// +optional
+	Orbit string `json:"orbit,omitempty"`
+
 	// Image is the Envoy container image.
 	// +kubebuilder:default="envoyproxy/envoy-distroless:v1.21.6"
 	// +optional
