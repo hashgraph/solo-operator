@@ -24,6 +24,7 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/controller"
 	"github.com/hashgraph/solo-operator/internal/resources/helm"
+	"github.com/hashgraph/solo-operator/internal/upgrade/registry"
 )
 
 var (
@@ -129,11 +130,47 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = controller.NewNetworkOperationReconciler(
+	upgradePlatform := os.Getenv("SOLO_UPGRADE_TARGET_PLATFORM")
+	upgradeValidator := registry.NewOCIValidator(upgradePlatform)
+	upgradeRecorder := mgr.GetEventRecorderFor("solo-operator")
+
+	if err = controller.NewNetworkUpgradePrepareReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
+		upgradeRecorder,
+		upgradeValidator,
 	).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "NetworkOperation")
+		setupLog.Error(err, "unable to create controller", "controller", "NetworkUpgradePrepare")
+		os.Exit(1)
+	}
+
+	if err = controller.NewNetworkUpgradeFreezeReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+		upgradeRecorder,
+		upgradeValidator,
+	).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "NetworkUpgradeFreeze")
+		os.Exit(1)
+	}
+
+	if err = controller.NewNetworkUpgradeExecuteReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+		upgradeRecorder,
+		upgradeValidator,
+		0,
+	).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "NetworkUpgradeExecute")
+		os.Exit(1)
+	}
+
+	if err = controller.NewNetworkUpgradeFreezeAbortReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+		upgradeRecorder,
+	).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "NetworkUpgradeFreezeAbort")
 		os.Exit(1)
 	}
 

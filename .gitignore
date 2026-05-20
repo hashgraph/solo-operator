@@ -71,6 +71,7 @@ charts/solo-operator/charts/crds/templates/*.yaml
 tmp/
 *.tmp
 *.temp
+docs/tmp/
 
 # Log files
 *.log

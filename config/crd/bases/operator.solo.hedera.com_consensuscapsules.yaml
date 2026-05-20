@@ -137,6 +137,15 @@ spec:
                   type: string
                 description: node.properties key-value pairs
                 type: object
+              offline:
+                default: false
+                description: |-
+                  Offline, when true, instructs the reconciler to keep the consensus pod
+                  scaled to zero. NetworkUpgradeExecute toggles this around the daemon
+                  handoff window so the consensus node stays down while infrastructure
+                  files and config CRs are applied, then comes back up cleanly on the
+                  new image. Default false.
+                type: boolean
               orbit:
                 description: orbit this capsule belongs to
                 type: string

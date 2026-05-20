@@ -57,6 +57,16 @@ func TestBuildImage(t *testing.T) {
 			sv:       operatorv1alpha1.SoftwareVersion{},
 			expected: "",
 		},
+		{
+			name: "with manifest hash appends digest",
+			sv: operatorv1alpha1.SoftwareVersion{
+				Repository:   "ghcr.io",
+				ImageName:    "hashgraph/cn",
+				ImageTag:     "0.75.0",
+				ManifestHash: "sha256:abc123",
+			},
+			expected: "ghcr.io/hashgraph/cn:0.75.0@sha256:abc123",
+		},
 	}
 
 	for _, tt := range tests {

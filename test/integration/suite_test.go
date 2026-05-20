@@ -91,12 +91,6 @@ var _ = BeforeSuite(func() {
 	).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
-	err = controller.NewNetworkOperationReconciler(
-		k8sManager.GetClient(),
-		k8sManager.GetScheme(),
-	).SetupWithManager(k8sManager)
-	Expect(err).ToNot(HaveOccurred())
-
 	err = controller.NewHelmCapsuleReconciler(
 		k8sManager.GetClient(),
 		k8sManager.GetScheme(),
