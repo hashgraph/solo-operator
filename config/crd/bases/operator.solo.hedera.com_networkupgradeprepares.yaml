@@ -32,8 +32,6 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: NetworkUpgradePrepare is the Schema for the networkupgradeprepares
-          API.
         properties:
           apiVersion:
             description: |-
@@ -53,29 +51,28 @@ spec:
           metadata:
             type: object
           spec:
-            description: NetworkUpgradePrepareSpec defines the desired state of a
-              NetworkUpgradePrepare.
             properties:
               images:
-                description: Images is the verbatim images section of consensus-node-components.yaml.
+                description: |-
+                  UpgradeImagesSpec is the verbatim "images:" section of consensus-node-components.yaml.
+                  Embedded in Prepare, Freeze and Execute specs so each CR is self-contained.
                 properties:
                   backupUploader:
-                    description: UpgradeComponentSpec is the per-component block in
-                      UpgradeImagesSpec.
                     properties:
                       deterministic:
                         description: |-
-                          Deterministic carries the platform-keyed layer-hash expectations for
-                          deterministic builds.
+                          UpgradeDeterministicSpec carries layer hashes when Supported=true.
+                          When Supported=false, hashes live per-registry on UpgradeRegistrySpec instead.
                         properties:
                           layerHashes:
                             additionalProperties:
                               items:
+                                description: Sha256Digest is an OCI sha256 digest
+                                  ("sha256:" + 64 lowercase hex chars).
+                                pattern: ^sha256:[a-f0-9]{64}$
                                 type: string
                               type: array
-                            description: |-
-                              LayerHashes is keyed by platform string (e.g. "linux/amd64", "linux/arm64")
-                              with an ordered list of layer SHA256 digests.
+                            description: Keyed by platform ("linux/amd64", "linux/arm64").
                             type: object
                           supported:
                             type: boolean
@@ -84,30 +81,24 @@ spec:
                         type: object
                       enabled:
                         default: true
-                        description: |-
-                          Enabled defaults to true when omitted. false means the component is present
-                          in the manifest but should be removed from the consensus pod on execute.
+                        description: Enabled=false means present-but-remove the sidecar
+                          from the consensus pod on execute.
                         type: boolean
                       registries:
-                        description: |-
-                          Registries is the list of OCI image references this component can be
-                          pulled from. At least one entry is required.
                         items:
-                          description: UpgradeRegistrySpec is one OCI image source
-                            for the component.
                           properties:
                             image:
-                              description: Image is the OCI image reference (with
-                                tag or digest).
                               type: string
                             layerHashes:
                               additionalProperties:
                                 items:
+                                  description: Sha256Digest is an OCI sha256 digest
+                                    ("sha256:" + 64 lowercase hex chars).
+                                  pattern: ^sha256:[a-f0-9]{64}$
                                   type: string
                                 type: array
-                              description: |-
-                                LayerHashes is per-registry layer hashes for non-deterministic builds.
-                                Keyed by platform string.
+                              description: Per-registry layer hashes for non-deterministic
+                                builds.
                               type: object
                           required:
                           - image
@@ -115,8 +106,6 @@ spec:
                         minItems: 1
                         type: array
                       version:
-                        description: Version is the release version (e.g. "0.75.0")
-                          for audit/labelling.
                         type: string
                     required:
                     - deterministic
@@ -124,22 +113,21 @@ spec:
                     - version
                     type: object
                   blockStreamUploader:
-                    description: UpgradeComponentSpec is the per-component block in
-                      UpgradeImagesSpec.
                     properties:
                       deterministic:
                         description: |-
-                          Deterministic carries the platform-keyed layer-hash expectations for
-                          deterministic builds.
+                          UpgradeDeterministicSpec carries layer hashes when Supported=true.
+                          When Supported=false, hashes live per-registry on UpgradeRegistrySpec instead.
                         properties:
                           layerHashes:
                             additionalProperties:
                               items:
+                                description: Sha256Digest is an OCI sha256 digest
+                                  ("sha256:" + 64 lowercase hex chars).
+                                pattern: ^sha256:[a-f0-9]{64}$
                                 type: string
                               type: array
-                            description: |-
-                              LayerHashes is keyed by platform string (e.g. "linux/amd64", "linux/arm64")
-                              with an ordered list of layer SHA256 digests.
+                            description: Keyed by platform ("linux/amd64", "linux/arm64").
                             type: object
                           supported:
                             type: boolean
@@ -148,30 +136,24 @@ spec:
                         type: object
                       enabled:
                         default: true
-                        description: |-
-                          Enabled defaults to true when omitted. false means the component is present
-                          in the manifest but should be removed from the consensus pod on execute.
+                        description: Enabled=false means present-but-remove the sidecar
+                          from the consensus pod on execute.
                         type: boolean
                       registries:
-                        description: |-
-                          Registries is the list of OCI image references this component can be
-                          pulled from. At least one entry is required.
                         items:
-                          description: UpgradeRegistrySpec is one OCI image source
-                            for the component.
                           properties:
                             image:
-                              description: Image is the OCI image reference (with
-                                tag or digest).
                               type: string
                             layerHashes:
                               additionalProperties:
                                 items:
+                                  description: Sha256Digest is an OCI sha256 digest
+                                    ("sha256:" + 64 lowercase hex chars).
+                                  pattern: ^sha256:[a-f0-9]{64}$
                                   type: string
                                 type: array
-                              description: |-
-                                LayerHashes is per-registry layer hashes for non-deterministic builds.
-                                Keyed by platform string.
+                              description: Per-registry layer hashes for non-deterministic
+                                builds.
                               type: object
                           required:
                           - image
@@ -179,8 +161,6 @@ spec:
                         minItems: 1
                         type: array
                       version:
-                        description: Version is the release version (e.g. "0.75.0")
-                          for audit/labelling.
                         type: string
                     required:
                     - deterministic
@@ -188,22 +168,21 @@ spec:
                     - version
                     type: object
                   consensusNode:
-                    description: ConsensusNode is the required main container image
-                      set.
                     properties:
                       deterministic:
                         description: |-
-                          Deterministic carries the platform-keyed layer-hash expectations for
-                          deterministic builds.
+                          UpgradeDeterministicSpec carries layer hashes when Supported=true.
+                          When Supported=false, hashes live per-registry on UpgradeRegistrySpec instead.
                         properties:
                           layerHashes:
                             additionalProperties:
                               items:
+                                description: Sha256Digest is an OCI sha256 digest
+                                  ("sha256:" + 64 lowercase hex chars).
+                                pattern: ^sha256:[a-f0-9]{64}$
                                 type: string
                               type: array
-                            description: |-
-                              LayerHashes is keyed by platform string (e.g. "linux/amd64", "linux/arm64")
-                              with an ordered list of layer SHA256 digests.
+                            description: Keyed by platform ("linux/amd64", "linux/arm64").
                             type: object
                           supported:
                             type: boolean
@@ -212,30 +191,24 @@ spec:
                         type: object
                       enabled:
                         default: true
-                        description: |-
-                          Enabled defaults to true when omitted. false means the component is present
-                          in the manifest but should be removed from the consensus pod on execute.
+                        description: Enabled=false means present-but-remove the sidecar
+                          from the consensus pod on execute.
                         type: boolean
                       registries:
-                        description: |-
-                          Registries is the list of OCI image references this component can be
-                          pulled from. At least one entry is required.
                         items:
-                          description: UpgradeRegistrySpec is one OCI image source
-                            for the component.
                           properties:
                             image:
-                              description: Image is the OCI image reference (with
-                                tag or digest).
                               type: string
                             layerHashes:
                               additionalProperties:
                                 items:
+                                  description: Sha256Digest is an OCI sha256 digest
+                                    ("sha256:" + 64 lowercase hex chars).
+                                  pattern: ^sha256:[a-f0-9]{64}$
                                   type: string
                                 type: array
-                              description: |-
-                                LayerHashes is per-registry layer hashes for non-deterministic builds.
-                                Keyed by platform string.
+                              description: Per-registry layer hashes for non-deterministic
+                                builds.
                               type: object
                           required:
                           - image
@@ -243,8 +216,6 @@ spec:
                         minItems: 1
                         type: array
                       version:
-                        description: Version is the release version (e.g. "0.75.0")
-                          for audit/labelling.
                         type: string
                     required:
                     - deterministic
@@ -252,22 +223,21 @@ spec:
                     - version
                     type: object
                   eventStreamUploader:
-                    description: UpgradeComponentSpec is the per-component block in
-                      UpgradeImagesSpec.
                     properties:
                       deterministic:
                         description: |-
-                          Deterministic carries the platform-keyed layer-hash expectations for
-                          deterministic builds.
+                          UpgradeDeterministicSpec carries layer hashes when Supported=true.
+                          When Supported=false, hashes live per-registry on UpgradeRegistrySpec instead.
                         properties:
                           layerHashes:
                             additionalProperties:
                               items:
+                                description: Sha256Digest is an OCI sha256 digest
+                                  ("sha256:" + 64 lowercase hex chars).
+                                pattern: ^sha256:[a-f0-9]{64}$
                                 type: string
                               type: array
-                            description: |-
-                              LayerHashes is keyed by platform string (e.g. "linux/amd64", "linux/arm64")
-                              with an ordered list of layer SHA256 digests.
+                            description: Keyed by platform ("linux/amd64", "linux/arm64").
                             type: object
                           supported:
                             type: boolean
@@ -276,30 +246,24 @@ spec:
                         type: object
                       enabled:
                         default: true
-                        description: |-
-                          Enabled defaults to true when omitted. false means the component is present
-                          in the manifest but should be removed from the consensus pod on execute.
+                        description: Enabled=false means present-but-remove the sidecar
+                          from the consensus pod on execute.
                         type: boolean
                       registries:
-                        description: |-
-                          Registries is the list of OCI image references this component can be
-                          pulled from. At least one entry is required.
                         items:
-                          description: UpgradeRegistrySpec is one OCI image source
-                            for the component.
                           properties:
                             image:
-                              description: Image is the OCI image reference (with
-                                tag or digest).
                               type: string
                             layerHashes:
                               additionalProperties:
                                 items:
+                                  description: Sha256Digest is an OCI sha256 digest
+                                    ("sha256:" + 64 lowercase hex chars).
+                                  pattern: ^sha256:[a-f0-9]{64}$
                                   type: string
                                 type: array
-                              description: |-
-                                LayerHashes is per-registry layer hashes for non-deterministic builds.
-                                Keyed by platform string.
+                              description: Per-registry layer hashes for non-deterministic
+                                builds.
                               type: object
                           required:
                           - image
@@ -307,8 +271,6 @@ spec:
                         minItems: 1
                         type: array
                       version:
-                        description: Version is the release version (e.g. "0.75.0")
-                          for audit/labelling.
                         type: string
                     required:
                     - deterministic
@@ -316,22 +278,21 @@ spec:
                     - version
                     type: object
                   recordStreamUploader:
-                    description: UpgradeComponentSpec is the per-component block in
-                      UpgradeImagesSpec.
                     properties:
                       deterministic:
                         description: |-
-                          Deterministic carries the platform-keyed layer-hash expectations for
-                          deterministic builds.
+                          UpgradeDeterministicSpec carries layer hashes when Supported=true.
+                          When Supported=false, hashes live per-registry on UpgradeRegistrySpec instead.
                         properties:
                           layerHashes:
                             additionalProperties:
                               items:
+                                description: Sha256Digest is an OCI sha256 digest
+                                  ("sha256:" + 64 lowercase hex chars).
+                                pattern: ^sha256:[a-f0-9]{64}$
                                 type: string
                               type: array
-                            description: |-
-                              LayerHashes is keyed by platform string (e.g. "linux/amd64", "linux/arm64")
-                              with an ordered list of layer SHA256 digests.
+                            description: Keyed by platform ("linux/amd64", "linux/arm64").
                             type: object
                           supported:
                             type: boolean
@@ -340,30 +301,24 @@ spec:
                         type: object
                       enabled:
                         default: true
-                        description: |-
-                          Enabled defaults to true when omitted. false means the component is present
-                          in the manifest but should be removed from the consensus pod on execute.
+                        description: Enabled=false means present-but-remove the sidecar
+                          from the consensus pod on execute.
                         type: boolean
                       registries:
-                        description: |-
-                          Registries is the list of OCI image references this component can be
-                          pulled from. At least one entry is required.
                         items:
-                          description: UpgradeRegistrySpec is one OCI image source
-                            for the component.
                           properties:
                             image:
-                              description: Image is the OCI image reference (with
-                                tag or digest).
                               type: string
                             layerHashes:
                               additionalProperties:
                                 items:
+                                  description: Sha256Digest is an OCI sha256 digest
+                                    ("sha256:" + 64 lowercase hex chars).
+                                  pattern: ^sha256:[a-f0-9]{64}$
                                   type: string
                                 type: array
-                              description: |-
-                                LayerHashes is per-registry layer hashes for non-deterministic builds.
-                                Keyed by platform string.
+                              description: Per-registry layer hashes for non-deterministic
+                                builds.
                               type: object
                           required:
                           - image
@@ -371,8 +326,6 @@ spec:
                         minItems: 1
                         type: array
                       version:
-                        description: Version is the release version (e.g. "0.75.0")
-                          for audit/labelling.
                         type: string
                     required:
                     - deterministic
@@ -380,22 +333,21 @@ spec:
                     - version
                     type: object
                   uc:
-                    description: UpgradeComponentSpec is the per-component block in
-                      UpgradeImagesSpec.
                     properties:
                       deterministic:
                         description: |-
-                          Deterministic carries the platform-keyed layer-hash expectations for
-                          deterministic builds.
+                          UpgradeDeterministicSpec carries layer hashes when Supported=true.
+                          When Supported=false, hashes live per-registry on UpgradeRegistrySpec instead.
                         properties:
                           layerHashes:
                             additionalProperties:
                               items:
+                                description: Sha256Digest is an OCI sha256 digest
+                                  ("sha256:" + 64 lowercase hex chars).
+                                pattern: ^sha256:[a-f0-9]{64}$
                                 type: string
                               type: array
-                            description: |-
-                              LayerHashes is keyed by platform string (e.g. "linux/amd64", "linux/arm64")
-                              with an ordered list of layer SHA256 digests.
+                            description: Keyed by platform ("linux/amd64", "linux/arm64").
                             type: object
                           supported:
                             type: boolean
@@ -404,30 +356,24 @@ spec:
                         type: object
                       enabled:
                         default: true
-                        description: |-
-                          Enabled defaults to true when omitted. false means the component is present
-                          in the manifest but should be removed from the consensus pod on execute.
+                        description: Enabled=false means present-but-remove the sidecar
+                          from the consensus pod on execute.
                         type: boolean
                       registries:
-                        description: |-
-                          Registries is the list of OCI image references this component can be
-                          pulled from. At least one entry is required.
                         items:
-                          description: UpgradeRegistrySpec is one OCI image source
-                            for the component.
                           properties:
                             image:
-                              description: Image is the OCI image reference (with
-                                tag or digest).
                               type: string
                             layerHashes:
                               additionalProperties:
                                 items:
+                                  description: Sha256Digest is an OCI sha256 digest
+                                    ("sha256:" + 64 lowercase hex chars).
+                                  pattern: ^sha256:[a-f0-9]{64}$
                                   type: string
                                 type: array
-                              description: |-
-                                LayerHashes is per-registry layer hashes for non-deterministic builds.
-                                Keyed by platform string.
+                              description: Per-registry layer hashes for non-deterministic
+                                builds.
                               type: object
                           required:
                           - image
@@ -435,8 +381,6 @@ spec:
                         minItems: 1
                         type: array
                       version:
-                        description: Version is the release version (e.g. "0.75.0")
-                          for audit/labelling.
                         type: string
                     required:
                     - deterministic
@@ -447,13 +391,11 @@ spec:
                 - consensusNode
                 type: object
               operationId:
-                description: |-
-                  OperationID is the opaque identifier shared by all CRs of one upgrade
-                  operation (typically "upgrade-<timestamp>-<version>").
+                maxLength: 63
+                minLength: 1
+                pattern: ^[A-Za-z0-9]([-A-Za-z0-9_.]{0,61}[A-Za-z0-9])?$
                 type: string
               orbit:
-                description: Orbit is the deployment scope (typically the namespace
-                  name).
                 type: string
             required:
             - images
@@ -461,7 +403,6 @@ spec:
             - orbit
             type: object
           status:
-            description: NetworkUpgradePrepareStatus is the observed state of a NetworkUpgradePrepare.
             properties:
               completionTime:
                 format: date-time
@@ -536,25 +477,22 @@ spec:
                 type: string
               selectedSources:
                 description: |-
-                  SelectedSources records the chosen registry per present-and-enabled
-                  component on successful reconciliation. Populated only when Phase=Succeeded.
+                  SelectedSources is the per-component validation outcome. Lives in
+                  Prepare.status; UC copies it into Freeze.spec and Execute.spec verbatim.
                 properties:
                   backupUploader:
-                    description: SelectedSource is the validation outcome for one
-                      component.
                     properties:
                       digest:
-                        description: Digest is the resolved manifest digest (e.g.
-                          "sha256:...").
+                        description: Sha256Digest is an OCI sha256 digest ("sha256:"
+                          + 64 lowercase hex chars).
+                        pattern: ^sha256:[a-f0-9]{64}$
                         type: string
                       image:
-                        description: Image is the OCI image reference that was selected.
                         type: string
                       layerHashesVerified:
                         description: |-
-                          LayerHashesVerified is true when expected layer hashes were configured
-                          and matched what the registry served. False either when no hashes were
-                          configured to compare against, or when a mismatch was detected.
+                          LayerHashesVerified is true when expected hashes were configured and matched
+                          what the registry served; false when no hashes were configured or on mismatch.
                         type: boolean
                     required:
                     - digest
@@ -562,21 +500,18 @@ spec:
                     - layerHashesVerified
                     type: object
                   blockStreamUploader:
-                    description: SelectedSource is the validation outcome for one
-                      component.
                     properties:
                       digest:
-                        description: Digest is the resolved manifest digest (e.g.
-                          "sha256:...").
+                        description: Sha256Digest is an OCI sha256 digest ("sha256:"
+                          + 64 lowercase hex chars).
+                        pattern: ^sha256:[a-f0-9]{64}$
                         type: string
                       image:
-                        description: Image is the OCI image reference that was selected.
                         type: string
                       layerHashesVerified:
                         description: |-
-                          LayerHashesVerified is true when expected layer hashes were configured
-                          and matched what the registry served. False either when no hashes were
-                          configured to compare against, or when a mismatch was detected.
+                          LayerHashesVerified is true when expected hashes were configured and matched
+                          what the registry served; false when no hashes were configured or on mismatch.
                         type: boolean
                     required:
                     - digest
@@ -584,21 +519,18 @@ spec:
                     - layerHashesVerified
                     type: object
                   consensusNode:
-                    description: SelectedSource is the validation outcome for one
-                      component.
                     properties:
                       digest:
-                        description: Digest is the resolved manifest digest (e.g.
-                          "sha256:...").
+                        description: Sha256Digest is an OCI sha256 digest ("sha256:"
+                          + 64 lowercase hex chars).
+                        pattern: ^sha256:[a-f0-9]{64}$
                         type: string
                       image:
-                        description: Image is the OCI image reference that was selected.
                         type: string
                       layerHashesVerified:
                         description: |-
-                          LayerHashesVerified is true when expected layer hashes were configured
-                          and matched what the registry served. False either when no hashes were
-                          configured to compare against, or when a mismatch was detected.
+                          LayerHashesVerified is true when expected hashes were configured and matched
+                          what the registry served; false when no hashes were configured or on mismatch.
                         type: boolean
                     required:
                     - digest
@@ -606,21 +538,18 @@ spec:
                     - layerHashesVerified
                     type: object
                   eventStreamUploader:
-                    description: SelectedSource is the validation outcome for one
-                      component.
                     properties:
                       digest:
-                        description: Digest is the resolved manifest digest (e.g.
-                          "sha256:...").
+                        description: Sha256Digest is an OCI sha256 digest ("sha256:"
+                          + 64 lowercase hex chars).
+                        pattern: ^sha256:[a-f0-9]{64}$
                         type: string
                       image:
-                        description: Image is the OCI image reference that was selected.
                         type: string
                       layerHashesVerified:
                         description: |-
-                          LayerHashesVerified is true when expected layer hashes were configured
-                          and matched what the registry served. False either when no hashes were
-                          configured to compare against, or when a mismatch was detected.
+                          LayerHashesVerified is true when expected hashes were configured and matched
+                          what the registry served; false when no hashes were configured or on mismatch.
                         type: boolean
                     required:
                     - digest
@@ -628,21 +557,18 @@ spec:
                     - layerHashesVerified
                     type: object
                   recordStreamUploader:
-                    description: SelectedSource is the validation outcome for one
-                      component.
                     properties:
                       digest:
-                        description: Digest is the resolved manifest digest (e.g.
-                          "sha256:...").
+                        description: Sha256Digest is an OCI sha256 digest ("sha256:"
+                          + 64 lowercase hex chars).
+                        pattern: ^sha256:[a-f0-9]{64}$
                         type: string
                       image:
-                        description: Image is the OCI image reference that was selected.
                         type: string
                       layerHashesVerified:
                         description: |-
-                          LayerHashesVerified is true when expected layer hashes were configured
-                          and matched what the registry served. False either when no hashes were
-                          configured to compare against, or when a mismatch was detected.
+                          LayerHashesVerified is true when expected hashes were configured and matched
+                          what the registry served; false when no hashes were configured or on mismatch.
                         type: boolean
                     required:
                     - digest
@@ -650,21 +576,18 @@ spec:
                     - layerHashesVerified
                     type: object
                   uc:
-                    description: SelectedSource is the validation outcome for one
-                      component.
                     properties:
                       digest:
-                        description: Digest is the resolved manifest digest (e.g.
-                          "sha256:...").
+                        description: Sha256Digest is an OCI sha256 digest ("sha256:"
+                          + 64 lowercase hex chars).
+                        pattern: ^sha256:[a-f0-9]{64}$
                         type: string
                       image:
-                        description: Image is the OCI image reference that was selected.
                         type: string
                       layerHashesVerified:
                         description: |-
-                          LayerHashesVerified is true when expected layer hashes were configured
-                          and matched what the registry served. False either when no hashes were
-                          configured to compare against, or when a mismatch was detected.
+                          LayerHashesVerified is true when expected hashes were configured and matched
+                          what the registry served; false when no hashes were configured or on mismatch.
                         type: boolean
                     required:
                     - digest

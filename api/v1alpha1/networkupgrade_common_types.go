@@ -2,8 +2,6 @@
 
 package v1alpha1
 
-// ComponentName identifies a component in a NetworkUpgrade* CR's spec.images section.
-// The string values are the JSON/YAML keys used in spec.images and status.selectedSources.
 type ComponentName string
 
 const (
@@ -15,7 +13,6 @@ const (
 	ComponentUC                   ComponentName = "uc"
 )
 
-// AllUpgradeComponents is the canonical iteration order for component validation.
 var AllUpgradeComponents = []ComponentName{
 	ComponentConsensusNode,
 	ComponentRecordStreamUploader,
@@ -26,76 +23,53 @@ var AllUpgradeComponents = []ComponentName{
 }
 
 // UpgradeImagesSpec is the verbatim "images:" section of consensus-node-components.yaml.
-// It is embedded into the Prepare, Freeze and Execute CR specs so each CR is
-// self-contained and survives independently of its predecessors.
+// Embedded in Prepare, Freeze and Execute specs so each CR is self-contained.
 type UpgradeImagesSpec struct {
-	// ConsensusNode is the required main container image set.
 	ConsensusNode UpgradeComponentSpec `json:"consensusNode"`
-
 	// +optional
 	RecordStreamUploader *UpgradeComponentSpec `json:"recordStreamUploader,omitempty"`
-
 	// +optional
 	EventStreamUploader *UpgradeComponentSpec `json:"eventStreamUploader,omitempty"`
-
 	// +optional
 	BlockStreamUploader *UpgradeComponentSpec `json:"blockStreamUploader,omitempty"`
-
 	// +optional
 	BackupUploader *UpgradeComponentSpec `json:"backupUploader,omitempty"`
-
 	// +optional
 	UC *UpgradeComponentSpec `json:"uc,omitempty"`
 }
 
-// UpgradeComponentSpec is the per-component block in UpgradeImagesSpec.
 type UpgradeComponentSpec struct {
-	// Version is the release version (e.g. "0.75.0") for audit/labelling.
 	Version string `json:"version"`
 
-	// Enabled defaults to true when omitted. false means the component is present
-	// in the manifest but should be removed from the consensus pod on execute.
+	// Enabled=false means present-but-remove the sidecar from the consensus pod on execute.
 	// +optional
 	// +kubebuilder:default=true
 	Enabled *bool `json:"enabled,omitempty"`
 
-	// Deterministic carries the platform-keyed layer-hash expectations for
-	// deterministic builds.
 	Deterministic UpgradeDeterministicSpec `json:"deterministic"`
 
-	// Registries is the list of OCI image references this component can be
-	// pulled from. At least one entry is required.
 	// +kubebuilder:validation:MinItems=1
 	Registries []UpgradeRegistrySpec `json:"registries"`
 }
 
-// UpgradeDeterministicSpec describes layer-hash expectations when the build is
-// deterministic. When Supported is false, hashes are supplied per-registry on
-// UpgradeRegistrySpec instead.
+// UpgradeDeterministicSpec carries layer hashes when Supported=true.
+// When Supported=false, hashes live per-registry on UpgradeRegistrySpec instead.
 type UpgradeDeterministicSpec struct {
 	Supported bool `json:"supported"`
-
-	// LayerHashes is keyed by platform string (e.g. "linux/amd64", "linux/arm64")
-	// with an ordered list of layer SHA256 digests.
+	// Keyed by platform ("linux/amd64", "linux/arm64").
 	// +optional
-	LayerHashes map[string][]string `json:"layerHashes,omitempty"`
+	LayerHashes map[string][]Sha256Digest `json:"layerHashes,omitempty"`
 }
 
-// UpgradeRegistrySpec is one OCI image source for the component.
 type UpgradeRegistrySpec struct {
-	// Image is the OCI image reference (with tag or digest).
 	Image string `json:"image"`
-
-	// LayerHashes is per-registry layer hashes for non-deterministic builds.
-	// Keyed by platform string.
+	// Per-registry layer hashes for non-deterministic builds.
 	// +optional
-	LayerHashes map[string][]string `json:"layerHashes,omitempty"`
+	LayerHashes map[string][]Sha256Digest `json:"layerHashes,omitempty"`
 }
 
-// SelectedSources is the per-component result of registry validation.
-// It lives in NetworkUpgradePrepare.status; the UC copies it into Freeze.spec
-// and Execute.spec verbatim. The Freeze and Execute reconcilers may write an
-// updated copy to their own status when failover occurs.
+// SelectedSources is the per-component validation outcome. Lives in
+// Prepare.status; UC copies it into Freeze.spec and Execute.spec verbatim.
 type SelectedSources struct {
 	// +optional
 	ConsensusNode *SelectedSource `json:"consensusNode,omitempty"`
@@ -111,27 +85,24 @@ type SelectedSources struct {
 	UC *SelectedSource `json:"uc,omitempty"`
 }
 
-// SelectedSource is the validation outcome for one component.
+// Sha256Digest is an OCI sha256 digest ("sha256:" + 64 lowercase hex chars).
+// +kubebuilder:validation:Pattern=`^sha256:[a-f0-9]{64}$`
+type Sha256Digest string
+
 type SelectedSource struct {
-	// Image is the OCI image reference that was selected.
-	Image string `json:"image"`
-
-	// Digest is the resolved manifest digest (e.g. "sha256:...").
-	Digest string `json:"digest"`
-
-	// LayerHashesVerified is true when expected layer hashes were configured
-	// and matched what the registry served. False either when no hashes were
-	// configured to compare against, or when a mismatch was detected.
+	Image  string       `json:"image"`
+	Digest Sha256Digest `json:"digest"`
+	// LayerHashesVerified is true when expected hashes were configured and matched
+	// what the registry served; false when no hashes were configured or on mismatch.
 	LayerHashesVerified bool `json:"layerHashesVerified"`
 }
 
-// Label keys used to link the four NetworkUpgrade* CRs for one operation.
+// Labels linking all CRs of one upgrade operation.
 const (
 	LabelOperationID = "operator.solo.hedera.com/operation-id"
 	LabelStep        = "operator.solo.hedera.com/step"
 )
 
-// Step label values.
 const (
 	StepPrepare = "prepare"
 	StepFreeze  = "freeze"
@@ -139,7 +110,7 @@ const (
 	StepAbort   = "abort"
 )
 
-// Condition type constants for the NetworkUpgrade* CRs.
+// Condition types per CR.
 const (
 	// Prepare
 	CondManifestValidated = "ManifestValidated"
@@ -181,6 +152,15 @@ const (
 
 	ReasonAbortSuccess     = "Success"
 	ReasonAbortAfterFreeze = "AbortAfterFreeze"
+)
+
+// DaemonResult condition reasons, written by the provisioner daemon.
+const (
+	ReasonDaemonSucceeded          = "Succeeded"
+	ReasonDaemonFileDownloadFailed = "FileDownloadFailed"
+	ReasonDaemonFileHashMismatch   = "FileHashMismatch"
+	ReasonDaemonInfraUpgradeFailed = "InfraUpgradeFailed"
+	ReasonDaemonSelfUpgradeFailed  = "SelfUpgradeFailed"
 )
 
 // Event reasons posted on NetworkUpgrade* CRs.

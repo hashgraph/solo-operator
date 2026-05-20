@@ -3147,15 +3147,15 @@ func (in *UpgradeDeterministicSpec) DeepCopyInto(out *UpgradeDeterministicSpec) 
 	*out = *in
 	if in.LayerHashes != nil {
 		in, out := &in.LayerHashes, &out.LayerHashes
-		*out = make(map[string][]string, len(*in))
+		*out = make(map[string][]Sha256Digest, len(*in))
 		for key, val := range *in {
-			var outVal []string
+			var outVal []Sha256Digest
 			if val == nil {
 				(*out)[key] = nil
 			} else {
 				inVal := (*in)[key]
 				in, out := &inVal, &outVal
-				*out = make([]string, len(*in))
+				*out = make([]Sha256Digest, len(*in))
 				copy(*out, *in)
 			}
 			(*out)[key] = outVal
@@ -3219,15 +3219,15 @@ func (in *UpgradeRegistrySpec) DeepCopyInto(out *UpgradeRegistrySpec) {
 	*out = *in
 	if in.LayerHashes != nil {
 		in, out := &in.LayerHashes, &out.LayerHashes
-		*out = make(map[string][]string, len(*in))
+		*out = make(map[string][]Sha256Digest, len(*in))
 		for key, val := range *in {
-			var outVal []string
+			var outVal []Sha256Digest
 			if val == nil {
 				(*out)[key] = nil
 			} else {
 				inVal := (*in)[key]
 				in, out := &inVal, &outVal
-				*out = make([]string, len(*in))
+				*out = make([]Sha256Digest, len(*in))
 				copy(*out, *in)
 			}
 			(*out)[key] = outVal

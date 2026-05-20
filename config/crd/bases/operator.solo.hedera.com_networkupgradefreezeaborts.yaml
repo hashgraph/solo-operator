@@ -32,8 +32,6 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: NetworkUpgradeFreezeAbort is the Schema for the networkupgradefreezeaborts
-          API.
         properties:
           apiVersion:
             description: |-
@@ -53,25 +51,19 @@ spec:
           metadata:
             type: object
           spec:
-            description: NetworkUpgradeFreezeAbortSpec defines the desired state of
-              a NetworkUpgradeFreezeAbort.
             properties:
               operationId:
-                description: |-
-                  OperationID links this CR to the associated Prepare/Freeze CR(s) being
-                  aborted, through the shared operation-id label.
+                maxLength: 63
+                minLength: 1
+                pattern: ^[A-Za-z0-9]([-A-Za-z0-9_.]{0,61}[A-Za-z0-9])?$
                 type: string
               orbit:
-                description: Orbit is the deployment scope (typically the namespace
-                  name).
                 type: string
             required:
             - operationId
             - orbit
             type: object
           status:
-            description: NetworkUpgradeFreezeAbortStatus is the observed state of
-              a NetworkUpgradeFreezeAbort.
             properties:
               completionTime:
                 format: date-time
