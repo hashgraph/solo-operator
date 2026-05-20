@@ -153,127 +153,34 @@ var _ = Describe("E2E Tests", func() {
 			})
 		})
 
-		Context("NetworkOperation CRD", func() {
-			It("should accept NetworkOperation for genesis", func() {
-				testNamespace := "e2e-netop-genesis"
+		Context("NetworkGenesis CRD", func() {
+			It("should accept a NetworkGenesis CR", func() {
+				testNamespace := "e2e-netgenesis"
 				err := createNamespace(ctx, testNamespace)
 				if err != nil {
 					Expect(err.Error()).To(ContainSubstring("already exists"))
 				}
 				defer deleteNamespace(ctx, testNamespace)
 
-				netOp := &operatorv1alpha1.NetworkOperation{
+				ng := &operatorv1alpha1.NetworkGenesis{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "genesis-op",
+						Name:      "genesis-1",
 						Namespace: testNamespace,
 					},
-					Spec: operatorv1alpha1.NetworkOperationSpec{
-						Orbit: "test-orbit",
-						Mode:  operatorv1alpha1.NetworkOperationModeNetworkGenesis,
+					Spec: operatorv1alpha1.NetworkGenesisSpec{
+						Orbit:       "test-orbit",
+						OperationID: "genesis-e2e",
 					},
 				}
 
-				err = k8sClient.Create(ctx, netOp)
-				Expect(err).NotTo(HaveOccurred())
+				Expect(k8sClient.Create(ctx, ng)).To(Succeed())
 
-				// Verify
-				created := &operatorv1alpha1.NetworkOperation{}
-				err = k8sClient.Get(ctx, client.ObjectKey{Name: "genesis-op", Namespace: testNamespace}, created)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(created.Spec.Mode).To(Equal(operatorv1alpha1.NetworkOperationModeNetworkGenesis))
+				created := &operatorv1alpha1.NetworkGenesis{}
+				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: "genesis-1", Namespace: testNamespace}, created)).To(Succeed())
+				Expect(created.Spec.Orbit).To(Equal("test-orbit"))
+				Expect(created.Spec.OperationID).To(Equal("genesis-e2e"))
 
-				// Cleanup
-				Expect(k8sClient.Delete(ctx, netOp)).To(Succeed())
-			})
-
-			It("should accept NetworkOperation for upgrade", func() {
-				testNamespace := "e2e-netop-upgrade"
-				err := createNamespace(ctx, testNamespace)
-				if err != nil {
-					Expect(err.Error()).To(ContainSubstring("already exists"))
-				}
-				defer deleteNamespace(ctx, testNamespace)
-
-				netOp := &operatorv1alpha1.NetworkOperation{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "upgrade-op",
-						Namespace: testNamespace,
-					},
-					Spec: operatorv1alpha1.NetworkOperationSpec{
-						Orbit: "test-orbit",
-						Mode:  operatorv1alpha1.NetworkOperationModeNetworkUpgrade,
-						NetworkUpgrade: &operatorv1alpha1.NetworkUpgradeSpec{
-							WorkflowStep: operatorv1alpha1.NetworkUpgradeWorkflowStepExecuteImmediate,
-							Changesets: operatorv1alpha1.NetworkUpgradeChangesets{
-								ConsensusNodeChangeset: operatorv1alpha1.ConsensusNodeChangeset{
-									SoftwareVersionSource: &operatorv1alpha1.SoftwareVersionSource{
-										ImageRepositories: []operatorv1alpha1.ImageRepository{
-											{
-												Repository: "gcr.io/hedera-registry",
-												ImageName:  "consensus-node",
-												ImageTag:   "v0.65.1",
-											},
-										},
-										ImageVerificationSpec: []operatorv1alpha1.ImageVerificationSpec{},
-									},
-								},
-							},
-						},
-					},
-				}
-
-				err = k8sClient.Create(ctx, netOp)
-				Expect(err).NotTo(HaveOccurred())
-
-				// Verify
-				created := &operatorv1alpha1.NetworkOperation{}
-				err = k8sClient.Get(ctx, client.ObjectKey{Name: "upgrade-op", Namespace: testNamespace}, created)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(created.Spec.Mode).To(Equal(operatorv1alpha1.NetworkOperationModeNetworkUpgrade))
-				Expect(created.Spec.NetworkUpgrade.WorkflowStep).To(Equal(operatorv1alpha1.NetworkUpgradeWorkflowStepExecuteImmediate))
-
-				// Cleanup
-				Expect(k8sClient.Delete(ctx, netOp)).To(Succeed())
-			})
-
-			It("should accept NetworkOperation for node add", func() {
-				testNamespace := "e2e-netop-nodeadd"
-				err := createNamespace(ctx, testNamespace)
-				if err != nil {
-					Expect(err.Error()).To(ContainSubstring("already exists"))
-				}
-				defer deleteNamespace(ctx, testNamespace)
-
-				netOp := &operatorv1alpha1.NetworkOperation{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "node-add-op",
-						Namespace: testNamespace,
-					},
-					Spec: operatorv1alpha1.NetworkOperationSpec{
-						Orbit: "test-orbit",
-						Mode:  operatorv1alpha1.NetworkOperationModeNodeAdd,
-						NodeOperation: &operatorv1alpha1.NodeOperationSpec{
-							NodeAdd: &operatorv1alpha1.NodeAddSpec{
-								NodeName:  "node5",
-								NodeID:    5,
-								AccountID: "0.0.8",
-							},
-						},
-					},
-				}
-
-				err = k8sClient.Create(ctx, netOp)
-				Expect(err).NotTo(HaveOccurred())
-
-				// Verify
-				created := &operatorv1alpha1.NetworkOperation{}
-				err = k8sClient.Get(ctx, client.ObjectKey{Name: "node-add-op", Namespace: testNamespace}, created)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(created.Spec.Mode).To(Equal(operatorv1alpha1.NetworkOperationModeNodeAdd))
-				Expect(created.Spec.NodeOperation.NodeAdd.NodeID).To(Equal(int64(5)))
-
-				// Cleanup
-				Expect(k8sClient.Delete(ctx, netOp)).To(Succeed())
+				Expect(k8sClient.Delete(ctx, ng)).To(Succeed())
 			})
 		})
 
@@ -485,11 +392,11 @@ var _ = Describe("E2E Tests", func() {
 		AfterAll(func() {
 			By("Cleaning up test resources")
 
-			// Delete NetworkOperations
-			netOpList := &operatorv1alpha1.NetworkOperationList{}
-			_ = k8sClient.List(ctx, netOpList, client.InNamespace(testNamespace))
-			for _, netOp := range netOpList.Items {
-				_ = k8sClient.Delete(ctx, &netOp)
+			// Delete NetworkGenesis CRs
+			ngList := &operatorv1alpha1.NetworkGenesisList{}
+			_ = k8sClient.List(ctx, ngList, client.InNamespace(testNamespace))
+			for _, ng := range ngList.Items {
+				_ = k8sClient.Delete(ctx, &ng)
 			}
 
 			// Delete ConsensusCapsules
@@ -591,77 +498,24 @@ var _ = Describe("E2E Tests", func() {
 			}, shortTimeout, interval).Should(Equal(4))
 		})
 
-		It("should create a NetworkOperation for genesis", func() {
-			netOp := &operatorv1alpha1.NetworkOperation{
+		It("should create a NetworkGenesis CR", func() {
+			ng := &operatorv1alpha1.NetworkGenesis{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "genesis",
 					Namespace: testNamespace,
 				},
-				Spec: operatorv1alpha1.NetworkOperationSpec{
-					Orbit: orbitName,
-					Mode:  operatorv1alpha1.NetworkOperationModeNetworkGenesis,
+				Spec: operatorv1alpha1.NetworkGenesisSpec{
+					Orbit:       orbitName,
+					OperationID: "e2e-genesis",
 				},
 			}
 
-			err := k8sClient.Create(ctx, netOp)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, ng)).To(Succeed())
 
-			// Verify NetworkOperation is created
-			created := &operatorv1alpha1.NetworkOperation{}
+			created := &operatorv1alpha1.NetworkGenesis{}
 			Eventually(func() error {
 				return k8sClient.Get(ctx, client.ObjectKey{Name: "genesis", Namespace: testNamespace}, created)
 			}, shortTimeout, interval).Should(Succeed())
-		})
-	})
-
-	Describe("Sequencer Behavior", Ordered, func() {
-		// Test that NetworkOperations are queued properly
-		const testNamespace = "e2e-sequencer-test"
-
-		BeforeAll(func() {
-			err := createNamespace(ctx, testNamespace)
-			if err != nil {
-				Expect(err.Error()).To(ContainSubstring("already exists"))
-			}
-		})
-
-		AfterAll(func() {
-			// Cleanup all NetworkOperations
-			netOpList := &operatorv1alpha1.NetworkOperationList{}
-			_ = k8sClient.List(ctx, netOpList, client.InNamespace(testNamespace))
-			for _, netOp := range netOpList.Items {
-				_ = k8sClient.Delete(ctx, &netOp)
-			}
-			_ = deleteNamespace(ctx, testNamespace)
-		})
-
-		It("should accept multiple NetworkOperations in the same namespace", func() {
-			// Create multiple operations - they should be queued
-			for i := 0; i < 3; i++ {
-				netOp := &operatorv1alpha1.NetworkOperation{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("op-%d", i),
-						Namespace: testNamespace,
-					},
-					Spec: operatorv1alpha1.NetworkOperationSpec{
-						Orbit: "test-orbit",
-						Mode:  operatorv1alpha1.NetworkOperationModeNetworkCheck,
-					},
-				}
-
-				err := k8sClient.Create(ctx, netOp)
-				Expect(err).NotTo(HaveOccurred())
-			}
-
-			// Verify all operations were created
-			netOpList := &operatorv1alpha1.NetworkOperationList{}
-			Eventually(func() int {
-				err := k8sClient.List(ctx, netOpList, client.InNamespace(testNamespace))
-				if err != nil {
-					return 0
-				}
-				return len(netOpList.Items)
-			}, shortTimeout, interval).Should(Equal(3))
 		})
 	})
 

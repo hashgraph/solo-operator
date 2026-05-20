@@ -129,11 +129,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = controller.NewNetworkOperationReconciler(
+	if err = controller.NewNetworkGenesisReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
 	).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "NetworkOperation")
+		setupLog.Error(err, "unable to create controller", "controller", "NetworkGenesis")
 		os.Exit(1)
 	}
 

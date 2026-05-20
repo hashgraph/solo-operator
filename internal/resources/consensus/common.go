@@ -44,15 +44,16 @@ const (
 	ConfigMapSuffix      = "-cm"
 )
 
-// Resource names
+// Resource names. The genesis package re-exports the ConfigMap-related
+// constants from this block (single source of truth lives here so deployment.go
+// can mount them without importing the genesis package, which would create a
+// cycle since genesis imports consensus for hostname helpers).
 const (
-	// ClusterConfigMapName is the name of the ConfigMap created by genesis
+	// ClusterConfigMapName is the legacy cluster-config ConfigMap created by NetworkGenesis.
 	ClusterConfigMapName = "cluster-config"
-	// PublicKeysConfigMapName is the name of the public keys ConfigMap created by genesis
-	PublicKeysConfigMapName = "public-keys"
-	// GenesisConfigMapName is the namespace-scoped ConfigMap containing genesis-network.json
+	// GenesisConfigMapName holds genesis-network.json — mounted by ConsensusCapsule pods.
 	GenesisConfigMapName = "genesis-config"
-	// GenesisNetworkFileName is the key/filename for the roster JSON inside GenesisConfigMapName
+	// GenesisNetworkFileName is the key inside GenesisConfigMapName.
 	GenesisNetworkFileName = "genesis-network.json"
 )
 
