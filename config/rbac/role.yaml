@@ -98,6 +98,10 @@ rules:
   - haproxycapsules
   - helmcapsules
   - networkoperations
+  - networkupgradeexecutes
+  - networkupgradefreezeaborts
+  - networkupgradefreezes
+  - networkupgradeprepares
   - orbits
   verbs:
   - create
@@ -115,6 +119,10 @@ rules:
   - haproxycapsules/finalizers
   - helmcapsules/finalizers
   - networkoperations/finalizers
+  - networkupgradeexecutes/finalizers
+  - networkupgradefreezeaborts/finalizers
+  - networkupgradefreezes/finalizers
+  - networkupgradeprepares/finalizers
   - orbits/finalizers
   verbs:
   - update
@@ -126,6 +134,10 @@ rules:
   - haproxycapsules/status
   - helmcapsules/status
   - networkoperations/status
+  - networkupgradeexecutes/status
+  - networkupgradefreezeaborts/status
+  - networkupgradefreezes/status
+  - networkupgradeprepares/status
   - orbits/status
   verbs:
   - get
