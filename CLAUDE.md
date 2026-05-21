@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Managed custom resources:**
 - `Orbit` — cluster-scoped network configuration
 - `ConsensusCapsule` — namespace-scoped Hedera consensus node
-- `NetworkOperation` — namespace-scoped genesis/upgrade operations
+- `NetworkGenesis` — namespace-scoped network genesis operation (produces roster + address book ConfigMaps)
 - `HAProxyCapsule` — namespace-scoped HAProxy load balancer
 - `EnvoyProxy` — namespace-scoped Envoy proxy
 - `HelmCapsule` — Helm-managed deployments
@@ -104,9 +104,7 @@ Reconciler implementations. Each CRD has a corresponding reconciler. Uses the su
 | `internal/controller/` | Reconciler implementations (one per CRD) |
 | `internal/subreconciler/` | Dependent resource pattern (owned object reconciliation) |
 | `internal/resources/` | Kubernetes resource builders (Deployments, Services, etc.) |
-| `internal/operations/` | `NetworkOperation` step processors (genesis, upgrade) |
-| `internal/processor/` | Generic step-based task execution framework |
-| `internal/sequencer/` | Operation queue and ordering management |
+| `internal/operations/genesis/` | NetworkGenesis builders (roster, address book, cluster-config) |
 | `internal/common/` | Shared utilities (labels, annotations, conditions) |
 
 ### Config & Manifests (`config/`)

@@ -39,7 +39,7 @@ Solo Operator automates the deployment and lifecycle management of Hedera consen
 |----------|-------|-------------|
 | **Orbit** | Cluster | Network configuration and settings |
 | **ConsensusCapsule** | Namespace | Hedera consensus node deployments |
-| **NetworkOperation** | Namespace | Genesis, upgrade, and maintenance operations |
+| **NetworkGenesis** | Namespace | Network genesis operation (roster + address book ConfigMaps) |
 | **HAProxyCapsule** | Namespace | HAProxy load balancer for gRPC traffic |
 | **EnvoyProxy** | Namespace | Envoy proxy for HTTP/gRPC routing |
 
@@ -120,11 +120,9 @@ kubectl delete -f https://github.com/hashgraph/solo-operator/releases/latest/dow
 │   └── manager/            # Manager deployment
 ├── internal/
 │   ├── controller/         # Reconciler implementations
-│   ├── processor/          # Step-based task framework
-│   ├── sequencer/          # Operation queue management
 │   ├── subreconciler/      # Dependent resource pattern
 │   ├── resources/          # Resource builders
-│   └── operations/         # NetworkOperation processors
+│   └── operations/         # NetworkGenesis builders (roster, address book, cluster-config)
 ├── charts/solo-operator/   # Helm chart
 ├── docs/                   # Documentation
 └── test/                   # Integration and E2E tests
