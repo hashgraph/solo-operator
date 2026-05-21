@@ -47,6 +47,67 @@ func TestBuildClusterConfig_ContainsExpectedKeys(t *testing.T) {
 	}
 }
 
+func TestBuildClusterConfig_OrbitOverridesWin(t *testing.T) {
+	orbit := &operatorv1alpha1.Orbit{
+		Spec: operatorv1alpha1.OrbitSpec{
+			Consensus: operatorv1alpha1.OrbitConsensus{
+				NetworkSettings:          map[string]string{"showInternalStats": "0"},
+				ApplicationConfiguration: map[string]string{"contracts.chainId": "9999"},
+				PermissionConfiguration:  map[string]string{"freeze": "0-*"},
+				Genesis: &operatorv1alpha1.OrbitGenesis{
+					ThrottlesJson: `{"override": true}`,
+				},
+			},
+		},
+	}
+	data := BuildClusterConfig(orbit, []RosterMaterial{{NodeID: 0, GossipHost: "h", GossipPort: 1, Weight: 1}}, nil)
+
+	// settings.txt uses comma-padded "key, value" — the override changes the
+	// default of "1" to "0".
+	if !strings.Contains(data["settings.txt"], "showInternalStats,") || !strings.Contains(data["settings.txt"], " 0\n") {
+		t.Errorf("settings.txt override (showInternalStats=0) not applied; got:\n%s", data["settings.txt"])
+	}
+	if !strings.Contains(data["application.properties"], "contracts.chainId=9999") {
+		t.Errorf("application.properties override (contracts.chainId) not applied; got:\n%s", data["application.properties"])
+	}
+	if !strings.Contains(data["api-permission.properties"], "freeze=0-*") {
+		t.Errorf("api-permission.properties override (freeze) not applied; got:\n%s", data["api-permission.properties"])
+	}
+	if data["genesis-throttles.json"] != `{"override": true}` {
+		t.Errorf("genesis-throttles.json override not applied verbatim; got: %s", data["genesis-throttles.json"])
+	}
+}
+
+func TestBuildClusterConfig_LedgerIDPropagates(t *testing.T) {
+	orbit := &operatorv1alpha1.Orbit{
+		Spec: operatorv1alpha1.OrbitSpec{
+			Consensus: operatorv1alpha1.OrbitConsensus{
+				Genesis: &operatorv1alpha1.OrbitGenesis{
+					AddressBook: &operatorv1alpha1.OrbitAddressBook{LedgerId: "0x01"},
+				},
+			},
+		},
+	}
+	data := BuildClusterConfig(orbit, []RosterMaterial{{NodeID: 0, GossipHost: "h", GossipPort: 1, Weight: 1}}, nil)
+
+	if !strings.HasPrefix(data[ConfigKeyConfigTxt], "swirld, 298\n") {
+		t.Errorf("config.txt should use ledger 298 for 0x01; got first line: %q", firstLine(data[ConfigKeyConfigTxt]))
+	}
+	if !strings.Contains(data["application.properties"], "contracts.chainId=298") {
+		t.Errorf("application.properties chainId should be 298 for ledger 0x01")
+	}
+	if !strings.Contains(data["bootstrap.properties"], "contracts.chainId=298") {
+		t.Errorf("bootstrap.properties chainId should be 298 for ledger 0x01")
+	}
+}
+
+func firstLine(s string) string {
+	if idx := strings.Index(s, "\n"); idx >= 0 {
+		return s[:idx]
+	}
+	return s
+}
+
 func TestLedgerIDToHex(t *testing.T) {
 	cases := []struct{ in, wantID, wantChain string }{
 		{"0x01", "0x01", "298"},

@@ -297,7 +297,6 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 	pvc := capsule.Spec.PersistentVolumeClaims
 
 	// ── ConfigMap volumes ────────────────────────────────────────────────────
-	genesisOptional := true
 	defaultMode := int32(420) // 0644
 	volumes := []corev1.Volume{
 		{
@@ -318,16 +317,14 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 				},
 			},
 		},
-		// genesis-config is optional: absent until a genesis NetworkOperation runs.
-		// Mounted at a temp path; the genesis-init init container copies the file into
-		// the writable data-config-dir emptyDir so the platform can archive it after round 1.
+		// genesis-config is optional: absent until NetworkGenesis runs.
 		{
 			Name: "genesis-config",
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{Name: GenesisConfigMapName},
 					DefaultMode:          &defaultMode,
-					Optional:             &genesisOptional,
+					Optional:             func() *bool { b := true; return &b }(),
 				},
 			},
 		},
@@ -344,11 +341,11 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 		// log4j2.xml and settings.txt relative to that directory.
 		{Name: "hapi-app-config", MountPath: HapiBase + "/log4j2.xml", SubPath: "log4j2.xml", ReadOnly: true},
 		{Name: "hapi-app-config", MountPath: HapiBase + "/settings.txt", SubPath: "settings.txt", ReadOnly: true},
-		// data-config-dir provides the writable data/config directory; individual
-		// config files are overlaid on top via subPath mounts below.
+		// data-config-dir is the writable data/config directory; individual files overlaid via subPath.
 		{Name: "data-config-dir", MountPath: HapiBase + "/data/config"},
 		{Name: "data-config", MountPath: HapiBase + "/data/config/application.properties", SubPath: "application.properties"},
 		{Name: "data-config", MountPath: HapiBase + "/data/config/api-permission.properties", SubPath: "api-permission.properties"},
+		{Name: "data-config", MountPath: HapiBase + "/data/config/" + GenesisPropertiesFileName, SubPath: GenesisPropertiesFileName},
 	}
 
 	// block-nodes.json — only when BlockNodes is configured

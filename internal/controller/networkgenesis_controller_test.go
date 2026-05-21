@@ -158,6 +158,7 @@ func TestNetworkGenesisReconciler_HappyPath(t *testing.T) {
 	for _, cmName := range []string{
 		genesis.GenesisConfigMapName,
 		genesis.AddressBookBinConfigMapName,
+		genesis.PublicKeysConfigMapName,
 		genesis.ClusterConfigMapName,
 	} {
 		cm := &corev1.ConfigMap{}
@@ -166,8 +167,105 @@ func TestNetworkGenesisReconciler_HappyPath(t *testing.T) {
 		}
 	}
 
-	if len(got.Status.GeneratedConfigMaps) != 3 {
-		t.Errorf("expected 3 generated ConfigMaps in status, got %v", got.Status.GeneratedConfigMaps)
+	if len(got.Status.GeneratedConfigMaps) != 4 {
+		t.Errorf("expected 4 generated ConfigMaps in status, got %v", got.Status.GeneratedConfigMaps)
+	}
+}
+
+func TestNetworkGenesisReconciler_StampsOperationIDLabel(t *testing.T) {
+	scheme := ngTestScheme(t)
+	sigPEM := ngSelfSignedCertPEM(t)
+	grpcPEM := ngSelfSignedCertPEM(t)
+
+	orbit := &operatorv1alpha1.Orbit{ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"}}
+	capsule := ngCapsule("node0", 0)
+	const opID = "genesis-2026-05-21"
+	ng := &operatorv1alpha1.NetworkGenesis{
+		ObjectMeta: metav1.ObjectMeta{Name: "genesis-1", Namespace: "test"},
+		Spec:       operatorv1alpha1.NetworkGenesisSpec{Orbit: "test-orbit", OperationID: opID},
+	}
+	objs := []client.Object{orbit, capsule, ng}
+	objs = append(objs, ngCapsuleSecrets("node0", sigPEM, grpcPEM)...)
+
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithStatusSubresource(&operatorv1alpha1.NetworkGenesis{}).
+		WithObjects(objs...).Build()
+
+	r := NewNetworkGenesisReconciler(c, scheme)
+	name := types.NamespacedName{Namespace: "test", Name: "genesis-1"}
+	reconcileToCompletion(t, r, name)
+
+	for _, cmName := range []string{
+		genesis.GenesisConfigMapName,
+		genesis.AddressBookBinConfigMapName,
+		genesis.PublicKeysConfigMapName,
+		genesis.ClusterConfigMapName,
+	} {
+		cm := &corev1.ConfigMap{}
+		if err := c.Get(context.Background(), types.NamespacedName{Namespace: "test", Name: cmName}, cm); err != nil {
+			t.Fatalf("ConfigMap %s not created: %v", cmName, err)
+		}
+		if got := cm.Labels["hedera.com/operation-id"]; got != opID {
+			t.Errorf("ConfigMap %s: hedera.com/operation-id = %q, want %q", cmName, got, opID)
+		}
+	}
+}
+
+// Spec mutation post-creation is terminal — CR must be deleted+recreated.
+func TestNetworkGenesisReconciler_SpecMutationIsTerminal(t *testing.T) {
+	scheme := ngTestScheme(t)
+
+	orbit := &operatorv1alpha1.Orbit{ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"}}
+	ng := &operatorv1alpha1.NetworkGenesis{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "genesis-1",
+			Namespace:  "test",
+			Generation: 2,
+			Finalizers: []string{NetworkGenesisFinalizer},
+		},
+		Spec: operatorv1alpha1.NetworkGenesisSpec{Orbit: "test-orbit", OperationID: "v2"},
+		Status: operatorv1alpha1.NetworkGenesisStatus{
+			Phase:              operatorv1alpha1.PhaseSucceeded,
+			ObservedGeneration: 1,
+		},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithStatusSubresource(&operatorv1alpha1.NetworkGenesis{}).
+		WithObjects(orbit, ng).Build()
+
+	r := NewNetworkGenesisReconciler(c, scheme)
+	name := types.NamespacedName{Namespace: "test", Name: "genesis-1"}
+
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: name}); err != nil {
+		t.Fatalf("rejection reconcile: unexpected error: %v", err)
+	}
+
+	got := &operatorv1alpha1.NetworkGenesis{}
+	if err := c.Get(context.Background(), name, got); err != nil {
+		t.Fatalf("get after rejection: %v", err)
+	}
+	if got.Status.Phase != operatorv1alpha1.PhaseFailed {
+		t.Fatalf("expected Phase=Failed after mutation, got %s; conditions=%v", got.Status.Phase, got.Status.Conditions)
+	}
+	var rejected bool
+	for _, cond := range got.Status.Conditions {
+		if cond.Reason == networkGenesisReasonSpecMutated {
+			rejected = true
+			break
+		}
+	}
+	if !rejected {
+		t.Errorf("expected condition with Reason=%s, got %v", networkGenesisReasonSpecMutated, got.Status.Conditions)
+	}
+
+	// Terminal: subsequent reconcile must short-circuit and not produce any
+	// ConfigMap.
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: name}); err != nil {
+		t.Fatalf("post-rejection reconcile: unexpected error: %v", err)
+	}
+	if err := c.Get(context.Background(), types.NamespacedName{Namespace: "test", Name: genesis.GenesisConfigMapName}, &corev1.ConfigMap{}); err == nil {
+		t.Errorf("post-rejection reconcile should not create genesis-config ConfigMap")
 	}
 }
 
@@ -231,6 +329,58 @@ func TestNetworkGenesisReconciler_ExplicitRoster(t *testing.T) {
 	}
 	if !strings.Contains(body, `"weight": "2"`) {
 		t.Errorf("expected weight=2 (string-encoded uint64) in genesis-network.json")
+	}
+}
+
+// Once Phase=Succeeded, subsequent reconciles must early-exit without
+// touching the ConfigMaps (terminal-state guard at controller.go:73).
+func TestNetworkGenesisReconciler_SucceededIsTerminal(t *testing.T) {
+	scheme := ngTestScheme(t)
+	sigPEM := ngSelfSignedCertPEM(t)
+	grpcPEM := ngSelfSignedCertPEM(t)
+
+	orbit := &operatorv1alpha1.Orbit{ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"}}
+	capsule := ngCapsule("node0", 0)
+	ng := &operatorv1alpha1.NetworkGenesis{
+		ObjectMeta: metav1.ObjectMeta{Name: "genesis-1", Namespace: "test"},
+		Spec:       operatorv1alpha1.NetworkGenesisSpec{Orbit: "test-orbit", OperationID: "term"},
+	}
+	objs := []client.Object{orbit, capsule, ng}
+	objs = append(objs, ngCapsuleSecrets("node0", sigPEM, grpcPEM)...)
+
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithStatusSubresource(&operatorv1alpha1.NetworkGenesis{}).
+		WithObjects(objs...).Build()
+
+	r := NewNetworkGenesisReconciler(c, scheme)
+	name := types.NamespacedName{Namespace: "test", Name: "genesis-1"}
+	reconcileToCompletion(t, r, name)
+
+	// Snapshot the genesis-config CM, then sabotage it. A terminal Phase=Succeeded
+	// must keep the reconciler from re-running and overwriting.
+	cm := &corev1.ConfigMap{}
+	Expect := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
+	Expect(c.Get(context.Background(), types.NamespacedName{Name: genesis.GenesisConfigMapName, Namespace: "test"}, cm))
+	cm.Data[genesis.GenesisNetworkFileName] = "sentinel-not-overwritten"
+	Expect(c.Update(context.Background(), cm))
+
+	result, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: name})
+	if err != nil {
+		t.Fatalf("post-success reconcile returned error: %v", err)
+	}
+	if result.Requeue || result.RequeueAfter != 0 {
+		t.Errorf("post-success reconcile should not requeue; got %+v", result)
+	}
+
+	check := &corev1.ConfigMap{}
+	Expect(c.Get(context.Background(), types.NamespacedName{Name: genesis.GenesisConfigMapName, Namespace: "test"}, check))
+	if check.Data[genesis.GenesisNetworkFileName] != "sentinel-not-overwritten" {
+		t.Errorf("terminal-state guard failed: ConfigMap was overwritten after Phase=Succeeded")
 	}
 }
 

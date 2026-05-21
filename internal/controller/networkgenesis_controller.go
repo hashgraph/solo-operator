@@ -21,8 +21,9 @@ import (
 const (
 	NetworkGenesisFinalizer = "operator.solo.hedera.com/networkgenesis-finalizer"
 
-	networkGenesisConditionReady  = "Ready"
-	networkGenesisConditionFailed = "Failed"
+	networkGenesisConditionReady    = "Ready"
+	networkGenesisConditionFailed   = "Failed"
+	networkGenesisReasonSpecMutated = "SpecMutationRejected"
 )
 
 // NetworkGenesisReconciler produces the genesis ConfigMaps. The CR is
@@ -70,25 +71,33 @@ func (r *NetworkGenesisReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{Requeue: true}, nil
 	}
 
+	if hasSpecMutationRejection(ng.Status.Conditions) {
+		return ctrl.Result{}, nil
+	}
+	if ng.Status.ObservedGeneration > 0 && ng.Generation != ng.Status.ObservedGeneration {
+		return r.rejectMutation(ctx, ng)
+	}
+
 	// Succeeded is terminal; Failed is observational so transient errors
 	// recover via controller-runtime backoff on the next requeue.
 	if ng.Status.Phase == operatorv1alpha1.PhaseSucceeded {
 		return ctrl.Result{}, nil
 	}
 
-	if err := r.run(ctx, ng); err != nil {
+	orbit, err := r.run(ctx, ng)
+	if err != nil {
 		if _, ferr := r.fail(ctx, ng, err.Error()); ferr != nil {
 			log.FromContext(ctx).Error(ferr, "failed to update status after error")
 		}
 		return ctrl.Result{}, err
 	}
-	return r.succeed(ctx, ng)
+	return r.succeed(ctx, ng, orbit)
 }
 
-func (r *NetworkGenesisReconciler) run(ctx context.Context, ng *operatorv1alpha1.NetworkGenesis) error {
+func (r *NetworkGenesisReconciler) run(ctx context.Context, ng *operatorv1alpha1.NetworkGenesis) (*operatorv1alpha1.Orbit, error) {
 	orbit := &operatorv1alpha1.Orbit{}
 	if err := r.Get(ctx, client.ObjectKey{Name: ng.Spec.Orbit}, orbit); err != nil {
-		return fmt.Errorf("orbit %q not found: %w", ng.Spec.Orbit, err)
+		return nil, fmt.Errorf("orbit %q not found: %w", ng.Spec.Orbit, err)
 	}
 
 	var (
@@ -101,38 +110,43 @@ func (r *NetworkGenesisReconciler) run(ctx context.Context, ng *operatorv1alpha1
 		materials, err = genesis.MaterialsFromCluster(ctx, r.Client, ng.Namespace, orbit)
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	genesisJSON, err := genesis.BuildGenesisNetworkJSON(materials)
 	if err != nil {
-		return fmt.Errorf("build genesis-network.json: %w", err)
+		return nil, fmt.Errorf("build genesis-network.json: %w", err)
 	}
-	if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.GenesisConfigMapName, ng.Spec.Orbit,
+	if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.GenesisConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,
 		map[string]string{genesis.GenesisNetworkFileName: string(genesisJSON)}, nil); err != nil {
-		return fmt.Errorf("upsert %s: %w", genesis.GenesisConfigMapName, err)
+		return nil, fmt.Errorf("upsert %s: %w", genesis.GenesisConfigMapName, err)
 	}
 
 	abBin, err := genesis.BuildAddressBookBin(materials)
 	if err != nil {
-		return fmt.Errorf("build addressbook-bin: %w", err)
+		return nil, fmt.Errorf("build addressbook-bin: %w", err)
 	}
-	if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.AddressBookBinConfigMapName, ng.Spec.Orbit,
+	if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.AddressBookBinConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,
 		nil, map[string][]byte{genesis.AddressBookBinKey: abBin}); err != nil {
-		return fmt.Errorf("upsert %s: %w", genesis.AddressBookBinConfigMapName, err)
+		return nil, fmt.Errorf("upsert %s: %w", genesis.AddressBookBinConfigMapName, err)
+	}
+
+	if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.PublicKeysConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,
+		genesis.BuildPublicKeys(materials), nil); err != nil {
+		return nil, fmt.Errorf("upsert %s: %w", genesis.PublicKeysConfigMapName, err)
 	}
 
 	podIPs, err := genesis.CollectPodIPs(ctx, r.Client, ng.Namespace)
 	if err != nil {
-		return fmt.Errorf("collect pod IPs: %w", err)
+		return nil, fmt.Errorf("collect pod IPs: %w", err)
 	}
 	clusterData := genesis.BuildClusterConfig(orbit, materials, podIPs)
-	if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.ClusterConfigMapName, ng.Spec.Orbit,
+	if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.ClusterConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,
 		clusterData, nil); err != nil {
-		return fmt.Errorf("upsert %s: %w", genesis.ClusterConfigMapName, err)
+		return nil, fmt.Errorf("upsert %s: %w", genesis.ClusterConfigMapName, err)
 	}
 
-	return nil
+	return orbit, nil
 }
 
 // handleDeletion lets generated ConfigMaps outlive the CR — they are still
@@ -145,16 +159,18 @@ func (r *NetworkGenesisReconciler) handleDeletion(ctx context.Context, ng *opera
 	return ctrl.Result{}, r.Update(ctx, ng)
 }
 
-func (r *NetworkGenesisReconciler) succeed(ctx context.Context, ng *operatorv1alpha1.NetworkGenesis) (ctrl.Result, error) {
+func (r *NetworkGenesisReconciler) succeed(ctx context.Context, ng *operatorv1alpha1.NetworkGenesis, orbit *operatorv1alpha1.Orbit) (ctrl.Result, error) {
 	now := metav1.Now()
 	ng.Status.Phase = operatorv1alpha1.PhaseSucceeded
 	ng.Status.ObservedGeneration = ng.Generation
 	ng.Status.CompletionTime = &now
-	ng.Status.GeneratedConfigMaps = []string{
+	generatedCMs := []string{
 		genesis.GenesisConfigMapName,
 		genesis.AddressBookBinConfigMapName,
+		genesis.PublicKeysConfigMapName,
 		genesis.ClusterConfigMapName,
 	}
+	ng.Status.GeneratedConfigMaps = generatedCMs
 	setNetworkGenesisCondition(&ng.Status.Conditions, metav1.Condition{
 		Type:               networkGenesisConditionReady,
 		Status:             metav1.ConditionTrue,
@@ -180,6 +196,30 @@ func (r *NetworkGenesisReconciler) fail(ctx context.Context, ng *operatorv1alpha
 		ObservedGeneration: ng.Generation,
 	})
 	return ctrl.Result{}, r.Status().Update(ctx, ng)
+}
+
+func (r *NetworkGenesisReconciler) rejectMutation(ctx context.Context, ng *operatorv1alpha1.NetworkGenesis) (ctrl.Result, error) {
+	now := metav1.Now()
+	ng.Status.Phase = operatorv1alpha1.PhaseFailed
+	ng.Status.ObservedGeneration = ng.Generation
+	setNetworkGenesisCondition(&ng.Status.Conditions, metav1.Condition{
+		Type:               networkGenesisConditionFailed,
+		Status:             metav1.ConditionTrue,
+		LastTransitionTime: now,
+		Reason:             networkGenesisReasonSpecMutated,
+		Message:            "spec is immutable post-creation; delete and re-create the CR to change inputs",
+		ObservedGeneration: ng.Generation,
+	})
+	return ctrl.Result{}, r.Status().Update(ctx, ng)
+}
+
+func hasSpecMutationRejection(conditions []operatorv1alpha1.Condition) bool {
+	for _, c := range conditions {
+		if c.Reason == networkGenesisReasonSpecMutated && c.Status == metav1.ConditionTrue {
+			return true
+		}
+	}
+	return false
 }
 
 func setNetworkGenesisCondition(conditions *[]operatorv1alpha1.Condition, c metav1.Condition) {

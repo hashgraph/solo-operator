@@ -55,6 +55,8 @@ const (
 	GenesisConfigMapName = "genesis-config"
 	// GenesisNetworkFileName is the key inside GenesisConfigMapName.
 	GenesisNetworkFileName = "genesis-network.json"
+	// GenesisPropertiesFileName is the key inside data-config-cm for genesis.properties.
+	GenesisPropertiesFileName = "genesis.properties"
 )
 
 // Checkpoint ConfigMap constants — [capsule-name]-checkpoint.

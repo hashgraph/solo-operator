@@ -40,7 +40,7 @@ func nodeAddressFromMaterial(m RosterMaterial) (*services.NodeAddress, error) {
 			{DomainName: m.ServiceHost, Port: m.ServicePort},
 		},
 		Description: m.Description,
-		Stake:       int64(m.Weight),
+		Stake:       m.Weight,
 	}, nil
 }
 

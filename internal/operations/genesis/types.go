@@ -32,7 +32,7 @@ type RosterMaterial struct {
 	ServiceHost string
 	ServicePort int32
 
-	Weight      int
+	Weight      int64
 	AdminKeyHex string
 
 	SigningCertPEM   []byte

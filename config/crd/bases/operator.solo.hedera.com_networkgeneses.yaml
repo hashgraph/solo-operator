@@ -97,6 +97,7 @@ spec:
                       type: integer
                     weight:
                       description: Weight defaults to 1 when zero.
+                      format: int64
                       minimum: 0
                       type: integer
                   required:

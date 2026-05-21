@@ -56,7 +56,7 @@ type NetworkGenesisRosterEntry struct {
 	// Weight defaults to 1 when zero.
 	// +kubebuilder:validation:Minimum=0
 	// +optional
-	Weight int `json:"weight,omitempty"`
+	Weight int64 `json:"weight,omitempty"`
 
 	// Hex-encoded ED25519 admin public key.
 	// +optional

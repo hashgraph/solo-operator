@@ -13,7 +13,12 @@ import (
 	"github.com/hashgraph/solo-operator/internal/common"
 )
 
-func UpsertConfigMap(ctx context.Context, c client.Client, namespace, name, orbitName string, data map[string]string, binaryData map[string][]byte) error {
+func UpsertConfigMap(ctx context.Context, c client.Client, namespace, name, orbitName, operationID string, data map[string]string, binaryData map[string][]byte) error {
+	labels := common.StandardLabels(name, orbitName)
+	if operationID != "" {
+		labels[common.LabelOperationID] = operationID
+	}
+
 	cm := &corev1.ConfigMap{}
 	err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, cm)
 	if apierrors.IsNotFound(err) {
@@ -21,7 +26,7 @@ func UpsertConfigMap(ctx context.Context, c client.Client, namespace, name, orbi
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
 				Namespace: namespace,
-				Labels:    common.StandardLabels(name, orbitName),
+				Labels:    labels,
 			},
 			Data:       data,
 			BinaryData: binaryData,
@@ -33,6 +38,6 @@ func UpsertConfigMap(ctx context.Context, c client.Client, namespace, name, orbi
 	}
 	cm.Data = data
 	cm.BinaryData = binaryData
-	cm.Labels = common.StandardLabels(name, orbitName)
+	cm.Labels = labels
 	return c.Update(ctx, cm)
 }

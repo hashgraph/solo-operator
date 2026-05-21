@@ -44,7 +44,7 @@ func nodeMetadataFromMaterial(m RosterMaterial) (genesisNodeMetadata, error) {
 		return genesisNodeMetadata{}, fmt.Errorf("accountId %q: %w", m.AccountID, err)
 	}
 
-	weight := strconvUint64(int64(m.Weight))
+	weight := strconvUint64(m.Weight)
 	gossipEndpoints := []genesisServiceEndpoint{{DomainName: m.GossipHost, Port: m.GossipPort}}
 	serviceEndpoints := []genesisServiceEndpoint{{DomainName: m.ServiceHost, Port: m.ServicePort}}
 
