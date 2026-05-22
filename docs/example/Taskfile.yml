@@ -82,9 +82,9 @@ tasks:
     desc: Run network genesis (all nodes must be deployed first)
     deps: [deploy:nodes]
     cmds:
-      - kubectl apply -f network-operation/network-genesis.yaml
+      - kubectl apply -f network-genesis/network-genesis.yaml
       - echo ">> Waiting for genesis to complete..."
-      - kubectl wait --for=jsonpath='{.status.phase}'=Succeeded networkoperation/network-genesis -n solo-orbit --timeout=300s
+      - kubectl wait --for=jsonpath='{.status.phase}'=Succeeded networkgenesis/network-genesis -n solo-orbit --timeout=300s
       - echo ">> Genesis completed successfully"
 
   deploy:

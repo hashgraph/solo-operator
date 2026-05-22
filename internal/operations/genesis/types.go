@@ -3,135 +3,56 @@
 package genesis
 
 import (
-	"context"
+	"fmt"
+	"strings"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
-	"github.com/hashgraph/solo-operator/internal/processor"
+	"github.com/hashgraph/solo-operator/internal/resources/consensus"
 )
 
 const (
-	// StepConditionTypeVerifySecrets is the condition type for secret verification
-	StepConditionTypeVerifySecrets = "VerifySecrets"
-	// StepConditionReasonConsensusNodeSecrets is the condition reason for consensus node secrets
-	StepConditionReasonConsensusNodeSecrets = "ConsensusNodeSecrets"
+	GenesisConfigMapName   = consensus.GenesisConfigMapName
+	GenesisNetworkFileName = consensus.GenesisNetworkFileName
+	ClusterConfigMapName   = consensus.ClusterConfigMapName
 
-	// StepConditionTypeConfigCreated is the condition type for config creation
-	StepConditionTypeConfigCreated = "ConfigCreated"
-	// StepConditionReasonClusterConfig is the condition reason for cluster config
-	StepConditionReasonClusterConfig = "ClusterConfig"
-	// StepConditionReasonPublicKeyConfig is the condition reason for public key config
-	StepConditionReasonPublicKeyConfig = "PublicKeyConfig"
-	// StepConditionReasonGenesisNetwork is the condition reason for genesis-network.json creation
-	StepConditionReasonGenesisNetwork = "GenesisNetworkConfig"
+	PublicKeysConfigMapName     = consensus.PublicKeysConfigMapName
+	AddressBookBinConfigMapName = "addressbook-bin"
+	AddressBookBinKey           = "addressbook.bin"
 
-	// ClusterConfigName is the name of the cluster config ConfigMap.
-	//
-	// Deprecated: use the genesis-config ConfigMap instead.
-	ClusterConfigName = "cluster-config"
-	// PublicKeysName is the name of the public keys ConfigMap
-	PublicKeysName = "public-keys"
-
-	// ConfigKeyConfigTxt is the key for config.txt in the ConfigMap.
-	//
-	// Deprecated: Hedera consensus nodes ≥ v0.56 use genesis-network.json instead.
 	ConfigKeyConfigTxt = "config.txt"
-	// ConfigKeyPodIPs is the key for pod IPs in the ConfigMap
-	ConfigKeyPodIPs = "pod-ips"
+	ConfigKeyPodIPs    = "pod-ips"
 )
 
-// GenesisStatus represents the status during genesis processing
-type GenesisStatus struct {
-	Phase             operatorv1alpha1.Phase
-	Conditions        []metav1.Condition
-	ConsensusCapsules []string
+// RosterMaterial holds one node's pre-parsed inputs shared by every builder.
+type RosterMaterial struct {
+	NodeID      int64
+	AccountID   string
+	Description string
+
+	GossipHost  string
+	GossipPort  int32
+	ServiceHost string
+	ServicePort int32
+
+	Weight      int64
+	AdminKeyHex string
+
+	SigningCertPEM   []byte
+	SigningCertDER   []byte
+	SigningRSAPubKey string
+	GrpcCertHashHex  string
+
+	ExternalAddress string
 }
 
-// GetPhase returns the current phase
-func (s *GenesisStatus) GetPhase() operatorv1alpha1.Phase {
-	return s.Phase
-}
-
-// SetPhase sets the phase
-func (s *GenesisStatus) SetPhase(phase operatorv1alpha1.Phase) {
-	s.Phase = phase
-}
-
-// GetConditions returns the conditions
-func (s *GenesisStatus) GetConditions() []metav1.Condition {
-	return s.Conditions
-}
-
-// AddCondition adds a condition to the status
-func (s *GenesisStatus) AddCondition(condition metav1.Condition) {
-	// Remove existing condition with same type
-	filtered := make([]metav1.Condition, 0, len(s.Conditions))
-	for _, c := range s.Conditions {
-		if c.Type != condition.Type {
-			filtered = append(filtered, c)
-		}
+// splitAccountIDParts parses "shard.realm.account"; empty falls back to 0.0.(3+nodeID).
+func splitAccountIDParts(accountID string, nodeID int64) (shard, realm, account string, err error) {
+	id := strings.TrimSpace(accountID)
+	if id == "" {
+		return "0", "0", fmt.Sprintf("%d", 3+nodeID), nil
 	}
-	s.Conditions = append(filtered, condition)
-}
-
-// HasSuccessfulCondition checks if a condition with the given type and reason is successful
-func (s *GenesisStatus) HasSuccessfulCondition(conditionType, reason string) bool {
-	for _, c := range s.Conditions {
-		if c.Type == conditionType && c.Reason == reason && c.Status == metav1.ConditionTrue {
-			return true
-		}
+	parts := strings.Split(id, ".")
+	if len(parts) != 3 {
+		return "", "", "", fmt.Errorf("expected shard.realm.account, got %q", accountID)
 	}
-	return false
-}
-
-// GenesisContext holds context for genesis processing
-type GenesisContext struct {
-	Client    client.Client
-	Namespace string
-	OrbitName string
-}
-
-// Task represents the genesis task
-type Task struct {
-	client       client.Client
-	steps        []processor.ProcessorStep[*operatorv1alpha1.NetworkOperation, *GenesisStatus]
-	statusGetter func(*operatorv1alpha1.NetworkOperation) *GenesisStatus
-}
-
-// NewTask creates a new genesis task
-func NewTask(c client.Client) *Task {
-	return &Task{
-		client: c,
-		steps: []processor.ProcessorStep[*operatorv1alpha1.NetworkOperation, *GenesisStatus]{
-			NewCheckSecretsStep(c),
-			NewCreatePublicKeysStep(c),
-			NewCreateGenesisNetworkStep(c),
-			NewCreateAddressBookStep(c),
-		},
-		statusGetter: func(op *operatorv1alpha1.NetworkOperation) *GenesisStatus {
-			return &GenesisStatus{
-				Phase:             op.Status.Phase,
-				Conditions:        op.Status.Conditions,
-				ConsensusCapsules: op.Status.ConsensusCapsules,
-			}
-		},
-	}
-}
-
-// Steps returns the steps for this task
-func (t *Task) Steps() []processor.ProcessorStep[*operatorv1alpha1.NetworkOperation, *GenesisStatus] {
-	return t.steps
-}
-
-// StatusGetter returns the status getter function
-func (t *Task) StatusGetter() func(*operatorv1alpha1.NetworkOperation) *GenesisStatus {
-	return t.statusGetter
-}
-
-// Execute runs the genesis task
-func (t *Task) Execute(ctx context.Context, op *operatorv1alpha1.NetworkOperation) (*processor.Result[*GenesisStatus], error) {
-	baseTask := processor.NewBaseTask(t.steps, t.statusGetter)
-	return baseTask.Execute(ctx, op)
+	return parts[0], parts[1], parts[2], nil
 }

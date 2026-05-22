@@ -97,7 +97,7 @@ rules:
   - envoyproxies
   - haproxycapsules
   - helmcapsules
-  - networkoperations
+  - networkgeneses
   - orbits
   verbs:
   - create
@@ -114,7 +114,7 @@ rules:
   - envoyproxies/finalizers
   - haproxycapsules/finalizers
   - helmcapsules/finalizers
-  - networkoperations/finalizers
+  - networkgeneses/finalizers
   - orbits/finalizers
   verbs:
   - update
@@ -125,7 +125,7 @@ rules:
   - envoyproxies/status
   - haproxycapsules/status
   - helmcapsules/status
-  - networkoperations/status
+  - networkgeneses/status
   - orbits/status
   verbs:
   - get
