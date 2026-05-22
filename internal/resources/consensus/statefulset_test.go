@@ -411,7 +411,7 @@ func TestBuildVolumes_PublicKeysProjectedAlongsidePrivateKey(t *testing.T) {
 
 	var hasPrivateKey, hasPublicKeys bool
 	for _, src := range proj.Sources {
-		if src.Secret != nil && src.Secret.LocalObjectReference.Name == "node0-keys" {
+		if src.Secret != nil && src.Secret.Name == "node0-keys" {
 			hasPrivateKey = true
 		}
 		if src.ConfigMap != nil && src.ConfigMap.Name == PublicKeysConfigMapName {
