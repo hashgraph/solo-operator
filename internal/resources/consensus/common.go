@@ -57,6 +57,8 @@ const (
 	GenesisNetworkFileName = "genesis-network.json"
 	// GenesisPropertiesFileName is the key inside data-config-cm for genesis.properties.
 	GenesisPropertiesFileName = "genesis.properties"
+	// PublicKeysConfigMapName holds all nodes' signing public certs — mounted into data/keys.
+	PublicKeysConfigMapName = "public-keys"
 )
 
 // Checkpoint ConfigMap constants — [capsule-name]-checkpoint.

@@ -14,6 +14,7 @@ const (
 	GenesisNetworkFileName = consensus.GenesisNetworkFileName
 	ClusterConfigMapName   = consensus.ClusterConfigMapName
 
+	PublicKeysConfigMapName     = consensus.PublicKeysConfigMapName
 	AddressBookBinConfigMapName = "addressbook-bin"
 	AddressBookBinKey           = "addressbook.bin"
 

@@ -4,6 +4,7 @@ package consensus
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -336,6 +337,143 @@ func TestNeedsUpdate_ContainerSecurityContextChanged(t *testing.T) {
 	if !r.needsUpdate(existing, desired) {
 		t.Error("container SecurityContext change should trigger update")
 	}
+}
+
+// ── keys volume ──────────────────────────────────────────────────────────────
+
+func capsuleWithSecretResources(signingSecretName, signingKeyName string) *operatorv1alpha1.ConsensusCapsule {
+	c := capsuleWithImage("v0.50.0")
+	c.Spec.Secrets = &operatorv1alpha1.ConsensusSecrets{
+		SecretResources: &operatorv1alpha1.ConsensusSecretResources{
+			SigningPrivateKey: operatorv1alpha1.KeyReference{
+				SecretName: signingSecretName,
+				KeyName:    signingKeyName,
+			},
+		},
+	}
+	return c
+}
+
+func findProjectedVolume(volumes []corev1.Volume, name string) *corev1.ProjectedVolumeSource {
+	for _, v := range volumes {
+		if v.Name == name && v.Projected != nil {
+			return v.Projected
+		}
+	}
+	return nil
+}
+
+func TestBuildVolumes_PublicKeysProjectedIntoKeysVolume(t *testing.T) {
+	r := newStsReconciler()
+	capsule := capsuleWithSecretResources("node0-keys", "s-private-node0.pem")
+
+	volumes, mounts := r.buildVolumes(capsule)
+
+	proj := findProjectedVolume(volumes, "keys")
+	if proj == nil {
+		t.Fatal("expected projected 'keys' volume")
+	}
+
+	var hasPublicKeys bool
+	for _, src := range proj.Sources {
+		if src.ConfigMap != nil && src.ConfigMap.Name == PublicKeysConfigMapName {
+			hasPublicKeys = true
+			if src.ConfigMap.Optional == nil || !*src.ConfigMap.Optional {
+				t.Error("public-keys ConfigMap source should be optional")
+			}
+		}
+	}
+	if !hasPublicKeys {
+		t.Errorf("expected public-keys ConfigMap in projected sources, got %+v", proj.Sources)
+	}
+
+	var hasKeysMount bool
+	for _, m := range mounts {
+		if m.Name == "keys" && m.MountPath == HapiBase+"/data/keys" {
+			hasKeysMount = true
+		}
+	}
+	if !hasKeysMount {
+		t.Error("expected keys volume mount at data/keys")
+	}
+}
+
+func TestBuildVolumes_PublicKeysProjectedAlongsidePrivateKey(t *testing.T) {
+	r := newStsReconciler()
+	capsule := capsuleWithSecretResources("node0-keys", "s-private-node0.pem")
+
+	volumes, _ := r.buildVolumes(capsule)
+
+	proj := findProjectedVolume(volumes, "keys")
+	if proj == nil {
+		t.Fatal("expected projected 'keys' volume")
+	}
+
+	var hasPrivateKey, hasPublicKeys bool
+	for _, src := range proj.Sources {
+		if src.Secret != nil && src.Secret.LocalObjectReference.Name == "node0-keys" {
+			hasPrivateKey = true
+		}
+		if src.ConfigMap != nil && src.ConfigMap.Name == PublicKeysConfigMapName {
+			hasPublicKeys = true
+		}
+	}
+	if !hasPrivateKey {
+		t.Error("expected private key secret in projected sources")
+	}
+	if !hasPublicKeys {
+		t.Error("expected public-keys ConfigMap in projected sources")
+	}
+}
+
+func TestBuildVolumes_PublicKeysPresentEvenWithoutPrivateKeySecret(t *testing.T) {
+	r := newStsReconciler()
+	// SecretResources set but SigningPrivateKey left empty
+	capsule := capsuleWithSecretResources("", "")
+
+	volumes, _ := r.buildVolumes(capsule)
+
+	proj := findProjectedVolume(volumes, "keys")
+	if proj == nil {
+		t.Fatal("expected projected 'keys' volume even without private key secret")
+	}
+
+	var hasPublicKeys bool
+	for _, src := range proj.Sources {
+		if src.ConfigMap != nil && src.ConfigMap.Name == PublicKeysConfigMapName {
+			hasPublicKeys = true
+		}
+	}
+	if !hasPublicKeys {
+		t.Error("expected public-keys ConfigMap in projected sources even without private key")
+	}
+}
+
+func TestBuildVolumes_PrivateKeyFilenameUsesCapsuleName(t *testing.T) {
+	r := newStsReconciler()
+	capsule := capsuleWithSecretResources("node0-keys", "s-private-node0.pem")
+	// capsule.Name is "node0" from capsuleWithImage
+
+	volumes, _ := r.buildVolumes(capsule)
+
+	proj := findProjectedVolume(volumes, "keys")
+	if proj == nil {
+		t.Fatal("expected projected 'keys' volume")
+	}
+
+	for _, src := range proj.Sources {
+		if src.Secret != nil {
+			if len(src.Secret.Items) != 1 {
+				t.Fatalf("expected 1 key mapping, got %d", len(src.Secret.Items))
+			}
+			want := fmt.Sprintf("s-private-%s.pem", capsule.Name)
+			if got := src.Secret.Items[0].Path; got != want {
+				t.Errorf("private key path: want %q, got %q", want, got)
+			}
+			return
+		}
+	}
+	t.Error("no Secret projected source found")
 }
 
 // ── pod-level volume deduplication ───────────────────────────────────────────

@@ -450,26 +450,32 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 						},
 						Items: []corev1.KeyToPath{{
 							Key:  capsule.Spec.Secrets.SecretResources.SigningPrivateKey.KeyName,
-							Path: fmt.Sprintf("s-private-node%d.pem", capsule.Spec.NodeId+1),
+							Path: fmt.Sprintf("s-private-%s.pem", capsule.Name),
 						}},
 					},
 				})
 			}
 
-			if len(projectedSources) > 0 {
-				volumes = append(volumes, corev1.Volume{
-					Name: "keys",
-					VolumeSource: corev1.VolumeSource{
-						Projected: &corev1.ProjectedVolumeSource{
-							Sources:     projectedSources,
-							DefaultMode: &defaultMode,
-						},
+			// public signing certs for all nodes (optional: absent until NetworkGenesis runs)
+			publicKeysOptional := true
+			projectedSources = append(projectedSources, corev1.VolumeProjection{
+				ConfigMap: &corev1.ConfigMapProjection{
+					LocalObjectReference: corev1.LocalObjectReference{Name: PublicKeysConfigMapName},
+					Optional:             &publicKeysOptional,
+				},
+			})
+			volumes = append(volumes, corev1.Volume{
+				Name: "keys",
+				VolumeSource: corev1.VolumeSource{
+					Projected: &corev1.ProjectedVolumeSource{
+						Sources:     projectedSources,
+						DefaultMode: &defaultMode,
 					},
-				})
-				volumeMounts = append(volumeMounts, corev1.VolumeMount{
-					Name: "keys", MountPath: HapiBase + "/data/keys",
-				})
-			}
+				},
+			})
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name: "keys", MountPath: HapiBase + "/data/keys",
+			})
 
 			sr := capsule.Spec.Secrets.SecretResources
 			if sr.GrpcTlsPrivateKey.SecretName != "" {
