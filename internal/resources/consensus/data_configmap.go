@@ -22,6 +22,7 @@ import (
 // It produces <name>-data-config-cm containing:
 //   - application.properties — rendered from orbit.Spec.Consensus.ApplicationConfiguration
 //   - api-permission.properties — rendered from orbit.Spec.Consensus.PermissionConfiguration
+//   - genesis.properties — rendered from orbit.Spec.Consensus.GenesisProperties (omitted when empty)
 type DataConfigMapSubReconciler struct {
 	*subreconciler.BaseSubReconciler[*operatorv1alpha1.ConsensusCapsule]
 }
@@ -87,6 +88,9 @@ func (r *DataConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1.Co
 	data := map[string]string{
 		"application.properties":    MergeApplicationProperties(orbit.Spec.Consensus.ApplicationConfiguration),
 		"api-permission.properties": RenderProperties(orbit.Spec.Consensus.PermissionConfiguration),
+	}
+	if len(orbit.Spec.Consensus.GenesisProperties) > 0 {
+		data[GenesisPropertiesFileName] = RenderProperties(orbit.Spec.Consensus.GenesisProperties)
 	}
 
 	return &corev1.ConfigMap{

@@ -97,7 +97,7 @@ rules:
   - envoyproxies
   - haproxycapsules
   - helmcapsules
-  - networkoperations
+  - networkgeneses
   - networkupgradeexecutes
   - networkupgradefreezeaborts
   - networkupgradefreezes
@@ -118,7 +118,7 @@ rules:
   - envoyproxies/finalizers
   - haproxycapsules/finalizers
   - helmcapsules/finalizers
-  - networkoperations/finalizers
+  - networkgeneses/finalizers
   - networkupgradeexecutes/finalizers
   - networkupgradefreezeaborts/finalizers
   - networkupgradefreezes/finalizers
@@ -133,7 +133,7 @@ rules:
   - envoyproxies/status
   - haproxycapsules/status
   - helmcapsules/status
-  - networkoperations/status
+  - networkgeneses/status
   - networkupgradeexecutes/status
   - networkupgradefreezeaborts/status
   - networkupgradefreezes/status

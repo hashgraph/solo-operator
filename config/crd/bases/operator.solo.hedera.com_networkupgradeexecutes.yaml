@@ -588,6 +588,7 @@ spec:
                 format: int64
                 type: integer
               phase:
+                description: ExecutePhase is the phase enum for NetworkUpgradeExecute.
                 enum:
                 - Pending
                 - ReadyForProvisionerDaemon
