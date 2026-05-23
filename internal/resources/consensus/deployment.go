@@ -75,6 +75,9 @@ func (r *StatefulSetSubReconciler) Reconcile(ctx context.Context, capsule *opera
 // buildStatefulSet builds the desired StatefulSet.
 func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (*appsv1.StatefulSet, error) {
 	replicas := int32(1)
+	if capsule.Spec.Offline {
+		replicas = 0
+	}
 	selectorLabels := SelectorLabels(capsule)
 	podLabels := PodLabels(capsule)
 

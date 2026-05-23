@@ -97,6 +97,11 @@ type ConsensusCapsuleSpec struct {
 	// PVC configs for node volumes
 	// +optional
 	PersistentVolumeClaims *ConsensusPVCConfig `json:"persistentVolumeClaims,omitempty"`
+
+	// Offline keeps the consensus pod scaled to zero when true.
+	// +optional
+	// +kubebuilder:default=false
+	Offline bool `json:"offline,omitempty"`
 }
 
 // BlockNodesConfig defines block-node connection settings.

@@ -162,6 +162,38 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = controller.NewNetworkUpgradePrepareReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+	).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "NetworkUpgradePrepare")
+		os.Exit(1)
+	}
+
+	if err = controller.NewNetworkUpgradeFreezeReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+	).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "NetworkUpgradeFreeze")
+		os.Exit(1)
+	}
+
+	if err = controller.NewNetworkUpgradeExecuteReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+	).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "NetworkUpgradeExecute")
+		os.Exit(1)
+	}
+
+	if err = controller.NewNetworkUpgradeFreezeAbortReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+	).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "NetworkUpgradeFreezeAbort")
+		os.Exit(1)
+	}
+
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
