@@ -118,6 +118,22 @@ func TestPrepareReconcile_SkipsDisabledComponent(t *testing.T) {
 	}
 }
 
+func TestPrepareReconcile_NotFound(t *testing.T) {
+	scheme := newControllerTestScheme()
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	r := NewNetworkUpgradePrepareReconciler(c, scheme)
+
+	res, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: client.ObjectKey{Name: "missing", Namespace: "test"},
+	})
+	if err != nil {
+		t.Fatalf("expected no error for missing object, got %v", err)
+	}
+	if res.Requeue || res.RequeueAfter != 0 {
+		t.Errorf("expected no requeue for missing object, got %+v", res)
+	}
+}
+
 func TestPrepareReconcile_EmitsUnreachableWarning(t *testing.T) {
 	checker := fakePrepareChecker{fail: map[string]bool{"ghcr.io/b/cn:0.62.0": true}}
 	recorded := reconcilePrepare(t, newPrepareForTest(), checker)
