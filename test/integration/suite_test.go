@@ -21,6 +21,7 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/controller"
+	"github.com/hashgraph/solo-operator/internal/registry"
 	"github.com/hashgraph/solo-operator/internal/resources/helmtest"
 )
 
@@ -104,11 +105,12 @@ var _ = BeforeSuite(func() {
 	).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
-	err = controller.NewNetworkUpgradePrepareReconciler(
+	prepareReconciler := controller.NewNetworkUpgradePrepareReconciler(
 		k8sManager.GetClient(),
 		k8sManager.GetScheme(),
-	).SetupWithManager(k8sManager)
-	Expect(err).ToNot(HaveOccurred())
+	)
+	prepareReconciler.StrategyName = registry.StrategySequential
+	Expect(prepareReconciler.SetupWithManager(k8sManager)).To(Succeed())
 
 	go func() {
 		defer GinkgoRecover()

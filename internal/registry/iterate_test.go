@@ -45,6 +45,10 @@ func newRNG(seed uint64) *rand.Rand {
 	return rand.New(rand.NewPCG(seed, seed))
 }
 
+func randStrategy(seed uint64) RandomStrategy {
+	return RandomStrategy{Rand: newRNG(seed)}
+}
+
 func resultImages(results []RegistryResult) []string {
 	out := make([]string, len(results))
 	for i, r := range results {
@@ -63,7 +67,7 @@ func TestCheckAll_NoEarlyExit(t *testing.T) {
 	}
 
 	comp := componentWith(5)
-	results := CheckAll(context.Background(), checker, comp, time.Second, newRNG(1))
+	results := CheckAll(context.Background(), checker, comp, time.Second, randStrategy(1))
 
 	if len(results) != 5 {
 		t.Fatalf("expected 5 results, got %d", len(results))
@@ -95,7 +99,7 @@ func TestCheckAll_RecordsFailuresWithoutAborting(t *testing.T) {
 		},
 	}
 
-	results := CheckAll(context.Background(), checker, componentWith(4), time.Second, newRNG(7))
+	results := CheckAll(context.Background(), checker, componentWith(4), time.Second, randStrategy(7))
 
 	if len(results) != 4 {
 		t.Fatalf("expected 4 results, got %d", len(results))
@@ -122,8 +126,8 @@ func TestCheckAll_RandomisedOrder(t *testing.T) {
 	comp := componentWith(6)
 
 	// Same seed → same order (deterministic, testable).
-	a := resultImages(CheckAll(context.Background(), &fakeChecker{}, comp, time.Second, newRNG(42)))
-	b := resultImages(CheckAll(context.Background(), &fakeChecker{}, comp, time.Second, newRNG(42)))
+	a := resultImages(CheckAll(context.Background(), &fakeChecker{}, comp, time.Second, randStrategy(42)))
+	b := resultImages(CheckAll(context.Background(), &fakeChecker{}, comp, time.Second, randStrategy(42)))
 	if !slices.Equal(a, b) {
 		t.Fatalf("same seed produced different orders:\n%v\n%v", a, b)
 	}
@@ -131,7 +135,7 @@ func TestCheckAll_RandomisedOrder(t *testing.T) {
 	// Different seeds → at least two distinct orderings observed.
 	orders := map[string]struct{}{}
 	for seed := uint64(0); seed < 20; seed++ {
-		order := resultImages(CheckAll(context.Background(), &fakeChecker{}, comp, time.Second, newRNG(seed)))
+		order := resultImages(CheckAll(context.Background(), &fakeChecker{}, comp, time.Second, randStrategy(seed)))
 		orders[fmt.Sprint(order)] = struct{}{}
 	}
 	if len(orders) < 2 {
@@ -153,7 +157,7 @@ func TestCheckAll_PerCheckTimeout(t *testing.T) {
 	}
 
 	start := time.Now()
-	results := CheckAll(context.Background(), checker, componentWith(3), 50*time.Millisecond, newRNG(3))
+	results := CheckAll(context.Background(), checker, componentWith(3), 50*time.Millisecond, randStrategy(3))
 	elapsed := time.Since(start)
 
 	if elapsed > 500*time.Millisecond {
@@ -186,7 +190,7 @@ func TestCheckAll_RunsConcurrently(t *testing.T) {
 
 	// 4 registries == the concurrency limit, so they run in one wave.
 	start := time.Now()
-	CheckAll(context.Background(), checker, componentWith(4), time.Second, newRNG(1))
+	CheckAll(context.Background(), checker, componentWith(4), time.Second, randStrategy(1))
 	elapsed := time.Since(start)
 
 	if elapsed >= 3*per {

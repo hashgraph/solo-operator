@@ -4,7 +4,6 @@ package registry
 
 import (
 	"context"
-	"math/rand/v2"
 	"sync"
 	"time"
 
@@ -13,21 +12,16 @@ import (
 
 const maxConcurrentChecks = 4
 
-// CheckAll checks all of a component's registries in rng-randomised order with
-// no early exit, each under its own timeout, and returns one result per
-// registry in that order. checker and rng must be non-nil.
+// CheckAll checks all of a component's registries in strategy order with no
+// early exit, each under its own timeout. checker and strategy must be non-nil.
 func CheckAll(
 	ctx context.Context,
 	checker ImageChecker,
 	comp operatorv1alpha1.UpgradeComponentSpec,
 	timeout time.Duration,
-	rng *rand.Rand,
+	strategy IterationStrategy,
 ) []RegistryResult {
-	registries := make([]operatorv1alpha1.UpgradeRegistrySpec, len(comp.Registries))
-	copy(registries, comp.Registries)
-	rng.Shuffle(len(registries), func(i, j int) {
-		registries[i], registries[j] = registries[j], registries[i]
-	})
+	registries := strategy.Order(comp.Registries)
 
 	// each goroutine writes only its own index — no mutex needed
 	results := make([]RegistryResult, len(registries))

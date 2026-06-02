@@ -48,6 +48,8 @@ var _ = Describe("NetworkUpgradePrepare Controller", func() {
 		}
 		Expect(k8sClient.Create(ctx, nup)).To(Succeed())
 
+		// The suite configures the Sequential strategy; all registries are still
+		// audited end-to-end.
 		Eventually(func() bool {
 			return hasEvent(ctx, ns, nupName, operatorv1alpha1.EventRegistryAuditComplete,
 				"consensusNode: 2/2 registries reachable")

@@ -25,6 +25,9 @@ type NetworkUpgradePrepareReconciler struct {
 	Scheme   *runtime.Scheme
 	Recorder events.EventRecorder
 	Checker  registry.ImageChecker
+
+	// StrategyName is the --registry-order flag value; "" or unknown → Random.
+	StrategyName string
 }
 
 func NewNetworkUpgradePrepareReconciler(c client.Client, scheme *runtime.Scheme) *NetworkUpgradePrepareReconciler {
@@ -47,8 +50,10 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// fresh per run, so iteration order is randomised each reconcile
+	// fresh per run so the random order changes each reconcile
 	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
+	strategy := registry.NewStrategy(r.StrategyName, rng)
+	logger.V(1).Info("registry iteration strategy", "strategy", strategy.Name())
 
 	for _, name := range operatorv1alpha1.AllUpgradeComponents {
 		comp, present := prepare.Spec.Images.Component(name)
@@ -56,7 +61,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 			continue
 		}
 
-		results := registry.CheckAll(ctx, r.Checker, comp, checkTimeout, rng)
+		results := registry.CheckAll(ctx, r.Checker, comp, checkTimeout, strategy)
 
 		reachable := 0
 		for _, res := range results {

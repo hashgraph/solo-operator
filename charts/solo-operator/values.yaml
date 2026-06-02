@@ -62,6 +62,11 @@ logging:
   # Log format: json, console
   format: json
 
+# Registry validation configuration (upgrade Prepare phase)
+registry:
+  # Order in which a component's registries are checked: Random or Sequential
+  order: Random
+
 # Metrics configuration
 metrics:
   enabled: true

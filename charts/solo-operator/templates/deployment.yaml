@@ -46,6 +46,9 @@ spec:
             {{- if eq .Values.logging.format "json" }}
             - --zap-encoder=json
             {{- end }}
+            {{- with .Values.registry.order }}
+            - --registry-order={{ . }}
+            {{- end }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           volumeMounts:
