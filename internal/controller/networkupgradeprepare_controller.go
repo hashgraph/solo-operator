@@ -7,8 +7,9 @@ import (
 	"math/rand/v2"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -22,7 +23,7 @@ const checkTimeout = 15 * time.Second
 type NetworkUpgradePrepareReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Recorder events.EventRecorder
 	Checker  registry.ImageChecker
 }
 
@@ -68,11 +69,11 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 
 		unreachable := len(results) - reachable
 		if r.Recorder != nil {
-			r.Recorder.Eventf(&prepare, "Normal", operatorv1alpha1.EventRegistryAuditComplete,
-				"%s: %d/%d registries reachable", name, reachable, len(results))
+			r.Recorder.Eventf(&prepare, nil, corev1.EventTypeNormal, operatorv1alpha1.EventRegistryAuditComplete,
+				"RegistryAudit", "%s: %d/%d registries reachable", name, reachable, len(results))
 			if unreachable > 0 {
-				r.Recorder.Eventf(&prepare, "Warning", operatorv1alpha1.EventRegistryUnreachable,
-					"%s: %d/%d registries unreachable", name, unreachable, len(results))
+				r.Recorder.Eventf(&prepare, nil, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryUnreachable,
+					"RegistryAudit", "%s: %d/%d registries unreachable", name, unreachable, len(results))
 			}
 		}
 	}
@@ -82,7 +83,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 
 func (r *NetworkUpgradePrepareReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.Recorder == nil {
-		r.Recorder = mgr.GetEventRecorderFor("networkupgradeprepare")
+		r.Recorder = mgr.GetEventRecorder("networkupgradeprepare")
 	}
 	if r.Checker == nil {
 		r.Checker = registry.OCIChecker{}

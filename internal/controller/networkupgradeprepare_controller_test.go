@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -67,7 +67,7 @@ func reconcilePrepare(t *testing.T, prepare *operatorv1alpha1.NetworkUpgradePrep
 	scheme := newControllerTestScheme()
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(prepare).Build()
 
-	rec := record.NewFakeRecorder(32)
+	rec := events.NewFakeRecorder(32)
 	r := NewNetworkUpgradePrepareReconciler(c, scheme)
 	r.Recorder = rec
 	r.Checker = checker
@@ -79,16 +79,16 @@ func reconcilePrepare(t *testing.T, prepare *operatorv1alpha1.NetworkUpgradePrep
 	}
 
 	close(rec.Events)
-	var events []string
+	var recorded []string
 	for e := range rec.Events {
-		events = append(events, e)
+		recorded = append(recorded, e)
 	}
-	return events
+	return recorded
 }
 
-func countContaining(events []string, substr string) int {
+func countContaining(recorded []string, substr string) int {
 	n := 0
-	for _, e := range events {
+	for _, e := range recorded {
 		if strings.Contains(e, substr) {
 			n++
 		}
@@ -97,35 +97,35 @@ func countContaining(events []string, substr string) int {
 }
 
 func TestPrepareReconcile_AuditEventAllReachable(t *testing.T) {
-	events := reconcilePrepare(t, newPrepareForTest(), registry.OCIChecker{})
+	recorded := reconcilePrepare(t, newPrepareForTest(), registry.OCIChecker{})
 
 	// consensusNode is enabled with 3 registries, all reachable.
-	if got := countContaining(events, "RegistryAuditComplete consensusNode: 3/3 registries reachable"); got != 1 {
-		t.Errorf("expected one consensusNode audit-complete event, got %d in %v", got, events)
+	if got := countContaining(recorded, "RegistryAuditComplete consensusNode: 3/3 registries reachable"); got != 1 {
+		t.Errorf("expected one consensusNode audit-complete event, got %d in %v", got, recorded)
 	}
 	// All reachable → no unreachable warnings.
-	if got := countContaining(events, "RegistryUnreachable"); got != 0 {
-		t.Errorf("expected no unreachable warnings, got %d in %v", got, events)
+	if got := countContaining(recorded, "RegistryUnreachable"); got != 0 {
+		t.Errorf("expected no unreachable warnings, got %d in %v", got, recorded)
 	}
 }
 
 func TestPrepareReconcile_SkipsDisabledComponent(t *testing.T) {
-	events := reconcilePrepare(t, newPrepareForTest(), registry.OCIChecker{})
+	recorded := reconcilePrepare(t, newPrepareForTest(), registry.OCIChecker{})
 
 	// The disabled recordStreamUploader must not be audited at all.
-	if got := countContaining(events, "recordStreamUploader"); got != 0 {
-		t.Errorf("disabled component should produce no events, got %d in %v", got, events)
+	if got := countContaining(recorded, "recordStreamUploader"); got != 0 {
+		t.Errorf("disabled component should produce no events, got %d in %v", got, recorded)
 	}
 }
 
 func TestPrepareReconcile_EmitsUnreachableWarning(t *testing.T) {
 	checker := fakePrepareChecker{fail: map[string]bool{"ghcr.io/b/cn:0.62.0": true}}
-	events := reconcilePrepare(t, newPrepareForTest(), checker)
+	recorded := reconcilePrepare(t, newPrepareForTest(), checker)
 
-	if got := countContaining(events, "RegistryAuditComplete consensusNode: 2/3 registries reachable"); got != 1 {
-		t.Errorf("expected 2/3 reachable audit event, got %d in %v", got, events)
+	if got := countContaining(recorded, "RegistryAuditComplete consensusNode: 2/3 registries reachable"); got != 1 {
+		t.Errorf("expected 2/3 reachable audit event, got %d in %v", got, recorded)
 	}
-	if got := countContaining(events, "RegistryUnreachable consensusNode: 1/3 registries unreachable"); got != 1 {
-		t.Errorf("expected 1/3 unreachable warning, got %d in %v", got, events)
+	if got := countContaining(recorded, "RegistryUnreachable consensusNode: 1/3 registries unreachable"); got != 1 {
+		t.Errorf("expected 1/3 unreachable warning, got %d in %v", got, recorded)
 	}
 }
