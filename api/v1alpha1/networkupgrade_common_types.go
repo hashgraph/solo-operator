@@ -38,6 +38,34 @@ type UpgradeImagesSpec struct {
 	UC *UpgradeComponentSpec `json:"uc,omitempty"`
 }
 
+// Component returns the named component's spec and whether it is present. The
+// optional sidecar components report false when unset.
+func (s UpgradeImagesSpec) Component(name ComponentName) (UpgradeComponentSpec, bool) {
+	switch name {
+	case ComponentConsensusNode:
+		return s.ConsensusNode, true
+	case ComponentRecordStreamUploader:
+		return derefComponent(s.RecordStreamUploader)
+	case ComponentEventStreamUploader:
+		return derefComponent(s.EventStreamUploader)
+	case ComponentBlockStreamUploader:
+		return derefComponent(s.BlockStreamUploader)
+	case ComponentBackupUploader:
+		return derefComponent(s.BackupUploader)
+	case ComponentUC:
+		return derefComponent(s.UC)
+	default:
+		return UpgradeComponentSpec{}, false
+	}
+}
+
+func derefComponent(c *UpgradeComponentSpec) (UpgradeComponentSpec, bool) {
+	if c == nil {
+		return UpgradeComponentSpec{}, false
+	}
+	return *c, true
+}
+
 type UpgradeComponentSpec struct {
 	Version string `json:"version"`
 

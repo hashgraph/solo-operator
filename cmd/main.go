@@ -23,6 +23,7 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/controller"
+	"github.com/hashgraph/solo-operator/internal/registry"
 	"github.com/hashgraph/solo-operator/internal/resources/helm"
 )
 
@@ -42,6 +43,7 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
+	var registryOrder string
 	var tlsOpts []func(*tls.Config)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
@@ -54,6 +56,8 @@ func main() {
 		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	flag.StringVar(&registryOrder, "registry-order", registry.StrategyRandom,
+		"Order in which registries are checked during the upgrade Prepare phase: Random or Sequential.")
 
 	opts := zap.Options{
 		Development: true,
@@ -162,10 +166,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = controller.NewNetworkUpgradePrepareReconciler(
+	prepareReconciler := controller.NewNetworkUpgradePrepareReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
-	).SetupWithManager(mgr); err != nil {
+	)
+	prepareReconciler.StrategyName = registryOrder
+	if err = prepareReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkUpgradePrepare")
 		os.Exit(1)
 	}
