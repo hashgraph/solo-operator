@@ -14,7 +14,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/registry"
 )
+
+// stubImageChecker avoids real registry I/O in envtest by reporting every
+// registry valid.
+type stubImageChecker struct{}
+
+func (stubImageChecker) Check(_ context.Context, spec operatorv1alpha1.UpgradeRegistrySpec, _ operatorv1alpha1.UpgradeDeterministicSpec) registry.RegistryResult {
+	return registry.RegistryResult{Image: spec.Image, State: registry.StateValid}
+}
 
 var _ = Describe("NetworkUpgradePrepare Controller", func() {
 	ctx := context.Background()
