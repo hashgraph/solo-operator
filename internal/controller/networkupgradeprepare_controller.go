@@ -76,6 +76,10 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 				logger.Info("registry failed layer hash verification", "component", name, "image", res.Image, "error", res.Err)
 				r.event(&prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
 					"%s: registry %s failed layer hash verification: %v", name, res.Image, res.Err)
+			case registry.StateNoHashes:
+				logger.Info("image has no layer hashes configured", "component", name, "image", res.Image, "error", res.Err)
+				r.event(&prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
+					"%s: image %s has no layer hashes configured: %v", name, res.Image, res.Err)
 			default:
 				logger.Info("unexpected registry state", "component", name, "image", res.Image, "state", res.State)
 			}

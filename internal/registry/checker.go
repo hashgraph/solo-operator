@@ -70,7 +70,8 @@ func (c OCIChecker) Check(ctx context.Context, spec operatorv1alpha1.UpgradeRegi
 	res.Digest = digest
 
 	if len(expected) == 0 {
-		res.State = StateValid
+		res.State = StateNoHashes
+		res.Err = fmt.Errorf("image %s has no layer hashes configured: cannot verify image integrity", spec.Image)
 		return res
 	}
 

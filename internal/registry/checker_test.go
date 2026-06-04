@@ -121,13 +121,16 @@ func TestOCIChecker_NonDeterministic_IgnoresGlobalHashes(t *testing.T) {
 	}
 }
 
-func TestOCIChecker_NoExpectedHashes_ValidUnverified(t *testing.T) {
+func TestOCIChecker_NoExpectedHashes_Error(t *testing.T) {
 	src := fakeSource{digest: "sha256:abc"}
 	res := checkerWith(src).Check(context.Background(), operatorv1alpha1.UpgradeRegistrySpec{Image: "gcr.io/a/cn:1"},
 		operatorv1alpha1.UpgradeDeterministicSpec{Supported: true})
 
-	if res.State != StateValid || res.LayerHashesVerified {
-		t.Fatalf("expected valid but unverified when no hashes configured, got %+v", res)
+	if res.State != StateNoHashes || res.Err == nil {
+		t.Fatalf("expected StateNoHashes with error when no hashes configured, got %+v", res)
+	}
+	if res.LayerHashesVerified {
+		t.Error("LayerHashesVerified must be false when no hashes configured")
 	}
 }
 

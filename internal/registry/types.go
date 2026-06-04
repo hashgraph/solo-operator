@@ -15,6 +15,7 @@ const (
 	StateValid        RegistryState = "Valid"
 	StateUnreachable  RegistryState = "Unreachable"
 	StateHashMismatch RegistryState = "HashMismatch"
+	StateNoHashes     RegistryState = "NoHashes"
 )
 
 type RegistryResult struct {
