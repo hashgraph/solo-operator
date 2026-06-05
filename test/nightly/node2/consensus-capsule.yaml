@@ -1,0 +1,197 @@
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: ConsensusCapsule
+metadata:
+  name: node2
+  namespace: solo-orbit
+  labels:
+    app.kubernetes.io/component: consensus-node
+    app.kubernetes.io/managed-by: solo-operator
+spec:
+  orbit: solo-orbit
+  nodeId: 2
+  accountId: "0.0.5"
+  weight: 500
+  serviceType: ClusterIP
+  podProperties:
+    containers:
+      consensusNode:
+        softwareVersion:
+          repository: "gcr.io/hedera-registry"
+          imageName: "consensus-node"
+          imageTag: "0.72.1"
+          imagePullPolicy: IfNotPresent
+        resources:
+          limits:
+            cpu: "1"
+            memory: 2Gi
+          requests:
+            cpu: "250m"
+            memory: 1Gi
+        javaOpts: "-XX:+UseG1GC -XX:MaxDirectMemorySize=1500m --add-opens java.base/jdk.internal.misc=ALL-UNNAMED --add-opens java.base/java.nio=ALL-UNNAMED -Dio.netty.tryReflectionSetAccessible=true"
+
+      blocksUploader:
+        enabled: true
+        name: "blockstream-uploader"
+        softwareVersion:
+          repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
+          imageName: "cheetah"
+          imageTag: "0.6.0"
+          imagePullPolicy: IfNotPresent
+        logLevel: Debug
+        maxProcessors: 10
+        stopOnError: false
+        resources:
+          limits:
+            cpu: 400m
+            memory: 400Mi
+          requests:
+            cpu: 200m
+            memory: 200Mi
+        blob:
+          enabled: true
+          url: "s3://solo-streams?region=us-east-1&endpoint=http://minio.minio-tenant.svc.cluster.local&use_path_style=true&disable_https=true"
+        envFromSecret: "uploader-mirror-secrets"
+
+      recordsUploader:
+        enabled: true
+        name: "record-stream-uploader"
+        softwareVersion:
+          repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
+          imageName: "cheetah"
+          imageTag: "0.6.0"
+          imagePullPolicy: IfNotPresent
+        logLevel: Debug
+        maxProcessors: 10
+        stopOnError: false
+        resources:
+          limits:
+            cpu: 400m
+            memory: 400Mi
+          requests:
+            cpu: 200m
+            memory: 200Mi
+        blob:
+          enabled: true
+          url: "s3://solo-streams?region=us-east-1&endpoint=http://minio.minio-tenant.svc.cluster.local&use_path_style=true&disable_https=true"
+        envFromSecret: "uploader-mirror-secrets"
+
+      eventsUploader:
+        enabled: true
+        name: "event-stream-uploader"
+        softwareVersion:
+          repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
+          imageName: "cheetah"
+          imageTag: "0.6.0"
+          imagePullPolicy: IfNotPresent
+        logLevel: Debug
+        maxProcessors: 10
+        stopOnError: false
+        resources:
+          limits:
+            cpu: 400m
+            memory: 400Mi
+          requests:
+            cpu: 200m
+            memory: 200Mi
+        blob:
+          enabled: true
+          url: "s3://solo-streams?region=us-east-1&endpoint=http://minio.minio-tenant.svc.cluster.local&use_path_style=true&disable_https=true"
+        envFromSecret: "uploader-mirror-secrets"
+
+      backupUploader:
+        enabled: true
+        name: "backup-uploader"
+        softwareVersion:
+          repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
+          imageName: "backup-uploader"
+          imageTag: "0.38.0"
+          imagePullPolicy: IfNotPresent
+        resources:
+          limits:
+            cpu: 400m
+            memory: 400Mi
+          requests:
+            cpu: 200m
+            memory: 200Mi
+        config:
+          bucketName: "solo-backups"
+          s3:
+            enabled: true
+            url: "http://minio.minio-tenant.svc.cluster.local"
+          gcs:
+            enabled: false
+          envFromSecret: "backup-uploader-secrets"
+
+      alloy:
+        enabled: false
+
+  persistentVolumeClaims:
+    logs:
+      accessModes: [ReadWriteOnce]
+      resources:
+        requests:
+          storage: 1Gi
+    stats:
+      accessModes: [ReadWriteOnce]
+      resources:
+        requests:
+          storage: 1Gi
+    state:
+      accessModes: [ReadWriteOnce]
+      resources:
+        requests:
+          storage: 2Gi
+    upgrade:
+      accessModes: [ReadWriteOnce]
+      resources:
+        requests:
+          storage: 1Gi
+    streams:
+      block:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 1Gi
+      record:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 1Gi
+      events:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 1Gi
+
+  secrets:
+    secretResources:
+      grpcTlsPrivateKey:
+        keyName: "hedera-node2.key"
+        secretName: "node2-grpc-tls-keys"
+      grpcTlsPublicCertificate:
+        keyName: "hedera-node2.crt"
+        secretName: "node2-grpc-tls-keys"
+      signingPrivateKey:
+        keyName: "s-private-node2.pem"
+        secretName: "node2-gossip-keys"
+      signingPublicCertificate:
+        keyName: "s-public-node2.pem"
+        secretName: "node2-gossip-keys"
+
+  log4j2.xml: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <Configuration status="WARN" monitorInterval="600">
+      <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+          <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5p %-4L %c{1} - %m{nolookups}%n"/>
+        </Console>
+      </Appenders>
+      <Loggers>
+        <Logger name="com.swirlds.platform.system.status" level="INFO" additivity="false">
+          <AppenderRef ref="Console"/>
+        </Logger>
+        <Root level="WARN">
+          <AppenderRef ref="Console"/>
+        </Root>
+      </Loggers>
+    </Configuration>

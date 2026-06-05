@@ -9,23 +9,15 @@ on:
   workflow_dispatch:
 
 permissions:
-  actions: write
   contents: read
-  id-token: write
-
-env:
-  CACHE_DIR: cache_dir
-  CACHE_KEY: nightly-test
-  HOSTNAME_PREFIX: github-
-  MACHINE: n4-highmem-4
-  VERSION: 0.0.0-${{ github.sha }}
-  VERSION_A: 0.59.0
-  VERSION_B: 0.59.5
-  ZONE: us-central1-a
 
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
+
+env:
+  KIND_NODE_IMAGE: kindest/node:v1.31.4@sha256:2cb39f7295fe7eafee0842b1052a599a4fb0f8bcf3f83d96c7f4864c357c6c30
+  VERSION: 0.0.0-${{ github.sha }}
 
 jobs:
   test:
@@ -38,18 +30,6 @@ jobs:
 
       - name: Checkout Code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          token: ${{ secrets.GH_ACCESS_TOKEN }}
-
-      - name: Authenticate to Google Cloud
-        id: google-auth
-        uses: step-security/google-github-auth@775fc4c80760272ef389c9f9f8d98de7db0c170d # v3.0.2
-        with:
-          workload_identity_provider: projects/970521953460/locations/global/workloadIdentityPools/solo-op-automation-pool/providers/gh-provider
-          service_account: gh-solo-test-driver@solo-operator-automated-tests.iam.gserviceaccount.com
-
-      - name: Setup Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
 
       - name: Setup Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -60,61 +40,80 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
 
-      - name: Install tools
-        run: |
-          sudo apt-get -qq update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y gettext moreutils parallel
-
-      - name: Try restoring cache
-        id: restore
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      - name: Install Task
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
         with:
-          path: ${{ env.CACHE_DIR }}.tar
-          key: ${{ env.CACHE_KEY }}
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0
+
+      - name: Set up Docker Buildx
+        uses: step-security/setup-buildx-action@f931205d68723ad9589fd2a7e2ece238bf9de341 # v4.0.0
+        with:
+          version: v0.32.1
+          driver-opts: network=host,image=ghcr.io/hashgraph/runner-images/buildkit:buildx-stable-1
+
+      - name: Setup Kind
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
+        with:
+          install_only: true
+          node_image: ${{ env.KIND_NODE_IMAGE }}
+          version: v0.31.0
+          kubectl_version: v1.31.4
+          verbosity: 3
+
+      - name: Create KinD Cluster with Registry
+        uses: container-tools/kind-action@0ad70e2299366b0e1552c7240f4e4567148f723e # v2.0.4
+        with:
+          version: 0.31.0
+          kubectl_version: v1.31.4
+          registry: true
+          node_image: ${{ env.KIND_NODE_IMAGE }}
+          cluster_name: solo-operator-nightly
+
+      - name: Build Binaries
+        run: task build:binary:all
+
+      - name: Generate Checksums
+        run: task hash
+
+      - name: Build and Push to Local Registry
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          tags: localhost:5000/solo-operator:${{ env.VERSION }}
+
+      - name: Install yq
+        run: go install github.com/mikefarah/yq/v4@latest
+
+      - name: Sync CRD Templates into Subchart
+        run: task helm:sync-crds
+
+      - name: Deploy Operator
+        run: |
+          helm upgrade --install solo-operator charts/solo-operator \
+            --namespace solo-operator --create-namespace --wait --timeout 120s \
+            --set image.repository=kind-registry:5000/solo-operator \
+            --set image.tag=${{ env.VERSION }}
 
       - name: Run nightly test
-        id: nightly_test
+        run: task -d test/nightly deploy
+
+      - name: Collect logs
+        if: ${{ always() && !cancelled() }}
         run: |
-          :
-          cache_dir_hash() {
-            find "${CACHE_DIR}" -type f -exec sha1sum {} + | sort | sha1sum | cut -d ' ' -f1
-          }
-          test -f "${CACHE_DIR}.tar" && tar -xf "${CACHE_DIR}.tar"
-          mkdir -p "${CACHE_DIR}"
-          hash_a=$(cache_dir_hash)
-          ./test/nightly/scripts/main.sh
-          find "${CACHE_DIR}" -name "*.yaml" -exec rm {} \;
-          hardlink -cq "${CACHE_DIR}"
-          hash_b=$(cache_dir_hash)
-          tar -cf "${CACHE_DIR}.tar" "${CACHE_DIR}"
-          echo "refresh_cache=$([ "${hash_a}" != "${hash_b}" ] && echo true || echo false)" >> "${GITHUB_OUTPUT}"
+          mkdir -p logs
+          kubectl logs -n solo-operator -l app.kubernetes.io/name=solo-operator --tail=-1 > logs/operator.log 2>&1 || true
+          kubectl logs -n solo-orbit -l app.kubernetes.io/component=consensus-node -c consensus-node --tail=-1 > logs/consensus-nodes.log 2>&1 || true
 
       - name: Publish test logs
         if: ${{ always() && !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: Test Logs
-          path: "logs"
-
-      - name: Delete old cache (if refresh requested)
-        if: ${{ steps.nightly_test.outcome == 'success' && steps.nightly_test.outputs.refresh_cache == 'true' }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "Deleting existing cache with key '${{ env.CACHE_KEY }}'"
-          curl -X DELETE \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/caches?key=${{ env.CACHE_KEY }}"
-
-      - name: Save new cache
-        if: ${{ steps.nightly_test.outcome == 'success' && steps.nightly_test.outputs.refresh_cache == 'true' }}
-        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: ${{ env.CACHE_DIR }}.tar
-          key: ${{ env.CACHE_KEY }}
-
-      - name: Delete VMs
-        if: ${{ always() }}
-        run: |
-          gcloud compute instances list --format='value(name)' | grep "^${HOSTNAME_PREFIX}" | xargs gcloud compute instances delete --quiet --zone="${ZONE}" || true
+          path: logs

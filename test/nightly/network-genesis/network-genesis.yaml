@@ -1,0 +1,10 @@
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: NetworkGenesis
+metadata:
+  name: network-genesis
+  namespace: solo-orbit
+  labels:
+    app.kubernetes.io/managed-by: solo-operator
+spec:
+  orbit: solo-orbit
+  operationId: network-genesis
