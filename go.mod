@@ -2,7 +2,7 @@
 
 module github.com/hashgraph/solo-operator
 
-go 1.26.3
+go 1.26.4
 
 require (
 	github.com/hiero-ledger/hiero-sdk-go/v2 v2.78.1
