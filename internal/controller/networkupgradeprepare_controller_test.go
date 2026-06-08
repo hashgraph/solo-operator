@@ -18,16 +18,22 @@ import (
 	"github.com/hashgraph/solo-operator/internal/registry"
 )
 
-// fakePrepareChecker reports every registry reachable except those in fail.
+// fakePrepareChecker reports every registry Valid except those listed as
+// unreachable or hash-mismatched.
 type fakePrepareChecker struct {
-	fail map[string]bool
+	unreachable map[string]bool
+	mismatch    map[string]bool
 }
 
 func (c fakePrepareChecker) Check(_ context.Context, spec operatorv1alpha1.UpgradeRegistrySpec, _ operatorv1alpha1.UpgradeDeterministicSpec) registry.RegistryResult {
-	if c.fail[spec.Image] {
-		return registry.RegistryResult{Image: spec.Image, Reachable: false, Err: fmt.Errorf("unreachable")}
+	switch {
+	case c.unreachable[spec.Image]:
+		return registry.RegistryResult{Image: spec.Image, State: registry.StateUnreachable, Err: fmt.Errorf("unreachable")}
+	case c.mismatch[spec.Image]:
+		return registry.RegistryResult{Image: spec.Image, State: registry.StateHashMismatch, Err: fmt.Errorf("hash mismatch")}
+	default:
+		return registry.RegistryResult{Image: spec.Image, State: registry.StateValid}
 	}
-	return registry.RegistryResult{Image: spec.Image, Reachable: true}
 }
 
 func boolPtr(b bool) *bool { return &b }
@@ -97,7 +103,7 @@ func countContaining(recorded []string, substr string) int {
 }
 
 func TestPrepareReconcile_AuditEventAllReachable(t *testing.T) {
-	recorded := reconcilePrepare(t, newPrepareForTest(), registry.OCIChecker{})
+	recorded := reconcilePrepare(t, newPrepareForTest(), fakePrepareChecker{})
 
 	// consensusNode is enabled with 3 registries, all reachable.
 	if got := countContaining(recorded, "RegistryAuditComplete consensusNode: 3/3 registries reachable"); got != 1 {
@@ -110,7 +116,7 @@ func TestPrepareReconcile_AuditEventAllReachable(t *testing.T) {
 }
 
 func TestPrepareReconcile_SkipsDisabledComponent(t *testing.T) {
-	recorded := reconcilePrepare(t, newPrepareForTest(), registry.OCIChecker{})
+	recorded := reconcilePrepare(t, newPrepareForTest(), fakePrepareChecker{})
 
 	// The disabled recordStreamUploader must not be audited at all.
 	if got := countContaining(recorded, "recordStreamUploader"); got != 0 {
@@ -135,7 +141,7 @@ func TestPrepareReconcile_NotFound(t *testing.T) {
 }
 
 func TestPrepareReconcile_EmitsUnreachableWarning(t *testing.T) {
-	checker := fakePrepareChecker{fail: map[string]bool{"ghcr.io/b/cn:0.62.0": true}}
+	checker := fakePrepareChecker{unreachable: map[string]bool{"ghcr.io/b/cn:0.62.0": true}}
 	recorded := reconcilePrepare(t, newPrepareForTest(), checker)
 
 	if got := countContaining(recorded, "RegistryAuditComplete consensusNode: 2/3 registries reachable"); got != 1 {
@@ -143,5 +149,18 @@ func TestPrepareReconcile_EmitsUnreachableWarning(t *testing.T) {
 	}
 	if got := countContaining(recorded, "RegistryUnreachable consensusNode: 1/3 registries unreachable"); got != 1 {
 		t.Errorf("expected 1/3 unreachable warning, got %d in %v", got, recorded)
+	}
+}
+
+func TestPrepareReconcile_EmitsInvalidOnHashMismatch(t *testing.T) {
+	checker := fakePrepareChecker{mismatch: map[string]bool{"ghcr.io/b/cn:0.62.0": true}}
+	recorded := reconcilePrepare(t, newPrepareForTest(), checker)
+
+	// A hash mismatch is still reachable, so it counts toward the audit total.
+	if got := countContaining(recorded, "RegistryAuditComplete consensusNode: 3/3 registries reachable"); got != 1 {
+		t.Errorf("expected 3/3 reachable audit event, got %d in %v", got, recorded)
+	}
+	if got := countContaining(recorded, "RegistryInvalid consensusNode: registry ghcr.io/b/cn:0.62.0 failed layer hash verification"); got != 1 {
+		t.Errorf("expected one RegistryInvalid event, got %d in %v", got, recorded)
 	}
 }

@@ -8,10 +8,21 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
+// RegistryState is the outcome of checking one registry entry.
+type RegistryState string
+
+const (
+	StateValid        RegistryState = "Valid"
+	StateUnreachable  RegistryState = "Unreachable"
+	StateHashMismatch RegistryState = "HashMismatch"
+	StateNoHashes     RegistryState = "NoHashes"
+)
+
 type RegistryResult struct {
-	Image               string
-	Digest              operatorv1alpha1.Sha256Digest
-	Reachable           bool
+	Image  string
+	Digest operatorv1alpha1.Sha256Digest
+	State  RegistryState
+	// true when expected layer hashes were configured and matched the image
 	LayerHashesVerified bool
 	// recorded, never propagated, so one failure can't abort sibling checks
 	Err error

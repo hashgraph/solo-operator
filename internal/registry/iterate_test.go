@@ -30,7 +30,7 @@ func (c *fakeChecker) Check(ctx context.Context, spec operatorv1alpha1.UpgradeRe
 	if c.fn != nil {
 		return c.fn(ctx, spec)
 	}
-	return RegistryResult{Image: spec.Image, Reachable: true}
+	return RegistryResult{Image: spec.Image, State: StateValid}
 }
 
 func componentWith(n int) operatorv1alpha1.UpgradeComponentSpec {
@@ -62,7 +62,7 @@ func TestCheckAll_NoEarlyExit(t *testing.T) {
 	checker := &fakeChecker{
 		fn: func(_ context.Context, spec operatorv1alpha1.UpgradeRegistrySpec) RegistryResult {
 			// Everything "succeeds" — a naive early-exit impl would stop after one.
-			return RegistryResult{Image: spec.Image, Reachable: true}
+			return RegistryResult{Image: spec.Image, State: StateValid}
 		},
 	}
 
@@ -93,9 +93,9 @@ func TestCheckAll_RecordsFailuresWithoutAborting(t *testing.T) {
 	checker := &fakeChecker{
 		fn: func(_ context.Context, spec operatorv1alpha1.UpgradeRegistrySpec) RegistryResult {
 			if spec.Image == "img-2" {
-				return RegistryResult{Image: spec.Image, Reachable: false, Err: boom}
+				return RegistryResult{Image: spec.Image, State: StateUnreachable, Err: boom}
 			}
-			return RegistryResult{Image: spec.Image, Reachable: true}
+			return RegistryResult{Image: spec.Image, State: StateValid}
 		},
 	}
 
@@ -107,11 +107,11 @@ func TestCheckAll_RecordsFailuresWithoutAborting(t *testing.T) {
 	var failures, successes int
 	for _, r := range results {
 		if r.Image == "img-2" {
-			if r.Reachable || r.Err == nil {
+			if r.State != StateUnreachable || r.Err == nil {
 				t.Errorf("img-2 should be recorded as failed, got %+v", r)
 			}
 			failures++
-		} else if r.Reachable {
+		} else if r.State == StateValid {
 			successes++
 		}
 	}
@@ -150,9 +150,9 @@ func TestCheckAll_PerCheckTimeout(t *testing.T) {
 		fn: func(ctx context.Context, spec operatorv1alpha1.UpgradeRegistrySpec) RegistryResult {
 			if spec.Image == "img-1" {
 				<-ctx.Done() // never returns until the timeout fires
-				return RegistryResult{Image: spec.Image, Reachable: false, Err: ctx.Err()}
+				return RegistryResult{Image: spec.Image, State: StateUnreachable, Err: ctx.Err()}
 			}
-			return RegistryResult{Image: spec.Image, Reachable: true}
+			return RegistryResult{Image: spec.Image, State: StateValid}
 		},
 	}
 
@@ -165,10 +165,10 @@ func TestCheckAll_PerCheckTimeout(t *testing.T) {
 	}
 	for _, r := range results {
 		if r.Image == "img-1" {
-			if r.Reachable || r.Err == nil {
+			if r.State != StateUnreachable || r.Err == nil {
 				t.Errorf("slow registry should be recorded as failed, got %+v", r)
 			}
-		} else if !r.Reachable {
+		} else if r.State != StateValid {
 			t.Errorf("fast registry %q should succeed, got %+v", r.Image, r)
 		}
 	}
@@ -184,7 +184,7 @@ func TestCheckAll_RunsConcurrently(t *testing.T) {
 			case <-time.After(per):
 			case <-ctx.Done():
 			}
-			return RegistryResult{Image: spec.Image, Reachable: true}
+			return RegistryResult{Image: spec.Image, State: StateValid}
 		},
 	}
 

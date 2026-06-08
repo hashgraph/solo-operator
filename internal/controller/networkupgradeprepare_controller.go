@@ -63,27 +63,44 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 
 		results := registry.CheckAll(ctx, r.Checker, comp, checkTimeout, strategy)
 
-		reachable := 0
+		unreachable := 0
 		for _, res := range results {
-			if res.Reachable {
-				reachable++
-			} else {
+			switch res.State {
+			case registry.StateValid:
+				// counted via the reachable total below
+			case registry.StateUnreachable:
+				unreachable++
 				logger.Info("registry unreachable", "component", name, "image", res.Image, "error", res.Err)
+			case registry.StateHashMismatch:
+				// emitted per-registry (unlike aggregated unreachable) so each tampered image is named
+				logger.Info("registry failed layer hash verification", "component", name, "image", res.Image, "error", res.Err)
+				r.event(&prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
+					"%s: registry %s failed layer hash verification: %v", name, res.Image, res.Err)
+			case registry.StateNoHashes:
+				logger.Info("image has no layer hashes configured", "component", name, "image", res.Image, "error", res.Err)
+				r.event(&prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
+					"%s: image %s has no layer hashes configured: %v", name, res.Image, res.Err)
+			default:
+				logger.Info("unexpected registry state", "component", name, "image", res.Image, "state", res.State)
 			}
 		}
 
-		unreachable := len(results) - reachable
-		if r.Recorder != nil {
-			r.Recorder.Eventf(&prepare, nil, corev1.EventTypeNormal, operatorv1alpha1.EventRegistryAuditComplete,
-				"RegistryAudit", "%s: %d/%d registries reachable", name, reachable, len(results))
-			if unreachable > 0 {
-				r.Recorder.Eventf(&prepare, nil, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryUnreachable,
-					"RegistryAudit", "%s: %d/%d registries unreachable", name, unreachable, len(results))
-			}
+		reachable := len(results) - unreachable
+		r.event(&prepare, corev1.EventTypeNormal, operatorv1alpha1.EventRegistryAuditComplete,
+			"%s: %d/%d registries reachable", name, reachable, len(results))
+		if unreachable > 0 {
+			r.event(&prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryUnreachable,
+				"%s: %d/%d registries unreachable", name, unreachable, len(results))
 		}
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *NetworkUpgradePrepareReconciler) event(obj *operatorv1alpha1.NetworkUpgradePrepare, eventtype, reason, format string, args ...any) {
+	if r.Recorder != nil {
+		r.Recorder.Eventf(obj, nil, eventtype, reason, "RegistryAudit", format, args...)
+	}
 }
 
 func (r *NetworkUpgradePrepareReconciler) SetupWithManager(mgr ctrl.Manager) error {
