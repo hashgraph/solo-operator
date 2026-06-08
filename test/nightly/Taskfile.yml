@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: Apache-2.0
+
+version: '3'
+
+tasks:
+  setup:minio:
+    desc: Install MinIO operator and tenant
+    cmds:
+      - helm repo add minio-operator https://operator.min.io/
+      - helm repo update
+      - helm upgrade --install --namespace minio-operator --create-namespace minio-operator minio-operator/operator --wait --timeout 120s
+      - helm upgrade --install --namespace minio-tenant --create-namespace --values setup/minio-values.yaml minio-tenant minio-operator/tenant
+      - |
+        until kubectl get pod -l v1.min.io/tenant=minio-tenant -n minio-tenant --no-headers 2>/dev/null | grep -q .; do
+          echo ">> Waiting for MinIO pods..."
+          sleep 5
+        done
+      - kubectl wait --for=condition=ready pod -l v1.min.io/tenant=minio-tenant -n minio-tenant --timeout=120s
+
+  deploy:orbit:
+    desc: Create the solo-orbit namespace and deploy Orbit
+    cmds:
+      - kubectl create namespace solo-orbit --dry-run=client -o yaml | kubectl apply -f -
+      - kubectl apply -f common/orbit.yaml
+
+  deploy:common:
+    desc: Deploy common secrets
+    deps: [deploy:orbit]
+    cmds:
+      - kubectl apply -f common/secrets.yaml
+
+  deploy:nodes:
+    desc: Deploy all node secrets and consensus capsules
+    deps: [deploy:common]
+    cmds:
+      - kubectl apply -f node0/secrets.yaml
+      - kubectl apply -f node0/consensus-capsule.yaml
+      - kubectl apply -f node1/secrets.yaml
+      - kubectl apply -f node1/consensus-capsule.yaml
+      - kubectl apply -f node2/secrets.yaml
+      - kubectl apply -f node2/consensus-capsule.yaml
+      - kubectl apply -f node3/secrets.yaml
+      - kubectl apply -f node3/consensus-capsule.yaml
+
+  deploy:genesis:
+    desc: Run network genesis
+    deps: [deploy:nodes]
+    cmds:
+      - kubectl apply -f network-genesis/network-genesis.yaml
+      - echo ">> Waiting for genesis to complete..."
+      - kubectl wait --for=jsonpath='{.status.phase}'=Succeeded networkgenesis/network-genesis -n solo-orbit --timeout=300s
+      - echo ">> Genesis completed successfully"
+
+  deploy:
+    desc: Full deploy — minio + orbit + nodes + genesis + wait for pods ready
+    cmds:
+      - task: setup:minio
+      - task: deploy:genesis
+      - echo ">> Waiting for all consensus node pods to be ready..."
+      - kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=consensus-node -n solo-orbit --timeout=300s
+      - echo ">> All nodes ready"

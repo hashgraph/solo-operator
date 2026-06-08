@@ -311,6 +311,21 @@ tasks:
         } > "${DEST}"
         echo "  synced RBAC rules from ${SRC} → ${DEST}"
 
+  test:nightly:
+    desc: Run the nightly E2E test on a local kind cluster
+    vars:
+      NIGHTLY_CLUSTER: solo-operator-nightly
+    cmds:
+      - kind delete cluster --name {{.NIGHTLY_CLUSTER}} || true
+      - kind create cluster --name {{.NIGHTLY_CLUSTER}}
+      - task: kind:metallb
+      - task: docker:build
+      - kind load docker-image {{.IMG}} --name {{.NIGHTLY_CLUSTER}}
+      - helm upgrade --install solo-operator charts/solo-operator --namespace solo-operator --create-namespace --wait --timeout 120s --set image.tag=latest --set image.pullPolicy=Never
+      - kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=solo-operator -n solo-operator --timeout=120s
+      - task -d test/nightly deploy
+      - echo "Nightly test passed"
+
   tools:
     desc: Install required tools
     cmds:
