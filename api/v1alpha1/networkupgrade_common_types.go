@@ -113,6 +113,23 @@ type SelectedSources struct {
 	UC *SelectedSource `json:"uc,omitempty"`
 }
 
+func (s *SelectedSources) Set(name ComponentName, src *SelectedSource) {
+	switch name {
+	case ComponentConsensusNode:
+		s.ConsensusNode = src
+	case ComponentRecordStreamUploader:
+		s.RecordStreamUploader = src
+	case ComponentEventStreamUploader:
+		s.EventStreamUploader = src
+	case ComponentBlockStreamUploader:
+		s.BlockStreamUploader = src
+	case ComponentBackupUploader:
+		s.BackupUploader = src
+	case ComponentUC:
+		s.UC = src
+	}
+}
+
 // Sha256Digest is an OCI sha256 digest ("sha256:" + 64 lowercase hex chars).
 // +kubebuilder:validation:Pattern=`^sha256:[a-f0-9]{64}$`
 type Sha256Digest string
