@@ -113,6 +113,24 @@ type SelectedSources struct {
 	UC *SelectedSource `json:"uc,omitempty"`
 }
 
+func (s *SelectedSources) Get(name ComponentName) *SelectedSource {
+	switch name {
+	case ComponentConsensusNode:
+		return s.ConsensusNode
+	case ComponentRecordStreamUploader:
+		return s.RecordStreamUploader
+	case ComponentEventStreamUploader:
+		return s.EventStreamUploader
+	case ComponentBlockStreamUploader:
+		return s.BlockStreamUploader
+	case ComponentBackupUploader:
+		return s.BackupUploader
+	case ComponentUC:
+		return s.UC
+	}
+	return nil
+}
+
 func (s *SelectedSources) Set(name ComponentName, src *SelectedSource) {
 	switch name {
 	case ComponentConsensusNode:
