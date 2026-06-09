@@ -93,9 +93,17 @@ func reconcilePrepare(t *testing.T, prepare *operatorv1alpha1.NetworkUpgradePrep
 	r.Recorder = rec
 	r.Checker = checker
 
-	_, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: client.ObjectKeyFromObject(prepare),
-	})
+	// Run until terminal (handles the init→requeue→work cycle).
+	var err error
+	for i := 0; i < 5; i++ {
+		var res ctrl.Result
+		res, err = r.Reconcile(context.Background(), ctrl.Request{
+			NamespacedName: client.ObjectKeyFromObject(prepare),
+		})
+		if !res.Requeue && res.RequeueAfter == 0 {
+			break
+		}
+	}
 
 	close(rec.Events)
 	var recorded []string
@@ -236,8 +244,8 @@ func TestPrepareReconcile_AllInvalidFails(t *testing.T) {
 	if res.err == nil {
 		t.Error("expected error when no valid registry")
 	}
-	if res.prepare.Status.Phase != operatorv1alpha1.PhaseRunning {
-		t.Errorf("expected phase Running, got %s", res.prepare.Status.Phase)
+	if res.prepare.Status.Phase != operatorv1alpha1.PhaseFailed {
+		t.Errorf("expected phase Failed, got %s", res.prepare.Status.Phase)
 	}
 	if res.prepare.Status.SelectedSources != nil && res.prepare.Status.SelectedSources.ConsensusNode != nil {
 		t.Error("should not set selectedSources when no valid registry")
@@ -284,5 +292,91 @@ func TestPrepareReconcile_AlreadySucceededIsNoOp(t *testing.T) {
 	}
 	if len(recorded) != 0 {
 		t.Errorf("already-succeeded CR should emit no events, got %v", recorded)
+	}
+}
+
+func TestPrepareReconcile_SetsStartTime(t *testing.T) {
+	res := reconcilePrepare(t, newPrepareForTest(), fakePrepareChecker{})
+
+	if res.prepare.Status.StartTime == nil {
+		t.Error("expected StartTime to be set")
+	}
+}
+
+func TestPrepareReconcile_SetsManifestValidatedCondition(t *testing.T) {
+	res := reconcilePrepare(t, newPrepareForTest(), fakePrepareChecker{})
+
+	cond := findCondition(res.prepare.Status.Conditions, operatorv1alpha1.CondManifestValidated)
+	if cond == nil {
+		t.Fatal("ManifestValidated condition not set")
+	}
+	if cond.Status != metav1.ConditionTrue {
+		t.Errorf("expected ManifestValidated=True, got %s", cond.Status)
+	}
+	if cond.Reason != operatorv1alpha1.ReasonSchemaValid {
+		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonSchemaValid, cond.Reason)
+	}
+}
+
+func TestPrepareReconcile_SetsImageValidationConditionTrue(t *testing.T) {
+	res := reconcilePrepare(t, newPrepareForTest(), fakePrepareChecker{})
+
+	cond := findCondition(res.prepare.Status.Conditions, operatorv1alpha1.CondImageValidation)
+	if cond == nil {
+		t.Fatal("ImageValidation condition not set")
+	}
+	if cond.Status != metav1.ConditionTrue {
+		t.Errorf("expected ImageValidation=True, got %s", cond.Status)
+	}
+	if cond.Reason != operatorv1alpha1.ReasonAllImagesValid {
+		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonAllImagesValid, cond.Reason)
+	}
+}
+
+func TestPrepareReconcile_SetsImageValidationConditionFalse_OnHashMismatch(t *testing.T) {
+	checker := fakePrepareChecker{mismatch: map[string]bool{"ghcr.io/b/cn:0.62.0": true}}
+	res := reconcilePrepare(t, newPrepareForTest(), checker)
+
+	cond := findCondition(res.prepare.Status.Conditions, operatorv1alpha1.CondImageValidation)
+	if cond == nil {
+		t.Fatal("ImageValidation condition not set")
+	}
+	if cond.Status != metav1.ConditionFalse {
+		t.Errorf("expected ImageValidation=False on hash mismatch, got %s", cond.Status)
+	}
+}
+
+func TestPrepareReconcile_PhaseFailedOnAllInvalid_IsNoOp(t *testing.T) {
+	prepare := newPrepareForTest()
+	prepare.Status.Phase = operatorv1alpha1.PhaseFailed
+
+	scheme := newControllerTestScheme()
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(prepare).
+		WithStatusSubresource(prepare).
+		Build()
+	if err := c.Status().Update(context.Background(), prepare); err != nil {
+		t.Fatalf("pre-set status: %v", err)
+	}
+
+	rec := events.NewFakeRecorder(16)
+	r := NewNetworkUpgradePrepareReconciler(c, scheme)
+	r.Recorder = rec
+	r.Checker = fakePrepareChecker{}
+
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: client.ObjectKeyFromObject(prepare),
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	close(rec.Events)
+	var recorded []string
+	for e := range rec.Events {
+		recorded = append(recorded, e)
+	}
+	if len(recorded) != 0 {
+		t.Errorf("already-failed CR should emit no events, got %v", recorded)
 	}
 }

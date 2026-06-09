@@ -11,60 +11,287 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/registry"
 )
 
-// stubImageChecker avoids real registry I/O in envtest by reporting every
-// registry valid.
-type stubImageChecker struct{}
+// selectiveImageChecker is the suite-level ImageChecker. Images whose name
+// contains "unreachable" are reported as StateUnreachable; all others as StateValid.
+type selectiveImageChecker struct{}
 
-func (stubImageChecker) Check(_ context.Context, spec operatorv1alpha1.UpgradeRegistrySpec, _ operatorv1alpha1.UpgradeDeterministicSpec) registry.RegistryResult {
-	return registry.RegistryResult{Image: spec.Image, State: registry.StateValid}
+func (selectiveImageChecker) Check(_ context.Context, spec operatorv1alpha1.UpgradeRegistrySpec, _ operatorv1alpha1.UpgradeDeterministicSpec) registry.RegistryResult {
+	if strings.Contains(spec.Image, "unreachable") {
+		return registry.RegistryResult{Image: spec.Image, State: registry.StateUnreachable}
+	}
+	return registry.RegistryResult{
+		Image:               spec.Image,
+		State:               registry.StateValid,
+		Digest:              "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		LayerHashesVerified: true,
+	}
 }
+
+// stubImageChecker kept as alias so the suite_test.go reference compiles.
+type stubImageChecker = selectiveImageChecker
 
 var _ = Describe("NetworkUpgradePrepare Controller", func() {
 	ctx := context.Background()
 
-	const (
-		ns      = "nup-registry"
-		nupName = "prepare-1"
-		opID    = "nup-op-001"
-	)
+	const ns = "nup-integration"
 
 	BeforeEach(func() {
 		createNamespaceIgnoreExisting(ctx, ns)
 	})
 
-	It("audits every registry of each enabled component and emits RegistryAuditComplete", func() {
+	Context("all registries reachable", func() {
+		const (
+			nupName = "prepare-happy"
+			opID    = "nup-op-happy"
+		)
+
+		key := types.NamespacedName{Name: nupName, Namespace: ns}
+
+		enabled := true
+		disabled := false
 		nup := &operatorv1alpha1.NetworkUpgradePrepare{
 			ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns},
 			Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
-				Orbit:       "nup-orbit",
+				Orbit:       ns,
 				OperationID: opID,
 				Images: operatorv1alpha1.UpgradeImagesSpec{
 					ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
-						Version: "0.62.0",
+						Version: "0.75.0",
+						Enabled: &enabled,
 						Registries: []operatorv1alpha1.UpgradeRegistrySpec{
-							{Image: "gcr.io/a/cn:0.62.0"},
-							{Image: "ghcr.io/b/cn:0.62.0"},
+							{Image: "gcr.io/a/cn:0.75.0"},
+							{Image: "ghcr.io/b/cn:0.75.0"},
+						},
+					},
+					RecordStreamUploader: &operatorv1alpha1.UpgradeComponentSpec{
+						Version: "0.43.0",
+						Enabled: &disabled,
+						Registries: []operatorv1alpha1.UpgradeRegistrySpec{
+							{Image: "gcr.io/a/rsu:0.43.0"},
 						},
 					},
 				},
 			},
 		}
-		Expect(k8sClient.Create(ctx, nup)).To(Succeed())
 
-		// The suite configures the Sequential strategy; all registries are still
-		// audited end-to-end.
-		Eventually(func() bool {
-			return hasEvent(ctx, ns, nupName, operatorv1alpha1.EventRegistryAuditComplete,
-				"consensusNode: 2/2 registries reachable")
-		}, timeout, interval).Should(BeTrue())
+		BeforeEach(func() {
+			Expect(k8sClient.Create(ctx, nup.DeepCopy())).To(Succeed())
+		})
+
+		AfterEach(func() {
+			Expect(k8sClient.Delete(ctx, nup.DeepCopy())).To(Succeed())
+		})
+
+		It("reconciles to Succeeded with all conditions, events, and selectedSources", func() {
+			By("reaching Succeeded phase")
+			Eventually(func() operatorv1alpha1.Phase {
+				got := &operatorv1alpha1.NetworkUpgradePrepare{}
+				_ = k8sClient.Get(ctx, key, got)
+				return got.Status.Phase
+			}, timeout, interval).Should(Equal(operatorv1alpha1.PhaseSucceeded))
+
+			got := &operatorv1alpha1.NetworkUpgradePrepare{}
+			Expect(k8sClient.Get(ctx, key, got)).To(Succeed())
+
+			By("setting StartTime")
+			Expect(got.Status.StartTime).NotTo(BeNil())
+
+			By("populating selectedSources for consensusNode only (disabled RSU excluded)")
+			Expect(got.Status.SelectedSources).NotTo(BeNil())
+			Expect(got.Status.SelectedSources.ConsensusNode).NotTo(BeNil())
+			Expect(got.Status.SelectedSources.ConsensusNode.Digest).NotTo(BeEmpty())
+			Expect(got.Status.SelectedSources.RecordStreamUploader).To(BeNil())
+
+			By("setting ManifestValidated=True")
+			Expect(conditionTrue(got.Status.Conditions, operatorv1alpha1.CondManifestValidated)).To(BeTrue())
+
+			By("setting ImageValidation=True")
+			Expect(conditionTrue(got.Status.Conditions, operatorv1alpha1.CondImageValidation)).To(BeTrue())
+
+			By("setting RegistrySelected=True")
+			Expect(conditionTrue(got.Status.Conditions, operatorv1alpha1.CondRegistrySelected)).To(BeTrue())
+
+			By("emitting RegistryAuditComplete for consensusNode (2/2 reachable)")
+			Expect(hasEvent(ctx, ns, nupName, operatorv1alpha1.EventRegistryAuditComplete,
+				"consensusNode: 2/2 registries reachable")).To(BeTrue())
+
+			By("not emitting any event for the disabled recordStreamUploader")
+			Expect(hasEvent(ctx, ns, nupName, operatorv1alpha1.EventRegistryAuditComplete,
+				"recordStreamUploader")).To(BeFalse())
+
+			By("emitting RegistrySelected for consensusNode")
+			Expect(hasEvent(ctx, ns, nupName, operatorv1alpha1.EventRegistrySelected, "consensusNode")).To(BeTrue())
+		})
+
+		It("stays Succeeded on re-reconcile (idempotent)", func() {
+			Eventually(func() operatorv1alpha1.Phase {
+				got := &operatorv1alpha1.NetworkUpgradePrepare{}
+				_ = k8sClient.Get(ctx, key, got)
+				return got.Status.Phase
+			}, timeout, interval).Should(Equal(operatorv1alpha1.PhaseSucceeded))
+
+			Consistently(func() operatorv1alpha1.Phase {
+				got := &operatorv1alpha1.NetworkUpgradePrepare{}
+				_ = k8sClient.Get(ctx, key, got)
+				return got.Status.Phase
+			}, timeout/3, interval).Should(Equal(operatorv1alpha1.PhaseSucceeded))
+		})
+	})
+
+	Context("partial failure — one registry unreachable, one valid", func() {
+		const (
+			nupName = "prepare-partial"
+			opID    = "nup-op-partial"
+		)
+
+		key := types.NamespacedName{Name: nupName, Namespace: ns}
+
+		// "unreachable" in the image name triggers StateUnreachable in selectiveImageChecker.
+		nup := &operatorv1alpha1.NetworkUpgradePrepare{
+			ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns},
+			Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
+				Orbit:       ns,
+				OperationID: opID,
+				Images: operatorv1alpha1.UpgradeImagesSpec{
+					ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+						Version: "0.75.0",
+						Registries: []operatorv1alpha1.UpgradeRegistrySpec{
+							{Image: "gcr.io/unreachable/cn:0.75.0"},
+							{Image: "ghcr.io/valid/cn:0.75.0"},
+						},
+					},
+				},
+			},
+		}
+
+		BeforeEach(func() {
+			Expect(k8sClient.Create(ctx, nup.DeepCopy())).To(Succeed())
+		})
+
+		AfterEach(func() {
+			Expect(k8sClient.Delete(ctx, nup.DeepCopy())).To(Succeed())
+		})
+
+		It("succeeds, emits RegistryUnreachable, and selects the valid registry", func() {
+			By("reaching Succeeded (valid fallback registry selected)")
+			Eventually(func() operatorv1alpha1.Phase {
+				got := &operatorv1alpha1.NetworkUpgradePrepare{}
+				_ = k8sClient.Get(ctx, key, got)
+				return got.Status.Phase
+			}, timeout, interval).Should(Equal(operatorv1alpha1.PhaseSucceeded))
+
+			By("emitting RegistryUnreachable warning (1/2 unreachable)")
+			Expect(hasEvent(ctx, ns, nupName, operatorv1alpha1.EventRegistryUnreachable,
+				"consensusNode: 1/2 registries unreachable")).To(BeTrue())
+
+			By("emitting RegistryAuditComplete showing 1/2 reachable")
+			Expect(hasEvent(ctx, ns, nupName, operatorv1alpha1.EventRegistryAuditComplete,
+				"consensusNode: 1/2 registries reachable")).To(BeTrue())
+
+			By("selecting the valid registry in selectedSources")
+			got := &operatorv1alpha1.NetworkUpgradePrepare{}
+			Expect(k8sClient.Get(ctx, key, got)).To(Succeed())
+			Expect(got.Status.SelectedSources).NotTo(BeNil())
+			Expect(got.Status.SelectedSources.ConsensusNode.Image).To(Equal("ghcr.io/valid/cn:0.75.0"))
+		})
+	})
+
+	Context("all registries unreachable", func() {
+		const (
+			nupName = "prepare-allfail"
+			opID    = "nup-op-allfail"
+		)
+
+		key := types.NamespacedName{Name: nupName, Namespace: ns}
+
+		nup := &operatorv1alpha1.NetworkUpgradePrepare{
+			ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns},
+			Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
+				Orbit:       ns,
+				OperationID: opID,
+				Images: operatorv1alpha1.UpgradeImagesSpec{
+					ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+						Version: "0.75.0",
+						Registries: []operatorv1alpha1.UpgradeRegistrySpec{
+							{Image: "gcr.io/unreachable/cn:0.75.0"},
+							{Image: "ghcr.io/unreachable/cn:0.75.0"},
+						},
+					},
+				},
+			},
+		}
+
+		BeforeEach(func() {
+			Expect(k8sClient.Create(ctx, nup.DeepCopy())).To(Succeed())
+		})
+
+		AfterEach(func() {
+			Expect(k8sClient.Delete(ctx, nup.DeepCopy())).To(Succeed())
+		})
+
+		It("reaches Failed, sets RegistrySelected=False, emits RegistryInvalid, and skips selectedSources", func() {
+			By("reaching Failed phase")
+			Eventually(func() operatorv1alpha1.Phase {
+				got := &operatorv1alpha1.NetworkUpgradePrepare{}
+				_ = k8sClient.Get(ctx, key, got)
+				return got.Status.Phase
+			}, timeout, interval).Should(Equal(operatorv1alpha1.PhaseFailed))
+
+			got := &operatorv1alpha1.NetworkUpgradePrepare{}
+			Expect(k8sClient.Get(ctx, key, got)).To(Succeed())
+
+			By("setting RegistrySelected=False condition")
+			Expect(conditionFalse(got.Status.Conditions, operatorv1alpha1.CondRegistrySelected)).To(BeTrue())
+
+			By("emitting RegistryInvalid warning")
+			Expect(hasEvent(ctx, ns, nupName, operatorv1alpha1.EventRegistryInvalid, "consensusNode")).To(BeTrue())
+
+			By("not populating selectedSources")
+			Expect(got.Status.SelectedSources).To(BeNil())
+		})
+
+		It("stays Failed on re-reconcile (terminal)", func() {
+			Eventually(func() operatorv1alpha1.Phase {
+				got := &operatorv1alpha1.NetworkUpgradePrepare{}
+				_ = k8sClient.Get(ctx, key, got)
+				return got.Status.Phase
+			}, timeout, interval).Should(Equal(operatorv1alpha1.PhaseFailed))
+
+			Consistently(func() operatorv1alpha1.Phase {
+				got := &operatorv1alpha1.NetworkUpgradePrepare{}
+				_ = k8sClient.Get(ctx, key, got)
+				return got.Status.Phase
+			}, timeout/3, interval).Should(Equal(operatorv1alpha1.PhaseFailed))
+		})
 	})
 })
+
+// conditionTrue returns true when the named condition has Status=True.
+func conditionTrue(conds []operatorv1alpha1.Condition, condType string) bool {
+	for _, c := range conds {
+		if c.Type == condType {
+			return c.Status == metav1.ConditionTrue
+		}
+	}
+	return false
+}
+
+// conditionFalse returns true when the named condition has Status=False.
+func conditionFalse(conds []operatorv1alpha1.Condition, condType string) bool {
+	for _, c := range conds {
+		if c.Type == condType {
+			return c.Status == metav1.ConditionFalse
+		}
+	}
+	return false
+}
 
 func hasEvent(ctx context.Context, ns, objName, reason, msgSubstr string) bool {
 	var events corev1.EventList

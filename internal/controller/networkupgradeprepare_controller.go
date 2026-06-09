@@ -52,8 +52,19 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if prepare.Status.Phase == operatorv1alpha1.PhaseSucceeded {
+	if prepare.Status.Phase == operatorv1alpha1.PhaseSucceeded ||
+		prepare.Status.Phase == operatorv1alpha1.PhaseFailed {
 		return ctrl.Result{}, nil
+	}
+
+	if prepare.Status.Phase == "" {
+		now := metav1.Now()
+		prepare.Status.StartTime = &now
+		prepare.Status.Phase = operatorv1alpha1.PhaseRunning
+		if err := r.Status().Update(ctx, &prepare); err != nil {
+			return ctrl.Result{}, fmt.Errorf("initializing status: %w", err)
+		}
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
@@ -62,6 +73,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 
 	selected := &operatorv1alpha1.SelectedSources{}
 	succeeded := true
+	allHashesValid := true
 
 	for _, name := range operatorv1alpha1.AllUpgradeComponents {
 		comp, present := prepare.Spec.Images.Component(name)
@@ -79,10 +91,12 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 				unreachable++
 				logger.Info("registry unreachable", "component", name, "image", res.Image, "error", res.Err)
 			case registry.StateHashMismatch:
+				allHashesValid = false
 				logger.Info("registry failed layer hash verification", "component", name, "image", res.Image, "error", res.Err)
 				r.event(&prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
 					"%s: registry %s failed layer hash verification: %v", name, res.Image, res.Err)
 			case registry.StateNoHashes:
+				allHashesValid = false
 				logger.Info("image has no layer hashes configured", "component", name, "image", res.Image, "error", res.Err)
 				r.event(&prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
 					"%s: image %s has no layer hashes configured: %v", name, res.Image, res.Err)
@@ -123,18 +137,42 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 		prepare.Status.Phase = operatorv1alpha1.PhaseSucceeded
 		prepare.Status.SelectedSources = selected
 		setCondition(&prepare.Status.Conditions, metav1.Condition{
-			Type:    operatorv1alpha1.CondRegistrySelected,
-			Status:  metav1.ConditionTrue,
-			Reason:  operatorv1alpha1.ReasonSelectionComplete,
-			Message: "registry selected for all components",
+			Type:               operatorv1alpha1.CondManifestValidated,
+			Status:             metav1.ConditionTrue,
+			Reason:             operatorv1alpha1.ReasonSchemaValid,
+			Message:            "manifest schema valid",
+			ObservedGeneration: prepare.Generation,
+		})
+		imageValidationStatus := metav1.ConditionTrue
+		imageValidationReason := operatorv1alpha1.ReasonAllImagesValid
+		imageValidationMessage := "all registries probed successfully"
+		if !allHashesValid {
+			imageValidationStatus = metav1.ConditionFalse
+			imageValidationReason = operatorv1alpha1.ReasonRegistryInvalid
+			imageValidationMessage = "one or more images failed layer hash verification"
+		}
+		setCondition(&prepare.Status.Conditions, metav1.Condition{
+			Type:               operatorv1alpha1.CondImageValidation,
+			Status:             imageValidationStatus,
+			Reason:             imageValidationReason,
+			Message:            imageValidationMessage,
+			ObservedGeneration: prepare.Generation,
+		})
+		setCondition(&prepare.Status.Conditions, metav1.Condition{
+			Type:               operatorv1alpha1.CondRegistrySelected,
+			Status:             metav1.ConditionTrue,
+			Reason:             operatorv1alpha1.ReasonSelectionComplete,
+			Message:            "registry selected for all components",
+			ObservedGeneration: prepare.Generation,
 		})
 	} else {
-		prepare.Status.Phase = operatorv1alpha1.PhaseRunning
+		prepare.Status.Phase = operatorv1alpha1.PhaseFailed
 		setCondition(&prepare.Status.Conditions, metav1.Condition{
-			Type:    operatorv1alpha1.CondRegistrySelected,
-			Status:  metav1.ConditionFalse,
-			Reason:  operatorv1alpha1.ReasonRegistryInvalid,
-			Message: "no valid registry available for one or more components",
+			Type:               operatorv1alpha1.CondRegistrySelected,
+			Status:             metav1.ConditionFalse,
+			Reason:             operatorv1alpha1.ReasonRegistryInvalid,
+			Message:            "no valid registry available for one or more components",
+			ObservedGeneration: prepare.Generation,
 		})
 	}
 
