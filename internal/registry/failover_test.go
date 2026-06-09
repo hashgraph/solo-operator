@@ -21,6 +21,15 @@ func compWithRegistries(images ...string) operatorv1alpha1.UpgradeComponentSpec 
 	return operatorv1alpha1.UpgradeComponentSpec{Registries: regs}
 }
 
+func compNonDeterministicWithHashes(image string, hashes map[string][]operatorv1alpha1.Sha256Digest) operatorv1alpha1.UpgradeComponentSpec {
+	return operatorv1alpha1.UpgradeComponentSpec{
+		Deterministic: operatorv1alpha1.UpgradeDeterministicSpec{Supported: false},
+		Registries: []operatorv1alpha1.UpgradeRegistrySpec{
+			{Image: image, LayerHashes: hashes},
+		},
+	}
+}
+
 func currentSource(image string) operatorv1alpha1.SelectedSource {
 	return operatorv1alpha1.SelectedSource{Image: image, Digest: testDigest, LayerHashesVerified: true}
 }
@@ -108,5 +117,42 @@ func TestRevalidateAndFailover_HashMismatchTreatedAsInvalid(t *testing.T) {
 	}
 	if res.Selected.Image != "img-b" {
 		t.Errorf("expected img-b as replacement, got %s", res.Selected.Image)
+	}
+}
+
+// TestRevalidateAndFailover_NonDeterministicNoSpuriousFailover guards against
+// revalidating with an empty spec (StateNoHashes) for non-deterministic images,
+// which would trigger a failover even when the registry is healthy.
+func TestRevalidateAndFailover_NonDeterministicNoSpuriousFailover(t *testing.T) {
+	hashes := map[string][]operatorv1alpha1.Sha256Digest{
+		"linux/amd64": {testDigest},
+	}
+	comp := compNonDeterministicWithHashes("img-a", hashes)
+	// SelectedSource carries the layer hashes stored during initial selection.
+	current := operatorv1alpha1.SelectedSource{
+		Image:               "img-a",
+		Digest:              testDigest,
+		LayerHashesVerified: true,
+		LayerHashes:         hashes,
+	}
+
+	// Mirrors real OCIChecker: empty LayerHashes → StateNoHashes.
+	checker := &fakeChecker{
+		fn: func(_ context.Context, spec operatorv1alpha1.UpgradeRegistrySpec) RegistryResult {
+			if len(spec.LayerHashes) == 0 {
+				return RegistryResult{Image: spec.Image, State: StateNoHashes}
+			}
+			return RegistryResult{Image: spec.Image, State: StateValid, Digest: testDigest, LayerHashesVerified: true}
+		},
+	}
+	res, err := RevalidateAndFailover(context.Background(), checker, comp, current, time.Second, newRNG(1), "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.DidFailover {
+		t.Error("expected no failover: healthy non-deterministic registry should not trigger failover")
+	}
+	if res.Selected.Image != "img-a" {
+		t.Errorf("expected original image preserved, got %s", res.Selected.Image)
 	}
 }

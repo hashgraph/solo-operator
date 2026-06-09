@@ -40,6 +40,11 @@ func NewNetworkUpgradePrepareReconciler(c client.Client, scheme *runtime.Scheme)
 	}
 }
 
+func (r *NetworkUpgradePrepareReconciler) WithStrategy(name string) *NetworkUpgradePrepareReconciler {
+	r.StrategyName = name
+	return r
+}
+
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradeprepares,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradeprepares/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradeprepares/finalizers,verbs=update
@@ -106,10 +111,12 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 			succeeded = false
 			continue
 		}
+		winnerSpec := registry.SpecForImage(comp, winner.Image)
 		selected.Set(name, &operatorv1alpha1.SelectedSource{
 			Image:               winner.Image,
 			Digest:              winner.Digest,
 			LayerHashesVerified: winner.LayerHashesVerified,
+			LayerHashes:         winnerSpec.LayerHashes,
 		})
 		r.event(&prepare, corev1.EventTypeNormal, operatorv1alpha1.EventRegistrySelected,
 			"%s: selected %s (digest: %s, layerHashesVerified: %v)", name, winner.Image, winner.Digest, winner.LayerHashesVerified)

@@ -4,7 +4,6 @@ package controller
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,25 +21,8 @@ const (
 	altExecuteDigest = operatorv1alpha1.Sha256Digest("sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd")
 )
 
-type fakeExecuteChecker struct {
-	unreachable map[string]bool
-	mismatch    map[string]bool
-	digest      operatorv1alpha1.Sha256Digest
-}
-
-func (c fakeExecuteChecker) Check(_ context.Context, spec operatorv1alpha1.UpgradeRegistrySpec, _ operatorv1alpha1.UpgradeDeterministicSpec) registry.RegistryResult {
-	d := c.digest
-	if d == "" {
-		d = executeDigest
-	}
-	switch {
-	case c.unreachable[spec.Image]:
-		return registry.RegistryResult{Image: spec.Image, State: registry.StateUnreachable}
-	case c.mismatch[spec.Image]:
-		return registry.RegistryResult{Image: spec.Image, State: registry.StateHashMismatch}
-	default:
-		return registry.RegistryResult{Image: spec.Image, State: registry.StateValid, Digest: d, LayerHashesVerified: true}
-	}
+func newExecuteChecker(unreachable, mismatch map[string]bool) fakeUpgradeChecker {
+	return fakeUpgradeChecker{unreachable: unreachable, mismatch: mismatch, defaultDigest: executeDigest}
 }
 
 func newExecuteForTest() *operatorv1alpha1.NetworkUpgradeExecute {
@@ -104,23 +86,13 @@ func reconcileExecute(t *testing.T, execute *operatorv1alpha1.NetworkUpgradeExec
 	return executeReconcileResult{events: recorded, execute: &updated, err: err}
 }
 
-func countExecuteEvents(recorded []string, substr string) int {
-	n := 0
-	for _, e := range recorded {
-		if strings.Contains(e, substr) {
-			n++
-		}
-	}
-	return n
-}
-
 func TestExecuteReconcile_SelectedRegistryStillValid(t *testing.T) {
-	res := reconcileExecute(t, newExecuteForTest(), fakeExecuteChecker{})
+	res := reconcileExecute(t, newExecuteForTest(), newExecuteChecker(nil, nil))
 
 	if res.err != nil {
 		t.Fatalf("unexpected error: %v", res.err)
 	}
-	if got := countExecuteEvents(res.events, "RegistryFailover"); got != 0 {
+	if got := countContaining(res.events, "RegistryFailover"); got != 0 {
 		t.Errorf("expected no failover events, got %d", got)
 	}
 	if res.execute.Status.SelectedSources == nil || res.execute.Status.SelectedSources.ConsensusNode == nil {
@@ -136,22 +108,23 @@ func TestExecuteReconcile_SelectedRegistryStillValid(t *testing.T) {
 }
 
 func TestExecuteReconcile_FailoverToAlternate(t *testing.T) {
-	checker := fakeExecuteChecker{
-		unreachable: map[string]bool{"reg-a/cn:0.75.0": true},
-		digest:      altExecuteDigest,
+	checker := fakeUpgradeChecker{
+		unreachable:   map[string]bool{"reg-a/cn:0.75.0": true},
+		digest:        altExecuteDigest,
+		defaultDigest: executeDigest,
 	}
 	res := reconcileExecute(t, newExecuteForTest(), checker)
 
 	if res.err != nil {
 		t.Fatalf("unexpected error: %v", res.err)
 	}
-	if got := countExecuteEvents(res.events, "RegistryFailover"); got != 1 {
+	if got := countContaining(res.events, "RegistryFailover"); got != 1 {
 		t.Errorf("expected one RegistryFailover event, got %d in %v", got, res.events)
 	}
-	if got := countExecuteEvents(res.events, "reg-a/cn:0.75.0"); got == 0 {
+	if got := countContaining(res.events, "reg-a/cn:0.75.0"); got == 0 {
 		t.Errorf("RegistryFailover event should name the failed registry")
 	}
-	if got := countExecuteEvents(res.events, "reg-b/cn:0.75.0"); got == 0 {
+	if got := countContaining(res.events, "reg-b/cn:0.75.0"); got == 0 {
 		t.Errorf("RegistryFailover event should name the replacement registry")
 	}
 	if res.execute.Status.SelectedSources == nil || res.execute.Status.SelectedSources.ConsensusNode == nil {
@@ -163,9 +136,7 @@ func TestExecuteReconcile_FailoverToAlternate(t *testing.T) {
 }
 
 func TestExecuteReconcile_NoValidRegistry_TerminalFailure(t *testing.T) {
-	checker := fakeExecuteChecker{
-		unreachable: map[string]bool{"reg-a/cn:0.75.0": true, "reg-b/cn:0.75.0": true},
-	}
+	checker := newExecuteChecker(map[string]bool{"reg-a/cn:0.75.0": true, "reg-b/cn:0.75.0": true}, nil)
 	res := reconcileExecute(t, newExecuteForTest(), checker)
 
 	if res.err == nil {
@@ -181,77 +152,50 @@ func TestExecuteReconcile_NoValidRegistry_TerminalFailure(t *testing.T) {
 	if cond == nil || cond.Status != metav1.ConditionFalse {
 		t.Errorf("expected RegistrySelected=False, got %v", cond)
 	}
-	if got := countExecuteEvents(res.events, "RegistryInvalid"); got == 0 {
+	if got := countContaining(res.events, "RegistryInvalid"); got == 0 {
 		t.Errorf("expected RegistryInvalid event, got none in %v", res.events)
 	}
 }
 
-func TestExecuteReconcile_AlreadySucceededIsNoOp(t *testing.T) {
-	execute := newExecuteForTest()
-	execute.Status.Phase = operatorv1alpha1.ExecutePhaseSucceeded
-
-	scheme := newControllerTestScheme()
-	c := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(execute).
-		WithStatusSubresource(execute).
-		Build()
-	if err := c.Status().Update(context.Background(), execute); err != nil {
-		t.Fatalf("pre-set status: %v", err)
+func TestExecuteReconcile_TerminalPhaseIsNoOp(t *testing.T) {
+	phases := []operatorv1alpha1.ExecutePhase{
+		operatorv1alpha1.ExecutePhaseSucceeded,
+		operatorv1alpha1.ExecutePhaseFailed,
 	}
+	for _, phase := range phases {
+		t.Run(string(phase), func(t *testing.T) {
+			execute := newExecuteForTest()
+			execute.Status.Phase = phase
 
-	rec := events.NewFakeRecorder(16)
-	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
-	r.Recorder = rec
-	r.Checker = fakeExecuteChecker{}
+			scheme := newControllerTestScheme()
+			c := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(execute).
+				WithStatusSubresource(execute).
+				Build()
+			if err := c.Status().Update(context.Background(), execute); err != nil {
+				t.Fatalf("pre-set status: %v", err)
+			}
 
-	if _, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: client.ObjectKeyFromObject(execute),
-	}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+			rec := events.NewFakeRecorder(16)
+			r := NewNetworkUpgradeExecuteReconciler(c, scheme)
+			r.Recorder = rec
+			r.Checker = newExecuteChecker(nil, nil)
 
-	close(rec.Events)
-	var recorded []string
-	for e := range rec.Events {
-		recorded = append(recorded, e)
-	}
-	if len(recorded) != 0 {
-		t.Errorf("already-succeeded CR should emit no events, got %v", recorded)
-	}
-}
+			if _, err := r.Reconcile(context.Background(), ctrl.Request{
+				NamespacedName: client.ObjectKeyFromObject(execute),
+			}); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
-func TestExecuteReconcile_AlreadyFailedIsNoOp(t *testing.T) {
-	execute := newExecuteForTest()
-	execute.Status.Phase = operatorv1alpha1.ExecutePhaseFailed
-
-	scheme := newControllerTestScheme()
-	c := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(execute).
-		WithStatusSubresource(execute).
-		Build()
-	if err := c.Status().Update(context.Background(), execute); err != nil {
-		t.Fatalf("pre-set status: %v", err)
-	}
-
-	rec := events.NewFakeRecorder(16)
-	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
-	r.Recorder = rec
-	r.Checker = fakeExecuteChecker{}
-
-	if _, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: client.ObjectKeyFromObject(execute),
-	}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	close(rec.Events)
-	var recorded []string
-	for e := range rec.Events {
-		recorded = append(recorded, e)
-	}
-	if len(recorded) != 0 {
-		t.Errorf("already-failed CR should emit no events, got %v", recorded)
+			close(rec.Events)
+			var recorded []string
+			for e := range rec.Events {
+				recorded = append(recorded, e)
+			}
+			if len(recorded) != 0 {
+				t.Errorf("terminal CR should emit no events, got %v", recorded)
+			}
+		})
 	}
 }

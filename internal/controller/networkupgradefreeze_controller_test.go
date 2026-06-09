@@ -4,7 +4,6 @@ package controller
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,27 +21,8 @@ const (
 	altFreezeDigest = operatorv1alpha1.Sha256Digest("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
 )
 
-// fakeFreezeChecker is analogous to fakePrepareChecker but also supports
-// returning a specific digest for valid results.
-type fakeFreezeChecker struct {
-	unreachable map[string]bool
-	mismatch    map[string]bool
-	digest      operatorv1alpha1.Sha256Digest
-}
-
-func (c fakeFreezeChecker) Check(_ context.Context, spec operatorv1alpha1.UpgradeRegistrySpec, _ operatorv1alpha1.UpgradeDeterministicSpec) registry.RegistryResult {
-	d := c.digest
-	if d == "" {
-		d = freezeDigest
-	}
-	switch {
-	case c.unreachable[spec.Image]:
-		return registry.RegistryResult{Image: spec.Image, State: registry.StateUnreachable}
-	case c.mismatch[spec.Image]:
-		return registry.RegistryResult{Image: spec.Image, State: registry.StateHashMismatch}
-	default:
-		return registry.RegistryResult{Image: spec.Image, State: registry.StateValid, Digest: d, LayerHashesVerified: true}
-	}
+func newFreezeChecker(unreachable, mismatch map[string]bool) fakeUpgradeChecker {
+	return fakeUpgradeChecker{unreachable: unreachable, mismatch: mismatch, defaultDigest: freezeDigest}
 }
 
 func newFreezeForTest() *operatorv1alpha1.NetworkUpgradeFreeze {
@@ -107,23 +87,13 @@ func reconcileFreeze(t *testing.T, freeze *operatorv1alpha1.NetworkUpgradeFreeze
 	return freezeReconcileResult{events: recorded, freeze: &updated, err: err}
 }
 
-func countFreezeEvents(recorded []string, substr string) int {
-	n := 0
-	for _, e := range recorded {
-		if strings.Contains(e, substr) {
-			n++
-		}
-	}
-	return n
-}
-
 func TestFreezeReconcile_SelectedRegistryStillValid(t *testing.T) {
-	res := reconcileFreeze(t, newFreezeForTest(), fakeFreezeChecker{})
+	res := reconcileFreeze(t, newFreezeForTest(), newFreezeChecker(nil, nil))
 
 	if res.err != nil {
 		t.Fatalf("unexpected error: %v", res.err)
 	}
-	if got := countFreezeEvents(res.events, "RegistryFailover"); got != 0 {
+	if got := countContaining(res.events, "RegistryFailover"); got != 0 {
 		t.Errorf("expected no failover events, got %d", got)
 	}
 	if res.freeze.Status.SelectedSources == nil || res.freeze.Status.SelectedSources.ConsensusNode == nil {
@@ -139,22 +109,23 @@ func TestFreezeReconcile_SelectedRegistryStillValid(t *testing.T) {
 }
 
 func TestFreezeReconcile_FailoverToAlternate(t *testing.T) {
-	checker := fakeFreezeChecker{
-		unreachable: map[string]bool{"reg-a/cn:0.75.0": true},
-		digest:      altFreezeDigest,
+	checker := fakeUpgradeChecker{
+		unreachable:   map[string]bool{"reg-a/cn:0.75.0": true},
+		digest:        altFreezeDigest,
+		defaultDigest: freezeDigest,
 	}
 	res := reconcileFreeze(t, newFreezeForTest(), checker)
 
 	if res.err != nil {
 		t.Fatalf("unexpected error: %v", res.err)
 	}
-	if got := countFreezeEvents(res.events, "RegistryFailover"); got != 1 {
+	if got := countContaining(res.events, "RegistryFailover"); got != 1 {
 		t.Errorf("expected one RegistryFailover event, got %d in %v", got, res.events)
 	}
-	if got := countFreezeEvents(res.events, "reg-a/cn:0.75.0"); got == 0 {
+	if got := countContaining(res.events, "reg-a/cn:0.75.0"); got == 0 {
 		t.Errorf("RegistryFailover event should name the failed registry")
 	}
-	if got := countFreezeEvents(res.events, "reg-b/cn:0.75.0"); got == 0 {
+	if got := countContaining(res.events, "reg-b/cn:0.75.0"); got == 0 {
 		t.Errorf("RegistryFailover event should name the replacement registry")
 	}
 	if res.freeze.Status.SelectedSources == nil || res.freeze.Status.SelectedSources.ConsensusNode == nil {
@@ -166,9 +137,7 @@ func TestFreezeReconcile_FailoverToAlternate(t *testing.T) {
 }
 
 func TestFreezeReconcile_NoValidRegistry(t *testing.T) {
-	checker := fakeFreezeChecker{
-		unreachable: map[string]bool{"reg-a/cn:0.75.0": true, "reg-b/cn:0.75.0": true},
-	}
+	checker := newFreezeChecker(map[string]bool{"reg-a/cn:0.75.0": true, "reg-b/cn:0.75.0": true}, nil)
 	res := reconcileFreeze(t, newFreezeForTest(), checker)
 
 	if res.err == nil {
@@ -181,7 +150,7 @@ func TestFreezeReconcile_NoValidRegistry(t *testing.T) {
 	if cond == nil || cond.Status != metav1.ConditionFalse {
 		t.Errorf("expected RegistryHealthCheck=False, got %v", cond)
 	}
-	if got := countFreezeEvents(res.events, "RegistryInvalid"); got == 0 {
+	if got := countContaining(res.events, "RegistryInvalid"); got == 0 {
 		t.Errorf("expected RegistryInvalid event, got none in %v", res.events)
 	}
 }
@@ -203,7 +172,7 @@ func TestFreezeReconcile_AlreadySucceededIsNoOp(t *testing.T) {
 	rec := events.NewFakeRecorder(16)
 	r := NewNetworkUpgradeFreezeReconciler(c, scheme)
 	r.Recorder = rec
-	r.Checker = fakeFreezeChecker{}
+	r.Checker = newFreezeChecker(nil, nil)
 
 	if _, err := r.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: client.ObjectKeyFromObject(freeze),

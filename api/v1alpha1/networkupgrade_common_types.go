@@ -155,6 +155,10 @@ type SelectedSource struct {
 	// LayerHashesVerified is true when expected hashes were configured and matched
 	// what the registry served; false when no hashes were configured or on mismatch.
 	LayerHashesVerified bool `json:"layerHashesVerified"`
+	// LayerHashes stores the per-platform hashes used during initial selection so
+	// re-validation doesn't need to re-scan comp.Registries. Keyed by platform.
+	// +optional
+	LayerHashes map[string][]Sha256Digest `json:"layerHashes,omitempty"`
 }
 
 // Labels linking all CRs of one upgrade operation.
