@@ -4,6 +4,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"time"
@@ -62,21 +63,12 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, nil
 	}
 
-	// Pending → Running: set StartTime and record that work has begun.
-	if prepare.Status.Phase == "" {
+	if prepare.Status.Phase == "" || prepare.Status.Phase == operatorv1alpha1.PhasePending {
 		now := metav1.Now()
 		prepare.Status.StartTime = &now
-		prepare.Status.Phase = operatorv1alpha1.PhasePending
-		if err := r.Status().Update(ctx, &prepare); err != nil {
-			return ctrl.Result{}, fmt.Errorf("initializing status: %w", err)
-		}
-		return ctrl.Result{Requeue: true}, nil
-	}
-
-	if prepare.Status.Phase == operatorv1alpha1.PhasePending {
 		prepare.Status.Phase = operatorv1alpha1.PhaseRunning
 		if err := r.Status().Update(ctx, &prepare); err != nil {
-			return ctrl.Result{}, fmt.Errorf("setting phase Running: %w", err)
+			return ctrl.Result{}, fmt.Errorf("initializing status: %w", err)
 		}
 		return ctrl.Result{Requeue: true}, nil
 	}
@@ -104,7 +96,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 		if err := r.Status().Update(ctx, &prepare); err != nil {
 			return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
 		}
-		return ctrl.Result{}, fmt.Errorf("%s", msg)
+		return ctrl.Result{}, errors.New(msg)
 	}
 
 	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
@@ -192,21 +184,19 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 			Message:            "manifest schema valid",
 			ObservedGeneration: prepare.Generation,
 		})
-		imageValidationStatus := metav1.ConditionTrue
-		imageValidationReason := operatorv1alpha1.ReasonAllImagesValid
-		imageValidationMessage := "all registries probed successfully"
-		if !allHashesValid {
-			imageValidationStatus = metav1.ConditionFalse
-			imageValidationReason = operatorv1alpha1.ReasonRegistryInvalid
-			imageValidationMessage = "one or more images failed layer hash verification"
-		}
-		setCondition(&prepare.Status.Conditions, metav1.Condition{
+		imageValidationCond := metav1.Condition{
 			Type:               operatorv1alpha1.CondImageValidation,
-			Status:             imageValidationStatus,
-			Reason:             imageValidationReason,
-			Message:            imageValidationMessage,
+			Status:             metav1.ConditionTrue,
+			Reason:             operatorv1alpha1.ReasonAllImagesValid,
+			Message:            "all registries probed successfully",
 			ObservedGeneration: prepare.Generation,
-		})
+		}
+		if !allHashesValid {
+			imageValidationCond.Status = metav1.ConditionFalse
+			imageValidationCond.Reason = operatorv1alpha1.ReasonRegistryInvalid
+			imageValidationCond.Message = "one or more images failed layer hash verification"
+		}
+		setCondition(&prepare.Status.Conditions, imageValidationCond)
 		setCondition(&prepare.Status.Conditions, metav1.Condition{
 			Type:               operatorv1alpha1.CondRegistrySelected,
 			Status:             metav1.ConditionTrue,

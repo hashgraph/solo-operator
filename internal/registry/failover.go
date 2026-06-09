@@ -36,11 +36,8 @@ func RevalidateAndFailover(
 		return FailoverResult{Selected: current}, nil
 	}
 
-	sweepCtx, sweepCancel := context.WithTimeout(ctx, timeout)
-	defer sweepCancel()
-
 	strategy := NewStrategy(strategyName, rng)
-	results := CheckAll(sweepCtx, checker, comp, timeout, strategy)
+	results := CheckAll(ctx, checker, comp, timeout, strategy)
 
 	winner, ok := SelectValid(results, rng)
 	if !ok {
