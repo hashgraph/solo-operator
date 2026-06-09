@@ -4,10 +4,12 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"math/rand/v2"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -50,10 +52,16 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// fresh per run so the random order changes each reconcile
+	if prepare.Status.Phase == operatorv1alpha1.PhaseSucceeded {
+		return ctrl.Result{}, nil
+	}
+
 	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	strategy := registry.NewStrategy(r.StrategyName, rng)
 	logger.V(1).Info("registry iteration strategy", "strategy", strategy.Name())
+
+	selected := &operatorv1alpha1.SelectedSources{}
+	succeeded := true
 
 	for _, name := range operatorv1alpha1.AllUpgradeComponents {
 		comp, present := prepare.Spec.Images.Component(name)
@@ -67,12 +75,10 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 		for _, res := range results {
 			switch res.State {
 			case registry.StateValid:
-				// counted via the reachable total below
 			case registry.StateUnreachable:
 				unreachable++
 				logger.Info("registry unreachable", "component", name, "image", res.Image, "error", res.Err)
 			case registry.StateHashMismatch:
-				// emitted per-registry (unlike aggregated unreachable) so each tampered image is named
 				logger.Info("registry failed layer hash verification", "component", name, "image", res.Image, "error", res.Err)
 				r.event(&prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
 					"%s: registry %s failed layer hash verification: %v", name, res.Image, res.Err)
@@ -92,8 +98,53 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 			r.event(&prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryUnreachable,
 				"%s: %d/%d registries unreachable", name, unreachable, len(results))
 		}
+
+		winner, ok := registry.SelectValid(results, rng)
+		if !ok {
+			r.event(&prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
+				"%s: no valid registry available", name)
+			succeeded = false
+			continue
+		}
+		selected.Set(name, &operatorv1alpha1.SelectedSource{
+			Image:               winner.Image,
+			Digest:              winner.Digest,
+			LayerHashesVerified: winner.LayerHashesVerified,
+		})
+		r.event(&prepare, corev1.EventTypeNormal, operatorv1alpha1.EventRegistrySelected,
+			"%s: selected %s (digest: %s, layerHashesVerified: %v)", name, winner.Image, winner.Digest, winner.LayerHashesVerified)
 	}
 
+	prepare.Status.ObservedGeneration = prepare.Generation
+
+	if succeeded {
+		now := metav1.Now()
+		prepare.Status.CompletionTime = &now
+		prepare.Status.Phase = operatorv1alpha1.PhaseSucceeded
+		prepare.Status.SelectedSources = selected
+		setCondition(&prepare.Status.Conditions, metav1.Condition{
+			Type:    operatorv1alpha1.CondRegistrySelected,
+			Status:  metav1.ConditionTrue,
+			Reason:  operatorv1alpha1.ReasonSelectionComplete,
+			Message: "registry selected for all components",
+		})
+	} else {
+		prepare.Status.Phase = operatorv1alpha1.PhaseRunning
+		setCondition(&prepare.Status.Conditions, metav1.Condition{
+			Type:    operatorv1alpha1.CondRegistrySelected,
+			Status:  metav1.ConditionFalse,
+			Reason:  operatorv1alpha1.ReasonRegistryInvalid,
+			Message: "no valid registry available for one or more components",
+		})
+	}
+
+	if err := r.Status().Update(ctx, &prepare); err != nil {
+		return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+	}
+
+	if !succeeded {
+		return ctrl.Result{}, fmt.Errorf("no valid registry for one or more components")
+	}
 	return ctrl.Result{}, nil
 }
 
