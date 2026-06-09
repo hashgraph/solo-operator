@@ -125,8 +125,12 @@ func TestPrepareReconcile_AuditEventAllReachable(t *testing.T) {
 func TestPrepareReconcile_SkipsDisabledComponent(t *testing.T) {
 	res := reconcilePrepare(t, newPrepareForTest(), newPrepareChecker(nil, nil))
 
-	if got := countContaining(res.events, "recordStreamUploader"); got != 0 {
-		t.Errorf("disabled component should produce no events, got %d in %v", got, res.events)
+	// enabled=false → SidecarDisabled event, but no registry audit.
+	if got := countContaining(res.events, "SidecarDisabled recordStreamUploader"); got != 1 {
+		t.Errorf("expected one SidecarDisabled event for disabled RSU, got %d in %v", got, res.events)
+	}
+	if got := countContaining(res.events, "RegistryAuditComplete recordStreamUploader"); got != 0 {
+		t.Errorf("disabled component should not trigger registry audit, got %d in %v", got, res.events)
 	}
 }
 
@@ -215,7 +219,7 @@ func TestPrepareReconcile_Success(t *testing.T) {
 	})
 }
 
-func TestPrepareReconcile_AllInvalidFails(t *testing.T) {
+func TestPrepareReconcile_AllInvalidRetries(t *testing.T) {
 	checker := newPrepareChecker(map[string]bool{
 		"gcr.io/a/cn:0.62.0":  true,
 		"ghcr.io/b/cn:0.62.0": true,
@@ -226,8 +230,9 @@ func TestPrepareReconcile_AllInvalidFails(t *testing.T) {
 	if res.err == nil {
 		t.Error("expected error when no valid registry")
 	}
-	if res.prepare.Status.Phase != operatorv1alpha1.PhaseFailed {
-		t.Errorf("expected phase Failed, got %s", res.prepare.Status.Phase)
+	// Registry failures are transient — phase stays Running for retry.
+	if res.prepare.Status.Phase != operatorv1alpha1.PhaseRunning {
+		t.Errorf("expected phase Running (retryable), got %s", res.prepare.Status.Phase)
 	}
 	if res.prepare.Status.SelectedSources != nil && res.prepare.Status.SelectedSources.ConsensusNode != nil {
 		t.Error("should not set selectedSources when no valid registry")
@@ -278,7 +283,7 @@ func TestPrepareReconcile_AlreadySucceededIsNoOp(t *testing.T) {
 }
 
 func TestPrepareReconcile_SetsStartTime(t *testing.T) {
-	res := reconcilePrepare(t, newPrepareForTest(), fakePrepareChecker{})
+	res := reconcilePrepare(t, newPrepareForTest(), newPrepareChecker(nil, nil))
 
 	if res.prepare.Status.StartTime == nil {
 		t.Error("expected StartTime to be set")
@@ -286,7 +291,7 @@ func TestPrepareReconcile_SetsStartTime(t *testing.T) {
 }
 
 func TestPrepareReconcile_SetsManifestValidatedCondition(t *testing.T) {
-	res := reconcilePrepare(t, newPrepareForTest(), fakePrepareChecker{})
+	res := reconcilePrepare(t, newPrepareForTest(), newPrepareChecker(nil, nil))
 
 	cond := findCondition(res.prepare.Status.Conditions, operatorv1alpha1.CondManifestValidated)
 	if cond == nil {
@@ -301,7 +306,7 @@ func TestPrepareReconcile_SetsManifestValidatedCondition(t *testing.T) {
 }
 
 func TestPrepareReconcile_SetsImageValidationConditionTrue(t *testing.T) {
-	res := reconcilePrepare(t, newPrepareForTest(), fakePrepareChecker{})
+	res := reconcilePrepare(t, newPrepareForTest(), newPrepareChecker(nil, nil))
 
 	cond := findCondition(res.prepare.Status.Conditions, operatorv1alpha1.CondImageValidation)
 	if cond == nil {
@@ -316,9 +321,13 @@ func TestPrepareReconcile_SetsImageValidationConditionTrue(t *testing.T) {
 }
 
 func TestPrepareReconcile_SetsImageValidationConditionFalse_OnHashMismatch(t *testing.T) {
-	checker := fakePrepareChecker{mismatch: map[string]bool{"ghcr.io/b/cn:0.62.0": true}}
+	checker := newPrepareChecker(nil, map[string]bool{"ghcr.io/b/cn:0.62.0": true})
 	res := reconcilePrepare(t, newPrepareForTest(), checker)
 
+	// Hash mismatch: a winner is still selected (other registries valid), but allHashesValid=false.
+	if res.prepare.Status.Phase != operatorv1alpha1.PhaseSucceeded {
+		t.Errorf("expected phase Succeeded even with hash mismatch (winner selected), got %s", res.prepare.Status.Phase)
+	}
 	cond := findCondition(res.prepare.Status.Conditions, operatorv1alpha1.CondImageValidation)
 	if cond == nil {
 		t.Fatal("ImageValidation condition not set")
@@ -345,7 +354,7 @@ func TestPrepareReconcile_PhaseFailedOnAllInvalid_IsNoOp(t *testing.T) {
 	rec := events.NewFakeRecorder(16)
 	r := NewNetworkUpgradePrepareReconciler(c, scheme)
 	r.Recorder = rec
-	r.Checker = fakePrepareChecker{}
+	r.Checker = newPrepareChecker(nil, nil)
 
 	if _, err := r.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: client.ObjectKeyFromObject(prepare),
@@ -360,5 +369,89 @@ func TestPrepareReconcile_PhaseFailedOnAllInvalid_IsNoOp(t *testing.T) {
 	}
 	if len(recorded) != 0 {
 		t.Errorf("already-failed CR should emit no events, got %v", recorded)
+	}
+}
+
+func TestPrepareReconcile_EmitsComponentSkipped(t *testing.T) {
+	prepare := newPrepareForTest()
+	// Remove the optional recordStreamUploader entirely to trigger ComponentSkipped.
+	prepare.Spec.Images.RecordStreamUploader = nil
+	res := reconcilePrepare(t, prepare, newPrepareChecker(nil, nil))
+
+	if got := countContaining(res.events, "ComponentSkipped recordStreamUploader"); got != 1 {
+		t.Errorf("expected one ComponentSkipped event for recordStreamUploader, got %d in %v", got, res.events)
+	}
+}
+
+func TestPrepareReconcile_EmitsSidecarDisabled(t *testing.T) {
+	res := reconcilePrepare(t, newPrepareForTest(), newPrepareChecker(nil, nil))
+
+	// newPrepareForTest has RSU present with enabled=false → SidecarDisabled.
+	if got := countContaining(res.events, "SidecarDisabled recordStreamUploader"); got != 1 {
+		t.Errorf("expected one SidecarDisabled event for recordStreamUploader, got %d in %v", got, res.events)
+	}
+}
+
+func TestPrepareReconcile_DuplicateOperationID_SetsPhaseFailed(t *testing.T) {
+	scheme := newControllerTestScheme()
+
+	existing := newPrepareForTest()
+	existing.Name = "existing"
+	existing.UID = "uid-existing"
+
+	prepare := newPrepareForTest()
+	prepare.Name = "duplicate"
+	prepare.UID = "uid-duplicate"
+
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(existing, prepare).
+		WithStatusSubresource(existing, prepare).
+		Build()
+
+	rec := events.NewFakeRecorder(16)
+	r := NewNetworkUpgradePrepareReconciler(c, scheme)
+	r.Recorder = rec
+	r.Checker = newPrepareChecker(nil, nil)
+
+	// Advance "duplicate" to Running phase so uniqueness check runs.
+	dup := prepare.DeepCopy()
+	dup.Status.Phase = operatorv1alpha1.PhaseRunning
+	if err := c.Status().Update(context.Background(), dup); err != nil {
+		t.Fatalf("pre-set phase: %v", err)
+	}
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: client.ObjectKey{Name: "duplicate", Namespace: "test"},
+	})
+	if err == nil {
+		t.Error("expected error for duplicate operationId")
+	}
+
+	var got operatorv1alpha1.NetworkUpgradePrepare
+	if getErr := c.Get(context.Background(), client.ObjectKey{Name: "duplicate", Namespace: "test"}, &got); getErr != nil {
+		t.Fatalf("get: %v", getErr)
+	}
+	if got.Status.Phase != operatorv1alpha1.PhaseFailed {
+		t.Errorf("expected PhaseFailed for duplicate operationId, got %s", got.Status.Phase)
+	}
+	cond := findCondition(got.Status.Conditions, operatorv1alpha1.CondManifestValidated)
+	if cond == nil {
+		t.Fatal("ManifestValidated condition not set")
+	}
+	if cond.Status != metav1.ConditionFalse {
+		t.Errorf("expected ManifestValidated=False, got %s", cond.Status)
+	}
+	if cond.Reason != operatorv1alpha1.ReasonDuplicateOpID {
+		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonDuplicateOpID, cond.Reason)
+	}
+
+	close(rec.Events)
+	var recorded []string
+	for e := range rec.Events {
+		recorded = append(recorded, e)
+	}
+	if got := countContaining(recorded, "ManifestInvalid"); got != 1 {
+		t.Errorf("expected one ManifestInvalid event, got %d in %v", got, recorded)
 	}
 }

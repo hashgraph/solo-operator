@@ -420,10 +420,8 @@ spec:
                             type: string
                           type: array
                         description: |-
-                          LayerHashes are the expected per-platform layer hashes that were used to
-                          verify this image. Stored here so re-validation can check against the same
-                          hashes without re-scanning comp.Registries on every reconcile.
-                          Keyed by platform ("linux/amd64", "linux/arm64").
+                          LayerHashes stores the per-platform hashes used during initial selection so
+                          re-validation doesn't need to re-scan comp.Registries. Keyed by platform.
                         type: object
                       layerHashesVerified:
                         description: |-
@@ -453,10 +451,8 @@ spec:
                             type: string
                           type: array
                         description: |-
-                          LayerHashes are the expected per-platform layer hashes that were used to
-                          verify this image. Stored here so re-validation can check against the same
-                          hashes without re-scanning comp.Registries on every reconcile.
-                          Keyed by platform ("linux/amd64", "linux/arm64").
+                          LayerHashes stores the per-platform hashes used during initial selection so
+                          re-validation doesn't need to re-scan comp.Registries. Keyed by platform.
                         type: object
                       layerHashesVerified:
                         description: |-
@@ -486,10 +482,8 @@ spec:
                             type: string
                           type: array
                         description: |-
-                          LayerHashes are the expected per-platform layer hashes that were used to
-                          verify this image. Stored here so re-validation can check against the same
-                          hashes without re-scanning comp.Registries on every reconcile.
-                          Keyed by platform ("linux/amd64", "linux/arm64").
+                          LayerHashes stores the per-platform hashes used during initial selection so
+                          re-validation doesn't need to re-scan comp.Registries. Keyed by platform.
                         type: object
                       layerHashesVerified:
                         description: |-
@@ -519,10 +513,8 @@ spec:
                             type: string
                           type: array
                         description: |-
-                          LayerHashes are the expected per-platform layer hashes that were used to
-                          verify this image. Stored here so re-validation can check against the same
-                          hashes without re-scanning comp.Registries on every reconcile.
-                          Keyed by platform ("linux/amd64", "linux/arm64").
+                          LayerHashes stores the per-platform hashes used during initial selection so
+                          re-validation doesn't need to re-scan comp.Registries. Keyed by platform.
                         type: object
                       layerHashesVerified:
                         description: |-
@@ -552,10 +544,8 @@ spec:
                             type: string
                           type: array
                         description: |-
-                          LayerHashes are the expected per-platform layer hashes that were used to
-                          verify this image. Stored here so re-validation can check against the same
-                          hashes without re-scanning comp.Registries on every reconcile.
-                          Keyed by platform ("linux/amd64", "linux/arm64").
+                          LayerHashes stores the per-platform hashes used during initial selection so
+                          re-validation doesn't need to re-scan comp.Registries. Keyed by platform.
                         type: object
                       layerHashesVerified:
                         description: |-
@@ -585,10 +575,8 @@ spec:
                             type: string
                           type: array
                         description: |-
-                          LayerHashes are the expected per-platform layer hashes that were used to
-                          verify this image. Stored here so re-validation can check against the same
-                          hashes without re-scanning comp.Registries on every reconcile.
-                          Keyed by platform ("linux/amd64", "linux/arm64").
+                          LayerHashes stores the per-platform hashes used during initial selection so
+                          re-validation doesn't need to re-scan comp.Registries. Keyed by platform.
                         type: object
                       layerHashesVerified:
                         description: |-
@@ -704,10 +692,8 @@ spec:
                             type: string
                           type: array
                         description: |-
-                          LayerHashes are the expected per-platform layer hashes that were used to
-                          verify this image. Stored here so re-validation can check against the same
-                          hashes without re-scanning comp.Registries on every reconcile.
-                          Keyed by platform ("linux/amd64", "linux/arm64").
+                          LayerHashes stores the per-platform hashes used during initial selection so
+                          re-validation doesn't need to re-scan comp.Registries. Keyed by platform.
                         type: object
                       layerHashesVerified:
                         description: |-
@@ -737,10 +723,8 @@ spec:
                             type: string
                           type: array
                         description: |-
-                          LayerHashes are the expected per-platform layer hashes that were used to
-                          verify this image. Stored here so re-validation can check against the same
-                          hashes without re-scanning comp.Registries on every reconcile.
-                          Keyed by platform ("linux/amd64", "linux/arm64").
+                          LayerHashes stores the per-platform hashes used during initial selection so
+                          re-validation doesn't need to re-scan comp.Registries. Keyed by platform.
                         type: object
                       layerHashesVerified:
                         description: |-
@@ -770,10 +754,8 @@ spec:
                             type: string
                           type: array
                         description: |-
-                          LayerHashes are the expected per-platform layer hashes that were used to
-                          verify this image. Stored here so re-validation can check against the same
-                          hashes without re-scanning comp.Registries on every reconcile.
-                          Keyed by platform ("linux/amd64", "linux/arm64").
+                          LayerHashes stores the per-platform hashes used during initial selection so
+                          re-validation doesn't need to re-scan comp.Registries. Keyed by platform.
                         type: object
                       layerHashesVerified:
                         description: |-
@@ -803,10 +785,8 @@ spec:
                             type: string
                           type: array
                         description: |-
-                          LayerHashes are the expected per-platform layer hashes that were used to
-                          verify this image. Stored here so re-validation can check against the same
-                          hashes without re-scanning comp.Registries on every reconcile.
-                          Keyed by platform ("linux/amd64", "linux/arm64").
+                          LayerHashes stores the per-platform hashes used during initial selection so
+                          re-validation doesn't need to re-scan comp.Registries. Keyed by platform.
                         type: object
                       layerHashesVerified:
                         description: |-
@@ -836,10 +816,8 @@ spec:
                             type: string
                           type: array
                         description: |-
-                          LayerHashes are the expected per-platform layer hashes that were used to
-                          verify this image. Stored here so re-validation can check against the same
-                          hashes without re-scanning comp.Registries on every reconcile.
-                          Keyed by platform ("linux/amd64", "linux/arm64").
+                          LayerHashes stores the per-platform hashes used during initial selection so
+                          re-validation doesn't need to re-scan comp.Registries. Keyed by platform.
                         type: object
                       layerHashesVerified:
                         description: |-
@@ -869,10 +847,8 @@ spec:
                             type: string
                           type: array
                         description: |-
-                          LayerHashes are the expected per-platform layer hashes that were used to
-                          verify this image. Stored here so re-validation can check against the same
-                          hashes without re-scanning comp.Registries on every reconcile.
-                          Keyed by platform ("linux/amd64", "linux/arm64").
+                          LayerHashes stores the per-platform hashes used during initial selection so
+                          re-validation doesn't need to re-scan comp.Registries. Keyed by platform.
                         type: object
                       layerHashesVerified:
                         description: |-

@@ -62,14 +62,49 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, nil
 	}
 
+	// Pending → Running: set StartTime and record that work has begun.
 	if prepare.Status.Phase == "" {
 		now := metav1.Now()
 		prepare.Status.StartTime = &now
-		prepare.Status.Phase = operatorv1alpha1.PhaseRunning
+		prepare.Status.Phase = operatorv1alpha1.PhasePending
 		if err := r.Status().Update(ctx, &prepare); err != nil {
 			return ctrl.Result{}, fmt.Errorf("initializing status: %w", err)
 		}
 		return ctrl.Result{Requeue: true}, nil
+	}
+
+	if prepare.Status.Phase == operatorv1alpha1.PhasePending {
+		prepare.Status.Phase = operatorv1alpha1.PhaseRunning
+		if err := r.Status().Update(ctx, &prepare); err != nil {
+			return ctrl.Result{}, fmt.Errorf("setting phase Running: %w", err)
+		}
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// Step 1: validate operationId uniqueness within the namespace.
+	var siblings operatorv1alpha1.NetworkUpgradePrepareList
+	if err := r.List(ctx, &siblings, client.InNamespace(prepare.Namespace)); err != nil {
+		return ctrl.Result{}, fmt.Errorf("listing siblings: %w", err)
+	}
+	for _, s := range siblings.Items {
+		if s.UID == prepare.UID || s.Spec.OperationID != prepare.Spec.OperationID {
+			continue
+		}
+		msg := fmt.Sprintf("operationId %q already used by %s/%s", prepare.Spec.OperationID, s.Namespace, s.Name)
+		r.event(&prepare, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
+		prepare.Status.Phase = operatorv1alpha1.PhaseFailed
+		prepare.Status.ObservedGeneration = prepare.Generation
+		setCondition(&prepare.Status.Conditions, metav1.Condition{
+			Type:               operatorv1alpha1.CondManifestValidated,
+			Status:             metav1.ConditionFalse,
+			Reason:             operatorv1alpha1.ReasonDuplicateOpID,
+			Message:            msg,
+			ObservedGeneration: prepare.Generation,
+		})
+		if err := r.Status().Update(ctx, &prepare); err != nil {
+			return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+		}
+		return ctrl.Result{}, fmt.Errorf("%s", msg)
 	}
 
 	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
@@ -82,7 +117,14 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 
 	for _, name := range operatorv1alpha1.AllUpgradeComponents {
 		comp, present := prepare.Spec.Images.Component(name)
-		if !present || (comp.Enabled != nil && !*comp.Enabled) {
+		if !present {
+			r.event(&prepare, corev1.EventTypeNormal, operatorv1alpha1.EventComponentSkipped,
+				"%s: omitted from manifest; current image left unchanged", name)
+			continue
+		}
+		if comp.Enabled != nil && !*comp.Enabled {
+			r.event(&prepare, corev1.EventTypeNormal, operatorv1alpha1.EventSidecarDisabled,
+				"%s: enabled=false; sidecar will be removed on execute", name)
 			continue
 		}
 
@@ -173,7 +215,9 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 			ObservedGeneration: prepare.Generation,
 		})
 	} else {
-		prepare.Status.Phase = operatorv1alpha1.PhaseFailed
+		// Registry failures are transient — stay Running and let controller-runtime
+		// requeue with backoff. PhaseFailed is only set for non-recoverable errors
+		// (e.g. duplicate operationId above).
 		setCondition(&prepare.Status.Conditions, metav1.Condition{
 			Type:               operatorv1alpha1.CondRegistrySelected,
 			Status:             metav1.ConditionFalse,

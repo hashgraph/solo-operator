@@ -57,7 +57,6 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, nil
 	}
 
-	// Re-validation runs unconditionally to catch registry rot since Prepare.
 	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 
 	updated := &operatorv1alpha1.SelectedSources{}
@@ -96,9 +95,11 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 
 	freeze.Status.ObservedGeneration = freeze.Generation
 
-	freeze.Status.SelectedSources = updated
-
 	if succeeded {
+		now := metav1.Now()
+		freeze.Status.CompletionTime = &now
+		freeze.Status.Phase = operatorv1alpha1.PhaseSucceeded
+		freeze.Status.SelectedSources = updated
 		setCondition(&freeze.Status.Conditions, metav1.Condition{
 			Type:    operatorv1alpha1.CondRegistryHealthCheck,
 			Status:  metav1.ConditionTrue,

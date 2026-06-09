@@ -153,7 +153,6 @@ var _ = Describe("NetworkUpgradePrepare Controller", func() {
 
 		key := types.NamespacedName{Name: nupName, Namespace: ns}
 
-		// "unreachable" in the image name triggers StateUnreachable in selectiveImageChecker.
 		nup := &operatorv1alpha1.NetworkUpgradePrepare{
 			ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns},
 			Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
@@ -236,13 +235,13 @@ var _ = Describe("NetworkUpgradePrepare Controller", func() {
 			Expect(k8sClient.Delete(ctx, nup.DeepCopy())).To(Succeed())
 		})
 
-		It("reaches Failed, sets RegistrySelected=False, emits RegistryInvalid, and skips selectedSources", func() {
-			By("reaching Failed phase")
+		It("stays Running, sets RegistrySelected=False, emits RegistryInvalid, and skips selectedSources", func() {
+			By("reaching Running phase (registry failures are retryable)")
 			Eventually(func() operatorv1alpha1.Phase {
 				got := &operatorv1alpha1.NetworkUpgradePrepare{}
 				_ = k8sClient.Get(ctx, key, got)
 				return got.Status.Phase
-			}, timeout, interval).Should(Equal(operatorv1alpha1.PhaseFailed))
+			}, timeout, interval).Should(Equal(operatorv1alpha1.PhaseRunning))
 
 			got := &operatorv1alpha1.NetworkUpgradePrepare{}
 			Expect(k8sClient.Get(ctx, key, got)).To(Succeed())
@@ -256,24 +255,9 @@ var _ = Describe("NetworkUpgradePrepare Controller", func() {
 			By("not populating selectedSources")
 			Expect(got.Status.SelectedSources).To(BeNil())
 		})
-
-		It("stays Failed on re-reconcile (terminal)", func() {
-			Eventually(func() operatorv1alpha1.Phase {
-				got := &operatorv1alpha1.NetworkUpgradePrepare{}
-				_ = k8sClient.Get(ctx, key, got)
-				return got.Status.Phase
-			}, timeout, interval).Should(Equal(operatorv1alpha1.PhaseFailed))
-
-			Consistently(func() operatorv1alpha1.Phase {
-				got := &operatorv1alpha1.NetworkUpgradePrepare{}
-				_ = k8sClient.Get(ctx, key, got)
-				return got.Status.Phase
-			}, timeout/3, interval).Should(Equal(operatorv1alpha1.PhaseFailed))
-		})
 	})
 })
 
-// conditionTrue returns true when the named condition has Status=True.
 func conditionTrue(conds []operatorv1alpha1.Condition, condType string) bool {
 	for _, c := range conds {
 		if c.Type == condType {
@@ -283,7 +267,6 @@ func conditionTrue(conds []operatorv1alpha1.Condition, condType string) bool {
 	return false
 }
 
-// conditionFalse returns true when the named condition has Status=False.
 func conditionFalse(conds []operatorv1alpha1.Condition, condType string) bool {
 	for _, c := range conds {
 		if c.Type == condType {
