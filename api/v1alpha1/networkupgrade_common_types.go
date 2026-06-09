@@ -113,39 +113,36 @@ type SelectedSources struct {
 	UC *SelectedSource `json:"uc,omitempty"`
 }
 
-func (s *SelectedSources) Set(name ComponentName, src *SelectedSource) {
+func (s *SelectedSources) field(name ComponentName) **SelectedSource {
 	switch name {
 	case ComponentConsensusNode:
-		s.ConsensusNode = src
+		return &s.ConsensusNode
 	case ComponentRecordStreamUploader:
-		s.RecordStreamUploader = src
+		return &s.RecordStreamUploader
 	case ComponentEventStreamUploader:
-		s.EventStreamUploader = src
+		return &s.EventStreamUploader
 	case ComponentBlockStreamUploader:
-		s.BlockStreamUploader = src
+		return &s.BlockStreamUploader
 	case ComponentBackupUploader:
-		s.BackupUploader = src
+		return &s.BackupUploader
 	case ComponentUC:
-		s.UC = src
+		return &s.UC
+	default:
+		return nil
 	}
 }
 
 func (s *SelectedSources) Get(name ComponentName) *SelectedSource {
-	switch name {
-	case ComponentConsensusNode:
-		return s.ConsensusNode
-	case ComponentRecordStreamUploader:
-		return s.RecordStreamUploader
-	case ComponentEventStreamUploader:
-		return s.EventStreamUploader
-	case ComponentBlockStreamUploader:
-		return s.BlockStreamUploader
-	case ComponentBackupUploader:
-		return s.BackupUploader
-	case ComponentUC:
-		return s.UC
+	if f := s.field(name); f != nil {
+		return *f
 	}
 	return nil
+}
+
+func (s *SelectedSources) Set(name ComponentName, src *SelectedSource) {
+	if f := s.field(name); f != nil {
+		*f = src
+	}
 }
 
 // Sha256Digest is an OCI sha256 digest ("sha256:" + 64 lowercase hex chars).
