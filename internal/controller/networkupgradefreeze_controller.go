@@ -36,6 +36,11 @@ func NewNetworkUpgradeFreezeReconciler(c client.Client, scheme *runtime.Scheme) 
 	}
 }
 
+func (r *NetworkUpgradeFreezeReconciler) WithStrategy(name string) *NetworkUpgradeFreezeReconciler {
+	r.StrategyName = name
+	return r
+}
+
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradefreezes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradefreezes/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradefreezes/finalizers,verbs=update
@@ -52,6 +57,7 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, nil
 	}
 
+	// Re-validation runs unconditionally to catch registry rot since Prepare.
 	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 
 	updated := &operatorv1alpha1.SelectedSources{}

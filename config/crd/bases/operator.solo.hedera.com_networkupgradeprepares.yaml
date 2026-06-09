@@ -489,6 +489,20 @@ spec:
                         type: string
                       image:
                         type: string
+                      layerHashes:
+                        additionalProperties:
+                          items:
+                            description: Sha256Digest is an OCI sha256 digest ("sha256:"
+                              + 64 lowercase hex chars).
+                            pattern: ^sha256:[a-f0-9]{64}$
+                            type: string
+                          type: array
+                        description: |-
+                          LayerHashes are the expected per-platform layer hashes that were used to
+                          verify this image. Stored here so re-validation can check against the same
+                          hashes without re-scanning comp.Registries on every reconcile.
+                          Keyed by platform ("linux/amd64", "linux/arm64").
+                        type: object
                       layerHashesVerified:
                         description: |-
                           LayerHashesVerified is true when expected hashes were configured and matched
@@ -508,6 +522,20 @@ spec:
                         type: string
                       image:
                         type: string
+                      layerHashes:
+                        additionalProperties:
+                          items:
+                            description: Sha256Digest is an OCI sha256 digest ("sha256:"
+                              + 64 lowercase hex chars).
+                            pattern: ^sha256:[a-f0-9]{64}$
+                            type: string
+                          type: array
+                        description: |-
+                          LayerHashes are the expected per-platform layer hashes that were used to
+                          verify this image. Stored here so re-validation can check against the same
+                          hashes without re-scanning comp.Registries on every reconcile.
+                          Keyed by platform ("linux/amd64", "linux/arm64").
+                        type: object
                       layerHashesVerified:
                         description: |-
                           LayerHashesVerified is true when expected hashes were configured and matched
@@ -527,6 +555,20 @@ spec:
                         type: string
                       image:
                         type: string
+                      layerHashes:
+                        additionalProperties:
+                          items:
+                            description: Sha256Digest is an OCI sha256 digest ("sha256:"
+                              + 64 lowercase hex chars).
+                            pattern: ^sha256:[a-f0-9]{64}$
+                            type: string
+                          type: array
+                        description: |-
+                          LayerHashes are the expected per-platform layer hashes that were used to
+                          verify this image. Stored here so re-validation can check against the same
+                          hashes without re-scanning comp.Registries on every reconcile.
+                          Keyed by platform ("linux/amd64", "linux/arm64").
+                        type: object
                       layerHashesVerified:
                         description: |-
                           LayerHashesVerified is true when expected hashes were configured and matched
@@ -546,6 +588,20 @@ spec:
                         type: string
                       image:
                         type: string
+                      layerHashes:
+                        additionalProperties:
+                          items:
+                            description: Sha256Digest is an OCI sha256 digest ("sha256:"
+                              + 64 lowercase hex chars).
+                            pattern: ^sha256:[a-f0-9]{64}$
+                            type: string
+                          type: array
+                        description: |-
+                          LayerHashes are the expected per-platform layer hashes that were used to
+                          verify this image. Stored here so re-validation can check against the same
+                          hashes without re-scanning comp.Registries on every reconcile.
+                          Keyed by platform ("linux/amd64", "linux/arm64").
+                        type: object
                       layerHashesVerified:
                         description: |-
                           LayerHashesVerified is true when expected hashes were configured and matched
@@ -565,6 +621,20 @@ spec:
                         type: string
                       image:
                         type: string
+                      layerHashes:
+                        additionalProperties:
+                          items:
+                            description: Sha256Digest is an OCI sha256 digest ("sha256:"
+                              + 64 lowercase hex chars).
+                            pattern: ^sha256:[a-f0-9]{64}$
+                            type: string
+                          type: array
+                        description: |-
+                          LayerHashes are the expected per-platform layer hashes that were used to
+                          verify this image. Stored here so re-validation can check against the same
+                          hashes without re-scanning comp.Registries on every reconcile.
+                          Keyed by platform ("linux/amd64", "linux/arm64").
+                        type: object
                       layerHashesVerified:
                         description: |-
                           LayerHashesVerified is true when expected hashes were configured and matched
@@ -584,6 +654,20 @@ spec:
                         type: string
                       image:
                         type: string
+                      layerHashes:
+                        additionalProperties:
+                          items:
+                            description: Sha256Digest is an OCI sha256 digest ("sha256:"
+                              + 64 lowercase hex chars).
+                            pattern: ^sha256:[a-f0-9]{64}$
+                            type: string
+                          type: array
+                        description: |-
+                          LayerHashes are the expected per-platform layer hashes that were used to
+                          verify this image. Stored here so re-validation can check against the same
+                          hashes without re-scanning comp.Registries on every reconcile.
+                          Keyed by platform ("linux/amd64", "linux/arm64").
+                        type: object
                       layerHashesVerified:
                         description: |-
                           LayerHashesVerified is true when expected hashes were configured and matched

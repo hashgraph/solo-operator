@@ -26,7 +26,10 @@ func RevalidateAndFailover(
 	rng *rand.Rand,
 	strategyName string,
 ) (FailoverResult, error) {
-	spec := operatorv1alpha1.UpgradeRegistrySpec{Image: current.Image}
+	// Use stored hashes so non-deterministic components don't get StateNoHashes
+	// from an empty spec and trigger a spurious failover.
+	spec := specForSource(comp, current)
+
 	cctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -43,13 +46,36 @@ func RevalidateAndFailover(
 		return FailoverResult{}, fmt.Errorf("no valid registry available for component (original %s unreachable)", current.Image)
 	}
 
+	winnerSpec := SpecForImage(comp, winner.Image)
 	return FailoverResult{
 		Selected: operatorv1alpha1.SelectedSource{
 			Image:               winner.Image,
 			Digest:              winner.Digest,
 			LayerHashesVerified: winner.LayerHashesVerified,
+			LayerHashes:         winnerSpec.LayerHashes,
 		},
 		DidFailover: true,
 		FailedImage: current.Image,
 	}, nil
+}
+
+// specForSource builds the spec for re-checking the current source. Prefers
+// hashes stored on current; falls back to comp.Registries for older objects
+// that predate the LayerHashes field.
+func specForSource(comp operatorv1alpha1.UpgradeComponentSpec, current operatorv1alpha1.SelectedSource) operatorv1alpha1.UpgradeRegistrySpec {
+	if len(current.LayerHashes) > 0 {
+		return operatorv1alpha1.UpgradeRegistrySpec{Image: current.Image, LayerHashes: current.LayerHashes}
+	}
+	return SpecForImage(comp, current.Image)
+}
+
+// SpecForImage returns the matching UpgradeRegistrySpec from comp.Registries,
+// or a bare spec if no match is found.
+func SpecForImage(comp operatorv1alpha1.UpgradeComponentSpec, image string) operatorv1alpha1.UpgradeRegistrySpec {
+	for _, r := range comp.Registries {
+		if r.Image == image {
+			return r
+		}
+	}
+	return operatorv1alpha1.UpgradeRegistrySpec{Image: image}
 }

@@ -113,38 +113,35 @@ type SelectedSources struct {
 	UC *SelectedSource `json:"uc,omitempty"`
 }
 
-func (s *SelectedSources) Get(name ComponentName) *SelectedSource {
+func (s *SelectedSources) field(name ComponentName) **SelectedSource {
 	switch name {
 	case ComponentConsensusNode:
-		return s.ConsensusNode
+		return &s.ConsensusNode
 	case ComponentRecordStreamUploader:
-		return s.RecordStreamUploader
+		return &s.RecordStreamUploader
 	case ComponentEventStreamUploader:
-		return s.EventStreamUploader
+		return &s.EventStreamUploader
 	case ComponentBlockStreamUploader:
-		return s.BlockStreamUploader
+		return &s.BlockStreamUploader
 	case ComponentBackupUploader:
-		return s.BackupUploader
+		return &s.BackupUploader
 	case ComponentUC:
-		return s.UC
+		return &s.UC
+	default:
+		return nil
+	}
+}
+
+func (s *SelectedSources) Get(name ComponentName) *SelectedSource {
+	if f := s.field(name); f != nil {
+		return *f
 	}
 	return nil
 }
 
 func (s *SelectedSources) Set(name ComponentName, src *SelectedSource) {
-	switch name {
-	case ComponentConsensusNode:
-		s.ConsensusNode = src
-	case ComponentRecordStreamUploader:
-		s.RecordStreamUploader = src
-	case ComponentEventStreamUploader:
-		s.EventStreamUploader = src
-	case ComponentBlockStreamUploader:
-		s.BlockStreamUploader = src
-	case ComponentBackupUploader:
-		s.BackupUploader = src
-	case ComponentUC:
-		s.UC = src
+	if f := s.field(name); f != nil {
+		*f = src
 	}
 }
 
@@ -158,6 +155,10 @@ type SelectedSource struct {
 	// LayerHashesVerified is true when expected hashes were configured and matched
 	// what the registry served; false when no hashes were configured or on mismatch.
 	LayerHashesVerified bool `json:"layerHashesVerified"`
+	// LayerHashes stores the per-platform hashes used during initial selection so
+	// re-validation doesn't need to re-scan comp.Registries. Keyed by platform.
+	// +optional
+	LayerHashes map[string][]Sha256Digest `json:"layerHashes,omitempty"`
 }
 
 // Labels linking all CRs of one upgrade operation.

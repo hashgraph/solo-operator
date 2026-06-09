@@ -4,7 +4,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -17,29 +16,6 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/registry"
 )
-
-// fakePrepareChecker reports every registry Valid except those listed as
-// unreachable or hash-mismatched. Valid results carry a synthetic digest.
-type fakePrepareChecker struct {
-	unreachable map[string]bool
-	mismatch    map[string]bool
-}
-
-func (c fakePrepareChecker) Check(_ context.Context, spec operatorv1alpha1.UpgradeRegistrySpec, _ operatorv1alpha1.UpgradeDeterministicSpec) registry.RegistryResult {
-	switch {
-	case c.unreachable[spec.Image]:
-		return registry.RegistryResult{Image: spec.Image, State: registry.StateUnreachable, Err: fmt.Errorf("unreachable")}
-	case c.mismatch[spec.Image]:
-		return registry.RegistryResult{Image: spec.Image, State: registry.StateHashMismatch, Err: fmt.Errorf("hash mismatch")}
-	default:
-		return registry.RegistryResult{
-			Image:               spec.Image,
-			State:               registry.StateValid,
-			Digest:              "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-			LayerHashesVerified: true,
-		}
-	}
-}
 
 func boolPtr(b bool) *bool { return &b }
 
@@ -129,8 +105,14 @@ func countContaining(recorded []string, substr string) int {
 	return n
 }
 
+const prepareDefaultDigest = operatorv1alpha1.Sha256Digest("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+
+func newPrepareChecker(unreachable, mismatch map[string]bool) fakeUpgradeChecker {
+	return fakeUpgradeChecker{unreachable: unreachable, mismatch: mismatch, defaultDigest: prepareDefaultDigest}
+}
+
 func TestPrepareReconcile_AuditEventAllReachable(t *testing.T) {
-	res := reconcilePrepare(t, newPrepareForTest(), fakePrepareChecker{})
+	res := reconcilePrepare(t, newPrepareForTest(), newPrepareChecker(nil, nil))
 
 	if got := countContaining(res.events, "RegistryAuditComplete consensusNode: 3/3 registries reachable"); got != 1 {
 		t.Errorf("expected one consensusNode audit-complete event, got %d in %v", got, res.events)
@@ -141,7 +123,7 @@ func TestPrepareReconcile_AuditEventAllReachable(t *testing.T) {
 }
 
 func TestPrepareReconcile_SkipsDisabledComponent(t *testing.T) {
-	res := reconcilePrepare(t, newPrepareForTest(), fakePrepareChecker{})
+	res := reconcilePrepare(t, newPrepareForTest(), newPrepareChecker(nil, nil))
 
 	if got := countContaining(res.events, "recordStreamUploader"); got != 0 {
 		t.Errorf("disabled component should produce no events, got %d in %v", got, res.events)
@@ -165,7 +147,7 @@ func TestPrepareReconcile_NotFound(t *testing.T) {
 }
 
 func TestPrepareReconcile_EmitsUnreachableWarning(t *testing.T) {
-	checker := fakePrepareChecker{unreachable: map[string]bool{"ghcr.io/b/cn:0.62.0": true}}
+	checker := newPrepareChecker(map[string]bool{"ghcr.io/b/cn:0.62.0": true}, nil)
 	res := reconcilePrepare(t, newPrepareForTest(), checker)
 
 	if got := countContaining(res.events, "RegistryAuditComplete consensusNode: 2/3 registries reachable"); got != 1 {
@@ -177,7 +159,7 @@ func TestPrepareReconcile_EmitsUnreachableWarning(t *testing.T) {
 }
 
 func TestPrepareReconcile_EmitsInvalidOnHashMismatch(t *testing.T) {
-	checker := fakePrepareChecker{mismatch: map[string]bool{"ghcr.io/b/cn:0.62.0": true}}
+	checker := newPrepareChecker(nil, map[string]bool{"ghcr.io/b/cn:0.62.0": true})
 	res := reconcilePrepare(t, newPrepareForTest(), checker)
 
 	if got := countContaining(res.events, "RegistryAuditComplete consensusNode: 3/3 registries reachable"); got != 1 {
@@ -189,7 +171,7 @@ func TestPrepareReconcile_EmitsInvalidOnHashMismatch(t *testing.T) {
 }
 
 func TestPrepareReconcile_Success(t *testing.T) {
-	res := reconcilePrepare(t, newPrepareForTest(), fakePrepareChecker{})
+	res := reconcilePrepare(t, newPrepareForTest(), newPrepareChecker(nil, nil))
 
 	t.Run("NoError", func(t *testing.T) {
 		if res.err != nil {
@@ -234,11 +216,11 @@ func TestPrepareReconcile_Success(t *testing.T) {
 }
 
 func TestPrepareReconcile_AllInvalidFails(t *testing.T) {
-	checker := fakePrepareChecker{unreachable: map[string]bool{
+	checker := newPrepareChecker(map[string]bool{
 		"gcr.io/a/cn:0.62.0":  true,
 		"ghcr.io/b/cn:0.62.0": true,
 		"reg.c.io/cn:0.62.0":  true,
-	}}
+	}, nil)
 	res := reconcilePrepare(t, newPrepareForTest(), checker)
 
 	if res.err == nil {
@@ -277,7 +259,7 @@ func TestPrepareReconcile_AlreadySucceededIsNoOp(t *testing.T) {
 	rec := events.NewFakeRecorder(16)
 	r := NewNetworkUpgradePrepareReconciler(c, scheme)
 	r.Recorder = rec
-	r.Checker = fakePrepareChecker{}
+	r.Checker = newPrepareChecker(nil, nil)
 
 	if _, err := r.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: client.ObjectKeyFromObject(prepare),

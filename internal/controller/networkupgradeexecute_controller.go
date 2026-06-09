@@ -36,6 +36,11 @@ func NewNetworkUpgradeExecuteReconciler(c client.Client, scheme *runtime.Scheme)
 	}
 }
 
+func (r *NetworkUpgradeExecuteReconciler) WithStrategy(name string) *NetworkUpgradeExecuteReconciler {
+	r.StrategyName = name
+	return r
+}
+
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradeexecutes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradeexecutes/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradeexecutes/finalizers,verbs=update
@@ -53,6 +58,8 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, nil
 	}
 
+	// Re-validation runs unconditionally — a tampered image at Execute time
+	// corrupts nodes, so freshness outweighs the extra OCI round-trips.
 	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 
 	updated := &operatorv1alpha1.SelectedSources{}
