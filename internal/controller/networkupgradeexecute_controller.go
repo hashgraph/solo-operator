@@ -58,6 +58,8 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, nil
 	}
 
+	// Re-validation runs unconditionally — a tampered image at Execute time
+	// corrupts nodes, so freshness outweighs the extra OCI round-trips.
 	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 
 	updated := &operatorv1alpha1.SelectedSources{}
