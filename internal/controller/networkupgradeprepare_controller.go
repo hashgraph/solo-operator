@@ -4,7 +4,6 @@ package controller
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/rand/v2"
 	"time"
@@ -96,7 +95,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 		if err := r.Status().Update(ctx, &prepare); err != nil {
 			return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
 		}
-		return ctrl.Result{}, errors.New(msg)
+		return ctrl.Result{}, fmt.Errorf("%s", msg)
 	}
 
 	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))

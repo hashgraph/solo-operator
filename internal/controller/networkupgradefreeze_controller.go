@@ -107,6 +107,7 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 			Message: "all selected registries healthy",
 		})
 	} else {
+		// Stay Running — registry issues are transient, freeze retries automatically.
 		freeze.Status.Phase = operatorv1alpha1.PhaseRunning
 		setCondition(&freeze.Status.Conditions, metav1.Condition{
 			Type:    operatorv1alpha1.CondRegistryHealthCheck,

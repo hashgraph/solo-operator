@@ -106,6 +106,7 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 			Message: "all selected registries healthy",
 		})
 	} else {
+		// Terminal — a bad registry at execute time means the upgrade can't proceed safely.
 		execute.Status.Phase = operatorv1alpha1.ExecutePhaseFailed
 		now := metav1.Now()
 		execute.Status.CompletionTime = &now
