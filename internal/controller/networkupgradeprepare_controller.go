@@ -74,7 +74,10 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 
 	// Step 1: validate operationId uniqueness within the namespace.
 	var siblings operatorv1alpha1.NetworkUpgradePrepareList
-	if err := r.List(ctx, &siblings, client.InNamespace(prepare.Namespace)); err != nil {
+	if err := r.List(ctx, &siblings,
+		client.InNamespace(prepare.Namespace),
+		client.MatchingFields{fieldOperationID: prepare.Spec.OperationID},
+	); err != nil {
 		return ctrl.Result{}, fmt.Errorf("listing siblings: %w", err)
 	}
 	for _, s := range siblings.Items {
@@ -232,12 +235,24 @@ func (r *NetworkUpgradePrepareReconciler) event(obj *operatorv1alpha1.NetworkUpg
 	}
 }
 
+const fieldOperationID = "spec.operationId"
+
 func (r *NetworkUpgradePrepareReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.Recorder == nil {
 		r.Recorder = mgr.GetEventRecorder("networkupgradeprepare")
 	}
 	if r.Checker == nil {
 		r.Checker = registry.OCIChecker{}
+	}
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&operatorv1alpha1.NetworkUpgradePrepare{},
+		fieldOperationID,
+		func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradePrepare).Spec.OperationID}
+		},
+	); err != nil {
+		return fmt.Errorf("registering operationId index: %w", err)
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.NetworkUpgradePrepare{}).

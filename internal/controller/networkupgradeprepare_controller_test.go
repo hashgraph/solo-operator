@@ -55,6 +55,10 @@ type reconcileResult struct {
 	err     error
 }
 
+func prepareIndexFunc(o client.Object) []string {
+	return []string{o.(*operatorv1alpha1.NetworkUpgradePrepare).Spec.OperationID}
+}
+
 func reconcilePrepare(t *testing.T, prepare *operatorv1alpha1.NetworkUpgradePrepare, checker registry.ImageChecker) reconcileResult {
 	t.Helper()
 	scheme := newControllerTestScheme()
@@ -62,6 +66,7 @@ func reconcilePrepare(t *testing.T, prepare *operatorv1alpha1.NetworkUpgradePrep
 		WithScheme(scheme).
 		WithObjects(prepare).
 		WithStatusSubresource(prepare).
+		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, prepareIndexFunc).
 		Build()
 
 	rec := events.NewFakeRecorder(64)
@@ -407,6 +412,7 @@ func TestPrepareReconcile_DuplicateOperationID_SetsPhaseFailed(t *testing.T) {
 		WithScheme(scheme).
 		WithObjects(existing, prepare).
 		WithStatusSubresource(existing, prepare).
+		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, prepareIndexFunc).
 		Build()
 
 	rec := events.NewFakeRecorder(16)
@@ -453,5 +459,52 @@ func TestPrepareReconcile_DuplicateOperationID_SetsPhaseFailed(t *testing.T) {
 	}
 	if got := countContaining(recorded, "ManifestInvalid"); got != 1 {
 		t.Errorf("expected one ManifestInvalid event, got %d in %v", got, recorded)
+	}
+}
+
+func TestPrepareReconcile_UniqueOperationID_IgnoresSibling(t *testing.T) {
+	scheme := newControllerTestScheme()
+
+	sibling := newPrepareForTest()
+	sibling.Name = "other"
+	sibling.UID = "uid-other"
+	sibling.Spec.OperationID = "op-different"
+
+	prepare := newPrepareForTest()
+	prepare.Name = "mine"
+	prepare.UID = "uid-mine"
+	// prepare.Spec.OperationID == "op-001" (from newPrepareForTest)
+
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(sibling, prepare).
+		WithStatusSubresource(sibling, prepare).
+		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, prepareIndexFunc).
+		Build()
+
+	rec := events.NewFakeRecorder(64)
+	r := NewNetworkUpgradePrepareReconciler(c, scheme)
+	r.Recorder = rec
+	r.Checker = newPrepareChecker(nil, nil)
+
+	// Run until terminal.
+	for i := 0; i < 5; i++ {
+		res, err := r.Reconcile(context.Background(), ctrl.Request{
+			NamespacedName: client.ObjectKey{Name: "mine", Namespace: "test"},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !res.Requeue && res.RequeueAfter == 0 {
+			break
+		}
+	}
+
+	var got operatorv1alpha1.NetworkUpgradePrepare
+	if err := c.Get(context.Background(), client.ObjectKey{Name: "mine", Namespace: "test"}, &got); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.Status.Phase != operatorv1alpha1.PhaseSucceeded {
+		t.Errorf("expected PhaseSucceeded when sibling has different operationId, got %s", got.Status.Phase)
 	}
 }
