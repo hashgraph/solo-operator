@@ -27,7 +27,11 @@ func newFreezeChecker(unreachable, mismatch map[string]bool) fakeUpgradeChecker 
 
 func newFreezeForTest() *operatorv1alpha1.NetworkUpgradeFreeze {
 	return &operatorv1alpha1.NetworkUpgradeFreeze{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-freeze", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-freeze",
+			Namespace: "default",
+			Labels:    map[string]string{operatorv1alpha1.LabelOperationID: "op-001"},
+		},
 		Spec: operatorv1alpha1.NetworkUpgradeFreezeSpec{
 			Orbit:         "test-orbit",
 			OperationID:   "op-001",
@@ -49,29 +53,64 @@ func newFreezeForTest() *operatorv1alpha1.NetworkUpgradeFreeze {
 	}
 }
 
+func newSucceededPrepareForFreeze() *operatorv1alpha1.NetworkUpgradePrepare {
+	return &operatorv1alpha1.NetworkUpgradePrepare{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-prepare",
+			Namespace: "default",
+			Labels:    map[string]string{operatorv1alpha1.LabelOperationID: "op-001"},
+		},
+		Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
+			Orbit:       "test-orbit",
+			OperationID: "op-001",
+		},
+		Status: operatorv1alpha1.NetworkUpgradePrepareStatus{
+			Phase: operatorv1alpha1.PhaseSucceeded,
+		},
+	}
+}
+
 type freezeReconcileResult struct {
 	events []string
 	freeze *operatorv1alpha1.NetworkUpgradeFreeze
 	err    error
 }
 
-func reconcileFreeze(t *testing.T, freeze *operatorv1alpha1.NetworkUpgradeFreeze, checker registry.ImageChecker) freezeReconcileResult {
+func reconcileFreeze(t *testing.T, freeze *operatorv1alpha1.NetworkUpgradeFreeze, prepare *operatorv1alpha1.NetworkUpgradePrepare, checker registry.ImageChecker) freezeReconcileResult {
 	t.Helper()
 	scheme := newControllerTestScheme()
-	c := fake.NewClientBuilder().
+
+	builder := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(freeze).
-		WithStatusSubresource(freeze).
-		Build()
+		WithStatusSubresource(freeze)
+	if prepare != nil {
+		builder = builder.WithObjects(prepare).WithStatusSubresource(prepare)
+	}
+	c := builder.Build()
+
+	// Pre-seed prepare status since fake client doesn't persist status from WithObjects.
+	if prepare != nil {
+		if err := c.Status().Update(context.Background(), prepare); err != nil {
+			t.Fatalf("pre-seed prepare status: %v", err)
+		}
+	}
 
 	rec := events.NewFakeRecorder(32)
 	r := NewNetworkUpgradeFreezeReconciler(c, scheme)
 	r.Recorder = rec
 	r.Checker = checker
 
-	_, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: client.ObjectKeyFromObject(freeze),
-	})
+	var err error
+	for i := 0; i < 5; i++ {
+		var res ctrl.Result
+		res, err = r.Reconcile(context.Background(), ctrl.Request{
+			NamespacedName: client.ObjectKeyFromObject(freeze),
+		})
+		if !res.Requeue && res.RequeueAfter == 0 {
+			break
+		}
+	}
 
 	close(rec.Events)
 	var recorded []string
@@ -87,11 +126,34 @@ func reconcileFreeze(t *testing.T, freeze *operatorv1alpha1.NetworkUpgradeFreeze
 	return freezeReconcileResult{events: recorded, freeze: &updated, err: err}
 }
 
+func assertFreezeWaitsForPrepare(t *testing.T, res freezeReconcileResult) {
+	t.Helper()
+	if res.err != nil {
+		t.Fatalf("expected no error while waiting for prepare, got %v", res.err)
+	}
+	if res.freeze.Status.Phase == operatorv1alpha1.PhaseSucceeded || res.freeze.Status.Phase == operatorv1alpha1.PhaseFailed {
+		t.Errorf("expected non-terminal phase while waiting, got %s", res.freeze.Status.Phase)
+	}
+}
+
+func TestFreezeReconcile_PrepareNotFound(t *testing.T) {
+	assertFreezeWaitsForPrepare(t, reconcileFreeze(t, newFreezeForTest(), nil, newFreezeChecker(nil, nil)))
+}
+
+func TestFreezeReconcile_PrepareNotSucceeded(t *testing.T) {
+	prepare := newSucceededPrepareForFreeze()
+	prepare.Status.Phase = operatorv1alpha1.PhaseRunning
+	assertFreezeWaitsForPrepare(t, reconcileFreeze(t, newFreezeForTest(), prepare, newFreezeChecker(nil, nil)))
+}
+
 func TestFreezeReconcile_SelectedRegistryStillValid(t *testing.T) {
-	res := reconcileFreeze(t, newFreezeForTest(), newFreezeChecker(nil, nil))
+	res := reconcileFreeze(t, newFreezeForTest(), newSucceededPrepareForFreeze(), newFreezeChecker(nil, nil))
 
 	if res.err != nil {
 		t.Fatalf("unexpected error: %v", res.err)
+	}
+	if res.freeze.Status.StartTime == nil {
+		t.Error("expected StartTime to be set")
 	}
 	if got := countContaining(res.events, "RegistryFailover"); got != 0 {
 		t.Errorf("expected no failover events, got %d", got)
@@ -106,6 +168,10 @@ func TestFreezeReconcile_SelectedRegistryStillValid(t *testing.T) {
 	if cond == nil || cond.Status != metav1.ConditionTrue {
 		t.Errorf("expected RegistryHealthCheck=True, got %v", cond)
 	}
+	rfCond := findCondition(res.freeze.Status.Conditions, operatorv1alpha1.CondReadyForFreeze)
+	if rfCond == nil || rfCond.Status != metav1.ConditionTrue {
+		t.Errorf("expected ReadyForFreeze=True, got %v", rfCond)
+	}
 }
 
 func TestFreezeReconcile_FailoverToAlternate(t *testing.T) {
@@ -114,7 +180,7 @@ func TestFreezeReconcile_FailoverToAlternate(t *testing.T) {
 		digest:        altFreezeDigest,
 		defaultDigest: freezeDigest,
 	}
-	res := reconcileFreeze(t, newFreezeForTest(), checker)
+	res := reconcileFreeze(t, newFreezeForTest(), newSucceededPrepareForFreeze(), checker)
 
 	if res.err != nil {
 		t.Fatalf("unexpected error: %v", res.err)
@@ -134,11 +200,15 @@ func TestFreezeReconcile_FailoverToAlternate(t *testing.T) {
 	if res.freeze.Status.SelectedSources.ConsensusNode.Image != "reg-b/cn:0.75.0" {
 		t.Errorf("expected failover to reg-b, got %s", res.freeze.Status.SelectedSources.ConsensusNode.Image)
 	}
+	rfCond := findCondition(res.freeze.Status.Conditions, operatorv1alpha1.CondReadyForFreeze)
+	if rfCond == nil || rfCond.Status != metav1.ConditionTrue {
+		t.Errorf("expected ReadyForFreeze=True after successful failover, got %v", rfCond)
+	}
 }
 
 func TestFreezeReconcile_NoValidRegistry(t *testing.T) {
 	checker := newFreezeChecker(map[string]bool{"reg-a/cn:0.75.0": true, "reg-b/cn:0.75.0": true}, nil)
-	res := reconcileFreeze(t, newFreezeForTest(), checker)
+	res := reconcileFreeze(t, newFreezeForTest(), newSucceededPrepareForFreeze(), checker)
 
 	if res.err == nil {
 		t.Error("expected error when no valid registry")
@@ -149,6 +219,10 @@ func TestFreezeReconcile_NoValidRegistry(t *testing.T) {
 	cond := findCondition(res.freeze.Status.Conditions, operatorv1alpha1.CondRegistryHealthCheck)
 	if cond == nil || cond.Status != metav1.ConditionFalse {
 		t.Errorf("expected RegistryHealthCheck=False, got %v", cond)
+	}
+	rfCond := findCondition(res.freeze.Status.Conditions, operatorv1alpha1.CondReadyForFreeze)
+	if rfCond == nil || rfCond.Status != metav1.ConditionFalse {
+		t.Errorf("expected ReadyForFreeze=False, got %v", rfCond)
 	}
 	if got := countContaining(res.events, "RegistryInvalid"); got == 0 {
 		t.Errorf("expected RegistryInvalid event, got none in %v", res.events)
