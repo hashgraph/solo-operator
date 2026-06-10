@@ -169,25 +169,26 @@ func main() {
 	prepareReconciler := controller.NewNetworkUpgradePrepareReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
-	)
-	prepareReconciler.StrategyName = registryOrder
+	).WithStrategy(registryOrder)
 	if err = prepareReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkUpgradePrepare")
 		os.Exit(1)
 	}
 
-	if err = controller.NewNetworkUpgradeFreezeReconciler(
+	freezeReconciler := controller.NewNetworkUpgradeFreezeReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
-	).SetupWithManager(mgr); err != nil {
+	).WithStrategy(registryOrder)
+	if err = freezeReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkUpgradeFreeze")
 		os.Exit(1)
 	}
 
-	if err = controller.NewNetworkUpgradeExecuteReconciler(
+	executeReconciler := controller.NewNetworkUpgradeExecuteReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
-	).SetupWithManager(mgr); err != nil {
+	).WithStrategy(registryOrder)
+	if err = executeReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkUpgradeExecute")
 		os.Exit(1)
 	}
