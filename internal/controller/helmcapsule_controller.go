@@ -378,3 +378,13 @@ func setCondition(conditions *[]operatorv1alpha1.Condition, newCond metav1.Condi
 	newCond.LastTransitionTime = now
 	*conditions = append(*conditions, newCond)
 }
+
+// findCondition returns the condition with the given type, or nil.
+func findCondition(conditions []operatorv1alpha1.Condition, condType string) *operatorv1alpha1.Condition {
+	for i := range conditions {
+		if conditions[i].Type == condType {
+			return &conditions[i]
+		}
+	}
+	return nil
+}

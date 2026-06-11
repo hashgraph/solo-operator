@@ -5,7 +5,9 @@ package controller
 import (
 	"context"
 	"testing"
+	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -13,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/registry"
 )
 
@@ -25,7 +28,10 @@ func newExecuteChecker(unreachable, mismatch map[string]bool) fakeUpgradeChecker
 	return fakeUpgradeChecker{unreachable: unreachable, mismatch: mismatch, defaultDigest: executeDigest}
 }
 
+// newExecuteForTest builds an Execute CR already in ReadyForProvisionerDaemon phase
+// so single-reconcile tests skip initialization and go straight to the working state.
 func newExecuteForTest() *operatorv1alpha1.NetworkUpgradeExecute {
+	now := metav1.Now()
 	return &operatorv1alpha1.NetworkUpgradeExecute{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-execute", Namespace: "default"},
 		Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
@@ -45,30 +51,90 @@ func newExecuteForTest() *operatorv1alpha1.NetworkUpgradeExecute {
 				},
 			},
 		},
+		Status: operatorv1alpha1.NetworkUpgradeExecuteStatus{
+			Phase:     operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon,
+			StartTime: &now,
+		},
+	}
+}
+
+// newSucceededPrepare returns a Prepare CR in Succeeded phase for the given operationID.
+func newSucceededPrepare(namespace, operationID string) *operatorv1alpha1.NetworkUpgradePrepare {
+	return &operatorv1alpha1.NetworkUpgradePrepare{
+		ObjectMeta: metav1.ObjectMeta{Name: "prepare-" + operationID, Namespace: namespace},
+		Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
+			OperationID: operationID,
+		},
+		Status: operatorv1alpha1.NetworkUpgradePrepareStatus{
+			Phase: operatorv1alpha1.PhaseSucceeded,
+		},
+	}
+}
+
+// newSucceededFreeze returns a Freeze CR in Succeeded phase for the given operationID.
+func newSucceededFreeze(namespace, operationID string) *operatorv1alpha1.NetworkUpgradeFreeze {
+	return &operatorv1alpha1.NetworkUpgradeFreeze{
+		ObjectMeta: metav1.ObjectMeta{Name: "freeze-" + operationID, Namespace: namespace},
+		Spec: operatorv1alpha1.NetworkUpgradeFreezeSpec{
+			OperationID: operationID,
+		},
+		Status: operatorv1alpha1.NetworkUpgradeFreezeStatus{
+			Phase: operatorv1alpha1.PhaseSucceeded,
+		},
 	}
 }
 
 type executeReconcileResult struct {
 	events  []string
 	execute *operatorv1alpha1.NetworkUpgradeExecute
+	result  ctrl.Result
 	err     error
 }
 
-func reconcileExecute(t *testing.T, execute *operatorv1alpha1.NetworkUpgradeExecute, checker registry.ImageChecker) executeReconcileResult {
+func reconcileExecuteWith(
+	t *testing.T,
+	execute *operatorv1alpha1.NetworkUpgradeExecute,
+	checker registry.ImageChecker,
+	extra ...client.Object,
+) executeReconcileResult {
 	t.Helper()
 	scheme := newControllerTestScheme()
+
+	objs := []client.Object{execute}
+	objs = append(objs, extra...)
+
 	c := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(execute).
+		WithObjects(objs...).
 		WithStatusSubresource(execute).
+		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradePrepare).Spec.OperationID}
+		}).
+		WithIndex(&operatorv1alpha1.NetworkUpgradeFreeze{}, fieldOperationID, func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradeFreeze).Spec.OperationID}
+		}).
+		WithIndex(&operatorv1alpha1.NetworkUpgradeExecute{}, fieldOperationID, func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradeExecute).Spec.OperationID}
+		}).
 		Build()
+
+	// Fake client stores spec from WithObjects but ignores status sub-resource fields.
+	// Drive status for prerequisite CRs explicitly.
+	for _, obj := range extra {
+		switch v := obj.(type) {
+		case *operatorv1alpha1.NetworkUpgradePrepare:
+			_ = c.Status().Update(context.Background(), v)
+		case *operatorv1alpha1.NetworkUpgradeFreeze:
+			_ = c.Status().Update(context.Background(), v)
+		}
+	}
 
 	rec := events.NewFakeRecorder(32)
 	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
 	r.Recorder = rec
 	r.Checker = checker
 
-	_, err := r.Reconcile(context.Background(), ctrl.Request{
+	result, err := r.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: client.ObjectKeyFromObject(execute),
 	})
 
@@ -83,77 +149,39 @@ func reconcileExecute(t *testing.T, execute *operatorv1alpha1.NetworkUpgradeExec
 		t.Fatalf("get updated execute: %v", getErr)
 	}
 
-	return executeReconcileResult{events: recorded, execute: &updated, err: err}
+	return executeReconcileResult{events: recorded, execute: &updated, result: result, err: err}
 }
 
-func TestExecuteReconcile_SelectedRegistryStillValid(t *testing.T) {
-	res := reconcileExecute(t, newExecuteForTest(), newExecuteChecker(nil, nil))
+// prereqs returns the standard Prepare+Freeze CRs that satisfy prerequisites.
+func prereqs() []client.Object {
+	return []client.Object{
+		newSucceededPrepare("default", "op-001"),
+		newSucceededFreeze("default", "op-001"),
+	}
+}
+
+func TestExecuteReconcile_InitializesStatus(t *testing.T) {
+	execute := &operatorv1alpha1.NetworkUpgradeExecute{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-execute", Namespace: "default"},
+		Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
+			Orbit: "test-orbit", OperationID: "op-001",
+			Images:          operatorv1alpha1.UpgradeImagesSpec{ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{Version: "0.75.0", Registries: registriesFor("reg-a/cn:0.75.0")}},
+			SelectedSources: operatorv1alpha1.SelectedSources{ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest}},
+		},
+	}
+	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil))
 
 	if res.err != nil {
 		t.Fatalf("unexpected error: %v", res.err)
 	}
-	if got := countContaining(res.events, "RegistryFailover"); got != 0 {
-		t.Errorf("expected no failover events, got %d", got)
+	if !res.result.Requeue {
+		t.Error("expected Requeue=true on initialization")
 	}
-	if res.execute.Status.SelectedSources == nil || res.execute.Status.SelectedSources.ConsensusNode == nil {
-		t.Fatal("expected selectedSources to be populated in status")
+	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon {
+		t.Errorf("expected ReadyForProvisionerDaemon, got %s", res.execute.Status.Phase)
 	}
-	if res.execute.Status.SelectedSources.ConsensusNode.Image != "reg-a/cn:0.75.0" {
-		t.Errorf("expected original image preserved, got %s", res.execute.Status.SelectedSources.ConsensusNode.Image)
-	}
-	cond := findCondition(res.execute.Status.Conditions, operatorv1alpha1.CondRegistrySelected)
-	if cond == nil || cond.Status != metav1.ConditionTrue {
-		t.Errorf("expected RegistrySelected=True, got %v", cond)
-	}
-}
-
-func TestExecuteReconcile_FailoverToAlternate(t *testing.T) {
-	checker := fakeUpgradeChecker{
-		unreachable:   map[string]bool{"reg-a/cn:0.75.0": true},
-		digest:        altExecuteDigest,
-		defaultDigest: executeDigest,
-	}
-	res := reconcileExecute(t, newExecuteForTest(), checker)
-
-	if res.err != nil {
-		t.Fatalf("unexpected error: %v", res.err)
-	}
-	if got := countContaining(res.events, "RegistryFailover"); got != 1 {
-		t.Errorf("expected one RegistryFailover event, got %d in %v", got, res.events)
-	}
-	if got := countContaining(res.events, "reg-a/cn:0.75.0"); got == 0 {
-		t.Errorf("RegistryFailover event should name the failed registry")
-	}
-	if got := countContaining(res.events, "reg-b/cn:0.75.0"); got == 0 {
-		t.Errorf("RegistryFailover event should name the replacement registry")
-	}
-	if res.execute.Status.SelectedSources == nil || res.execute.Status.SelectedSources.ConsensusNode == nil {
-		t.Fatal("expected selectedSources updated after failover")
-	}
-	if res.execute.Status.SelectedSources.ConsensusNode.Image != "reg-b/cn:0.75.0" {
-		t.Errorf("expected failover to reg-b, got %s", res.execute.Status.SelectedSources.ConsensusNode.Image)
-	}
-}
-
-func TestExecuteReconcile_NoValidRegistry_TerminalFailure(t *testing.T) {
-	checker := newExecuteChecker(map[string]bool{"reg-a/cn:0.75.0": true, "reg-b/cn:0.75.0": true}, nil)
-	res := reconcileExecute(t, newExecuteForTest(), checker)
-
-	if res.err == nil {
-		t.Error("expected error when no valid registry")
-	}
-	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhaseFailed {
-		t.Errorf("expected phase Failed (terminal), got %s", res.execute.Status.Phase)
-	}
-	if res.execute.Status.CompletionTime == nil {
-		t.Error("expected CompletionTime set on terminal failure")
-	}
-	cond := findCondition(res.execute.Status.Conditions, operatorv1alpha1.CondRegistrySelected)
-	if cond == nil || cond.Status != metav1.ConditionFalse {
-		t.Errorf("expected RegistrySelected=False, got %v", cond)
-	}
-	if got := countContaining(res.events, "RegistryInvalid"); got == 0 {
-		t.Errorf("expected RegistryInvalid event, got none in %v", res.events)
+	if res.execute.Status.StartTime == nil {
+		t.Error("expected StartTime set")
 	}
 }
 
@@ -197,5 +225,500 @@ func TestExecuteReconcile_TerminalPhaseIsNoOp(t *testing.T) {
 				t.Errorf("terminal CR should emit no events, got %v", recorded)
 			}
 		})
+	}
+}
+
+func TestExecuteReconcile_WaitsForPrereqs(t *testing.T) {
+	res := reconcileExecuteWith(t, newExecuteForTest(), newExecuteChecker(nil, nil))
+	// No Prepare/Freeze in fake client → should requeue after prereq delay, no error.
+	if res.err != nil {
+		t.Fatalf("unexpected error: %v", res.err)
+	}
+	if res.result.RequeueAfter != executePrereqRequeueAfter {
+		t.Errorf("expected RequeueAfter=%v, got %v", executePrereqRequeueAfter, res.result.RequeueAfter)
+	}
+}
+
+func TestExecuteReconcile_SelectedRegistryStillValid(t *testing.T) {
+	res := reconcileExecuteWith(t, newExecuteForTest(), newExecuteChecker(nil, nil), prereqs()...)
+
+	if res.err != nil {
+		t.Fatalf("unexpected error: %v", res.err)
+	}
+	if got := countContaining(res.events, "RegistryFailover"); got != 0 {
+		t.Errorf("expected no failover events, got %d", got)
+	}
+	if res.execute.Status.SelectedSources == nil || res.execute.Status.SelectedSources.ConsensusNode == nil {
+		t.Fatal("expected selectedSources to be populated in status")
+	}
+	if res.execute.Status.SelectedSources.ConsensusNode.Image != "reg-a/cn:0.75.0" {
+		t.Errorf("expected original image preserved, got %s", res.execute.Status.SelectedSources.ConsensusNode.Image)
+	}
+	cond := findCondition(res.execute.Status.Conditions, operatorv1alpha1.CondRegistrySelected)
+	if cond == nil || cond.Status != metav1.ConditionTrue {
+		t.Errorf("expected RegistrySelected=True, got %v", cond)
+	}
+}
+
+func TestExecuteReconcile_FailoverToAlternate(t *testing.T) {
+	checker := fakeUpgradeChecker{
+		unreachable:   map[string]bool{"reg-a/cn:0.75.0": true},
+		digest:        altExecuteDigest,
+		defaultDigest: executeDigest,
+	}
+	res := reconcileExecuteWith(t, newExecuteForTest(), checker, prereqs()...)
+
+	if res.err != nil {
+		t.Fatalf("unexpected error: %v", res.err)
+	}
+	if got := countContaining(res.events, "RegistryFailover"); got != 1 {
+		t.Errorf("expected one RegistryFailover event, got %d in %v", got, res.events)
+	}
+	if got := countContaining(res.events, "reg-a/cn:0.75.0"); got == 0 {
+		t.Errorf("RegistryFailover event should name the failed registry")
+	}
+	if got := countContaining(res.events, "reg-b/cn:0.75.0"); got == 0 {
+		t.Errorf("RegistryFailover event should name the replacement registry")
+	}
+	if res.execute.Status.SelectedSources == nil || res.execute.Status.SelectedSources.ConsensusNode == nil {
+		t.Fatal("expected selectedSources updated after failover")
+	}
+	if res.execute.Status.SelectedSources.ConsensusNode.Image != "reg-b/cn:0.75.0" {
+		t.Errorf("expected failover to reg-b, got %s", res.execute.Status.SelectedSources.ConsensusNode.Image)
+	}
+}
+
+func TestExecuteReconcile_NoValidRegistry_TerminalFailure(t *testing.T) {
+	checker := newExecuteChecker(map[string]bool{"reg-a/cn:0.75.0": true, "reg-b/cn:0.75.0": true}, nil)
+	res := reconcileExecuteWith(t, newExecuteForTest(), checker, prereqs()...)
+
+	if res.err == nil {
+		t.Error("expected error when no valid registry")
+	}
+	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhaseFailed {
+		t.Errorf("expected phase Failed (terminal), got %s", res.execute.Status.Phase)
+	}
+	if res.execute.Status.CompletionTime == nil {
+		t.Error("expected CompletionTime set on terminal failure")
+	}
+	cond := findCondition(res.execute.Status.Conditions, operatorv1alpha1.CondRegistrySelected)
+	if cond == nil || cond.Status != metav1.ConditionFalse {
+		t.Errorf("expected RegistrySelected=False, got %v", cond)
+	}
+	if got := countContaining(res.events, "RegistryInvalid"); got == 0 {
+		t.Errorf("expected RegistryInvalid event, got none in %v", res.events)
+	}
+}
+
+func TestExecuteReconcile_ScalesDownCapsule(t *testing.T) {
+	execute := newExecuteForTest()
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "node0",
+			Namespace: "default",
+			Labels:    map[string]string{common.LabelOrbit: "test-orbit"},
+		},
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1,
+			Log4j2XML:     "<log/>",
+			PodProperties: operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "old-repo", ImageName: "cn", ImageTag: "0.74.0"}}}},
+		},
+	}
+
+	scheme := newControllerTestScheme()
+	b := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(execute, capsule, newSucceededPrepare("default", "op-001"), newSucceededFreeze("default", "op-001")).
+		WithStatusSubresource(execute).
+		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradePrepare).Spec.OperationID}
+		}).
+		WithIndex(&operatorv1alpha1.NetworkUpgradeFreeze{}, fieldOperationID, func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradeFreeze).Spec.OperationID}
+		}).
+		WithIndex(&operatorv1alpha1.NetworkUpgradeExecute{}, fieldOperationID, func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradeExecute).Spec.OperationID}
+		})
+	c := b.Build()
+	_ = c.Status().Update(context.Background(), newSucceededPrepare("default", "op-001"))
+	_ = c.Status().Update(context.Background(), newSucceededFreeze("default", "op-001"))
+
+	rec := events.NewFakeRecorder(32)
+	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
+	r.Recorder = rec
+	r.Checker = newExecuteChecker(nil, nil)
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(execute)})
+	close(rec.Events)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var updated operatorv1alpha1.ConsensusCapsule
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(capsule), &updated); err != nil {
+		t.Fatalf("get capsule: %v", err)
+	}
+	if !updated.Spec.Offline {
+		t.Error("expected capsule Offline=true after scale-down")
+	}
+
+	var evts []string
+	for e := range rec.Events {
+		evts = append(evts, e)
+	}
+	if got := countContaining(evts, "PodScaledDown"); got == 0 {
+		t.Errorf("expected PodScaledDown event, got none in %v", evts)
+	}
+}
+
+func TestExecuteReconcile_DaemonResultFalse_TerminalFailure(t *testing.T) {
+	execute := newExecuteForTest()
+	execute.Status.Conditions = []operatorv1alpha1.Condition{
+		{
+			Type:               operatorv1alpha1.CondDaemonResult,
+			Status:             metav1.ConditionFalse,
+			Reason:             operatorv1alpha1.ReasonDaemonFileHashMismatch,
+			LastTransitionTime: metav1.Now(),
+		},
+	}
+
+	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil), prereqs()...)
+
+	if res.err != nil {
+		t.Fatalf("unexpected error: %v", res.err)
+	}
+	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhaseFailed {
+		t.Errorf("expected Failed, got %s", res.execute.Status.Phase)
+	}
+	if res.execute.Status.CompletionTime == nil {
+		t.Error("expected CompletionTime set")
+	}
+}
+
+func TestExecuteReconcile_DaemonResultTrue_AdvancesToPendingNodeUpgrade(t *testing.T) {
+	execute := newExecuteForTest()
+	execute.Status.Conditions = []operatorv1alpha1.Condition{
+		{
+			Type:               operatorv1alpha1.CondDaemonResult,
+			Status:             metav1.ConditionTrue,
+			Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
+			LastTransitionTime: metav1.Now(),
+		},
+	}
+
+	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil), prereqs()...)
+
+	if res.err != nil {
+		t.Fatalf("unexpected error: %v", res.err)
+	}
+	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhasePendingNodeUpgrade {
+		t.Errorf("expected PendingNodeUpgrade, got %s", res.execute.Status.Phase)
+	}
+	if !res.result.Requeue {
+		t.Error("expected Requeue=true after advancing phase")
+	}
+}
+
+func TestExecuteReconcile_PendingNodeUpgrade_PatchesCapsule(t *testing.T) {
+	execute := newExecuteForTest()
+	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
+		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
+	}
+
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "node0",
+			Namespace: "default",
+			Labels:    map[string]string{common.LabelOrbit: "test-orbit"},
+		},
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1,
+			Log4j2XML: "<log/>",
+			Offline:   true,
+			PodProperties: operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
+				SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "old-repo", ImageName: "cn", ImageTag: "0.74.0"},
+			}}},
+		},
+	}
+
+	scheme := newControllerTestScheme()
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(execute, capsule).
+		WithStatusSubresource(execute).
+		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradePrepare).Spec.OperationID}
+		}).
+		WithIndex(&operatorv1alpha1.NetworkUpgradeFreeze{}, fieldOperationID, func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradeFreeze).Spec.OperationID}
+		}).
+		WithIndex(&operatorv1alpha1.NetworkUpgradeExecute{}, fieldOperationID, func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradeExecute).Spec.OperationID}
+		}).
+		Build()
+	if err := c.Status().Update(context.Background(), execute); err != nil {
+		t.Fatalf("pre-set execute status: %v", err)
+	}
+
+	rec := events.NewFakeRecorder(32)
+	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
+	r.Recorder = rec
+	r.Checker = newExecuteChecker(nil, nil)
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(execute)})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	close(rec.Events)
+
+	var updatedCapsule operatorv1alpha1.ConsensusCapsule
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(capsule), &updatedCapsule); err != nil {
+		t.Fatalf("get capsule: %v", err)
+	}
+	if updatedCapsule.Spec.Offline {
+		t.Error("expected Offline=false after patch")
+	}
+	sv := updatedCapsule.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersion
+	if sv == nil {
+		t.Fatal("expected SoftwareVersion set")
+	}
+	if sv.ImageName != "cn" || sv.ImageTag != "0.75.0" {
+		t.Errorf("expected cn:0.75.0, got %s/%s:%s", sv.Repository, sv.ImageName, sv.ImageTag)
+	}
+
+	var updatedExecute operatorv1alpha1.NetworkUpgradeExecute
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(execute), &updatedExecute); err != nil {
+		t.Fatalf("get execute: %v", err)
+	}
+	cond := findCondition(updatedExecute.Status.Conditions, operatorv1alpha1.CondConsensusCapsulePatched)
+	if cond == nil || cond.Status != metav1.ConditionTrue {
+		t.Errorf("expected ConsensusCapsulePatched=True, got %v", cond)
+	}
+}
+
+func TestExecuteReconcile_PendingNodeUpgrade_WaitsForPodReady(t *testing.T) {
+	execute := newExecuteForTest()
+	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
+		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
+	}
+	// Mark capsule already patched.
+	setCondition(&execute.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.CondConsensusCapsulePatched,
+		Status:             metav1.ConditionTrue,
+		Reason:             operatorv1alpha1.ReasonPatchApplied,
+		LastTransitionTime: metav1.Now(),
+	})
+
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1,
+			Log4j2XML:     "<log/>",
+			PodProperties: operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "reg-a", ImageName: "cn", ImageTag: "0.75.0"}}}},
+		},
+	}
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default"},
+		Status:     appsv1.StatefulSetStatus{ReadyReplicas: 0},
+	}
+
+	scheme := newControllerTestScheme()
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(execute, capsule, sts).
+		WithStatusSubresource(execute, sts).
+		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradePrepare).Spec.OperationID}
+		}).
+		WithIndex(&operatorv1alpha1.NetworkUpgradeFreeze{}, fieldOperationID, func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradeFreeze).Spec.OperationID}
+		}).
+		WithIndex(&operatorv1alpha1.NetworkUpgradeExecute{}, fieldOperationID, func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradeExecute).Spec.OperationID}
+		}).
+		Build()
+	if err := c.Status().Update(context.Background(), execute); err != nil {
+		t.Fatalf("pre-set execute status: %v", err)
+	}
+	if err := c.Status().Update(context.Background(), sts); err != nil {
+		t.Fatalf("pre-set sts status: %v", err)
+	}
+
+	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
+	r.Recorder = events.NewFakeRecorder(8)
+	r.Checker = newExecuteChecker(nil, nil)
+
+	result, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(execute)})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.RequeueAfter != executeReadyRequeueAfter {
+		t.Errorf("expected RequeueAfter=%v, got %v", executeReadyRequeueAfter, result.RequeueAfter)
+	}
+
+	var updated operatorv1alpha1.NetworkUpgradeExecute
+	_ = c.Get(context.Background(), client.ObjectKeyFromObject(execute), &updated)
+	if updated.Status.Phase == operatorv1alpha1.ExecutePhaseSucceeded {
+		t.Error("should not succeed while pods are not ready")
+	}
+}
+
+func TestExecuteReconcile_PendingNodeUpgrade_SucceedsWhenPodsReady(t *testing.T) {
+	execute := newExecuteForTest()
+	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
+		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
+	}
+	setCondition(&execute.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.CondConsensusCapsulePatched,
+		Status:             metav1.ConditionTrue,
+		Reason:             operatorv1alpha1.ReasonPatchApplied,
+		LastTransitionTime: metav1.Now(),
+	})
+
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1,
+			Log4j2XML:     "<log/>",
+			PodProperties: operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "reg-a", ImageName: "cn", ImageTag: "0.75.0"}}}},
+		},
+	}
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default"},
+		Status:     appsv1.StatefulSetStatus{ReadyReplicas: 1},
+	}
+
+	scheme := newControllerTestScheme()
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(execute, capsule, sts).
+		WithStatusSubresource(execute, sts).
+		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradePrepare).Spec.OperationID}
+		}).
+		WithIndex(&operatorv1alpha1.NetworkUpgradeFreeze{}, fieldOperationID, func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradeFreeze).Spec.OperationID}
+		}).
+		WithIndex(&operatorv1alpha1.NetworkUpgradeExecute{}, fieldOperationID, func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradeExecute).Spec.OperationID}
+		}).
+		Build()
+	if err := c.Status().Update(context.Background(), execute); err != nil {
+		t.Fatalf("pre-set execute status: %v", err)
+	}
+	if err := c.Status().Update(context.Background(), sts); err != nil {
+		t.Fatalf("pre-set sts status: %v", err)
+	}
+
+	rec := events.NewFakeRecorder(8)
+	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
+	r.Recorder = rec
+	r.Checker = newExecuteChecker(nil, nil)
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(execute)})
+	close(rec.Events)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var updated operatorv1alpha1.NetworkUpgradeExecute
+	_ = c.Get(context.Background(), client.ObjectKeyFromObject(execute), &updated)
+	if updated.Status.Phase != operatorv1alpha1.ExecutePhaseSucceeded {
+		t.Errorf("expected Succeeded, got %s", updated.Status.Phase)
+	}
+	if updated.Status.CompletionTime == nil {
+		t.Error("expected CompletionTime set")
+	}
+
+	var evts []string
+	for e := range rec.Events {
+		evts = append(evts, e)
+	}
+	if got := countContaining(evts, "UpgradeSucceeded"); got == 0 {
+		t.Errorf("expected UpgradeSucceeded event, got none in %v", evts)
+	}
+}
+
+func TestExecuteReconcile_PodReadyTimeout(t *testing.T) {
+	execute := newExecuteForTest()
+	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
+		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
+	}
+	setCondition(&execute.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.CondConsensusCapsulePatched,
+		Status:             metav1.ConditionTrue,
+		Reason:             operatorv1alpha1.ReasonPatchApplied,
+		LastTransitionTime: metav1.Now(),
+	})
+	// StartTime far in the past to trigger timeout.
+	pastTime := metav1.NewTime(time.Now().Add(-30 * time.Minute))
+	execute.Status.StartTime = &pastTime
+
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1,
+			Log4j2XML:     "<log/>",
+			PodProperties: operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "reg-a", ImageName: "cn", ImageTag: "0.75.0"}}}},
+		},
+	}
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default"},
+		Status:     appsv1.StatefulSetStatus{ReadyReplicas: 0},
+	}
+
+	scheme := newControllerTestScheme()
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(execute, capsule, sts).
+		WithStatusSubresource(execute, sts).
+		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradePrepare).Spec.OperationID}
+		}).
+		WithIndex(&operatorv1alpha1.NetworkUpgradeFreeze{}, fieldOperationID, func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradeFreeze).Spec.OperationID}
+		}).
+		WithIndex(&operatorv1alpha1.NetworkUpgradeExecute{}, fieldOperationID, func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradeExecute).Spec.OperationID}
+		}).
+		Build()
+	if err := c.Status().Update(context.Background(), execute); err != nil {
+		t.Fatalf("pre-set execute status: %v", err)
+	}
+	if err := c.Status().Update(context.Background(), sts); err != nil {
+		t.Fatalf("pre-set sts status: %v", err)
+	}
+
+	rec := events.NewFakeRecorder(8)
+	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
+	r.Recorder = rec
+	r.Checker = newExecuteChecker(nil, nil)
+	r.PodReadyTimeout = 5 * time.Minute // shorter than the 30m elapsed
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(execute)})
+	close(rec.Events)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var updated operatorv1alpha1.NetworkUpgradeExecute
+	_ = c.Get(context.Background(), client.ObjectKeyFromObject(execute), &updated)
+	if updated.Status.Phase != operatorv1alpha1.ExecutePhaseFailed {
+		t.Errorf("expected Failed on timeout, got %s", updated.Status.Phase)
+	}
+	if updated.Status.CompletionTime == nil {
+		t.Error("expected CompletionTime set on timeout")
+	}
+
+	var evts []string
+	for e := range rec.Events {
+		evts = append(evts, e)
+	}
+	if got := countContaining(evts, "UpgradeFailed"); got == 0 {
+		t.Errorf("expected UpgradeFailed event, got none in %v", evts)
 	}
 }

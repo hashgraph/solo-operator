@@ -84,39 +84,21 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 
 	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 
-	updated := &operatorv1alpha1.SelectedSources{}
-	succeeded := true
-
-	for _, name := range operatorv1alpha1.AllUpgradeComponents {
-		comp, present := freeze.Spec.Images.Component(name)
-		if !present || (comp.Enabled != nil && !*comp.Enabled) {
-			continue
-		}
-
-		current := freeze.Spec.SelectedSources.Get(name)
-		if current == nil {
-			logger.Info("no selectedSource in spec for component, skipping", "component", name)
-			continue
-		}
-
-		result, err := registry.RevalidateAndFailover(ctx, r.Checker, comp, *current, checkTimeout, rng, r.StrategyName)
-		if err != nil {
-			logger.Info("no valid registry for component", "component", name, "error", err)
-			r.eventf(&freeze, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
-				"%s: %v", name, err)
-			succeeded = false
-			continue
-		}
-
-		if result.DidFailover {
+	updated, succeeded := registry.RevalidateComponents(
+		ctx, r.Checker,
+		freeze.Spec.Images, freeze.Spec.SelectedSources,
+		checkTimeout, rng, r.StrategyName,
+		nil,
+		func(name operatorv1alpha1.ComponentName, res registry.FailoverResult) {
 			r.eventf(&freeze, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryFailover,
 				"%s: registry %s unreachable, failed over to %s (digest: %s)",
-				name, result.FailedImage, result.Selected.Image, result.Selected.Digest)
-		}
-
-		src := result.Selected
-		updated.Set(name, &src)
-	}
+				name, res.FailedImage, res.Selected.Image, res.Selected.Digest)
+		},
+		func(name operatorv1alpha1.ComponentName, err error) {
+			r.eventf(&freeze, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
+				"%s: %v", name, err)
+		},
+	)
 
 	freeze.Status.ObservedGeneration = freeze.Generation
 

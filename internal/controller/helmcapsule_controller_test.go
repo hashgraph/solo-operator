@@ -532,14 +532,3 @@ func TestDeletion_skipUninstallAnnotationBypassesHelm(t *testing.T) {
 		}
 	}
 }
-
-// ─── helpers ──────────────────────────────────────────────────────────────────
-
-func findCondition(conds []operatorv1alpha1.Condition, condType string) *operatorv1alpha1.Condition {
-	for i := range conds {
-		if conds[i].Type == condType {
-			return &conds[i]
-		}
-	}
-	return nil
-}
