@@ -98,9 +98,9 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 
 	execute.Status.ObservedGeneration = execute.Generation
 
-	execute.Status.SelectedSources = updated
-
 	if succeeded {
+		execute.Status.SelectedSources = updated
+		execute.Status.Phase = operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon
 		setCondition(&execute.Status.Conditions, metav1.Condition{
 			Type:    operatorv1alpha1.CondRegistrySelected,
 			Status:  metav1.ConditionTrue,
@@ -108,6 +108,7 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 			Message: "all selected registries healthy",
 		})
 	} else {
+		// Terminal — a bad registry at execute time means the upgrade can't proceed safely.
 		execute.Status.Phase = operatorv1alpha1.ExecutePhaseFailed
 		now := metav1.Now()
 		execute.Status.CompletionTime = &now

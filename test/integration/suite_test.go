@@ -110,7 +110,7 @@ var _ = BeforeSuite(func() {
 		k8sManager.GetScheme(),
 	)
 	prepareReconciler.StrategyName = registry.StrategySequential
-	prepareReconciler.Checker = stubImageChecker{}
+	prepareReconciler.Checker = selectiveImageChecker{}
 	Expect(prepareReconciler.SetupWithManager(k8sManager)).To(Succeed())
 
 	go func() {

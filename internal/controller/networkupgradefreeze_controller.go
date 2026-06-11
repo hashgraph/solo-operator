@@ -96,9 +96,11 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 
 	freeze.Status.ObservedGeneration = freeze.Generation
 
-	freeze.Status.SelectedSources = updated
-
 	if succeeded {
+		now := metav1.Now()
+		freeze.Status.CompletionTime = &now
+		freeze.Status.Phase = operatorv1alpha1.PhaseSucceeded
+		freeze.Status.SelectedSources = updated
 		setCondition(&freeze.Status.Conditions, metav1.Condition{
 			Type:    operatorv1alpha1.CondRegistryHealthCheck,
 			Status:  metav1.ConditionTrue,
@@ -106,6 +108,7 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 			Message: "all selected registries healthy",
 		})
 	} else {
+		// Stay Running — registry issues are transient, freeze retries automatically.
 		freeze.Status.Phase = operatorv1alpha1.PhaseRunning
 		setCondition(&freeze.Status.Conditions, metav1.Condition{
 			Type:    operatorv1alpha1.CondRegistryHealthCheck,

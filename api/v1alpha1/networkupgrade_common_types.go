@@ -199,6 +199,8 @@ const (
 // Reason constants used in conditions and events.
 const (
 	ReasonSchemaValid       = "SchemaValid"
+	ReasonSchemaInvalid     = "SchemaInvalid"
+	ReasonDuplicateOpID     = "DuplicateOperationID"
 	ReasonAllImagesValid    = "AllImagesValid"
 	ReasonSelectionComplete = "SelectionComplete"
 	ReasonRegistryInvalid   = "RegistryInvalid"
@@ -229,11 +231,14 @@ const (
 
 // Event reasons posted on NetworkUpgrade* CRs.
 const (
+	EventManifestInvalid       = "ManifestInvalid"
 	EventRegistryAuditComplete = "RegistryAuditComplete"
 	EventRegistryUnreachable   = "RegistryUnreachable"
 	EventRegistrySelected      = "RegistrySelected"
 	EventRegistryInvalid       = "RegistryInvalid"
 	EventRegistryFailover      = "RegistryFailover"
+	EventComponentSkipped      = "ComponentSkipped"
+	EventSidecarDisabled       = "SidecarDisabled"
 
 	EventPodScaledDown      = "PodScaledDown"
 	EventReadyForDaemon     = "ReadyForProvisionerDaemon"
