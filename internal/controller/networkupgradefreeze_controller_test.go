@@ -82,6 +82,7 @@ func reconcileFreeze(t *testing.T, freeze *operatorv1alpha1.NetworkUpgradeFreeze
 
 	builder := fake.NewClientBuilder().
 		WithScheme(scheme).
+		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, prepareIndexFunc).
 		WithObjects(freeze).
 		WithStatusSubresource(freeze)
 	if prepare != nil {
@@ -236,6 +237,7 @@ func TestFreezeReconcile_AlreadySucceededIsNoOp(t *testing.T) {
 	scheme := newControllerTestScheme()
 	c := fake.NewClientBuilder().
 		WithScheme(scheme).
+		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, prepareIndexFunc).
 		WithObjects(freeze).
 		WithStatusSubresource(freeze).
 		Build()

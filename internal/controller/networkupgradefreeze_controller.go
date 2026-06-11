@@ -170,7 +170,7 @@ func (r *NetworkUpgradeFreezeReconciler) findPrepare(ctx context.Context, namesp
 	var list operatorv1alpha1.NetworkUpgradePrepareList
 	if err := r.List(ctx, &list,
 		client.InNamespace(namespace),
-		client.MatchingLabels{operatorv1alpha1.LabelOperationID: operationID},
+		client.MatchingFields{fieldOperationID: operationID},
 	); err != nil {
 		return nil, fmt.Errorf("listing NetworkUpgradePrepare: %w", err)
 	}
