@@ -76,7 +76,6 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, nil
 	}
 
-	// Initialize status on first reconcile.
 	if execute.Status.Phase == "" || execute.Status.Phase == operatorv1alpha1.ExecutePhasePending {
 		now := metav1.Now()
 		execute.Status.StartTime = &now
@@ -102,12 +101,9 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 	}
 }
 
-// reconcileWaitingForDaemon handles the ReadyForProvisionerDaemon and PendingInfraUpgrade phases.
-// It first ensures prerequisites are met and the capsule is scaled down, then polls for DaemonResult.
 func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	// Check prerequisites: Prepare and Freeze must both be Succeeded.
 	prepare, err := r.findPrepare(ctx, execute.Namespace, execute.Spec.OperationID)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -170,7 +166,6 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 		Message: "all selected registries healthy",
 	})
 
-	// Scale down the capsule if not already done.
 	capsules, err := r.listCapsules(ctx, execute.Namespace, execute.Spec.Orbit)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -179,11 +174,9 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 		return ctrl.Result{}, err
 	}
 
-	// Check if DaemonResult condition has been written by the provisioner daemon.
 	daemonCond := findCondition(execute.Status.Conditions, operatorv1alpha1.CondDaemonResult)
 
 	if daemonCond == nil {
-		// Daemon has not responded yet — stay in ReadyForProvisionerDaemon and poll.
 		execute.Status.ObservedGeneration = execute.Generation
 		if err := r.Status().Update(ctx, execute); err != nil {
 			if apierrors.IsConflict(err) {
@@ -207,7 +200,6 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 		return ctrl.Result{}, nil
 	}
 
-	// DaemonResult=True: advance to PendingNodeUpgrade.
 	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
 	execute.Status.ObservedGeneration = execute.Generation
 	if err := r.Status().Update(ctx, execute); err != nil {
@@ -221,14 +213,12 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 	return ctrl.Result{Requeue: true}, nil
 }
 
-// reconcilePendingNodeUpgrade patches the ConsensusCapsule and monitors pod readiness.
 func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (ctrl.Result, error) {
 	capsules, err := r.listCapsules(ctx, execute.Namespace, execute.Spec.Orbit)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// Patch capsules that haven't been patched yet (idempotent: skip already-patched ones).
 	capsulePatched := findCondition(execute.Status.Conditions, operatorv1alpha1.CondConsensusCapsulePatched)
 	if capsulePatched == nil || capsulePatched.Status != metav1.ConditionTrue {
 		if err := r.patchCapsules(ctx, execute, capsules); err != nil {
@@ -252,7 +242,6 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 		return ctrl.Result{RequeueAfter: executeReadyRequeueAfter}, nil
 	}
 
-	// Capsule already patched — check if StatefulSet pods are ready.
 	allReady, timedOut, err := r.checkPodsReady(ctx, execute, capsules)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -281,7 +270,6 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 		return ctrl.Result{RequeueAfter: executeReadyRequeueAfter}, nil
 	}
 
-	// All pods ready — upgrade succeeded.
 	now := metav1.Now()
 	execute.Status.Phase = operatorv1alpha1.ExecutePhaseSucceeded
 	execute.Status.CompletionTime = &now
@@ -303,7 +291,6 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 	return ctrl.Result{}, nil
 }
 
-// ensureCapsuleOffline sets Offline=true on any capsule in the orbit that is not already offline.
 func (r *NetworkUpgradeExecuteReconciler) ensureCapsuleOffline(
 	ctx context.Context,
 	execute *operatorv1alpha1.NetworkUpgradeExecute,
@@ -325,7 +312,6 @@ func (r *NetworkUpgradeExecuteReconciler) ensureCapsuleOffline(
 	return nil
 }
 
-// patchCapsules applies the image upgrade (three-rule) and sets Offline=false atomically.
 func (r *NetworkUpgradeExecuteReconciler) patchCapsules(
 	ctx context.Context,
 	execute *operatorv1alpha1.NetworkUpgradeExecute,
@@ -376,28 +362,24 @@ func (r *NetworkUpgradeExecuteReconciler) applyImagePatch(
 		setSoftwareVersion(&capsule.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersion, img)
 	}
 
-	// recordStreamUploader
 	if img, remove, upgrade := applyComponent(operatorv1alpha1.ComponentRecordStreamUploader); remove {
 		capsule.Spec.PodProperties.Containers.RecordsUploader = nil
 	} else if upgrade {
 		ensureCheetah(&capsule.Spec.PodProperties.Containers.RecordsUploader, img)
 	}
 
-	// eventStreamUploader
 	if img, remove, upgrade := applyComponent(operatorv1alpha1.ComponentEventStreamUploader); remove {
 		capsule.Spec.PodProperties.Containers.EventsUploader = nil
 	} else if upgrade {
 		ensureCheetah(&capsule.Spec.PodProperties.Containers.EventsUploader, img)
 	}
 
-	// blockStreamUploader
 	if img, remove, upgrade := applyComponent(operatorv1alpha1.ComponentBlockStreamUploader); remove {
 		capsule.Spec.PodProperties.Containers.BlocksUploader = nil
 	} else if upgrade {
 		ensureCheetah(&capsule.Spec.PodProperties.Containers.BlocksUploader, img)
 	}
 
-	// backupUploader
 	if img, remove, upgrade := applyComponent(operatorv1alpha1.ComponentBackupUploader); remove {
 		capsule.Spec.PodProperties.Containers.BackupUploader = nil
 	} else if upgrade {
@@ -407,7 +389,6 @@ func (r *NetworkUpgradeExecuteReconciler) applyImagePatch(
 	// ComponentUC — not yet wired into ConsensusContainers; skip until added.
 }
 
-// checkPodsReady inspects StatefulSet.Status.ReadyReplicas for all capsules.
 func (r *NetworkUpgradeExecuteReconciler) checkPodsReady(
 	ctx context.Context,
 	execute *operatorv1alpha1.NetworkUpgradeExecute,
@@ -516,7 +497,6 @@ func (r *NetworkUpgradeExecuteReconciler) SetupWithManager(mgr ctrl.Manager) err
 		Complete(r)
 }
 
-// ensureCheetah sets the image on a *CheetahUploader, allocating if nil.
 func ensureCheetah(ptr **operatorv1alpha1.CheetahUploader, image string) {
 	if *ptr == nil {
 		*ptr = &operatorv1alpha1.CheetahUploader{}
@@ -524,7 +504,6 @@ func ensureCheetah(ptr **operatorv1alpha1.CheetahUploader, image string) {
 	setSoftwareVersion(&(*ptr).SoftwareVersion, image)
 }
 
-// ensureStream sets the image on a *StreamUploader, allocating if nil.
 func ensureStream(ptr **operatorv1alpha1.StreamUploader, image string) {
 	if *ptr == nil {
 		*ptr = &operatorv1alpha1.StreamUploader{}
@@ -532,7 +511,6 @@ func ensureStream(ptr **operatorv1alpha1.StreamUploader, image string) {
 	setSoftwareVersion(&(*ptr).SoftwareVersion, image)
 }
 
-// setSoftwareVersion allocates and populates a SoftwareVersion from a full OCI image reference.
 func setSoftwareVersion(sv **operatorv1alpha1.SoftwareVersion, image string) {
 	if *sv == nil {
 		*sv = &operatorv1alpha1.SoftwareVersion{}
