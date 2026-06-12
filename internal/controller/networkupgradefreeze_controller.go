@@ -63,7 +63,7 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, nil
 	}
 
-	prepare, err := r.findPrepare(ctx, freeze.Namespace, freeze.Spec.OperationID)
+	prepare, err := findPrepare(ctx, r.Client, freeze.Namespace, freeze.Spec.OperationID)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -147,17 +147,6 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, fmt.Errorf("no valid registry for one or more components")
 	}
 	return ctrl.Result{}, nil
-}
-
-func (r *NetworkUpgradeFreezeReconciler) findPrepare(ctx context.Context, namespace, operationID string) (*operatorv1alpha1.NetworkUpgradePrepare, error) {
-	return findOneByOperationID(ctx, r.Client, namespace, operationID, "NetworkUpgradePrepare",
-		func() *operatorv1alpha1.NetworkUpgradePrepareList {
-			return &operatorv1alpha1.NetworkUpgradePrepareList{}
-		},
-		func(l *operatorv1alpha1.NetworkUpgradePrepareList) []operatorv1alpha1.NetworkUpgradePrepare {
-			return l.Items
-		},
-	)
 }
 
 func (r *NetworkUpgradeFreezeReconciler) eventf(obj *operatorv1alpha1.NetworkUpgradeFreeze, eventtype, reason, format string, args ...any) {

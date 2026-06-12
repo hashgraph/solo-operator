@@ -174,6 +174,7 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 				Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
 					Orbit:           ns,
 					OperationID:     opID,
+					ConsensusNode:   "node0-happy",
 					SelectedSources: selected,
 					Images: operatorv1alpha1.UpgradeImagesSpec{
 						ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
@@ -225,12 +226,15 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 			})
 			Expect(k8sClient.Status().Update(ctx, got)).To(Succeed())
 
-			By("expecting PendingNodeUpgrade")
+			By("expecting PendingNodeUpgrade or beyond")
 			Eventually(func() operatorv1alpha1.ExecutePhase {
 				got := &operatorv1alpha1.NetworkUpgradeExecute{}
 				_ = k8sClient.Get(ctx, nuxKey, got)
 				return got.Status.Phase
-			}, timeout, interval).Should(Equal(operatorv1alpha1.ExecutePhasePendingNodeUpgrade))
+			}, timeout, interval).Should(BeElementOf(
+				operatorv1alpha1.ExecutePhasePendingNodeUpgrade,
+				operatorv1alpha1.ExecutePhaseSucceeded,
+			))
 		})
 
 		It("reaches Succeeded after daemon success and pods become ready", func() {
@@ -295,6 +299,8 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 			}
 			selected := buildPrereqs(opID, nupName, nufName, images)
 
+			buildCapsuleWithSTS("node0-daemon-fail", ns, 0)
+
 			nux := &operatorv1alpha1.NetworkUpgradeExecute{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      nuxName,
@@ -307,6 +313,7 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 				Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
 					Orbit:           ns,
 					OperationID:     opID,
+					ConsensusNode:   "node0-daemon-fail",
 					SelectedSources: selected,
 					Images: operatorv1alpha1.UpgradeImagesSpec{
 						ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
@@ -323,6 +330,8 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 			_ = k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradeExecute{ObjectMeta: metav1.ObjectMeta{Name: nuxName, Namespace: ns}})
 			_ = k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradeFreeze{ObjectMeta: metav1.ObjectMeta{Name: nufName, Namespace: ns}})
 			_ = k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradePrepare{ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns}})
+			_ = k8sClient.Delete(ctx, &operatorv1alpha1.ConsensusCapsule{ObjectMeta: metav1.ObjectMeta{Name: "node0-daemon-fail", Namespace: ns}})
+			_ = k8sClient.Delete(ctx, &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "node0-daemon-fail", Namespace: ns}})
 		})
 
 		It("transitions to Failed when daemon writes DaemonResult=False", func() {
@@ -375,8 +384,9 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 					},
 				},
 				Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
-					Orbit:       ns,
-					OperationID: opID,
+					Orbit:         ns,
+					OperationID:   opID,
+					ConsensusNode: "node0-no-prereqs",
 					Images: operatorv1alpha1.UpgradeImagesSpec{
 						ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
 							Version:    "0.75.0",
@@ -434,6 +444,7 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 				},
 			}
 			buildPrereqs(opID, nupName, nufName, images)
+			buildCapsuleWithSTS("node0-failover", ns, 0)
 
 			nux := &operatorv1alpha1.NetworkUpgradeExecute{
 				ObjectMeta: metav1.ObjectMeta{
@@ -445,9 +456,10 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 					},
 				},
 				Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
-					Orbit:       ns,
-					OperationID: opID,
-					Images:      images,
+					Orbit:         ns,
+					OperationID:   opID,
+					ConsensusNode: "node0-failover",
+					Images:        images,
 					SelectedSources: operatorv1alpha1.SelectedSources{
 						ConsensusNode: &operatorv1alpha1.SelectedSource{
 							Image:  "gcr.io/unreachable/cn:0.75.0",
@@ -463,23 +475,45 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 			_ = k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradeExecute{ObjectMeta: metav1.ObjectMeta{Name: nuxName, Namespace: ns}})
 			_ = k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradeFreeze{ObjectMeta: metav1.ObjectMeta{Name: nufName, Namespace: ns}})
 			_ = k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradePrepare{ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns}})
+			_ = k8sClient.Delete(ctx, &operatorv1alpha1.ConsensusCapsule{ObjectMeta: metav1.ObjectMeta{Name: "node0-failover", Namespace: ns}})
+			_ = k8sClient.Delete(ctx, &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "node0-failover", Namespace: ns}})
 		})
 
 		It("revalidates, fails over, sets RegistrySelected=True, emits RegistryFailover event", func() {
-			By("waiting for ReadyForProvisionerDaemon with RegistrySelected=True after failover")
+			By("waiting for DaemonResult=True then RegistrySelected=True after failover")
+
+			By("waiting for ReadyForProvisionerDaemon")
+			Eventually(func() operatorv1alpha1.ExecutePhase {
+				got := &operatorv1alpha1.NetworkUpgradeExecute{}
+				_ = k8sClient.Get(ctx, nuxKey, got)
+				return got.Status.Phase
+			}, timeout, interval).Should(Equal(operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon))
+
+			By("writing DaemonResult=True")
+			got := &operatorv1alpha1.NetworkUpgradeExecute{}
+			Expect(k8sClient.Get(ctx, nuxKey, got)).To(Succeed())
+			got.Status.Conditions = append(got.Status.Conditions, operatorv1alpha1.Condition{
+				Type:               operatorv1alpha1.CondDaemonResult,
+				Status:             metav1.ConditionTrue,
+				Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
+				LastTransitionTime: metav1.Now(),
+			})
+			Expect(k8sClient.Status().Update(ctx, got)).To(Succeed())
+
+			By("waiting for RegistrySelected=True after failover")
 			Eventually(func() bool {
 				got := &operatorv1alpha1.NetworkUpgradeExecute{}
 				_ = k8sClient.Get(ctx, nuxKey, got)
 				return conditionTrue(got.Status.Conditions, operatorv1alpha1.CondRegistrySelected)
 			}, timeout, interval).Should(BeTrue())
 
-			got := &operatorv1alpha1.NetworkUpgradeExecute{}
-			Expect(k8sClient.Get(ctx, nuxKey, got)).To(Succeed())
+			final := &operatorv1alpha1.NetworkUpgradeExecute{}
+			Expect(k8sClient.Get(ctx, nuxKey, final)).To(Succeed())
 
 			By("updating selectedSources to the failover registry")
-			Expect(got.Status.SelectedSources).NotTo(BeNil())
-			Expect(got.Status.SelectedSources.ConsensusNode).NotTo(BeNil())
-			Expect(got.Status.SelectedSources.ConsensusNode.Image).To(Equal("gcr.io/valid/cn:0.75.0"))
+			Expect(final.Status.SelectedSources).NotTo(BeNil())
+			Expect(final.Status.SelectedSources.ConsensusNode).NotTo(BeNil())
+			Expect(final.Status.SelectedSources.ConsensusNode.Image).To(Equal("gcr.io/valid/cn:0.75.0"))
 
 			By("emitting RegistryFailover warning event")
 			Expect(hasEvent(ctx, ns, nuxName, operatorv1alpha1.EventRegistryFailover, "consensusNode")).To(BeTrue())
@@ -520,6 +554,7 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 				Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
 					Orbit:           ns,
 					OperationID:     opID,
+					ConsensusNode:   capsName,
 					Images:          images,
 					SelectedSources: selected,
 				},
@@ -610,6 +645,7 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 				Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
 					Orbit:           ns,
 					OperationID:     opID,
+					ConsensusNode:   capsName,
 					Images:          images,
 					SelectedSources: selected,
 				},

@@ -107,7 +107,7 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	prepare, err := r.findPrepare(ctx, execute.Namespace, execute.Spec.OperationID)
+	prepare, err := findPrepare(ctx, r.Client, execute.Namespace, execute.Spec.OperationID)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -116,7 +116,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 		return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
 	}
 
-	freeze, err := r.findFreeze(ctx, execute.Namespace, execute.Spec.OperationID)
+	freeze, err := findFreeze(ctx, r.Client, execute.Namespace, execute.Spec.OperationID)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -503,26 +503,6 @@ func (r *NetworkUpgradeExecuteReconciler) checkPodReady(
 		return false, false, fmt.Errorf("getting StatefulSet for capsule %s: %w", capsule.Name, err)
 	}
 	return sts.Status.ReadyReplicas >= 1, false, nil
-}
-
-func (r *NetworkUpgradeExecuteReconciler) findPrepare(ctx context.Context, namespace, operationID string) (*operatorv1alpha1.NetworkUpgradePrepare, error) {
-	return findOneByOperationID(ctx, r.Client, namespace, operationID, "NetworkUpgradePrepare",
-		func() *operatorv1alpha1.NetworkUpgradePrepareList {
-			return &operatorv1alpha1.NetworkUpgradePrepareList{}
-		},
-		func(l *operatorv1alpha1.NetworkUpgradePrepareList) []operatorv1alpha1.NetworkUpgradePrepare {
-			return l.Items
-		},
-	)
-}
-
-func (r *NetworkUpgradeExecuteReconciler) findFreeze(ctx context.Context, namespace, operationID string) (*operatorv1alpha1.NetworkUpgradeFreeze, error) {
-	return findOneByOperationID(ctx, r.Client, namespace, operationID, "NetworkUpgradeFreeze",
-		func() *operatorv1alpha1.NetworkUpgradeFreezeList { return &operatorv1alpha1.NetworkUpgradeFreezeList{} },
-		func(l *operatorv1alpha1.NetworkUpgradeFreezeList) []operatorv1alpha1.NetworkUpgradeFreeze {
-			return l.Items
-		},
-	)
 }
 
 func (r *NetworkUpgradeExecuteReconciler) eventf(obj *operatorv1alpha1.NetworkUpgradeExecute, eventtype, reason, format string, args ...any) {
