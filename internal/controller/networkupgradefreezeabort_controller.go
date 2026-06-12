@@ -92,20 +92,14 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 }
 
 func (r *NetworkUpgradeFreezeAbortReconciler) findExecute(ctx context.Context, namespace, operationID string) (*operatorv1alpha1.NetworkUpgradeExecute, error) {
-	var list operatorv1alpha1.NetworkUpgradeExecuteList
-	if err := r.List(ctx, &list,
-		client.InNamespace(namespace),
-		client.MatchingFields{fieldOperationID: operationID},
-	); err != nil {
-		return nil, fmt.Errorf("listing NetworkUpgradeExecute: %w", err)
-	}
-	if len(list.Items) == 0 {
-		return nil, nil
-	}
-	if len(list.Items) > 1 {
-		return nil, fmt.Errorf("expected at most one NetworkUpgradeExecute for operation %q, found %d", operationID, len(list.Items))
-	}
-	return &list.Items[0], nil
+	return findOneByOperationID(ctx, r.Client, namespace, operationID, "NetworkUpgradeExecute",
+		func() *operatorv1alpha1.NetworkUpgradeExecuteList {
+			return &operatorv1alpha1.NetworkUpgradeExecuteList{}
+		},
+		func(l *operatorv1alpha1.NetworkUpgradeExecuteList) []operatorv1alpha1.NetworkUpgradeExecute {
+			return l.Items
+		},
+	)
 }
 
 func (r *NetworkUpgradeFreezeAbortReconciler) eventf(obj *operatorv1alpha1.NetworkUpgradeFreezeAbort, eventtype, reason, format string, args ...any) {

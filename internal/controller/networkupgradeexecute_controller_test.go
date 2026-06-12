@@ -103,19 +103,10 @@ func reconcileExecuteWith(
 	objs := []client.Object{execute}
 	objs = append(objs, extra...)
 
-	c := fake.NewClientBuilder().
+	c := withExecuteIndexes(fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(objs...).
-		WithStatusSubresource(execute).
-		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, func(o client.Object) []string {
-			return []string{o.(*operatorv1alpha1.NetworkUpgradePrepare).Spec.OperationID}
-		}).
-		WithIndex(&operatorv1alpha1.NetworkUpgradeFreeze{}, fieldOperationID, func(o client.Object) []string {
-			return []string{o.(*operatorv1alpha1.NetworkUpgradeFreeze).Spec.OperationID}
-		}).
-		WithIndex(&operatorv1alpha1.NetworkUpgradeExecute{}, fieldOperationID, func(o client.Object) []string {
-			return []string{o.(*operatorv1alpha1.NetworkUpgradeExecute).Spec.OperationID}
-		}).
+		WithStatusSubresource(execute)).
 		Build()
 
 	// Fake client stores spec from WithObjects but ignores status sub-resource fields.
@@ -150,6 +141,19 @@ func reconcileExecuteWith(
 	}
 
 	return executeReconcileResult{events: recorded, execute: &updated, result: result, err: err}
+}
+
+func withExecuteIndexes(b *fake.ClientBuilder) *fake.ClientBuilder {
+	return b.
+		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradePrepare).Spec.OperationID}
+		}).
+		WithIndex(&operatorv1alpha1.NetworkUpgradeFreeze{}, fieldOperationID, func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradeFreeze).Spec.OperationID}
+		}).
+		WithIndex(&operatorv1alpha1.NetworkUpgradeExecute{}, fieldOperationID, func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradeExecute).Spec.OperationID}
+		})
 }
 
 // prereqs returns the standard Prepare+Freeze CRs that satisfy prerequisites.
@@ -326,20 +330,10 @@ func TestExecuteReconcile_ScalesDownCapsule(t *testing.T) {
 	}
 
 	scheme := newControllerTestScheme()
-	b := fake.NewClientBuilder().
+	c := withExecuteIndexes(fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(execute, capsule, newSucceededPrepare("default", "op-001"), newSucceededFreeze("default", "op-001")).
-		WithStatusSubresource(execute).
-		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, func(o client.Object) []string {
-			return []string{o.(*operatorv1alpha1.NetworkUpgradePrepare).Spec.OperationID}
-		}).
-		WithIndex(&operatorv1alpha1.NetworkUpgradeFreeze{}, fieldOperationID, func(o client.Object) []string {
-			return []string{o.(*operatorv1alpha1.NetworkUpgradeFreeze).Spec.OperationID}
-		}).
-		WithIndex(&operatorv1alpha1.NetworkUpgradeExecute{}, fieldOperationID, func(o client.Object) []string {
-			return []string{o.(*operatorv1alpha1.NetworkUpgradeExecute).Spec.OperationID}
-		})
-	c := b.Build()
+		WithStatusSubresource(execute)).Build()
 	_ = c.Status().Update(context.Background(), newSucceededPrepare("default", "op-001"))
 	_ = c.Status().Update(context.Background(), newSucceededFreeze("default", "op-001"))
 
@@ -443,20 +437,10 @@ func TestExecuteReconcile_PendingNodeUpgrade_PatchesCapsule(t *testing.T) {
 	}
 
 	scheme := newControllerTestScheme()
-	c := fake.NewClientBuilder().
+	c := withExecuteIndexes(fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(execute, capsule).
-		WithStatusSubresource(execute).
-		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, func(o client.Object) []string {
-			return []string{o.(*operatorv1alpha1.NetworkUpgradePrepare).Spec.OperationID}
-		}).
-		WithIndex(&operatorv1alpha1.NetworkUpgradeFreeze{}, fieldOperationID, func(o client.Object) []string {
-			return []string{o.(*operatorv1alpha1.NetworkUpgradeFreeze).Spec.OperationID}
-		}).
-		WithIndex(&operatorv1alpha1.NetworkUpgradeExecute{}, fieldOperationID, func(o client.Object) []string {
-			return []string{o.(*operatorv1alpha1.NetworkUpgradeExecute).Spec.OperationID}
-		}).
-		Build()
+		WithStatusSubresource(execute)).Build()
 	if err := c.Status().Update(context.Background(), execute); err != nil {
 		t.Fatalf("pre-set execute status: %v", err)
 	}
@@ -525,20 +509,10 @@ func TestExecuteReconcile_PendingNodeUpgrade_WaitsForPodReady(t *testing.T) {
 	}
 
 	scheme := newControllerTestScheme()
-	c := fake.NewClientBuilder().
+	c := withExecuteIndexes(fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(execute, capsule, sts).
-		WithStatusSubresource(execute, sts).
-		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, func(o client.Object) []string {
-			return []string{o.(*operatorv1alpha1.NetworkUpgradePrepare).Spec.OperationID}
-		}).
-		WithIndex(&operatorv1alpha1.NetworkUpgradeFreeze{}, fieldOperationID, func(o client.Object) []string {
-			return []string{o.(*operatorv1alpha1.NetworkUpgradeFreeze).Spec.OperationID}
-		}).
-		WithIndex(&operatorv1alpha1.NetworkUpgradeExecute{}, fieldOperationID, func(o client.Object) []string {
-			return []string{o.(*operatorv1alpha1.NetworkUpgradeExecute).Spec.OperationID}
-		}).
-		Build()
+		WithStatusSubresource(execute, sts)).Build()
 	if err := c.Status().Update(context.Background(), execute); err != nil {
 		t.Fatalf("pre-set execute status: %v", err)
 	}
@@ -592,20 +566,10 @@ func TestExecuteReconcile_PendingNodeUpgrade_SucceedsWhenPodsReady(t *testing.T)
 	}
 
 	scheme := newControllerTestScheme()
-	c := fake.NewClientBuilder().
+	c := withExecuteIndexes(fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(execute, capsule, sts).
-		WithStatusSubresource(execute, sts).
-		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, func(o client.Object) []string {
-			return []string{o.(*operatorv1alpha1.NetworkUpgradePrepare).Spec.OperationID}
-		}).
-		WithIndex(&operatorv1alpha1.NetworkUpgradeFreeze{}, fieldOperationID, func(o client.Object) []string {
-			return []string{o.(*operatorv1alpha1.NetworkUpgradeFreeze).Spec.OperationID}
-		}).
-		WithIndex(&operatorv1alpha1.NetworkUpgradeExecute{}, fieldOperationID, func(o client.Object) []string {
-			return []string{o.(*operatorv1alpha1.NetworkUpgradeExecute).Spec.OperationID}
-		}).
-		Build()
+		WithStatusSubresource(execute, sts)).Build()
 	if err := c.Status().Update(context.Background(), execute); err != nil {
 		t.Fatalf("pre-set execute status: %v", err)
 	}
@@ -672,20 +636,10 @@ func TestExecuteReconcile_PodReadyTimeout(t *testing.T) {
 	}
 
 	scheme := newControllerTestScheme()
-	c := fake.NewClientBuilder().
+	c := withExecuteIndexes(fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(execute, capsule, sts).
-		WithStatusSubresource(execute, sts).
-		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, func(o client.Object) []string {
-			return []string{o.(*operatorv1alpha1.NetworkUpgradePrepare).Spec.OperationID}
-		}).
-		WithIndex(&operatorv1alpha1.NetworkUpgradeFreeze{}, fieldOperationID, func(o client.Object) []string {
-			return []string{o.(*operatorv1alpha1.NetworkUpgradeFreeze).Spec.OperationID}
-		}).
-		WithIndex(&operatorv1alpha1.NetworkUpgradeExecute{}, fieldOperationID, func(o client.Object) []string {
-			return []string{o.(*operatorv1alpha1.NetworkUpgradeExecute).Spec.OperationID}
-		}).
-		Build()
+		WithStatusSubresource(execute, sts)).Build()
 	if err := c.Status().Update(context.Background(), execute); err != nil {
 		t.Fatalf("pre-set execute status: %v", err)
 	}
@@ -720,5 +674,226 @@ func TestExecuteReconcile_PodReadyTimeout(t *testing.T) {
 	}
 	if got := countContaining(evts, "UpgradeFailed"); got == 0 {
 		t.Errorf("expected UpgradeFailed event, got none in %v", evts)
+	}
+}
+
+// applyImagePatch unit tests — test the three-rule logic directly without a full reconcile.
+
+func newExecuteWithImages(images operatorv1alpha1.UpgradeImagesSpec, selected operatorv1alpha1.SelectedSources) *operatorv1alpha1.NetworkUpgradeExecute {
+	e := newExecuteForTest()
+	e.Spec.Images = images
+	e.Status.SelectedSources = &selected
+	return e
+}
+
+func TestApplyImagePatch_ConsensusNodeUpgrade(t *testing.T) {
+	execute := newExecuteWithImages(
+		operatorv1alpha1.UpgradeImagesSpec{
+			ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+				Version:    "0.75.0",
+				Registries: registriesFor("reg-a/cn:0.75.0"),
+			},
+		},
+		operatorv1alpha1.SelectedSources{
+			ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
+		},
+	)
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			PodProperties: operatorv1alpha1.ConsensusPodProperties{
+				Containers: operatorv1alpha1.ConsensusContainers{
+					ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
+						SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "old", ImageName: "cn", ImageTag: "0.74.0"},
+					},
+				},
+			},
+		},
+	}
+
+	r := &NetworkUpgradeExecuteReconciler{}
+	r.applyImagePatch(execute, capsule)
+
+	sv := capsule.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersion
+	if sv == nil {
+		t.Fatal("expected SoftwareVersion set")
+	}
+	if sv.Repository != "reg-a" || sv.ImageName != "cn" || sv.ImageTag != "0.75.0" {
+		t.Errorf("unexpected sv: %+v", sv)
+	}
+}
+
+func TestApplyImagePatch_CheetahSidecar_Upgrade(t *testing.T) {
+	execute := newExecuteWithImages(
+		operatorv1alpha1.UpgradeImagesSpec{
+			ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{Version: "0.75.0", Registries: registriesFor("reg-a/cn:0.75.0")},
+			RecordStreamUploader: &operatorv1alpha1.UpgradeComponentSpec{
+				Version:    "1.0.0",
+				Enabled:    boolPtr(true),
+				Registries: registriesFor("reg-a/rsu:1.0.0"),
+			},
+		},
+		operatorv1alpha1.SelectedSources{
+			ConsensusNode:        &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
+			RecordStreamUploader: &operatorv1alpha1.SelectedSource{Image: "reg-a/rsu:1.0.0", Digest: executeDigest},
+		},
+	)
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			PodProperties: operatorv1alpha1.ConsensusPodProperties{
+				Containers: operatorv1alpha1.ConsensusContainers{
+					ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{ImageName: "cn", ImageTag: "0.74.0"}},
+				},
+			},
+		},
+	}
+
+	r := &NetworkUpgradeExecuteReconciler{}
+	r.applyImagePatch(execute, capsule)
+
+	ru := capsule.Spec.PodProperties.Containers.RecordsUploader
+	if ru == nil {
+		t.Fatal("expected RecordsUploader allocated")
+	}
+	if ru.SoftwareVersion == nil {
+		t.Fatal("expected SoftwareVersion set on RecordsUploader")
+	}
+	if ru.SoftwareVersion.ImageName != "rsu" || ru.SoftwareVersion.ImageTag != "1.0.0" {
+		t.Errorf("unexpected SoftwareVersion: %+v", ru.SoftwareVersion)
+	}
+}
+
+func TestApplyImagePatch_CheetahSidecar_Remove(t *testing.T) {
+	execute := newExecuteWithImages(
+		operatorv1alpha1.UpgradeImagesSpec{
+			ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{Version: "0.75.0", Registries: registriesFor("reg-a/cn:0.75.0")},
+			RecordStreamUploader: &operatorv1alpha1.UpgradeComponentSpec{
+				Version: "1.0.0",
+				Enabled: boolPtr(false),
+			},
+		},
+		operatorv1alpha1.SelectedSources{
+			ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
+		},
+	)
+	existing := &operatorv1alpha1.CheetahUploader{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{ImageName: "rsu", ImageTag: "0.9.0"}}
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			PodProperties: operatorv1alpha1.ConsensusPodProperties{
+				Containers: operatorv1alpha1.ConsensusContainers{
+					ConsensusNode:   operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{ImageName: "cn", ImageTag: "0.74.0"}},
+					RecordsUploader: existing,
+				},
+			},
+		},
+	}
+
+	r := &NetworkUpgradeExecuteReconciler{}
+	r.applyImagePatch(execute, capsule)
+
+	if capsule.Spec.PodProperties.Containers.RecordsUploader != nil {
+		t.Error("expected RecordsUploader=nil after remove")
+	}
+}
+
+func TestApplyImagePatch_StreamSidecar_Upgrade(t *testing.T) {
+	execute := newExecuteWithImages(
+		operatorv1alpha1.UpgradeImagesSpec{
+			ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{Version: "0.75.0", Registries: registriesFor("reg-a/cn:0.75.0")},
+			BackupUploader: &operatorv1alpha1.UpgradeComponentSpec{
+				Version:    "2.0.0",
+				Enabled:    boolPtr(true),
+				Registries: registriesFor("reg-a/bu:2.0.0"),
+			},
+		},
+		operatorv1alpha1.SelectedSources{
+			ConsensusNode:  &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
+			BackupUploader: &operatorv1alpha1.SelectedSource{Image: "reg-a/bu:2.0.0", Digest: executeDigest},
+		},
+	)
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			PodProperties: operatorv1alpha1.ConsensusPodProperties{
+				Containers: operatorv1alpha1.ConsensusContainers{
+					ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{ImageName: "cn", ImageTag: "0.74.0"}},
+				},
+			},
+		},
+	}
+
+	r := &NetworkUpgradeExecuteReconciler{}
+	r.applyImagePatch(execute, capsule)
+
+	bu := capsule.Spec.PodProperties.Containers.BackupUploader
+	if bu == nil {
+		t.Fatal("expected BackupUploader allocated")
+	}
+	if bu.SoftwareVersion == nil {
+		t.Fatal("expected SoftwareVersion set on BackupUploader")
+	}
+	if bu.SoftwareVersion.ImageName != "bu" || bu.SoftwareVersion.ImageTag != "2.0.0" {
+		t.Errorf("unexpected SoftwareVersion: %+v", bu.SoftwareVersion)
+	}
+}
+
+func TestApplyImagePatch_StreamSidecar_Remove(t *testing.T) {
+	execute := newExecuteWithImages(
+		operatorv1alpha1.UpgradeImagesSpec{
+			ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{Version: "0.75.0", Registries: registriesFor("reg-a/cn:0.75.0")},
+			BackupUploader: &operatorv1alpha1.UpgradeComponentSpec{
+				Version: "2.0.0",
+				Enabled: boolPtr(false),
+			},
+		},
+		operatorv1alpha1.SelectedSources{
+			ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
+		},
+	)
+	existing := &operatorv1alpha1.StreamUploader{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{ImageName: "bu", ImageTag: "1.9.0"}}
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			PodProperties: operatorv1alpha1.ConsensusPodProperties{
+				Containers: operatorv1alpha1.ConsensusContainers{
+					ConsensusNode:  operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{ImageName: "cn", ImageTag: "0.74.0"}},
+					BackupUploader: existing,
+				},
+			},
+		},
+	}
+
+	r := &NetworkUpgradeExecuteReconciler{}
+	r.applyImagePatch(execute, capsule)
+
+	if capsule.Spec.PodProperties.Containers.BackupUploader != nil {
+		t.Error("expected BackupUploader=nil after remove")
+	}
+}
+
+func TestApplyImagePatch_OmittedSidecar_NoChange(t *testing.T) {
+	execute := newExecuteWithImages(
+		operatorv1alpha1.UpgradeImagesSpec{
+			ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{Version: "0.75.0", Registries: registriesFor("reg-a/cn:0.75.0")},
+			// RecordStreamUploader deliberately omitted
+		},
+		operatorv1alpha1.SelectedSources{
+			ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
+		},
+	)
+	existing := &operatorv1alpha1.CheetahUploader{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{ImageName: "rsu", ImageTag: "0.9.0"}}
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			PodProperties: operatorv1alpha1.ConsensusPodProperties{
+				Containers: operatorv1alpha1.ConsensusContainers{
+					ConsensusNode:   operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{ImageName: "cn", ImageTag: "0.74.0"}},
+					RecordsUploader: existing,
+				},
+			},
+		},
+	}
+
+	r := &NetworkUpgradeExecuteReconciler{}
+	r.applyImagePatch(execute, capsule)
+
+	if capsule.Spec.PodProperties.Containers.RecordsUploader != existing {
+		t.Error("expected RecordsUploader unchanged when component omitted from spec")
 	}
 }

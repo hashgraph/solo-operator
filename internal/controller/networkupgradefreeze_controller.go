@@ -150,20 +150,14 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 }
 
 func (r *NetworkUpgradeFreezeReconciler) findPrepare(ctx context.Context, namespace, operationID string) (*operatorv1alpha1.NetworkUpgradePrepare, error) {
-	var list operatorv1alpha1.NetworkUpgradePrepareList
-	if err := r.List(ctx, &list,
-		client.InNamespace(namespace),
-		client.MatchingFields{fieldOperationID: operationID},
-	); err != nil {
-		return nil, fmt.Errorf("listing NetworkUpgradePrepare: %w", err)
-	}
-	if len(list.Items) == 0 {
-		return nil, nil
-	}
-	if len(list.Items) > 1 {
-		return nil, fmt.Errorf("expected at most one NetworkUpgradePrepare for operation %q, found %d", operationID, len(list.Items))
-	}
-	return &list.Items[0], nil
+	return findOneByOperationID(ctx, r.Client, namespace, operationID, "NetworkUpgradePrepare",
+		func() *operatorv1alpha1.NetworkUpgradePrepareList {
+			return &operatorv1alpha1.NetworkUpgradePrepareList{}
+		},
+		func(l *operatorv1alpha1.NetworkUpgradePrepareList) []operatorv1alpha1.NetworkUpgradePrepare {
+			return l.Items
+		},
+	)
 }
 
 func (r *NetworkUpgradeFreezeReconciler) eventf(obj *operatorv1alpha1.NetworkUpgradeFreeze, eventtype, reason, format string, args ...any) {

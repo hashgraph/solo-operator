@@ -434,37 +434,23 @@ func (r *NetworkUpgradeExecuteReconciler) listCapsules(ctx context.Context, name
 }
 
 func (r *NetworkUpgradeExecuteReconciler) findPrepare(ctx context.Context, namespace, operationID string) (*operatorv1alpha1.NetworkUpgradePrepare, error) {
-	var list operatorv1alpha1.NetworkUpgradePrepareList
-	if err := r.List(ctx, &list,
-		client.InNamespace(namespace),
-		client.MatchingFields{fieldOperationID: operationID},
-	); err != nil {
-		return nil, fmt.Errorf("listing NetworkUpgradePrepare: %w", err)
-	}
-	if len(list.Items) == 0 {
-		return nil, nil
-	}
-	if len(list.Items) > 1 {
-		return nil, fmt.Errorf("expected at most one NetworkUpgradePrepare for operation %q, found %d", operationID, len(list.Items))
-	}
-	return &list.Items[0], nil
+	return findOneByOperationID(ctx, r.Client, namespace, operationID, "NetworkUpgradePrepare",
+		func() *operatorv1alpha1.NetworkUpgradePrepareList {
+			return &operatorv1alpha1.NetworkUpgradePrepareList{}
+		},
+		func(l *operatorv1alpha1.NetworkUpgradePrepareList) []operatorv1alpha1.NetworkUpgradePrepare {
+			return l.Items
+		},
+	)
 }
 
 func (r *NetworkUpgradeExecuteReconciler) findFreeze(ctx context.Context, namespace, operationID string) (*operatorv1alpha1.NetworkUpgradeFreeze, error) {
-	var list operatorv1alpha1.NetworkUpgradeFreezeList
-	if err := r.List(ctx, &list,
-		client.InNamespace(namespace),
-		client.MatchingFields{fieldOperationID: operationID},
-	); err != nil {
-		return nil, fmt.Errorf("listing NetworkUpgradeFreeze: %w", err)
-	}
-	if len(list.Items) == 0 {
-		return nil, nil
-	}
-	if len(list.Items) > 1 {
-		return nil, fmt.Errorf("expected at most one NetworkUpgradeFreeze for operation %q, found %d", operationID, len(list.Items))
-	}
-	return &list.Items[0], nil
+	return findOneByOperationID(ctx, r.Client, namespace, operationID, "NetworkUpgradeFreeze",
+		func() *operatorv1alpha1.NetworkUpgradeFreezeList { return &operatorv1alpha1.NetworkUpgradeFreezeList{} },
+		func(l *operatorv1alpha1.NetworkUpgradeFreezeList) []operatorv1alpha1.NetworkUpgradeFreeze {
+			return l.Items
+		},
+	)
 }
 
 func (r *NetworkUpgradeExecuteReconciler) eventf(obj *operatorv1alpha1.NetworkUpgradeExecute, eventtype, reason, format string, args ...any) {
@@ -473,23 +459,23 @@ func (r *NetworkUpgradeExecuteReconciler) eventf(obj *operatorv1alpha1.NetworkUp
 	}
 }
 
-func (r *NetworkUpgradeExecuteReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	if r.Recorder == nil {
-		r.Recorder = mgr.GetEventRecorder("networkupgradeexecute")
-	}
-	if r.Checker == nil {
-		r.Checker = registry.OCIChecker{}
-	}
-	// Register field index on NetworkUpgradeFreeze — not yet registered by any other controller.
-	if err := mgr.GetFieldIndexer().IndexField(
+func RegisterFreezeIndex(mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(
 		context.Background(),
 		&operatorv1alpha1.NetworkUpgradeFreeze{},
 		fieldOperationID,
 		func(o client.Object) []string {
 			return []string{o.(*operatorv1alpha1.NetworkUpgradeFreeze).Spec.OperationID}
 		},
-	); err != nil {
-		return fmt.Errorf("registering operationId index on NetworkUpgradeFreeze: %w", err)
+	)
+}
+
+func (r *NetworkUpgradeExecuteReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.Recorder == nil {
+		r.Recorder = mgr.GetEventRecorder("networkupgradeexecute")
+	}
+	if r.Checker == nil {
+		r.Checker = registry.OCIChecker{}
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.NetworkUpgradeExecute{}).
