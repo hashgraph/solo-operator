@@ -189,6 +189,7 @@ const (
 	CondConfigCRsApplied        = "ConfigCRsApplied"
 	CondDaemonResult            = "DaemonResult"
 	CondConsensusCapsulePatched = "ConsensusCapsulePatched"
+	CondCapsulesOnline          = "CapsulesOnline"
 	CondNodesUpgraded           = "NodesUpgraded"
 	CondNodeStarting            = "NodeStarting"
 
@@ -212,6 +213,7 @@ const (
 	ReasonScaledDown       = "ScaledDown"
 	ReasonReadyForDaemon   = "ReadyForProvisionerDaemon"
 	ReasonPatchApplied     = "PatchApplied"
+	ReasonCapsulesOnline   = "CapsulesOnline"
 	ReasonPodReady         = "PodReady"
 	ReasonUpgradeSucceeded = "UpgradeSucceeded"
 	ReasonUpgradeFailed    = "UpgradeFailed"
@@ -244,6 +246,7 @@ const (
 	EventReadyForDaemon     = "ReadyForProvisionerDaemon"
 	EventPendingNodeUpgrade = "PendingNodeUpgrade"
 	EventCapsulePatched     = "CapsulePatched"
+	EventCapsulesOnline     = "CapsulesOnline"
 	EventUpgradeSucceeded   = "UpgradeSucceeded"
 	EventUpgradeFailed      = "UpgradeFailed"
 

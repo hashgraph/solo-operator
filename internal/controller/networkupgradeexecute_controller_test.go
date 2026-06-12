@@ -35,8 +35,9 @@ func newExecuteForTest() *operatorv1alpha1.NetworkUpgradeExecute {
 	return &operatorv1alpha1.NetworkUpgradeExecute{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-execute", Namespace: "default"},
 		Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
-			Orbit:       "test-orbit",
-			OperationID: "op-001",
+			Orbit:         "test-orbit",
+			OperationID:   "op-001",
+			ConsensusNode: "node0",
 			Images: operatorv1alpha1.UpgradeImagesSpec{
 				ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
 					Version:    "0.75.0",
@@ -164,11 +165,30 @@ func prereqs() []client.Object {
 	}
 }
 
+// prereqsWithCapsule returns prereqs plus a node0 capsule.
+func prereqsWithCapsule() []client.Object {
+	return append(prereqs(), newOfflineCapsule("node0"))
+}
+
+// newOfflineCapsule returns a minimal ConsensusCapsule with Offline=true.
+func newOfflineCapsule(name string) *operatorv1alpha1.ConsensusCapsule {
+	return &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1, Log4j2XML: "<log/>",
+			Offline: true,
+			PodProperties: operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
+				SoftwareVersion: &operatorv1alpha1.SoftwareVersion{},
+			}}},
+		},
+	}
+}
+
 func TestExecuteReconcile_InitializesStatus(t *testing.T) {
 	execute := &operatorv1alpha1.NetworkUpgradeExecute{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-execute", Namespace: "default"},
 		Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
-			Orbit: "test-orbit", OperationID: "op-001",
+			Orbit: "test-orbit", OperationID: "op-001", ConsensusNode: "node0",
 			Images:          operatorv1alpha1.UpgradeImagesSpec{ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{Version: "0.75.0", Registries: registriesFor("reg-a/cn:0.75.0")}},
 			SelectedSources: operatorv1alpha1.SelectedSources{ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest}},
 		},
@@ -253,13 +273,7 @@ func newExecuteInPendingNodeUpgrade() *operatorv1alpha1.NetworkUpgradeExecute {
 
 func TestExecuteReconcile_SelectedRegistryStillValid(t *testing.T) {
 	execute := newExecuteInPendingNodeUpgrade()
-	capsule := &operatorv1alpha1.ConsensusCapsule{
-		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
-		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1, Log4j2XML: "<log/>",
-			PodProperties: operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{}}}},
-		},
-	}
+	capsule := newOfflineCapsule("node0")
 	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil), capsule)
 
 	if res.err != nil {
@@ -282,13 +296,7 @@ func TestExecuteReconcile_SelectedRegistryStillValid(t *testing.T) {
 
 func TestExecuteReconcile_FailoverToAlternate(t *testing.T) {
 	execute := newExecuteInPendingNodeUpgrade()
-	capsule := &operatorv1alpha1.ConsensusCapsule{
-		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
-		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1, Log4j2XML: "<log/>",
-			PodProperties: operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{}}}},
-		},
-	}
+	capsule := newOfflineCapsule("node0")
 	checker := fakeUpgradeChecker{
 		unreachable:   map[string]bool{"reg-a/cn:0.75.0": true},
 		digest:        altExecuteDigest,
@@ -318,13 +326,7 @@ func TestExecuteReconcile_FailoverToAlternate(t *testing.T) {
 
 func TestExecuteReconcile_NoValidRegistry_TerminalFailure(t *testing.T) {
 	execute := newExecuteInPendingNodeUpgrade()
-	capsule := &operatorv1alpha1.ConsensusCapsule{
-		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
-		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1, Log4j2XML: "<log/>",
-			PodProperties: operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{}}}},
-		},
-	}
+	capsule := newOfflineCapsule("node0")
 	checker := newExecuteChecker(map[string]bool{"reg-a/cn:0.75.0": true, "reg-b/cn:0.75.0": true}, nil)
 	res := reconcileExecuteWith(t, execute, checker, capsule)
 
@@ -408,7 +410,7 @@ func TestExecuteReconcile_DaemonResultFalse_TerminalFailure(t *testing.T) {
 		},
 	}
 
-	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil), prereqs()...)
+	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil), prereqsWithCapsule()...)
 
 	if res.err != nil {
 		t.Fatalf("unexpected error: %v", res.err)
@@ -432,7 +434,7 @@ func TestExecuteReconcile_DaemonResultTrue_AdvancesToPendingNodeUpgrade(t *testi
 		},
 	}
 
-	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil), prereqs()...)
+	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil), prereqsWithCapsule()...)
 
 	if res.err != nil {
 		t.Fatalf("unexpected error: %v", res.err)
@@ -492,8 +494,8 @@ func TestExecuteReconcile_PendingNodeUpgrade_PatchesCapsule(t *testing.T) {
 	if err := c.Get(context.Background(), client.ObjectKeyFromObject(capsule), &updatedCapsule); err != nil {
 		t.Fatalf("get capsule: %v", err)
 	}
-	if updatedCapsule.Spec.Offline {
-		t.Error("expected Offline=false after patch")
+	if !updatedCapsule.Spec.Offline {
+		t.Error("capsule should remain Offline=true until all are patched and brought online together")
 	}
 	sv := updatedCapsule.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersion
 	if sv == nil {
@@ -513,17 +515,93 @@ func TestExecuteReconcile_PendingNodeUpgrade_PatchesCapsule(t *testing.T) {
 	}
 }
 
+func TestExecuteReconcile_PendingNodeUpgrade_BringsCapsuleOnline(t *testing.T) {
+	execute := newExecuteForTest()
+	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
+		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
+	}
+	setCondition(&execute.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.CondConsensusCapsulePatched,
+		Status:             metav1.ConditionTrue,
+		Reason:             operatorv1alpha1.ReasonPatchApplied,
+		LastTransitionTime: metav1.Now(),
+	})
+
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1,
+			Log4j2XML: "<log/>",
+			Offline:   true,
+			PodProperties: operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
+				SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "reg-a", ImageName: "cn", ImageTag: "0.75.0"},
+			}}},
+		},
+	}
+
+	scheme := newControllerTestScheme()
+	c := withExecuteIndexes(fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(execute, capsule).
+		WithStatusSubresource(execute)).Build()
+	if err := c.Status().Update(context.Background(), execute); err != nil {
+		t.Fatalf("pre-set execute status: %v", err)
+	}
+
+	rec := events.NewFakeRecorder(8)
+	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
+	r.Recorder = rec
+	r.Checker = newExecuteChecker(nil, nil)
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(execute)})
+	close(rec.Events)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var updatedCapsule operatorv1alpha1.ConsensusCapsule
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(capsule), &updatedCapsule); err != nil {
+		t.Fatalf("get capsule: %v", err)
+	}
+	if updatedCapsule.Spec.Offline {
+		t.Error("expected Offline=false after bring-online step")
+	}
+
+	var updatedExecute operatorv1alpha1.NetworkUpgradeExecute
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(execute), &updatedExecute); err != nil {
+		t.Fatalf("get execute: %v", err)
+	}
+	cond := findCondition(updatedExecute.Status.Conditions, operatorv1alpha1.CondCapsulesOnline)
+	if cond == nil || cond.Status != metav1.ConditionTrue {
+		t.Errorf("expected CapsulesOnline=True, got %v", cond)
+	}
+
+	var evts []string
+	for e := range rec.Events {
+		evts = append(evts, e)
+	}
+	if got := countContaining(evts, "CapsulesOnline"); got == 0 {
+		t.Errorf("expected CapsulesOnline event, got none in %v", evts)
+	}
+}
+
 func TestExecuteReconcile_PendingNodeUpgrade_WaitsForPodReady(t *testing.T) {
 	execute := newExecuteForTest()
 	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
 	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
 		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
 	}
-	// Mark capsule already patched.
 	setCondition(&execute.Status.Conditions, metav1.Condition{
 		Type:               operatorv1alpha1.CondConsensusCapsulePatched,
 		Status:             metav1.ConditionTrue,
 		Reason:             operatorv1alpha1.ReasonPatchApplied,
+		LastTransitionTime: metav1.Now(),
+	})
+	setCondition(&execute.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.CondCapsulesOnline,
+		Status:             metav1.ConditionTrue,
+		Reason:             operatorv1alpha1.ReasonCapsulesOnline,
 		LastTransitionTime: metav1.Now(),
 	})
 
@@ -581,6 +659,12 @@ func TestExecuteReconcile_PendingNodeUpgrade_SucceedsWhenPodsReady(t *testing.T)
 		Type:               operatorv1alpha1.CondConsensusCapsulePatched,
 		Status:             metav1.ConditionTrue,
 		Reason:             operatorv1alpha1.ReasonPatchApplied,
+		LastTransitionTime: metav1.Now(),
+	})
+	setCondition(&execute.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.CondCapsulesOnline,
+		Status:             metav1.ConditionTrue,
+		Reason:             operatorv1alpha1.ReasonCapsulesOnline,
 		LastTransitionTime: metav1.Now(),
 	})
 
@@ -648,6 +732,12 @@ func TestExecuteReconcile_PodReadyTimeout(t *testing.T) {
 		Type:               operatorv1alpha1.CondConsensusCapsulePatched,
 		Status:             metav1.ConditionTrue,
 		Reason:             operatorv1alpha1.ReasonPatchApplied,
+		LastTransitionTime: metav1.Now(),
+	})
+	setCondition(&execute.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.CondCapsulesOnline,
+		Status:             metav1.ConditionTrue,
+		Reason:             operatorv1alpha1.ReasonCapsulesOnline,
 		LastTransitionTime: metav1.Now(),
 	})
 	pastTime := metav1.NewTime(time.Now().Add(-30 * time.Minute))

@@ -13,6 +13,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -124,11 +125,16 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 		return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
 	}
 
-	capsules, err := r.listCapsules(ctx, execute.Namespace, execute.Spec.Orbit)
+	capsule, err := r.getCapsule(ctx, execute)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if err := r.ensureCapsuleOffline(ctx, execute, capsules); err != nil {
+	if capsule == nil {
+		logger.Info("ConsensusCapsule not found", "capsule", execute.Spec.ConsensusNode)
+		return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
+	}
+
+	if err := r.ensureCapsuleOffline(ctx, execute, capsule); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -174,14 +180,27 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 }
 
 func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (ctrl.Result, error) {
-	capsules, err := r.listCapsules(ctx, execute.Namespace, execute.Spec.Orbit)
+	capsule, err := r.getCapsule(ctx, execute)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+	if capsule == nil {
+		return ctrl.Result{RequeueAfter: executeReadyRequeueAfter}, nil
+	}
 
+	// Step 1: re-validate registries and patch this capsule's images (keep Offline=true).
+	// Wait until all sibling Execute CRs for this operationID have their capsule offline
+	// before patching any, so no node restarts while others are still running.
 	capsulePatched := findCondition(execute.Status.Conditions, operatorv1alpha1.CondConsensusCapsulePatched)
 	if capsulePatched == nil || capsulePatched.Status != metav1.ConditionTrue {
-		// Re-validate registries immediately before applying images to nodes.
+		allOffline, err := r.allSiblingsOffline(ctx, execute)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if !allOffline {
+			return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
+		}
+
 		rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 		skipUC := map[operatorv1alpha1.ComponentName]bool{operatorv1alpha1.ComponentUC: true}
 		updated, registryOK := registry.RevalidateComponents(
@@ -225,14 +244,16 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 			Message: "all selected registries healthy",
 		})
 
-		if err := r.patchCapsules(ctx, execute, capsules); err != nil {
-			return ctrl.Result{}, err
+		patch := client.MergeFrom(capsule.DeepCopy())
+		r.applyImagePatch(execute, capsule)
+		if err := r.Patch(ctx, capsule, patch); err != nil {
+			return ctrl.Result{}, fmt.Errorf("patching capsule %s: %w", capsule.Name, err)
 		}
 		setCondition(&execute.Status.Conditions, metav1.Condition{
 			Type:    operatorv1alpha1.CondConsensusCapsulePatched,
 			Status:  metav1.ConditionTrue,
 			Reason:  operatorv1alpha1.ReasonPatchApplied,
-			Message: "ConsensusCapsule images updated and brought online",
+			Message: "ConsensusCapsule images updated",
 		})
 		execute.Status.ObservedGeneration = execute.Generation
 		if err := r.Status().Update(ctx, execute); err != nil {
@@ -242,11 +263,48 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 			return ctrl.Result{}, fmt.Errorf("updating status after capsule patch: %w", err)
 		}
 		r.eventf(execute, corev1.EventTypeNormal, operatorv1alpha1.EventCapsulePatched,
-			"ConsensusCapsule patched with new images for operationId %q", execute.Spec.OperationID)
+			"ConsensusCapsule %s patched with new images for operationId %q", capsule.Name, execute.Spec.OperationID)
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// Step 2: bring this capsule online once all siblings are also patched.
+	capsulesOnline := findCondition(execute.Status.Conditions, operatorv1alpha1.CondCapsulesOnline)
+	if capsulesOnline == nil || capsulesOnline.Status != metav1.ConditionTrue {
+		allPatched, err := r.allSiblingsPatched(ctx, execute)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if !allPatched {
+			return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
+		}
+
+		if capsule.Spec.Offline {
+			patch := client.MergeFrom(capsule.DeepCopy())
+			capsule.Spec.Offline = false
+			if err := r.Patch(ctx, capsule, patch); err != nil {
+				return ctrl.Result{}, fmt.Errorf("bringing capsule %s online: %w", capsule.Name, err)
+			}
+		}
+		setCondition(&execute.Status.Conditions, metav1.Condition{
+			Type:    operatorv1alpha1.CondCapsulesOnline,
+			Status:  metav1.ConditionTrue,
+			Reason:  operatorv1alpha1.ReasonCapsulesOnline,
+			Message: "ConsensusCapsule brought online",
+		})
+		execute.Status.ObservedGeneration = execute.Generation
+		if err := r.Status().Update(ctx, execute); err != nil {
+			if apierrors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
+			return ctrl.Result{}, fmt.Errorf("updating status after bringing capsule online: %w", err)
+		}
+		r.eventf(execute, corev1.EventTypeNormal, operatorv1alpha1.EventCapsulesOnline,
+			"ConsensusCapsule %s brought online for operationId %q", capsule.Name, execute.Spec.OperationID)
 		return ctrl.Result{RequeueAfter: executeReadyRequeueAfter}, nil
 	}
 
-	allReady, timedOut, err := r.checkPodsReady(ctx, execute, capsules)
+	// Step 3: wait for pod to be ready.
+	ready, timedOut, err := r.checkPodReady(ctx, execute, capsule)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -260,17 +318,17 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 			Type:    operatorv1alpha1.CondNodesUpgraded,
 			Status:  metav1.ConditionFalse,
 			Reason:  operatorv1alpha1.ReasonUpgradeFailed,
-			Message: "timed out waiting for consensus pods to become ready",
+			Message: "timed out waiting for consensus pod to become ready",
 		})
 		if err := r.Status().Update(ctx, execute); err != nil {
 			return ctrl.Result{}, fmt.Errorf("updating status to failed: %w", err)
 		}
 		r.eventf(execute, corev1.EventTypeWarning, operatorv1alpha1.EventUpgradeFailed,
-			"timed out waiting for consensus pods after upgrade for operationId %q", execute.Spec.OperationID)
+			"timed out waiting for consensus pod after upgrade for operationId %q", execute.Spec.OperationID)
 		return ctrl.Result{}, nil
 	}
 
-	if !allReady {
+	if !ready {
 		return ctrl.Result{RequeueAfter: executeReadyRequeueAfter}, nil
 	}
 
@@ -282,7 +340,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 		Type:    operatorv1alpha1.CondNodesUpgraded,
 		Status:  metav1.ConditionTrue,
 		Reason:  operatorv1alpha1.ReasonUpgradeSucceeded,
-		Message: "all consensus pods ready with upgraded images",
+		Message: "consensus pod ready with upgraded images",
 	})
 	if err := r.Status().Update(ctx, execute); err != nil {
 		if apierrors.IsConflict(err) {
@@ -291,47 +349,89 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 		return ctrl.Result{}, fmt.Errorf("updating status to succeeded: %w", err)
 	}
 	r.eventf(execute, corev1.EventTypeNormal, operatorv1alpha1.EventUpgradeSucceeded,
-		"upgrade succeeded for operationId %q", execute.Spec.OperationID)
+		"upgrade succeeded for operationId %q capsule %s", execute.Spec.OperationID, capsule.Name)
 	return ctrl.Result{}, nil
+}
+
+// allSiblingsOffline returns true when every Execute CR for this operationID has its capsule offline.
+// This ensures no node is patched while another is still running.
+func (r *NetworkUpgradeExecuteReconciler) allSiblingsOffline(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (bool, error) {
+	var list operatorv1alpha1.NetworkUpgradeExecuteList
+	if err := r.List(ctx, &list,
+		client.InNamespace(execute.Namespace),
+		client.MatchingFields{fieldOperationID: execute.Spec.OperationID},
+	); err != nil {
+		return false, fmt.Errorf("listing Execute CRs for operationId %q: %w", execute.Spec.OperationID, err)
+	}
+	for i := range list.Items {
+		sibling := &list.Items[i]
+		if sibling.Spec.ConsensusNode == "" {
+			continue
+		}
+		var capsule operatorv1alpha1.ConsensusCapsule
+		err := r.Get(ctx, types.NamespacedName{Name: sibling.Spec.ConsensusNode, Namespace: sibling.Namespace}, &capsule)
+		if apierrors.IsNotFound(err) {
+			continue
+		}
+		if err != nil {
+			return false, fmt.Errorf("getting capsule %s: %w", sibling.Spec.ConsensusNode, err)
+		}
+		if !capsule.Spec.Offline {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// allSiblingsPatched returns true when every Execute CR for this operationID has CondConsensusCapsulePatched=True.
+func (r *NetworkUpgradeExecuteReconciler) allSiblingsPatched(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (bool, error) {
+	var list operatorv1alpha1.NetworkUpgradeExecuteList
+	if err := r.List(ctx, &list,
+		client.InNamespace(execute.Namespace),
+		client.MatchingFields{fieldOperationID: execute.Spec.OperationID},
+	); err != nil {
+		return false, fmt.Errorf("listing Execute CRs for operationId %q: %w", execute.Spec.OperationID, err)
+	}
+	for i := range list.Items {
+		sibling := &list.Items[i]
+		if sibling.UID == execute.UID {
+			continue
+		}
+		cond := findCondition(sibling.Status.Conditions, operatorv1alpha1.CondConsensusCapsulePatched)
+		if cond == nil || cond.Status != metav1.ConditionTrue {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func (r *NetworkUpgradeExecuteReconciler) getCapsule(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (*operatorv1alpha1.ConsensusCapsule, error) {
+	var capsule operatorv1alpha1.ConsensusCapsule
+	err := r.Get(ctx, types.NamespacedName{Name: execute.Spec.ConsensusNode, Namespace: execute.Namespace}, &capsule)
+	if apierrors.IsNotFound(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("getting ConsensusCapsule %s: %w", execute.Spec.ConsensusNode, err)
+	}
+	return &capsule, nil
 }
 
 func (r *NetworkUpgradeExecuteReconciler) ensureCapsuleOffline(
 	ctx context.Context,
 	execute *operatorv1alpha1.NetworkUpgradeExecute,
-	capsules []operatorv1alpha1.ConsensusCapsule,
+	capsule *operatorv1alpha1.ConsensusCapsule,
 ) error {
-	for i := range capsules {
-		c := &capsules[i]
-		if c.Spec.Offline {
-			continue
-		}
-		patch := client.MergeFrom(c.DeepCopy())
-		c.Spec.Offline = true
-		if err := r.Patch(ctx, c, patch); err != nil {
-			return fmt.Errorf("scaling down capsule %s: %w", c.Name, err)
-		}
-		r.eventf(execute, corev1.EventTypeNormal, operatorv1alpha1.EventPodScaledDown,
-			"scaled down ConsensusCapsule %s/%s for operationId %q", c.Namespace, c.Name, execute.Spec.OperationID)
+	if capsule.Spec.Offline {
+		return nil
 	}
-	return nil
-}
-
-func (r *NetworkUpgradeExecuteReconciler) patchCapsules(
-	ctx context.Context,
-	execute *operatorv1alpha1.NetworkUpgradeExecute,
-	capsules []operatorv1alpha1.ConsensusCapsule,
-) error {
-	for i := range capsules {
-		c := &capsules[i]
-		patch := client.MergeFrom(c.DeepCopy())
-
-		r.applyImagePatch(execute, c)
-		c.Spec.Offline = false
-
-		if err := r.Patch(ctx, c, patch); err != nil {
-			return fmt.Errorf("patching capsule %s: %w", c.Name, err)
-		}
+	patch := client.MergeFrom(capsule.DeepCopy())
+	capsule.Spec.Offline = true
+	if err := r.Patch(ctx, capsule, patch); err != nil {
+		return fmt.Errorf("scaling down capsule %s: %w", capsule.Name, err)
 	}
+	r.eventf(execute, corev1.EventTypeNormal, operatorv1alpha1.EventPodScaledDown,
+		"scaled down ConsensusCapsule %s/%s for operationId %q", capsule.Namespace, capsule.Name, execute.Spec.OperationID)
 	return nil
 }
 
@@ -361,7 +461,6 @@ func (r *NetworkUpgradeExecuteReconciler) applyImagePatch(
 		return src.Image, false, true
 	}
 
-	// consensusNode — always present, never a pointer.
 	if img, remove, upgrade := applyComponent(operatorv1alpha1.ComponentConsensusNode); upgrade && !remove {
 		setSoftwareVersion(&capsule.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersion, img)
 	}
@@ -393,48 +492,30 @@ func (r *NetworkUpgradeExecuteReconciler) applyImagePatch(
 	// ComponentUC — not yet wired into ConsensusContainers; skip until added.
 }
 
-func (r *NetworkUpgradeExecuteReconciler) checkPodsReady(
+func (r *NetworkUpgradeExecuteReconciler) checkPodReady(
 	ctx context.Context,
 	execute *operatorv1alpha1.NetworkUpgradeExecute,
-	capsules []operatorv1alpha1.ConsensusCapsule,
-) (allReady, timedOut bool, err error) {
+	capsule *operatorv1alpha1.ConsensusCapsule,
+) (ready, timedOut bool, err error) {
 	timeout := r.PodReadyTimeout
 	if timeout == 0 {
 		timeout = executeDefaultPodReadyTimeout
 	}
-
 	if execute.Status.NodeUpgradeStartTime != nil && time.Since(execute.Status.NodeUpgradeStartTime.Time) > timeout {
 		return false, true, nil
 	}
 
-	for i := range capsules {
-		c := &capsules[i]
-		var sts appsv1.StatefulSet
-		if err := r.Get(ctx, client.ObjectKey{
-			Name:      consensusresources.StatefulSetName(c),
-			Namespace: c.Namespace,
-		}, &sts); err != nil {
-			if apierrors.IsNotFound(err) {
-				return false, false, nil
-			}
-			return false, false, fmt.Errorf("getting StatefulSet for capsule %s: %w", c.Name, err)
-		}
-		if sts.Status.ReadyReplicas < 1 {
+	var sts appsv1.StatefulSet
+	if err := r.Get(ctx, client.ObjectKey{
+		Name:      consensusresources.StatefulSetName(capsule),
+		Namespace: capsule.Namespace,
+	}, &sts); err != nil {
+		if apierrors.IsNotFound(err) {
 			return false, false, nil
 		}
+		return false, false, fmt.Errorf("getting StatefulSet for capsule %s: %w", capsule.Name, err)
 	}
-	return true, false, nil
-}
-
-func (r *NetworkUpgradeExecuteReconciler) listCapsules(ctx context.Context, namespace, orbit string) ([]operatorv1alpha1.ConsensusCapsule, error) {
-	var list operatorv1alpha1.ConsensusCapsuleList
-	if err := r.List(ctx, &list,
-		client.InNamespace(namespace),
-		client.MatchingLabels{common.LabelOrbit: orbit},
-	); err != nil {
-		return nil, fmt.Errorf("listing ConsensusCapsules for orbit %q: %w", orbit, err)
-	}
-	return list.Items, nil
+	return sts.Status.ReadyReplicas >= 1, false, nil
 }
 
 func (r *NetworkUpgradeExecuteReconciler) findPrepare(ctx context.Context, namespace, operationID string) (*operatorv1alpha1.NetworkUpgradePrepare, error) {
@@ -470,6 +551,17 @@ func RegisterFreezeIndex(mgr ctrl.Manager) error {
 		fieldOperationID,
 		func(o client.Object) []string {
 			return []string{o.(*operatorv1alpha1.NetworkUpgradeFreeze).Spec.OperationID}
+		},
+	)
+}
+
+func RegisterExecuteIndex(mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&operatorv1alpha1.NetworkUpgradeExecute{},
+		fieldOperationID,
+		func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradeExecute).Spec.OperationID}
 		},
 	)
 }

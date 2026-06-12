@@ -53,7 +53,7 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	execute, err := r.findExecute(ctx, abort.Namespace, abort.Spec.OperationID)
+	executeExists, err := r.anyExecuteExists(ctx, abort.Namespace, abort.Spec.OperationID)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -62,7 +62,7 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 	abort.Status.CompletionTime = &completionTime
 	abort.Status.ObservedGeneration = abort.Generation
 
-	if execute != nil {
+	if executeExists {
 		log.FromContext(ctx).Info("NetworkUpgradeExecute CR exists; abort arrived after freeze", "operationId", abort.Spec.OperationID)
 		r.eventf(&abort, corev1.EventTypeWarning, operatorv1alpha1.EventAbortAfterFreeze,
 			"NetworkUpgradeExecute CR already exists for operationId %q; abort has no effect after freeze", abort.Spec.OperationID)
@@ -91,15 +91,15 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 	return ctrl.Result{}, nil
 }
 
-func (r *NetworkUpgradeFreezeAbortReconciler) findExecute(ctx context.Context, namespace, operationID string) (*operatorv1alpha1.NetworkUpgradeExecute, error) {
-	return findOneByOperationID(ctx, r.Client, namespace, operationID, "NetworkUpgradeExecute",
-		func() *operatorv1alpha1.NetworkUpgradeExecuteList {
-			return &operatorv1alpha1.NetworkUpgradeExecuteList{}
-		},
-		func(l *operatorv1alpha1.NetworkUpgradeExecuteList) []operatorv1alpha1.NetworkUpgradeExecute {
-			return l.Items
-		},
-	)
+func (r *NetworkUpgradeFreezeAbortReconciler) anyExecuteExists(ctx context.Context, namespace, operationID string) (bool, error) {
+	var list operatorv1alpha1.NetworkUpgradeExecuteList
+	if err := r.List(ctx, &list,
+		client.InNamespace(namespace),
+		client.MatchingFields{fieldOperationID: operationID},
+	); err != nil {
+		return false, fmt.Errorf("listing NetworkUpgradeExecute: %w", err)
+	}
+	return len(list.Items) > 0, nil
 }
 
 func (r *NetworkUpgradeFreezeAbortReconciler) eventf(obj *operatorv1alpha1.NetworkUpgradeFreezeAbort, eventtype, reason, format string, args ...any) {
@@ -111,16 +111,6 @@ func (r *NetworkUpgradeFreezeAbortReconciler) eventf(obj *operatorv1alpha1.Netwo
 func (r *NetworkUpgradeFreezeAbortReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.Recorder == nil {
 		r.Recorder = mgr.GetEventRecorder("networkupgradefreezeabort")
-	}
-	if err := mgr.GetFieldIndexer().IndexField(
-		context.Background(),
-		&operatorv1alpha1.NetworkUpgradeExecute{},
-		fieldOperationID,
-		func(o client.Object) []string {
-			return []string{o.(*operatorv1alpha1.NetworkUpgradeExecute).Spec.OperationID}
-		},
-	); err != nil {
-		return fmt.Errorf("registering operationId index on NetworkUpgradeExecute: %w", err)
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.NetworkUpgradeFreezeAbort{}).
