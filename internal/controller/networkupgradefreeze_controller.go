@@ -63,6 +63,15 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, nil
 	}
 
+	prepare, err := r.findPrepare(ctx, freeze.Namespace, freeze.Spec.OperationID)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if prepare == nil || prepare.Status.Phase != operatorv1alpha1.PhaseSucceeded {
+		logger.Info("waiting for NetworkUpgradePrepare to succeed", "operationId", freeze.Spec.OperationID)
+		return ctrl.Result{RequeueAfter: freezePrereqRequeueAfter}, nil
+	}
+
 	if freeze.Status.Phase == "" || freeze.Status.Phase == operatorv1alpha1.PhasePending {
 		now := metav1.Now()
 		freeze.Status.StartTime = &now
@@ -71,15 +80,6 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, fmt.Errorf("initializing status: %w", err)
 		}
 		return ctrl.Result{Requeue: true}, nil
-	}
-
-	prepare, err := r.findPrepare(ctx, freeze.Namespace, freeze.Spec.OperationID)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	if prepare == nil || prepare.Status.Phase != operatorv1alpha1.PhaseSucceeded {
-		logger.Info("waiting for NetworkUpgradePrepare to succeed", "operationId", freeze.Spec.OperationID)
-		return ctrl.Result{RequeueAfter: freezePrereqRequeueAfter}, nil
 	}
 
 	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
