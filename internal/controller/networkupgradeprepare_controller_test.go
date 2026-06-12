@@ -55,10 +55,6 @@ type reconcileResult struct {
 	err     error
 }
 
-func prepareIndexFunc(o client.Object) []string {
-	return []string{o.(*operatorv1alpha1.NetworkUpgradePrepare).Spec.OperationID}
-}
-
 func reconcilePrepare(t *testing.T, prepare *operatorv1alpha1.NetworkUpgradePrepare, checker registry.ImageChecker) reconcileResult {
 	t.Helper()
 	scheme := newControllerTestScheme()
