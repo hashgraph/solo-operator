@@ -237,22 +237,26 @@ func (r *NetworkUpgradePrepareReconciler) event(obj *operatorv1alpha1.NetworkUpg
 
 const fieldOperationID = "spec.operationId"
 
+func prepareIndexFunc(o client.Object) []string {
+	return []string{o.(*operatorv1alpha1.NetworkUpgradePrepare).Spec.OperationID}
+}
+
+// RegisterPrepareIndex registers the fieldOperationID field index on NetworkUpgradePrepare.
+func RegisterPrepareIndex(mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&operatorv1alpha1.NetworkUpgradePrepare{},
+		fieldOperationID,
+		prepareIndexFunc,
+	)
+}
+
 func (r *NetworkUpgradePrepareReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.Recorder == nil {
 		r.Recorder = mgr.GetEventRecorder("networkupgradeprepare")
 	}
 	if r.Checker == nil {
 		r.Checker = registry.OCIChecker{}
-	}
-	if err := mgr.GetFieldIndexer().IndexField(
-		context.Background(),
-		&operatorv1alpha1.NetworkUpgradePrepare{},
-		fieldOperationID,
-		func(o client.Object) []string {
-			return []string{o.(*operatorv1alpha1.NetworkUpgradePrepare).Spec.OperationID}
-		},
-	); err != nil {
-		return fmt.Errorf("registering operationId index: %w", err)
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.NetworkUpgradePrepare{}).
