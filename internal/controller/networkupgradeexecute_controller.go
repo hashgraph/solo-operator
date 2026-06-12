@@ -84,6 +84,8 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		if err := r.Status().Update(ctx, &execute); err != nil {
 			return ctrl.Result{}, fmt.Errorf("initializing status: %w", err)
 		}
+		r.eventf(&execute, corev1.EventTypeNormal, operatorv1alpha1.EventReadyForDaemon,
+			"waiting for provisioner daemon for operationId %q", execute.Spec.OperationID)
 		return ctrl.Result{Requeue: true}, nil
 	}
 
@@ -122,50 +124,6 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 		return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
 	}
 
-	// Re-validate registries every time (tampered image at execute time corrupts nodes).
-	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
-	skipUC := map[operatorv1alpha1.ComponentName]bool{operatorv1alpha1.ComponentUC: true}
-	updated, registryOK := registry.RevalidateComponents(
-		ctx, r.Checker,
-		execute.Spec.Images, execute.Spec.SelectedSources,
-		checkTimeout, rng, r.StrategyName,
-		skipUC,
-		func(name operatorv1alpha1.ComponentName, res registry.FailoverResult) {
-			r.eventf(execute, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryFailover,
-				"%s: registry %s unreachable, failed over to %s (digest: %s)",
-				name, res.FailedImage, res.Selected.Image, res.Selected.Digest)
-		},
-		func(name operatorv1alpha1.ComponentName, err error) {
-			r.eventf(execute, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
-				"%s: %v", name, err)
-		},
-	)
-	if !registryOK {
-		now := metav1.Now()
-		execute.Status.Phase = operatorv1alpha1.ExecutePhaseFailed
-		execute.Status.CompletionTime = &now
-		execute.Status.ObservedGeneration = execute.Generation
-		setCondition(&execute.Status.Conditions, metav1.Condition{
-			Type:    operatorv1alpha1.CondRegistrySelected,
-			Status:  metav1.ConditionFalse,
-			Reason:  operatorv1alpha1.ReasonRegistryInvalid,
-			Message: "no valid registry available for one or more components",
-		})
-		if err := r.Status().Update(ctx, execute); err != nil {
-			return ctrl.Result{}, fmt.Errorf("updating status to failed: %w", err)
-		}
-		r.eventf(execute, corev1.EventTypeWarning, operatorv1alpha1.EventUpgradeFailed,
-			"registry validation failed for operationId %q", execute.Spec.OperationID)
-		return ctrl.Result{}, fmt.Errorf("no valid registry for one or more components")
-	}
-	execute.Status.SelectedSources = updated
-	setCondition(&execute.Status.Conditions, metav1.Condition{
-		Type:    operatorv1alpha1.CondRegistrySelected,
-		Status:  metav1.ConditionTrue,
-		Reason:  operatorv1alpha1.ReasonSelectionComplete,
-		Message: "all selected registries healthy",
-	})
-
 	capsules, err := r.listCapsules(ctx, execute.Namespace, execute.Spec.Orbit)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -200,7 +158,9 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 		return ctrl.Result{}, nil
 	}
 
+	now := metav1.Now()
 	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	execute.Status.NodeUpgradeStartTime = &now
 	execute.Status.ObservedGeneration = execute.Generation
 	if err := r.Status().Update(ctx, execute); err != nil {
 		if apierrors.IsConflict(err) {
@@ -221,6 +181,50 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 
 	capsulePatched := findCondition(execute.Status.Conditions, operatorv1alpha1.CondConsensusCapsulePatched)
 	if capsulePatched == nil || capsulePatched.Status != metav1.ConditionTrue {
+		// Re-validate registries immediately before applying images to nodes.
+		rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
+		skipUC := map[operatorv1alpha1.ComponentName]bool{operatorv1alpha1.ComponentUC: true}
+		updated, registryOK := registry.RevalidateComponents(
+			ctx, r.Checker,
+			execute.Spec.Images, execute.Spec.SelectedSources,
+			checkTimeout, rng, r.StrategyName,
+			skipUC,
+			func(name operatorv1alpha1.ComponentName, res registry.FailoverResult) {
+				r.eventf(execute, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryFailover,
+					"%s: registry %s unreachable, failed over to %s (digest: %s)",
+					name, res.FailedImage, res.Selected.Image, res.Selected.Digest)
+			},
+			func(name operatorv1alpha1.ComponentName, err error) {
+				r.eventf(execute, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
+					"%s: %v", name, err)
+			},
+		)
+		if !registryOK {
+			now := metav1.Now()
+			execute.Status.Phase = operatorv1alpha1.ExecutePhaseFailed
+			execute.Status.CompletionTime = &now
+			execute.Status.ObservedGeneration = execute.Generation
+			setCondition(&execute.Status.Conditions, metav1.Condition{
+				Type:    operatorv1alpha1.CondRegistrySelected,
+				Status:  metav1.ConditionFalse,
+				Reason:  operatorv1alpha1.ReasonRegistryInvalid,
+				Message: "no valid registry available for one or more components",
+			})
+			if err := r.Status().Update(ctx, execute); err != nil {
+				return ctrl.Result{}, fmt.Errorf("updating status to failed: %w", err)
+			}
+			r.eventf(execute, corev1.EventTypeWarning, operatorv1alpha1.EventUpgradeFailed,
+				"registry validation failed for operationId %q", execute.Spec.OperationID)
+			return ctrl.Result{}, fmt.Errorf("no valid registry for one or more components")
+		}
+		execute.Status.SelectedSources = updated
+		setCondition(&execute.Status.Conditions, metav1.Condition{
+			Type:    operatorv1alpha1.CondRegistrySelected,
+			Status:  metav1.ConditionTrue,
+			Reason:  operatorv1alpha1.ReasonSelectionComplete,
+			Message: "all selected registries healthy",
+		})
+
 		if err := r.patchCapsules(ctx, execute, capsules); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -399,7 +403,7 @@ func (r *NetworkUpgradeExecuteReconciler) checkPodsReady(
 		timeout = executeDefaultPodReadyTimeout
 	}
 
-	if execute.Status.StartTime != nil && time.Since(execute.Status.StartTime.Time) > timeout {
+	if execute.Status.NodeUpgradeStartTime != nil && time.Since(execute.Status.NodeUpgradeStartTime.Time) > timeout {
 		return false, true, nil
 	}
 

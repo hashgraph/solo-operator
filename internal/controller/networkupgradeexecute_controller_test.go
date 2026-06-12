@@ -243,8 +243,24 @@ func TestExecuteReconcile_WaitsForPrereqs(t *testing.T) {
 	}
 }
 
+func newExecuteInPendingNodeUpgrade() *operatorv1alpha1.NetworkUpgradeExecute {
+	now := metav1.Now()
+	e := newExecuteForTest()
+	e.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	e.Status.NodeUpgradeStartTime = &now
+	return e
+}
+
 func TestExecuteReconcile_SelectedRegistryStillValid(t *testing.T) {
-	res := reconcileExecuteWith(t, newExecuteForTest(), newExecuteChecker(nil, nil), prereqs()...)
+	execute := newExecuteInPendingNodeUpgrade()
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1, Log4j2XML: "<log/>",
+			PodProperties: operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{}}}},
+		},
+	}
+	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil), capsule)
 
 	if res.err != nil {
 		t.Fatalf("unexpected error: %v", res.err)
@@ -265,12 +281,20 @@ func TestExecuteReconcile_SelectedRegistryStillValid(t *testing.T) {
 }
 
 func TestExecuteReconcile_FailoverToAlternate(t *testing.T) {
+	execute := newExecuteInPendingNodeUpgrade()
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1, Log4j2XML: "<log/>",
+			PodProperties: operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{}}}},
+		},
+	}
 	checker := fakeUpgradeChecker{
 		unreachable:   map[string]bool{"reg-a/cn:0.75.0": true},
 		digest:        altExecuteDigest,
 		defaultDigest: executeDigest,
 	}
-	res := reconcileExecuteWith(t, newExecuteForTest(), checker, prereqs()...)
+	res := reconcileExecuteWith(t, execute, checker, capsule)
 
 	if res.err != nil {
 		t.Fatalf("unexpected error: %v", res.err)
@@ -293,8 +317,16 @@ func TestExecuteReconcile_FailoverToAlternate(t *testing.T) {
 }
 
 func TestExecuteReconcile_NoValidRegistry_TerminalFailure(t *testing.T) {
+	execute := newExecuteInPendingNodeUpgrade()
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1, Log4j2XML: "<log/>",
+			PodProperties: operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{}}}},
+		},
+	}
 	checker := newExecuteChecker(map[string]bool{"reg-a/cn:0.75.0": true, "reg-b/cn:0.75.0": true}, nil)
-	res := reconcileExecuteWith(t, newExecuteForTest(), checker, prereqs()...)
+	res := reconcileExecuteWith(t, execute, checker, capsule)
 
 	if res.err == nil {
 		t.Error("expected error when no valid registry")
@@ -618,9 +650,8 @@ func TestExecuteReconcile_PodReadyTimeout(t *testing.T) {
 		Reason:             operatorv1alpha1.ReasonPatchApplied,
 		LastTransitionTime: metav1.Now(),
 	})
-	// StartTime far in the past to trigger timeout.
 	pastTime := metav1.NewTime(time.Now().Add(-30 * time.Minute))
-	execute.Status.StartTime = &pastTime
+	execute.Status.NodeUpgradeStartTime = &pastTime
 
 	capsule := &operatorv1alpha1.ConsensusCapsule{
 		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},

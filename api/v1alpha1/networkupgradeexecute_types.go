@@ -36,6 +36,8 @@ type NetworkUpgradeExecuteStatus struct {
 	// +optional
 	StartTime *metav1.Time `json:"startTime,omitempty"`
 	// +optional
+	NodeUpgradeStartTime *metav1.Time `json:"nodeUpgradeStartTime,omitempty"`
+	// +optional
 	CompletionTime *metav1.Time `json:"completionTime,omitempty"`
 	// +optional
 	// +patchMergeKey=type
