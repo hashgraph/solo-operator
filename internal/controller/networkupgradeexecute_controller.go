@@ -188,12 +188,9 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 		return ctrl.Result{RequeueAfter: executeReadyRequeueAfter}, nil
 	}
 
-	// Step 1: re-validate registries and patch this capsule's images (keep Offline=true).
-	// Wait until all sibling Execute CRs for this operationID have their capsule offline
-	// before patching any, so no node restarts while others are still running.
 	capsulePatched := findCondition(execute.Status.Conditions, operatorv1alpha1.CondConsensusCapsulePatched)
 	if capsulePatched == nil || capsulePatched.Status != metav1.ConditionTrue {
-		allOffline, err := r.allSiblingsOffline(ctx, execute)
+		allOffline, err := r.allPeersOffline(ctx, execute)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -267,10 +264,9 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	// Step 2: bring this capsule online once all siblings are also patched.
 	capsulesOnline := findCondition(execute.Status.Conditions, operatorv1alpha1.CondCapsulesOnline)
 	if capsulesOnline == nil || capsulesOnline.Status != metav1.ConditionTrue {
-		allPatched, err := r.allSiblingsPatched(ctx, execute)
+		allPatched, err := r.allPeersPatched(ctx, execute)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -303,7 +299,6 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 		return ctrl.Result{RequeueAfter: executeReadyRequeueAfter}, nil
 	}
 
-	// Step 3: wait for pod to be ready.
 	ready, timedOut, err := r.checkPodReady(ctx, execute, capsule)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -353,9 +348,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 	return ctrl.Result{}, nil
 }
 
-// allSiblingsOffline returns true when every Execute CR for this operationID has its capsule offline.
-// This ensures no node is patched while another is still running.
-func (r *NetworkUpgradeExecuteReconciler) allSiblingsOffline(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (bool, error) {
+func (r *NetworkUpgradeExecuteReconciler) allPeersOffline(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (bool, error) {
 	var list operatorv1alpha1.NetworkUpgradeExecuteList
 	if err := r.List(ctx, &list,
 		client.InNamespace(execute.Namespace),
@@ -383,8 +376,7 @@ func (r *NetworkUpgradeExecuteReconciler) allSiblingsOffline(ctx context.Context
 	return true, nil
 }
 
-// allSiblingsPatched returns true when every Execute CR for this operationID has CondConsensusCapsulePatched=True.
-func (r *NetworkUpgradeExecuteReconciler) allSiblingsPatched(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (bool, error) {
+func (r *NetworkUpgradeExecuteReconciler) allPeersPatched(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (bool, error) {
 	var list operatorv1alpha1.NetworkUpgradeExecuteList
 	if err := r.List(ctx, &list,
 		client.InNamespace(execute.Namespace),
@@ -435,10 +427,6 @@ func (r *NetworkUpgradeExecuteReconciler) ensureCapsuleOffline(
 	return nil
 }
 
-// applyImagePatch mutates the capsule in place using the three-rule logic:
-//   - present + enabled  → upgrade image
-//   - omitted            → no-change
-//   - present + disabled → remove sidecar (nil pointer)
 func (r *NetworkUpgradeExecuteReconciler) applyImagePatch(
 	execute *operatorv1alpha1.NetworkUpgradeExecute,
 	capsule *operatorv1alpha1.ConsensusCapsule,
@@ -489,7 +477,6 @@ func (r *NetworkUpgradeExecuteReconciler) applyImagePatch(
 		ensureStream(&capsule.Spec.PodProperties.Containers.BackupUploader, img)
 	}
 
-	// ComponentUC — not yet wired into ConsensusContainers; skip until added.
 }
 
 func (r *NetworkUpgradeExecuteReconciler) checkPodReady(
