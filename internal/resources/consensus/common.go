@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
@@ -252,7 +253,7 @@ func InternalHostname(capsule *operatorv1alpha1.ConsensusCapsule) string {
 }
 
 // NewSubReconcilers creates all consensus capsule subreconcilers in execution order
-func NewSubReconcilers(c client.Client, scheme *runtime.Scheme) *subreconciler.Chain[*operatorv1alpha1.ConsensusCapsule] {
+func NewSubReconcilers(c client.Client, scheme *runtime.Scheme, recorder events.EventRecorder) *subreconciler.Chain[*operatorv1alpha1.ConsensusCapsule] {
 	return subreconciler.NewChain(
 		NewServiceAccountSubReconciler(c, scheme),
 		NewRoleSubReconciler(c, scheme),
@@ -267,6 +268,6 @@ func NewSubReconcilers(c client.Client, scheme *runtime.Scheme) *subreconciler.C
 		// Checkpoint must precede StatefulSet so the ConfigMap exists before the
 		// init container tries to resolve the GENESIS_INITIALIZED env var.
 		NewCheckpointSubReconciler(c, scheme),
-		NewStatefulSetSubReconciler(c, scheme),
+		NewStatefulSetSubReconciler(c, scheme, recorder),
 	)
 }

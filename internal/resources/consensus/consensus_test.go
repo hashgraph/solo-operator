@@ -706,7 +706,7 @@ func TestStatefulSetSubReconciler(t *testing.T) {
 	capsule := newTestCapsule()
 	c := newTestClient(scheme, capsule)
 
-	reconciler := NewStatefulSetSubReconciler(c, scheme)
+	reconciler := NewStatefulSetSubReconciler(c, scheme, nil)
 
 	result, err := reconciler.Reconcile(ctx, capsule)
 	if err != nil {
@@ -1353,7 +1353,7 @@ func TestNewSubReconcilers(t *testing.T) {
 	scheme := newTestScheme()
 	c := newTestClient(scheme)
 
-	chain := NewSubReconcilers(c, scheme)
+	chain := NewSubReconcilers(c, scheme, nil)
 
 	if chain == nil {
 		t.Fatal("expected non-nil chain")

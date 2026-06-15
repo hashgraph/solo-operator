@@ -11,6 +11,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,15 +35,15 @@ const (
 type ConsensusCapsuleReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
+	Recorder      events.EventRecorder
 	subreconciler *subreconciler.Chain[*operatorv1alpha1.ConsensusCapsule]
 }
 
 // NewConsensusCapsuleReconciler creates a new ConsensusCapsuleReconciler
 func NewConsensusCapsuleReconciler(c client.Client, scheme *runtime.Scheme) *ConsensusCapsuleReconciler {
 	return &ConsensusCapsuleReconciler{
-		Client:        c,
-		Scheme:        scheme,
-		subreconciler: consensus.NewSubReconcilers(c, scheme),
+		Client: c,
+		Scheme: scheme,
 	}
 }
 
@@ -233,6 +234,12 @@ func (r *ConsensusCapsuleReconciler) markGenesisInitialized(ctx context.Context,
 
 // SetupWithManager sets up the controller with the Manager
 func (r *ConsensusCapsuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.Recorder == nil {
+		r.Recorder = mgr.GetEventRecorder("consensuscapsule")
+	}
+	if r.subreconciler == nil {
+		r.subreconciler = consensus.NewSubReconcilers(r.Client, r.Scheme, r.Recorder)
+	}
 	// Skip status-only updates (LoadBalancer IP, PVC binding, STS readyReplicas, etc.)
 	genChanged := builder.WithPredicates(predicate.GenerationChangedPredicate{})
 	return ctrl.NewControllerManagedBy(mgr).

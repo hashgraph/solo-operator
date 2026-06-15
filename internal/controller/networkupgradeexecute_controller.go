@@ -447,7 +447,7 @@ func (r *NetworkUpgradeExecuteReconciler) applyImagePatch(
 		return src.Image, false, true
 	}
 
-	if img, remove, upgrade := applyComponent(operatorv1alpha1.ComponentConsensusNode); upgrade && !remove {
+	if img, _, upgrade := applyComponent(operatorv1alpha1.ComponentConsensusNode); upgrade {
 		setSoftwareVersion(&capsule.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersion, img)
 	}
 
