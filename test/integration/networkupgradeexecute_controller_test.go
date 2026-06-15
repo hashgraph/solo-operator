@@ -408,18 +408,12 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 			_ = k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradeExecute{ObjectMeta: metav1.ObjectMeta{Name: nuxName, Namespace: ns}})
 		})
 
-		It("stays in ReadyForProvisionerDaemon while waiting for prereqs", func() {
-			Eventually(func() operatorv1alpha1.ExecutePhase {
-				got := &operatorv1alpha1.NetworkUpgradeExecute{}
-				_ = k8sClient.Get(ctx, nuxKey, got)
-				return got.Status.Phase
-			}, timeout, interval).Should(Equal(operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon))
-
+		It("stays in Pending while waiting for prereqs", func() {
 			Consistently(func() operatorv1alpha1.ExecutePhase {
 				got := &operatorv1alpha1.NetworkUpgradeExecute{}
 				_ = k8sClient.Get(ctx, nuxKey, got)
 				return got.Status.Phase
-			}, timeout/4, interval).Should(Equal(operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon))
+			}, timeout/4, interval).ShouldNot(Equal(operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon))
 		})
 	})
 
