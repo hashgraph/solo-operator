@@ -78,6 +78,37 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	if execute.Status.Phase == "" || execute.Status.Phase == operatorv1alpha1.ExecutePhasePending {
+		prepare, err := findPrepare(ctx, r.Client, execute.Namespace, execute.Spec.OperationID)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if prepare == nil || prepare.Status.Phase != operatorv1alpha1.PhaseSucceeded {
+			logger.Info("waiting for NetworkUpgradePrepare to succeed", "operationId", execute.Spec.OperationID)
+			return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
+		}
+
+		freeze, err := findFreeze(ctx, r.Client, execute.Namespace, execute.Spec.OperationID)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if freeze == nil || freeze.Status.Phase != operatorv1alpha1.PhaseSucceeded {
+			logger.Info("waiting for NetworkUpgradeFreeze to succeed", "operationId", execute.Spec.OperationID)
+			return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
+		}
+
+		capsule, err := r.getCapsule(ctx, &execute)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if capsule == nil {
+			logger.Info("ConsensusCapsule not found", "capsule", execute.Spec.ConsensusNode)
+			return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
+		}
+
+		if err := r.ensureCapsuleOffline(ctx, &execute, capsule); err != nil {
+			return ctrl.Result{}, err
+		}
+
 		now := metav1.Now()
 		execute.Status.StartTime = &now
 		execute.Status.Phase = operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon
@@ -105,39 +136,6 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 }
 
 func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
-	prepare, err := findPrepare(ctx, r.Client, execute.Namespace, execute.Spec.OperationID)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	if prepare == nil || prepare.Status.Phase != operatorv1alpha1.PhaseSucceeded {
-		logger.Info("waiting for NetworkUpgradePrepare to succeed", "operationId", execute.Spec.OperationID)
-		return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
-	}
-
-	freeze, err := findFreeze(ctx, r.Client, execute.Namespace, execute.Spec.OperationID)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	if freeze == nil || freeze.Status.Phase != operatorv1alpha1.PhaseSucceeded {
-		logger.Info("waiting for NetworkUpgradeFreeze to succeed", "operationId", execute.Spec.OperationID)
-		return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
-	}
-
-	capsule, err := r.getCapsule(ctx, execute)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	if capsule == nil {
-		logger.Info("ConsensusCapsule not found", "capsule", execute.Spec.ConsensusNode)
-		return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
-	}
-
-	if err := r.ensureCapsuleOffline(ctx, execute, capsule); err != nil {
-		return ctrl.Result{}, err
-	}
-
 	daemonCond := findCondition(execute.Status.Conditions, operatorv1alpha1.CondDaemonResult)
 
 	if daemonCond == nil {

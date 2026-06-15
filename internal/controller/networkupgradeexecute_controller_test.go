@@ -193,7 +193,7 @@ func TestExecuteReconcile_InitializesStatus(t *testing.T) {
 			SelectedSources: operatorv1alpha1.SelectedSources{ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest}},
 		},
 	}
-	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil))
+	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil), prereqsWithCapsule()...)
 
 	if res.err != nil {
 		t.Fatalf("unexpected error: %v", res.err)
@@ -253,7 +253,9 @@ func TestExecuteReconcile_TerminalPhaseIsNoOp(t *testing.T) {
 }
 
 func TestExecuteReconcile_WaitsForPrereqs(t *testing.T) {
-	res := reconcileExecuteWith(t, newExecuteForTest(), newExecuteChecker(nil, nil))
+	execute := newExecuteForTest()
+	execute.Status.Phase = operatorv1alpha1.ExecutePhasePending
+	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil))
 	// No Prepare/Freeze in fake client → should requeue after prereq delay, no error.
 	if res.err != nil {
 		t.Fatalf("unexpected error: %v", res.err)
@@ -350,6 +352,7 @@ func TestExecuteReconcile_NoValidRegistry_TerminalFailure(t *testing.T) {
 
 func TestExecuteReconcile_ScalesDownCapsule(t *testing.T) {
 	execute := newExecuteForTest()
+	execute.Status.Phase = operatorv1alpha1.ExecutePhasePending
 	capsule := &operatorv1alpha1.ConsensusCapsule{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "node0",
