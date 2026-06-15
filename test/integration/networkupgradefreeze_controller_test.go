@@ -332,21 +332,24 @@ var _ = Describe("NetworkUpgradeFreeze Controller", func() {
 		})
 
 		It("stays Running, sets both conditions False", func() {
-			By("reaching Running phase")
-			Eventually(func() operatorv1alpha1.Phase {
+			By("setting RegistryHealthCheck=False")
+			Eventually(func() bool {
 				got := &operatorv1alpha1.NetworkUpgradeFreeze{}
 				_ = k8sClient.Get(ctx, freezeKey, got)
-				return got.Status.Phase
-			}, timeout, interval).Should(Equal(operatorv1alpha1.PhaseRunning))
-
-			got := &operatorv1alpha1.NetworkUpgradeFreeze{}
-			Expect(k8sClient.Get(ctx, freezeKey, got)).To(Succeed())
-
-			By("setting RegistryHealthCheck=False")
-			Expect(conditionFalse(got.Status.Conditions, operatorv1alpha1.CondRegistryHealthCheck)).To(BeTrue())
+				return conditionFalse(got.Status.Conditions, operatorv1alpha1.CondRegistryHealthCheck)
+			}, timeout, interval).Should(BeTrue())
 
 			By("setting ReadyForFreeze=False")
-			Expect(conditionFalse(got.Status.Conditions, operatorv1alpha1.CondReadyForFreeze)).To(BeTrue())
+			Eventually(func() bool {
+				got := &operatorv1alpha1.NetworkUpgradeFreeze{}
+				_ = k8sClient.Get(ctx, freezeKey, got)
+				return conditionFalse(got.Status.Conditions, operatorv1alpha1.CondReadyForFreeze)
+			}, timeout, interval).Should(BeTrue())
+
+			By("staying in Running phase")
+			got := &operatorv1alpha1.NetworkUpgradeFreeze{}
+			Expect(k8sClient.Get(ctx, freezeKey, got)).To(Succeed())
+			Expect(got.Status.Phase).To(Equal(operatorv1alpha1.PhaseRunning))
 		})
 	})
 
