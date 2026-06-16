@@ -23,6 +23,9 @@ spec:
     - jsonPath: .spec.operationId
       name: OperationID
       type: string
+    - jsonPath: .spec.consensusNode
+      name: ConsensusNode
+      type: string
     - jsonPath: .status.phase
       name: Phase
       type: string
@@ -52,6 +55,9 @@ spec:
             type: object
           spec:
             properties:
+              consensusNode:
+                minLength: 1
+                type: string
               images:
                 description: |-
                   UpgradeImagesSpec is the verbatim "images:" section of consensus-node-components.yaml.
@@ -590,6 +596,7 @@ spec:
                     type: object
                 type: object
             required:
+            - consensusNode
             - images
             - operationId
             - orbit
@@ -656,6 +663,9 @@ spec:
                   - type
                   type: object
                 type: array
+              nodeUpgradeStartTime:
+                format: date-time
+                type: string
               observedGeneration:
                 format: int64
                 type: integer

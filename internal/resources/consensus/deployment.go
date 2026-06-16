@@ -12,6 +12,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -25,12 +26,14 @@ import (
 // StatefulSetSubReconciler manages the StatefulSet for a ConsensusCapsule.
 type StatefulSetSubReconciler struct {
 	*subreconciler.BaseSubReconciler[*operatorv1alpha1.ConsensusCapsule]
+	Recorder events.EventRecorder
 }
 
 // NewStatefulSetSubReconciler creates a new StatefulSetSubReconciler.
-func NewStatefulSetSubReconciler(c client.Client, scheme *runtime.Scheme) *StatefulSetSubReconciler {
+func NewStatefulSetSubReconciler(c client.Client, scheme *runtime.Scheme, recorder events.EventRecorder) *StatefulSetSubReconciler {
 	return &StatefulSetSubReconciler{
 		BaseSubReconciler: subreconciler.NewBaseSubReconciler[*operatorv1alpha1.ConsensusCapsule](c, scheme, "StatefulSet"),
+		Recorder:          recorder,
 	}
 }
 
@@ -582,6 +585,13 @@ func volumeOrEmptyDir(name, pvcName string, spec *corev1.PersistentVolumeClaimSp
 	}
 }
 
+// event emits a Kubernetes event against the capsule if a recorder is wired in.
+func (r *StatefulSetSubReconciler) event(capsule *operatorv1alpha1.ConsensusCapsule, eventtype, reason, msg string) {
+	if r.Recorder != nil {
+		r.Recorder.Eventf(capsule, nil, eventtype, reason, "StatefulSet", "%s", msg)
+	}
+}
+
 // addSidecarContainers adds optional sidecar containers to the StatefulSet pod template.
 func (r *StatefulSetSubReconciler) addSidecarContainers(sts *appsv1.StatefulSet, capsule *operatorv1alpha1.ConsensusCapsule, resolvedAlloy *operatorv1alpha1.AlloyConfig) error {
 	containers := capsule.Spec.PodProperties.Containers
@@ -604,39 +614,53 @@ func (r *StatefulSetSubReconciler) addSidecarContainers(sts *appsv1.StatefulSet,
 		})
 	}
 
-	if containers.BlocksUploader != nil && containers.BlocksUploader.Enabled {
-		c, err := r.buildCheetahUploaderContainer(containers.BlocksUploader, "blockstream-uploader", "cheetah-block-streams.yaml", PathBlockStreams, "BLOCK_STREAMS",
-			fmt.Sprintf("blockStreams/block-%s", accountId))
-		if err != nil {
-			return fmt.Errorf("blockstream-uploader: %w", err)
+	type cheetahSpec struct {
+		uploader      *operatorv1alpha1.CheetahUploader
+		eventLabel    string
+		containerName string
+		configFile    string
+		mountPath     string
+		envPrefix     string
+		bucketPath    string
+	}
+	uploaders := []cheetahSpec{
+		{containers.BlocksUploader, "blockStreamUploader", "blockstream-uploader", "cheetah-block-streams.yaml", PathBlockStreams, "BLOCK_STREAMS", fmt.Sprintf("blockStreams/block-%s", accountId)},
+		{containers.RecordsUploader, "recordStreamUploader", "record-stream-uploader", "cheetah-record-streams.yaml", PathRecordStreams, "RECORD_STREAMS", fmt.Sprintf("recordstreams/record%s", accountId)},
+		{containers.EventsUploader, "eventStreamUploader", "event-stream-uploader", "cheetah-events-streams.yaml", PathEventsStreams, "EVENTS_STREAMS", fmt.Sprintf("eventsStreams/events_%s", accountId)},
+	}
+	for _, u := range uploaders {
+		switch {
+		case u.uploader == nil:
+			r.event(capsule, corev1.EventTypeNormal, operatorv1alpha1.EventComponentSkipped,
+				u.eventLabel+": omitted from spec; no change made")
+		case !u.uploader.Enabled:
+			r.event(capsule, corev1.EventTypeNormal, operatorv1alpha1.EventSidecarDisabled,
+				u.eventLabel+": enabled=false; container removed from StatefulSet")
+		default:
+			c, err := r.buildCheetahUploaderContainer(u.uploader, u.containerName, u.configFile, u.mountPath, u.envPrefix, u.bucketPath)
+			if err != nil {
+				return fmt.Errorf("%s: %w", u.containerName, err)
+			}
+			sts.Spec.Template.Spec.Containers = append(sts.Spec.Template.Spec.Containers, c)
 		}
-		sts.Spec.Template.Spec.Containers = append(sts.Spec.Template.Spec.Containers, c)
 	}
 
-	if containers.RecordsUploader != nil && containers.RecordsUploader.Enabled {
-		c, err := r.buildCheetahUploaderContainer(containers.RecordsUploader, "record-stream-uploader", "cheetah-record-streams.yaml", PathRecordStreams, "RECORD_STREAMS",
-			fmt.Sprintf("recordstreams/record%s", accountId))
-		if err != nil {
-			return fmt.Errorf("record-stream-uploader: %w", err)
-		}
-		sts.Spec.Template.Spec.Containers = append(sts.Spec.Template.Spec.Containers, c)
-	}
-
-	if containers.EventsUploader != nil && containers.EventsUploader.Enabled {
-		c, err := r.buildCheetahUploaderContainer(containers.EventsUploader, "event-stream-uploader", "cheetah-events-streams.yaml", PathEventsStreams, "EVENTS_STREAMS",
-			fmt.Sprintf("eventsStreams/events_%s", accountId))
-		if err != nil {
-			return fmt.Errorf("event-stream-uploader: %w", err)
-		}
-		sts.Spec.Template.Spec.Containers = append(sts.Spec.Template.Spec.Containers, c)
-	}
-
-	if containers.BackupUploader != nil && containers.BackupUploader.Enabled {
+	switch {
+	case containers.BackupUploader == nil:
+		r.event(capsule, corev1.EventTypeNormal, operatorv1alpha1.EventComponentSkipped,
+			"backupUploader: omitted from spec; no change made")
+	case !containers.BackupUploader.Enabled:
+		r.event(capsule, corev1.EventTypeNormal, operatorv1alpha1.EventSidecarDisabled,
+			"backupUploader: enabled=false; container removed from StatefulSet")
+	default:
 		sts.Spec.Template.Spec.Containers = append(sts.Spec.Template.Spec.Containers,
 			r.buildBackupUploaderContainer(containers.BackupUploader))
 	}
 
-	if resolvedAlloy != nil && resolvedAlloy.Enabled {
+	if resolvedAlloy == nil || !resolvedAlloy.Enabled {
+		r.event(capsule, corev1.EventTypeNormal, operatorv1alpha1.EventComponentSkipped,
+			"alloy: omitted from spec; no change made")
+	} else {
 		dm := int32(420)
 		sts.Spec.Template.Spec.Volumes = append(sts.Spec.Template.Spec.Volumes, corev1.Volume{
 			Name: "alloy-config",

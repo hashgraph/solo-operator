@@ -127,6 +127,16 @@ var _ = BeforeSuite(func() {
 		k8sManager.GetScheme(),
 	).SetupWithManager(k8sManager)).To(Succeed())
 
+	Expect(controller.RegisterFreezeIndex(k8sManager)).To(Succeed())
+	Expect(controller.RegisterExecuteIndex(k8sManager)).To(Succeed())
+
+	executeReconciler := controller.NewNetworkUpgradeExecuteReconciler(
+		k8sManager.GetClient(),
+		k8sManager.GetScheme(),
+	)
+	executeReconciler.Checker = selectiveImageChecker{}
+	Expect(executeReconciler.SetupWithManager(k8sManager)).To(Succeed())
+
 	go func() {
 		defer GinkgoRecover()
 		err = k8sManager.Start(ctx)

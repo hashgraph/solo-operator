@@ -5,6 +5,7 @@ package consensus
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -12,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
@@ -27,7 +29,7 @@ func newStsTestScheme() *runtime.Scheme {
 func newStsReconciler() *StatefulSetSubReconciler {
 	scheme := newStsTestScheme()
 	c := fake.NewClientBuilder().WithScheme(scheme).Build()
-	return NewStatefulSetSubReconciler(c, scheme)
+	return NewStatefulSetSubReconciler(c, scheme, nil)
 }
 
 func capsuleWithImage(image string) *operatorv1alpha1.ConsensusCapsule {
@@ -220,7 +222,7 @@ func makeSts(image string, envVars []corev1.EnvVar) *appsv1.StatefulSet {
 }
 
 func TestNeedsUpdate_NoChange(t *testing.T) {
-	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme())
+	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme(), nil)
 	sts := makeSts("v0.50.0", nil)
 	if r.needsUpdate(sts, sts) {
 		t.Error("identical StatefulSets should not need update")
@@ -228,7 +230,7 @@ func TestNeedsUpdate_NoChange(t *testing.T) {
 }
 
 func TestNeedsUpdate_ImageChange(t *testing.T) {
-	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme())
+	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme(), nil)
 	existing := makeSts("v0.50.0", nil)
 	desired := makeSts("v0.51.0", nil)
 	if !r.needsUpdate(existing, desired) {
@@ -237,7 +239,7 @@ func TestNeedsUpdate_ImageChange(t *testing.T) {
 }
 
 func TestNeedsUpdate_EnvVarAdded(t *testing.T) {
-	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme())
+	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme(), nil)
 	existing := makeSts("v0.50.0", nil)
 	desired := makeSts("v0.50.0", []corev1.EnvVar{{Name: "JAVA_HEAP_MIN", Value: "4g"}})
 	if !r.needsUpdate(existing, desired) {
@@ -246,7 +248,7 @@ func TestNeedsUpdate_EnvVarAdded(t *testing.T) {
 }
 
 func TestNeedsUpdate_EnvVarValueChanged(t *testing.T) {
-	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme())
+	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme(), nil)
 	existing := makeSts("v0.50.0", []corev1.EnvVar{{Name: "JAVA_HEAP_MIN", Value: "4g"}})
 	desired := makeSts("v0.50.0", []corev1.EnvVar{{Name: "JAVA_HEAP_MIN", Value: "8g"}})
 	if !r.needsUpdate(existing, desired) {
@@ -255,7 +257,7 @@ func TestNeedsUpdate_EnvVarValueChanged(t *testing.T) {
 }
 
 func TestNeedsUpdate_InitContainerImageChange(t *testing.T) {
-	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme())
+	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme(), nil)
 	existing := makeSts("v0.50.0", nil)
 	desired := makeSts("v0.50.0", nil)
 	desired.Spec.Template.Spec.InitContainers[0].Image = "busybox:1.37.0"
@@ -265,7 +267,7 @@ func TestNeedsUpdate_InitContainerImageChange(t *testing.T) {
 }
 
 func TestNeedsUpdate_VolumeAdded(t *testing.T) {
-	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme())
+	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme(), nil)
 	existing := makeSts("v0.50.0", nil)
 	desired := makeSts("v0.50.0", nil)
 	desired.Spec.Template.Spec.Volumes = append(desired.Spec.Template.Spec.Volumes,
@@ -276,7 +278,7 @@ func TestNeedsUpdate_VolumeAdded(t *testing.T) {
 }
 
 func TestNeedsUpdate_VolumeSourceChanged(t *testing.T) {
-	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme())
+	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme(), nil)
 	existing := makeSts("v0.50.0", nil)
 	desired := makeSts("v0.50.0", nil)
 	// Same volume name, different ConfigMap backing — old code missed this.
@@ -294,7 +296,7 @@ func TestNeedsUpdate_VolumeSourceChanged(t *testing.T) {
 }
 
 func TestNeedsUpdate_EnvValueFromChanged(t *testing.T) {
-	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme())
+	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme(), nil)
 	existing := makeSts("v0.50.0", []corev1.EnvVar{
 		{
 			Name: "POD_IP",
@@ -317,7 +319,7 @@ func TestNeedsUpdate_EnvValueFromChanged(t *testing.T) {
 }
 
 func TestNeedsUpdate_InitContainerCommandChanged(t *testing.T) {
-	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme())
+	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme(), nil)
 	existing := makeSts("v0.50.0", nil)
 	desired := makeSts("v0.50.0", nil)
 	desired.Spec.Template.Spec.InitContainers[0].Command = []string{"sh", "-c", "echo updated"}
@@ -327,7 +329,7 @@ func TestNeedsUpdate_InitContainerCommandChanged(t *testing.T) {
 }
 
 func TestNeedsUpdate_ContainerSecurityContextChanged(t *testing.T) {
-	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme())
+	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme(), nil)
 	existing := makeSts("v0.50.0", nil)
 	desired := makeSts("v0.50.0", nil)
 	privileged := true
@@ -479,7 +481,7 @@ func TestBuildVolumes_PrivateKeyFilenameUsesCapsuleName(t *testing.T) {
 // ── pod-level volume deduplication ───────────────────────────────────────────
 
 func TestBuildVolumes_PodVolumeOverrideReplacesExisting(t *testing.T) {
-	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme())
+	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme(), nil)
 	capsule := capsuleWithImage("v0.50.0")
 
 	// Override the "saved" volume (which is always built by the operator) with a custom one.
@@ -509,5 +511,131 @@ func TestBuildVolumes_PodVolumeOverrideReplacesExisting(t *testing.T) {
 	}
 	if found == nil || found.HostPath == nil || found.HostPath.Path != "/mnt/custom-saved" {
 		t.Errorf("expected override volume to replace operator-built volume, got %+v", found)
+	}
+}
+
+// ── sidecar skip / disable events ────────────────────────────────────────────
+
+func newStsReconcilerWithRecorder(rec *events.FakeRecorder) *StatefulSetSubReconciler {
+	scheme := newStsTestScheme()
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	return NewStatefulSetSubReconciler(c, scheme, rec)
+}
+
+func collectEvents(rec *events.FakeRecorder) []string {
+	close(rec.Events)
+	var out []string
+	for e := range rec.Events {
+		out = append(out, e)
+	}
+	return out
+}
+
+func countEventsContaining(evts []string, substr string) int {
+	n := 0
+	for _, e := range evts {
+		if strings.Contains(e, substr) {
+			n++
+		}
+	}
+	return n
+}
+
+func TestAddSidecarContainers_NilSidecars_EmitsComponentSkipped(t *testing.T) {
+	rec := events.NewFakeRecorder(32)
+	r := newStsReconcilerWithRecorder(rec)
+
+	capsule := capsuleWithImage("gcr.io/repo/cn:0.62.0")
+	// All sidecar fields left nil (default from capsuleWithImage).
+	sts := &appsv1.StatefulSet{}
+
+	if err := r.addSidecarContainers(sts, capsule, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	evts := collectEvents(rec)
+	for _, component := range []string{"blockStreamUploader", "recordStreamUploader", "eventStreamUploader", "backupUploader", "alloy"} {
+		if got := countEventsContaining(evts, operatorv1alpha1.EventComponentSkipped); got == 0 {
+			t.Errorf("expected ComponentSkipped events, got none for %s in %v", component, evts)
+			break
+		}
+		if got := countEventsContaining(evts, component); got != 1 {
+			t.Errorf("expected one ComponentSkipped event for %s, got %d in %v", component, got, evts)
+		}
+	}
+	if got := countEventsContaining(evts, operatorv1alpha1.EventSidecarDisabled); got != 0 {
+		t.Errorf("expected no SidecarDisabled events, got %d in %v", got, evts)
+	}
+}
+
+func TestAddSidecarContainers_DisabledSidecars_EmitsSidecarDisabled(t *testing.T) {
+	rec := events.NewFakeRecorder(32)
+	r := newStsReconcilerWithRecorder(rec)
+
+	disabled := false
+	capsule := capsuleWithImage("gcr.io/repo/cn:0.62.0")
+	capsule.Spec.PodProperties.Containers.BlocksUploader = &operatorv1alpha1.CheetahUploader{Enabled: disabled}
+	capsule.Spec.PodProperties.Containers.RecordsUploader = &operatorv1alpha1.CheetahUploader{Enabled: disabled}
+	capsule.Spec.PodProperties.Containers.EventsUploader = &operatorv1alpha1.CheetahUploader{Enabled: disabled}
+	capsule.Spec.PodProperties.Containers.BackupUploader = &operatorv1alpha1.StreamUploader{Enabled: disabled}
+	sts := &appsv1.StatefulSet{}
+
+	if err := r.addSidecarContainers(sts, capsule, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	evts := collectEvents(rec)
+	for _, component := range []string{"blockStreamUploader", "recordStreamUploader", "eventStreamUploader", "backupUploader"} {
+		if got := countEventsContaining(evts, component); got != 1 {
+			t.Errorf("expected one SidecarDisabled event for %s, got %d in %v", component, got, evts)
+		}
+	}
+	if got := countEventsContaining(evts, operatorv1alpha1.EventSidecarDisabled); got != 4 {
+		t.Errorf("expected 4 SidecarDisabled events, got %d in %v", got, evts)
+	}
+	// alloy nil → ComponentSkipped, not SidecarDisabled
+	if got := countEventsContaining(evts, "alloy"); got != 1 {
+		t.Errorf("expected one ComponentSkipped event for alloy, got %d in %v", got, evts)
+	}
+}
+
+func TestAddSidecarContainers_EnabledSidecars_NoSkipOrDisableEvents(t *testing.T) {
+	rec := events.NewFakeRecorder(32)
+	r := newStsReconcilerWithRecorder(rec)
+
+	capsule := capsuleWithImage("gcr.io/repo/cn:0.62.0")
+	capsule.Spec.AccountId = "0.0.3"
+	enabled := true
+	capsule.Spec.PodProperties.Containers.BlocksUploader = &operatorv1alpha1.CheetahUploader{
+		Enabled:         enabled,
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "gcr.io", ImageName: "cheetah", ImageTag: "1.0"},
+	}
+	capsule.Spec.PodProperties.Containers.RecordsUploader = &operatorv1alpha1.CheetahUploader{
+		Enabled:         enabled,
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "gcr.io", ImageName: "cheetah", ImageTag: "1.0"},
+	}
+	capsule.Spec.PodProperties.Containers.EventsUploader = &operatorv1alpha1.CheetahUploader{
+		Enabled:         enabled,
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "gcr.io", ImageName: "cheetah", ImageTag: "1.0"},
+	}
+	capsule.Spec.PodProperties.Containers.BackupUploader = &operatorv1alpha1.StreamUploader{
+		Enabled:         enabled,
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "gcr.io", ImageName: "backup", ImageTag: "1.0"},
+	}
+	alloyEnabled := &operatorv1alpha1.AlloyConfig{Enabled: true,
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "gcr.io", ImageName: "alloy", ImageTag: "1.0"},
+	}
+
+	sts := &appsv1.StatefulSet{Spec: appsv1.StatefulSetSpec{Template: corev1.PodTemplateSpec{}}}
+	if err := r.addSidecarContainers(sts, capsule, alloyEnabled); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	evts := collectEvents(rec)
+	if got := countEventsContaining(evts, operatorv1alpha1.EventComponentSkipped); got != 0 {
+		t.Errorf("expected no ComponentSkipped events, got %d in %v", got, evts)
+	}
+	if got := countEventsContaining(evts, operatorv1alpha1.EventSidecarDisabled); got != 0 {
+		t.Errorf("expected no SidecarDisabled events, got %d in %v", got, evts)
 	}
 }

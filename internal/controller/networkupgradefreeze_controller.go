@@ -63,7 +63,7 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, nil
 	}
 
-	prepare, err := r.findPrepare(ctx, freeze.Namespace, freeze.Spec.OperationID)
+	prepare, err := findPrepare(ctx, r.Client, freeze.Namespace, freeze.Spec.OperationID)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -84,39 +84,21 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 
 	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 
-	updated := &operatorv1alpha1.SelectedSources{}
-	succeeded := true
-
-	for _, name := range operatorv1alpha1.AllUpgradeComponents {
-		comp, present := freeze.Spec.Images.Component(name)
-		if !present || (comp.Enabled != nil && !*comp.Enabled) {
-			continue
-		}
-
-		current := freeze.Spec.SelectedSources.Get(name)
-		if current == nil {
-			logger.Info("no selectedSource in spec for component, skipping", "component", name)
-			continue
-		}
-
-		result, err := registry.RevalidateAndFailover(ctx, r.Checker, comp, *current, checkTimeout, rng, r.StrategyName)
-		if err != nil {
-			logger.Info("no valid registry for component", "component", name, "error", err)
-			r.eventf(&freeze, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
-				"%s: %v", name, err)
-			succeeded = false
-			continue
-		}
-
-		if result.DidFailover {
+	updated, succeeded := registry.RevalidateComponents(
+		ctx, r.Checker,
+		freeze.Spec.Images, freeze.Spec.SelectedSources,
+		checkTimeout, rng, r.StrategyName,
+		nil,
+		func(name operatorv1alpha1.ComponentName, res registry.FailoverResult) {
 			r.eventf(&freeze, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryFailover,
 				"%s: registry %s unreachable, failed over to %s (digest: %s)",
-				name, result.FailedImage, result.Selected.Image, result.Selected.Digest)
-		}
-
-		src := result.Selected
-		updated.Set(name, &src)
-	}
+				name, res.FailedImage, res.Selected.Image, res.Selected.Digest)
+		},
+		func(name operatorv1alpha1.ComponentName, err error) {
+			r.eventf(&freeze, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
+				"%s: %v", name, err)
+		},
+	)
 
 	freeze.Status.ObservedGeneration = freeze.Generation
 
@@ -165,23 +147,6 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, fmt.Errorf("no valid registry for one or more components")
 	}
 	return ctrl.Result{}, nil
-}
-
-func (r *NetworkUpgradeFreezeReconciler) findPrepare(ctx context.Context, namespace, operationID string) (*operatorv1alpha1.NetworkUpgradePrepare, error) {
-	var list operatorv1alpha1.NetworkUpgradePrepareList
-	if err := r.List(ctx, &list,
-		client.InNamespace(namespace),
-		client.MatchingFields{fieldOperationID: operationID},
-	); err != nil {
-		return nil, fmt.Errorf("listing NetworkUpgradePrepare: %w", err)
-	}
-	if len(list.Items) == 0 {
-		return nil, nil
-	}
-	if len(list.Items) > 1 {
-		return nil, fmt.Errorf("expected at most one NetworkUpgradePrepare for operation %q, found %d", operationID, len(list.Items))
-	}
-	return &list.Items[0], nil
 }
 
 func (r *NetworkUpgradeFreezeReconciler) eventf(obj *operatorv1alpha1.NetworkUpgradeFreeze, eventtype, reason, format string, args ...any) {

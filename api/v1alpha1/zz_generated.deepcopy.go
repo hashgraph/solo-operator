@@ -1859,6 +1859,10 @@ func (in *NetworkUpgradeExecuteStatus) DeepCopyInto(out *NetworkUpgradeExecuteSt
 		in, out := &in.StartTime, &out.StartTime
 		*out = (*in).DeepCopy()
 	}
+	if in.NodeUpgradeStartTime != nil {
+		in, out := &in.NodeUpgradeStartTime, &out.NodeUpgradeStartTime
+		*out = (*in).DeepCopy()
+	}
 	if in.CompletionTime != nil {
 		in, out := &in.CompletionTime, &out.CompletionTime
 		*out = (*in).DeepCopy()

@@ -3,6 +3,8 @@
 package common
 
 import (
+	"strings"
+
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
@@ -32,4 +34,23 @@ func BuildImageOrDefault(sv *operatorv1alpha1.SoftwareVersion, defaultImage stri
 		return image
 	}
 	return defaultImage
+}
+
+// ParseImage splits a full OCI image reference "[[repo/]name[:tag]]" into its three components.
+// The last colon is only the tag separator if no slash follows (distinguishes tag from port).
+func ParseImage(image string) (repository, name, tag string) {
+	ref := image
+	if idx := strings.LastIndexByte(ref, ':'); idx > 0 {
+		if strings.IndexByte(ref[idx+1:], '/') < 0 {
+			tag = ref[idx+1:]
+			ref = ref[:idx]
+		}
+	}
+	if idx := strings.LastIndexByte(ref, '/'); idx >= 0 {
+		repository = ref[:idx]
+		name = ref[idx+1:]
+	} else {
+		name = ref
+	}
+	return
 }

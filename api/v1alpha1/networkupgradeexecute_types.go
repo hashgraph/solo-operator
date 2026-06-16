@@ -25,6 +25,9 @@ type NetworkUpgradeExecuteSpec struct {
 	// +kubebuilder:validation:MaxLength=63
 	OperationID string `json:"operationId"`
 
+	// +kubebuilder:validation:MinLength=1
+	ConsensusNode string `json:"consensusNode"`
+
 	Images UpgradeImagesSpec `json:"images"`
 
 	SelectedSources SelectedSources `json:"selectedSources"`
@@ -35,6 +38,8 @@ type NetworkUpgradeExecuteStatus struct {
 	Phase ExecutePhase `json:"phase,omitempty"`
 	// +optional
 	StartTime *metav1.Time `json:"startTime,omitempty"`
+	// +optional
+	NodeUpgradeStartTime *metav1.Time `json:"nodeUpgradeStartTime,omitempty"`
 	// +optional
 	CompletionTime *metav1.Time `json:"completionTime,omitempty"`
 	// +optional
@@ -54,6 +59,7 @@ type NetworkUpgradeExecuteStatus struct {
 // +kubebuilder:resource:shortName=nux
 // +kubebuilder:printcolumn:name="Orbit",type="string",JSONPath=".spec.orbit"
 // +kubebuilder:printcolumn:name="OperationID",type="string",JSONPath=".spec.operationId"
+// +kubebuilder:printcolumn:name="ConsensusNode",type="string",JSONPath=".spec.consensusNode"
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
