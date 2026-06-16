@@ -207,6 +207,9 @@ func TestExecuteReconcile_InitializesStatus(t *testing.T) {
 	if res.execute.Status.StartTime == nil {
 		t.Error("expected StartTime set")
 	}
+	if got := countContaining(res.events, "ReadyForProvisionerDaemon"); got != 1 {
+		t.Errorf("expected one ReadyForProvisionerDaemon event, got %d in %v", got, res.events)
+	}
 }
 
 func TestExecuteReconcile_TerminalPhaseIsNoOp(t *testing.T) {
