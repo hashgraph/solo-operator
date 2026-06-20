@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# systemd unit for the Upgrade Controller (UC) sidecar when run as a host-level
+# service (e.g. bare-metal / mainnet hosts). In Kubernetes the UC runs as a
+# sidecar container instead; this unit mirrors the solo-provisioner-daemon unit
+# in hashgraph/solo-weaver for host deployments.
+[Unit]
+Description=Solo Upgrade Controller (UC) sidecar
+After=network.target
+
+[Service]
+Type=notify
+User=hedera
+Group=hedera
+ExecStart=/opt/solo/weaver/bin/uc
+Restart=always
+RestartSec=5s
+
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/solo /opt/hgcapp
+
+[Install]
+WantedBy=multi-user.target
