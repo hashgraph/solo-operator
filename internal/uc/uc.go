@@ -68,6 +68,8 @@ func (u *UC) Run(ctx context.Context) error {
 		return server.Start(ctx)
 	})
 
+	// a permanently-failed monitor stays up in a degraded state — surfaced via /status, not a pod crash, so the
+	// operator gets an actionable signal instead of restart churn
 	for _, mon := range u.monitors {
 		g.Go(func() error {
 			daemonkit.SupervisedMonitor(ctx, mon, daemonkit.SupervisorOptions{

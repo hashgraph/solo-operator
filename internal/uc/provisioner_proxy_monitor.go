@@ -42,14 +42,16 @@ type ProvisionerProxyMonitorConfig struct {
 
 // ProvisionerProxyMonitor stands in for the host-level solo-provisioner daemon
 // in cluster-only / hashsphere deployments. It watches NetworkUpgradeExecute CRs
-// and, when one reaches ReadyForProvisionerDaemon, advances its status.phase to
-// PendingNodeUpgrade — the single transition the real daemon would otherwise own
-// (HIP XXXX2 §1318). It is self-healing: transient and auth errors retry with
-// exponential backoff.
+// and, when one reaches ReadyForProvisionerDaemon, runs the execute-phase
+// workflow — deploying the config CRs the upgrade requires — and only then
+// advances status.phase to PendingNodeUpgrade. It is self-healing: transient and
+// auth errors retry with exponential backoff.
 //
-// Ported from hashgraph/solo-weaver internal/daemon/consensus/upgrade_monitor.go,
-// reduced to the phase-advance behaviour (no infra upgrade / config placement,
-// which are unsupported in the cluster-only profile).
+// Ported from hashgraph/solo-weaver internal/daemon/consensus/upgrade_monitor.go.
+// The cluster-only profile drops the host infra upgrade (unsupported there) but
+// retains config-CR deployment, so the workflow runs asynchronously (single slot
+// guarded by activeOpID) rather than as a bare status patch — the phase advance
+// is the final step once the config CRs are in place.
 type ProvisionerProxyMonitor struct {
 	cfg    ProvisionerProxyMonitorConfig
 	client dynamic.Interface
@@ -336,10 +338,17 @@ func (pm *ProvisionerProxyMonitor) handleEvent(ctx context.Context, cr *unstruct
 	}()
 }
 
-// handleExecute is the single action this proxy performs: patch the Execute CR's
-// status.phase from ReadyForProvisionerDaemon to PendingNodeUpgrade. In the
-// Mainnet profile the host solo-provisioner daemon does this (plus infra upgrades
-// and config placement); in cluster-only mode the UC owns only this transition.
+// handleExecute runs the execute-phase workflow for the given CR. In the Mainnet
+// profile the host solo-provisioner daemon owns this (infra upgrade + config
+// placement + phase advance); in cluster-only mode the UC owns the config-CR
+// deployment and the phase advance (infra upgrade is unsupported).
+//
+// TODO: deploy the config CRs the upgrade requires before the phase advance. Each
+// step must use a context derived from ctx with an explicit timeout — if a step
+// hangs, activeOpID stays set and the proxy rejects all later upgrades silently.
+//
+// The final step (below) patches status.phase ReadyForProvisionerDaemon ->
+// PendingNodeUpgrade once the config CRs are in place.
 func (pm *ProvisionerProxyMonitor) handleExecute(ctx context.Context, cr *unstructured.Unstructured) error {
 	operationID := operationIDOf(cr)
 	if pm.onTransition != nil {
