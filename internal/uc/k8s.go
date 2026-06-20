@@ -55,6 +55,10 @@ func buildDynamicClient(kubeconfigPath string) (dynamic.Interface, error) {
 			return nil, fmt.Errorf("load kubeconfig %s: %w", kubeconfigPath, err)
 		}
 	}
+	// restCfg.Timeout bounds the client-side HTTP request dial. Without it a
+	// TCP-level hang (SYN sent, no reply) blocks Watch() for the OS TCP timeout
+	// (~20 min) regardless of ListOptions.TimeoutSeconds, which is server-side
+	// only. Mirrors solo-weaver UpgradeMonitor's buildDynamicClient.
 	restCfg.Timeout = 30 * time.Second
 	client, err := dynamic.NewForConfig(restCfg)
 	if err != nil {

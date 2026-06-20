@@ -55,12 +55,15 @@ type ProvisionerProxyMonitor struct {
 	client dynamic.Interface
 
 	mu sync.Mutex
-	// activeOpID guards the single in-flight transition slot.
+	// activeOpID is non-empty while a transition is in-flight; guards the single
+	// execution slot so two operations cannot transition concurrently.
 	activeOpID string
-	// completedOpIDs holds operationIds advanced past ReadyForProvisionerDaemon in
-	// this process lifetime; guards the patch round-trip window. Re-seeded from the
-	// cluster List on every Run entry, so it survives restarts (the CR phase is the
-	// durable source of truth).
+	// completedOpIDs holds operationIds already advanced past
+	// ReadyForProvisionerDaemon, stopping a rerun of the same operation. It guards
+	// the patch round-trip window (the gap before the CR's new phase is observed by
+	// the watch loop). Seeded at every Run entry from the cluster List, so surviving
+	// a restart needs no disk persistence — the CR's phase is the durable source of
+	// truth. Mirrors solo-weaver UpgradeMonitor.
 	completedOpIDs map[string]struct{}
 
 	connectivityErr atomic.Pointer[daemonkit.StatusError]
@@ -264,7 +267,9 @@ func (pm *ProvisionerProxyMonitor) runWatch(ctx context.Context, resourceVersion
 }
 
 // handleEvent advances a CR at ReadyForProvisionerDaemon to PendingNodeUpgrade,
-// deduplicated by operationId (completedOpIDs + activeOpID + the CR's own phase).
+// deduplicated by operationId at two levels (mirroring solo-provisioner-daemon):
+// completedOpIDs stops a rerun of an already-advanced operation, and activeOpID
+// stops a second transition running simultaneously.
 func (pm *ProvisionerProxyMonitor) handleEvent(ctx context.Context, cr *unstructured.Unstructured) {
 	phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
 	if ExecutePhaseOf(phase) != operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon {
