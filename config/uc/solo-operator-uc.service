@@ -18,7 +18,10 @@ RestartSec=5s
 
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=/opt/solo /opt/hgcapp
+# Least-privilege: only the UC working tree and the consensus-node upgrade
+# directory (markers + deployment package) need to be writable. Everything else,
+# including the rest of /opt/hgcapp (config, data, saved state), stays read-only.
+ReadWritePaths=/opt/solo/weaver/uc /opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade
 
 [Install]
 WantedBy=multi-user.target
