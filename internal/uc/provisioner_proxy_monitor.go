@@ -182,7 +182,14 @@ func (pm *ProvisionerProxyMonitor) Run(ctx context.Context) error {
 // watch.
 func (pm *ProvisionerProxyMonitor) listAndSeed(ctx context.Context) (string, error) {
 	resource := pm.client.Resource(networkUpgradeExecuteGVR).Namespace(pm.cfg.Namespace)
-	list, err := resource.List(ctx, metav1.ListOptions{})
+	// Bound the List with a per-call deadline. The dynamic client has no
+	// client-wide request timeout (see buildDynamicClient), so without this a
+	// stalled List would block the Run loop indefinitely. Scoped to the List only —
+	// handleEvent below keeps the parent ctx so a triggered transition is not
+	// cancelled after listTimeout.
+	listCtx, cancel := context.WithTimeout(ctx, listTimeout)
+	defer cancel()
+	list, err := resource.List(listCtx, metav1.ListOptions{})
 	if err != nil {
 		return "", fmt.Errorf("list NetworkUpgradeExecute: %w", err)
 	}

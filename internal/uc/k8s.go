@@ -4,6 +4,7 @@ package uc
 
 import (
 	"fmt"
+	"net"
 	"time"
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -26,6 +27,20 @@ var (
 	networkUpgradeExecuteGVR = gvr("networkupgradeexecutes")
 	//nolint:unused // consumed by the factory CR handlers in #996
 	networkUpgradeFreezeAbortGVR = gvr("networkupgradefreezeaborts")
+)
+
+const (
+	// dialTimeout bounds TCP connection establishment (the SYN-no-reply case) and
+	// is applied via rest.Config.Dial. Unlike rest.Config.Timeout it does NOT cap
+	// an established stream, so it protects against connect hangs without killing
+	// a long-lived watch mid-flight.
+	dialTimeout = 30 * time.Second
+
+	// listTimeout bounds a single List call. It is applied per-call via
+	// context.WithTimeout and must NOT be applied to the watch (its lifetime is
+	// governed by watch TimeoutSeconds server-side); see buildDynamicClient for
+	// why a client-wide rest.Config.Timeout is unsafe for watches.
+	listTimeout = 30 * time.Second
 )
 
 func gvr(resource string) schema.GroupVersionResource {
@@ -55,11 +70,13 @@ func buildDynamicClient(kubeconfigPath string) (dynamic.Interface, error) {
 			return nil, fmt.Errorf("load kubeconfig %s: %w", kubeconfigPath, err)
 		}
 	}
-	// restCfg.Timeout bounds the client-side HTTP request dial. Without it a
-	// TCP-level hang (SYN sent, no reply) blocks Watch() for the OS TCP timeout
-	// (~20 min) regardless of ListOptions.TimeoutSeconds, which is server-side
-	// only. Mirrors solo-weaver UpgradeMonitor's buildDynamicClient.
-	restCfg.Timeout = 30 * time.Second
+	// Bound TCP connection establishment via a dial timeout — NOT rest.Config.Timeout,
+	// which becomes http.Client.Timeout and caps the whole request (including the
+	// watch response-body read), terminating Watch() early regardless of
+	// ListOptions.TimeoutSeconds (server-side only). The dial timeout bounds the
+	// SYN-no-reply connect hang; KeepAlive detects a silently-dead established
+	// connection — neither limits the lifetime of a healthy watch stream.
+	restCfg.Dial = (&net.Dialer{Timeout: dialTimeout, KeepAlive: dialTimeout}).DialContext
 	client, err := dynamic.NewForConfig(restCfg)
 	if err != nil {
 		return nil, fmt.Errorf("build dynamic client: %w", err)
