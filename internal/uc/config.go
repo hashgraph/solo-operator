@@ -43,8 +43,8 @@ const (
 type Config struct {
 	// Mode is the deployment profile (mainnet or cluster-only).
 	Mode Mode
-	// NodeID is the consensus node identity (e.g. "0.0.3").
-	NodeID string
+	// NodeID is the consensus node identity (a non-negative integer, e.g. 0, 1, 2).
+	NodeID int
 	// Orbit is the deployment scope the upgrade CRs target.
 	Orbit string
 	// Namespace is the Kubernetes namespace the UC watches and creates CRs in.
@@ -73,6 +73,7 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Mode:               ModeMainnet,
+		NodeID:             -1,
 		MarkerPath:         DefaultMarkerPath,
 		EventsPath:         DefaultEventsPath,
 		CRPersistPath:      DefaultCRPersistPath,
@@ -90,8 +91,8 @@ func (c Config) Validate() error {
 	default:
 		return errors.New("uc: mode must be 'mainnet' or 'cluster-only'")
 	}
-	if c.NodeID == "" {
-		return errors.New("uc: node-id is required")
+	if c.NodeID < 0 {
+		return errors.New("uc: node-id is required and must be a non-negative integer")
 	}
 	if c.Orbit == "" {
 		return errors.New("uc: orbit is required")

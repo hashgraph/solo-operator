@@ -36,8 +36,8 @@ const (
 type ProvisionerProxyMonitorConfig struct {
 	// Namespace is the orbit namespace to watch for NetworkUpgradeExecute CRs.
 	Namespace string
-	// NodeID is the Hedera node identifier (e.g. "0.0.3"), used in log context.
-	NodeID string
+	// NodeID is the Hedera node identifier (a non-negative integer), used in log context.
+	NodeID int
 }
 
 // ProvisionerProxyMonitor stands in for the host-level solo-provisioner daemon
