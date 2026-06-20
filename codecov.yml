@@ -1,0 +1,16 @@
+# Codecov configuration
+# https://docs.codecov.com/docs/codecov-yaml
+#
+# Coverage is still uploaded and tracked, but Codecov does not post a comment
+# on pull requests (avoids noisy "author is not an activated member" notices).
+comment: false
+
+# Do not let Codecov's status checks fail the PR; coverage is informational here.
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
