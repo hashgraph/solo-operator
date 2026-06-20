@@ -6,16 +6,24 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/automa-saga/logx"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/hashgraph/solo-operator/internal/uc"
 )
+
+// envPrefix namespaces the UC environment variables, e.g. --node-id maps to
+// UC_NODE_ID. This lets the sidecar be configured via container env vars
+// (sourced from the CR spec, a ConfigMap, or the downward API) instead of args.
+const envPrefix = "UC_"
 
 var (
 	flagLogLevel string
@@ -30,7 +38,8 @@ func main() {
 		Long: "The UC sidecar polls the marker-file directory written by the consensus node " +
 			"and creates NetworkUpgrade* Custom Resources. In cluster-only mode it also " +
 			"advances the Execute CR from ReadyForProvisionerDaemon to PendingNodeUpgrade.",
-		RunE: run,
+		PreRunE: bindEnv,
+		RunE:    run,
 	}
 
 	f := root.Flags()
@@ -51,6 +60,27 @@ func main() {
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}
+}
+
+// bindEnv applies UC_-prefixed environment variables to any flag the user did
+// not pass explicitly on the command line. Precedence is: CLI flag > env var >
+// default. The env var name is the flag name uppercased with '-' replaced by
+// '_' and the UC_ prefix, e.g. --node-id -> UC_NODE_ID, --poll-interval ->
+// UC_POLL_INTERVAL.
+func bindEnv(cmd *cobra.Command, _ []string) error {
+	var bindErr error
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if bindErr != nil || f.Changed {
+			return
+		}
+		env := envPrefix + strings.ReplaceAll(strings.ToUpper(f.Name), "-", "_")
+		if v, ok := os.LookupEnv(env); ok {
+			if err := f.Value.Set(v); err != nil {
+				bindErr = fmt.Errorf("invalid value for %s: %w", env, err)
+			}
+		}
+	})
+	return bindErr
 }
 
 func run(cmd *cobra.Command, _ []string) error {
