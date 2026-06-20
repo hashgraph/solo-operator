@@ -187,7 +187,7 @@ func (pm *ProvisionerProxyMonitor) listAndSeed(ctx context.Context) (string, err
 	pm.mu.Lock()
 	for i := range list.Items {
 		phase, _, _ := unstructured.NestedString(list.Items[i].Object, "status", "phase")
-		opID := list.Items[i].GetLabels()[operatorv1alpha1.LabelOperationID]
+		opID := operationIDOf(&list.Items[i])
 		if opID == "" {
 			continue
 		}
@@ -270,10 +270,10 @@ func (pm *ProvisionerProxyMonitor) handleEvent(ctx context.Context, cr *unstruct
 	if ExecutePhaseOf(phase) != operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon {
 		return
 	}
-	operationID := cr.GetLabels()[operatorv1alpha1.LabelOperationID]
+	operationID := operationIDOf(cr)
 	if operationID == "" {
 		logx.As().Warn().Str("reason", "ProxyMissingOperationID").
-			Str("cr_name", cr.GetName()).Msg("Execute CR has no operation-id label — ignoring")
+			Str("cr_name", cr.GetName()).Msg("Execute CR has no spec.operationId — ignoring")
 		return
 	}
 
@@ -329,7 +329,7 @@ func (pm *ProvisionerProxyMonitor) handleEvent(ctx context.Context, cr *unstruct
 // Mainnet profile the host solo-provisioner daemon does this (plus infra upgrades
 // and config placement); in cluster-only mode the UC owns only this transition.
 func (pm *ProvisionerProxyMonitor) handleExecute(ctx context.Context, cr *unstructured.Unstructured) error {
-	operationID := cr.GetLabels()[operatorv1alpha1.LabelOperationID]
+	operationID := operationIDOf(cr)
 	if pm.onTransition != nil {
 		pm.onTransition(operationID)
 	}
@@ -347,6 +347,15 @@ func (pm *ProvisionerProxyMonitor) handleExecute(ctx context.Context, cr *unstru
 		Str("operation_id", operationID).Str("cr_name", cr.GetName()).
 		Msg("advanced Execute CR to PendingNodeUpgrade")
 	return nil
+}
+
+// operationIDOf returns the authoritative operation id from spec.operationId.
+// This mirrors the operator's indexed field and solo-weaver's upgrade monitor:
+// spec.operationId is identity, while the operator.solo.hedera.com/operation-id
+// label is only for List/Watch selection.
+func operationIDOf(cr *unstructured.Unstructured) string {
+	id, _, _ := unstructured.NestedString(cr.Object, "spec", "operationId")
+	return id
 }
 
 // ExecutePhaseOf converts a raw status.phase string into the typed enum.
