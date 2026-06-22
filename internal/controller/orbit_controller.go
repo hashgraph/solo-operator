@@ -41,6 +41,7 @@ func NewOrbitReconciler(c client.Client, scheme *runtime.Scheme) *OrbitReconcile
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=helmcapsules,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=haproxycapsules,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=envoyproxies,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=log4j2configs,verbs=get;list;watch;delete
 
 func (r *OrbitReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -163,6 +164,23 @@ func (r *OrbitReconciler) deleteOwnedCapsules(ctx context.Context, orbitObj *ope
 		}
 	}
 
+	log4j2 := &operatorv1alpha1.Log4j2ConfigList{}
+	if err := r.List(ctx, log4j2); err != nil {
+		return remaining, err
+	}
+	for i := range log4j2.Items {
+		lc := &log4j2.Items[i]
+		if lc.Spec.Orbit != orbitObj.Name {
+			continue
+		}
+		remaining++
+		if lc.DeletionTimestamp.IsZero() {
+			if err := r.Delete(ctx, lc); err != nil && !apierrors.IsNotFound(err) {
+				return remaining, err
+			}
+		}
+	}
+
 	return remaining, nil
 }
 
@@ -210,6 +228,7 @@ func (r *OrbitReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&operatorv1alpha1.HelmCapsule{}, handler.EnqueueRequestsFromMapFunc(r.mapHelmCapsuleToOrbit)).
 		Watches(&operatorv1alpha1.HAProxyCapsule{}, handler.EnqueueRequestsFromMapFunc(r.mapHAProxyCapsuleToOrbit)).
 		Watches(&operatorv1alpha1.EnvoyProxy{}, handler.EnqueueRequestsFromMapFunc(r.mapEnvoyProxyToOrbit)).
+		Watches(&operatorv1alpha1.Log4j2Config{}, handler.EnqueueRequestsFromMapFunc(r.mapLog4j2ConfigToOrbit)).
 		Named("orbit").
 		Complete(r)
 }
@@ -244,4 +263,12 @@ func (r *OrbitReconciler) mapEnvoyProxyToOrbit(_ context.Context, obj client.Obj
 		return nil
 	}
 	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: ep.Spec.Orbit}}}
+}
+
+func (r *OrbitReconciler) mapLog4j2ConfigToOrbit(_ context.Context, obj client.Object) []reconcile.Request {
+	lc, ok := obj.(*operatorv1alpha1.Log4j2Config)
+	if !ok || lc.Spec.Orbit == "" {
+		return nil
+	}
+	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: lc.Spec.Orbit}}}
 }

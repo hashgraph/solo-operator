@@ -19,22 +19,16 @@ import (
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
-// HapiAppConfigMapSubReconciler manages the hapi-app ConfigMap for a ConsensusCapsule.
-// It produces <name>-hapi-app-cm containing:
-//   - log4j2.xml — from capsule.Spec.Log4j2XML
-//   - settings.txt — rendered from orbit.Spec.Consensus.NetworkSettings
 type HapiAppConfigMapSubReconciler struct {
 	*subreconciler.BaseSubReconciler[*operatorv1alpha1.ConsensusCapsule]
 }
 
-// NewHapiAppConfigMapSubReconciler creates a new HapiAppConfigMapSubReconciler.
 func NewHapiAppConfigMapSubReconciler(c client.Client, scheme *runtime.Scheme) *HapiAppConfigMapSubReconciler {
 	return &HapiAppConfigMapSubReconciler{
 		BaseSubReconciler: subreconciler.NewBaseSubReconciler[*operatorv1alpha1.ConsensusCapsule](c, scheme, "HapiAppConfigMap"),
 	}
 }
 
-// Reconcile ensures the hapi-app ConfigMap exists and is up to date.
 func (r *HapiAppConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -43,7 +37,12 @@ func (r *HapiAppConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *
 		return ctrl.Result{}, err
 	}
 
-	desired := r.buildConfigMap(capsule, orbit)
+	log4j2XML, err := r.resolveLog4j2XML(ctx, capsule)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	desired := r.buildConfigMap(capsule, orbit, log4j2XML)
 
 	if err := controllerutil.SetControllerReference(capsule, desired, r.Scheme); err != nil {
 		return ctrl.Result{}, err
@@ -74,10 +73,29 @@ func (r *HapiAppConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *
 	return ctrl.Result{}, nil
 }
 
-// buildConfigMap constructs the desired hapi-app ConfigMap.
-func (r *HapiAppConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1.ConsensusCapsule, orbit *operatorv1alpha1.Orbit) *corev1.ConfigMap {
+// resolveLog4j2XML prefers Log4j2ConfigRef over the inline field.
+func (r *HapiAppConfigMapSubReconciler) resolveLog4j2XML(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (string, error) {
+	if capsule.Spec.Log4j2ConfigRef != "" {
+		ref := &operatorv1alpha1.Log4j2Config{}
+		if err := r.Client.Get(ctx, client.ObjectKey{Name: capsule.Spec.Log4j2ConfigRef, Namespace: capsule.Namespace}, ref); err != nil {
+			if apierrors.IsNotFound(err) {
+				return "", fmt.Errorf("Log4j2Config %q not found in namespace %q: will retry once it is created", capsule.Spec.Log4j2ConfigRef, capsule.Namespace)
+			}
+			return "", err
+		}
+		return ref.Spec.Content, nil
+	}
+
+	if capsule.Spec.Log4j2XML == "" {
+		return "", fmt.Errorf("capsule has no log4j2 config: set spec.log4j2ConfigRef or spec.log4j2.xml")
+	}
+
+	return capsule.Spec.Log4j2XML, nil
+}
+
+func (r *HapiAppConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1.ConsensusCapsule, orbit *operatorv1alpha1.Orbit, log4j2XML string) *corev1.ConfigMap {
 	data := map[string]string{
-		"log4j2.xml":   capsule.Spec.Log4j2XML,
+		"log4j2.xml":   log4j2XML,
 		"settings.txt": RenderSettingsTxt(orbit.Spec.Consensus.NetworkSettings),
 	}
 
@@ -91,8 +109,6 @@ func (r *HapiAppConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1
 	}
 }
 
-// fetchOrbit fetches the Orbit CR by name. Returns an error when the orbit does not exist
-// so the reconciler requeues and the ConfigMap is only created once the orbit is ready.
 func fetchOrbit(ctx context.Context, c client.Client, orbitName string) (*operatorv1alpha1.Orbit, error) {
 	if orbitName == "" {
 		return nil, fmt.Errorf("capsule has no orbit name set")
@@ -107,7 +123,6 @@ func fetchOrbit(ctx context.Context, c client.Client, orbitName string) (*operat
 	return orbit, nil
 }
 
-// needsConfigMapUpdate returns true if the ConfigMap data has changed.
 func needsConfigMapUpdate(existing, desired map[string]string) bool {
 	if len(existing) != len(desired) {
 		return true

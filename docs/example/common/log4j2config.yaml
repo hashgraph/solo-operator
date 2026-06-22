@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Shared Log4j2Config — creates a ConfigMap named network-log4j2 containing
+# the log4j2.xml consumed by all ConsensusCapsule nodes in this namespace.
+#
+# Each ConsensusCapsule references this CR via:
+#   spec:
+#     log4j2ConfigRef: network-log4j2
+#
+# Updating spec.content here propagates the new logging config to every node's
+# hapi-app ConfigMap automatically. To apply per-node overrides, create a
+# separate Log4j2Config per node and point each capsule's log4j2ConfigRef at it.
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: Log4j2Config
+metadata:
+  name: network-log4j2
+  namespace: solo-orbit
+spec:
+  # orbit links this resource to the Orbit for cascade deletion.
+  orbit: solo-orbit
+  # content is the raw log4j2.xml. Must be well-formed XML with a <Configuration> root element.
+  content: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <Configuration status="WARN" monitorInterval="600">
+      <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+          <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5p %-4L %c{1} - %m{nolookups}%n"/>
+        </Console>
+        <RollingFile name="RollingFile" fileName="output/hgcaa.log"
+                     filePattern="output/hgcaa.log-%i.log">
+          <PatternLayout>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5p %-4L %c{1} - %m{nolookups}%n</pattern>
+          </PatternLayout>
+          <Policies>
+            <SizeBasedTriggeringPolicy size="100 MB"/>
+          </Policies>
+          <DefaultRolloverStrategy max="1000"/>
+        </RollingFile>
+      </Appenders>
+      <Loggers>
+        <Logger name="com.swirlds.platform.system.status" level="INFO" additivity="false">
+          <AppenderRef ref="Console"/>
+          <AppenderRef ref="RollingFile"/>
+        </Logger>
+        <Root level="WARN">
+          <AppenderRef ref="Console"/>
+          <AppenderRef ref="RollingFile"/>
+        </Root>
+      </Loggers>
+    </Configuration>

@@ -97,6 +97,7 @@ rules:
   - envoyproxies
   - haproxycapsules
   - helmcapsules
+  - log4j2configs
   - networkgeneses
   - networkupgradeexecutes
   - networkupgradefreezeaborts
@@ -118,6 +119,7 @@ rules:
   - envoyproxies/finalizers
   - haproxycapsules/finalizers
   - helmcapsules/finalizers
+  - log4j2configs/finalizers
   - networkgeneses/finalizers
   - networkupgradeexecutes/finalizers
   - networkupgradefreezeaborts/finalizers
@@ -133,6 +135,7 @@ rules:
   - envoyproxies/status
   - haproxycapsules/status
   - helmcapsules/status
+  - log4j2configs/status
   - networkgeneses/status
   - networkupgradeexecutes/status
   - networkupgradefreezeaborts/status
