@@ -4,6 +4,7 @@ package consensus
 
 import (
 	"context"
+	"fmt"
 	"maps"
 
 	corev1 "k8s.io/api/core/v1"
@@ -19,23 +20,16 @@ import (
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
-// DataConfigMapSubReconciler manages the data-config ConfigMap for a ConsensusCapsule.
-// It produces <name>-data-config-cm containing:
-//   - application.properties — rendered from orbit.Spec.Consensus.ApplicationConfiguration
-//   - api-permission.properties — rendered from orbit.Spec.Consensus.PermissionConfiguration
-//   - genesis.properties — rendered from orbit.Spec.Consensus.GenesisProperties (omitted when empty)
 type DataConfigMapSubReconciler struct {
 	*subreconciler.BaseSubReconciler[*operatorv1alpha1.ConsensusCapsule]
 }
 
-// NewDataConfigMapSubReconciler creates a new DataConfigMapSubReconciler.
 func NewDataConfigMapSubReconciler(c client.Client, scheme *runtime.Scheme) *DataConfigMapSubReconciler {
 	return &DataConfigMapSubReconciler{
 		BaseSubReconciler: subreconciler.NewBaseSubReconciler[*operatorv1alpha1.ConsensusCapsule](c, scheme, "DataConfigMap"),
 	}
 }
 
-// Reconcile ensures the data-config ConfigMap exists and is up to date.
 func (r *DataConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -44,7 +38,12 @@ func (r *DataConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *ope
 		return ctrl.Result{}, err
 	}
 
-	desired := r.buildConfigMap(capsule, orbit)
+	appProps, err := r.resolveApplicationProperties(ctx, capsule, orbit)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	desired := r.buildConfigMap(capsule, orbit, appProps)
 
 	if err := controllerutil.SetControllerReference(capsule, desired, r.Scheme); err != nil {
 		return ctrl.Result{}, err
@@ -75,7 +74,20 @@ func (r *DataConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *ope
 	return ctrl.Result{}, nil
 }
 
-// MergeApplicationProperties merges overrides on top of the Solo defaults and renders the result.
+func (r *DataConfigMapSubReconciler) resolveApplicationProperties(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule, orbit *operatorv1alpha1.Orbit) (string, error) {
+	if capsule.Spec.ApplicationPropertiesRef != "" {
+		ref := &operatorv1alpha1.ApplicationProperties{}
+		if err := r.Client.Get(ctx, client.ObjectKey{Name: capsule.Spec.ApplicationPropertiesRef, Namespace: capsule.Namespace}, ref); err != nil {
+			if apierrors.IsNotFound(err) {
+				return "", fmt.Errorf("ApplicationProperties %q not found in namespace %q: will retry once it is created", capsule.Spec.ApplicationPropertiesRef, capsule.Namespace)
+			}
+			return "", err
+		}
+		return ref.Spec.Content, nil
+	}
+	return MergeApplicationProperties(orbit.Spec.Consensus.ApplicationConfiguration), nil
+}
+
 func MergeApplicationProperties(overrides map[string]string) string {
 	merged := DefaultApplicationProperties()
 	for k, v := range overrides {
@@ -84,10 +96,9 @@ func MergeApplicationProperties(overrides map[string]string) string {
 	return RenderProperties(merged)
 }
 
-// buildConfigMap constructs the desired data-config ConfigMap.
-func (r *DataConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1.ConsensusCapsule, orbit *operatorv1alpha1.Orbit) *corev1.ConfigMap {
+func (r *DataConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1.ConsensusCapsule, orbit *operatorv1alpha1.Orbit, appProps string) *corev1.ConfigMap {
 	data := map[string]string{
-		"application.properties":    MergeApplicationProperties(orbit.Spec.Consensus.ApplicationConfiguration),
+		"application.properties":    appProps,
 		"api-permission.properties": RenderProperties(orbit.Spec.Consensus.PermissionConfiguration),
 	}
 	if len(orbit.Spec.Consensus.GenesisProperties) > 0 {

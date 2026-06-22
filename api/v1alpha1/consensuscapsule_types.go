@@ -43,6 +43,10 @@ type ConsensusCapsuleSpec struct {
 	// +optional
 	NodeSettingsRef string `json:"nodeSettingsRef,omitempty"`
 
+	// Overrides the Orbit-derived application.properties when set.
+	// +optional
+	ApplicationPropertiesRef string `json:"applicationPropertiesRef,omitempty"`
+
 	// sets CONSENSUS_NODE_ALIAS env consumed by entrypoint.sh
 	// +optional
 	NodeAlias string `json:"nodeAlias,omitempty"`

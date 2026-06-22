@@ -57,6 +57,10 @@ spec:
               accountId:
                 description: node account ID
                 type: string
+              applicationPropertiesRef:
+                description: Overrides the Orbit-derived application.properties when
+                  set.
+                type: string
               blockNodes:
                 description: when set, creates a block-nodes ConfigMap and mounts
                   block-nodes.json
@@ -122,14 +126,10 @@ spec:
                   Useful when the node is reached via a custom DNS name, an external IP, a service mesh virtual service, or across clusters.
                 type: string
               log4j2.xml:
-                description: |-
-                  log4j2.xml content; mounted into the hapi-app ConfigMap alongside settings.txt.
-                  Mutually exclusive with Log4j2ConfigRef; Log4j2ConfigRef takes precedence when both are set.
+                description: Mutually exclusive with Log4j2ConfigRef; ref takes precedence
+                  when both are set.
                 type: string
               log4j2ConfigRef:
-                description: |-
-                  references a Log4j2Config CR in the same namespace whose managed ConfigMap
-                  supplies log4j2.xml. Takes precedence over Log4j2XML when set.
                 type: string
               nodeAlias:
                 description: sets CONSENSUS_NODE_ALIAS env consumed by entrypoint.sh
@@ -144,9 +144,7 @@ spec:
                 description: node.properties key-value pairs
                 type: object
               nodeSettingsRef:
-                description: |-
-                  references a NodeSettings CR in the same namespace whose managed ConfigMap
-                  supplies settings.txt. When set, overrides the Orbit-derived settings.
+                description: Overrides the Orbit-derived settings.txt when set.
                 type: string
               offline:
                 default: false

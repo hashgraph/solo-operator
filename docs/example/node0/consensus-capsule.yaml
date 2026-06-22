@@ -204,3 +204,8 @@ spec:
   # Overrides the Orbit-derived settings.txt for all nodes; omit to fall back
   # to spec.consensus.networkSettings on the Orbit.
   nodeSettingsRef: network-nodesettings
+
+  # Reference a shared ApplicationProperties CR (defined in common/applicationproperties.yaml).
+  # Overrides the Orbit-derived application.properties for all nodes; omit to fall back
+  # to spec.consensus.applicationConfiguration on the Orbit merged with Solo defaults.
+  applicationPropertiesRef: network-appprops

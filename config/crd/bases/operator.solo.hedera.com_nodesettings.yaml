@@ -26,7 +26,6 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: NodeSettings is the Schema for the nodesettings API
         properties:
           apiVersion:
             description: |-
@@ -46,29 +45,21 @@ spec:
           metadata:
             type: object
           spec:
-            description: NodeSettingsSpec defines the desired state of NodeSettings
             properties:
               content:
-                description: Content is the raw settings.txt content in Hedera's padded-comma
-                  format.
                 minLength: 1
                 type: string
               orbit:
-                description: Orbit is the owning Orbit's name. Set so the Orbit can
-                  cascade-delete this resource.
+                description: Set so the Orbit can cascade-delete this resource.
                 type: string
             required:
             - content
             type: object
           status:
-            description: NodeSettingsStatus defines the observed state of NodeSettings
             properties:
               configMapName:
-                description: ConfigMapName is the name of the managed ConfigMap.
                 type: string
               observedGeneration:
-                description: ObservedGeneration is the last generation the controller
-                  acted on.
                 format: int64
                 type: integer
             type: object

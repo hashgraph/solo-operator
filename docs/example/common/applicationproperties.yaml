@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Shared ApplicationProperties — creates a ConfigMap named network-appprops containing
+# application.properties consumed by all ConsensusCapsule nodes in this namespace.
+#
+# Each ConsensusCapsule references this CR via:
+#   spec:
+#     applicationPropertiesRef: network-appprops
+#
+# Updating spec.content here propagates the new properties to every node's
+# data-config ConfigMap automatically. To apply per-node overrides, create a
+# separate ApplicationProperties per node and point each capsule's
+# applicationPropertiesRef at it.
+#
+# When applicationPropertiesRef is not set, application.properties is derived
+# from the Orbit's spec.consensus.applicationConfiguration map merged with
+# Solo's built-in defaults.
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: ApplicationProperties
+metadata:
+  name: network-appprops
+  namespace: solo-orbit
+spec:
+  # orbit links this resource to the Orbit for cascade deletion.
+  orbit: solo-orbit
+  # content is the raw application.properties in Java key=value format.
+  # Each non-comment line must be:  key=value
+  content: |
+    hedera.config.version=0
+    netty.mode=TEST
+    hedera.recordStream.logPeriod=1
+    balances.exportPeriodSecs=400
+    files.maxSizeKb=2048
+    hedera.recordStream.compressFilesOnCreation=true
+    balances.compressOnCreation=true
+    contracts.maxNumWithHapiSigsAccess=0
+    autoRenew.targetTypes=
+    nodes.gossipFqdnRestricted=false
+    hedera.profiles.active=TEST
+    staking.periodMins=1
+    nodes.updateAccountIdAllowed=true
+    blockStream.streamMode=RECORDS
+    scheduling.longTermEnabled=false
+    bootstrap.throttleDefsJson.resource=data/config/genesis-throttles.json
+    cache.warmThreads=6
