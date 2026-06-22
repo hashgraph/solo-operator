@@ -143,6 +143,11 @@ spec:
                   type: string
                 description: node.properties key-value pairs
                 type: object
+              nodeSettingsRef:
+                description: |-
+                  references a NodeSettings CR in the same namespace whose managed ConfigMap
+                  supplies settings.txt. When set, overrides the Orbit-derived settings.
+                type: string
               offline:
                 default: false
                 description: Offline keeps the consensus pod scaled to zero when true.

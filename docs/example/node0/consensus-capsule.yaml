@@ -199,3 +199,8 @@ spec:
   # All nodes share the same logging configuration; update the Log4j2Config to
   # change logging for every node at once.
   log4j2ConfigRef: network-log4j2
+
+  # Reference a shared NodeSettings CR (defined in common/nodesettings.yaml).
+  # Overrides the Orbit-derived settings.txt for all nodes; omit to fall back
+  # to spec.consensus.networkSettings on the Orbit.
+  nodeSettingsRef: network-nodesettings

@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Shared NodeSettings — creates a ConfigMap named network-nodesettings containing
+# the settings.txt consumed by all ConsensusCapsule nodes in this namespace.
+#
+# Each ConsensusCapsule references this CR via:
+#   spec:
+#     nodeSettingsRef: network-nodesettings
+#
+# Updating spec.content here propagates the new settings to every node's
+# hapi-app ConfigMap automatically. To apply per-node overrides, create a
+# separate NodeSettings per node and point each capsule's nodeSettingsRef at it.
+#
+# When nodeSettingsRef is not set, settings.txt is derived from the Orbit's
+# spec.consensus.networkSettings map instead.
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: NodeSettings
+metadata:
+  name: network-nodesettings
+  namespace: solo-orbit
+spec:
+  # orbit links this resource to the Orbit for cascade deletion.
+  orbit: solo-orbit
+  # content is the raw settings.txt in Hedera's padded-comma format.
+  # Each non-comment line must be:  key,    value
+  content: |
+    checkSignedStateFromDisk,              1
+    state.recoveryFile,                    data/saved/RecoveryFile.dat
+    # throttle unsigned transactions above this TPS
+    throttle.maxTransactionsPerSec,        10000

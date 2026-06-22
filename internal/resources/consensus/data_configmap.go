@@ -4,6 +4,7 @@ package consensus
 
 import (
 	"context"
+	"maps"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -62,7 +63,7 @@ func (r *DataConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *ope
 		return ctrl.Result{}, err
 	}
 
-	if needsConfigMapUpdate(existing.Data, desired.Data) {
+	if !maps.Equal(existing.Data, desired.Data) {
 		logger.V(1).Info("Updating data-config ConfigMap", "name", desired.Name, "namespace", desired.Namespace)
 		existing.Data = desired.Data
 		existing.Labels = desired.Labels

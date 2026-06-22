@@ -5,6 +5,7 @@ package consensus
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -32,17 +33,17 @@ func NewHapiAppConfigMapSubReconciler(c client.Client, scheme *runtime.Scheme) *
 func (r *HapiAppConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	orbit, err := fetchOrbit(ctx, r.Client, capsule.Spec.Orbit)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
 	log4j2XML, err := r.resolveLog4j2XML(ctx, capsule)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	desired := r.buildConfigMap(capsule, orbit, log4j2XML)
+	settingsTxt, err := r.resolveSettingsTxt(ctx, capsule)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	desired := r.buildConfigMap(capsule, log4j2XML, settingsTxt)
 
 	if err := controllerutil.SetControllerReference(capsule, desired, r.Scheme); err != nil {
 		return ctrl.Result{}, err
@@ -61,7 +62,7 @@ func (r *HapiAppConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *
 		return ctrl.Result{}, err
 	}
 
-	if needsConfigMapUpdate(existing.Data, desired.Data) {
+	if !maps.Equal(existing.Data, desired.Data) || !maps.Equal(existing.Labels, desired.Labels) {
 		logger.V(1).Info("Updating hapi-app ConfigMap", "name", desired.Name, "namespace", desired.Namespace)
 		existing.Data = desired.Data
 		existing.Labels = desired.Labels
@@ -73,7 +74,6 @@ func (r *HapiAppConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *
 	return ctrl.Result{}, nil
 }
 
-// resolveLog4j2XML prefers Log4j2ConfigRef over the inline field.
 func (r *HapiAppConfigMapSubReconciler) resolveLog4j2XML(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (string, error) {
 	if capsule.Spec.Log4j2ConfigRef != "" {
 		ref := &operatorv1alpha1.Log4j2Config{}
@@ -93,19 +93,36 @@ func (r *HapiAppConfigMapSubReconciler) resolveLog4j2XML(ctx context.Context, ca
 	return capsule.Spec.Log4j2XML, nil
 }
 
-func (r *HapiAppConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1.ConsensusCapsule, orbit *operatorv1alpha1.Orbit, log4j2XML string) *corev1.ConfigMap {
-	data := map[string]string{
-		"log4j2.xml":   log4j2XML,
-		"settings.txt": RenderSettingsTxt(orbit.Spec.Consensus.NetworkSettings),
+func (r *HapiAppConfigMapSubReconciler) resolveSettingsTxt(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (string, error) {
+	if capsule.Spec.NodeSettingsRef != "" {
+		ref := &operatorv1alpha1.NodeSettings{}
+		if err := r.Client.Get(ctx, client.ObjectKey{Name: capsule.Spec.NodeSettingsRef, Namespace: capsule.Namespace}, ref); err != nil {
+			if apierrors.IsNotFound(err) {
+				return "", fmt.Errorf("NodeSettings %q not found in namespace %q: will retry once it is created", capsule.Spec.NodeSettingsRef, capsule.Namespace)
+			}
+			return "", err
+		}
+		return ref.Spec.Content, nil
 	}
 
+	orbit, err := fetchOrbit(ctx, r.Client, capsule.Spec.Orbit)
+	if err != nil {
+		return "", err
+	}
+	return RenderSettingsTxt(orbit.Spec.Consensus.NetworkSettings), nil
+}
+
+func (r *HapiAppConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1.ConsensusCapsule, log4j2XML, settingsTxt string) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      HapiAppConfigMapName(capsule),
 			Namespace: capsule.Namespace,
 			Labels:    CommonLabels(capsule),
 		},
-		Data: data,
+		Data: map[string]string{
+			"log4j2.xml":   log4j2XML,
+			"settings.txt": settingsTxt,
+		},
 	}
 }
 
@@ -121,16 +138,4 @@ func fetchOrbit(ctx context.Context, c client.Client, orbitName string) (*operat
 		return nil, err
 	}
 	return orbit, nil
-}
-
-func needsConfigMapUpdate(existing, desired map[string]string) bool {
-	if len(existing) != len(desired) {
-		return true
-	}
-	for k, v := range desired {
-		if existing[k] != v {
-			return true
-		}
-	}
-	return false
 }

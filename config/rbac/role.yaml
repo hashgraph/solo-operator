@@ -103,6 +103,7 @@ rules:
   - networkupgradefreezeaborts
   - networkupgradefreezes
   - networkupgradeprepares
+  - nodesettings
   - orbits
   verbs:
   - create
@@ -125,6 +126,7 @@ rules:
   - networkupgradefreezeaborts/finalizers
   - networkupgradefreezes/finalizers
   - networkupgradeprepares/finalizers
+  - nodesettings/finalizers
   - orbits/finalizers
   verbs:
   - update
@@ -141,6 +143,7 @@ rules:
   - networkupgradefreezeaborts/status
   - networkupgradefreezes/status
   - networkupgradeprepares/status
+  - nodesettings/status
   - orbits/status
   verbs:
   - get
