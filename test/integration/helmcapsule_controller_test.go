@@ -188,10 +188,11 @@ var _ = Describe("HelmCapsule Controller", func() {
 						Namespace: hcNS,
 					},
 					Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-						Orbit:     orbitName,
-						NodeId:    int64(i),
-						AccountId: fmt.Sprintf("0.0.%d", i+2),
-						Weight:    1,
+						Orbit:           orbitName,
+						NodeId:          int64(i),
+						AccountId:       fmt.Sprintf("0.0.%d", i+2),
+						Weight:          1,
+						Log4j2ConfigRef: "network-log4j2",
 						PodProperties: operatorv1alpha1.ConsensusPodProperties{
 							Containers: operatorv1alpha1.ConsensusContainers{
 								ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -449,10 +450,11 @@ var _ = Describe("HelmCapsule Controller", func() {
 			cap := &operatorv1alpha1.ConsensusCapsule{
 				ObjectMeta: metav1.ObjectMeta{Name: "node1", Namespace: hcNS},
 				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-					Orbit:     orbitName,
-					NodeId:    1,
-					AccountId: "0.0.3",
-					Weight:    1,
+					Orbit:           orbitName,
+					NodeId:          1,
+					AccountId:       "0.0.3",
+					Weight:          1,
+					Log4j2ConfigRef: "network-log4j2",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -598,10 +600,11 @@ var _ = Describe("HelmCapsule Controller", func() {
 			cap := &operatorv1alpha1.ConsensusCapsule{
 				ObjectMeta: metav1.ObjectMeta{Name: "node1", Namespace: hcNS},
 				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-					Orbit:     orbitName,
-					NodeId:    1,
-					AccountId: "0.0.3",
-					Weight:    1,
+					Orbit:           orbitName,
+					NodeId:          1,
+					AccountId:       "0.0.3",
+					Weight:          1,
+					Log4j2ConfigRef: "network-log4j2",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{

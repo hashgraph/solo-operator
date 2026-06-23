@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -25,14 +26,14 @@ const (
 type Log4j2ConfigReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
+	Recorder      events.EventRecorder
 	subreconciler *subreconciler.Chain[*operatorv1alpha1.Log4j2Config]
 }
 
 func NewLog4j2ConfigReconciler(c client.Client, scheme *runtime.Scheme) *Log4j2ConfigReconciler {
 	return &Log4j2ConfigReconciler{
-		Client:        c,
-		Scheme:        scheme,
-		subreconciler: log4j2config.NewSubReconcilers(c, scheme),
+		Client: c,
+		Scheme: scheme,
 	}
 }
 
@@ -90,16 +91,18 @@ func (r *Log4j2ConfigReconciler) handleDeletion(ctx context.Context, obj *operat
 }
 
 func (r *Log4j2ConfigReconciler) updateStatus(ctx context.Context, obj *operatorv1alpha1.Log4j2Config) error {
-	desired := log4j2config.ConfigMapName(obj)
-	if obj.Status.ObservedGeneration == obj.Generation && obj.Status.ConfigMapName == desired {
-		return nil
-	}
 	obj.Status.ObservedGeneration = obj.Generation
-	obj.Status.ConfigMapName = desired
+	obj.Status.ConfigMapName = log4j2config.ConfigMapName(obj)
 	return r.Status().Update(ctx, obj)
 }
 
 func (r *Log4j2ConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.Recorder == nil {
+		r.Recorder = mgr.GetEventRecorder("log4j2config")
+	}
+	if r.subreconciler == nil {
+		r.subreconciler = log4j2config.NewSubReconcilers(r.Client, r.Scheme, r.Recorder)
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.Log4j2Config{}).
 		Owns(&corev1.ConfigMap{}).

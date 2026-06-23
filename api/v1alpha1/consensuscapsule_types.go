@@ -32,15 +32,10 @@ type ConsensusCapsuleSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	Weight int `json:"weight"`
 
-	// log4j2.xml content; mounted into the hapi-app ConfigMap alongside settings.txt.
-	// Mutually exclusive with Log4j2ConfigRef; Log4j2ConfigRef takes precedence when both are set.
-	// +optional
-	Log4j2XML string `json:"log4j2.xml,omitempty"`
-
 	// references a Log4j2Config CR in the same namespace whose managed ConfigMap
-	// supplies log4j2.xml. Takes precedence over Log4j2XML when set.
-	// +optional
-	Log4j2ConfigRef string `json:"log4j2ConfigRef,omitempty"`
+	// is mounted as log4j2.xml. Changes take effect on the next pod restart.
+	// +kubebuilder:validation:MinLength=1
+	Log4j2ConfigRef string `json:"log4j2ConfigRef"`
 
 	// sets CONSENSUS_NODE_ALIAS env consumed by entrypoint.sh
 	// +optional

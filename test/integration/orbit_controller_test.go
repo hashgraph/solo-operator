@@ -86,11 +86,11 @@ var _ = Describe("Orbit Controller", func() {
 			cc := &operatorv1alpha1.ConsensusCapsule{
 				ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: nsA},
 				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-					Orbit:     orbitName,
-					NodeId:    0,
-					AccountId: "0.0.3",
-					Weight:    1,
-					Log4j2XML: "<Configuration></Configuration>",
+					Orbit:           orbitName,
+					NodeId:          0,
+					AccountId:       "0.0.3",
+					Weight:          1,
+					Log4j2ConfigRef: "network-log4j2",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{

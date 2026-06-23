@@ -94,11 +94,11 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 				Labels:    map[string]string{common.LabelOrbit: orbitLabel},
 			},
 			Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-				Orbit:     orbitLabel,
-				NodeId:    0,
-				AccountId: "0.0.3",
-				Weight:    1,
-				Log4j2XML: "<log/>",
+				Orbit:           orbitLabel,
+				NodeId:          0,
+				AccountId:       "0.0.3",
+				Weight:          1,
+				Log4j2ConfigRef: "network-log4j2",
 				PodProperties: operatorv1alpha1.ConsensusPodProperties{
 					Containers: operatorv1alpha1.ConsensusContainers{
 						ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{

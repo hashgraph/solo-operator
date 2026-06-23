@@ -121,15 +121,11 @@ spec:
                   overrides the auto-computed gossip hostname ({name}-0.consensus.{namespace}.svc.cluster.local).
                   Useful when the node is reached via a custom DNS name, an external IP, a service mesh virtual service, or across clusters.
                 type: string
-              log4j2.xml:
-                description: |-
-                  log4j2.xml content; mounted into the hapi-app ConfigMap alongside settings.txt.
-                  Mutually exclusive with Log4j2ConfigRef; Log4j2ConfigRef takes precedence when both are set.
-                type: string
               log4j2ConfigRef:
                 description: |-
                   references a Log4j2Config CR in the same namespace whose managed ConfigMap
-                  supplies log4j2.xml. Takes precedence over Log4j2XML when set.
+                  is mounted as log4j2.xml. Changes take effect on the next pod restart.
+                minLength: 1
                 type: string
               nodeAlias:
                 description: sets CONSENSUS_NODE_ALIAS env consumed by entrypoint.sh
@@ -20959,6 +20955,7 @@ spec:
                 type: integer
             required:
             - accountId
+            - log4j2ConfigRef
             - nodeId
             - orbit
             - podProperties
