@@ -235,11 +235,11 @@ func newTestCapsule() *operatorv1alpha1.ConsensusCapsule {
 			UID:       "test-uid",
 		},
 		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-			Orbit:     "test-orbit",
-			NodeId:    0,
-			AccountId: "0.0.3",
-			Weight:    1,
-			Log4j2XML: "<Configuration></Configuration>",
+			Orbit:           "test-orbit",
+			NodeId:          0,
+			AccountId:       "0.0.3",
+			Weight:          1,
+			Log4j2ConfigRef: "network-log4j2",
 			PodProperties: operatorv1alpha1.ConsensusPodProperties{
 				Containers: operatorv1alpha1.ConsensusContainers{
 					ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -388,8 +388,8 @@ func TestHapiAppConfigMapSubReconciler(t *testing.T) {
 		t.Fatalf("failed to get hapi-app ConfigMap: %v", err)
 	}
 
-	if cm.Data["log4j2.xml"] != "<Configuration></Configuration>" {
-		t.Errorf("unexpected log4j2.xml: %s", cm.Data["log4j2.xml"])
+	if _, ok := cm.Data["log4j2.xml"]; ok {
+		t.Error("log4j2.xml must not be in hapi-app-cm; it is now owned by the Log4j2Config CR")
 	}
 
 	if cm.Data["settings.txt"] == "" {
@@ -736,7 +736,7 @@ func TestStatefulSetVolumes_DefaultEmptyDir(t *testing.T) {
 	}
 
 	// ConfigMap volumes must be present
-	for _, cmVol := range []string{"hapi-app-config", "data-config"} {
+	for _, cmVol := range []string{"log4j2-config", "hapi-app-config", "data-config"} {
 		v, ok := volByName[cmVol]
 		if !ok {
 			t.Errorf("expected volume %s", cmVol)
@@ -747,32 +747,40 @@ func TestStatefulSetVolumes_DefaultEmptyDir(t *testing.T) {
 		}
 	}
 
-	// hapi-app-config must be subPath-mounted for log4j2.xml and settings.txt
-	// at the HapiApp2.0 directory (where the entrypoint script looks for them)
 	const hapiBase = "/opt/hgcapp/services-hedera/HapiApp2.0"
-	hapiConfigMounts := map[string]bool{}
+
+	// log4j2.xml is now served by the Log4j2Config CR's ConfigMap via log4j2-config volume
+	log4j2Mount := false
 	for _, m := range mounts {
-		if m.Name == "hapi-app-config" {
-			hapiConfigMounts[m.SubPath] = m.ReadOnly
-		}
-	}
-	for _, subPath := range []string{"log4j2.xml", "settings.txt"} {
-		readOnly, ok := hapiConfigMounts[subPath]
-		if !ok {
-			t.Errorf("expected hapi-app-config subPath mount for %s", subPath)
-			continue
-		}
-		if !readOnly {
-			t.Errorf("expected hapi-app-config/%s to be mounted readonly", subPath)
-		}
-		// verify mount path includes hapiBase
-		for _, m := range mounts {
-			if m.Name == "hapi-app-config" && m.SubPath == subPath {
-				if m.MountPath != hapiBase+"/"+subPath {
-					t.Errorf("unexpected mount path for %s: %s", subPath, m.MountPath)
-				}
+		if m.Name == "log4j2-config" && m.SubPath == "log4j2.xml" {
+			log4j2Mount = true
+			if !m.ReadOnly {
+				t.Error("expected log4j2-config/log4j2.xml to be mounted readonly")
+			}
+			if m.MountPath != hapiBase+"/log4j2.xml" {
+				t.Errorf("unexpected mount path for log4j2.xml: %s", m.MountPath)
 			}
 		}
+	}
+	if !log4j2Mount {
+		t.Error("expected log4j2-config subPath mount for log4j2.xml")
+	}
+
+	// settings.txt is still served by hapi-app-config
+	settingsMount := false
+	for _, m := range mounts {
+		if m.Name == "hapi-app-config" && m.SubPath == "settings.txt" {
+			settingsMount = true
+			if !m.ReadOnly {
+				t.Error("expected hapi-app-config/settings.txt to be mounted readonly")
+			}
+			if m.MountPath != hapiBase+"/settings.txt" {
+				t.Errorf("unexpected mount path for settings.txt: %s", m.MountPath)
+			}
+		}
+	}
+	if !settingsMount {
+		t.Error("expected hapi-app-config subPath mount for settings.txt")
 	}
 
 	// All PVC-optional volumes must default to emptyDir

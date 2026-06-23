@@ -20,6 +20,7 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
+	"github.com/hashgraph/solo-operator/internal/resources/log4j2config"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -306,6 +307,15 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 	defaultMode := int32(420) // 0644
 	volumes := []corev1.Volume{
 		{
+			Name: "log4j2-config",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: log4j2config.ConfigMapNameForRef(capsule.Spec.Log4j2ConfigRef)},
+					DefaultMode:          &defaultMode,
+				},
+			},
+		},
+		{
 			Name: "hapi-app-config",
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
@@ -343,9 +353,8 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 	}
 
 	volumeMounts := []corev1.VolumeMount{
-		// The consensus node entrypoint does `cd <hapiBase>` and then checks for
-		// log4j2.xml and settings.txt relative to that directory.
-		{Name: "hapi-app-config", MountPath: HapiBase + "/log4j2.xml", SubPath: "log4j2.xml", ReadOnly: true},
+		// log4j2.xml is owned by the Log4j2Config CR's ConfigMap; takes effect on next pod restart.
+		{Name: "log4j2-config", MountPath: HapiBase + "/log4j2.xml", SubPath: "log4j2.xml", ReadOnly: true},
 		{Name: "hapi-app-config", MountPath: HapiBase + "/settings.txt", SubPath: "settings.txt", ReadOnly: true},
 		// data-config-dir is the writable data/config directory; individual files overlaid via subPath.
 		{Name: "data-config-dir", MountPath: HapiBase + "/data/config"},

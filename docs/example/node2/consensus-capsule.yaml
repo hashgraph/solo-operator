@@ -195,7 +195,7 @@ spec:
         keyName: "s-public-node2.pem"
         secretName: "node2-gossip-keys"
 
-  # Reference a shared Log4j2Config CR (defined in common/log4j2config.yaml).
+  # Reference a shared Log4j2Config CR (defined in common/log4j2config.yaml). Takes effect on next pod restart.
   log4j2ConfigRef: network-log4j2
 
   nodeSettingsRef: network-nodesettings

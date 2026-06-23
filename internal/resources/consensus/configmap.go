@@ -38,12 +38,7 @@ func (r *HapiAppConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *
 		return ctrl.Result{}, err
 	}
 
-	settingsTxt, err := r.resolveSettingsTxt(ctx, capsule)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	desired := r.buildConfigMap(capsule, log4j2XML, settingsTxt)
+	desired := r.buildConfigMap(capsule, orbit)
 
 	if err := controllerutil.SetControllerReference(capsule, desired, r.Scheme); err != nil {
 		return ctrl.Result{}, err
@@ -74,45 +69,7 @@ func (r *HapiAppConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *
 	return ctrl.Result{}, nil
 }
 
-func (r *HapiAppConfigMapSubReconciler) resolveLog4j2XML(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (string, error) {
-	if capsule.Spec.Log4j2ConfigRef != "" {
-		ref := &operatorv1alpha1.Log4j2Config{}
-		if err := r.Client.Get(ctx, client.ObjectKey{Name: capsule.Spec.Log4j2ConfigRef, Namespace: capsule.Namespace}, ref); err != nil {
-			if apierrors.IsNotFound(err) {
-				return "", fmt.Errorf("Log4j2Config %q not found in namespace %q: will retry once it is created", capsule.Spec.Log4j2ConfigRef, capsule.Namespace)
-			}
-			return "", err
-		}
-		return ref.Spec.Content, nil
-	}
-
-	if capsule.Spec.Log4j2XML == "" {
-		return "", fmt.Errorf("capsule has no log4j2 config: set spec.log4j2ConfigRef or spec.log4j2.xml")
-	}
-
-	return capsule.Spec.Log4j2XML, nil
-}
-
-func (r *HapiAppConfigMapSubReconciler) resolveSettingsTxt(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (string, error) {
-	if capsule.Spec.NodeSettingsRef != "" {
-		ref := &operatorv1alpha1.NodeSettings{}
-		if err := r.Client.Get(ctx, client.ObjectKey{Name: capsule.Spec.NodeSettingsRef, Namespace: capsule.Namespace}, ref); err != nil {
-			if apierrors.IsNotFound(err) {
-				return "", fmt.Errorf("NodeSettings %q not found in namespace %q: will retry once it is created", capsule.Spec.NodeSettingsRef, capsule.Namespace)
-			}
-			return "", err
-		}
-		return ref.Spec.Content, nil
-	}
-
-	orbit, err := fetchOrbit(ctx, r.Client, capsule.Spec.Orbit)
-	if err != nil {
-		return "", err
-	}
-	return RenderSettingsTxt(orbit.Spec.Consensus.NetworkSettings), nil
-}
-
-func (r *HapiAppConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1.ConsensusCapsule, log4j2XML, settingsTxt string) *corev1.ConfigMap {
+func (r *HapiAppConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1.ConsensusCapsule, orbit *operatorv1alpha1.Orbit) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      HapiAppConfigMapName(capsule),
@@ -120,8 +77,7 @@ func (r *HapiAppConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1
 			Labels:    CommonLabels(capsule),
 		},
 		Data: map[string]string{
-			"log4j2.xml":   log4j2XML,
-			"settings.txt": settingsTxt,
+			"settings.txt": RenderSettingsTxt(orbit.Spec.Consensus.NetworkSettings),
 		},
 	}
 }
