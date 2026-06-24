@@ -4,12 +4,15 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -21,6 +24,8 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/resources/consensus"
+	"github.com/hashgraph/solo-operator/internal/resources/log4j2config"
+	"github.com/hashgraph/solo-operator/internal/resources/nodesettings"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -92,6 +97,20 @@ func (r *ConsensusCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{Requeue: true}, nil
 	}
 
+	ready, err := r.checkConfigRefs(ctx, capsule)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if !ready {
+		if err := r.Status().Update(ctx, capsule); err != nil {
+			if apierrors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
 	result, err := r.subreconciler.Reconcile(ctx, capsule)
 	if err != nil {
 		return result, err
@@ -109,6 +128,48 @@ func (r *ConsensusCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	return result, nil
+}
+
+type configRef struct {
+	condType string
+	refName  string
+	cmName   string
+}
+
+func (r *ConsensusCapsuleReconciler) configRefs(c *operatorv1alpha1.ConsensusCapsule) []configRef {
+	return []configRef{
+		{"Log4j2ConfigReady", c.Spec.Log4j2ConfigRef, log4j2config.ConfigMapNameForRef(c.Spec.Log4j2ConfigRef)},
+		{"NodeSettingsReady", c.Spec.SettingsConfigRef, nodesettings.ConfigMapNameForRef(c.Spec.SettingsConfigRef)},
+	}
+}
+
+func (r *ConsensusCapsuleReconciler) checkConfigRefs(ctx context.Context, c *operatorv1alpha1.ConsensusCapsule) (bool, error) {
+	allReady := true
+	for _, ref := range r.configRefs(c) {
+		err := r.Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: ref.cmName}, &corev1.ConfigMap{})
+		switch {
+		case apierrors.IsNotFound(err):
+			allReady = false
+			apimeta.SetStatusCondition(&c.Status.Conditions, metav1.Condition{
+				Type:               ref.condType,
+				Status:             metav1.ConditionFalse,
+				ObservedGeneration: c.Generation,
+				Reason:             "ConfigMapNotFound",
+				Message:            fmt.Sprintf("referenced config %q has no ConfigMap %q yet", ref.refName, ref.cmName),
+			})
+		case err != nil:
+			return false, err
+		default:
+			apimeta.SetStatusCondition(&c.Status.Conditions, metav1.Condition{
+				Type:               ref.condType,
+				Status:             metav1.ConditionTrue,
+				ObservedGeneration: c.Generation,
+				Reason:             "ConfigMapFound",
+				Message:            "referenced ConfigMap exists",
+			})
+		}
+	}
+	return allReady, nil
 }
 
 func (r *ConsensusCapsuleReconciler) handleDeletion(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
