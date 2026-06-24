@@ -21,7 +21,19 @@ type Log4j2ConfigStatus struct {
 
 	// +optional
 	ConfigMapName string `json:"configMapName,omitempty"`
+
+	// Conditions contains the latest observations of the Log4j2Config state.
+	// The "Valid" condition reflects whether spec.content is valid log4j2 XML.
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	Conditions []Condition `json:"conditions,omitempty"`
 }
+
+const (
+	// ConditionTypeValid is True when spec.content is valid log4j2 XML; False otherwise.
+	ConditionTypeValid = "Valid"
+)
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

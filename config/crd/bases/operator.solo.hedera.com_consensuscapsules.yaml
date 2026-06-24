@@ -125,11 +125,11 @@ spec:
                   overrides the auto-computed gossip hostname ({name}-0.consensus.{namespace}.svc.cluster.local).
                   Useful when the node is reached via a custom DNS name, an external IP, a service mesh virtual service, or across clusters.
                 type: string
-              log4j2.xml:
-                description: Mutually exclusive with Log4j2ConfigRef; ref takes precedence
-                  when both are set.
-                type: string
               log4j2ConfigRef:
+                description: |-
+                  references a Log4j2Config CR in the same namespace whose managed ConfigMap
+                  is mounted as log4j2.xml. Changes take effect on the next pod restart.
+                minLength: 1
                 type: string
               nodeAlias:
                 description: sets CONSENSUS_NODE_ALIAS env consumed by entrypoint.sh
@@ -143,9 +143,6 @@ spec:
                   type: string
                 description: node.properties key-value pairs
                 type: object
-              nodeSettingsRef:
-                description: Overrides the Orbit-derived settings.txt when set.
-                type: string
               offline:
                 default: false
                 description: Offline keeps the consensus pod scaled to zero when true.
@@ -20956,15 +20953,23 @@ spec:
                 - LoadBalancer
                 - NodePort
                 type: string
+              settingsConfigRef:
+                description: |-
+                  references a NodeSettings CR in the same namespace whose managed ConfigMap
+                  is mounted as settings.txt. Changes take effect on the next pod restart.
+                minLength: 1
+                type: string
               weight:
                 description: consensus weight
                 minimum: 0
                 type: integer
             required:
             - accountId
+            - log4j2ConfigRef
             - nodeId
             - orbit
             - podProperties
+            - settingsConfigRef
             - weight
             type: object
           status:

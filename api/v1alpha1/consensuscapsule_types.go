@@ -32,16 +32,15 @@ type ConsensusCapsuleSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	Weight int `json:"weight"`
 
-	// Mutually exclusive with Log4j2ConfigRef; ref takes precedence when both are set.
-	// +optional
-	Log4j2XML string `json:"log4j2.xml,omitempty"`
+	// references a Log4j2Config CR in the same namespace whose managed ConfigMap
+	// is mounted as log4j2.xml. Changes take effect on the next pod restart.
+	// +kubebuilder:validation:MinLength=1
+	Log4j2ConfigRef string `json:"log4j2ConfigRef"`
 
-	// +optional
-	Log4j2ConfigRef string `json:"log4j2ConfigRef,omitempty"`
-
-	// Overrides the Orbit-derived settings.txt when set.
-	// +optional
-	NodeSettingsRef string `json:"nodeSettingsRef,omitempty"`
+	// references a NodeSettings CR in the same namespace whose managed ConfigMap
+	// is mounted as settings.txt. Changes take effect on the next pod restart.
+	// +kubebuilder:validation:MinLength=1
+	SettingsConfigRef string `json:"settingsConfigRef"`
 
 	// Overrides the Orbit-derived application.properties when set.
 	// +optional

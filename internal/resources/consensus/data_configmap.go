@@ -20,6 +20,34 @@ import (
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
+<<<<<<< HEAD
+||||||| d5b1da1
+// DataConfigMapSubReconciler manages the data-config ConfigMap for a ConsensusCapsule.
+// It produces <name>-data-config-cm containing:
+//   - application.properties — rendered from orbit.Spec.Consensus.ApplicationConfiguration
+//   - api-permission.properties — rendered from orbit.Spec.Consensus.PermissionConfiguration
+//   - genesis.properties — rendered from orbit.Spec.Consensus.GenesisProperties (omitted when empty)
+=======
+func fetchOrbit(ctx context.Context, c client.Client, orbitName string) (*operatorv1alpha1.Orbit, error) {
+	if orbitName == "" {
+		return nil, fmt.Errorf("capsule has no orbit name set")
+	}
+	orbit := &operatorv1alpha1.Orbit{}
+	if err := c.Get(ctx, client.ObjectKey{Name: orbitName}, orbit); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, fmt.Errorf("orbit %q not found: will retry once Orbit is created", orbitName)
+		}
+		return nil, err
+	}
+	return orbit, nil
+}
+
+// DataConfigMapSubReconciler manages the data-config ConfigMap for a ConsensusCapsule.
+// It produces <name>-data-config-cm containing:
+//   - application.properties — rendered from orbit.Spec.Consensus.ApplicationConfiguration
+//   - api-permission.properties — rendered from orbit.Spec.Consensus.PermissionConfiguration
+//   - genesis.properties — rendered from orbit.Spec.Consensus.GenesisProperties (omitted when empty)
+>>>>>>> epica38_3_story2_nodesettings
 type DataConfigMapSubReconciler struct {
 	*subreconciler.BaseSubReconciler[*operatorv1alpha1.ConsensusCapsule]
 }

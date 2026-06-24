@@ -55,7 +55,7 @@ var _ = Describe("Log4j2Config Controller", func() {
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 
 			By("Verifying the ConfigMap is created")
-			cmKey := types.NamespacedName{Name: crName + "-log4j2", Namespace: namespace}
+			cmKey := types.NamespacedName{Name: crName + "-log4j2-cm", Namespace: namespace}
 			createdCM := &corev1.ConfigMap{}
 			Eventually(func() bool {
 				return k8sClient.Get(ctx, cmKey, createdCM) == nil
@@ -71,7 +71,7 @@ var _ = Describe("Log4j2Config Controller", func() {
 					return ""
 				}
 				return updatedCR.Status.ConfigMapName
-			}, timeout, interval).Should(Equal(crName + "-log4j2"))
+			}, timeout, interval).Should(Equal(crName + "-log4j2-cm"))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, cr)).Should(Succeed())
@@ -101,7 +101,7 @@ var _ = Describe("Log4j2Config Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 
-			cmKey := types.NamespacedName{Name: crName + "-log4j2", Namespace: namespace}
+			cmKey := types.NamespacedName{Name: crName + "-log4j2-cm", Namespace: namespace}
 			createdCM := &corev1.ConfigMap{}
 			Eventually(func() bool {
 				return k8sClient.Get(ctx, cmKey, createdCM) == nil
@@ -165,7 +165,7 @@ var _ = Describe("Log4j2Config Controller", func() {
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 
 			By("Verifying no ConfigMap is created")
-			cmKey := types.NamespacedName{Name: crName + "-log4j2", Namespace: namespace}
+			cmKey := types.NamespacedName{Name: crName + "-log4j2-cm", Namespace: namespace}
 			Consistently(func() bool {
 				cm := &corev1.ConfigMap{}
 				return k8sClient.Get(ctx, cmKey, cm) == nil
@@ -184,7 +184,7 @@ var _ = Describe("Log4j2Config Controller", func() {
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 
 			By("Verifying no ConfigMap is created")
-			cmKey := types.NamespacedName{Name: crName + "-wrongroot-log4j2", Namespace: namespace}
+			cmKey := types.NamespacedName{Name: crName + "-wrongroot-log4j2-cm", Namespace: namespace}
 			Consistently(func() bool {
 				cm := &corev1.ConfigMap{}
 				return k8sClient.Get(ctx, cmKey, cm) == nil

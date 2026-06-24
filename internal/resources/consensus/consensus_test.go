@@ -90,10 +90,6 @@ func TestResourceNames(t *testing.T) {
 		t.Errorf("expected role binding name node0-rb, got %s", got)
 	}
 
-	if got := HapiAppConfigMapName(capsule); got != "node0-hapi-app-cm" {
-		t.Errorf("expected hapi-app config map name node0-hapi-app-cm, got %s", got)
-	}
-
 	if got := DataConfigMapName(capsule); got != "node0-data-config-cm" {
 		t.Errorf("expected data config map name node0-data-config-cm, got %s", got)
 	}
@@ -235,11 +231,12 @@ func newTestCapsule() *operatorv1alpha1.ConsensusCapsule {
 			UID:       "test-uid",
 		},
 		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-			Orbit:     "test-orbit",
-			NodeId:    0,
-			AccountId: "0.0.3",
-			Weight:    1,
-			Log4j2XML: "<Configuration></Configuration>",
+			Orbit:             "test-orbit",
+			NodeId:            0,
+			AccountId:         "0.0.3",
+			Weight:            1,
+			Log4j2ConfigRef:   "network-log4j2",
+			SettingsConfigRef: "network-settings",
 			PodProperties: operatorv1alpha1.ConsensusPodProperties{
 				Containers: operatorv1alpha1.ConsensusContainers{
 					ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -361,62 +358,6 @@ func TestServiceAccountSubReconciler_UpdateAnnotations(t *testing.T) {
 	}
 	if sa.Annotations["iam.gke.io/gcp-service-account"] != "sa@project.iam.gserviceaccount.com" {
 		t.Error("expected gcp-service-account annotation after update")
-	}
-}
-
-// ── HapiAppConfigMap ──────────────────────────────────────────────────────────
-
-func TestHapiAppConfigMapSubReconciler(t *testing.T) {
-	ctx := context.Background()
-	scheme := newTestScheme()
-	capsule := newTestCapsule()
-	orbit := newTestOrbit()
-	c := newTestClient(scheme, capsule, orbit)
-
-	reconciler := NewHapiAppConfigMapSubReconciler(c, scheme)
-
-	result, err := reconciler.Reconcile(ctx, capsule)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.Requeue {
-		t.Error("unexpected requeue")
-	}
-
-	cm := &corev1.ConfigMap{}
-	if err := c.Get(ctx, client.ObjectKey{Name: "node0-hapi-app-cm", Namespace: "test-namespace"}, cm); err != nil {
-		t.Fatalf("failed to get hapi-app ConfigMap: %v", err)
-	}
-
-	if cm.Data["log4j2.xml"] != "<Configuration></Configuration>" {
-		t.Errorf("unexpected log4j2.xml: %s", cm.Data["log4j2.xml"])
-	}
-
-	if cm.Data["settings.txt"] == "" {
-		t.Error("expected settings.txt to be populated from Orbit")
-	}
-	// settings.txt uses the padded-comma format: "key,                 value"
-	wantSettings := RenderSettingsTxt(map[string]string{
-		"maxTransactionBytesPerSec": "2097152",
-		"useTLS":                    "1",
-	})
-	if got := cm.Data["settings.txt"]; got != wantSettings {
-		t.Errorf("unexpected settings.txt content: %q", got)
-	}
-}
-
-func TestHapiAppConfigMapSubReconciler_OrbitNotFound(t *testing.T) {
-	ctx := context.Background()
-	scheme := newTestScheme()
-	capsule := newTestCapsule() // orbit "test-orbit" not in client
-	c := newTestClient(scheme, capsule)
-
-	reconciler := NewHapiAppConfigMapSubReconciler(c, scheme)
-
-	// Orbit not found must be a hard failure so the reconciler requeues.
-	_, err := reconciler.Reconcile(ctx, capsule)
-	if err == nil {
-		t.Fatal("expected error when orbit is missing, got nil")
 	}
 }
 
@@ -736,7 +677,7 @@ func TestStatefulSetVolumes_DefaultEmptyDir(t *testing.T) {
 	}
 
 	// ConfigMap volumes must be present
-	for _, cmVol := range []string{"hapi-app-config", "data-config"} {
+	for _, cmVol := range []string{"log4j2-config", "settings-config", "data-config"} {
 		v, ok := volByName[cmVol]
 		if !ok {
 			t.Errorf("expected volume %s", cmVol)
@@ -747,32 +688,40 @@ func TestStatefulSetVolumes_DefaultEmptyDir(t *testing.T) {
 		}
 	}
 
-	// hapi-app-config must be subPath-mounted for log4j2.xml and settings.txt
-	// at the HapiApp2.0 directory (where the entrypoint script looks for them)
 	const hapiBase = "/opt/hgcapp/services-hedera/HapiApp2.0"
-	hapiConfigMounts := map[string]bool{}
+
+	// log4j2.xml is now served by the Log4j2Config CR's ConfigMap via log4j2-config volume
+	log4j2Mount := false
 	for _, m := range mounts {
-		if m.Name == "hapi-app-config" {
-			hapiConfigMounts[m.SubPath] = m.ReadOnly
-		}
-	}
-	for _, subPath := range []string{"log4j2.xml", "settings.txt"} {
-		readOnly, ok := hapiConfigMounts[subPath]
-		if !ok {
-			t.Errorf("expected hapi-app-config subPath mount for %s", subPath)
-			continue
-		}
-		if !readOnly {
-			t.Errorf("expected hapi-app-config/%s to be mounted readonly", subPath)
-		}
-		// verify mount path includes hapiBase
-		for _, m := range mounts {
-			if m.Name == "hapi-app-config" && m.SubPath == subPath {
-				if m.MountPath != hapiBase+"/"+subPath {
-					t.Errorf("unexpected mount path for %s: %s", subPath, m.MountPath)
-				}
+		if m.Name == "log4j2-config" && m.SubPath == "log4j2.xml" {
+			log4j2Mount = true
+			if !m.ReadOnly {
+				t.Error("expected log4j2-config/log4j2.xml to be mounted readonly")
+			}
+			if m.MountPath != hapiBase+"/log4j2.xml" {
+				t.Errorf("unexpected mount path for log4j2.xml: %s", m.MountPath)
 			}
 		}
+	}
+	if !log4j2Mount {
+		t.Error("expected log4j2-config subPath mount for log4j2.xml")
+	}
+
+	// settings.txt is served by the NodeSettings CR's ConfigMap via settings-config volume
+	settingsMount := false
+	for _, m := range mounts {
+		if m.Name == "settings-config" && m.SubPath == "settings.txt" {
+			settingsMount = true
+			if !m.ReadOnly {
+				t.Error("expected settings-config/settings.txt to be mounted readonly")
+			}
+			if m.MountPath != hapiBase+"/settings.txt" {
+				t.Errorf("unexpected mount path for settings.txt: %s", m.MountPath)
+			}
+		}
+	}
+	if !settingsMount {
+		t.Error("expected settings-config subPath mount for settings.txt")
 	}
 
 	// All PVC-optional volumes must default to emptyDir

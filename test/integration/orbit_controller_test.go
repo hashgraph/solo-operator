@@ -83,14 +83,28 @@ var _ = Describe("Orbit Controller", func() {
 				},
 			})).Should(Succeed())
 
+			Expect(k8sClient.Create(ctx, &operatorv1alpha1.Log4j2Config{
+				ObjectMeta: metav1.ObjectMeta{Name: "network-log4j2", Namespace: nsA},
+				Spec: operatorv1alpha1.Log4j2ConfigSpec{
+					Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`,
+				},
+			})).Should(Succeed())
+			Expect(k8sClient.Create(ctx, &operatorv1alpha1.NodeSettings{
+				ObjectMeta: metav1.ObjectMeta{Name: "network-settings", Namespace: nsA},
+				Spec: operatorv1alpha1.NodeSettingsSpec{
+					Content: "checkSignedStateFromDisk,              1",
+				},
+			})).Should(Succeed())
+
 			cc := &operatorv1alpha1.ConsensusCapsule{
 				ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: nsA},
 				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-					Orbit:     orbitName,
-					NodeId:    0,
-					AccountId: "0.0.3",
-					Weight:    1,
-					Log4j2XML: "<Configuration></Configuration>",
+					Orbit:             orbitName,
+					NodeId:            0,
+					AccountId:         "0.0.3",
+					Weight:            1,
+					Log4j2ConfigRef:   "network-log4j2",
+					SettingsConfigRef: "network-settings",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
