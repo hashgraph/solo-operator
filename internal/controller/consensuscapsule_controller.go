@@ -25,6 +25,7 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/resources/consensus"
 	"github.com/hashgraph/solo-operator/internal/resources/log4j2config"
+	"github.com/hashgraph/solo-operator/internal/resources/nodesettings"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -138,6 +139,7 @@ type configRef struct {
 func (r *ConsensusCapsuleReconciler) configRefs(c *operatorv1alpha1.ConsensusCapsule) []configRef {
 	return []configRef{
 		{"Log4j2ConfigReady", c.Spec.Log4j2ConfigRef, log4j2config.ConfigMapNameForRef(c.Spec.Log4j2ConfigRef)},
+		{"NodeSettingsReady", c.Spec.SettingsConfigRef, nodesettings.ConfigMapNameForRef(c.Spec.SettingsConfigRef)},
 	}
 }
 
