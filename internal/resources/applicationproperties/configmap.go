@@ -79,6 +79,11 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 	if !maps.Equal(existing.Data, desired.Data) || !maps.Equal(existing.Labels, desired.Labels) {
 		existing.Data = desired.Data
 		existing.Labels = desired.Labels
+		// Re-apply owner reference on update so a pre-existing CM without a controller
+		// reference gets cascade-GC wired up correctly.
+		if err := controllerutil.SetControllerReference(obj, existing, r.Scheme); err != nil {
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{}, r.Client.Update(ctx, existing)
 	}
 
