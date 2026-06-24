@@ -8,12 +8,13 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
@@ -21,21 +22,37 @@ import (
 
 type ConfigMapSubReconciler struct {
 	*subreconciler.BaseSubReconciler[*operatorv1alpha1.ApplicationProperties]
+	Recorder events.EventRecorder
 }
 
-func NewConfigMapSubReconciler(c client.Client, scheme *runtime.Scheme) *ConfigMapSubReconciler {
+func NewConfigMapSubReconciler(c client.Client, scheme *runtime.Scheme, recorder events.EventRecorder) *ConfigMapSubReconciler {
 	return &ConfigMapSubReconciler{
 		BaseSubReconciler: subreconciler.NewBaseSubReconciler[*operatorv1alpha1.ApplicationProperties](c, scheme, "ConfigMap"),
+		Recorder:          recorder,
 	}
 }
 
 func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1alpha1.ApplicationProperties) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	if err := ValidateContent(obj.Spec.Content); err != nil {
-		logger.Error(err, "invalid application.properties — fix spec.content to recover", "name", obj.Name, "namespace", obj.Namespace)
+		apimeta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:               operatorv1alpha1.ApplicationPropertiesConditionTypeValid,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: obj.Generation,
+			Reason:             "InvalidContent",
+			Message:            err.Error(),
+		})
+		if r.Recorder != nil {
+			r.Recorder.Eventf(obj, nil, corev1.EventTypeWarning, "InvalidContent", "ConfigMap", "invalid application.properties: %s", err.Error())
+		}
 		return ctrl.Result{}, nil
 	}
+	apimeta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.ApplicationPropertiesConditionTypeValid,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: obj.Generation,
+		Reason:             "ContentValid",
+		Message:            "spec.content is valid application.properties",
+	})
 
 	desired := r.buildConfigMap(obj)
 
@@ -47,14 +64,12 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 	err := r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("Creating ApplicationProperties ConfigMap", "name", desired.Name, "namespace", desired.Namespace)
 			return ctrl.Result{}, r.Client.Create(ctx, desired)
 		}
 		return ctrl.Result{}, err
 	}
 
 	if r.needsUpdate(existing, desired) {
-		logger.V(1).Info("Updating ApplicationProperties ConfigMap", "name", desired.Name, "namespace", desired.Namespace)
 		existing.Data = desired.Data
 		existing.Labels = desired.Labels
 		return ctrl.Result{}, r.Client.Update(ctx, existing)

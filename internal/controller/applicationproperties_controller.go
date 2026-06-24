@@ -32,9 +32,8 @@ type ApplicationPropertiesReconciler struct {
 
 func NewApplicationPropertiesReconciler(c client.Client, scheme *runtime.Scheme) *ApplicationPropertiesReconciler {
 	return &ApplicationPropertiesReconciler{
-		Client:        c,
-		Scheme:        scheme,
-		subreconciler: applicationproperties.NewSubReconcilers(c, scheme),
+		Client: c,
+		Scheme: scheme,
 	}
 }
 
@@ -87,12 +86,8 @@ func (r *ApplicationPropertiesReconciler) Reconcile(ctx context.Context, req ctr
 }
 
 func (r *ApplicationPropertiesReconciler) updateStatus(ctx context.Context, obj *operatorv1alpha1.ApplicationProperties) error {
-	desired := applicationproperties.ConfigMapName(obj)
-	if obj.Status.ObservedGeneration == obj.Generation && obj.Status.ConfigMapName == desired {
-		return nil
-	}
 	obj.Status.ObservedGeneration = obj.Generation
-	obj.Status.ConfigMapName = desired
+	obj.Status.ConfigMapName = applicationproperties.ConfigMapName(obj)
 	return r.Status().Update(ctx, obj)
 }
 
@@ -103,7 +98,12 @@ func (r *ApplicationPropertiesReconciler) event(obj *operatorv1alpha1.Applicatio
 }
 
 func (r *ApplicationPropertiesReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.Recorder = mgr.GetEventRecorder("applicationproperties")
+	if r.Recorder == nil {
+		r.Recorder = mgr.GetEventRecorder("applicationproperties")
+	}
+	if r.subreconciler == nil {
+		r.subreconciler = applicationproperties.NewSubReconcilers(r.Client, r.Scheme, r.Recorder)
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.ApplicationProperties{}).
 		Owns(&corev1.ConfigMap{}).

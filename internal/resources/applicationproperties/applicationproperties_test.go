@@ -104,7 +104,7 @@ func TestConfigMapSubReconciler_CreatesConfigMap(t *testing.T) {
 		Spec:       operatorv1alpha1.ApplicationPropertiesSpec{Content: validProperties},
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(obj).Build()
-	r := NewConfigMapSubReconciler(c, scheme)
+	r := NewConfigMapSubReconciler(c, scheme, nil)
 
 	_, err := r.Reconcile(context.Background(), obj)
 	if err != nil {
@@ -131,7 +131,7 @@ func TestConfigMapSubReconciler_UpdatesConfigMap(t *testing.T) {
 		Data:       map[string]string{ConfigFileName: "hedera.config.version=1"},
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(obj, existingCM).Build()
-	r := NewConfigMapSubReconciler(c, scheme)
+	r := NewConfigMapSubReconciler(c, scheme, nil)
 
 	_, err := r.Reconcile(context.Background(), obj)
 	if err != nil {
@@ -154,7 +154,7 @@ func TestConfigMapSubReconciler_InvalidContent(t *testing.T) {
 		Spec:       operatorv1alpha1.ApplicationPropertiesSpec{Content: "badline without equals"},
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(obj).Build()
-	r := NewConfigMapSubReconciler(c, scheme)
+	r := NewConfigMapSubReconciler(c, scheme, nil)
 
 	_, err := r.Reconcile(context.Background(), obj)
 	if err != nil {
