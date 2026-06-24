@@ -198,4 +198,5 @@ spec:
   # Reference a shared Log4j2Config CR (defined in common/log4j2config.yaml). Takes effect on next pod restart.
   log4j2ConfigRef: network-log4j2
 
-  nodeSettingsRef: network-nodesettings
+  # Reference a shared NodeSettings CR (defined in common/nodesettings.yaml). Takes effect on next pod restart.
+  settingsConfigRef: network-settings

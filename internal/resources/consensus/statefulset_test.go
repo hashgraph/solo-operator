@@ -212,7 +212,7 @@ func makeSts(image string, envVars []corev1.EnvVar) *appsv1.StatefulSet {
 						{Name: "consensus-node", Image: image, Env: envVars},
 					},
 					Volumes: []corev1.Volume{
-						{Name: "hapi-app-config"},
+						{Name: "settings-config"},
 						{Name: "data"},
 					},
 				},

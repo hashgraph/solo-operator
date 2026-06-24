@@ -60,6 +60,17 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			if err != nil {
 				Expect(err.Error()).To(ContainSubstring("already exists"))
 			}
+
+			nodeSettings := &operatorv1alpha1.NodeSettings{
+				ObjectMeta: metav1.ObjectMeta{Name: "network-settings", Namespace: capsuleNamespace},
+				Spec: operatorv1alpha1.NodeSettingsSpec{
+					Content: "checkSignedStateFromDisk,              1",
+				},
+			}
+			err = k8sClient.Create(ctx, nodeSettings)
+			if err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
 		})
 
 		It("Should create all dependent resources", func() {
@@ -70,11 +81,12 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 					Namespace: capsuleNamespace,
 				},
 				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-					Orbit:           "test-orbit",
-					NodeId:          0,
-					AccountId:       "0.0.3",
-					Weight:          1,
-					Log4j2ConfigRef: "network-log4j2",
+					Orbit:             "test-orbit",
+					NodeId:            0,
+					AccountId:         "0.0.3",
+					Weight:            1,
+					Log4j2ConfigRef:   "network-log4j2",
+					SettingsConfigRef: "network-settings",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -115,14 +127,15 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 
-			By("Verifying the ConfigMap is created")
-			cmLookupKey := types.NamespacedName{Name: fmt.Sprintf("%s-hapi-app-cm", capsuleName), Namespace: capsuleNamespace}
+			By("Verifying the data-config ConfigMap is created")
+			cmLookupKey := types.NamespacedName{Name: fmt.Sprintf("%s-data-config-cm", capsuleName), Namespace: capsuleNamespace}
 			createdCM := &corev1.ConfigMap{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, cmLookupKey, createdCM)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
-			Expect(createdCM.Data).To(HaveKey("settings.txt"))
+			Expect(createdCM.Data).To(HaveKey("application.properties"))
+			Expect(createdCM.Data).NotTo(HaveKey("settings.txt"))
 			Expect(createdCM.Data).NotTo(HaveKey("log4j2.xml"))
 
 			By("Verifying the Service is created")
@@ -187,6 +200,17 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			if err != nil {
 				Expect(err.Error()).To(ContainSubstring("already exists"))
 			}
+
+			nodeSettings := &operatorv1alpha1.NodeSettings{
+				ObjectMeta: metav1.ObjectMeta{Name: "network-settings", Namespace: capsuleNamespace},
+				Spec: operatorv1alpha1.NodeSettingsSpec{
+					Content: "checkSignedStateFromDisk,              1",
+				},
+			}
+			err = k8sClient.Create(ctx, nodeSettings)
+			if err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
 		})
 
 		It("Should create PVCs", func() {
@@ -198,11 +222,12 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 					Namespace: capsuleNamespace,
 				},
 				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-					Orbit:           "test-orbit",
-					NodeId:          1,
-					AccountId:       "0.0.4",
-					Weight:          1,
-					Log4j2ConfigRef: "network-log4j2",
+					Orbit:             "test-orbit",
+					NodeId:            1,
+					AccountId:         "0.0.4",
+					Weight:            1,
+					Log4j2ConfigRef:   "network-log4j2",
+					SettingsConfigRef: "network-settings",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{

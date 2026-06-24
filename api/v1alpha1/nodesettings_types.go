@@ -21,7 +21,14 @@ type NodeSettingsStatus struct {
 
 	// +optional
 	ConfigMapName string `json:"configMapName,omitempty"`
+
+	// +listType=map
+	// +listMapKey=type
+	// +optional
+	Conditions []Condition `json:"conditions,omitempty"`
 }
+
+const NodeSettingsConditionTypeValid = "Valid"
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

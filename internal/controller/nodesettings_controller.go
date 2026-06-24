@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -25,14 +26,14 @@ const (
 type NodeSettingsReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
+	Recorder      events.EventRecorder
 	subreconciler *subreconciler.Chain[*operatorv1alpha1.NodeSettings]
 }
 
 func NewNodeSettingsReconciler(c client.Client, scheme *runtime.Scheme) *NodeSettingsReconciler {
 	return &NodeSettingsReconciler{
-		Client:        c,
-		Scheme:        scheme,
-		subreconciler: nodesettings.NewSubReconcilers(c, scheme),
+		Client: c,
+		Scheme: scheme,
 	}
 }
 
@@ -83,16 +84,18 @@ func (r *NodeSettingsReconciler) Reconcile(ctx context.Context, req ctrl.Request
 }
 
 func (r *NodeSettingsReconciler) updateStatus(ctx context.Context, obj *operatorv1alpha1.NodeSettings) error {
-	desired := nodesettings.ConfigMapName(obj)
-	if obj.Status.ObservedGeneration == obj.Generation && obj.Status.ConfigMapName == desired {
-		return nil
-	}
 	obj.Status.ObservedGeneration = obj.Generation
-	obj.Status.ConfigMapName = desired
+	obj.Status.ConfigMapName = nodesettings.ConfigMapName(obj)
 	return r.Status().Update(ctx, obj)
 }
 
 func (r *NodeSettingsReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.Recorder == nil {
+		r.Recorder = mgr.GetEventRecorder("nodesettings")
+	}
+	if r.subreconciler == nil {
+		r.subreconciler = nodesettings.NewSubReconcilers(r.Client, r.Scheme, r.Recorder)
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.NodeSettings{}).
 		Owns(&corev1.ConfigMap{}).

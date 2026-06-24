@@ -26,7 +26,6 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Log4j2Config is the Schema for the log4j2configs API
         properties:
           apiVersion:
             description: |-
@@ -46,22 +45,17 @@ spec:
           metadata:
             type: object
           spec:
-            description: Log4j2ConfigSpec defines the desired state of Log4j2Config
             properties:
               content:
-                description: Content is the raw log4j2.xml content. Must be a valid
-                  Log4j2 XML configuration.
                 minLength: 1
                 type: string
               orbit:
-                description: Orbit is the owning Orbit's name. Set so the Orbit can
-                  cascade-delete this resource.
+                description: Set so the Orbit can cascade-delete this resource.
                 type: string
             required:
             - content
             type: object
           status:
-            description: Log4j2ConfigStatus defines the observed state of Log4j2Config
             properties:
               conditions:
                 description: |-
@@ -126,11 +120,8 @@ spec:
                 - type
                 x-kubernetes-list-type: map
               configMapName:
-                description: ConfigMapName is the name of the managed ConfigMap.
                 type: string
               observedGeneration:
-                description: ObservedGeneration is the last generation the controller
-                  acted on.
                 format: int64
                 type: integer
             type: object

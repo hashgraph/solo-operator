@@ -4,6 +4,7 @@ package nodesettings
 
 import (
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
@@ -13,7 +14,7 @@ import (
 
 const (
 	PartOfNodeSettings = "node-settings"
-	ConfigMapSuffix    = "-nodesettings"
+	ConfigMapSuffix    = "-settings-cm"
 	ConfigFileName     = "settings.txt"
 )
 
@@ -29,8 +30,12 @@ func ConfigMapName(obj *operatorv1alpha1.NodeSettings) string {
 	return obj.Name + ConfigMapSuffix
 }
 
-func NewSubReconcilers(c client.Client, scheme *runtime.Scheme) *subreconciler.Chain[*operatorv1alpha1.NodeSettings] {
+func ConfigMapNameForRef(name string) string {
+	return name + ConfigMapSuffix
+}
+
+func NewSubReconcilers(c client.Client, scheme *runtime.Scheme, recorder events.EventRecorder) *subreconciler.Chain[*operatorv1alpha1.NodeSettings] {
 	return subreconciler.NewChain(
-		NewConfigMapSubReconciler(c, scheme),
+		NewConfigMapSubReconciler(c, scheme, recorder),
 	)
 }

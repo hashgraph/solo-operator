@@ -161,11 +161,6 @@ func RoleBindingName(capsule *operatorv1alpha1.ConsensusCapsule) string {
 	return capsule.Name + RoleBindingSuffix
 }
 
-// HapiAppConfigMapName returns the hapi-app ConfigMap name for a capsule.
-func HapiAppConfigMapName(capsule *operatorv1alpha1.ConsensusCapsule) string {
-	return capsule.Name + "-hapi-app-cm"
-}
-
 // DataConfigMapName returns the data-config ConfigMap name for a capsule.
 func DataConfigMapName(capsule *operatorv1alpha1.ConsensusCapsule) string {
 	return capsule.Name + "-data-config-cm"
@@ -258,7 +253,6 @@ func NewSubReconcilers(c client.Client, scheme *runtime.Scheme, recorder events.
 		NewServiceAccountSubReconciler(c, scheme),
 		NewRoleSubReconciler(c, scheme),
 		NewRoleBindingSubReconciler(c, scheme),
-		NewHapiAppConfigMapSubReconciler(c, scheme),
 		NewDataConfigMapSubReconciler(c, scheme),
 		NewBlockNodesConfigMapSubReconciler(c, scheme),
 		NewCheetahConfigMapSubReconciler(c, scheme),

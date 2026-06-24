@@ -201,6 +201,6 @@ spec:
   log4j2ConfigRef: network-log4j2
 
   # Reference a shared NodeSettings CR (defined in common/nodesettings.yaml).
-  # Overrides the Orbit-derived settings.txt for all nodes; omit to fall back
-  # to spec.consensus.networkSettings on the Orbit.
-  nodeSettingsRef: network-nodesettings
+  # All nodes share the same settings.txt; update the NodeSettings to change
+  # platform settings for every node at once. Takes effect on next pod restart.
+  settingsConfigRef: network-settings

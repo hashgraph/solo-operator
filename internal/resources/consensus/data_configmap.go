@@ -4,6 +4,7 @@ package consensus
 
 import (
 	"context"
+	"fmt"
 	"maps"
 
 	corev1 "k8s.io/api/core/v1"
@@ -18,6 +19,20 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
+
+func fetchOrbit(ctx context.Context, c client.Client, orbitName string) (*operatorv1alpha1.Orbit, error) {
+	if orbitName == "" {
+		return nil, fmt.Errorf("capsule has no orbit name set")
+	}
+	orbit := &operatorv1alpha1.Orbit{}
+	if err := c.Get(ctx, client.ObjectKey{Name: orbitName}, orbit); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, fmt.Errorf("orbit %q not found: will retry once Orbit is created", orbitName)
+		}
+		return nil, err
+	}
+	return orbit, nil
+}
 
 // DataConfigMapSubReconciler manages the data-config ConfigMap for a ConsensusCapsule.
 // It produces <name>-data-config-cm containing:

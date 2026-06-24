@@ -139,11 +139,6 @@ spec:
                   type: string
                 description: node.properties key-value pairs
                 type: object
-              nodeSettingsRef:
-                description: |-
-                  references a NodeSettings CR in the same namespace whose managed ConfigMap
-                  supplies settings.txt. When set, overrides the Orbit-derived settings.
-                type: string
               offline:
                 default: false
                 description: Offline keeps the consensus pod scaled to zero when true.
@@ -20954,6 +20949,12 @@ spec:
                 - LoadBalancer
                 - NodePort
                 type: string
+              settingsConfigRef:
+                description: |-
+                  references a NodeSettings CR in the same namespace whose managed ConfigMap
+                  is mounted as settings.txt. Changes take effect on the next pod restart.
+                minLength: 1
+                type: string
               weight:
                 description: consensus weight
                 minimum: 0
@@ -20964,6 +20965,7 @@ spec:
             - nodeId
             - orbit
             - podProperties
+            - settingsConfigRef
             - weight
             type: object
           status:
