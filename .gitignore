@@ -81,3 +81,6 @@ debug
 
 # Version file
 VERSION
+
+# semantic-release UC version marker
+.release-version-uc
