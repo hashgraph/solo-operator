@@ -197,15 +197,18 @@ client; the per-marker CR construction is covered by #993–#996. Detection is
 intentionally idempotent-friendly: the loop does not assume a marker fires only
 once, and no `operationId` is minted at this layer.
 
-**Control socket & version** (`internal/uc/control_client_test.go`, `internal/version`):
+**Control socket** (`internal/uc/control_client_test.go`):
 
 ```bash
 go test ./internal/uc/ -run TestFetchStatus -v
-go test ./internal/version/ -v
 ```
 
 | Test | Asserts |
 |------|---------|
 | `TestFetchStatusPrettyPrints` | `uc status` dials the Unix socket, fetches `GET /status`, and pretty-prints the JSON body. |
 | `TestFetchStatusNon200` / `TestFetchStatusNoSocket` | A non-200 response and an absent socket both surface as errors. |
-| `internal/version` suite | `Info.Format` renders json/yaml/text, rejects unknown formats, and `Get()` reflects the ldflags-injected build vars. |
+
+Build-time version metadata is now provided by the shared, dependency-free
+[`github.com/automa-saga/version`](https://github.com/automa-saga/version)
+package (stamped via `-ldflags -X`); it carries its own tests, so there is no
+in-repo version suite. `uc version` renders `text` (default) or `json`.

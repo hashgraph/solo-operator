@@ -14,11 +14,11 @@ import (
 	"syscall"
 
 	"github.com/automa-saga/logx"
+	"github.com/automa-saga/version"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	"github.com/hashgraph/solo-operator/internal/uc"
-	"github.com/hashgraph/solo-operator/internal/version"
 )
 
 // envPrefix namespaces the UC environment variables, e.g. --node-id maps to
@@ -44,7 +44,7 @@ func main() {
 		RunE:    run,
 	}
 
-	root.AddCommand(version.Cmd(), statusCmd())
+	root.AddCommand(versionCmd(), statusCmd())
 
 	f := root.Flags()
 	f.BoolVarP(&flagVersion, "version", "v", false, "Print version and exit")
@@ -86,6 +86,27 @@ func bindEnv(cmd *cobra.Command, _ []string) error {
 		}
 	})
 	return bindErr
+}
+
+// versionCmd prints the binary's build metadata, stamped at build time via
+// -ldflags -X into github.com/automa-saga/version. It honours an -o/--output
+// flag (text or json); text is the default.
+func versionCmd() *cobra.Command {
+	var format string
+	cmd := &cobra.Command{
+		Use:   "version",
+		Short: "Print version information and exit",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			out, err := version.Get().Format(format)
+			if err != nil {
+				return err
+			}
+			cmd.Println(out)
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&format, "output", "o", version.FormatText, "Output format: text or json")
+	return cmd
 }
 
 // statusCmd queries the running UC's control server over its Unix socket and

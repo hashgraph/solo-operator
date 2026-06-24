@@ -5,7 +5,10 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
+
+	"github.com/automa-saga/version"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -44,8 +47,10 @@ func main() {
 	var secureMetrics bool
 	var enableHTTP2 bool
 	var registryOrder string
+	var showVersion bool
 	var tlsOpts []func(*tls.Config)
 
+	flag.BoolVar(&showVersion, "version", false, "Print version information and exit.")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -64,6 +69,11 @@ func main() {
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
+
+	if showVersion {
+		fmt.Println(version.Get().Text())
+		os.Exit(0)
+	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
@@ -231,7 +241,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	setupLog.Info("starting manager")
+	info := version.Get()
+	setupLog.Info("starting manager", "version", info.Version, "commit", info.Commit, "buildDate", info.Date)
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
