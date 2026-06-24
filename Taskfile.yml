@@ -11,6 +11,18 @@ vars:
   ENVTEST_K8S_VERSION: "1.32.0"
   COVERAGE_FILE: coverage.out
   COVERAGE_HTML: coverage.html
+  # Build metadata injected into internal/version via -ldflags -X.
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+  COMMIT:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo none
+  BUILD_DATE:
+    sh: date -u +%Y-%m-%dT%H:%M:%SZ
+  UC_LDFLAGS: >-
+    -w -s
+    -X github.com/hashgraph/solo-operator/internal/version.Number={{.VERSION}}
+    -X github.com/hashgraph/solo-operator/internal/version.Commit={{.COMMIT}}
+    -X github.com/hashgraph/solo-operator/internal/version.Date={{.BUILD_DATE}}
 
 tasks:
   default:
@@ -43,13 +55,13 @@ tasks:
   build:uc:
     desc: Build the UC sidecar binary for the current platform
     cmds:
-      - go build -o bin/uc cmd/uc/main.go
+      - go build -ldflags="{{.UC_LDFLAGS}}" -o bin/uc cmd/uc/main.go
 
   build:uc:all:
     desc: Cross-compile the UC sidecar binary for all supported platforms (linux/amd64, linux/arm64)
     cmds:
-      - CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -trimpath -o bin/uc-linux-amd64 cmd/uc/main.go
-      - CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-w -s" -trimpath -o bin/uc-linux-arm64 cmd/uc/main.go
+      - CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="{{.UC_LDFLAGS}}" -trimpath -o bin/uc-linux-amd64 cmd/uc/main.go
+      - CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="{{.UC_LDFLAGS}}" -trimpath -o bin/uc-linux-arm64 cmd/uc/main.go
       - chmod +x bin/uc-linux-amd64 bin/uc-linux-arm64
 
   hash:

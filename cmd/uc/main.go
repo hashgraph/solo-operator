@@ -18,6 +18,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/hashgraph/solo-operator/internal/uc"
+	"github.com/hashgraph/solo-operator/internal/version"
 )
 
 // envPrefix namespaces the UC environment variables, e.g. --node-id maps to
@@ -27,6 +28,7 @@ const envPrefix = "UC_"
 
 var (
 	flagLogLevel string
+	flagVersion  bool
 
 	cfg = uc.DefaultConfig()
 )
@@ -42,7 +44,10 @@ func main() {
 		RunE:    run,
 	}
 
+	root.AddCommand(version.Cmd(), statusCmd())
+
 	f := root.Flags()
+	f.BoolVarP(&flagVersion, "version", "v", false, "Print version and exit")
 	f.StringVar((*string)(&cfg.Mode), "mode", string(cfg.Mode), "Deployment mode: mainnet or cluster-only")
 	f.IntVar(&cfg.NodeID, "node-id", cfg.NodeID, "Consensus node identity (a non-negative integer, e.g. 0, 1, 2)")
 	f.StringVar(&cfg.Orbit, "orbit", cfg.Orbit, "Deployment orbit the upgrade CRs target")
@@ -83,7 +88,38 @@ func bindEnv(cmd *cobra.Command, _ []string) error {
 	return bindErr
 }
 
+// statusCmd queries the running UC's control server over its Unix socket and
+// prints the per-monitor status. It is the operator-facing counterpart to the
+// daemonkit GET /status endpoint, so a human need not hand-roll curl.
+func statusCmd() *cobra.Command {
+	socketPath := uc.DefaultSocketPath
+	cmd := &cobra.Command{
+		Use:          "status",
+		Short:        "Query the running UC sidecar's status over its control socket",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			out, err := uc.FetchStatus(cmd.Context(), socketPath)
+			if err != nil {
+				return err
+			}
+			cmd.Println(out)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&socketPath, "socket-path", socketPath, "Unix socket of the running UC control server")
+	return cmd
+}
+
 func run(cmd *cobra.Command, _ []string) error {
+	if flagVersion {
+		out, err := version.Get().Format(version.FormatText)
+		if err != nil {
+			return err
+		}
+		cmd.Println(out)
+		return nil
+	}
+
 	if err := logx.Initialize(logx.LoggingConfig{
 		Level:          flagLogLevel,
 		ConsoleLogging: true,

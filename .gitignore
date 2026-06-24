@@ -79,8 +79,9 @@ tmp/
 debug
 *.debug
 
-# Version file
-VERSION
+# Version file (root-level semantic-release marker; anchored so it does not
+# match the internal/version Go package on case-insensitive filesystems)
+/VERSION
 
 # semantic-release UC version marker
 .release-version-uc
