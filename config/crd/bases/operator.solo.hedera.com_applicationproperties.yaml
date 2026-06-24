@@ -118,6 +118,10 @@ spec:
                 x-kubernetes-list-type: map
               configMapName:
                 type: string
+              ledgerID:
+                description: LedgerID is the ledger.id value parsed from spec.content
+                  (observability only).
+                type: string
               observedGeneration:
                 format: int64
                 type: integer

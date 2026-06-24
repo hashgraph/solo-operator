@@ -1,20 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# Shared ApplicationProperties — creates a ConfigMap named network-appprops containing
-# application.properties consumed by all ConsensusCapsule nodes in this namespace.
+# Shared ApplicationProperties — creates a ConfigMap named network-appprops-application-properties-cm
+# that is subPath-mounted at data/config/application.properties in every ConsensusCapsule pod.
 #
-# Each ConsensusCapsule references this CR via:
+# Each ConsensusCapsule must reference this CR via:
 #   spec:
 #     applicationPropertiesRef: network-appprops
 #
-# Updating spec.content here propagates the new properties to every node's
-# data-config ConfigMap automatically. To apply per-node overrides, create a
-# separate ApplicationProperties per node and point each capsule's
-# applicationPropertiesRef at it.
-#
-# When applicationPropertiesRef is not set, application.properties is derived
-# from the Orbit's spec.consensus.applicationConfiguration map merged with
-# Solo's built-in defaults.
+# Updating spec.content propagates the new properties to all nodes on the next pod restart.
+# For per-node overrides create a separate ApplicationProperties per node and set each
+# capsule's applicationPropertiesRef accordingly.
 apiVersion: operator.solo.hedera.com/v1alpha1
 kind: ApplicationProperties
 metadata:

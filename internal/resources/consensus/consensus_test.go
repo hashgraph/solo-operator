@@ -385,20 +385,8 @@ func TestDataConfigMapSubReconciler(t *testing.T) {
 		t.Fatalf("failed to get data-config ConfigMap: %v", err)
 	}
 
-	appProps := cm.Data["application.properties"]
-	if appProps == "" {
-		t.Error("expected application.properties to be populated")
-	}
-	for _, want := range []string{
-		"nodes.gossipFqdnRestricted=false\n",
-		"hedera.profiles.active=TEST\n",
-		"netty.mode=TEST\n",
-		"blockStream.streamMode=BOTH\n", // user override of default RECORDS
-		"hedera.shard=0\n",
-	} {
-		if !strings.Contains(appProps, want) {
-			t.Errorf("application.properties missing %q", want)
-		}
+	if _, ok := cm.Data["application.properties"]; ok {
+		t.Error("application.properties must not be in data-config-cm (owned by ApplicationProperties CR)")
 	}
 
 	if cm.Data["api-permission.properties"] == "" {

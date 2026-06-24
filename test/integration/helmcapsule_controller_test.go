@@ -190,6 +190,17 @@ var _ = Describe("HelmCapsule Controller", func() {
 				Expect(err.Error()).To(ContainSubstring("already exists"))
 			}
 
+			appPropsMirror := &operatorv1alpha1.ApplicationProperties{
+				ObjectMeta: metav1.ObjectMeta{Name: "network-appprops", Namespace: hcNS},
+				Spec: operatorv1alpha1.ApplicationPropertiesSpec{
+					Content: "hedera.config.version=0\nnetty.mode=TEST",
+				},
+			}
+			err = k8sClient.Create(ctx, appPropsMirror)
+			if err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
+
 			for i := 1; i <= 2; i++ {
 				cap := &operatorv1alpha1.ConsensusCapsule{
 					ObjectMeta: metav1.ObjectMeta{
@@ -197,12 +208,13 @@ var _ = Describe("HelmCapsule Controller", func() {
 						Namespace: hcNS,
 					},
 					Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-						Orbit:             orbitName,
-						NodeId:            int64(i),
-						AccountId:         fmt.Sprintf("0.0.%d", i+2),
-						Weight:            1,
-						Log4j2ConfigRef:   "network-log4j2",
-						SettingsConfigRef: "network-settings",
+						Orbit:                    orbitName,
+						NodeId:                   int64(i),
+						AccountId:                fmt.Sprintf("0.0.%d", i+2),
+						Weight:                   1,
+						Log4j2ConfigRef:          "network-log4j2",
+						SettingsConfigRef:        "network-settings",
+						ApplicationPropertiesRef: "network-appprops",
 						PodProperties: operatorv1alpha1.ConsensusPodProperties{
 							Containers: operatorv1alpha1.ConsensusContainers{
 								ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -466,15 +478,27 @@ var _ = Describe("HelmCapsule Controller", func() {
 				Expect(err.Error()).To(ContainSubstring("already exists"))
 			}
 
+			appPropsRelay := &operatorv1alpha1.ApplicationProperties{
+				ObjectMeta: metav1.ObjectMeta{Name: "network-appprops", Namespace: hcNS},
+				Spec: operatorv1alpha1.ApplicationPropertiesSpec{
+					Content: "hedera.config.version=0\nnetty.mode=TEST",
+				},
+			}
+			err = k8sClient.Create(ctx, appPropsRelay)
+			if err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
+
 			cap := &operatorv1alpha1.ConsensusCapsule{
 				ObjectMeta: metav1.ObjectMeta{Name: "node1", Namespace: hcNS},
 				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-					Orbit:             orbitName,
-					NodeId:            1,
-					AccountId:         "0.0.3",
-					Weight:            1,
-					Log4j2ConfigRef:   "network-log4j2",
-					SettingsConfigRef: "network-settings",
+					Orbit:                    orbitName,
+					NodeId:                   1,
+					AccountId:                "0.0.3",
+					Weight:                   1,
+					Log4j2ConfigRef:          "network-log4j2",
+					SettingsConfigRef:        "network-settings",
+					ApplicationPropertiesRef: "network-appprops",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -626,15 +650,27 @@ var _ = Describe("HelmCapsule Controller", func() {
 				Expect(err.Error()).To(ContainSubstring("already exists"))
 			}
 
+			appPropsBN := &operatorv1alpha1.ApplicationProperties{
+				ObjectMeta: metav1.ObjectMeta{Name: "network-appprops", Namespace: hcNS},
+				Spec: operatorv1alpha1.ApplicationPropertiesSpec{
+					Content: "hedera.config.version=0\nnetty.mode=TEST",
+				},
+			}
+			err = k8sClient.Create(ctx, appPropsBN)
+			if err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
+
 			cap := &operatorv1alpha1.ConsensusCapsule{
 				ObjectMeta: metav1.ObjectMeta{Name: "node1", Namespace: hcNS},
 				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-					Orbit:             orbitName,
-					NodeId:            1,
-					AccountId:         "0.0.3",
-					Weight:            1,
-					Log4j2ConfigRef:   "network-log4j2",
-					SettingsConfigRef: "network-settings",
+					Orbit:                    orbitName,
+					NodeId:                   1,
+					AccountId:                "0.0.3",
+					Weight:                   1,
+					Log4j2ConfigRef:          "network-log4j2",
+					SettingsConfigRef:        "network-settings",
+					ApplicationPropertiesRef: "network-appprops",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{

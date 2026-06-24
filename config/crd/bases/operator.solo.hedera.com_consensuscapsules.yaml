@@ -58,8 +58,10 @@ spec:
                 description: node account ID
                 type: string
               applicationPropertiesRef:
-                description: Overrides the Orbit-derived application.properties when
-                  set.
+                description: |-
+                  references an ApplicationProperties CR in the same namespace whose managed ConfigMap
+                  is subPath-mounted at data/config/application.properties.
+                minLength: 1
                 type: string
               blockNodes:
                 description: when set, creates a block-nodes ConfigMap and mounts
@@ -20965,6 +20967,7 @@ spec:
                 type: integer
             required:
             - accountId
+            - applicationPropertiesRef
             - log4j2ConfigRef
             - nodeId
             - orbit

@@ -22,6 +22,10 @@ type ApplicationPropertiesStatus struct {
 	// +optional
 	ConfigMapName string `json:"configMapName,omitempty"`
 
+	// LedgerID is the ledger.id value parsed from spec.content (observability only).
+	// +optional
+	LedgerID string `json:"ledgerID,omitempty"`
+
 	// +listType=map
 	// +listMapKey=type
 	// +optional

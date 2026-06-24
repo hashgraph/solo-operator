@@ -24,7 +24,7 @@ var _ = Describe("ApplicationProperties Controller", func() {
 
 	Context("When creating an ApplicationProperties with valid content", func() {
 		const (
-			crName    = "test-appprops"
+			crName    = "test-application-properties-cm"
 			namespace = "appprops-test"
 		)
 		ctx := context.Background()
@@ -46,7 +46,7 @@ var _ = Describe("ApplicationProperties Controller", func() {
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 
 			By("Verifying the ConfigMap is created")
-			cmKey := types.NamespacedName{Name: crName + "-appprops", Namespace: namespace}
+			cmKey := types.NamespacedName{Name: crName + "-application-properties-cm", Namespace: namespace}
 			createdCM := &corev1.ConfigMap{}
 			Eventually(func() bool {
 				return k8sClient.Get(ctx, cmKey, createdCM) == nil
@@ -62,7 +62,7 @@ var _ = Describe("ApplicationProperties Controller", func() {
 					return ""
 				}
 				return updatedCR.Status.ConfigMapName
-			}, timeout, interval).Should(Equal(crName + "-appprops"))
+			}, timeout, interval).Should(Equal(crName + "-application-properties-cm"))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, cr)).Should(Succeed())
@@ -71,7 +71,7 @@ var _ = Describe("ApplicationProperties Controller", func() {
 
 	Context("When updating spec.content", func() {
 		const (
-			crName    = "test-appprops-update"
+			crName    = "test-application-properties-cm-update"
 			namespace = "appprops-update-test"
 		)
 		ctx := context.Background()
@@ -92,7 +92,7 @@ var _ = Describe("ApplicationProperties Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 
-			cmKey := types.NamespacedName{Name: crName + "-appprops", Namespace: namespace}
+			cmKey := types.NamespacedName{Name: crName + "-application-properties-cm", Namespace: namespace}
 			createdCM := &corev1.ConfigMap{}
 			Eventually(func() bool {
 				return k8sClient.Get(ctx, cmKey, createdCM) == nil
@@ -124,7 +124,7 @@ staking.periodMins=1440`
 
 	Context("When creating an ApplicationProperties with invalid content", func() {
 		const (
-			crName    = "test-appprops-invalid"
+			crName    = "test-application-properties-cm-invalid"
 			namespace = "appprops-invalid-test"
 		)
 		ctx := context.Background()
@@ -146,7 +146,7 @@ staking.periodMins=1440`
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 
 			By("Verifying no ConfigMap is created")
-			cmKey := types.NamespacedName{Name: crName + "-appprops", Namespace: namespace}
+			cmKey := types.NamespacedName{Name: crName + "-application-properties-cm", Namespace: namespace}
 			Consistently(func() bool {
 				cm := &corev1.ConfigMap{}
 				return k8sClient.Get(ctx, cmKey, cm) == nil

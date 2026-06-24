@@ -52,12 +52,7 @@ func (r *DataConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *ope
 		return ctrl.Result{}, err
 	}
 
-	appProps, err := r.resolveApplicationProperties(ctx, capsule, orbit)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	desired := r.buildConfigMap(capsule, orbit, appProps)
+	desired := r.buildConfigMap(capsule, orbit)
 
 	if err := controllerutil.SetControllerReference(capsule, desired, r.Scheme); err != nil {
 		return ctrl.Result{}, err
@@ -88,20 +83,6 @@ func (r *DataConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *ope
 	return ctrl.Result{}, nil
 }
 
-func (r *DataConfigMapSubReconciler) resolveApplicationProperties(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule, orbit *operatorv1alpha1.Orbit) (string, error) {
-	if capsule.Spec.ApplicationPropertiesRef != "" {
-		ref := &operatorv1alpha1.ApplicationProperties{}
-		if err := r.Client.Get(ctx, client.ObjectKey{Name: capsule.Spec.ApplicationPropertiesRef, Namespace: capsule.Namespace}, ref); err != nil {
-			if apierrors.IsNotFound(err) {
-				return "", fmt.Errorf("ApplicationProperties %q not found in namespace %q: will retry once it is created", capsule.Spec.ApplicationPropertiesRef, capsule.Namespace)
-			}
-			return "", err
-		}
-		return ref.Spec.Content, nil
-	}
-	return MergeApplicationProperties(orbit.Spec.Consensus.ApplicationConfiguration), nil
-}
-
 func MergeApplicationProperties(overrides map[string]string) string {
 	merged := DefaultApplicationProperties()
 	for k, v := range overrides {
@@ -110,9 +91,8 @@ func MergeApplicationProperties(overrides map[string]string) string {
 	return RenderProperties(merged)
 }
 
-func (r *DataConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1.ConsensusCapsule, orbit *operatorv1alpha1.Orbit, appProps string) *corev1.ConfigMap {
+func (r *DataConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1.ConsensusCapsule, orbit *operatorv1alpha1.Orbit) *corev1.ConfigMap {
 	data := map[string]string{
-		"application.properties":    appProps,
 		"api-permission.properties": RenderProperties(orbit.Spec.Consensus.PermissionConfiguration),
 	}
 	if len(orbit.Spec.Consensus.GenesisProperties) > 0 {

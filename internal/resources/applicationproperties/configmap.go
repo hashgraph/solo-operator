@@ -4,6 +4,7 @@ package applicationproperties
 
 import (
 	"context"
+	"fmt"
 	"maps"
 
 	corev1 "k8s.io/api/core/v1"
@@ -34,18 +35,24 @@ func NewConfigMapSubReconciler(c client.Client, scheme *runtime.Scheme, recorder
 
 func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1alpha1.ApplicationProperties) (ctrl.Result, error) {
 	if err := ValidateContent(obj.Spec.Content); err != nil {
-		apimeta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
-			Type:               operatorv1alpha1.ApplicationPropertiesConditionTypeValid,
-			Status:             metav1.ConditionFalse,
-			ObservedGeneration: obj.Generation,
-			Reason:             "InvalidContent",
-			Message:            err.Error(),
-		})
-		if r.Recorder != nil {
-			r.Recorder.Eventf(obj, nil, corev1.EventTypeWarning, "InvalidContent", "ConfigMap", "invalid application.properties: %s", err.Error())
-		}
-		return ctrl.Result{}, nil
+		return r.reject(obj, "InvalidContent", err.Error())
 	}
+
+	ledgerID, _ := ParseLedgerID(obj.Spec.Content)
+
+	if obj.Spec.Orbit != "" && ledgerID != "" {
+		orbit := &operatorv1alpha1.Orbit{}
+		if err := r.Client.Get(ctx, client.ObjectKey{Name: obj.Spec.Orbit}, orbit); err != nil {
+			if apierrors.IsNotFound(err) {
+				return ctrl.Result{}, fmt.Errorf("orbit %q not found: will retry once Orbit is created", obj.Spec.Orbit)
+			}
+			return ctrl.Result{}, err
+		}
+		if orbitLedgerID := orbitLedgerID(orbit); orbitLedgerID != "" && ledgerID != orbitLedgerID {
+			return r.reject(obj, "LedgerIDMismatch", fmt.Sprintf("spec.content ledger.id %q does not match Orbit %q ledger.id %q", ledgerID, obj.Spec.Orbit, orbitLedgerID))
+		}
+	}
+
 	apimeta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 		Type:               operatorv1alpha1.ApplicationPropertiesConditionTypeValid,
 		Status:             metav1.ConditionTrue,
@@ -53,9 +60,9 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 		Reason:             "ContentValid",
 		Message:            "spec.content is valid application.properties",
 	})
+	obj.Status.LedgerID = ledgerID
 
 	desired := r.buildConfigMap(obj)
-
 	if err := controllerutil.SetControllerReference(obj, desired, r.Scheme); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -69,7 +76,7 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 		return ctrl.Result{}, err
 	}
 
-	if r.needsUpdate(existing, desired) {
+	if !maps.Equal(existing.Data, desired.Data) || !maps.Equal(existing.Labels, desired.Labels) {
 		existing.Data = desired.Data
 		existing.Labels = desired.Labels
 		return ctrl.Result{}, r.Client.Update(ctx, existing)
@@ -78,8 +85,18 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 	return ctrl.Result{}, nil
 }
 
-func (r *ConfigMapSubReconciler) needsUpdate(existing, desired *corev1.ConfigMap) bool {
-	return !maps.Equal(existing.Data, desired.Data) || !maps.Equal(existing.Labels, desired.Labels)
+func (r *ConfigMapSubReconciler) reject(obj *operatorv1alpha1.ApplicationProperties, reason, msg string) (ctrl.Result, error) {
+	apimeta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.ApplicationPropertiesConditionTypeValid,
+		Status:             metav1.ConditionFalse,
+		ObservedGeneration: obj.Generation,
+		Reason:             reason,
+		Message:            msg,
+	})
+	if r.Recorder != nil {
+		r.Recorder.Eventf(obj, nil, corev1.EventTypeWarning, reason, "ConfigMap", "%s", msg)
+	}
+	return ctrl.Result{}, nil
 }
 
 func (r *ConfigMapSubReconciler) buildConfigMap(obj *operatorv1alpha1.ApplicationProperties) *corev1.ConfigMap {
@@ -93,4 +110,11 @@ func (r *ConfigMapSubReconciler) buildConfigMap(obj *operatorv1alpha1.Applicatio
 			ConfigFileName: obj.Spec.Content,
 		},
 	}
+}
+
+func orbitLedgerID(orbit *operatorv1alpha1.Orbit) string {
+	if orbit.Spec.Consensus.Genesis == nil || orbit.Spec.Consensus.Genesis.AddressBook == nil {
+		return ""
+	}
+	return orbit.Spec.Consensus.Genesis.AddressBook.LedgerId
 }

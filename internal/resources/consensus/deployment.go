@@ -20,6 +20,7 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
+	"github.com/hashgraph/solo-operator/internal/resources/applicationproperties"
 	"github.com/hashgraph/solo-operator/internal/resources/log4j2config"
 	"github.com/hashgraph/solo-operator/internal/resources/nodesettings"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
@@ -326,6 +327,15 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 			},
 		},
 		{
+			Name: "app-config",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: applicationproperties.ConfigMapNameForRef(capsule.Spec.ApplicationPropertiesRef)},
+					DefaultMode:          &defaultMode,
+				},
+			},
+		},
+		{
 			Name: "data-config",
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
@@ -360,7 +370,7 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 		{Name: "settings-config", MountPath: HapiBase + "/settings.txt", SubPath: "settings.txt", ReadOnly: true},
 		// data-config-dir is the writable data/config directory; individual files overlaid via subPath.
 		{Name: "data-config-dir", MountPath: HapiBase + "/data/config"},
-		{Name: "data-config", MountPath: HapiBase + "/data/config/application.properties", SubPath: "application.properties"},
+		{Name: "app-config", MountPath: HapiBase + "/data/config/application.properties", SubPath: "application.properties"},
 		{Name: "data-config", MountPath: HapiBase + "/data/config/api-permission.properties", SubPath: "api-permission.properties"},
 		{Name: "data-config", MountPath: HapiBase + "/data/config/" + GenesisPropertiesFileName, SubPath: GenesisPropertiesFileName},
 	}
