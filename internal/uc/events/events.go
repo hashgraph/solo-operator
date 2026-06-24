@@ -34,10 +34,14 @@ const (
 )
 
 const (
-	// fileGlob matches the UC upgrade event logs in the events directory. UC only
-	// writes upgrade operations, so the daemon's "consensus-" prefix is dropped;
-	// the operation ID already carries an "upgrade-" prefix.
-	fileGlob = "upgrade-*.jsonl"
+	// fileGlob matches every per-operation event log Open can create. Open names
+	// files "<operationID>.jsonl" and does not enforce a type prefix (it must not
+	// reject upstream-authored operation IDs), so retention deliberately covers
+	// all "*.jsonl" in the events directory rather than only "upgrade-*". This
+	// keeps the retention contract consistent with what Open writes — no log can
+	// escape pruning and accumulate unbounded. The UC owns this directory, so no
+	// foreign files are at risk.
+	fileGlob = "*.jsonl"
 
 	// retainMaxAge is the age threshold for the FilenameTimestampStrategy. It
 	// mirrors the daemon's 365-day window; the hard cap is the dominant control.
@@ -62,10 +66,10 @@ type Writer struct {
 // Open returns a Writer that appends to "<operationID>.jsonl" in dir, creating
 // the file if it does not exist. operationID is validated for path/shell safety
 // (sanity.ValidateOperationID); it is NOT required to follow the timestamp
-// convention, but one that omits a parseable timestamp will never be pruned by
-// the retention policy, so Open logs a warning in that case. nodeID is the
-// consensus node identity recorded on every event. The caller must Close the
-// Writer.
+// convention, but one that omits a parseable timestamp loses the durable,
+// semantic ordering retention prefers and ages out by mtime instead, so Open
+// logs a warning in that case. nodeID is the consensus node identity recorded on
+// every event. The caller must Close the Writer.
 func Open(dir, operationID, nodeID string) (*Writer, error) {
 	if err := sanity.ValidateOperationID(operationID); err != nil {
 		return nil, err
@@ -77,7 +81,7 @@ func Open(dir, operationID, nodeID string) (*Writer, error) {
 		logx.As().Warn().
 			Str("reason", "OperationIDMissingTimestamp").
 			Str("operationId", operationID).
-			Msg("operationId has no parseable timestamp; its event log will never be pruned by retention")
+			Msg("operationId has no parseable timestamp; its event log will be retained by mtime, not by operation time")
 	}
 	logger, err := eventlog.NewAppend(dir, operationID+".jsonl")
 	if err != nil {
@@ -109,18 +113,47 @@ func (w *Writer) log(level Level, reason, msg string) error {
 // Close flushes and closes the underlying file.
 func (w *Writer) Close() error { return w.logger.Close() }
 
-// Prune applies the startup retention policy to upgrade event logs in dir: files
-// older than the max-age window are removed, then the oldest remaining files
-// beyond RetainCount are removed, leaving the last RetainCount by embedded
-// timestamp. Files whose timestamp cannot be parsed are never deleted. This is
-// the same FilenameTimestampStrategy the consensus daemon applies. Intended to
-// run once at UC startup; a failure should be logged and tolerated, not fatal.
+// Prune applies the startup retention policy to event logs in dir: files older
+// than the max-age window are removed, then the oldest remaining files beyond
+// RetainCount are removed, leaving the last RetainCount by embedded timestamp.
+//
+// Retention is timestamp-first with an mtime fallback (see retentionStrategy):
+// the same FilenameTimestampStrategy the consensus daemon applies, falling back
+// to mtime only when a filename carries no parseable timestamp. Intended to run
+// once at UC startup; a failure should be logged and tolerated, not fatal.
 func Prune(dir string) error {
-	p := filepruner.New(filepruner.FilenameTimestampStrategy{
-		Layout: sanity.TimestampLayout,
-		MaxAge: retainMaxAge,
+	p := filepruner.New(retentionStrategy{
+		byName:  filepruner.FilenameTimestampStrategy{Layout: sanity.TimestampLayout, MaxAge: retainMaxAge},
+		byMtime: filepruner.ModTimeStrategy{MaxAge: retainMaxAge},
 	})
 	return p.Prune(dir, fileGlob, RetainCount)
+}
+
+// retentionStrategy decides prune-eligibility by the timestamp embedded in the
+// filename when present, and only falls back to the file's mtime when the name
+// has no parseable timestamp.
+//
+// This is deliberately NOT filepruner.Any: Any OR's the two age decisions, so a
+// file that is recent by its embedded timestamp but old by mtime (clock skew, a
+// restore that reset mtimes, a copy without -p) would be wrongly pruned — exactly
+// the unreliability the filename timestamp exists to avoid. The fallback also
+// makes timestampless files eligible (mtime is always available), so they are
+// subject to the hard cap too and can never accumulate unbounded.
+type retentionStrategy struct {
+	byName  filepruner.FilenameTimestampStrategy
+	byMtime filepruner.ModTimeStrategy
+}
+
+// ShouldPrune uses the filename timestamp when one is present; otherwise it falls
+// back to mtime. byName.Layout is a non-empty constant, so the only error it can
+// return is ErrNoTimestamp ("no timestamp in name") — the precise case we fall
+// back on.
+func (s retentionStrategy) ShouldPrune(path string) (bool, error) {
+	prune, err := s.byName.ShouldPrune(path)
+	if err != nil {
+		return s.byMtime.ShouldPrune(path)
+	}
+	return prune, nil
 }
 
 // hasTimestamp reports whether s contains a substring parseable by

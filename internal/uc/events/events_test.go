@@ -113,7 +113,7 @@ func TestOpenValidatesInput(t *testing.T) {
 func TestPruneRetainsLastN(t *testing.T) {
 	dir := t.TempDir()
 
-	// Create RetainCount+5 upgrade logs with ascending embedded timestamps.
+	// Create RetainCount+extra upgrade logs with ascending embedded timestamps.
 	const extra = 5
 	var names []string
 	for i := 0; i < RetainCount+extra; i++ {
@@ -122,16 +122,14 @@ func TestPruneRetainsLastN(t *testing.T) {
 		names = append(names, name)
 		writeFile(t, filepath.Join(dir, name))
 	}
-	// A non-upgrade file and a file with no timestamp must be left untouched.
-	writeFile(t, filepath.Join(dir, "migration-20260101T000000Z.jsonl"))
-	writeFile(t, filepath.Join(dir, "upgrade-notimestamp.jsonl"))
+	// A non-.jsonl file is outside the retention glob entirely and must be untouched.
+	writeFile(t, filepath.Join(dir, "notes.txt"))
 
 	if err := Prune(dir); err != nil {
 		t.Fatalf("Prune: %v", err)
 	}
 
-	// The oldest `extra` upgrade-with-timestamp files should be gone; the newest
-	// RetainCount kept, plus the protected files.
+	// The oldest `extra` timestamped files should be gone; the newest RetainCount kept.
 	for i, name := range names {
 		_, err := os.Stat(filepath.Join(dir, name))
 		if i < extra && !os.IsNotExist(err) {
@@ -141,8 +139,32 @@ func TestPruneRetainsLastN(t *testing.T) {
 			t.Errorf("%s should have been retained: %v", name, err)
 		}
 	}
-	mustExist(t, filepath.Join(dir, "migration-20260101T000000Z.jsonl"))
-	mustExist(t, filepath.Join(dir, "upgrade-notimestamp.jsonl"))
+	mustExist(t, filepath.Join(dir, "notes.txt"))
+}
+
+func TestPruneMtimeFallbackForTimestamplessFiles(t *testing.T) {
+	dir := t.TempDir()
+
+	// Two event logs whose names carry no parseable timestamp, so retention falls
+	// back to mtime: one stale (beyond the max-age window) and one fresh.
+	stale := filepath.Join(dir, "upgrade-notimestamp-old.jsonl")
+	fresh := filepath.Join(dir, "upgrade-notimestamp-new.jsonl")
+	writeFile(t, stale)
+	writeFile(t, fresh)
+
+	old := time.Now().Add(-2 * retainMaxAge)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+
+	if err := Prune(dir); err != nil {
+		t.Fatalf("Prune: %v", err)
+	}
+
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Errorf("stale timestampless log should have been pruned by mtime fallback")
+	}
+	mustExist(t, fresh)
 }
 
 func readJSONL(t *testing.T, path string) []map[string]any {
@@ -160,6 +182,9 @@ func readJSONL(t *testing.T, path string) []map[string]any {
 			t.Fatalf("unmarshal line: %v", err)
 		}
 		out = append(out, m)
+	}
+	if err := sc.Err(); err != nil {
+		t.Fatalf("scan %s: %v", path, err)
 	}
 	return out
 }
