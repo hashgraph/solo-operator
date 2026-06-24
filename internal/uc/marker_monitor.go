@@ -12,6 +12,8 @@ import (
 	"github.com/automa-saga/daemonkit"
 	"github.com/automa-saga/logx"
 	"k8s.io/client-go/dynamic"
+
+	"github.com/hashgraph/solo-operator/internal/uc/events"
 )
 
 // MarkerMonitor is the core UC behaviour: it polls the marker directory and, for
@@ -77,6 +79,15 @@ func (m *MarkerMonitor) Run(ctx context.Context) error {
 		Str("marker_path", m.cfg.MarkerPath).
 		Dur("poll_interval", m.cfg.PollInterval).
 		Msg("marker monitor started")
+
+	// Startup retention: keep only the last events.RetainCount upgrade-*.jsonl
+	// event logs (story 9.1, same policy as the consensus daemon). A failure is
+	// tolerated — stale audit logs must never block the monitor from starting.
+	if err := events.Prune(m.cfg.EventsPath); err != nil {
+		logx.As().Warn().Err(err).Str("reason", "EventLogPruneFailed").
+			Str("events_path", m.cfg.EventsPath).
+			Msg("failed to prune upgrade event logs — continuing")
+	}
 
 	// TODO(#998): restart recovery — reconcile cluster (source of truth) -> disk
 	// (--cr-persist-path) -> markers, resume status watching, clean up completed
