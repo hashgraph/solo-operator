@@ -42,6 +42,11 @@ type ConsensusCapsuleSpec struct {
 	// +kubebuilder:validation:MinLength=1
 	SettingsConfigRef string `json:"settingsConfigRef"`
 
+	// references an ApplicationProperties CR in the same namespace whose managed ConfigMap
+	// is subPath-mounted at data/config/application.properties.
+	// +kubebuilder:validation:MinLength=1
+	ApplicationPropertiesRef string `json:"applicationPropertiesRef"`
+
 	// sets CONSENSUS_NODE_ALIAS env consumed by entrypoint.sh
 	// +optional
 	NodeAlias string `json:"nodeAlias,omitempty"`

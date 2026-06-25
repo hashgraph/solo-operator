@@ -93,6 +93,7 @@ rules:
 - apiGroups:
   - operator.solo.hedera.com
   resources:
+  - applicationproperties
   - consensuscapsules
   - envoyproxies
   - haproxycapsules
@@ -116,6 +117,7 @@ rules:
 - apiGroups:
   - operator.solo.hedera.com
   resources:
+  - applicationproperties/finalizers
   - consensuscapsules/finalizers
   - envoyproxies/finalizers
   - haproxycapsules/finalizers
@@ -133,6 +135,7 @@ rules:
 - apiGroups:
   - operator.solo.hedera.com
   resources:
+  - applicationproperties/status
   - consensuscapsules/status
   - envoyproxies/status
   - haproxycapsules/status

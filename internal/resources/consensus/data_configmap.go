@@ -34,23 +34,16 @@ func fetchOrbit(ctx context.Context, c client.Client, orbitName string) (*operat
 	return orbit, nil
 }
 
-// DataConfigMapSubReconciler manages the data-config ConfigMap for a ConsensusCapsule.
-// It produces <name>-data-config-cm containing:
-//   - application.properties — rendered from orbit.Spec.Consensus.ApplicationConfiguration
-//   - api-permission.properties — rendered from orbit.Spec.Consensus.PermissionConfiguration
-//   - genesis.properties — rendered from orbit.Spec.Consensus.GenesisProperties (omitted when empty)
 type DataConfigMapSubReconciler struct {
 	*subreconciler.BaseSubReconciler[*operatorv1alpha1.ConsensusCapsule]
 }
 
-// NewDataConfigMapSubReconciler creates a new DataConfigMapSubReconciler.
 func NewDataConfigMapSubReconciler(c client.Client, scheme *runtime.Scheme) *DataConfigMapSubReconciler {
 	return &DataConfigMapSubReconciler{
 		BaseSubReconciler: subreconciler.NewBaseSubReconciler[*operatorv1alpha1.ConsensusCapsule](c, scheme, "DataConfigMap"),
 	}
 }
 
-// Reconcile ensures the data-config ConfigMap exists and is up to date.
 func (r *DataConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -90,7 +83,6 @@ func (r *DataConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *ope
 	return ctrl.Result{}, nil
 }
 
-// MergeApplicationProperties merges overrides on top of the Solo defaults and renders the result.
 func MergeApplicationProperties(overrides map[string]string) string {
 	merged := DefaultApplicationProperties()
 	for k, v := range overrides {
@@ -99,10 +91,8 @@ func MergeApplicationProperties(overrides map[string]string) string {
 	return RenderProperties(merged)
 }
 
-// buildConfigMap constructs the desired data-config ConfigMap.
 func (r *DataConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1.ConsensusCapsule, orbit *operatorv1alpha1.Orbit) *corev1.ConfigMap {
 	data := map[string]string{
-		"application.properties":    MergeApplicationProperties(orbit.Spec.Consensus.ApplicationConfiguration),
 		"api-permission.properties": RenderProperties(orbit.Spec.Consensus.PermissionConfiguration),
 	}
 	if len(orbit.Spec.Consensus.GenesisProperties) > 0 {

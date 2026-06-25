@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/resources/applicationproperties"
 	"github.com/hashgraph/solo-operator/internal/resources/consensus"
 	"github.com/hashgraph/solo-operator/internal/resources/log4j2config"
 	"github.com/hashgraph/solo-operator/internal/resources/nodesettings"
@@ -140,6 +141,7 @@ func (r *ConsensusCapsuleReconciler) configRefs(c *operatorv1alpha1.ConsensusCap
 	return []configRef{
 		{"Log4j2ConfigReady", c.Spec.Log4j2ConfigRef, log4j2config.ConfigMapNameForRef(c.Spec.Log4j2ConfigRef)},
 		{"NodeSettingsReady", c.Spec.SettingsConfigRef, nodesettings.ConfigMapNameForRef(c.Spec.SettingsConfigRef)},
+		{"ApplicationPropertiesReady", c.Spec.ApplicationPropertiesRef, applicationproperties.ConfigMapNameForRef(c.Spec.ApplicationPropertiesRef)},
 	}
 }
 

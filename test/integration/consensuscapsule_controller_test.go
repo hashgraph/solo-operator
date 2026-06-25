@@ -71,6 +71,17 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			if err != nil {
 				Expect(err.Error()).To(ContainSubstring("already exists"))
 			}
+
+			appProps := &operatorv1alpha1.ApplicationProperties{
+				ObjectMeta: metav1.ObjectMeta{Name: "network-appprops", Namespace: capsuleNamespace},
+				Spec: operatorv1alpha1.ApplicationPropertiesSpec{
+					Content: "hedera.config.version=0\nnetty.mode=TEST",
+				},
+			}
+			err = k8sClient.Create(ctx, appProps)
+			if err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
 		})
 
 		It("Should create all dependent resources", func() {
@@ -81,12 +92,13 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 					Namespace: capsuleNamespace,
 				},
 				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-					Orbit:             "test-orbit",
-					NodeId:            0,
-					AccountId:         "0.0.3",
-					Weight:            1,
-					Log4j2ConfigRef:   "network-log4j2",
-					SettingsConfigRef: "network-settings",
+					Orbit:                    "test-orbit",
+					NodeId:                   0,
+					AccountId:                "0.0.3",
+					Weight:                   1,
+					Log4j2ConfigRef:          "network-log4j2",
+					SettingsConfigRef:        "network-settings",
+					ApplicationPropertiesRef: "network-appprops",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -134,7 +146,8 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 				err := k8sClient.Get(ctx, cmLookupKey, createdCM)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
-			Expect(createdCM.Data).To(HaveKey("application.properties"))
+			Expect(createdCM.Data).To(HaveKey("api-permission.properties"))
+			Expect(createdCM.Data).NotTo(HaveKey("application.properties"))
 			Expect(createdCM.Data).NotTo(HaveKey("settings.txt"))
 			Expect(createdCM.Data).NotTo(HaveKey("log4j2.xml"))
 
@@ -211,6 +224,17 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			if err != nil {
 				Expect(err.Error()).To(ContainSubstring("already exists"))
 			}
+
+			appProps := &operatorv1alpha1.ApplicationProperties{
+				ObjectMeta: metav1.ObjectMeta{Name: "network-appprops", Namespace: capsuleNamespace},
+				Spec: operatorv1alpha1.ApplicationPropertiesSpec{
+					Content: "hedera.config.version=0\nnetty.mode=TEST",
+				},
+			}
+			err = k8sClient.Create(ctx, appProps)
+			if err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
 		})
 
 		It("Should create PVCs", func() {
@@ -222,12 +246,13 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 					Namespace: capsuleNamespace,
 				},
 				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-					Orbit:             "test-orbit",
-					NodeId:            1,
-					AccountId:         "0.0.4",
-					Weight:            1,
-					Log4j2ConfigRef:   "network-log4j2",
-					SettingsConfigRef: "network-settings",
+					Orbit:                    "test-orbit",
+					NodeId:                   1,
+					AccountId:                "0.0.4",
+					Weight:                   1,
+					Log4j2ConfigRef:          "network-log4j2",
+					SettingsConfigRef:        "network-settings",
+					ApplicationPropertiesRef: "network-appprops",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{

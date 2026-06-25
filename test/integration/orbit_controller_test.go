@@ -95,16 +95,23 @@ var _ = Describe("Orbit Controller", func() {
 					Content: "checkSignedStateFromDisk,              1",
 				},
 			})).Should(Succeed())
+			Expect(k8sClient.Create(ctx, &operatorv1alpha1.ApplicationProperties{
+				ObjectMeta: metav1.ObjectMeta{Name: "network-appprops", Namespace: nsA},
+				Spec: operatorv1alpha1.ApplicationPropertiesSpec{
+					Content: "hedera.config.version=0\nnetty.mode=TEST",
+				},
+			})).Should(Succeed())
 
 			cc := &operatorv1alpha1.ConsensusCapsule{
 				ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: nsA},
 				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-					Orbit:             orbitName,
-					NodeId:            0,
-					AccountId:         "0.0.3",
-					Weight:            1,
-					Log4j2ConfigRef:   "network-log4j2",
-					SettingsConfigRef: "network-settings",
+					Orbit:                    orbitName,
+					NodeId:                   0,
+					AccountId:                "0.0.3",
+					Weight:                   1,
+					Log4j2ConfigRef:          "network-log4j2",
+					SettingsConfigRef:        "network-settings",
+					ApplicationPropertiesRef: "network-appprops",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{

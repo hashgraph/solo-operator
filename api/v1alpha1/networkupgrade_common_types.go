@@ -252,4 +252,7 @@ const (
 
 	EventAbortProcessed   = "AbortProcessed"
 	EventAbortAfterFreeze = "AbortAfterFreeze"
+
+	EventConfigCRReconciled = "ConfigCRReconciled"
+	EventConfigCRFailed     = "ConfigCRFailed"
 )

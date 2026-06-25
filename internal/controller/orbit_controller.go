@@ -43,6 +43,7 @@ func NewOrbitReconciler(c client.Client, scheme *runtime.Scheme) *OrbitReconcile
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=envoyproxies,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=log4j2configs,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=nodesettings,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=applicationproperties,verbs=get;list;watch;delete
 
 func (r *OrbitReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -199,6 +200,23 @@ func (r *OrbitReconciler) deleteOwnedCapsules(ctx context.Context, orbitObj *ope
 		}
 	}
 
+	appPropsList := &operatorv1alpha1.ApplicationPropertiesList{}
+	if err := r.List(ctx, appPropsList); err != nil {
+		return remaining, err
+	}
+	for i := range appPropsList.Items {
+		ap := &appPropsList.Items[i]
+		if ap.Spec.Orbit != orbitObj.Name {
+			continue
+		}
+		remaining++
+		if ap.DeletionTimestamp.IsZero() {
+			if err := r.Delete(ctx, ap); err != nil && !apierrors.IsNotFound(err) {
+				return remaining, err
+			}
+		}
+	}
+
 	return remaining, nil
 }
 
@@ -248,6 +266,7 @@ func (r *OrbitReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&operatorv1alpha1.EnvoyProxy{}, handler.EnqueueRequestsFromMapFunc(r.mapEnvoyProxyToOrbit)).
 		Watches(&operatorv1alpha1.Log4j2Config{}, handler.EnqueueRequestsFromMapFunc(r.mapLog4j2ConfigToOrbit)).
 		Watches(&operatorv1alpha1.NodeSettings{}, handler.EnqueueRequestsFromMapFunc(r.mapNodeSettingsToOrbit)).
+		Watches(&operatorv1alpha1.ApplicationProperties{}, handler.EnqueueRequestsFromMapFunc(r.mapApplicationPropertiesToOrbit)).
 		Named("orbit").
 		Complete(r)
 }
@@ -298,4 +317,12 @@ func (r *OrbitReconciler) mapNodeSettingsToOrbit(_ context.Context, obj client.O
 		return nil
 	}
 	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: ns.Spec.Orbit}}}
+}
+
+func (r *OrbitReconciler) mapApplicationPropertiesToOrbit(_ context.Context, obj client.Object) []reconcile.Request {
+	ap, ok := obj.(*operatorv1alpha1.ApplicationProperties)
+	if !ok || ap.Spec.Orbit == "" {
+		return nil
+	}
+	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: ap.Spec.Orbit}}}
 }

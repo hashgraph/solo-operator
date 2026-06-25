@@ -117,6 +117,12 @@ var _ = BeforeSuite(func() {
 	).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
+	err = controller.NewApplicationPropertiesReconciler(
+		k8sManager.GetClient(),
+		k8sManager.GetScheme(),
+	).SetupWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred())
+
 	Expect(controller.RegisterPrepareIndex(k8sManager)).To(Succeed())
 
 	prepareReconciler := controller.NewNetworkUpgradePrepareReconciler(

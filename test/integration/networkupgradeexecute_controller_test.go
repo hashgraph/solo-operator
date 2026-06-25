@@ -25,6 +25,34 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 
 	BeforeEach(func() {
 		createNamespaceIgnoreExisting(ctx, ns)
+
+		log4j2 := &operatorv1alpha1.Log4j2Config{
+			ObjectMeta: metav1.ObjectMeta{Name: "network-log4j2", Namespace: ns},
+			Spec: operatorv1alpha1.Log4j2ConfigSpec{
+				Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`,
+			},
+		}
+		if err := k8sClient.Create(ctx, log4j2); err != nil {
+			Expect(err.Error()).To(ContainSubstring("already exists"))
+		}
+
+		nodeSettings := &operatorv1alpha1.NodeSettings{
+			ObjectMeta: metav1.ObjectMeta{Name: "network-settings", Namespace: ns},
+			Spec:       operatorv1alpha1.NodeSettingsSpec{Content: "checkSignedStateFromDisk,              1"},
+		}
+		if err := k8sClient.Create(ctx, nodeSettings); err != nil {
+			Expect(err.Error()).To(ContainSubstring("already exists"))
+		}
+
+		appProps := &operatorv1alpha1.ApplicationProperties{
+			ObjectMeta: metav1.ObjectMeta{Name: "network-appprops", Namespace: ns},
+			Spec: operatorv1alpha1.ApplicationPropertiesSpec{
+				Content: "hedera.config.version=0\nnetty.mode=TEST",
+			},
+		}
+		if err := k8sClient.Create(ctx, appProps); err != nil {
+			Expect(err.Error()).To(ContainSubstring("already exists"))
+		}
 	})
 
 	buildPrereqs := func(opID, nupName, nufName string, images operatorv1alpha1.UpgradeImagesSpec) operatorv1alpha1.SelectedSources {
@@ -94,12 +122,13 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 				Labels:    map[string]string{common.LabelOrbit: orbitLabel},
 			},
 			Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-				Orbit:             orbitLabel,
-				NodeId:            0,
-				AccountId:         "0.0.3",
-				Weight:            1,
-				Log4j2ConfigRef:   "network-log4j2",
-				SettingsConfigRef: "network-settings",
+				Orbit:                    orbitLabel,
+				NodeId:                   0,
+				AccountId:                "0.0.3",
+				Weight:                   1,
+				Log4j2ConfigRef:          "network-log4j2",
+				SettingsConfigRef:        "network-settings",
+				ApplicationPropertiesRef: "network-appprops",
 				PodProperties: operatorv1alpha1.ConsensusPodProperties{
 					Containers: operatorv1alpha1.ConsensusContainers{
 						ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
