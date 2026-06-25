@@ -31,11 +31,11 @@ type Factory struct {
 
 	// store implements persist-before-send (#992): each handler serializes its CR
 	// under cfg.CRPersistPath before Create and deletes the file on success.
-	store *CRStore //nolint:unused // consumed by the CR handlers in #993-#998
+	store *CRStore
 
 	// mu guards the operation-id cache (#997). The cache is a performance hint
 	// only; correctness rests on the K8s API existence check before each create.
-	mu    sync.Mutex                     //nolint:unused // guards cache; wired by the handlers in #993-#998
+	mu    sync.Mutex
 	cache map[string]map[string]struct{} // operationId -> set of created steps
 }
 
@@ -52,13 +52,22 @@ func NewFactory(cfg Config, client dynamic.Interface) *Factory {
 // RecoverOnStartup reconciles cluster state, persisted CRs on disk, and marker
 // files so the UC resumes in-flight upgrades without re-signalling.
 //
-// TODO(#997): seed the operation-id cache by querying all NetworkUpgrade* CRs
-// with a matching operation-id label.
+// Today it seeds the operation-id dedup cache (#997) by querying every
+// NetworkUpgrade* CR already in the namespace, so a restart does not re-create
+// CRs for markers it handled before the restart. A seed query failure is logged
+// but not fatal: the per-action cluster query remains authoritative, so an
+// unseeded cache only costs one extra API call per operation.
+//
 // TODO(#998): re-send any CR persisted on disk but not yet in the cluster; clean
 // up artifacts for upgrades that have already reached a terminal phase.
-func (f *Factory) RecoverOnStartup(_ context.Context) error {
-	logx.As().Info().Str("reason", "UCStartupRecoveryPending").
-		Msg("startup recovery not yet implemented (#997, #998)")
+func (f *Factory) RecoverOnStartup(ctx context.Context) error {
+	if err := f.seedCache(ctx); err != nil {
+		logx.As().Warn().Err(err).Str("reason", "UCCacheSeedFailed").
+			Msg("could not seed op-id dedup cache on startup; per-action queries remain authoritative")
+		return nil
+	}
+	logx.As().Info().Str("reason", "UCCacheSeeded").
+		Msg("seeded op-id dedup cache from existing NetworkUpgrade CRs")
 	return nil
 }
 
@@ -106,6 +115,20 @@ func (f *Factory) HandleExecuteImmediate(ctx context.Context) error {
 		return nil
 	}
 
+	// Dedup (#997): on steady-state ticks the marker is still on disk but the CR
+	// already exists. Consult the cache, falling back to the authoritative
+	// cluster query, before doing any persist/create work. A query error is
+	// transient — retry next tick.
+	exists, err := f.alreadyCreated(ctx, networkUpgradePrepareGVR, operationID, operatorv1alpha1.StepPrepare)
+	if err != nil {
+		return fmt.Errorf("dedup check for %s: %w", operationID, err)
+	}
+	if exists {
+		logx.As().Debug().Str("reason", "PrepareCRExists").Str("operation_id", operationID).
+			Msg("NetworkUpgradePrepare already exists — skipping create")
+		return nil
+	}
+
 	cr, err := buildPrepareCR(f.cfg, operationID, manifest.Images)
 	if err != nil {
 		return fmt.Errorf("build NetworkUpgradePrepare for %s: %w", operationID, err)
@@ -120,9 +143,12 @@ func (f *Factory) HandleExecuteImmediate(ctx context.Context) error {
 	resource := f.client.Resource(networkUpgradePrepareGVR).Namespace(f.cfg.Namespace)
 	if _, err := resource.Create(ctx, cr, metav1.CreateOptions{}); err != nil {
 		if k8serrors.IsAlreadyExists(err) {
-			// The CR was already created on a prior tick (first-detection-wins). The
-			// persisted file is now redundant — drop it and treat as success. The
-			// authoritative dedup is this API-level check (#997 only caches it).
+			// The CR was already created on a prior tick (first-detection-wins),
+			// e.g. a race past the dedup query. Record it so future ticks hit the
+			// cache, drop the now-redundant persisted file, and treat as success.
+			// This API-level check is the ultimate dedup guard (the cache only
+			// front-runs it).
+			f.markCreated(operationID, operatorv1alpha1.StepPrepare)
 			if delErr := f.store.Delete(operationID, operatorv1alpha1.StepPrepare); delErr != nil {
 				logx.As().Warn().Err(delErr).Str("reason", "CRPersistCleanupFailed").
 					Str("operation_id", operationID).Msg("failed to delete persisted CR after AlreadyExists")
@@ -131,13 +157,16 @@ func (f *Factory) HandleExecuteImmediate(ctx context.Context) error {
 				Str("cr_name", cr.GetName()).Msg("NetworkUpgradePrepare already exists — skipping create")
 			return nil
 		}
-		// Leave the persisted file in place: it marks the crash/send window for the
-		// restart-recovery flow (#998) to re-send.
+		// The create failed: a stale cache entry must not mask a missing CR on the
+		// next tick. Leave the persisted file in place: it marks the crash/send
+		// window for the restart-recovery flow (#998) to re-send.
+		f.invalidate(operationID)
 		return fmt.Errorf("create NetworkUpgradePrepare %s: %w", cr.GetName(), err)
 	}
 
-	// Success — the cluster now owns the CR, so the persisted copy is no longer
-	// needed for recovery.
+	// Success — record in the cache so steady-state ticks skip the API query, and
+	// drop the persisted copy now that the cluster owns the CR.
+	f.markCreated(operationID, operatorv1alpha1.StepPrepare)
 	if err := f.store.Delete(operationID, operatorv1alpha1.StepPrepare); err != nil {
 		logx.As().Warn().Err(err).Str("reason", "CRPersistCleanupFailed").
 			Str("operation_id", operationID).Msg("failed to delete persisted CR after create")

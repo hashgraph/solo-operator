@@ -6,9 +6,10 @@ console logs, the JSONL event log, and the control-socket status/version
 endpoints.
 
 It targets the foundational polling loop delivered in **story 8.1** (#991), the
-persist-before-send primitive from **story 8.2** (#992), and the
+persist-before-send primitive from **story 8.2** (#992), the
 `execute_immediate.mf` → `NetworkUpgradePrepare` handler from **story 8.3**
-(#993). When you drop `execute_immediate.mf` you will now see the loop construct,
+(#993), and the operation-id deduplication from **story 8.7** (#997). When you
+drop `execute_immediate.mf` you will now see the loop construct,
 persist, and create a real `NetworkUpgradePrepare` CR (§4a). The remaining
 per-marker handlers (#994–#996), the dedup cache (#997), and cleanup/recovery
 (#998) are still stubbed — dropping one of those markers logs a "handler not yet
@@ -188,10 +189,22 @@ You should see a CR named `upgrade-0.75.0-<marker-time-lowercased>-prepare` with
 
 The `operationId` is **minted from the marker's creation time + package
 version**, so it is stable across re-detections: on every subsequent tick the
-handler recomputes the same name and the create is a safe no-op (the existing CR
-is detected at the K8s API level — "first detection wins"). Re-running the
+handler recomputes the same name and the create is a safe no-op. Re-running the
 `touch` updates the marker mtime and therefore mints a *new* operationId; use a
 fresh `$UCDIR` (or leave the marker in place) to observe stable behaviour.
+
+**Deduplication (#997).** The marker stays on disk (cleanup is #998), so the
+handler re-sees it every tick. Two layers stop a duplicate create: an
+authoritative cluster query for a CR carrying the same
+`operator.solo.hedera.com/operation-id` label, fronted by an in-memory cache so
+steady-state ticks skip the API call entirely. After the first `CRDelivered` you
+will see **no further** `kubectl`-visible activity for that marker — the second
+and later ticks are served from the cache and never reach the API server. On
+restart, `RecoverOnStartup` re-seeds the cache by listing existing
+`NetworkUpgrade*` CRs, so a restarted sidecar does not re-create a CR it already
+delivered. The cache is a hint only: any K8s API error drops the entry and the
+next tick re-queries, and the create's own `AlreadyExists` check is the ultimate
+guard against a race.
 
 **Invalid manifest:** set `schemaVersion: 99` (or remove
 `images.consensusNode.version`) and re-run — the handler logs a `ManifestInvalid`
@@ -375,12 +388,25 @@ go test ./internal/uc/ -run 'TestParseComponents|TestHandleExecuteImmediate' -v
 | `TestParseComponentsManifestInvalid` | Unknown/missing `schemaVersion`, missing `consensusNode.version`, and malformed YAML all map to `ManifestInvalid`. |
 | `TestHandleExecuteImmediateCreatesPrepareCR` | Builds + creates a `NetworkUpgradePrepare` with the correct name, labels, `created-by` annotation, `spec.orbit/operationId/images`; the persisted file is cleaned up after the create. |
 | `TestHandleExecuteImmediateManifestInvalidCreatesNoCR` | An invalid manifest halts the handler (returns nil, no retry) and creates no CR / persists nothing. |
-| `TestHandleExecuteImmediateIsIdempotent` | Re-dispatching the same marker creates exactly one CR (first-detection-wins via the K8s `AlreadyExists` check). |
+| `TestHandleExecuteImmediateIsIdempotent` | Re-dispatching the same marker creates exactly one CR (dedup query + cache, backstopped by the K8s `AlreadyExists` check). |
 | `TestHandleExecuteImmediateLeavesPersistedOnCreateError` | A non-`AlreadyExists` create failure leaves the persisted CR on disk for restart recovery (#998). |
 
 The handler uses a fake dynamic client, so no real cluster is needed. The
 `operationId` is minted deterministically from the marker's mtime + package
 version, so the tests pin the marker mtime for a stable name.
+
+**Op-id deduplication** (`internal/uc/dedup_test.go`):
+
+```bash
+go test ./internal/uc/ -run 'TestDedup|TestHandleExecuteImmediateCache|TestHandleExecuteImmediateConcurrent' -v
+```
+
+| Test | Asserts |
+|------|---------|
+| `TestHandleExecuteImmediateCacheAvoidsAPIOnSteadyState` | First tick issues one List (dedup query) + one Create; every later tick is served from the cache with **zero** API calls. |
+| `TestDedupSeededCacheSkipsCreate` | A CR already in the cluster, seeded into the cache by `RecoverOnStartup`, makes the next tick create nothing (restart safety). |
+| `TestDedupAPIErrorInvalidatesCache` | A failed dedup query drops the cached entry and propagates the error; once the API recovers, the next tick re-queries and proceeds. |
+| `TestHandleExecuteImmediateConcurrentNeverDuplicates` | Eight concurrent ticks for the same op-id converge on exactly one CR (cache races are benign; `AlreadyExists` is authoritative). |
 
 **Control socket** (`internal/uc/control_client_test.go`):
 
