@@ -26,38 +26,61 @@ func serveOnSocket(t *testing.T, h http.Handler) string {
 	return sock
 }
 
-func TestFetchStatusPrettyPrints(t *testing.T) {
-	sock := serveOnSocket(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/status" {
-			http.Error(w, "not found", http.StatusNotFound)
-			return
-		}
+// daemonkitMux mimics the two routes the daemonkit control server registers.
+func daemonkitMux(status string) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"marker-monitor":{"state":"running"}}`))
-	}))
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	})
+	mux.HandleFunc("GET /status", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(status))
+	})
+	return mux
+}
 
-	out, err := FetchStatus(context.Background(), sock)
+func TestControlClientStatusPretty(t *testing.T) {
+	sock := serveOnSocket(t, daemonkitMux(`{"marker-monitor":{"state":"running"}}`))
+
+	out, err := NewControlClient(sock).StatusPretty(context.Background())
 	if err != nil {
-		t.Fatalf("FetchStatus: %v", err)
+		t.Fatalf("StatusPretty: %v", err)
 	}
 	if !strings.Contains(out, "marker-monitor") || !strings.Contains(out, "\n") {
 		t.Fatalf("expected indented JSON containing marker-monitor, got %q", out)
 	}
 }
 
-func TestFetchStatusNon200(t *testing.T) {
+func TestControlClientHealth(t *testing.T) {
+	sock := serveOnSocket(t, daemonkitMux("{}"))
+
+	if err := NewControlClient(sock).Health(context.Background()); err != nil {
+		t.Fatalf("Health: %v", err)
+	}
+}
+
+func TestControlClientNon200(t *testing.T) {
 	sock := serveOnSocket(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "boom", http.StatusInternalServerError)
 	}))
 
-	if _, err := FetchStatus(context.Background(), sock); err == nil {
-		t.Fatal("FetchStatus on 500 = nil error, want error")
+	c := NewControlClient(sock)
+	if _, err := c.Status(context.Background()); err == nil {
+		t.Fatal("Status on 500 = nil error, want error")
+	}
+	if err := c.Health(context.Background()); err == nil {
+		t.Fatal("Health on 500 = nil error, want error")
 	}
 }
 
-func TestFetchStatusNoSocket(t *testing.T) {
+func TestControlClientNoSocket(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "absent.sock")
-	if _, err := FetchStatus(context.Background(), missing); err == nil {
-		t.Fatal("FetchStatus on missing socket = nil error, want dial error")
+	c := NewControlClient(missing)
+	if _, err := c.Status(context.Background()); err == nil {
+		t.Fatal("Status on missing socket = nil error, want dial error")
+	}
+	if err := c.Health(context.Background()); err == nil {
+		t.Fatal("Health on missing socket = nil error, want dial error")
 	}
 }

@@ -44,7 +44,7 @@ func main() {
 		RunE:    run,
 	}
 
-	root.AddCommand(versionCmd(), statusCmd())
+	root.AddCommand(versionCmd(), statusCmd(), healthCmd())
 
 	f := root.Flags()
 	f.BoolVarP(&flagVersion, "version", "v", false, "Print version and exit")
@@ -119,11 +119,32 @@ func statusCmd() *cobra.Command {
 		Short:        "Query the running UC sidecar's status over its control socket",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			out, err := uc.FetchStatus(cmd.Context(), socketPath)
+			out, err := uc.NewControlClient(socketPath).StatusPretty(cmd.Context())
 			if err != nil {
 				return err
 			}
 			cmd.Println(out)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&socketPath, "socket-path", socketPath, "Unix socket of the running UC control server")
+	return cmd
+}
+
+// healthCmd probes the running UC's GET /health endpoint over its Unix socket.
+// It prints "ok" and exits 0 when the process is live, or fails with the reason
+// (unreachable socket / non-200) otherwise — usable as a scripted liveness check.
+func healthCmd() *cobra.Command {
+	socketPath := uc.DefaultSocketPath
+	cmd := &cobra.Command{
+		Use:          "health",
+		Short:        "Probe the running UC sidecar's liveness over its control socket",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := uc.NewControlClient(socketPath).Health(cmd.Context()); err != nil {
+				return err
+			}
+			cmd.Println("ok")
 			return nil
 		},
 	}

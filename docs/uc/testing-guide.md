@@ -21,9 +21,8 @@ task build:uc          # -> bin/uc, with version metadata stamped via -ldflags
 Confirm the version metadata was injected:
 
 ```bash
-./bin/uc version            # human-readable text
+./bin/uc version            # human-readable text (default)
 ./bin/uc version -o json    # JSON (version, commit, date, goVersion)
-./bin/uc version -o yaml    # YAML
 ./bin/uc --version          # shorthand, prints text and exits
 ```
 
@@ -144,16 +143,17 @@ empty — that is expected at the 8.1 stage.
 
 ## 6. Query the control socket (status & health)
 
-The UC exposes a daemonkit control server on `--socket-path`. The `uc status`
-subcommand dials it for you:
+The UC exposes a daemonkit control server on `--socket-path` with two endpoints,
+`GET /status` and `GET /health`. The `uc` binary dials them for you:
 
 ```bash
-./bin/uc status --socket-path "$UCDIR/uc.sock"
+./bin/uc status --socket-path "$UCDIR/uc.sock"   # pretty-printed per-monitor status JSON
+./bin/uc health --socket-path "$UCDIR/uc.sock"   # prints "ok" + exit 0 while live, errors otherwise
 ```
 
-You should get pretty-printed JSON with one entry per monitor
-(`marker-monitor`, and `provisioner-proxy-monitor` in cluster-only mode),
-showing each monitor's liveness and any connectivity error.
+`status` returns one entry per monitor (`marker-monitor`, and
+`provisioner-proxy-monitor` in cluster-only mode), showing each monitor's
+liveness and any connectivity error. `health` is a scriptable liveness probe.
 
 Prefer raw `curl`? The same endpoints are available directly:
 
@@ -200,13 +200,19 @@ once, and no `operationId` is minted at this layer.
 **Control socket** (`internal/uc/control_client_test.go`):
 
 ```bash
-go test ./internal/uc/ -run TestFetchStatus -v
+go test ./internal/uc/ -run TestControlClient -v
 ```
 
 | Test | Asserts |
 |------|---------|
-| `TestFetchStatusPrettyPrints` | `uc status` dials the Unix socket, fetches `GET /status`, and pretty-prints the JSON body. |
-| `TestFetchStatusNon200` / `TestFetchStatusNoSocket` | A non-200 response and an absent socket both surface as errors. |
+| `TestControlClientStatusPretty` | `Status` fetches `GET /status` and pretty-prints the JSON body (backs `uc status`). |
+| `TestControlClientHealth` | `Health` succeeds against a live `GET /health` (backs `uc health`). |
+| `TestControlClientNon200` | A non-200 response on either endpoint surfaces as an error. |
+| `TestControlClientNoSocket` | An absent socket surfaces as a dial error on either endpoint. |
+
+The `ControlClient` covers the full daemonkit control surface (`/status` and
+`/health`); add a method (and `uc` subcommand) here for any new endpoint the
+server registers.
 
 Build-time version metadata is now provided by the shared, dependency-free
 [`github.com/automa-saga/version`](https://github.com/automa-saga/version)
