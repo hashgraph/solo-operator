@@ -32,7 +32,43 @@ ldflags will show the `dev` placeholders — that is expected.
 
 ---
 
-## 2. Run the sidecar against scratch directories
+## 2. Prepare the cluster (install the CRDs)
+
+The UC creates and lists `NetworkUpgrade*` Custom Resources, so their CRDs must
+exist in the target cluster. If they are missing you will see the sidecar retry
+forever with:
+
+```
+WRN list error — retrying error="list NetworkUpgradeExecute: the server could not find the requested resource" reason=ProvisionerProxyListError
+```
+
+Install the CRDs (idempotent; uses server-side apply):
+
+```bash
+task install            # kubectl apply --server-side -f config/crd/bases
+```
+
+Verify the four CRDs are registered:
+
+```bash
+kubectl api-resources --api-group=operator.solo.hedera.com | grep -i networkupgrade
+# Expect: networkupgradeprepares, networkupgradefreezes,
+#         networkupgradefreezeaborts, networkupgradeexecutes
+kubectl get networkupgradeexecutes -A    # should return "No resources found", not an error
+```
+
+Also create the namespace the UC targets (`--namespace`, below) if it does not
+already exist:
+
+```bash
+kubectl create namespace solo --dry-run=client -o yaml | kubectl apply -f -
+```
+
+To remove the CRDs afterwards: `task uninstall`.
+
+---
+
+## 3. Run the sidecar against scratch directories
 
 The UC defaults point at production host paths under `/opt/...`. For local
 testing, point every path at a scratch directory so nothing requires root:
@@ -71,7 +107,7 @@ and poll interval.
 
 ---
 
-## 3. Test marker detection and dispatch
+## 4. Test marker detection and dispatch
 
 In a second terminal, drop marker files into the marker directory. The loop
 re-scans every poll interval and dispatches each marker it finds.
@@ -99,7 +135,7 @@ The four recognised markers and what each routes to:
 
 ---
 
-## 4. Test the freeze-window interval switch
+## 5. Test the freeze-window interval switch
 
 The loop polls at the normal cadence (`--poll-interval`) and drops to the fast
 cadence (`--freeze-poll-interval`, default 1s) during the freeze window to
@@ -123,7 +159,7 @@ Look for a `PollIntervalChanged` line with `from=1s to=5s`.
 
 ---
 
-## 5. Inspect the JSONL event log
+## 6. Inspect the JSONL event log
 
 The UC writes a structured audit log (story 9.1) under `--events-path`. On
 startup it prunes old `upgrade-*.jsonl` files to the retention limit; per-upgrade
@@ -141,7 +177,7 @@ empty — that is expected at the 8.1 stage.
 
 ---
 
-## 6. Query the control socket (status & health)
+## 7. Query the control socket (status & health)
 
 The UC exposes a daemonkit control server on `--socket-path` with two endpoints,
 `GET /status` and `GET /health`. The `uc` binary dials them for you:
@@ -164,7 +200,7 @@ curl --unix-socket "$UCDIR/uc.sock" -i http://uc/health   # 200 when the process
 
 ---
 
-## 7. Clean up
+## 8. Clean up
 
 ```bash
 # Ctrl-C the sidecar (it shuts down on SIGINT/SIGTERM), then:
