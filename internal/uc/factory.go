@@ -13,6 +13,8 @@ import (
 	"github.com/automa-saga/logx"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
@@ -115,65 +117,67 @@ func (f *Factory) HandleExecuteImmediate(ctx context.Context) error {
 		return nil
 	}
 
-	// Dedup (#997): on steady-state ticks the marker is still on disk but the CR
-	// already exists. Consult the cache, falling back to the authoritative
-	// cluster query, before doing any persist/create work. A query error is
-	// transient — retry next tick.
-	exists, err := f.alreadyCreated(ctx, networkUpgradePrepareGVR, operationID, operatorv1alpha1.StepPrepare)
-	if err != nil {
-		return fmt.Errorf("dedup check for %s: %w", operationID, err)
-	}
-	if exists {
-		logx.As().Debug().Str("reason", "PrepareCRExists").Str("operation_id", operationID).
-			Msg("NetworkUpgradePrepare already exists — skipping create")
-		return nil
-	}
-
 	cr, err := buildPrepareCR(f.cfg, operationID, manifest.Images)
 	if err != nil {
 		return fmt.Errorf("build NetworkUpgradePrepare for %s: %w", operationID, err)
 	}
+	return f.deliverCR(ctx, networkUpgradePrepareGVR, operationID, operatorv1alpha1.StepPrepare, kindNetworkUpgradePrepare, cr)
+}
 
-	// Persist-before-send (#992): the CR hits disk before any K8s API call so a
-	// crash in the send window leaves it recoverable on the next startup.
-	if _, err := f.store.Persist(operationID, operatorv1alpha1.StepPrepare, cr); err != nil {
-		return fmt.Errorf("persist NetworkUpgradePrepare %s: %w", operationID, err)
+// deliverCR is the shared persist-before-send + dedup tail of every marker
+// handler. It (1) skips when the CR already exists — cache-first, falling back
+// to the authoritative cluster query (#997); (2) persists the CR to disk before
+// the K8s API call so a crash in the send window leaves it recoverable (#992);
+// (3) Creates it, treating AlreadyExists as success (first-detection-wins, the
+// ultimate dedup guard); and (4) maintains the op-id cache and persisted file.
+//
+// It returns nil on success or a benign no-op, and an error only on a transient
+// failure worth retrying on the next tick. On a create failure the persisted
+// file is intentionally left on disk for the restart-recovery flow (#998) and
+// the cache entry is invalidated so a stale hint cannot mask a missing CR.
+func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource, operationID, step, kind string, cr *unstructured.Unstructured) error {
+	exists, err := f.alreadyCreated(ctx, gvr, operationID, step)
+	if err != nil {
+		return fmt.Errorf("dedup check for %s/%s: %w", operationID, step, err)
+	}
+	if exists {
+		logx.As().Debug().Str("reason", "CRExists").Str("operation_id", operationID).
+			Str("step", step).Str("cr_name", cr.GetName()).Msg("CR already exists — skipping create")
+		return nil
 	}
 
-	resource := f.client.Resource(networkUpgradePrepareGVR).Namespace(f.cfg.Namespace)
+	if _, err := f.store.Persist(operationID, step, cr); err != nil {
+		return fmt.Errorf("persist %s %s: %w", kind, operationID, err)
+	}
+
+	resource := f.client.Resource(gvr).Namespace(f.cfg.Namespace)
 	if _, err := resource.Create(ctx, cr, metav1.CreateOptions{}); err != nil {
 		if k8serrors.IsAlreadyExists(err) {
-			// The CR was already created on a prior tick (first-detection-wins),
-			// e.g. a race past the dedup query. Record it so future ticks hit the
-			// cache, drop the now-redundant persisted file, and treat as success.
-			// This API-level check is the ultimate dedup guard (the cache only
-			// front-runs it).
-			f.markCreated(operationID, operatorv1alpha1.StepPrepare)
-			if delErr := f.store.Delete(operationID, operatorv1alpha1.StepPrepare); delErr != nil {
+			// Created on a prior tick (e.g. a race past the dedup query). Record it
+			// so future ticks hit the cache, drop the now-redundant persisted file,
+			// and treat as success.
+			f.markCreated(operationID, step)
+			if delErr := f.store.Delete(operationID, step); delErr != nil {
 				logx.As().Warn().Err(delErr).Str("reason", "CRPersistCleanupFailed").
 					Str("operation_id", operationID).Msg("failed to delete persisted CR after AlreadyExists")
 			}
-			logx.As().Debug().Str("reason", "PrepareCRExists").Str("operation_id", operationID).
-				Str("cr_name", cr.GetName()).Msg("NetworkUpgradePrepare already exists — skipping create")
+			logx.As().Debug().Str("reason", "CRExists").Str("operation_id", operationID).
+				Str("step", step).Str("cr_name", cr.GetName()).Msg("CR already exists — skipping create")
 			return nil
 		}
-		// The create failed: a stale cache entry must not mask a missing CR on the
-		// next tick. Leave the persisted file in place: it marks the crash/send
-		// window for the restart-recovery flow (#998) to re-send.
 		f.invalidate(operationID)
-		return fmt.Errorf("create NetworkUpgradePrepare %s: %w", cr.GetName(), err)
+		return fmt.Errorf("create %s %s: %w", kind, cr.GetName(), err)
 	}
 
 	// Success — record in the cache so steady-state ticks skip the API query, and
 	// drop the persisted copy now that the cluster owns the CR.
-	f.markCreated(operationID, operatorv1alpha1.StepPrepare)
-	if err := f.store.Delete(operationID, operatorv1alpha1.StepPrepare); err != nil {
+	f.markCreated(operationID, step)
+	if err := f.store.Delete(operationID, step); err != nil {
 		logx.As().Warn().Err(err).Str("reason", "CRPersistCleanupFailed").
 			Str("operation_id", operationID).Msg("failed to delete persisted CR after create")
 	}
 	logx.As().Info().Str("reason", "CRDelivered").Str("operation_id", operationID).
-		Str("cr_name", cr.GetName()).Str("cr_kind", kindNetworkUpgradePrepare).
-		Msg("created NetworkUpgradePrepare CR")
+		Str("cr_name", cr.GetName()).Str("cr_kind", kind).Msg("created CR")
 	return nil
 }
 
@@ -200,11 +204,37 @@ func (f *Factory) HandleNowFrozen(_ context.Context) error {
 	return nil
 }
 
-// HandleFreezeAborted creates a NetworkUpgradeFreezeAbort CR.
-//
-// TODO(#996): implement CR construction + persist-before-send.
-func (f *Factory) HandleFreezeAborted(_ context.Context) error {
-	logx.As().Info().Str("reason", "MarkerHandlerPending").Str("marker", MarkerFreezeAborted).
-		Msg("freeze_aborted.mf handler not yet implemented (#996)")
-	return nil
+// HandleFreezeAborted creates a NetworkUpgradeFreezeAbort CR (#996). The UC
+// mints no new identity here: per HIP-1496 the operationId is resolved from the
+// most-recent non-terminal NetworkUpgradePrepare CR (cluster → on-disk
+// fallback), so the abort inherits the upgrade it is cancelling. The UC takes no
+// further action — the operator's FreezeAbortReconciler owns the logic
+// (including the AbortAfterFreeze guard); prior Prepare/Freeze CRs are left in
+// place as an audit trail.
+func (f *Factory) HandleFreezeAborted(ctx context.Context) error {
+	operationID, err := f.resolveOperationID(ctx)
+	if err != nil {
+		return fmt.Errorf("resolve operationId for %s: %w", MarkerFreezeAborted, err)
+	}
+	if operationID == "" {
+		// No NetworkUpgradePrepare exists in the cluster (source of truth) or on
+		// disk. In the normal protocol this cannot happen: execute_immediate.mf
+		// precedes and co-resides with freeze_aborted.mf and is dispatched first
+		// each tick (so Prepare is re-ensured before this runs), and Prepare CRs
+		// are never deleted — an abort always finds its Prepare. Reaching here is a
+		// genuine anomaly: the abort has no corresponding upgrade in the operator's
+		// view, so there is nothing to cancel. The UC deliberately does NOT
+		// fabricate an identity — a synthesized operationId would correlate to no
+		// Prepare/Freeze/Execute CR, producing an orphan CR the operator cannot act
+		// on. It records the anomaly and creates no CR.
+		logx.As().Warn().Str("reason", "AbortWithoutPrepare").Str("marker", MarkerFreezeAborted).
+			Msg("freeze_aborted.mf with no corresponding NetworkUpgradePrepare — nothing to cancel; no CR created")
+		return nil
+	}
+
+	cr, err := buildFreezeAbortCR(f.cfg, operationID)
+	if err != nil {
+		return fmt.Errorf("build NetworkUpgradeFreezeAbort for %s: %w", operationID, err)
+	}
+	return f.deliverCR(ctx, networkUpgradeFreezeAbortGVR, operationID, operatorv1alpha1.StepAbort, kindNetworkUpgradeFreezeAbort, cr)
 }

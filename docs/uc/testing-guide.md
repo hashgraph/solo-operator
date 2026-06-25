@@ -8,8 +8,9 @@ endpoints.
 It targets the foundational polling loop delivered in **story 8.1** (#991), the
 persist-before-send primitive from **story 8.2** (#992), the
 `execute_immediate.mf` → `NetworkUpgradePrepare` handler from **story 8.3**
-(#993), and the operation-id deduplication from **story 8.7** (#997). When you
-drop `execute_immediate.mf` you will now see the loop construct,
+(#993), the `freeze_aborted.mf` → `NetworkUpgradeFreezeAbort` handler from
+**story 8.6** (#996), and the operation-id deduplication from **story 8.7**
+(#997). When you drop `execute_immediate.mf` you will now see the loop construct,
 persist, and create a real `NetworkUpgradePrepare` CR (§4a). The remaining
 per-marker handlers (#994–#996), the dedup cache (#997), and cleanup/recovery
 (#998) are still stubbed — dropping one of those markers logs a "handler not yet
@@ -136,7 +137,7 @@ The four recognised markers and what each routes to:
 | `execute_immediate.mf` | `HandleExecuteImmediate` (#993)        | **implemented** — see §4a |
 | `freeze_scheduled.mf`  | `HandleFreezeScheduled` (#994)         | stubbed        |
 | `now_frozen.mf`        | `HandleNowFrozen` (#995)               | stubbed        |
-| `freeze_aborted.mf`    | `HandleFreezeAborted` (#996)           | stubbed        |
+| `freeze_aborted.mf`    | `HandleFreezeAborted` (#996)           | **implemented** — see §4b |
 
 ---
 
@@ -209,6 +210,62 @@ guard against a race.
 **Invalid manifest:** set `schemaVersion: 99` (or remove
 `images.consensusNode.version`) and re-run — the handler logs a `ManifestInvalid`
 error line and creates **no** CR, rather than retrying forever.
+
+---
+
+## 4b. Cancel an upgrade (`freeze_aborted.mf`, #996)
+
+`freeze_aborted.mf` is written when a `FREEZE_ABORT` transaction cancels a
+pending upgrade (before the scheduled freeze time). The handler creates a
+`NetworkUpgradeFreezeAbort` CR and takes no further action — the operator's
+`FreezeAbortReconciler` owns the abort logic.
+
+The abort **inherits** the upgrade's identity: per HIP-1496 the UC mints an
+`operationId` only at prepare, and every later phase resolves it from the
+most-recent **non-terminal** `NetworkUpgradePrepare` CR (cluster query → an
+on-disk Prepare as fallback). So abort only does something once a Prepare CR
+exists. With the Prepare CR from §4a still present:
+
+```bash
+touch "$UCDIR/markers/freeze_aborted.mf"
+```
+
+Watch for a `CRDelivered` line, then confirm the CR:
+
+```bash
+kubectl get networkupgradefreezeaborts -n solo   # short name: nua
+kubectl get networkupgradefreezeaborts -n solo -o yaml | less
+```
+
+You should see a CR named `upgrade-0.75.0-<prepare-time-lowercased>-abort` —
+**the same operationId as the Prepare CR**, with the `-abort` step suffix — and:
+- labels `operator.solo.hedera.com/operation-id` (matching the Prepare) and
+  `operator.solo.hedera.com/step: abort`,
+- annotation `operator.solo.hedera.com/created-by: UC`,
+- `spec.orbit` + `spec.operationId`; **no** `images` block (abort carries only
+  identity).
+
+Confirm the **audit trail is preserved** — the abort does not delete sibling CRs:
+
+```bash
+kubectl get networkupgradeprepares -n solo   # the Prepare CR is still there
+```
+
+**No corresponding Prepare (anomaly):** drop `freeze_aborted.mf` into a fresh
+`$UCDIR` with no Prepare CR — the handler logs `AbortWithoutPrepare` and creates
+**no** CR. This is an artificial scenario: in the real protocol the abort always
+has a Prepare to inherit from, because (1) the consensus node writes
+`execute_immediate.mf` before `freeze_aborted.mf` and it is the **UC** that later
+cleans the artifacts directory, so both markers co-reside on disk; (2) the poller
+dispatches `execute_immediate.mf` before `freeze_aborted.mf` in the same tick, so
+the Prepare CR is (re)ensured first; and (3) the cluster is the source of truth
+and `NetworkUpgrade*` CRs are never deleted. Reaching this branch therefore means
+the abort has **no upgrade to cancel** in the operator's view — so the UC records
+the anomaly rather than fabricating an `operationId` (a synthesized id would
+create an orphan CR that correlates to no Prepare/Freeze/Execute and the operator
+could not act on).
+
+Processing this marker also reverts the poll cadence to `--poll-interval` (§5).
 
 ---
 
@@ -407,6 +464,23 @@ go test ./internal/uc/ -run 'TestDedup|TestHandleExecuteImmediateCache|TestHandl
 | `TestDedupSeededCacheSkipsCreate` | A CR already in the cluster, seeded into the cache by `RecoverOnStartup`, makes the next tick create nothing (restart safety). |
 | `TestDedupAPIErrorInvalidatesCache` | A failed dedup query drops the cached entry and propagates the error; once the API recovers, the next tick re-queries and proceeds. |
 | `TestHandleExecuteImmediateConcurrentNeverDuplicates` | Eight concurrent ticks for the same op-id converge on exactly one CR (cache races are benign; `AlreadyExists` is authoritative). |
+
+**FreezeAbort handler & op-id resolver** (`internal/uc/freeze_abort_test.go`):
+
+```bash
+go test ./internal/uc/ -run 'TestResolveOperationID|TestHandleFreezeAborted' -v
+```
+
+| Test | Asserts |
+|------|---------|
+| `TestResolveOperationIDFromCluster` | Resolves the in-flight `operationId` from a non-terminal Prepare CR (cluster = source of truth). |
+| `TestResolveOperationIDSkipsTerminalPrepare` | A `Succeeded`/`Failed` Prepare is ignored, so a completed prior upgrade is never mistaken for the in-flight one. |
+| `TestResolveOperationIDDiskFallback` | With no CR in-cluster, resolves from a Prepare persisted on disk (crash window). |
+| `TestResolveOperationIDNoneReturnsEmpty` | No Prepare anywhere → empty id (caller no-ops and retries later), not an error. |
+| `TestHandleFreezeAbortedCreatesCR` | Builds + creates a `NetworkUpgradeFreezeAbort` named `<operationId>-abort` with op-id + `step: abort` labels, `created-by` annotation, `spec.orbit/operationId` (no images); persisted file cleaned up. |
+| `TestHandleFreezeAbortedNoPrepareCreatesNoCR` | No Prepare to inherit identity from → returns nil and creates no CR. |
+| `TestHandleFreezeAbortedIsIdempotent` | Re-dispatching the marker creates exactly one abort CR (dedup). |
+| `TestHandleFreezeAbortedDoesNotDeleteSiblings` | The Prepare CR survives the abort (audit trail; the UC never deletes sibling CRs). |
 
 **Control socket** (`internal/uc/control_client_test.go`):
 

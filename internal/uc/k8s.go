@@ -24,8 +24,7 @@ var (
 	//nolint:unused // consumed by the factory CR handlers in #994
 	networkUpgradeFreezeGVR = gvr("networkupgradefreezes")
 	//nolint:unused // consumed by the factory CR handlers in #995
-	networkUpgradeExecuteGVR = gvr("networkupgradeexecutes")
-	//nolint:unused // consumed by the factory CR handlers in #996
+	networkUpgradeExecuteGVR     = gvr("networkupgradeexecutes")
 	networkUpgradeFreezeAbortGVR = gvr("networkupgradefreezeaborts")
 
 	// allUpgradeGVRs is the set the startup op-id cache seed (#997) and restart
