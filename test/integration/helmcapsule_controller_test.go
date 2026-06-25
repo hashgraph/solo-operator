@@ -181,6 +181,15 @@ var _ = Describe("HelmCapsule Controller", func() {
 				Expect(err.Error()).To(ContainSubstring("already exists"))
 			}
 
+			nsSettings := &operatorv1alpha1.NodeSettings{
+				ObjectMeta: metav1.ObjectMeta{Name: "network-settings", Namespace: hcNS},
+				Spec:       operatorv1alpha1.NodeSettingsSpec{Content: "checkSignedStateFromDisk,              1"},
+			}
+			err = k8sClient.Create(ctx, nsSettings)
+			if err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
+
 			for i := 1; i <= 2; i++ {
 				cap := &operatorv1alpha1.ConsensusCapsule{
 					ObjectMeta: metav1.ObjectMeta{
@@ -188,11 +197,12 @@ var _ = Describe("HelmCapsule Controller", func() {
 						Namespace: hcNS,
 					},
 					Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-						Orbit:           orbitName,
-						NodeId:          int64(i),
-						AccountId:       fmt.Sprintf("0.0.%d", i+2),
-						Weight:          1,
-						Log4j2ConfigRef: "network-log4j2",
+						Orbit:             orbitName,
+						NodeId:            int64(i),
+						AccountId:         fmt.Sprintf("0.0.%d", i+2),
+						Weight:            1,
+						Log4j2ConfigRef:   "network-log4j2",
+						SettingsConfigRef: "network-settings",
 						PodProperties: operatorv1alpha1.ConsensusPodProperties{
 							Containers: operatorv1alpha1.ConsensusContainers{
 								ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -447,14 +457,24 @@ var _ = Describe("HelmCapsule Controller", func() {
 				Expect(err.Error()).To(ContainSubstring("already exists"))
 			}
 
+			nsSettingsRelay := &operatorv1alpha1.NodeSettings{
+				ObjectMeta: metav1.ObjectMeta{Name: "network-settings", Namespace: hcNS},
+				Spec:       operatorv1alpha1.NodeSettingsSpec{Content: "checkSignedStateFromDisk,              1"},
+			}
+			err = k8sClient.Create(ctx, nsSettingsRelay)
+			if err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
+
 			cap := &operatorv1alpha1.ConsensusCapsule{
 				ObjectMeta: metav1.ObjectMeta{Name: "node1", Namespace: hcNS},
 				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-					Orbit:           orbitName,
-					NodeId:          1,
-					AccountId:       "0.0.3",
-					Weight:          1,
-					Log4j2ConfigRef: "network-log4j2",
+					Orbit:             orbitName,
+					NodeId:            1,
+					AccountId:         "0.0.3",
+					Weight:            1,
+					Log4j2ConfigRef:   "network-log4j2",
+					SettingsConfigRef: "network-settings",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -597,14 +617,24 @@ var _ = Describe("HelmCapsule Controller", func() {
 				Expect(err.Error()).To(ContainSubstring("already exists"))
 			}
 
+			nsSettingsBN := &operatorv1alpha1.NodeSettings{
+				ObjectMeta: metav1.ObjectMeta{Name: "network-settings", Namespace: hcNS},
+				Spec:       operatorv1alpha1.NodeSettingsSpec{Content: "checkSignedStateFromDisk,              1"},
+			}
+			err = k8sClient.Create(ctx, nsSettingsBN)
+			if err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
+
 			cap := &operatorv1alpha1.ConsensusCapsule{
 				ObjectMeta: metav1.ObjectMeta{Name: "node1", Namespace: hcNS},
 				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-					Orbit:           orbitName,
-					NodeId:          1,
-					AccountId:       "0.0.3",
-					Weight:          1,
-					Log4j2ConfigRef: "network-log4j2",
+					Orbit:             orbitName,
+					NodeId:            1,
+					AccountId:         "0.0.3",
+					Weight:            1,
+					Log4j2ConfigRef:   "network-log4j2",
+					SettingsConfigRef: "network-settings",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{

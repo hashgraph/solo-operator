@@ -56,7 +56,8 @@ func (r *Log4j2ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	if !obj.DeletionTimestamp.IsZero() {
-		return r.handleDeletion(ctx, obj)
+		controllerutil.RemoveFinalizer(obj, Log4j2ConfigFinalizer)
+		return ctrl.Result{}, r.Update(ctx, obj)
 	}
 
 	if !controllerutil.ContainsFinalizer(obj, Log4j2ConfigFinalizer) {
@@ -79,14 +80,6 @@ func (r *Log4j2ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, nil
-}
-
-func (r *Log4j2ConfigReconciler) handleDeletion(ctx context.Context, obj *operatorv1alpha1.Log4j2Config) (ctrl.Result, error) {
-	controllerutil.RemoveFinalizer(obj, Log4j2ConfigFinalizer)
-	if err := r.Update(ctx, obj); err != nil {
-		return ctrl.Result{}, err
-	}
 	return ctrl.Result{}, nil
 }
 

@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Shared NodeSettings — creates a ConfigMap named network-settings-cm containing
+# the settings.txt mounted directly into each ConsensusCapsule pod.
+#
+# Each ConsensusCapsule references this CR via:
+#   spec:
+#     settingsConfigRef: network-settings
+#
+# Updating spec.content here updates the ConfigMap; the change takes effect on
+# the next pod restart (subPath mounts are not live-synced).
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: NodeSettings
+metadata:
+  name: network-settings
+  namespace: solo-orbit
+spec:
+  # orbit links this resource to the Orbit for cascade deletion.
+  orbit: solo-orbit
+  # content is the raw settings.txt in Hedera's padded-comma format.
+  # Each non-comment line must be:  key,    value
+  content: |
+    checkSignedStateFromDisk,              1
+    state.recoveryFile,                    data/saved/RecoveryFile.dat
+    # throttle unsigned transactions above this TPS
+    throttle.maxTransactionsPerSec,        10000

@@ -72,7 +72,8 @@ type OrbitConsensus struct {
 	// +optional
 	ProvisioningModel string `json:"provisioningModel,omitempty"`
 
-	// NetworkSettings is equivalent to settings.txt
+	// NetworkSettings holds network-wide common values (e.g. `ledger.id`); NOT the node settings.txt,
+	// which is owned by NodeSettings.
 	NetworkSettings map[string]string `json:"networkSettings"`
 
 	// ApplicationConfiguration is equivalent to application.properties

@@ -37,6 +37,11 @@ type ConsensusCapsuleSpec struct {
 	// +kubebuilder:validation:MinLength=1
 	Log4j2ConfigRef string `json:"log4j2ConfigRef"`
 
+	// references a NodeSettings CR in the same namespace whose managed ConfigMap
+	// is mounted as settings.txt. Changes take effect on the next pod restart.
+	// +kubebuilder:validation:MinLength=1
+	SettingsConfigRef string `json:"settingsConfigRef"`
+
 	// sets CONSENSUS_NODE_ALIAS env consumed by entrypoint.sh
 	// +optional
 	NodeAlias string `json:"nodeAlias,omitempty"`

@@ -20949,6 +20949,12 @@ spec:
                 - LoadBalancer
                 - NodePort
                 type: string
+              settingsConfigRef:
+                description: |-
+                  references a NodeSettings CR in the same namespace whose managed ConfigMap
+                  is mounted as settings.txt. Changes take effect on the next pod restart.
+                minLength: 1
+                type: string
               weight:
                 description: consensus weight
                 minimum: 0
@@ -20959,6 +20965,7 @@ spec:
             - nodeId
             - orbit
             - podProperties
+            - settingsConfigRef
             - weight
             type: object
           status:

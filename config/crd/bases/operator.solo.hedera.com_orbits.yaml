@@ -161,7 +161,9 @@ spec:
                   networkSettings:
                     additionalProperties:
                       type: string
-                    description: NetworkSettings is equivalent to settings.txt
+                    description: |-
+                      NetworkSettings holds network-wide common values (e.g. `ledger.id`); NOT the node settings.txt,
+                      which is owned by NodeSettings.
                     type: object
                   permissionConfiguration:
                     additionalProperties:

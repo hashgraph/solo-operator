@@ -21,6 +21,7 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/resources/log4j2config"
+	"github.com/hashgraph/solo-operator/internal/resources/nodesettings"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -316,10 +317,10 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 			},
 		},
 		{
-			Name: "hapi-app-config",
+			Name: "settings-config",
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{Name: HapiAppConfigMapName(capsule)},
+					LocalObjectReference: corev1.LocalObjectReference{Name: nodesettings.ConfigMapNameForRef(capsule.Spec.SettingsConfigRef)},
 					DefaultMode:          &defaultMode,
 				},
 			},
@@ -355,7 +356,8 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 	volumeMounts := []corev1.VolumeMount{
 		// log4j2.xml is owned by the Log4j2Config CR's ConfigMap; takes effect on next pod restart.
 		{Name: "log4j2-config", MountPath: HapiBase + "/log4j2.xml", SubPath: "log4j2.xml", ReadOnly: true},
-		{Name: "hapi-app-config", MountPath: HapiBase + "/settings.txt", SubPath: "settings.txt", ReadOnly: true},
+		// settings.txt is owned by the NodeSettings CR's ConfigMap; takes effect on next pod restart.
+		{Name: "settings-config", MountPath: HapiBase + "/settings.txt", SubPath: "settings.txt", ReadOnly: true},
 		// data-config-dir is the writable data/config directory; individual files overlaid via subPath.
 		{Name: "data-config-dir", MountPath: HapiBase + "/data/config"},
 		{Name: "data-config", MountPath: HapiBase + "/data/config/application.properties", SubPath: "application.properties"},
