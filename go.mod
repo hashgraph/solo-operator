@@ -7,6 +7,7 @@ go 1.26.4
 require (
 	github.com/automa-saga/daemonkit v0.1.0
 	github.com/automa-saga/logx v0.5.0
+	github.com/automa-saga/version v1.0.0
 	github.com/google/go-containerregistry v0.21.6
 	github.com/hiero-ledger/hiero-sdk-go/v2 v2.78.1
 	github.com/joomcode/errorx v1.2.0

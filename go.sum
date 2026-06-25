@@ -30,6 +30,8 @@ github.com/automa-saga/daemonkit v0.1.0 h1:/ph77RqJnBAsx79oROEmlgZ63/aFNg0Tiy5Gs
 github.com/automa-saga/daemonkit v0.1.0/go.mod h1:SljBxNkAAfJMfnC2hurv+NRZzwC2LRf2QZJR/waHwQA=
 github.com/automa-saga/logx v0.5.0 h1:yuFC7JlEQRbEKr+6t9eg1kXAvRIIgzdu9Bz7a0gSJYo=
 github.com/automa-saga/logx v0.5.0/go.mod h1:8S9d499t8uro8yO3blI1hruXLEYWzrBp9ndCI/Ik/88=
+github.com/automa-saga/version v1.0.0 h1:3asMlA3P/Yr3CgctHGdV+hbKOof+9eexMXa046wBzmQ=
+github.com/automa-saga/version v1.0.0/go.mod h1:bTfEhqvwBq6zI6mJ6v8jkjJNNabMuxFevduuvQbiQhs=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
 github.com/blang/semver/v4 v4.0.0 h1:1PFHFE6yCCTv8C1TeyNNarDzntLi7wMI5i/pzqYIsAM=

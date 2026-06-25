@@ -26,9 +26,21 @@ import (
 // restart recovery (8.8) are delegated to the factory and are TODO stubs.
 type MarkerMonitor struct {
 	cfg     Config
-	factory *Factory
+	factory markerDispatcher
 
 	connectivityErr atomic.Pointer[daemonkit.StatusError]
+}
+
+// markerDispatcher routes a detected marker to the handler that constructs the
+// corresponding NetworkUpgrade* CR. *Factory is the production implementation;
+// the seam exists so the poll loop can be exercised in tests without a K8s
+// client (the per-marker handlers themselves are covered by #993-#996).
+type markerDispatcher interface {
+	RecoverOnStartup(ctx context.Context) error
+	HandleExecuteImmediate(ctx context.Context) error
+	HandleFreezeScheduled(ctx context.Context) error
+	HandleNowFrozen(ctx context.Context) error
+	HandleFreezeAborted(ctx context.Context) error
 }
 
 // NewMarkerMonitor constructs the marker monitor.

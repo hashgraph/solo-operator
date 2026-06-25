@@ -11,6 +11,20 @@ vars:
   ENVTEST_K8S_VERSION: "1.32.0"
   COVERAGE_FILE: coverage.out
   COVERAGE_HTML: coverage.html
+  # Build metadata injected into the shared github.com/automa-saga/version
+  # package via -ldflags -X. Both binaries (manager, uc) stamp the same vars at
+  # their own build step.
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+  COMMIT:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo none
+  BUILD_DATE:
+    sh: date -u +%Y-%m-%dT%H:%M:%SZ
+  LDFLAGS: >-
+    -w -s
+    -X github.com/automa-saga/version.Version={{.VERSION}}
+    -X github.com/automa-saga/version.Commit={{.COMMIT}}
+    -X github.com/automa-saga/version.Date={{.BUILD_DATE}}
 
 tasks:
   default:
@@ -31,25 +45,25 @@ tasks:
   build:binary:
     desc: Build the operator binary for the current platform
     cmds:
-      - go build -o bin/{{.BINARY_NAME}} cmd/main.go
+      - go build -ldflags="{{.LDFLAGS}}" -o bin/{{.BINARY_NAME}} cmd/main.go
 
   build:binary:all:
     desc: Cross-compile operator binary for all supported platforms (linux/amd64, linux/arm64)
     cmds:
-      - CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -trimpath -o bin/manager-linux-amd64 cmd/main.go
-      - CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-w -s" -trimpath -o bin/manager-linux-arm64 cmd/main.go
+      - CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="{{.LDFLAGS}}" -trimpath -o bin/manager-linux-amd64 cmd/main.go
+      - CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="{{.LDFLAGS}}" -trimpath -o bin/manager-linux-arm64 cmd/main.go
       - chmod +x bin/manager-linux-amd64 bin/manager-linux-arm64
 
   build:uc:
     desc: Build the UC sidecar binary for the current platform
     cmds:
-      - go build -o bin/uc cmd/uc/main.go
+      - go build -ldflags="{{.LDFLAGS}}" -o bin/uc cmd/uc/main.go
 
   build:uc:all:
     desc: Cross-compile the UC sidecar binary for all supported platforms (linux/amd64, linux/arm64)
     cmds:
-      - CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -trimpath -o bin/uc-linux-amd64 cmd/uc/main.go
-      - CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-w -s" -trimpath -o bin/uc-linux-arm64 cmd/uc/main.go
+      - CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="{{.LDFLAGS}}" -trimpath -o bin/uc-linux-amd64 cmd/uc/main.go
+      - CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="{{.LDFLAGS}}" -trimpath -o bin/uc-linux-arm64 cmd/uc/main.go
       - chmod +x bin/uc-linux-amd64 bin/uc-linux-arm64
 
   hash:
