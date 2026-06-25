@@ -200,6 +200,62 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = controller.NewApiPermissionPropertiesReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+	).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ApiPermissionProperties")
+		os.Exit(1)
+	}
+
+	if err = controller.NewNodePropertiesReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+	).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "NodeProperties")
+		os.Exit(1)
+	}
+
+	if err = controller.NewThrottlesConfigReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+	).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ThrottlesConfig")
+		os.Exit(1)
+	}
+
+	if err = controller.NewFeeSchedulesReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+	).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "FeeSchedules")
+		os.Exit(1)
+	}
+
+	if err = controller.NewSimpleFeesSchedulesReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+	).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "SimpleFeesSchedules")
+		os.Exit(1)
+	}
+
+	if err = controller.NewApplicationOverridePropertiesReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+	).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ApplicationOverrideProperties")
+		os.Exit(1)
+	}
+
+	if err = controller.NewBootstrapPropertiesReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+	).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "BootstrapProperties")
+		os.Exit(1)
+	}
+
 	if err = controller.RegisterPrepareIndex(mgr); err != nil {
 		setupLog.Error(err, "unable to register operationId index")
 		os.Exit(1)

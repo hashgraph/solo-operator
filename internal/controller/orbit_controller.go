@@ -44,6 +44,13 @@ func NewOrbitReconciler(c client.Client, scheme *runtime.Scheme) *OrbitReconcile
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=log4j2configs,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=nodesettings,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=applicationproperties,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=apipermissionproperties,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=nodeproperties,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=throttlesconfigs,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=feeschedules,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=simplefeesschedules,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=applicationoverrideproperties,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=bootstrapproperties,verbs=get;list;watch;delete
 
 func (r *OrbitReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -217,6 +224,125 @@ func (r *OrbitReconciler) deleteOwnedCapsules(ctx context.Context, orbitObj *ope
 		}
 	}
 
+	apiPermList := &operatorv1alpha1.ApiPermissionPropertiesList{}
+	if err := r.List(ctx, apiPermList); err != nil {
+		return remaining, err
+	}
+	for i := range apiPermList.Items {
+		item := &apiPermList.Items[i]
+		if item.Spec.Orbit != orbitObj.Name {
+			continue
+		}
+		remaining++
+		if item.DeletionTimestamp.IsZero() {
+			if err := r.Delete(ctx, item); err != nil && !apierrors.IsNotFound(err) {
+				return remaining, err
+			}
+		}
+	}
+
+	nodePropsList := &operatorv1alpha1.NodePropertiesConfigList{}
+	if err := r.List(ctx, nodePropsList); err != nil {
+		return remaining, err
+	}
+	for i := range nodePropsList.Items {
+		item := &nodePropsList.Items[i]
+		if item.Spec.Orbit != orbitObj.Name {
+			continue
+		}
+		remaining++
+		if item.DeletionTimestamp.IsZero() {
+			if err := r.Delete(ctx, item); err != nil && !apierrors.IsNotFound(err) {
+				return remaining, err
+			}
+		}
+	}
+
+	throttlesList := &operatorv1alpha1.ThrottlesConfigList{}
+	if err := r.List(ctx, throttlesList); err != nil {
+		return remaining, err
+	}
+	for i := range throttlesList.Items {
+		item := &throttlesList.Items[i]
+		if item.Spec.Orbit != orbitObj.Name {
+			continue
+		}
+		remaining++
+		if item.DeletionTimestamp.IsZero() {
+			if err := r.Delete(ctx, item); err != nil && !apierrors.IsNotFound(err) {
+				return remaining, err
+			}
+		}
+	}
+
+	feeSchedList := &operatorv1alpha1.FeeSchedulesList{}
+	if err := r.List(ctx, feeSchedList); err != nil {
+		return remaining, err
+	}
+	for i := range feeSchedList.Items {
+		item := &feeSchedList.Items[i]
+		if item.Spec.Orbit != orbitObj.Name {
+			continue
+		}
+		remaining++
+		if item.DeletionTimestamp.IsZero() {
+			if err := r.Delete(ctx, item); err != nil && !apierrors.IsNotFound(err) {
+				return remaining, err
+			}
+		}
+	}
+
+	simpleFeesList := &operatorv1alpha1.SimpleFeesSchedulesList{}
+	if err := r.List(ctx, simpleFeesList); err != nil {
+		return remaining, err
+	}
+	for i := range simpleFeesList.Items {
+		item := &simpleFeesList.Items[i]
+		if item.Spec.Orbit != orbitObj.Name {
+			continue
+		}
+		remaining++
+		if item.DeletionTimestamp.IsZero() {
+			if err := r.Delete(ctx, item); err != nil && !apierrors.IsNotFound(err) {
+				return remaining, err
+			}
+		}
+	}
+
+	appOverrideList := &operatorv1alpha1.ApplicationOverridePropertiesList{}
+	if err := r.List(ctx, appOverrideList); err != nil {
+		return remaining, err
+	}
+	for i := range appOverrideList.Items {
+		item := &appOverrideList.Items[i]
+		if item.Spec.Orbit != orbitObj.Name {
+			continue
+		}
+		remaining++
+		if item.DeletionTimestamp.IsZero() {
+			if err := r.Delete(ctx, item); err != nil && !apierrors.IsNotFound(err) {
+				return remaining, err
+			}
+		}
+	}
+
+	bootstrapList := &operatorv1alpha1.BootstrapPropertiesList{}
+	if err := r.List(ctx, bootstrapList); err != nil {
+		return remaining, err
+	}
+	for i := range bootstrapList.Items {
+		item := &bootstrapList.Items[i]
+		if item.Spec.Orbit != orbitObj.Name {
+			continue
+		}
+		remaining++
+		if item.DeletionTimestamp.IsZero() {
+			if err := r.Delete(ctx, item); err != nil && !apierrors.IsNotFound(err) {
+				return remaining, err
+			}
+		}
+	}
+
 	return remaining, nil
 }
 
@@ -267,6 +393,13 @@ func (r *OrbitReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&operatorv1alpha1.Log4j2Config{}, handler.EnqueueRequestsFromMapFunc(r.mapLog4j2ConfigToOrbit)).
 		Watches(&operatorv1alpha1.NodeSettings{}, handler.EnqueueRequestsFromMapFunc(r.mapNodeSettingsToOrbit)).
 		Watches(&operatorv1alpha1.ApplicationProperties{}, handler.EnqueueRequestsFromMapFunc(r.mapApplicationPropertiesToOrbit)).
+		Watches(&operatorv1alpha1.ApiPermissionProperties{}, handler.EnqueueRequestsFromMapFunc(r.mapApiPermissionPropertiesToOrbit)).
+		Watches(&operatorv1alpha1.NodePropertiesConfig{}, handler.EnqueueRequestsFromMapFunc(r.mapNodePropertiesToOrbit)).
+		Watches(&operatorv1alpha1.ThrottlesConfig{}, handler.EnqueueRequestsFromMapFunc(r.mapThrottlesConfigToOrbit)).
+		Watches(&operatorv1alpha1.FeeSchedules{}, handler.EnqueueRequestsFromMapFunc(r.mapFeeSchedulesToOrbit)).
+		Watches(&operatorv1alpha1.SimpleFeesSchedules{}, handler.EnqueueRequestsFromMapFunc(r.mapSimpleFeesSchedulesToOrbit)).
+		Watches(&operatorv1alpha1.ApplicationOverrideProperties{}, handler.EnqueueRequestsFromMapFunc(r.mapApplicationOverridePropertiesToOrbit)).
+		Watches(&operatorv1alpha1.BootstrapProperties{}, handler.EnqueueRequestsFromMapFunc(r.mapBootstrapPropertiesToOrbit)).
 		Named("orbit").
 		Complete(r)
 }
@@ -325,4 +458,60 @@ func (r *OrbitReconciler) mapApplicationPropertiesToOrbit(_ context.Context, obj
 		return nil
 	}
 	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: ap.Spec.Orbit}}}
+}
+
+func (r *OrbitReconciler) mapApiPermissionPropertiesToOrbit(_ context.Context, obj client.Object) []reconcile.Request {
+	o, ok := obj.(*operatorv1alpha1.ApiPermissionProperties)
+	if !ok || o.Spec.Orbit == "" {
+		return nil
+	}
+	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: o.Spec.Orbit}}}
+}
+
+func (r *OrbitReconciler) mapNodePropertiesToOrbit(_ context.Context, obj client.Object) []reconcile.Request {
+	o, ok := obj.(*operatorv1alpha1.NodePropertiesConfig)
+	if !ok || o.Spec.Orbit == "" {
+		return nil
+	}
+	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: o.Spec.Orbit}}}
+}
+
+func (r *OrbitReconciler) mapThrottlesConfigToOrbit(_ context.Context, obj client.Object) []reconcile.Request {
+	o, ok := obj.(*operatorv1alpha1.ThrottlesConfig)
+	if !ok || o.Spec.Orbit == "" {
+		return nil
+	}
+	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: o.Spec.Orbit}}}
+}
+
+func (r *OrbitReconciler) mapFeeSchedulesToOrbit(_ context.Context, obj client.Object) []reconcile.Request {
+	o, ok := obj.(*operatorv1alpha1.FeeSchedules)
+	if !ok || o.Spec.Orbit == "" {
+		return nil
+	}
+	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: o.Spec.Orbit}}}
+}
+
+func (r *OrbitReconciler) mapSimpleFeesSchedulesToOrbit(_ context.Context, obj client.Object) []reconcile.Request {
+	o, ok := obj.(*operatorv1alpha1.SimpleFeesSchedules)
+	if !ok || o.Spec.Orbit == "" {
+		return nil
+	}
+	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: o.Spec.Orbit}}}
+}
+
+func (r *OrbitReconciler) mapApplicationOverridePropertiesToOrbit(_ context.Context, obj client.Object) []reconcile.Request {
+	o, ok := obj.(*operatorv1alpha1.ApplicationOverrideProperties)
+	if !ok || o.Spec.Orbit == "" {
+		return nil
+	}
+	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: o.Spec.Orbit}}}
+}
+
+func (r *OrbitReconciler) mapBootstrapPropertiesToOrbit(_ context.Context, obj client.Object) []reconcile.Request {
+	o, ok := obj.(*operatorv1alpha1.BootstrapProperties)
+	if !ok || o.Spec.Orbit == "" {
+		return nil
+	}
+	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: o.Spec.Orbit}}}
 }

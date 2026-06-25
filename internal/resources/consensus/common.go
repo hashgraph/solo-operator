@@ -161,9 +161,10 @@ func RoleBindingName(capsule *operatorv1alpha1.ConsensusCapsule) string {
 	return capsule.Name + RoleBindingSuffix
 }
 
-// DataConfigMapName returns the data-config ConfigMap name for a capsule.
+// DataConfigMapName returns the genesis-properties ConfigMap name for a capsule.
+// This CM holds genesis.properties rendered from Orbit.Spec.Consensus.GenesisProperties.
 func DataConfigMapName(capsule *operatorv1alpha1.ConsensusCapsule) string {
-	return capsule.Name + "-data-config-cm"
+	return capsule.Name + "-genesis-properties-cm"
 }
 
 // BlockNodesConfigMapName returns the block-nodes ConfigMap name for a capsule.

@@ -209,3 +209,26 @@ spec:
   # Overrides the Orbit-derived application.properties for all nodes; omit to fall back
   # to spec.consensus.applicationConfiguration on the Orbit merged with Solo defaults.
   applicationPropertiesRef: network-appprops
+
+  # Optional config CRs — omit any field to skip mounting that file entirely.
+
+  # api-permission.properties (defined in common/apipermissionproperties.yaml)
+  apiPermissionPropertiesRef: network-apipermprops
+
+  # node.properties (defined in common/nodeproperties.yaml)
+  nodePropertiesRef: network-nodeprops
+
+  # throttles.json (defined in common/throttlesconfig.yaml)
+  throttlesConfigRef: network-throttles
+
+  # feeSchedules.json (defined in common/feeschedules.yaml)
+  feeSchedulesRef: network-feesched
+
+  # simpleFeesSchedules.json (defined in common/simplefeesschedules.yaml)
+  simpleFeesSchedulesRef: network-simplefeesched
+
+  # application-override.properties (defined in common/applicationoverrideproperties.yaml)
+  applicationOverridePropertiesRef: network-appoverprops
+
+  # bootstrap.properties (defined in common/bootstrapproperties.yaml)
+  bootstrapPropertiesRef: network-bootprops

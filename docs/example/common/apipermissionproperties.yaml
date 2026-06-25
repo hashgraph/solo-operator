@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Shared ApiPermissionProperties — creates a ConfigMap named network-apipermprops-api-permission-properties-cm
+# that is subPath-mounted at data/config/api-permission.properties in every ConsensusCapsule pod.
+#
+# Each ConsensusCapsule must reference this CR via:
+#   spec:
+#     apiPermissionPropertiesRef: network-apipermprops
+#
+# This field is optional. When omitted the file is not mounted (the node falls back
+# to whatever is baked into the container image). Updating spec.content propagates
+# the new file to all referencing nodes on the next pod restart.
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: ApiPermissionProperties
+metadata:
+  name: network-apipermprops
+  namespace: solo-orbit
+spec:
+  # orbit links this resource to the Orbit for cascade deletion.
+  orbit: solo-orbit
+  # content is the raw api-permission.properties in Java key=value format.
+  content: |
+    getVersionInfo=EVERYBODY
+    getSolidityAddress=EVERYBODY
+    callLocal=CONTRACT
+    contractCallMethod=CONTRACT
+    createContract=CONTRACT
+    deleteContract=PRIVILEGED
+    contractGetInfo=EVERYBODY
+    contractGetBytecode=EVERYBODY
+    contractGetRecords=EVERYBODY
+    getTopicInfo=EVERYBODY
+    createTopic=EVERYBODY
+    updateTopic=OWNER
+    deleteTopic=OWNER
+    submitMessage=EVERYBODY

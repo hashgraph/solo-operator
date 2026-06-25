@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Shared BootstrapProperties — creates a ConfigMap named network-bootprops-bootstrap-properties-cm
+# that is subPath-mounted at data/config/bootstrap.properties in every ConsensusCapsule pod.
+#
+# Each ConsensusCapsule must reference this CR via:
+#   spec:
+#     bootstrapPropertiesRef: network-bootprops
+#
+# This field is optional. When omitted the file is not mounted. Updating spec.content
+# propagates the new file to all referencing nodes on the next pod restart.
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: BootstrapProperties
+metadata:
+  name: network-bootprops
+  namespace: solo-orbit
+spec:
+  # orbit links this resource to the Orbit for cascade deletion.
+  orbit: solo-orbit
+  # content is the raw bootstrap.properties in Java key=value format.
+  content: |
+    bootstrap.hapiPermissions.path=data/config/api-permission.properties
+    bootstrap.throttleDefsJson.resource=data/config/throttles.json
+    bootstrap.feeSchedulesJson.resource=data/config/feeSchedules.json
