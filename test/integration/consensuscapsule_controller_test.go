@@ -49,6 +49,17 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			if err != nil {
 				Expect(err.Error()).To(ContainSubstring("already exists"))
 			}
+
+			log4j2 := &operatorv1alpha1.Log4j2Config{
+				ObjectMeta: metav1.ObjectMeta{Name: "network-log4j2", Namespace: capsuleNamespace},
+				Spec: operatorv1alpha1.Log4j2ConfigSpec{
+					Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`,
+				},
+			}
+			err = k8sClient.Create(ctx, log4j2)
+			if err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
 		})
 
 		It("Should create all dependent resources", func() {
@@ -59,11 +70,11 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 					Namespace: capsuleNamespace,
 				},
 				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-					Orbit:     "test-orbit",
-					NodeId:    0,
-					AccountId: "0.0.3",
-					Weight:    1,
-					Log4j2XML: "<Configuration></Configuration>",
+					Orbit:           "test-orbit",
+					NodeId:          0,
+					AccountId:       "0.0.3",
+					Weight:          1,
+					Log4j2ConfigRef: "network-log4j2",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -111,7 +122,8 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 				err := k8sClient.Get(ctx, cmLookupKey, createdCM)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
-			Expect(createdCM.Data["log4j2.xml"]).To(Equal("<Configuration></Configuration>"))
+			Expect(createdCM.Data).To(HaveKey("settings.txt"))
+			Expect(createdCM.Data).NotTo(HaveKey("log4j2.xml"))
 
 			By("Verifying the Service is created")
 			svcLookupKey := types.NamespacedName{Name: capsuleName, Namespace: capsuleNamespace}
@@ -164,6 +176,17 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			if err != nil {
 				Expect(err.Error()).To(ContainSubstring("already exists"))
 			}
+
+			log4j2 := &operatorv1alpha1.Log4j2Config{
+				ObjectMeta: metav1.ObjectMeta{Name: "network-log4j2", Namespace: capsuleNamespace},
+				Spec: operatorv1alpha1.Log4j2ConfigSpec{
+					Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`,
+				},
+			}
+			err = k8sClient.Create(ctx, log4j2)
+			if err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
 		})
 
 		It("Should create PVCs", func() {
@@ -175,11 +198,11 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 					Namespace: capsuleNamespace,
 				},
 				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-					Orbit:     "test-orbit",
-					NodeId:    1,
-					AccountId: "0.0.4",
-					Weight:    1,
-					Log4j2XML: "<Configuration></Configuration>",
+					Orbit:           "test-orbit",
+					NodeId:          1,
+					AccountId:       "0.0.4",
+					Weight:          1,
+					Log4j2ConfigRef: "network-log4j2",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{

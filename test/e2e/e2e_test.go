@@ -117,11 +117,11 @@ var _ = Describe("E2E Tests", func() {
 						Namespace: testNamespace,
 					},
 					Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-						Orbit:     "test-orbit",
-						NodeId:    0,
-						AccountId: "0.0.3",
-						Weight:    1,
-						Log4j2XML: "<Configuration></Configuration>",
+						Orbit:           "test-orbit",
+						NodeId:          0,
+						AccountId:       "0.0.3",
+						Weight:          1,
+						Log4j2ConfigRef: "network-log4j2",
 						PodProperties: operatorv1alpha1.ConsensusPodProperties{
 							Containers: operatorv1alpha1.ConsensusContainers{
 								ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -462,11 +462,11 @@ var _ = Describe("E2E Tests", func() {
 						Namespace: testNamespace,
 					},
 					Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-						Orbit:     orbitName,
-						NodeId:    int64(i),
-						AccountId: fmt.Sprintf("0.0.%d", i+3),
-						Weight:    1,
-						Log4j2XML: "<Configuration></Configuration>",
+						Orbit:           orbitName,
+						NodeId:          int64(i),
+						AccountId:       fmt.Sprintf("0.0.%d", i+3),
+						Weight:          1,
+						Log4j2ConfigRef: "network-log4j2",
 						PodProperties: operatorv1alpha1.ConsensusPodProperties{
 							Containers: operatorv1alpha1.ConsensusContainers{
 								ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -567,11 +567,11 @@ var _ = Describe("E2E Tests", func() {
 						Namespace: testNamespace,
 					},
 					Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-						Orbit:     orbitName,
-						NodeId:    0,
-						AccountId: "0.0.3",
-						Weight:    1,
-						Log4j2XML: "<Configuration></Configuration>",
+						Orbit:           orbitName,
+						NodeId:          0,
+						AccountId:       "0.0.3",
+						Weight:          1,
+						Log4j2ConfigRef: "network-log4j2",
 						PodProperties: operatorv1alpha1.ConsensusPodProperties{
 							Containers: operatorv1alpha1.ConsensusContainers{
 								ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -644,11 +644,11 @@ var _ = Describe("Operator Reconciliation Tests", Label("operator-required"), fu
 					Namespace: testNamespace,
 				},
 				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-					Orbit:     orbitName,
-					NodeId:    0,
-					AccountId: "0.0.3",
-					Weight:    1,
-					Log4j2XML: "<Configuration></Configuration>",
+					Orbit:           orbitName,
+					NodeId:          0,
+					AccountId:       "0.0.3",
+					Weight:          1,
+					Log4j2ConfigRef: "network-log4j2",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{

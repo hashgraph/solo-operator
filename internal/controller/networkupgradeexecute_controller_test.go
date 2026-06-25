@@ -175,7 +175,7 @@ func newOfflineCapsule(name string) *operatorv1alpha1.ConsensusCapsule {
 	return &operatorv1alpha1.ConsensusCapsule{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
 		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1, Log4j2XML: "<log/>",
+			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1, Log4j2ConfigRef: "network-log4j2",
 			Offline: true,
 			PodProperties: operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
 				SoftwareVersion: &operatorv1alpha1.SoftwareVersion{},
@@ -364,8 +364,8 @@ func TestExecuteReconcile_ScalesDownCapsule(t *testing.T) {
 		},
 		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
 			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1,
-			Log4j2XML:     "<log/>",
-			PodProperties: operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "old-repo", ImageName: "cn", ImageTag: "0.74.0"}}}},
+			Log4j2ConfigRef: "network-log4j2",
+			PodProperties:   operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "old-repo", ImageName: "cn", ImageTag: "0.74.0"}}}},
 		},
 	}
 
@@ -468,8 +468,8 @@ func TestExecuteReconcile_PendingNodeUpgrade_PatchesCapsule(t *testing.T) {
 		},
 		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
 			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1,
-			Log4j2XML: "<log/>",
-			Offline:   true,
+			Log4j2ConfigRef: "network-log4j2",
+			Offline:         true,
 			PodProperties: operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
 				SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "old-repo", ImageName: "cn", ImageTag: "0.74.0"},
 			}}},
@@ -538,8 +538,8 @@ func TestExecuteReconcile_PendingNodeUpgrade_BringsCapsuleOnline(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
 		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
 			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1,
-			Log4j2XML: "<log/>",
-			Offline:   true,
+			Log4j2ConfigRef: "network-log4j2",
+			Offline:         true,
 			PodProperties: operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
 				SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "reg-a", ImageName: "cn", ImageTag: "0.75.0"},
 			}}},
@@ -615,8 +615,8 @@ func TestExecuteReconcile_PendingNodeUpgrade_WaitsForPodReady(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
 		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
 			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1,
-			Log4j2XML:     "<log/>",
-			PodProperties: operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "reg-a", ImageName: "cn", ImageTag: "0.75.0"}}}},
+			Log4j2ConfigRef: "network-log4j2",
+			PodProperties:   operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "reg-a", ImageName: "cn", ImageTag: "0.75.0"}}}},
 		},
 	}
 	sts := &appsv1.StatefulSet{
@@ -678,8 +678,8 @@ func TestExecuteReconcile_PendingNodeUpgrade_SucceedsWhenPodsReady(t *testing.T)
 		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
 		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
 			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1,
-			Log4j2XML:     "<log/>",
-			PodProperties: operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "reg-a", ImageName: "cn", ImageTag: "0.75.0"}}}},
+			Log4j2ConfigRef: "network-log4j2",
+			PodProperties:   operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "reg-a", ImageName: "cn", ImageTag: "0.75.0"}}}},
 		},
 	}
 	sts := &appsv1.StatefulSet{
@@ -753,8 +753,8 @@ func TestExecuteReconcile_PodReadyTimeout(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
 		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
 			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1,
-			Log4j2XML:     "<log/>",
-			PodProperties: operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "reg-a", ImageName: "cn", ImageTag: "0.75.0"}}}},
+			Log4j2ConfigRef: "network-log4j2",
+			PodProperties:   operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "reg-a", ImageName: "cn", ImageTag: "0.75.0"}}}},
 		},
 	}
 	sts := &appsv1.StatefulSet{
