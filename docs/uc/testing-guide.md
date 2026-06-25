@@ -5,10 +5,14 @@ sidecar locally and observing its behaviour: the marker-file polling loop, the
 console logs, the JSONL event log, and the control-socket status/version
 endpoints.
 
-It targets the foundational polling loop delivered in **story 8.1** (#991). The
-per-marker CR handlers (#993–#996), persistence (#992), dedup (#997), and
-cleanup (#998) are stubbed for now — when you drop a marker you will see the loop
-detect it and log a "handler not yet implemented" line rather than a created CR.
+It targets the foundational polling loop delivered in **story 8.1** (#991) plus
+the persist-before-send primitive from **story 8.2** (#992). The per-marker CR
+handlers (#993–#996), dedup (#997), and cleanup/recovery (#998) are stubbed for
+now — when you drop a marker you will see the loop detect it and log a "handler
+not yet implemented" line rather than a created CR, so the `--cr-persist-path`
+directory stays empty in an end-to-end run today. §8 below shows how to exercise
+the persistence primitive directly via its unit tests until the handlers wire it
+in.
 
 ---
 
@@ -211,7 +215,53 @@ curl --unix-socket "$UCDIR/uc.sock" -i http://uc/health   # 200 when the process
 
 ---
 
-## 8. Clean up
+## 8. CR persistence (persist-before-send, #992)
+
+For crash safety the factory serializes every constructed `NetworkUpgrade*` CR to
+YAML under `--cr-persist-path` (`$UCDIR/crs` in this guide) **before** the K8s API
+`Create`, and removes the file only **after** the create succeeds. A file left on
+disk therefore marks the crash window between persist and send: on restart it is
+re-read and handed to the recovery flow (#998) to re-send.
+
+On-disk format:
+
+- One file per CR, named deterministically `<operationId>.<step>.yaml`, where
+  `<step>` is one of `prepare`, `freeze`, `execute`, `abort`. The name lets
+  recovery correlate a file with its operation and the marker that produced it
+  without parsing the body — e.g. `upgrade-v0.76.0-20260415T143000Z.prepare.yaml`.
+- The body is the full CR serialized as YAML; it round-trips losslessly
+  (marshal → write → read → unmarshal reproduces the object).
+- Writes are atomic (temp file + rename), so a crash mid-write never leaves a
+  truncated CR that recovery would try to re-send.
+
+> **End-to-end today the `crs/` directory stays empty** — the marker handlers
+> (#993+) are the callers of `Persist`/`Delete`, and they are still stubs. So a
+> live run (§3–§5) creates no files here yet. Until the handlers land, exercise
+> the primitive and its on-disk contract directly via its unit tests:
+
+```bash
+go test ./internal/uc/ -run TestCRStore -v
+```
+
+| Test | Asserts |
+|------|---------|
+| `TestCRStorePersistThenDelete` | A CR file appears under `--cr-persist-path` on `Persist`, named `<operationId>.<step>.yaml`, and is gone after `Delete` (the success path). |
+| `TestCRStoreDeleteMissingIsNotError` | Deleting an already-absent file is a no-op, not an error (safe after a recovery re-send). |
+| `TestCRStoreRoundTripsLosslessly` | `Persist` → `List` reproduces the CR object exactly and recovers `operationId`/`step` from the filename. |
+| `TestCRStoreCrashLeftoverIsRecoverable` | CRs left on disk (simulated crash before the create ack) are all detected and decoded on the next `List` scan. |
+| `TestCRStorePersistIsIdempotent` | Re-persisting the same `operationId`+`step` overwrites in place — one file, no error (re-detection of the same marker must not fail). |
+| `TestCRStoreListIgnoresForeignAndPartialFiles` | `List` skips `.tmp` leftovers, foreign files, and names with an unknown step, returning only well-formed CRs. |
+| `TestCRStoreListMissingDirIsEmpty` | A never-created persist dir yields no entries and no error. |
+| `TestCRStoreRejectsBadInput` | A path-traversal `operationId`, an unknown step, or a nil CR is rejected at the boundary. |
+
+Once the handlers wire it in, you will be able to watch the lifecycle live:
+drop a marker (§4), then in a tight loop `ls "$UCDIR/crs"` to catch the
+`<operationId>.<step>.yaml` file appear before the CR shows up in
+`kubectl get networkupgrade...` and disappear once the create is acknowledged.
+
+---
+
+## 9. Clean up
 
 ```bash
 # Ctrl-C the sidecar (it shuts down on SIGINT/SIGTERM), then:

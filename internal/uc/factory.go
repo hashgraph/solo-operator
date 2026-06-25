@@ -21,6 +21,10 @@ type Factory struct {
 	cfg    Config
 	client dynamic.Interface
 
+	// store implements persist-before-send (#992): each handler serializes its CR
+	// under cfg.CRPersistPath before Create and deletes the file on success.
+	store *CRStore //nolint:unused // consumed by the CR handlers in #993-#998
+
 	// mu guards the operation-id cache (#997). The cache is a performance hint
 	// only; correctness rests on the K8s API existence check before each create.
 	mu    sync.Mutex                     //nolint:unused // guards cache; wired by the handlers in #993-#998
@@ -32,6 +36,7 @@ func NewFactory(cfg Config, client dynamic.Interface) *Factory {
 	return &Factory{
 		cfg:    cfg,
 		client: client,
+		store:  NewCRStore(cfg.CRPersistPath),
 		cache:  make(map[string]map[string]struct{}),
 	}
 }
