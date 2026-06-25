@@ -13,7 +13,7 @@ import (
 	"github.com/automa-saga/logx"
 	"k8s.io/client-go/dynamic"
 
-	"github.com/hashgraph/solo-operator/internal/errx"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/uc/events"
 )
 
@@ -67,12 +67,12 @@ func (m *MarkerMonitor) RequiredProbe() daemonkit.Probe {
 		"uc-marker",
 		&daemonkit.TaggedProbe{
 			Inner:      &daemonkit.DiskPermissionProbe{Path: m.cfg.MarkerPath, Permission: 0o555},
-			Reason:     "MarkerPathUnreadable",
+			Reason:     ReasonMarkerPathUnreadable.String(),
 			Resolution: "Verify the marker directory is mounted and readable: ls -la " + m.cfg.MarkerPath,
 		},
 		&daemonkit.TaggedProbe{
 			Inner:      &daemonkit.DiskWriteTestProbe{Dir: m.cfg.CRPersistPath},
-			Reason:     "CRPersistPathUnwritable",
+			Reason:     ReasonCRPersistPathUnwritable.String(),
 			Resolution: "Verify the CR-persist directory exists and is writable: ls -la " + m.cfg.CRPersistPath,
 		},
 	)
@@ -88,7 +88,7 @@ func (m *MarkerMonitor) RequiredProbe() daemonkit.Probe {
 // to resume in-flight upgrades idempotently.
 func (m *MarkerMonitor) Run(ctx context.Context) error {
 	logx.As().Info().
-		Str("reason", "MarkerMonitorStarted").
+		Str("reason", ReasonMarkerMonitorStarted.String()).
 		Str("marker_path", m.cfg.MarkerPath).
 		Dur("poll_interval", m.cfg.PollInterval).
 		Msg("marker monitor started")
@@ -97,7 +97,7 @@ func (m *MarkerMonitor) Run(ctx context.Context) error {
 	// event logs (story 9.1, same policy as the consensus daemon). A failure is
 	// tolerated — stale audit logs must never block the monitor from starting.
 	if err := events.Prune(m.cfg.EventsPath); err != nil {
-		logx.As().Warn().Err(err).Str("reason", "EventLogPruneFailed").
+		logx.As().Warn().Err(err).Str("reason", ReasonEventLogPruneFailed.String()).
 			Str("events_path", m.cfg.EventsPath).
 			Msg("failed to prune upgrade event logs — continuing")
 	}
@@ -106,7 +106,7 @@ func (m *MarkerMonitor) Run(ctx context.Context) error {
 	// (--cr-persist-path) -> markers, resume status watching, clean up completed
 	// upgrade artifacts. Then seed the in-memory operation-id cache (#997).
 	if err := m.factory.RecoverOnStartup(ctx); err != nil {
-		logx.As().Warn().Err(err).Str("reason", "UCStartupRecoveryError").
+		logx.As().Warn().Err(err).Str("reason", ReasonUCStartupRecoveryError.String()).
 			Msg("startup recovery encountered an error — continuing")
 	}
 
@@ -117,12 +117,12 @@ func (m *MarkerMonitor) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			logx.As().Info().Str("reason", "MarkerMonitorStopped").Msg("marker monitor stopped")
+			logx.As().Info().Str("reason", ReasonMarkerMonitorStopped.String()).Msg("marker monitor stopped")
 			return nil
 		case <-timer.C:
 			next := m.poll(ctx, interval)
 			if next != interval {
-				logx.As().Info().Str("reason", "PollIntervalChanged").
+				logx.As().Info().Str("reason", ReasonPollIntervalChanged.String()).
 					Dur("from", interval).Dur("to", next).Msg("poll interval changed")
 				interval = next
 			}
@@ -141,19 +141,8 @@ func (m *MarkerMonitor) poll(ctx context.Context, current time.Duration) time.Du
 			continue
 		}
 		if err := m.dispatch(ctx, name); err != nil {
-			ev := logx.As().Error().Err(err).Str("marker", name)
-			// Surface the structured reason + remediation hints attached via
-			// internal/errx so the log line carries the same reason= identifier as
-			// the error and any actionable next steps.
-			if reason, ok := errx.Reason(err); ok {
-				ev = ev.Str("reason", reason)
-			} else {
-				ev = ev.Str("reason", "MarkerHandlerFailed")
-			}
-			if hints, ok := errx.Hints(err); ok {
-				ev = ev.Strs("hints", hints)
-			}
-			ev.Msg("failed to handle marker")
+			common.LogErr(logx.As().Error(), err, ReasonMarkerHandlerFailed).
+				Str("marker", name).Msg("failed to handle marker")
 			continue
 		}
 		switch name {

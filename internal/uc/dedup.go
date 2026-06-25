@@ -55,7 +55,7 @@ func (f *Factory) alreadyCreated(ctx context.Context, gvr schema.GroupVersionRes
 		// the next tick re-queries instead of trusting a stale (in)existence.
 		f.invalidate(operationID)
 		return false, errx.WithHints(
-			errx.WithReason(errK8sAPI.Wrap(err, "query existing %s for operation %q", gvr.Resource, operationID), "DedupQueryFailed"),
+			errx.WithReason(errK8sAPI.Wrap(err, "query existing %s for operation %q", gvr.Resource, operationID), ReasonDedupQueryFailed),
 			"Confirm the UC ServiceAccount has list permission on "+gvr.Resource+"."+gvr.Group,
 			"Check API server connectivity",
 		)
@@ -117,7 +117,7 @@ func (f *Factory) seedCache(ctx context.Context) error {
 		cancel()
 		if err != nil {
 			return errx.WithHints(
-				errx.WithReason(errK8sAPI.Wrap(err, "seed op-id cache from %s", gvr.Resource), "CacheSeedFailed"),
+				errx.WithReason(errK8sAPI.Wrap(err, "seed op-id cache from %s", gvr.Resource), ReasonCacheSeedFailed),
 				"Confirm the UC ServiceAccount has list permission on "+gvr.Resource+"."+gvr.Group,
 			)
 		}

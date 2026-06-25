@@ -18,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/uc"
 )
 
@@ -44,6 +45,11 @@ func main() {
 		RunE:              run,
 	}
 
+	// We render errors ourselves (errx.Format adds the resolution hints), so keep
+	// cobra from printing the bare error and the usage block on a runtime failure.
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+
 	root.AddCommand(versionCmd(), statusCmd(), healthCmd())
 
 	f := root.Flags()
@@ -63,6 +69,10 @@ func main() {
 	f.StringVar(&flagLogLevel, "log-level", "info", "Log level: debug, info, warn, error")
 
 	if err := root.Execute(); err != nil {
+		// Render the error with its remediation hints (errx.Format) instead of
+		// cobra's bare one-liner, so operator-actionable failures (config, RBAC,
+		// disk, connectivity) print their resolution steps.
+		fmt.Fprintln(os.Stderr, errx.Format(err))
 		os.Exit(1)
 	}
 }

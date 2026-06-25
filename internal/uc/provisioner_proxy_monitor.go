@@ -127,20 +127,20 @@ func (pm *ProvisionerProxyMonitor) clearConnectivityError() {
 // NetworkUpgradeExecute CRs (seeding completedOpIDs and dispatching any already at
 // ReadyForProvisionerDaemon), then watches from the List's ResourceVersion.
 func (pm *ProvisionerProxyMonitor) Run(ctx context.Context) error {
-	logx.As().Info().Str("reason", "ProvisionerProxyMonitorStarted").
+	logx.As().Info().Str("reason", ReasonProvisionerProxyMonitorStarted.String()).
 		Str("namespace", pm.cfg.Namespace).Msg("provisioner-proxy monitor started")
 
 	backoff := proxyBackoffInitial
 	for {
 		listRV, listErr := pm.listAndSeed(ctx)
 		if ctx.Err() != nil {
-			logx.As().Info().Str("reason", "ProvisionerProxyMonitorStopped").Msg("provisioner-proxy monitor stopped")
+			logx.As().Info().Str("reason", ReasonProvisionerProxyMonitorStopped.String()).Msg("provisioner-proxy monitor stopped")
 			return nil
 		}
 		if listErr != nil {
-			pm.setConnectivityError("ProvisionerProxyListError", listErr.Error(),
+			pm.setConnectivityError(ReasonProvisionerProxyListError.String(), listErr.Error(),
 				fmt.Sprintf("Verify RBAC for networkupgradeexecutes in namespace %s", pm.cfg.Namespace))
-			logx.As().Warn().Err(listErr).Str("reason", "ProvisionerProxyListError").
+			logx.As().Warn().Err(listErr).Str("reason", ReasonProvisionerProxyListError.String()).
 				Dur("retry_in", backoff).Msg("list error — retrying")
 			if !sleepCtx(ctx, backoff) {
 				return nil
@@ -152,7 +152,7 @@ func (pm *ProvisionerProxyMonitor) Run(ctx context.Context) error {
 
 		err := pm.runWatch(ctx, listRV)
 		if ctx.Err() != nil {
-			logx.As().Info().Str("reason", "ProvisionerProxyMonitorStopped").Msg("provisioner-proxy monitor stopped")
+			logx.As().Info().Str("reason", ReasonProvisionerProxyMonitorStopped.String()).Msg("provisioner-proxy monitor stopped")
 			return nil
 		}
 		if err == nil {
@@ -164,14 +164,14 @@ func (pm *ProvisionerProxyMonitor) Run(ctx context.Context) error {
 			continue
 		}
 		if isAuthError(err) {
-			pm.setConnectivityError("ProvisionerProxyAuthError", err.Error(),
+			pm.setConnectivityError(ReasonProvisionerProxyAuthError.String(), err.Error(),
 				"Restore RBAC for the UC ServiceAccount on networkupgradeexecutes")
-			logx.As().Warn().Err(err).Str("reason", "ProvisionerProxyAuthError").
+			logx.As().Warn().Err(err).Str("reason", ReasonProvisionerProxyAuthError.String()).
 				Dur("retry_in", backoff).Msg("auth error watching NetworkUpgradeExecute")
 		} else {
-			pm.setConnectivityError("ProvisionerProxyWatchError", err.Error(),
+			pm.setConnectivityError(ReasonProvisionerProxyWatchError.String(), err.Error(),
 				"Check connectivity to the Kubernetes API server")
-			logx.As().Warn().Err(err).Str("reason", "ProvisionerProxyWatchError").
+			logx.As().Warn().Err(err).Str("reason", ReasonProvisionerProxyWatchError.String()).
 				Dur("retry_in", backoff).Msg("watch error — retrying")
 		}
 		if !sleepCtx(ctx, backoff) {
@@ -197,7 +197,7 @@ func (pm *ProvisionerProxyMonitor) listAndSeed(ctx context.Context) (string, err
 	list, err := resource.List(listCtx, metav1.ListOptions{})
 	if err != nil {
 		return "", errx.WithHints(
-			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradeExecute"), "ExecuteListFailed"),
+			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradeExecute"), ReasonExecuteListFailed),
 			"Confirm the UC ServiceAccount has list permission on networkupgradeexecutes."+operatorv1alpha1.GroupVersion.Group,
 		)
 	}
@@ -242,9 +242,9 @@ func (pm *ProvisionerProxyMonitor) listAndSeed(ctx context.Context) (string, err
 func (pm *ProvisionerProxyMonitor) runWatch(ctx context.Context, resourceVersion string) (retErr error) {
 	defer func() {
 		if r := recover(); r != nil {
-			logx.As().Error().Str("reason", "ProvisionerProxyWatchPanic").Interface("panic", r).
+			logx.As().Error().Str("reason", ReasonProvisionerProxyWatchPanic.String()).Interface("panic", r).
 				Msg("panic in watch loop — recovering")
-			retErr = errx.WithReason(errorx.InternalError.New("recovered panic in watch loop: %v", r), "ProvisionerProxyWatchPanic")
+			retErr = errx.WithReason(errorx.InternalError.New("recovered panic in watch loop: %v", r), ReasonProvisionerProxyWatchPanic)
 		}
 	}()
 	resource := pm.client.Resource(networkUpgradeExecuteGVR).Namespace(pm.cfg.Namespace)
@@ -255,7 +255,7 @@ func (pm *ProvisionerProxyMonitor) runWatch(ctx context.Context, resourceVersion
 	})
 	if err != nil {
 		return errx.WithHints(
-			errx.WithReason(errK8sAPI.Wrap(err, "watch NetworkUpgradeExecute"), "WatchFailed"),
+			errx.WithReason(errK8sAPI.Wrap(err, "watch NetworkUpgradeExecute"), ReasonWatchFailed),
 			"Confirm the UC ServiceAccount has watch permission on networkupgradeexecutes."+operatorv1alpha1.GroupVersion.Group,
 		)
 	}
@@ -271,7 +271,7 @@ func (pm *ProvisionerProxyMonitor) runWatch(ctx context.Context, resourceVersion
 			}
 			if event.Type == watch.Error {
 				return errx.WithReason(
-					errK8sAPI.Wrap(k8serrors.FromObject(event.Object), "watch error event"), "WatchErrorEvent")
+					errK8sAPI.Wrap(k8serrors.FromObject(event.Object), "watch error event"), ReasonWatchErrorEvent)
 			}
 			if event.Type != watch.Added && event.Type != watch.Modified {
 				continue
@@ -296,7 +296,7 @@ func (pm *ProvisionerProxyMonitor) handleEvent(ctx context.Context, cr *unstruct
 	}
 	operationID := operationIDOf(cr)
 	if operationID == "" {
-		logx.As().Warn().Str("reason", "ProvisionerProxyMissingOperationID").
+		logx.As().Warn().Str("reason", ReasonProvisionerProxyMissingOperationID.String()).
 			Str("cr_name", cr.GetName()).Msg("Execute CR has no spec.operationId — ignoring")
 		return
 	}
@@ -310,7 +310,7 @@ func (pm *ProvisionerProxyMonitor) handleEvent(ctx context.Context, cr *unstruct
 		active := pm.activeOpID
 		pm.mu.Unlock()
 		if active != operationID {
-			logx.As().Warn().Str("reason", "ProvisionerProxyBusy").
+			logx.As().Warn().Str("reason", ReasonProvisionerProxyBusy.String()).
 				Str("active", active).Str("incoming", operationID).
 				Msg("another transition is in-flight — rejecting")
 		}
@@ -319,7 +319,7 @@ func (pm *ProvisionerProxyMonitor) handleEvent(ctx context.Context, cr *unstruct
 	pm.activeOpID = operationID
 	pm.mu.Unlock()
 
-	logx.As().Info().Str("reason", "ReadyForProvisionerDaemon").
+	logx.As().Info().Str("reason", ReasonReadyForProvisionerDaemon.String()).
 		Str("operation_id", operationID).Str("cr_name", cr.GetName()).
 		Msg("Execute entered ReadyForProvisionerDaemon — advancing to PendingNodeUpgrade")
 
@@ -327,7 +327,7 @@ func (pm *ProvisionerProxyMonitor) handleEvent(ctx context.Context, cr *unstruct
 		var transErr error
 		defer func() {
 			if r := recover(); r != nil {
-				logx.As().Error().Str("reason", "ProvisionerProxyTransitionPanic").
+				logx.As().Error().Str("reason", ReasonProvisionerProxyTransitionPanic.String()).
 					Str("operation_id", operationID).Interface("panic", r).
 					Msg("transition panicked — UC continues")
 			}
@@ -342,7 +342,7 @@ func (pm *ProvisionerProxyMonitor) handleEvent(ctx context.Context, cr *unstruct
 		}()
 		transErr = pm.handleExecute(ctx, cr)
 		if transErr != nil {
-			logx.As().Error().Err(transErr).Str("reason", "ProvisionerProxyTransitionFailed").
+			logx.As().Error().Err(transErr).Str("reason", ReasonProvisionerProxyTransitionFailed.String()).
 				Str("operation_id", operationID).Msg("transition to PendingNodeUpgrade failed")
 		}
 	}()
@@ -373,11 +373,11 @@ func (pm *ProvisionerProxyMonitor) handleExecute(ctx context.Context, cr *unstru
 		metav1.PatchOptions{}, "status")
 	if err != nil {
 		return errx.WithHints(
-			errx.WithReason(errK8sAPI.Wrap(err, "patch %s status to PendingNodeUpgrade", cr.GetName()), "ExecutePatchFailed"),
+			errx.WithReason(errK8sAPI.Wrap(err, "patch %s status to PendingNodeUpgrade", cr.GetName()), ReasonExecutePatchFailed),
 			"Confirm the UC ServiceAccount has patch permission on networkupgradeexecutes/status."+operatorv1alpha1.GroupVersion.Group,
 		)
 	}
-	logx.As().Info().Str("reason", "PendingNodeUpgrade").
+	logx.As().Info().Str("reason", ReasonPendingNodeUpgrade.String()).
 		Str("operation_id", operationID).Str("cr_name", cr.GetName()).
 		Msg("advanced Execute CR to PendingNodeUpgrade")
 	return nil

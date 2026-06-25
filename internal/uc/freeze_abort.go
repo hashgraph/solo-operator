@@ -59,7 +59,7 @@ func buildFreezeAbortCR(cfg Config, operationID string) (*unstructured.Unstructu
 	obj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(abort)
 	if err != nil {
 		return nil, errx.WithReason(
-			errCRBuild.Wrap(err, "convert NetworkUpgradeFreezeAbort %s to unstructured", operationID), "CRBuildFailed")
+			errCRBuild.Wrap(err, "convert NetworkUpgradeFreezeAbort %s to unstructured", operationID), ReasonCRBuildFailed)
 	}
 	return &unstructured.Unstructured{Object: obj}, nil
 }

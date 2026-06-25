@@ -49,7 +49,7 @@ func parseComponentsManifest(path string) (*componentsManifest, error) {
 		// A read failure is transient — the file may not be fully written yet, or
 		// the volume may be briefly unavailable; the caller may retry next tick.
 		return nil, errx.WithHints(
-			errx.WithReason(errPersist.Wrap(err, "read components manifest %s", path), "ManifestReadFailed"),
+			errx.WithReason(errPersist.Wrap(err, "read components manifest %s", path), ReasonManifestReadFailed),
 			"Confirm the consensus node extracted the package into --marker-path",
 			"Check that manifests/consensus-node-components.yaml exists and is readable",
 		)
@@ -60,7 +60,7 @@ func parseComponentsManifest(path string) (*componentsManifest, error) {
 		// A malformed YAML body cannot be parsed regardless of schema; treat it as
 		// invalid (halt), not transient.
 		return nil, errx.WithHints(
-			errx.WithReason(errManifestInvalid.Wrap(err, "parse %s", path), "ManifestInvalid"),
+			errx.WithReason(errManifestInvalid.Wrap(err, "parse %s", path), ReasonManifestInvalid),
 			"Regenerate the deployment package — consensus-node-components.yaml is not valid YAML",
 		)
 	}
@@ -68,14 +68,14 @@ func parseComponentsManifest(path string) (*componentsManifest, error) {
 	if m.SchemaVersion != componentsSchemaVersion {
 		return nil, errx.WithHints(
 			errx.WithReason(errManifestInvalid.New("unknown schemaVersion %d in %s (supported: %d)",
-				m.SchemaVersion, path, componentsSchemaVersion), "ManifestInvalid"),
+				m.SchemaVersion, path, componentsSchemaVersion), ReasonManifestInvalid),
 			"This UC build understands schemaVersion 1 only",
 			"Upgrade the UC sidecar image to one that supports this package schemaVersion",
 		)
 	}
 	if m.Images.ConsensusNode.Version == "" {
 		return nil, errx.WithHints(
-			errx.WithReason(errManifestInvalid.New("images.consensusNode.version is required in %s", path), "ManifestInvalid"),
+			errx.WithReason(errManifestInvalid.New("images.consensusNode.version is required in %s", path), ReasonManifestInvalid),
 			"Set images.consensusNode.version in consensus-node-components.yaml",
 		)
 	}

@@ -32,12 +32,26 @@
 //	    the type; terminal errors carry no such trait.
 package errx
 
-import "github.com/joomcode/errorx"
+import (
+	"strings"
+
+	"github.com/joomcode/errorx"
+)
+
+// Reason is a stable, machine-readable error/condition code. Callers define
+// their own vocabulary as typed constants (e.g. `const ReasonX errx.Reason =
+// "X"`) so reason codes are enumerable in one place and typo-safe at call
+// sites. The convention is PascalCase, mirroring the logx `reason=` field so an
+// error, its log line, and any status output share one identifier.
+type Reason string
+
+// String returns the raw reason code, for use as a log field value
+// (`ev.Str("reason", r.String())`).
+func (r Reason) String() string { return string(r) }
 
 var (
-	// PropertyReason carries a stable, machine-readable reason code (PascalCase,
-	// mirroring the logx `reason=` field). It is printable, so it renders in the
-	// error string for at-a-glance correlation.
+	// PropertyReason carries the Reason code. It is printable, so it renders in
+	// the error string for at-a-glance correlation.
 	PropertyReason = errorx.RegisterPrintableProperty("reason")
 
 	// PropertyResolution carries a []string of remediation hints — concrete next
@@ -46,14 +60,14 @@ var (
 	PropertyResolution = errorx.RegisterProperty("resolution")
 )
 
-// WithReason attaches a machine-readable reason code to err. err should already
-// be an errorx error (from a Type.New/.Wrap); a plain error is wrapped so the
-// reason is never silently dropped. Returns nil when err is nil.
-func WithReason(err error, reason string) error {
+// WithReason attaches a Reason code to err. err should already be an errorx
+// error (from a Type.New/.Wrap); a plain error is wrapped so the reason is never
+// silently dropped. Returns nil when err is nil.
+func WithReason(err error, reason Reason) error {
 	if err == nil {
 		return nil
 	}
-	return ensure(err).WithProperty(PropertyReason, reason)
+	return ensure(err).WithProperty(PropertyReason, reason.String())
 }
 
 // WithHints attaches remediation hints to err (err is wrapped if it is not
@@ -65,11 +79,11 @@ func WithHints(err error, hints ...string) error {
 	return ensure(err).WithProperty(PropertyResolution, hints)
 }
 
-// Reason returns the reason code attached anywhere in err's cause chain.
-func Reason(err error) (string, bool) {
+// ReasonOf returns the Reason code attached anywhere in err's cause chain.
+func ReasonOf(err error) (Reason, bool) {
 	if v, ok := extract(err, PropertyReason); ok {
 		if s, ok := v.(string); ok {
-			return s, true
+			return Reason(s), true
 		}
 	}
 	return "", false
@@ -83,6 +97,30 @@ func Hints(err error) ([]string, bool) {
 		}
 	}
 	return nil, false
+}
+
+// Format renders err for a human surface (a CLI failure, a fatal startup log):
+// the full error message followed by a "Resolution:" block listing any attached
+// remediation hints. When no hints are attached it returns err.Error()
+// unchanged. Returns "" for a nil error. This is the doctor-style renderer; for
+// structured logging use ReasonOf/Hints to attach fields instead.
+func Format(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	hints, ok := Hints(err)
+	if !ok || len(hints) == 0 {
+		return msg
+	}
+	var b strings.Builder
+	b.WriteString(msg)
+	b.WriteString("\n\nResolution:")
+	for _, h := range hints {
+		b.WriteString("\n  - ")
+		b.WriteString(h)
+	}
+	return b.String()
 }
 
 // ensure returns err as an *errorx.Error, wrapping a non-errorx error so a

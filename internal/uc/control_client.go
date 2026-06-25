@@ -72,13 +72,13 @@ func (c *ControlClient) StatusPretty(ctx context.Context) (string, error) {
 func (c *ControlClient) get(ctx context.Context, path string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://uc"+path, http.NoBody)
 	if err != nil {
-		return nil, errx.WithReason(errControl.Wrap(err, "build request"), "ControlRequestFailed")
+		return nil, errx.WithReason(errControl.Wrap(err, "build request"), ReasonControlRequestFailed)
 	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, errx.WithHints(
-			errx.WithReason(errControl.Wrap(err, "query %s on %s", path, c.socketPath), "ControlDialFailed"),
+			errx.WithReason(errControl.Wrap(err, "query %s on %s", path, c.socketPath), ReasonControlDialFailed),
 			"Confirm the UC sidecar is running and --socket-path matches its control socket",
 		)
 	}
@@ -86,11 +86,11 @@ func (c *ControlClient) get(ctx context.Context, path string) ([]byte, error) {
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, errx.WithReason(errControl.Wrap(err, "read response"), "ControlReadFailed")
+		return nil, errx.WithReason(errControl.Wrap(err, "read response"), ReasonControlReadFailed)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, errx.WithReason(
-			errControl.New("control server returned %s: %s", resp.Status, string(body)), "ControlBadStatus")
+			errControl.New("control server returned %s: %s", resp.Status, string(body)), ReasonControlBadStatus)
 	}
 	return body, nil
 }

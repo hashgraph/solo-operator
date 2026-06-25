@@ -136,7 +136,7 @@ func TestParseComponentsManifestInvalid(t *testing.T) {
 			if !errorx.IsOfType(err, errManifestInvalid) {
 				t.Fatalf("want errManifestInvalid, got %v", err)
 			}
-			if reason, ok := errx.Reason(err); !ok || reason != "ManifestInvalid" {
+			if reason, ok := errx.ReasonOf(err); !ok || reason != "ManifestInvalid" {
 				t.Fatalf("want reason ManifestInvalid, got %q (ok=%v)", reason, ok)
 			}
 		})

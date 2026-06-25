@@ -83,17 +83,17 @@ func (u *UC) Run(ctx context.Context) error {
 	}
 
 	if err := daemonkit.NotifyReady(); err != nil {
-		logx.As().Warn().Err(err).Str("reason", "SdNotifyReadyFailed").Msg("Failed to send READY=1 to systemd")
+		logx.As().Warn().Err(err).Str("reason", ReasonSdNotifyReadyFailed.String()).Msg("Failed to send READY=1 to systemd")
 	}
 	logx.As().Info().
-		Str("reason", "UCStarted").
+		Str("reason", ReasonUCStarted.String()).
 		Str("mode", string(u.cfg.Mode)).
 		Int("monitors", len(u.monitors)).
 		Msg("UC started")
 
 	err := g.Wait()
 	if nerr := daemonkit.NotifyStopping(); nerr != nil {
-		logx.As().Warn().Err(nerr).Str("reason", "SdNotifyStoppingFailed").Msg("Failed to send STOPPING=1 to systemd")
+		logx.As().Warn().Err(nerr).Str("reason", ReasonSdNotifyStoppingFailed.String()).Msg("Failed to send STOPPING=1 to systemd")
 	}
 	return err
 }
@@ -130,7 +130,7 @@ func (u *UC) ensureDirs() error {
 		}
 		if err := os.MkdirAll(dir, 0o750); err != nil {
 			return errx.WithHints(
-				errx.WithReason(errPersist.Wrap(err, "create dir %s", dir), "WorkDirCreateFailed"),
+				errx.WithReason(errPersist.Wrap(err, "create dir %s", dir), ReasonWorkDirCreateFailed),
 				"Confirm the UC working directories (--cr-persist-path, --events-path, --backup-path, --socket-path) are on writable volumes",
 			)
 		}

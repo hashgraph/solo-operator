@@ -23,7 +23,7 @@ func TestWithReasonAndHints(t *testing.T) {
 		"Check the logs",
 	)
 
-	reason, ok := errx.Reason(err)
+	reason, ok := errx.ReasonOf(err)
 	if !ok || reason != "SomethingBroke" {
 		t.Fatalf("Reason() = %q, %v; want SomethingBroke, true", reason, ok)
 	}
@@ -38,7 +38,7 @@ func TestReasonWalksCauseChain(t *testing.T) {
 	inner := errx.WithReason(testType.New("inner"), "InnerReason")
 	outer := testType.Wrap(inner, "outer context")
 
-	reason, ok := errx.Reason(outer)
+	reason, ok := errx.ReasonOf(outer)
 	if !ok || reason != "InnerReason" {
 		t.Fatalf("Reason() through chain = %q, %v; want InnerReason, true", reason, ok)
 	}
@@ -53,7 +53,7 @@ func TestNilAndAbsent(t *testing.T) {
 	}
 	// A plain (non-errx) error has neither reason nor hints.
 	plain := errors.New("plain")
-	if _, ok := errx.Reason(plain); ok {
+	if _, ok := errx.ReasonOf(plain); ok {
 		t.Fatal("plain error should have no reason")
 	}
 	if _, ok := errx.Hints(plain); ok {

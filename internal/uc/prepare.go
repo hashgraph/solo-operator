@@ -40,7 +40,7 @@ func mintOperationID(version string, markerCreatedAt time.Time) (string, error) 
 	id := fmt.Sprintf("upgrade-%s-%s", version, markerCreatedAt.UTC().Format(sanity.TimestampLayout))
 	if err := sanity.ValidateOperationID(id); err != nil {
 		return "", errx.WithHints(
-			errx.WithReason(errManifestInvalid.Wrap(err, "derived operationId %q is invalid", id), "ManifestInvalid"),
+			errx.WithReason(errManifestInvalid.Wrap(err, "derived operationId %q is invalid", id), ReasonManifestInvalid),
 			"Confirm images.consensusNode.version is a clean version string (no spaces or shell metacharacters)",
 		)
 	}
@@ -87,7 +87,7 @@ func buildPrepareCR(cfg Config, operationID string, images operatorv1alpha1.Upgr
 	obj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(prepare)
 	if err != nil {
 		return nil, errx.WithReason(
-			errCRBuild.Wrap(err, "convert NetworkUpgradePrepare %s to unstructured", operationID), "CRBuildFailed")
+			errCRBuild.Wrap(err, "convert NetworkUpgradePrepare %s to unstructured", operationID), ReasonCRBuildFailed)
 	}
 	return &unstructured.Unstructured{Object: obj}, nil
 }

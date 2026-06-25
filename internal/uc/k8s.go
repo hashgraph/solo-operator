@@ -71,7 +71,7 @@ func buildDynamicClient(kubeconfigPath string) (dynamic.Interface, error) {
 		restCfg, err = rest.InClusterConfig()
 		if err != nil {
 			return nil, errx.WithHints(
-				errx.WithReason(errClient.Wrap(err, "load in-cluster config"), "InClusterConfigFailed"),
+				errx.WithReason(errClient.Wrap(err, "load in-cluster config"), ReasonInClusterConfigFailed),
 				"Run the UC as a pod with a mounted ServiceAccount token, or pass --kubeconfig for out-of-cluster use",
 			)
 		}
@@ -79,7 +79,7 @@ func buildDynamicClient(kubeconfigPath string) (dynamic.Interface, error) {
 		restCfg, err = clientcmd.BuildConfigFromFlags("", kubeconfigPath)
 		if err != nil {
 			return nil, errx.WithHints(
-				errx.WithReason(errClient.Wrap(err, "load kubeconfig %s", kubeconfigPath), "KubeconfigLoadFailed"),
+				errx.WithReason(errClient.Wrap(err, "load kubeconfig %s", kubeconfigPath), ReasonKubeconfigLoadFailed),
 				"Confirm --kubeconfig points to a readable, valid kubeconfig file",
 			)
 		}
@@ -93,7 +93,7 @@ func buildDynamicClient(kubeconfigPath string) (dynamic.Interface, error) {
 	restCfg.Dial = (&net.Dialer{Timeout: dialTimeout, KeepAlive: dialTimeout}).DialContext
 	client, err := dynamic.NewForConfig(restCfg)
 	if err != nil {
-		return nil, errx.WithReason(errClient.Wrap(err, "build dynamic client"), "DynamicClientFailed")
+		return nil, errx.WithReason(errClient.Wrap(err, "build dynamic client"), ReasonDynamicClientFailed)
 	}
 	return client, nil
 }

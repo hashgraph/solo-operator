@@ -91,49 +91,49 @@ func (c Config) Validate() error {
 	case ModeMainnet, ModeClusterOnly:
 	default:
 		return errx.WithHints(
-			errx.WithReason(errConfigInvalid.New("mode %q is invalid", c.Mode), "ConfigInvalid"),
+			errx.WithReason(errConfigInvalid.New("mode %q is invalid", c.Mode), ReasonConfigInvalid),
 			"Set --mode to 'mainnet' or 'cluster-only'",
 		)
 	}
 	if c.NodeID < 0 {
 		return errx.WithHints(
-			errx.WithReason(errConfigInvalid.New("node-id %d is invalid", c.NodeID), "ConfigInvalid"),
+			errx.WithReason(errConfigInvalid.New("node-id %d is invalid", c.NodeID), ReasonConfigInvalid),
 			"Set --node-id to a non-negative integer",
 		)
 	}
 	if c.Orbit == "" {
 		return errx.WithHints(
-			errx.WithReason(errConfigInvalid.New("orbit is required"), "ConfigInvalid"),
+			errx.WithReason(errConfigInvalid.New("orbit is required"), ReasonConfigInvalid),
 			"Set --orbit to the owning Orbit resource name",
 		)
 	}
 	if c.Namespace == "" {
 		return errx.WithHints(
-			errx.WithReason(errConfigInvalid.New("namespace is required"), "ConfigInvalid"),
+			errx.WithReason(errConfigInvalid.New("namespace is required"), ReasonConfigInvalid),
 			"Set --namespace to the node's Kubernetes namespace",
 		)
 	}
 	if c.MarkerPath == "" {
 		return errx.WithHints(
-			errx.WithReason(errConfigInvalid.New("marker-path is required"), "ConfigInvalid"),
+			errx.WithReason(errConfigInvalid.New("marker-path is required"), ReasonConfigInvalid),
 			"Set --marker-path to the consensus node's upgrade-artifacts directory (e.g. data/upgrade/current)",
 		)
 	}
 	if c.CRPersistPath == "" {
 		return errx.WithHints(
-			errx.WithReason(errConfigInvalid.New("cr-persist-path is required"), "ConfigInvalid"),
+			errx.WithReason(errConfigInvalid.New("cr-persist-path is required"), ReasonConfigInvalid),
 			"Set --cr-persist-path to a writable directory for persist-before-send CRs",
 		)
 	}
 	if c.PollInterval <= 0 {
 		return errx.WithHints(
-			errx.WithReason(errConfigInvalid.New("poll-interval %s must be positive", c.PollInterval), "ConfigInvalid"),
+			errx.WithReason(errConfigInvalid.New("poll-interval %s must be positive", c.PollInterval), ReasonConfigInvalid),
 			"Set --poll-interval to a positive duration (e.g. 60s)",
 		)
 	}
 	if c.FreezePollInterval <= 0 {
 		return errx.WithHints(
-			errx.WithReason(errConfigInvalid.New("freeze-poll-interval %s must be positive", c.FreezePollInterval), "ConfigInvalid"),
+			errx.WithReason(errConfigInvalid.New("freeze-poll-interval %s must be positive", c.FreezePollInterval), ReasonConfigInvalid),
 			"Set --freeze-poll-interval to a positive duration (e.g. 1s)",
 		)
 	}

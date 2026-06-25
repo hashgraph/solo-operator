@@ -154,23 +154,34 @@ for errors that leave a package boundary.
   ```
   Mark retryable errors with the `errorx.Temporary()` trait; terminal errors carry none.
   Match on type with `errorx.IsOfType(err, errManifestInvalid)` (never string-match messages).
-- **Reason + hints via `internal/errx`.** Decorate every error with a machine-readable reason
-  code and, where a meaningful remediation exists, operator hints:
+- **Reason codes are typed constants.** Each package keeps its `reason=` vocabulary as typed
+  `errx.Reason` constants in one place (e.g. `internal/uc/reasons.go`) — the single source of
+  truth for both error decoration and log lines, so codes are enumerable and typo-safe:
+  ```go
+  const ReasonK8sListFailed errx.Reason = "ListFailed"
+  ```
+- **Reason + hints via `internal/errx`.** Decorate every error with its reason code and, where a
+  meaningful remediation exists, operator hints:
   ```go
   return errx.WithHints(
-      errx.WithReason(errK8sAPI.Wrap(err, "list X"), "ListFailed"),
+      errx.WithReason(errK8sAPI.Wrap(err, "list X"), ReasonK8sListFailed),
       "Confirm the ServiceAccount has list permission on x.group",
   )
   ```
   - The reason code is **PascalCase** and **mirrors the logx `reason=` field**, so an error, its
-    log line, and any `/status` output share one identifier. Extract with `errx.Reason(err)`.
+    log line, and any `/status` output share one identifier. Extract with `errx.ReasonOf(err)`.
   - Hints are concrete next steps (`[]string`); attach only for actionable failures
     (config/disk/RBAC/connectivity), not internal bugs. Extract with `errx.Hints(err)`.
 - **Decorate once, at the source.** The lowest-level function touching the failing resource
   attaches the type/reason/hints; callers return the error as-is rather than re-wrapping (which
   would obscure the type and duplicate context).
-- **Surface at the boundary.** When logging a handler/loop error, pull `errx.Reason`/`errx.Hints`
-  onto the log event (see `MarkerMonitor.poll`) so the structured fields reach operators.
+- **Surface at the boundary.**
+  - *Structured logs:* `common.LogErr(ev, err, fallbackReason)` lifts the error's reason + hints
+    onto a zerolog event (see `MarkerMonitor.poll`). `errx` itself stays logger-agnostic.
+  - *Human/CLI output:* `errx.Format(err)` renders the message plus a `Resolution:` block of
+    hints (wired into the `uc` command's top-level error handler).
+- **`internal/errx` stays dependency-free** (only `errorx`) so it can be extracted as a
+  standalone library; domain reason vocabularies and any logger glue live in consuming packages.
 
 ## Key Conventions
 

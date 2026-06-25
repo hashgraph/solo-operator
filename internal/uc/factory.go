@@ -64,11 +64,11 @@ func NewFactory(cfg Config, client dynamic.Interface) *Factory {
 // up artifacts for upgrades that have already reached a terminal phase.
 func (f *Factory) RecoverOnStartup(ctx context.Context) error {
 	if err := f.seedCache(ctx); err != nil {
-		logx.As().Warn().Err(err).Str("reason", "UCCacheSeedFailed").
+		logx.As().Warn().Err(err).Str("reason", ReasonUCCacheSeedFailed.String()).
 			Msg("could not seed op-id dedup cache on startup; per-action queries remain authoritative")
 		return nil
 	}
-	logx.As().Info().Str("reason", "UCCacheSeeded").
+	logx.As().Info().Str("reason", ReasonUCCacheSeeded.String()).
 		Msg("seeded op-id dedup cache from existing NetworkUpgrade CRs")
 	return nil
 }
@@ -93,7 +93,7 @@ func (f *Factory) HandleExecuteImmediate(ctx context.Context) error {
 	if err != nil {
 		// The poller only dispatches after a successful Stat, so a failure here is
 		// a genuine race/IO error worth retrying on the next tick.
-		return errx.WithReason(errPersist.Wrap(err, "stat marker %s", MarkerExecuteImmediate), "MarkerStatFailed")
+		return errx.WithReason(errPersist.Wrap(err, "stat marker %s", MarkerExecuteImmediate), ReasonMarkerStatFailed)
 	}
 
 	manifestPath := filepath.Join(f.cfg.MarkerPath, manifestsSubdir, componentsManifestFile)
@@ -102,7 +102,7 @@ func (f *Factory) HandleExecuteImmediate(ctx context.Context) error {
 		if errorx.IsOfType(err, errManifestInvalid) {
 			// ManifestInvalid is terminal — re-reading the same bytes will not fix
 			// it. Log and halt this dispatch without creating a CR (no retry value).
-			logx.As().Error().Err(err).Str("reason", "ManifestInvalid").
+			logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).
 				Str("marker", MarkerExecuteImmediate).Str("manifest", manifestPath).
 				Msg("invalid consensus-node-components.yaml — halting prepare")
 			return nil
@@ -113,7 +113,7 @@ func (f *Factory) HandleExecuteImmediate(ctx context.Context) error {
 
 	operationID, err := mintOperationID(manifest.Images.ConsensusNode.Version, info.ModTime())
 	if err != nil {
-		logx.As().Error().Err(err).Str("reason", "ManifestInvalid").
+		logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).
 			Str("marker", MarkerExecuteImmediate).Msg("cannot derive a valid operationId — halting prepare")
 		return nil
 	}
@@ -143,7 +143,7 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 		return err
 	}
 	if exists {
-		logx.As().Debug().Str("reason", "CRExists").Str("operation_id", operationID).
+		logx.As().Debug().Str("reason", ReasonCRExists.String()).Str("operation_id", operationID).
 			Str("step", step).Str("cr_name", cr.GetName()).Msg("CR already exists — skipping create")
 		return nil
 	}
@@ -161,16 +161,16 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 			// and treat as success.
 			f.markCreated(operationID, step)
 			if delErr := f.store.Delete(operationID, step); delErr != nil {
-				logx.As().Warn().Err(delErr).Str("reason", "CRPersistCleanupFailed").
+				logx.As().Warn().Err(delErr).Str("reason", ReasonCRPersistCleanupFailed.String()).
 					Str("operation_id", operationID).Msg("failed to delete persisted CR after AlreadyExists")
 			}
-			logx.As().Debug().Str("reason", "CRExists").Str("operation_id", operationID).
+			logx.As().Debug().Str("reason", ReasonCRExists.String()).Str("operation_id", operationID).
 				Str("step", step).Str("cr_name", cr.GetName()).Msg("CR already exists — skipping create")
 			return nil
 		}
 		f.invalidate(operationID)
 		return errx.WithHints(
-			errx.WithReason(errK8sAPI.Wrap(err, "create %s %s", kind, cr.GetName()), "CRCreateFailed"),
+			errx.WithReason(errK8sAPI.Wrap(err, "create %s %s", kind, cr.GetName()), ReasonCRCreateFailed),
 			"Confirm the UC ServiceAccount has create permission on "+gvr.Resource+"."+gvr.Group,
 			"Check API server connectivity and that the CRD is installed",
 		)
@@ -180,10 +180,10 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 	// drop the persisted copy now that the cluster owns the CR.
 	f.markCreated(operationID, step)
 	if err := f.store.Delete(operationID, step); err != nil {
-		logx.As().Warn().Err(err).Str("reason", "CRPersistCleanupFailed").
+		logx.As().Warn().Err(err).Str("reason", ReasonCRPersistCleanupFailed.String()).
 			Str("operation_id", operationID).Msg("failed to delete persisted CR after create")
 	}
-	logx.As().Info().Str("reason", "CRDelivered").Str("operation_id", operationID).
+	logx.As().Info().Str("reason", ReasonCRDelivered.String()).Str("operation_id", operationID).
 		Str("cr_name", cr.GetName()).Str("cr_kind", kind).Msg("created CR")
 	return nil
 }
@@ -193,7 +193,7 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 //
 // TODO(#994): implement Prepare lookup + selectedSources copy + persist-before-send.
 func (f *Factory) HandleFreezeScheduled(_ context.Context) error {
-	logx.As().Info().Str("reason", "MarkerHandlerPending").Str("marker", MarkerFreezeScheduled).
+	logx.As().Info().Str("reason", ReasonMarkerHandlerPending.String()).Str("marker", MarkerFreezeScheduled).
 		Msg("freeze_scheduled.mf handler not yet implemented (#994)")
 	return nil
 }
@@ -206,7 +206,7 @@ func (f *Factory) HandleFreezeScheduled(_ context.Context) error {
 // TODO(#995): implement CR construction + persist-before-send + status watch for
 // the DaemonResult / NodeStarting conditions.
 func (f *Factory) HandleNowFrozen(_ context.Context) error {
-	logx.As().Info().Str("reason", "MarkerHandlerPending").Str("marker", MarkerNowFrozen).
+	logx.As().Info().Str("reason", ReasonMarkerHandlerPending.String()).Str("marker", MarkerNowFrozen).
 		Msg("now_frozen.mf handler not yet implemented (#995)")
 	return nil
 }
@@ -235,7 +235,7 @@ func (f *Factory) HandleFreezeAborted(ctx context.Context) error {
 		// fabricate an identity — a synthesized operationId would correlate to no
 		// Prepare/Freeze/Execute CR, producing an orphan CR the operator cannot act
 		// on. It records the anomaly and creates no CR.
-		logx.As().Warn().Str("reason", "AbortWithoutPrepare").Str("marker", MarkerFreezeAborted).
+		logx.As().Warn().Str("reason", ReasonAbortWithoutPrepare.String()).Str("marker", MarkerFreezeAborted).
 			Msg("freeze_aborted.mf with no corresponding NetworkUpgradePrepare — nothing to cancel; no CR created")
 		return nil
 	}

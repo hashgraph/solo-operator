@@ -43,7 +43,7 @@ func (f *Factory) resolveOperationID(ctx context.Context) (string, error) {
 		List(listCtx, metav1.ListOptions{})
 	if err != nil {
 		return "", errx.WithHints(
-			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradePrepare"), "PrepareListFailed"),
+			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradePrepare"), ReasonPrepareListFailed),
 			"Confirm the UC ServiceAccount has list permission on networkupgradeprepares."+operatorv1alpha1.GroupVersion.Group,
 		)
 	}
