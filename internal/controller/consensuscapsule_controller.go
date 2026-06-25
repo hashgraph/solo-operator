@@ -153,17 +153,21 @@ func (r *ConsensusCapsuleReconciler) configRefs(c *operatorv1alpha1.ConsensusCap
 	}
 	// Optional refs — only checked when the ref field is non-empty; no condition is
 	// set when unset so the capsule is never blocked by an absent optional config.
-	for _, opt := range []configRef{
-		{"ApiPermissionPropertiesReady", c.Spec.ApiPermissionPropertiesRef, apipermissionproperties.ConfigMapNameForRef(c.Spec.ApiPermissionPropertiesRef)},
-		{"NodePropertiesReady", c.Spec.NodePropertiesRef, nodeproperties.ConfigMapNameForRef(c.Spec.NodePropertiesRef)},
-		{"ThrottlesConfigReady", c.Spec.ThrottlesConfigRef, throttlesconfig.ConfigMapNameForRef(c.Spec.ThrottlesConfigRef)},
-		{"FeeSchedulesReady", c.Spec.FeeSchedulesRef, feeschedules.ConfigMapNameForRef(c.Spec.FeeSchedulesRef)},
-		{"SimpleFeesSchedulesReady", c.Spec.SimpleFeesSchedulesRef, simplefeesschedules.ConfigMapNameForRef(c.Spec.SimpleFeesSchedulesRef)},
-		{"ApplicationOverridePropertiesReady", c.Spec.ApplicationOverridePropertiesRef, applicationoverrideproperties.ConfigMapNameForRef(c.Spec.ApplicationOverridePropertiesRef)},
-		{"BootstrapPropertiesReady", c.Spec.BootstrapPropertiesRef, bootstrapproperties.ConfigMapNameForRef(c.Spec.BootstrapPropertiesRef)},
+	for _, opt := range []struct {
+		condType string
+		ref      string
+		fn       func(string) string
+	}{
+		{"ApiPermissionPropertiesReady", c.Spec.ApiPermissionPropertiesRef, apipermissionproperties.ConfigMapNameForRef},
+		{"NodePropertiesReady", c.Spec.NodePropertiesRef, nodeproperties.ConfigMapNameForRef},
+		{"ThrottlesConfigReady", c.Spec.ThrottlesConfigRef, throttlesconfig.ConfigMapNameForRef},
+		{"FeeSchedulesReady", c.Spec.FeeSchedulesRef, feeschedules.ConfigMapNameForRef},
+		{"SimpleFeesSchedulesReady", c.Spec.SimpleFeesSchedulesRef, simplefeesschedules.ConfigMapNameForRef},
+		{"ApplicationOverridePropertiesReady", c.Spec.ApplicationOverridePropertiesRef, applicationoverrideproperties.ConfigMapNameForRef},
+		{"BootstrapPropertiesReady", c.Spec.BootstrapPropertiesRef, bootstrapproperties.ConfigMapNameForRef},
 	} {
-		if opt.refName != "" {
-			refs = append(refs, opt)
+		if opt.ref != "" {
+			refs = append(refs, configRef{opt.condType, opt.ref, opt.fn(opt.ref)})
 		}
 	}
 	return refs

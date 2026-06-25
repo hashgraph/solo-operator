@@ -382,78 +382,31 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 	}
 
 	// ── Optional config CR volumes (only mounted when the ref is set) ─────────
-	optionalMode := int32(420) // 0644
 	trueVal := true
-	type optionalMount struct {
+	for _, om := range []struct {
+		ref        string
 		volumeName string
 		cmName     string
 		mountPath  string
 		subPath    string
-	}
-	optionalMounts := []optionalMount{}
-	if capsule.Spec.ApiPermissionPropertiesRef != "" {
-		optionalMounts = append(optionalMounts, optionalMount{
-			volumeName: "api-permission-config",
-			cmName:     apipermissionproperties.ConfigMapNameForRef(capsule.Spec.ApiPermissionPropertiesRef),
-			mountPath:  HapiBase + "/data/config/api-permission.properties",
-			subPath:    "api-permission.properties",
-		})
-	}
-	if capsule.Spec.NodePropertiesRef != "" {
-		optionalMounts = append(optionalMounts, optionalMount{
-			volumeName: "node-properties-config",
-			cmName:     nodeproperties.ConfigMapNameForRef(capsule.Spec.NodePropertiesRef),
-			mountPath:  HapiBase + "/data/config/node.properties",
-			subPath:    "node.properties",
-		})
-	}
-	if capsule.Spec.ThrottlesConfigRef != "" {
-		optionalMounts = append(optionalMounts, optionalMount{
-			volumeName: "throttles-config",
-			cmName:     throttlesconfig.ConfigMapNameForRef(capsule.Spec.ThrottlesConfigRef),
-			mountPath:  HapiBase + "/data/config/throttles.json",
-			subPath:    "throttles.json",
-		})
-	}
-	if capsule.Spec.FeeSchedulesRef != "" {
-		optionalMounts = append(optionalMounts, optionalMount{
-			volumeName: "fee-schedules-config",
-			cmName:     feeschedules.ConfigMapNameForRef(capsule.Spec.FeeSchedulesRef),
-			mountPath:  HapiBase + "/data/config/feeSchedules.json",
-			subPath:    "feeSchedules.json",
-		})
-	}
-	if capsule.Spec.SimpleFeesSchedulesRef != "" {
-		optionalMounts = append(optionalMounts, optionalMount{
-			volumeName: "simple-fee-schedules-config",
-			cmName:     simplefeesschedules.ConfigMapNameForRef(capsule.Spec.SimpleFeesSchedulesRef),
-			mountPath:  HapiBase + "/data/config/simpleFeesSchedules.json",
-			subPath:    "simpleFeesSchedules.json",
-		})
-	}
-	if capsule.Spec.ApplicationOverridePropertiesRef != "" {
-		optionalMounts = append(optionalMounts, optionalMount{
-			volumeName: "app-override-config",
-			cmName:     applicationoverrideproperties.ConfigMapNameForRef(capsule.Spec.ApplicationOverridePropertiesRef),
-			mountPath:  HapiBase + "/data/config/application-override.properties",
-			subPath:    "application-override.properties",
-		})
-	}
-	if capsule.Spec.BootstrapPropertiesRef != "" {
-		optionalMounts = append(optionalMounts, optionalMount{
-			volumeName: "bootstrap-config",
-			cmName:     bootstrapproperties.ConfigMapNameForRef(capsule.Spec.BootstrapPropertiesRef),
-			mountPath:  HapiBase + "/data/config/bootstrap.properties",
-			subPath:    "bootstrap.properties",
-		})
-	}
-	for _, om := range optionalMounts {
+	}{
+		{capsule.Spec.ApiPermissionPropertiesRef, "api-permission-config", apipermissionproperties.ConfigMapNameForRef(capsule.Spec.ApiPermissionPropertiesRef), HapiBase + "/data/config/api-permission.properties", "api-permission.properties"},
+		{capsule.Spec.NodePropertiesRef, "node-properties-config", nodeproperties.ConfigMapNameForRef(capsule.Spec.NodePropertiesRef), HapiBase + "/data/config/node.properties", "node.properties"},
+		{capsule.Spec.ThrottlesConfigRef, "throttles-config", throttlesconfig.ConfigMapNameForRef(capsule.Spec.ThrottlesConfigRef), HapiBase + "/data/config/throttles.json", "throttles.json"},
+		{capsule.Spec.FeeSchedulesRef, "fee-schedules-config", feeschedules.ConfigMapNameForRef(capsule.Spec.FeeSchedulesRef), HapiBase + "/data/config/feeSchedules.json", "feeSchedules.json"},
+		{capsule.Spec.SimpleFeesSchedulesRef, "simple-fee-schedules-config", simplefeesschedules.ConfigMapNameForRef(capsule.Spec.SimpleFeesSchedulesRef), HapiBase + "/data/config/simpleFeesSchedules.json", "simpleFeesSchedules.json"},
+		{capsule.Spec.ApplicationOverridePropertiesRef, "app-override-config", applicationoverrideproperties.ConfigMapNameForRef(capsule.Spec.ApplicationOverridePropertiesRef), HapiBase + "/data/config/application-override.properties", "application-override.properties"},
+		{capsule.Spec.BootstrapPropertiesRef, "bootstrap-config", bootstrapproperties.ConfigMapNameForRef(capsule.Spec.BootstrapPropertiesRef), HapiBase + "/data/config/bootstrap.properties", "bootstrap.properties"},
+	} {
+		if om.ref == "" {
+			continue
+		}
 		volumes = append(volumes, corev1.Volume{
 			Name: om.volumeName,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{Name: om.cmName},
-					DefaultMode:          &optionalMode,
+					DefaultMode:          &defaultMode,
 					Optional:             &trueVal,
 				},
 			},
