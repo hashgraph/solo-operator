@@ -11,15 +11,12 @@ import (
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/resources/throttlesconfig"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
-
-const ThrottlesConfigFinalizer = "operator.solo.hedera.com/throttlesconfig-finalizer"
 
 type ThrottlesConfigReconciler struct {
 	client.Client
@@ -37,7 +34,6 @@ func NewThrottlesConfigReconciler(c client.Client, scheme *runtime.Scheme) *Thro
 
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=throttlesconfigs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=throttlesconfigs/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=throttlesconfigs/finalizers,verbs=update
 
 func (r *ThrottlesConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -51,19 +47,6 @@ func (r *ThrottlesConfigReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
-	}
-
-	if !obj.DeletionTimestamp.IsZero() {
-		controllerutil.RemoveFinalizer(obj, ThrottlesConfigFinalizer)
-		return ctrl.Result{}, r.Update(ctx, obj)
-	}
-
-	if !controllerutil.ContainsFinalizer(obj, ThrottlesConfigFinalizer) {
-		controllerutil.AddFinalizer(obj, ThrottlesConfigFinalizer)
-		if err := r.Update(ctx, obj); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{Requeue: true}, nil
 	}
 
 	result, err := r.subreconciler.Reconcile(ctx, obj)
@@ -85,9 +68,6 @@ func (r *ThrottlesConfigReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 func (r *ThrottlesConfigReconciler) updateStatus(ctx context.Context, obj *operatorv1alpha1.ThrottlesConfig) error {
 	obj.Status.ObservedGeneration = obj.Generation
-	// status.configMapName is set unconditionally even when Valid=False (no ConfigMap was created).
-	// This is intentional: operators and users can always resolve the expected ConfigMap name from
-	// the CR name, and the Valid condition already signals whether the ConfigMap actually exists.
 	obj.Status.ConfigMapName = throttlesconfig.ConfigMapName(obj)
 	return r.Status().Update(ctx, obj)
 }

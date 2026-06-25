@@ -42,7 +42,7 @@ func NewOrbitReconciler(c client.Client, scheme *runtime.Scheme) *OrbitReconcile
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=nodesettings,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=applicationproperties,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=apipermissionproperties,verbs=get;list;watch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=nodeproperties,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=nodepropertiesconfigs,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=throttlesconfigs,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=feeschedules,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=simplefeesschedules,verbs=get;list;watch;delete
