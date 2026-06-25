@@ -20,7 +20,6 @@ import (
 // version are taken from the operator API package so they stay in sync with the
 // CRD definitions.
 var (
-	//nolint:unused // consumed by the factory CR handlers in #993
 	networkUpgradePrepareGVR = gvr("networkupgradeprepares")
 	//nolint:unused // consumed by the factory CR handlers in #994
 	networkUpgradeFreezeGVR  = gvr("networkupgradefreezes")

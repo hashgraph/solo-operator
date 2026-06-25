@@ -5,14 +5,14 @@ sidecar locally and observing its behaviour: the marker-file polling loop, the
 console logs, the JSONL event log, and the control-socket status/version
 endpoints.
 
-It targets the foundational polling loop delivered in **story 8.1** (#991) plus
-the persist-before-send primitive from **story 8.2** (#992). The per-marker CR
-handlers (#993–#996), dedup (#997), and cleanup/recovery (#998) are stubbed for
-now — when you drop a marker you will see the loop detect it and log a "handler
-not yet implemented" line rather than a created CR, so the `--cr-persist-path`
-directory stays empty in an end-to-end run today. §8 below shows how to exercise
-the persistence primitive directly via its unit tests until the handlers wire it
-in.
+It targets the foundational polling loop delivered in **story 8.1** (#991), the
+persist-before-send primitive from **story 8.2** (#992), and the
+`execute_immediate.mf` → `NetworkUpgradePrepare` handler from **story 8.3**
+(#993). When you drop `execute_immediate.mf` you will now see the loop construct,
+persist, and create a real `NetworkUpgradePrepare` CR (§4a). The remaining
+per-marker handlers (#994–#996), the dedup cache (#997), and cleanup/recovery
+(#998) are still stubbed — dropping one of those markers logs a "handler not yet
+implemented" line rather than a created CR.
 
 ---
 
@@ -117,12 +117,12 @@ In a second terminal, drop marker files into the marker directory. The loop
 re-scans every poll interval and dispatches each marker it finds.
 
 ```bash
-# Triggers the NetworkUpgradePrepare handler (#993, stubbed)
-touch "$UCDIR/markers/execute_immediate.mf"
+# A still-stubbed handler (#994) — logs rather than creating a CR
+touch "$UCDIR/markers/freeze_scheduled.mf"
 ```
 
 Watch the first terminal for (in `debug`):
-- a `MarkerHandlerPending` line naming `execute_immediate.mf`.
+- a `MarkerHandlerPending` line naming `freeze_scheduled.mf`.
 
 Markers are **not** deleted on detection (cleanup is #998), so you will see the
 same marker re-dispatched on every tick. That is by design — repeat-work
@@ -130,12 +130,72 @@ suppression is the dedup cache's job (#997), not the poller's.
 
 The four recognised markers and what each routes to:
 
-| Marker file            | Routed handler (story)           |
-|------------------------|----------------------------------|
-| `execute_immediate.mf` | `HandleExecuteImmediate` (#993)  |
-| `freeze_scheduled.mf`  | `HandleFreezeScheduled` (#994)   |
-| `now_frozen.mf`        | `HandleNowFrozen` (#995)         |
-| `freeze_aborted.mf`    | `HandleFreezeAborted` (#996)     |
+| Marker file            | Routed handler (story)                | Status         |
+|------------------------|----------------------------------------|----------------|
+| `execute_immediate.mf` | `HandleExecuteImmediate` (#993)        | **implemented** — see §4a |
+| `freeze_scheduled.mf`  | `HandleFreezeScheduled` (#994)         | stubbed        |
+| `now_frozen.mf`        | `HandleNowFrozen` (#995)               | stubbed        |
+| `freeze_aborted.mf`    | `HandleFreezeAborted` (#996)           | stubbed        |
+
+---
+
+## 4a. Create a NetworkUpgradePrepare CR (`execute_immediate.mf`, #993)
+
+`execute_immediate.mf` is the first marker the consensus node writes when it
+extracts an upgrade package. The CN unzips the archive **into the marker
+directory itself** and writes the marker there too, so the package manifests
+live under `<marker-path>/manifests/`. The handler reads
+`manifests/consensus-node-components.yaml`, mints an `operationId`, and creates a
+`NetworkUpgradePrepare` CR.
+
+First lay out a minimal package manifest next to the markers (mirrors the real
+extracted layout):
+
+```bash
+mkdir -p "$UCDIR/markers/manifests"
+cat > "$UCDIR/markers/manifests/consensus-node-components.yaml" <<'YAML'
+schemaVersion: 1
+images:
+  consensusNode:
+    version: "0.75.0"
+    deterministic:
+      supported: true
+      layerHashes:
+        linux/amd64:
+          - "sha256:abc123"
+    registries:
+      - image: "ghcr.io/hashgraph/consensus-node:0.75.0"
+YAML
+
+# Now trigger the handler
+touch "$UCDIR/markers/execute_immediate.mf"
+```
+
+Watch the first terminal for a `CRDelivered` log line with the `operation_id`
+and `cr_name`, then confirm the CR exists in the cluster:
+
+```bash
+kubectl get networkupgradeprepares -n solo
+kubectl get networkupgradeprepares -n solo -o yaml | less
+```
+
+You should see a CR named `upgrade-0.75.0-<marker-time-lowercased>-prepare` with:
+- labels `operator.solo.hedera.com/operation-id: upgrade-0.75.0-<marker-time>`
+  and `operator.solo.hedera.com/step: prepare`,
+- annotation `operator.solo.hedera.com/created-by: UC`,
+- `spec.orbit` = your `--orbit`, `spec.operationId`, and `spec.images` copied
+  verbatim from the manifest.
+
+The `operationId` is **minted from the marker's creation time + package
+version**, so it is stable across re-detections: on every subsequent tick the
+handler recomputes the same name and the create is a safe no-op (the existing CR
+is detected at the K8s API level — "first detection wins"). Re-running the
+`touch` updates the marker mtime and therefore mints a *new* operationId; use a
+fresh `$UCDIR` (or leave the marker in place) to observe stable behaviour.
+
+**Invalid manifest:** set `schemaVersion: 99` (or remove
+`images.consensusNode.version`) and re-run — the handler logs a `ManifestInvalid`
+error line and creates **no** CR, rather than retrying forever.
 
 ---
 
@@ -234,10 +294,13 @@ On-disk format:
 - Writes are atomic (temp file + rename), so a crash mid-write never leaves a
   truncated CR that recovery would try to re-send.
 
-> **End-to-end today the `crs/` directory stays empty** — the marker handlers
-> (#993+) are the callers of `Persist`/`Delete`, and they are still stubs. So a
-> live run (§3–§5) creates no files here yet. Until the handlers land, exercise
-> the primitive and its on-disk contract directly via its unit tests:
+> The `execute_immediate.mf` handler (§4a, #993) now drives this primitive: it
+> writes `<operationId>.prepare.yaml` here **before** the create and removes it
+> **after** the create is acknowledged. The window is brief, so under normal
+> operation you will usually catch the file only mid-create (see the live-watch
+> tip below) or after an injected failure. The remaining markers (#994–#996) are
+> still stubs, so their CR files do not appear yet. Exercise the on-disk contract
+> directly via its unit tests:
 
 ```bash
 go test ./internal/uc/ -run TestCRStore -v
@@ -254,10 +317,14 @@ go test ./internal/uc/ -run TestCRStore -v
 | `TestCRStoreListMissingDirIsEmpty` | A never-created persist dir yields no entries and no error. |
 | `TestCRStoreRejectsBadInput` | A path-traversal `operationId`, an unknown step, or a nil CR is rejected at the boundary. |
 
-Once the handlers wire it in, you will be able to watch the lifecycle live:
-drop a marker (§4), then in a tight loop `ls "$UCDIR/crs"` to catch the
-`<operationId>.<step>.yaml` file appear before the CR shows up in
-`kubectl get networkupgrade...` and disappear once the create is acknowledged.
+Watch the lifecycle live: in a tight loop print the persist dir while you drop
+`execute_immediate.mf` (§4a), to catch the `<operationId>.prepare.yaml` file
+appear before the CR shows up in `kubectl get networkupgradeprepares` and
+disappear once the create is acknowledged:
+
+```bash
+while true; do ls "$UCDIR/crs"; sleep 0.2; done
+```
 
 ---
 
@@ -293,6 +360,27 @@ The tests inject a fake `markerDispatcher` so the loop runs without a Kubernetes
 client; the per-marker CR construction is covered by #993–#996. Detection is
 intentionally idempotent-friendly: the loop does not assume a marker fires only
 once, and no `operationId` is minted at this layer.
+
+**Prepare handler & manifest parser** (`internal/uc/prepare_test.go`,
+`internal/uc/manifest.go`):
+
+```bash
+go test ./internal/uc/ -run 'TestParseComponents|TestHandleExecuteImmediate' -v
+```
+
+| Test | Asserts |
+|------|---------|
+| `TestParseComponentsManifestValid` | A valid `consensus-node-components.yaml` parses into `UpgradeImagesSpec` (consensus node + sidecars). |
+| `TestParseComponentsManifestLenientUnknownField` | An additive unknown field within a known `schemaVersion` is ignored, not rejected (lenient parsing). |
+| `TestParseComponentsManifestInvalid` | Unknown/missing `schemaVersion`, missing `consensusNode.version`, and malformed YAML all map to `ManifestInvalid`. |
+| `TestHandleExecuteImmediateCreatesPrepareCR` | Builds + creates a `NetworkUpgradePrepare` with the correct name, labels, `created-by` annotation, `spec.orbit/operationId/images`; the persisted file is cleaned up after the create. |
+| `TestHandleExecuteImmediateManifestInvalidCreatesNoCR` | An invalid manifest halts the handler (returns nil, no retry) and creates no CR / persists nothing. |
+| `TestHandleExecuteImmediateIsIdempotent` | Re-dispatching the same marker creates exactly one CR (first-detection-wins via the K8s `AlreadyExists` check). |
+| `TestHandleExecuteImmediateLeavesPersistedOnCreateError` | A non-`AlreadyExists` create failure leaves the persisted CR on disk for restart recovery (#998). |
+
+The handler uses a fake dynamic client, so no real cluster is needed. The
+`operationId` is minted deterministically from the marker's mtime + package
+version, so the tests pin the marker mtime for a stable name.
 
 **Control socket** (`internal/uc/control_client_test.go`):
 
