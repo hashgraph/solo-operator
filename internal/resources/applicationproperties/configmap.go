@@ -76,7 +76,7 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 		return ctrl.Result{}, err
 	}
 
-	if !maps.Equal(existing.Data, desired.Data) || !maps.Equal(existing.Labels, desired.Labels) {
+	if needsUpdate(existing, desired) {
 		existing.Data = desired.Data
 		existing.Labels = desired.Labels
 		// Re-apply owner reference on update so a pre-existing CM without a controller
@@ -88,6 +88,23 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func needsUpdate(existing, desired *corev1.ConfigMap) bool {
+	return !maps.Equal(existing.Data, desired.Data) ||
+		!maps.Equal(existing.Labels, desired.Labels) ||
+		!sameController(existing, desired)
+}
+
+// sameController reports whether existing and desired share the same controller owner
+// reference by UID. A missing controller ref on either side counts as a difference.
+func sameController(existing, desired *corev1.ConfigMap) bool {
+	ec := metav1.GetControllerOf(existing)
+	dc := metav1.GetControllerOf(desired)
+	if ec == nil || dc == nil {
+		return ec == nil && dc == nil
+	}
+	return ec.UID == dc.UID
 }
 
 func (r *ConfigMapSubReconciler) reject(obj *operatorv1alpha1.ApplicationProperties, reason, msg string) (ctrl.Result, error) {
