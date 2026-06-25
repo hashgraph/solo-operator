@@ -3,7 +3,6 @@
 package uc
 
 import (
-	"fmt"
 	"net"
 	"time"
 
@@ -14,6 +13,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // GVRs for the four NetworkUpgrade CRs the UC creates/watches. The group and
@@ -70,12 +70,18 @@ func buildDynamicClient(kubeconfigPath string) (dynamic.Interface, error) {
 	if kubeconfigPath == "" {
 		restCfg, err = rest.InClusterConfig()
 		if err != nil {
-			return nil, fmt.Errorf("load in-cluster config: %w", err)
+			return nil, errx.WithHints(
+				errx.WithReason(errClient.Wrap(err, "load in-cluster config"), "InClusterConfigFailed"),
+				"Run the UC as a pod with a mounted ServiceAccount token, or pass --kubeconfig for out-of-cluster use",
+			)
 		}
 	} else {
 		restCfg, err = clientcmd.BuildConfigFromFlags("", kubeconfigPath)
 		if err != nil {
-			return nil, fmt.Errorf("load kubeconfig %s: %w", kubeconfigPath, err)
+			return nil, errx.WithHints(
+				errx.WithReason(errClient.Wrap(err, "load kubeconfig %s", kubeconfigPath), "KubeconfigLoadFailed"),
+				"Confirm --kubeconfig points to a readable, valid kubeconfig file",
+			)
 		}
 	}
 	// Bound TCP connection establishment via a dial timeout — NOT rest.Config.Timeout,
@@ -87,7 +93,7 @@ func buildDynamicClient(kubeconfigPath string) (dynamic.Interface, error) {
 	restCfg.Dial = (&net.Dialer{Timeout: dialTimeout, KeepAlive: dialTimeout}).DialContext
 	client, err := dynamic.NewForConfig(restCfg)
 	if err != nil {
-		return nil, fmt.Errorf("build dynamic client: %w", err)
+		return nil, errx.WithReason(errClient.Wrap(err, "build dynamic client"), "DynamicClientFailed")
 	}
 	return client, nil
 }

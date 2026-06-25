@@ -3,13 +3,12 @@
 package uc
 
 import (
-	"errors"
-	"fmt"
 	"os"
 
 	"sigs.k8s.io/yaml"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // Deployment-package layout the UC reads. The marker directory is the root of the
@@ -27,12 +26,6 @@ const (
 	// changes do not require a UC upgrade.
 	componentsSchemaVersion = 1
 )
-
-// errManifestInvalid marks a manifest the UC refuses to process (unknown
-// schemaVersion or a missing required field). It maps to the ManifestInvalid
-// condition: the handler halts without creating a CR rather than retrying, since
-// re-reading the same bytes will not fix it.
-var errManifestInvalid = errors.New("manifest invalid")
 
 // componentsManifest is the thin wrapper around consensus-node-components.yaml.
 // The `images:` block maps 1:1 onto UpgradeImagesSpec (HIP-1494) — reused
@@ -53,23 +46,38 @@ type componentsManifest struct {
 func parseComponentsManifest(path string) (*componentsManifest, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read components manifest %s: %w", path, err)
+		// A read failure is transient — the file may not be fully written yet, or
+		// the volume may be briefly unavailable; the caller may retry next tick.
+		return nil, errx.WithHints(
+			errx.WithReason(errPersist.Wrap(err, "read components manifest %s", path), "ManifestReadFailed"),
+			"Confirm the consensus node extracted the package into --marker-path",
+			"Check that manifests/consensus-node-components.yaml exists and is readable",
+		)
 	}
 
 	var m componentsManifest
 	if err := yaml.Unmarshal(data, &m); err != nil {
 		// A malformed YAML body cannot be parsed regardless of schema; treat it as
 		// invalid (halt), not transient.
-		return nil, fmt.Errorf("%w: parse %s: %v", errManifestInvalid, path, err)
+		return nil, errx.WithHints(
+			errx.WithReason(errManifestInvalid.Wrap(err, "parse %s", path), "ManifestInvalid"),
+			"Regenerate the deployment package — consensus-node-components.yaml is not valid YAML",
+		)
 	}
 
 	if m.SchemaVersion != componentsSchemaVersion {
-		return nil, fmt.Errorf("%w: unknown schemaVersion %d in %s (supported: %d)",
-			errManifestInvalid, m.SchemaVersion, path, componentsSchemaVersion)
+		return nil, errx.WithHints(
+			errx.WithReason(errManifestInvalid.New("unknown schemaVersion %d in %s (supported: %d)",
+				m.SchemaVersion, path, componentsSchemaVersion), "ManifestInvalid"),
+			"This UC build understands schemaVersion 1 only",
+			"Upgrade the UC sidecar image to one that supports this package schemaVersion",
+		)
 	}
 	if m.Images.ConsensusNode.Version == "" {
-		return nil, fmt.Errorf("%w: images.consensusNode.version is required in %s",
-			errManifestInvalid, path)
+		return nil, errx.WithHints(
+			errx.WithReason(errManifestInvalid.New("images.consensusNode.version is required in %s", path), "ManifestInvalid"),
+			"Set images.consensusNode.version in consensus-node-components.yaml",
+		)
 	}
 	return &m, nil
 }

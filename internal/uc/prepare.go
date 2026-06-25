@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/sanity"
 )
 
@@ -38,7 +39,10 @@ const (
 func mintOperationID(version string, markerCreatedAt time.Time) (string, error) {
 	id := fmt.Sprintf("upgrade-%s-%s", version, markerCreatedAt.UTC().Format(sanity.TimestampLayout))
 	if err := sanity.ValidateOperationID(id); err != nil {
-		return "", fmt.Errorf("%w: derived operationId %q is invalid: %v", errManifestInvalid, id, err)
+		return "", errx.WithHints(
+			errx.WithReason(errManifestInvalid.Wrap(err, "derived operationId %q is invalid", id), "ManifestInvalid"),
+			"Confirm images.consensusNode.version is a clean version string (no spaces or shell metacharacters)",
+		)
 	}
 	return id, nil
 }
@@ -82,7 +86,8 @@ func buildPrepareCR(cfg Config, operationID string, images operatorv1alpha1.Upgr
 
 	obj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(prepare)
 	if err != nil {
-		return nil, fmt.Errorf("convert NetworkUpgradePrepare to unstructured: %w", err)
+		return nil, errx.WithReason(
+			errCRBuild.Wrap(err, "convert NetworkUpgradePrepare %s to unstructured", operationID), "CRBuildFailed")
 	}
 	return &unstructured.Unstructured{Object: obj}, nil
 }

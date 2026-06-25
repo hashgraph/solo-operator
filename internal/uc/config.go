@@ -3,8 +3,9 @@
 package uc
 
 import (
-	"errors"
 	"time"
+
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // Mode selects which deployment profile the UC runs under. It governs whether
@@ -89,28 +90,52 @@ func (c Config) Validate() error {
 	switch c.Mode {
 	case ModeMainnet, ModeClusterOnly:
 	default:
-		return errors.New("uc: mode must be 'mainnet' or 'cluster-only'")
+		return errx.WithHints(
+			errx.WithReason(errConfigInvalid.New("mode %q is invalid", c.Mode), "ConfigInvalid"),
+			"Set --mode to 'mainnet' or 'cluster-only'",
+		)
 	}
 	if c.NodeID < 0 {
-		return errors.New("uc: node-id is required and must be a non-negative integer")
+		return errx.WithHints(
+			errx.WithReason(errConfigInvalid.New("node-id %d is invalid", c.NodeID), "ConfigInvalid"),
+			"Set --node-id to a non-negative integer",
+		)
 	}
 	if c.Orbit == "" {
-		return errors.New("uc: orbit is required")
+		return errx.WithHints(
+			errx.WithReason(errConfigInvalid.New("orbit is required"), "ConfigInvalid"),
+			"Set --orbit to the owning Orbit resource name",
+		)
 	}
 	if c.Namespace == "" {
-		return errors.New("uc: namespace is required")
+		return errx.WithHints(
+			errx.WithReason(errConfigInvalid.New("namespace is required"), "ConfigInvalid"),
+			"Set --namespace to the node's Kubernetes namespace",
+		)
 	}
 	if c.MarkerPath == "" {
-		return errors.New("uc: marker-path is required")
+		return errx.WithHints(
+			errx.WithReason(errConfigInvalid.New("marker-path is required"), "ConfigInvalid"),
+			"Set --marker-path to the consensus node's upgrade-artifacts directory (e.g. data/upgrade/current)",
+		)
 	}
 	if c.CRPersistPath == "" {
-		return errors.New("uc: cr-persist-path is required")
+		return errx.WithHints(
+			errx.WithReason(errConfigInvalid.New("cr-persist-path is required"), "ConfigInvalid"),
+			"Set --cr-persist-path to a writable directory for persist-before-send CRs",
+		)
 	}
 	if c.PollInterval <= 0 {
-		return errors.New("uc: poll-interval must be positive")
+		return errx.WithHints(
+			errx.WithReason(errConfigInvalid.New("poll-interval %s must be positive", c.PollInterval), "ConfigInvalid"),
+			"Set --poll-interval to a positive duration (e.g. 60s)",
+		)
 	}
 	if c.FreezePollInterval <= 0 {
-		return errors.New("uc: freeze-poll-interval must be positive")
+		return errx.WithHints(
+			errx.WithReason(errConfigInvalid.New("freeze-poll-interval %s must be positive", c.FreezePollInterval), "ConfigInvalid"),
+			"Set --freeze-poll-interval to a positive duration (e.g. 1s)",
+		)
 	}
 	return nil
 }

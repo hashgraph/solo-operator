@@ -13,6 +13,7 @@ import (
 	"github.com/automa-saga/logx"
 	"k8s.io/client-go/dynamic"
 
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/uc/events"
 )
 
@@ -140,8 +141,19 @@ func (m *MarkerMonitor) poll(ctx context.Context, current time.Duration) time.Du
 			continue
 		}
 		if err := m.dispatch(ctx, name); err != nil {
-			logx.As().Error().Err(err).Str("reason", "MarkerHandlerFailed").
-				Str("marker", name).Msg("failed to handle marker")
+			ev := logx.As().Error().Err(err).Str("marker", name)
+			// Surface the structured reason + remediation hints attached via
+			// internal/errx so the log line carries the same reason= identifier as
+			// the error and any actionable next steps.
+			if reason, ok := errx.Reason(err); ok {
+				ev = ev.Str("reason", reason)
+			} else {
+				ev = ev.Str("reason", "MarkerHandlerFailed")
+			}
+			if hints, ok := errx.Hints(err); ok {
+				ev = ev.Strs("hints", hints)
+			}
+			ev.Msg("failed to handle marker")
 			continue
 		}
 		switch name {

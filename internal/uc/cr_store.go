@@ -3,7 +3,6 @@
 package uc
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -13,6 +12,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/sanity"
 )
 
@@ -69,25 +69,32 @@ func (s *CRStore) Persist(operationID, step string, cr *unstructured.Unstructure
 		return "", err
 	}
 	if cr == nil || cr.Object == nil {
-		return "", fmt.Errorf("uc: cannot persist a nil CR for operationId %q step %q", operationID, step)
+		return "", errx.WithReason(
+			errCRBuild.New("cannot persist a nil CR for operationId %q step %q", operationID, step), "CRBuildFailed")
 	}
 	if err := os.MkdirAll(s.dir, 0o750); err != nil {
-		return "", fmt.Errorf("create cr-persist dir %s: %w", s.dir, err)
+		return "", errx.WithHints(
+			errx.WithReason(errPersist.Wrap(err, "create cr-persist dir %s", s.dir), "CRPersistWriteFailed"),
+			"Confirm --cr-persist-path is on a writable volume with free space",
+		)
 	}
 	data, err := yaml.Marshal(cr.Object)
 	if err != nil {
-		return "", fmt.Errorf("marshal CR %s/%s: %w", operationID, step, err)
+		return "", errx.WithReason(errCRBuild.Wrap(err, "marshal CR %s/%s", operationID, step), "CRBuildFailed")
 	}
 	path := filepath.Join(s.dir, name)
 	// Write atomically: write a temp file then rename, so a crash mid-write can
 	// never leave a truncated CR on disk that recovery would try to re-send.
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o640); err != nil {
-		return "", fmt.Errorf("write CR %s: %w", tmp, err)
+		return "", errx.WithHints(
+			errx.WithReason(errPersist.Wrap(err, "write CR %s", tmp), "CRPersistWriteFailed"),
+			"Confirm --cr-persist-path is on a writable volume with free space",
+		)
 	}
 	if err := os.Rename(tmp, path); err != nil {
 		_ = os.Remove(tmp)
-		return "", fmt.Errorf("rename CR %s -> %s: %w", tmp, path, err)
+		return "", errx.WithReason(errPersist.Wrap(err, "rename CR %s -> %s", tmp, path), "CRPersistWriteFailed")
 	}
 	return path, nil
 }
@@ -102,7 +109,7 @@ func (s *CRStore) Delete(operationID, step string) error {
 		return err
 	}
 	if err := os.Remove(filepath.Join(s.dir, name)); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("delete persisted CR %s: %w", name, err)
+		return errx.WithReason(errPersist.Wrap(err, "delete persisted CR %s", name), "CRPersistDeleteFailed")
 	}
 	return nil
 }
@@ -118,7 +125,7 @@ func (s *CRStore) List() ([]PersistedCR, error) {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("read cr-persist dir %s: %w", s.dir, err)
+		return nil, errx.WithReason(errPersist.Wrap(err, "read cr-persist dir %s", s.dir), "CRPersistListFailed")
 	}
 
 	var out []PersistedCR
@@ -136,11 +143,14 @@ func (s *CRStore) List() ([]PersistedCR, error) {
 		path := filepath.Join(s.dir, e.Name())
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return nil, fmt.Errorf("read persisted CR %s: %w", path, err)
+			return nil, errx.WithReason(errPersist.Wrap(err, "read persisted CR %s", path), "CRPersistReadFailed")
 		}
 		obj := map[string]interface{}{}
 		if err := yaml.Unmarshal(data, &obj); err != nil {
-			return nil, fmt.Errorf("unmarshal persisted CR %s: %w", path, err)
+			return nil, errx.WithHints(
+				errx.WithReason(errPersist.Wrap(err, "unmarshal persisted CR %s", path), "CRPersistCorrupt"),
+				"A persisted CR file is corrupt; remove it from --cr-persist-path to let recovery proceed",
+			)
 		}
 		out = append(out, PersistedCR{
 			OperationID: operationID,
@@ -162,7 +172,7 @@ func fileName(operationID, step string) (string, error) {
 		return "", err
 	}
 	if _, ok := validSteps[step]; !ok {
-		return "", fmt.Errorf("uc: unknown CR step %q", step)
+		return "", errx.WithReason(errCRBuild.New("unknown CR step %q", step), "CRBuildFailed")
 	}
 	return operationID + "." + step + fileExt, nil
 }

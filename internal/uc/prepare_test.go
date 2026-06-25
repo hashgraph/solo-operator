@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/joomcode/errorx"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -19,6 +20,7 @@ import (
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 const validComponentsYAML = `schemaVersion: 1
@@ -131,8 +133,11 @@ func TestParseComponentsManifestInvalid(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			root := writePackage(t, body)
 			_, err := parseComponentsManifest(filepath.Join(root, manifestsSubdir, componentsManifestFile))
-			if !errors.Is(err, errManifestInvalid) {
+			if !errorx.IsOfType(err, errManifestInvalid) {
 				t.Fatalf("want errManifestInvalid, got %v", err)
+			}
+			if reason, ok := errx.Reason(err); !ok || reason != "ManifestInvalid" {
+				t.Fatalf("want reason ManifestInvalid, got %q (ok=%v)", reason, ok)
 			}
 		})
 	}

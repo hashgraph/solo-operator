@@ -137,6 +137,41 @@ The chart is published to `oci://ghcr.io/hashgraph/charts/solo-operator` on ever
 | `zxc-release.yaml` | reusable | Semantic release + helm package/push |
 | `flow-nightly-test.yaml` | schedule | Nightly E2E tests |
 
+## Error Handling
+
+Errors use [`github.com/joomcode/errorx`](https://github.com/joomcode/errorx), standardized
+through the shared `internal/errx` package. **Do not** return bare `fmt.Errorf`/`errors.New`
+for errors that leave a package boundary.
+
+- **Typed errors per package.** Each subsystem declares its own `errorx` namespace and a small
+  set of typed errors in a local `errors.go`, e.g.:
+  ```go
+  var (
+      errNS              = errorx.NewNamespace("uc")
+      errManifestInvalid = errNS.NewType("manifest_invalid")            // terminal
+      errK8sAPI          = errNS.NewType("k8s_api_failed", errorx.Temporary()) // retryable
+  )
+  ```
+  Mark retryable errors with the `errorx.Temporary()` trait; terminal errors carry none.
+  Match on type with `errorx.IsOfType(err, errManifestInvalid)` (never string-match messages).
+- **Reason + hints via `internal/errx`.** Decorate every error with a machine-readable reason
+  code and, where a meaningful remediation exists, operator hints:
+  ```go
+  return errx.WithHints(
+      errx.WithReason(errK8sAPI.Wrap(err, "list X"), "ListFailed"),
+      "Confirm the ServiceAccount has list permission on x.group",
+  )
+  ```
+  - The reason code is **PascalCase** and **mirrors the logx `reason=` field**, so an error, its
+    log line, and any `/status` output share one identifier. Extract with `errx.Reason(err)`.
+  - Hints are concrete next steps (`[]string`); attach only for actionable failures
+    (config/disk/RBAC/connectivity), not internal bugs. Extract with `errx.Hints(err)`.
+- **Decorate once, at the source.** The lowest-level function touching the failing resource
+  attaches the type/reason/hints; callers return the error as-is rather than re-wrapping (which
+  would obscure the type and duplicate context).
+- **Surface at the boundary.** When logging a handler/loop error, pull `errx.Reason`/`errx.Hints`
+  onto the log event (see `MarkerMonitor.poll`) so the structured fields reach operators.
+
 ## Key Conventions
 
 - Go version is specified in `go.mod`; use `actions/setup-go` with `go-version-file: go.mod`

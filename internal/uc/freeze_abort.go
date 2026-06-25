@@ -3,7 +3,6 @@
 package uc
 
 import (
-	"fmt"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -11,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // kindNetworkUpgradeFreezeAbort is the CR kind the freeze_aborted.mf handler
@@ -58,7 +58,8 @@ func buildFreezeAbortCR(cfg Config, operationID string) (*unstructured.Unstructu
 
 	obj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(abort)
 	if err != nil {
-		return nil, fmt.Errorf("convert NetworkUpgradeFreezeAbort to unstructured: %w", err)
+		return nil, errx.WithReason(
+			errCRBuild.Wrap(err, "convert NetworkUpgradeFreezeAbort %s to unstructured", operationID), "CRBuildFailed")
 	}
 	return &unstructured.Unstructured{Object: obj}, nil
 }

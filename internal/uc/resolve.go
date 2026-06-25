@@ -4,7 +4,6 @@ package uc
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/sanity"
 )
 
@@ -42,7 +42,10 @@ func (f *Factory) resolveOperationID(ctx context.Context) (string, error) {
 	list, err := f.client.Resource(networkUpgradePrepareGVR).Namespace(f.cfg.Namespace).
 		List(listCtx, metav1.ListOptions{})
 	if err != nil {
-		return "", fmt.Errorf("list NetworkUpgradePrepare: %w", err)
+		return "", errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradePrepare"), "PrepareListFailed"),
+			"Confirm the UC ServiceAccount has list permission on networkupgradeprepares."+operatorv1alpha1.GroupVersion.Group,
+		)
 	}
 
 	var (
@@ -80,7 +83,8 @@ func (f *Factory) resolveOperationID(ctx context.Context) (string, error) {
 	// ahead of the timestamp (e.g. "upgrade-0.9.0-<old>" > "upgrade-0.75.0-<new>").
 	persisted, err := f.store.List()
 	if err != nil {
-		return "", fmt.Errorf("list persisted CRs: %w", err)
+		// Already an errx-decorated persist (disk) error.
+		return "", err
 	}
 	best, bestTS, found = "", time.Time{}, false
 	for _, p := range persisted {

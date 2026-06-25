@@ -12,6 +12,7 @@ import (
 
 	"github.com/automa-saga/daemonkit"
 	"github.com/automa-saga/logx"
+	"github.com/joomcode/errorx"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -20,6 +21,7 @@ import (
 	"k8s.io/client-go/dynamic"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 const (
@@ -80,7 +82,8 @@ type ProvisionerProxyMonitor struct {
 func NewProvisionerProxyMonitor(cfg ProvisionerProxyMonitorConfig, kubeconfigPath string) (*ProvisionerProxyMonitor, error) {
 	client, err := buildDynamicClient(kubeconfigPath)
 	if err != nil {
-		return nil, fmt.Errorf("provisioner-proxy monitor: build k8s client: %w", err)
+		// Already an errx-decorated client error.
+		return nil, err
 	}
 	return NewProvisionerProxyMonitorWithClient(cfg, client), nil
 }
@@ -193,7 +196,10 @@ func (pm *ProvisionerProxyMonitor) listAndSeed(ctx context.Context) (string, err
 	defer cancel()
 	list, err := resource.List(listCtx, metav1.ListOptions{})
 	if err != nil {
-		return "", fmt.Errorf("list NetworkUpgradeExecute: %w", err)
+		return "", errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradeExecute"), "ExecuteListFailed"),
+			"Confirm the UC ServiceAccount has list permission on networkupgradeexecutes."+operatorv1alpha1.GroupVersion.Group,
+		)
 	}
 
 	pm.mu.Lock()
@@ -238,7 +244,7 @@ func (pm *ProvisionerProxyMonitor) runWatch(ctx context.Context, resourceVersion
 		if r := recover(); r != nil {
 			logx.As().Error().Str("reason", "ProvisionerProxyWatchPanic").Interface("panic", r).
 				Msg("panic in watch loop — recovering")
-			retErr = fmt.Errorf("recovered panic: %v", r)
+			retErr = errx.WithReason(errorx.InternalError.New("recovered panic in watch loop: %v", r), "ProvisionerProxyWatchPanic")
 		}
 	}()
 	resource := pm.client.Resource(networkUpgradeExecuteGVR).Namespace(pm.cfg.Namespace)
@@ -248,7 +254,10 @@ func (pm *ProvisionerProxyMonitor) runWatch(ctx context.Context, resourceVersion
 		TimeoutSeconds:  &timeoutSec,
 	})
 	if err != nil {
-		return fmt.Errorf("watch NetworkUpgradeExecute: %w", err)
+		return errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "watch NetworkUpgradeExecute"), "WatchFailed"),
+			"Confirm the UC ServiceAccount has watch permission on networkupgradeexecutes."+operatorv1alpha1.GroupVersion.Group,
+		)
 	}
 	defer watcher.Stop()
 
@@ -261,7 +270,8 @@ func (pm *ProvisionerProxyMonitor) runWatch(ctx context.Context, resourceVersion
 				return nil
 			}
 			if event.Type == watch.Error {
-				return fmt.Errorf("watch error event: %w", k8serrors.FromObject(event.Object))
+				return errx.WithReason(
+					errK8sAPI.Wrap(k8serrors.FromObject(event.Object), "watch error event"), "WatchErrorEvent")
 			}
 			if event.Type != watch.Added && event.Type != watch.Modified {
 				continue
@@ -362,7 +372,10 @@ func (pm *ProvisionerProxyMonitor) handleExecute(ctx context.Context, cr *unstru
 	_, err := resource.Patch(ctx, cr.GetName(), types.MergePatchType, patch,
 		metav1.PatchOptions{}, "status")
 	if err != nil {
-		return fmt.Errorf("patch %s status to PendingNodeUpgrade: %w", cr.GetName(), err)
+		return errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "patch %s status to PendingNodeUpgrade", cr.GetName()), "ExecutePatchFailed"),
+			"Confirm the UC ServiceAccount has patch permission on networkupgradeexecutes/status."+operatorv1alpha1.GroupVersion.Group,
+		)
 	}
 	logx.As().Info().Str("reason", "PendingNodeUpgrade").
 		Str("operation_id", operationID).Str("cr_name", cr.GetName()).

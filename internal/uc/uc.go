@@ -4,7 +4,6 @@ package uc
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -13,6 +12,8 @@ import (
 	"github.com/automa-saga/logx"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/client-go/dynamic"
+
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // UC is the upgrade-controller sidecar. It runs two supervised monitors:
@@ -34,7 +35,8 @@ type UC struct {
 func New(cfg Config) (*UC, error) {
 	client, err := buildDynamicClient(cfg.KubeconfigPath)
 	if err != nil {
-		return nil, fmt.Errorf("uc: %w", err)
+		// Already an errx-decorated client error.
+		return nil, err
 	}
 
 	monitors := []daemonkit.MonitorRunner{
@@ -127,7 +129,10 @@ func (u *UC) ensureDirs() error {
 			continue
 		}
 		if err := os.MkdirAll(dir, 0o750); err != nil {
-			return fmt.Errorf("uc: create dir %s: %w", dir, err)
+			return errx.WithHints(
+				errx.WithReason(errPersist.Wrap(err, "create dir %s", dir), "WorkDirCreateFailed"),
+				"Confirm the UC working directories (--cr-persist-path, --events-path, --backup-path, --socket-path) are on writable volumes",
+			)
 		}
 	}
 	return nil

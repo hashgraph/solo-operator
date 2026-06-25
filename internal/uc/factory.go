@@ -4,13 +4,12 @@ package uc
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 
 	"github.com/automa-saga/logx"
+	"github.com/joomcode/errorx"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -18,6 +17,7 @@ import (
 	"k8s.io/client-go/dynamic"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // Factory constructs NetworkUpgrade* CRs from deployment-package manifests and
@@ -93,13 +93,13 @@ func (f *Factory) HandleExecuteImmediate(ctx context.Context) error {
 	if err != nil {
 		// The poller only dispatches after a successful Stat, so a failure here is
 		// a genuine race/IO error worth retrying on the next tick.
-		return fmt.Errorf("stat marker %s: %w", MarkerExecuteImmediate, err)
+		return errx.WithReason(errPersist.Wrap(err, "stat marker %s", MarkerExecuteImmediate), "MarkerStatFailed")
 	}
 
 	manifestPath := filepath.Join(f.cfg.MarkerPath, manifestsSubdir, componentsManifestFile)
 	manifest, err := parseComponentsManifest(manifestPath)
 	if err != nil {
-		if errors.Is(err, errManifestInvalid) {
+		if errorx.IsOfType(err, errManifestInvalid) {
 			// ManifestInvalid is terminal — re-reading the same bytes will not fix
 			// it. Log and halt this dispatch without creating a CR (no retry value).
 			logx.As().Error().Err(err).Str("reason", "ManifestInvalid").
@@ -107,7 +107,8 @@ func (f *Factory) HandleExecuteImmediate(ctx context.Context) error {
 				Msg("invalid consensus-node-components.yaml — halting prepare")
 			return nil
 		}
-		return fmt.Errorf("parse %s: %w", componentsManifestFile, err)
+		// Already an errx-decorated transient (read) error; surface as-is.
+		return err
 	}
 
 	operationID, err := mintOperationID(manifest.Images.ConsensusNode.Version, info.ModTime())
@@ -119,7 +120,7 @@ func (f *Factory) HandleExecuteImmediate(ctx context.Context) error {
 
 	cr, err := buildPrepareCR(f.cfg, operationID, manifest.Images)
 	if err != nil {
-		return fmt.Errorf("build NetworkUpgradePrepare for %s: %w", operationID, err)
+		return err
 	}
 	return f.deliverCR(ctx, networkUpgradePrepareGVR, operationID, operatorv1alpha1.StepPrepare, kindNetworkUpgradePrepare, cr)
 }
@@ -138,7 +139,8 @@ func (f *Factory) HandleExecuteImmediate(ctx context.Context) error {
 func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource, operationID, step, kind string, cr *unstructured.Unstructured) error {
 	exists, err := f.alreadyCreated(ctx, gvr, operationID, step)
 	if err != nil {
-		return fmt.Errorf("dedup check for %s/%s: %w", operationID, step, err)
+		// Already an errx-decorated K8s API error from the dedup query.
+		return err
 	}
 	if exists {
 		logx.As().Debug().Str("reason", "CRExists").Str("operation_id", operationID).
@@ -147,7 +149,8 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 	}
 
 	if _, err := f.store.Persist(operationID, step, cr); err != nil {
-		return fmt.Errorf("persist %s %s: %w", kind, operationID, err)
+		// Already an errx-decorated persist (disk) error.
+		return err
 	}
 
 	resource := f.client.Resource(gvr).Namespace(f.cfg.Namespace)
@@ -166,7 +169,11 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 			return nil
 		}
 		f.invalidate(operationID)
-		return fmt.Errorf("create %s %s: %w", kind, cr.GetName(), err)
+		return errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "create %s %s", kind, cr.GetName()), "CRCreateFailed"),
+			"Confirm the UC ServiceAccount has create permission on "+gvr.Resource+"."+gvr.Group,
+			"Check API server connectivity and that the CRD is installed",
+		)
 	}
 
 	// Success — record in the cache so steady-state ticks skip the API query, and
@@ -214,7 +221,8 @@ func (f *Factory) HandleNowFrozen(_ context.Context) error {
 func (f *Factory) HandleFreezeAborted(ctx context.Context) error {
 	operationID, err := f.resolveOperationID(ctx)
 	if err != nil {
-		return fmt.Errorf("resolve operationId for %s: %w", MarkerFreezeAborted, err)
+		// Already an errx-decorated K8s/persist error from the resolver.
+		return err
 	}
 	if operationID == "" {
 		// No NetworkUpgradePrepare exists in the cluster (source of truth) or on
@@ -234,7 +242,7 @@ func (f *Factory) HandleFreezeAborted(ctx context.Context) error {
 
 	cr, err := buildFreezeAbortCR(f.cfg, operationID)
 	if err != nil {
-		return fmt.Errorf("build NetworkUpgradeFreezeAbort for %s: %w", operationID, err)
+		return err
 	}
 	return f.deliverCR(ctx, networkUpgradeFreezeAbortGVR, operationID, operatorv1alpha1.StepAbort, kindNetworkUpgradeFreezeAbort, cr)
 }

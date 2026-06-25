@@ -5,11 +5,12 @@ package uc
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"time"
+
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // defaultControlTimeout bounds a single control-socket request.
@@ -71,21 +72,25 @@ func (c *ControlClient) StatusPretty(ctx context.Context) (string, error) {
 func (c *ControlClient) get(ctx context.Context, path string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://uc"+path, http.NoBody)
 	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
+		return nil, errx.WithReason(errControl.Wrap(err, "build request"), "ControlRequestFailed")
 	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("query %s on %s: %w", path, c.socketPath, err)
+		return nil, errx.WithHints(
+			errx.WithReason(errControl.Wrap(err, "query %s on %s", path, c.socketPath), "ControlDialFailed"),
+			"Confirm the UC sidecar is running and --socket-path matches its control socket",
+		)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
+		return nil, errx.WithReason(errControl.Wrap(err, "read response"), "ControlReadFailed")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("control server returned %s: %s", resp.Status, string(body))
+		return nil, errx.WithReason(
+			errControl.New("control server returned %s: %s", resp.Status, string(body)), "ControlBadStatus")
 	}
 	return body, nil
 }

@@ -4,13 +4,13 @@ package uc
 
 import (
 	"context"
-	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // Operation-id deduplication (HIP-1496 §"Operation-id Deduplication").
@@ -54,7 +54,11 @@ func (f *Factory) alreadyCreated(ctx context.Context, gvr schema.GroupVersionRes
 		// Cache accuracy is suspect after an API failure — drop this operationId so
 		// the next tick re-queries instead of trusting a stale (in)existence.
 		f.invalidate(operationID)
-		return false, fmt.Errorf("query existing %s for operation %q: %w", gvr.Resource, operationID, err)
+		return false, errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "query existing %s for operation %q", gvr.Resource, operationID), "DedupQueryFailed"),
+			"Confirm the UC ServiceAccount has list permission on "+gvr.Resource+"."+gvr.Group,
+			"Check API server connectivity",
+		)
 	}
 
 	found := false
@@ -112,7 +116,10 @@ func (f *Factory) seedCache(ctx context.Context) error {
 			List(listCtx, metav1.ListOptions{})
 		cancel()
 		if err != nil {
-			return fmt.Errorf("seed op-id cache from %s: %w", gvr.Resource, err)
+			return errx.WithHints(
+				errx.WithReason(errK8sAPI.Wrap(err, "seed op-id cache from %s", gvr.Resource), "CacheSeedFailed"),
+				"Confirm the UC ServiceAccount has list permission on "+gvr.Resource+"."+gvr.Group,
+			)
 		}
 		for i := range list.Items {
 			l := list.Items[i].GetLabels()
