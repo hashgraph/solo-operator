@@ -161,19 +161,30 @@ Look for a `PollIntervalChanged` line with `from=1s to=5s`.
 
 ## 6. Inspect the JSONL event log
 
-The UC writes a structured audit log (story 9.1) under `--events-path`. On
-startup it prunes old `upgrade-*.jsonl` files to the retention limit; per-upgrade
-event lines are appended as handlers are completed in later stories.
+The UC writes a structured audit log (story 9.1) under `--events-path`, one
+`upgrade-<operationId>.jsonl` file per upgrade.
+
+> **At story 8.1 the events directory stays empty — this is expected, not a
+> bug.** A `.jsonl` file is created only when a per-marker handler runs, and the
+> handlers are still stubs (#993+). On startup the monitor calls only
+> `events.Prune`, which *retains/deletes existing* logs to enforce the retention
+> limit — it never creates one. So with a fresh scratch directory there is
+> nothing to see yet. Dropping a marker (§4) logs `MarkerHandlerPending` to the
+> console but writes no event file.
+
+Once the handlers land, this is how you would inspect the log:
 
 ```bash
 ls -la "$UCDIR/events"
-# Tail any upgrade log as JSON lines:
+# Tail an upgrade log as JSON lines:
 cat "$UCDIR/events"/upgrade-*.jsonl 2>/dev/null | jq .
 ```
 
 Each line is a self-contained JSON object (timestamp, level, reason, message,
-and upgrade fields). If no upgrade has produced events yet, the directory may be
-empty — that is expected at the 8.1 stage.
+and upgrade fields).
+
+To exercise the writer/retention logic today, run its unit tests instead:
+`go test ./internal/uc/events/ -v`.
 
 ---
 
