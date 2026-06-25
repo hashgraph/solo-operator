@@ -104,5 +104,18 @@ func (r *ConfigMapSubReconciler) buildConfigMap(obj *operatorv1alpha1.NodeSettin
 }
 
 func (r *ConfigMapSubReconciler) needsUpdate(existing, desired *corev1.ConfigMap) bool {
-	return !maps.Equal(existing.Data, desired.Data) || !maps.Equal(existing.Labels, desired.Labels)
+	return !maps.Equal(existing.Data, desired.Data) ||
+		!maps.Equal(existing.Labels, desired.Labels) ||
+		!sameController(existing, desired)
+}
+
+// sameController reports whether existing and desired share the same controller owner
+// reference by UID. A missing controller ref on either side counts as a difference.
+func sameController(existing, desired *corev1.ConfigMap) bool {
+	ec := metav1.GetControllerOf(existing)
+	dc := metav1.GetControllerOf(desired)
+	if ec == nil || dc == nil {
+		return ec == nil && dc == nil
+	}
+	return ec.UID == dc.UID
 }
