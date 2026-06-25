@@ -40,8 +40,8 @@ func main() {
 		Long: "The UC sidecar polls the marker-file directory written by the consensus node " +
 			"and creates NetworkUpgrade* Custom Resources. In cluster-only mode it also " +
 			"advances the Execute CR from ReadyForProvisionerDaemon to PendingNodeUpgrade.",
-		PreRunE: bindEnv,
-		RunE:    run,
+		PersistentPreRunE: bindEnv,
+		RunE:              run,
 	}
 
 	root.AddCommand(versionCmd(), statusCmd(), healthCmd())
@@ -72,6 +72,10 @@ func main() {
 // default. The env var name is the flag name uppercased with '-' replaced by
 // '_' and the UC_ prefix, e.g. --node-id -> UC_NODE_ID, --poll-interval ->
 // UC_POLL_INTERVAL.
+//
+// It is wired as PersistentPreRunE so it also runs for subcommands: `uc status`
+// and `uc health` honour UC_SOCKET_PATH for their --socket-path flag. Each
+// invocation visits only the executing command's own flag set.
 func bindEnv(cmd *cobra.Command, _ []string) error {
 	var bindErr error
 	cmd.Flags().VisitAll(func(f *pflag.Flag) {
