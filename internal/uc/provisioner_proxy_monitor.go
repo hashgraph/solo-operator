@@ -124,20 +124,20 @@ func (pm *ProvisionerProxyMonitor) clearConnectivityError() {
 // NetworkUpgradeExecute CRs (seeding completedOpIDs and dispatching any already at
 // ReadyForProvisionerDaemon), then watches from the List's ResourceVersion.
 func (pm *ProvisionerProxyMonitor) Run(ctx context.Context) error {
-	logx.As().Info().Str("reason", "ProxyMonitorStarted").
+	logx.As().Info().Str("reason", "ProvisionerProxyMonitorStarted").
 		Str("namespace", pm.cfg.Namespace).Msg("provisioner-proxy monitor started")
 
 	backoff := proxyBackoffInitial
 	for {
 		listRV, listErr := pm.listAndSeed(ctx)
 		if ctx.Err() != nil {
-			logx.As().Info().Str("reason", "ProxyMonitorStopped").Msg("provisioner-proxy monitor stopped")
+			logx.As().Info().Str("reason", "ProvisionerProxyMonitorStopped").Msg("provisioner-proxy monitor stopped")
 			return nil
 		}
 		if listErr != nil {
-			pm.setConnectivityError("ProxyListError", listErr.Error(),
+			pm.setConnectivityError("ProvisionerProxyListError", listErr.Error(),
 				fmt.Sprintf("Verify RBAC for networkupgradeexecutes in namespace %s", pm.cfg.Namespace))
-			logx.As().Warn().Err(listErr).Str("reason", "ProxyListError").
+			logx.As().Warn().Err(listErr).Str("reason", "ProvisionerProxyListError").
 				Dur("retry_in", backoff).Msg("list error — retrying")
 			if !sleepCtx(ctx, backoff) {
 				return nil
@@ -149,7 +149,7 @@ func (pm *ProvisionerProxyMonitor) Run(ctx context.Context) error {
 
 		err := pm.runWatch(ctx, listRV)
 		if ctx.Err() != nil {
-			logx.As().Info().Str("reason", "ProxyMonitorStopped").Msg("provisioner-proxy monitor stopped")
+			logx.As().Info().Str("reason", "ProvisionerProxyMonitorStopped").Msg("provisioner-proxy monitor stopped")
 			return nil
 		}
 		if err == nil {
@@ -161,14 +161,14 @@ func (pm *ProvisionerProxyMonitor) Run(ctx context.Context) error {
 			continue
 		}
 		if isAuthError(err) {
-			pm.setConnectivityError("ProxyAuthError", err.Error(),
+			pm.setConnectivityError("ProvisionerProxyAuthError", err.Error(),
 				"Restore RBAC for the UC ServiceAccount on networkupgradeexecutes")
-			logx.As().Warn().Err(err).Str("reason", "ProxyAuthError").
+			logx.As().Warn().Err(err).Str("reason", "ProvisionerProxyAuthError").
 				Dur("retry_in", backoff).Msg("auth error watching NetworkUpgradeExecute")
 		} else {
-			pm.setConnectivityError("ProxyWatchError", err.Error(),
+			pm.setConnectivityError("ProvisionerProxyWatchError", err.Error(),
 				"Check connectivity to the Kubernetes API server")
-			logx.As().Warn().Err(err).Str("reason", "ProxyWatchError").
+			logx.As().Warn().Err(err).Str("reason", "ProvisionerProxyWatchError").
 				Dur("retry_in", backoff).Msg("watch error — retrying")
 		}
 		if !sleepCtx(ctx, backoff) {
@@ -236,7 +236,7 @@ func (pm *ProvisionerProxyMonitor) listAndSeed(ctx context.Context) (string, err
 func (pm *ProvisionerProxyMonitor) runWatch(ctx context.Context, resourceVersion string) (retErr error) {
 	defer func() {
 		if r := recover(); r != nil {
-			logx.As().Error().Str("reason", "ProxyWatchPanic").Interface("panic", r).
+			logx.As().Error().Str("reason", "ProvisionerProxyWatchPanic").Interface("panic", r).
 				Msg("panic in watch loop — recovering")
 			retErr = fmt.Errorf("recovered panic: %v", r)
 		}
@@ -286,7 +286,7 @@ func (pm *ProvisionerProxyMonitor) handleEvent(ctx context.Context, cr *unstruct
 	}
 	operationID := operationIDOf(cr)
 	if operationID == "" {
-		logx.As().Warn().Str("reason", "ProxyMissingOperationID").
+		logx.As().Warn().Str("reason", "ProvisionerProxyMissingOperationID").
 			Str("cr_name", cr.GetName()).Msg("Execute CR has no spec.operationId — ignoring")
 		return
 	}
@@ -300,7 +300,7 @@ func (pm *ProvisionerProxyMonitor) handleEvent(ctx context.Context, cr *unstruct
 		active := pm.activeOpID
 		pm.mu.Unlock()
 		if active != operationID {
-			logx.As().Warn().Str("reason", "ProxyBusy").
+			logx.As().Warn().Str("reason", "ProvisionerProxyBusy").
 				Str("active", active).Str("incoming", operationID).
 				Msg("another transition is in-flight — rejecting")
 		}
@@ -317,7 +317,7 @@ func (pm *ProvisionerProxyMonitor) handleEvent(ctx context.Context, cr *unstruct
 		var transErr error
 		defer func() {
 			if r := recover(); r != nil {
-				logx.As().Error().Str("reason", "ProxyTransitionPanic").
+				logx.As().Error().Str("reason", "ProvisionerProxyTransitionPanic").
 					Str("operation_id", operationID).Interface("panic", r).
 					Msg("transition panicked — UC continues")
 			}
@@ -332,7 +332,7 @@ func (pm *ProvisionerProxyMonitor) handleEvent(ctx context.Context, cr *unstruct
 		}()
 		transErr = pm.handleExecute(ctx, cr)
 		if transErr != nil {
-			logx.As().Error().Err(transErr).Str("reason", "ProxyTransitionFailed").
+			logx.As().Error().Err(transErr).Str("reason", "ProvisionerProxyTransitionFailed").
 				Str("operation_id", operationID).Msg("transition to PendingNodeUpgrade failed")
 		}
 	}()
