@@ -11,10 +11,11 @@ persist-before-send primitive from **story 8.2** (#992), the
 (#993), the `freeze_aborted.mf` → `NetworkUpgradeFreezeAbort` handler from
 **story 8.6** (#996), and the operation-id deduplication from **story 8.7**
 (#997). When you drop `execute_immediate.mf` you will now see the loop construct,
-persist, and create a real `NetworkUpgradePrepare` CR (§4a). The remaining
-per-marker handlers (#994–#996), the dedup cache (#997), and cleanup/recovery
-(#998) are still stubbed — dropping one of those markers logs a "handler not yet
-implemented" line rather than a created CR.
+persist, and create a real `NetworkUpgradePrepare` CR (§4a); dropping
+`freeze_aborted.mf` likewise creates a `NetworkUpgradeFreezeAbort` CR (§4b). The
+remaining per-marker handlers (#994 `freeze_scheduled.mf`, #995 `now_frozen.mf`)
+and cleanup/recovery (#998) are still stubbed — dropping one of those markers
+logs a "handler not yet implemented" line rather than a created CR.
 
 ---
 

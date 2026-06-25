@@ -21,12 +21,15 @@ import (
 //
 //   - Authoritative guard: a cluster query for an existing CR carrying the same
 //     operation-id label. This is crash-safe — a restart re-queries and finds
-//     the CR the previous process created. Correctness rests here alone.
+//     the CR the previous process created. Backed by AlreadyExists on Create as
+//     the ultimate, race-proof guard (first-detection-wins), so a stale or
+//     missing cache entry can never cause a duplicate CR.
 //   - Performance cache: an in-memory operationId -> set-of-steps map that lets
 //     steady-state ticks skip the API round-trip. It is a hint only: seeded by a
 //     startup query, populated on every successful create/observe, and dropped
-//     for an operationId on ANY API error so the next action re-queries. The
-//     cache is never trusted for correctness, only to avoid a redundant call.
+//     for an operationId on ANY API error so the next action re-queries. A cache
+//     hit short-circuits the query, but its accuracy is maintained by the query
+//     and create paths above — it is never the sole basis for correctness.
 
 // alreadyCreated reports whether a CR for operationID+step already exists. It
 // consults the in-memory cache first; on a miss it falls back to the

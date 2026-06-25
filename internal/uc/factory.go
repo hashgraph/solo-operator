@@ -17,6 +17,7 @@ import (
 	"k8s.io/client-go/dynamic"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
@@ -36,7 +37,8 @@ type Factory struct {
 	store *CRStore
 
 	// mu guards the operation-id cache (#997). The cache is a performance hint
-	// only; correctness rests on the K8s API existence check before each create.
+	// only; correctness rests on the K8s API existence check before each create,
+	// backstopped by AlreadyExists on Create (first-detection-wins).
 	mu    sync.Mutex
 	cache map[string]map[string]struct{} // operationId -> set of created steps
 }
@@ -64,7 +66,9 @@ func NewFactory(cfg Config, client dynamic.Interface) *Factory {
 // up artifacts for upgrades that have already reached a terminal phase.
 func (f *Factory) RecoverOnStartup(ctx context.Context) error {
 	if err := f.seedCache(ctx); err != nil {
-		logx.As().Warn().Err(err).Str("reason", ReasonUCCacheSeedFailed.String()).
+		// Use the error's own reason (ReasonCacheSeedFailed from seedCache) so the
+		// log line and the error share one identifier; fall back only if absent.
+		common.LogErr(logx.As().Warn(), err, ReasonUCCacheSeedFailed).
 			Msg("could not seed op-id dedup cache on startup; per-action queries remain authoritative")
 		return nil
 	}
@@ -154,7 +158,9 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 	}
 
 	resource := f.client.Resource(gvr).Namespace(f.cfg.Namespace)
-	if _, err := resource.Create(ctx, cr, metav1.CreateOptions{}); err != nil {
+	createCtx, cancel := context.WithTimeout(ctx, createTimeout)
+	defer cancel()
+	if _, err := resource.Create(createCtx, cr, metav1.CreateOptions{}); err != nil {
 		if k8serrors.IsAlreadyExists(err) {
 			// Created on a prior tick (e.g. a race past the dedup query). Record it
 			// so future ticks hit the cache, drop the now-redundant persisted file,

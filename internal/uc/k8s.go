@@ -49,6 +49,11 @@ const (
 	// governed by watch TimeoutSeconds server-side); see buildDynamicClient for
 	// why a client-wide rest.Config.Timeout is unsafe for watches.
 	listTimeout = 30 * time.Second
+
+	// createTimeout bounds a single CR Create call. Applied per-call via
+	// context.WithTimeout so a stalled API server cannot block the marker poll
+	// loop indefinitely — the handler fails fast and retries on the next tick.
+	createTimeout = 30 * time.Second
 )
 
 func gvr(resource string) schema.GroupVersionResource {

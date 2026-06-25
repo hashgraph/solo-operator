@@ -85,3 +85,5 @@ debug
 
 # semantic-release UC version marker
 .release-version-uc
+CLAUDE.local.md
+.rtk/

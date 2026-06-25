@@ -169,7 +169,10 @@ func (s *CRStore) List() ([]PersistedCR, error) {
 // boundary rather than producing a file recovery cannot correlate.
 func fileName(operationID, step string) (string, error) {
 	if err := sanity.ValidateOperationID(operationID); err != nil {
-		return "", err
+		// Reason-code even this "should never happen" input so callers on the
+		// persist-before-send boundary always get an enumerable, log-correlatable
+		// error rather than a bare validation message.
+		return "", errx.WithReason(errCRBuild.Wrap(err, "invalid operationId %q", operationID), ReasonCRBuildFailed)
 	}
 	if _, ok := validSteps[step]; !ok {
 		return "", errx.WithReason(errCRBuild.New("unknown CR step %q", step), ReasonCRBuildFailed)
