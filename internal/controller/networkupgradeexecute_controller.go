@@ -475,6 +475,12 @@ func (r *NetworkUpgradeExecuteReconciler) applyImagePatch(
 		ensureStream(&capsule.Spec.PodProperties.Containers.BackupUploader, img)
 	}
 
+	if img, remove, upgrade := applyComponent(operatorv1alpha1.ComponentUC); remove {
+		capsule.Spec.PodProperties.Containers.UC = nil
+	} else if upgrade {
+		ensureUC(&capsule.Spec.PodProperties.Containers.UC, img)
+	}
+
 }
 
 func (r *NetworkUpgradeExecuteReconciler) checkPodReady(
@@ -554,6 +560,13 @@ func ensureCheetah(ptr **operatorv1alpha1.CheetahUploader, image string) {
 func ensureStream(ptr **operatorv1alpha1.StreamUploader, image string) {
 	if *ptr == nil {
 		*ptr = &operatorv1alpha1.StreamUploader{}
+	}
+	setSoftwareVersion(&(*ptr).SoftwareVersion, image)
+}
+
+func ensureUC(ptr **operatorv1alpha1.UcSidecar, image string) {
+	if *ptr == nil {
+		*ptr = &operatorv1alpha1.UcSidecar{}
 	}
 	setSoftwareVersion(&(*ptr).SoftwareVersion, image)
 }

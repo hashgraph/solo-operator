@@ -554,11 +554,7 @@ func TestAddSidecarContainers_NilSidecars_EmitsComponentSkipped(t *testing.T) {
 	}
 
 	evts := collectEvents(rec)
-	for _, component := range []string{"blockStreamUploader", "recordStreamUploader", "eventStreamUploader", "backupUploader", "alloy"} {
-		if got := countEventsContaining(evts, operatorv1alpha1.EventComponentSkipped); got == 0 {
-			t.Errorf("expected ComponentSkipped events, got none for %s in %v", component, evts)
-			break
-		}
+	for _, component := range []string{"blockStreamUploader", "recordStreamUploader", "eventStreamUploader", "backupUploader", "uc", "alloy"} {
 		if got := countEventsContaining(evts, component); got != 1 {
 			t.Errorf("expected one ComponentSkipped event for %s, got %d in %v", component, got, evts)
 		}
@@ -578,6 +574,7 @@ func TestAddSidecarContainers_DisabledSidecars_EmitsSidecarDisabled(t *testing.T
 	capsule.Spec.PodProperties.Containers.RecordsUploader = &operatorv1alpha1.CheetahUploader{Enabled: disabled}
 	capsule.Spec.PodProperties.Containers.EventsUploader = &operatorv1alpha1.CheetahUploader{Enabled: disabled}
 	capsule.Spec.PodProperties.Containers.BackupUploader = &operatorv1alpha1.StreamUploader{Enabled: disabled}
+	capsule.Spec.PodProperties.Containers.UC = &operatorv1alpha1.UcSidecar{Enabled: disabled}
 	sts := &appsv1.StatefulSet{}
 
 	if err := r.addSidecarContainers(sts, capsule, nil); err != nil {
@@ -585,15 +582,14 @@ func TestAddSidecarContainers_DisabledSidecars_EmitsSidecarDisabled(t *testing.T
 	}
 
 	evts := collectEvents(rec)
-	for _, component := range []string{"blockStreamUploader", "recordStreamUploader", "eventStreamUploader", "backupUploader"} {
+	for _, component := range []string{"blockStreamUploader", "recordStreamUploader", "eventStreamUploader", "backupUploader", "uc"} {
 		if got := countEventsContaining(evts, component); got != 1 {
 			t.Errorf("expected one SidecarDisabled event for %s, got %d in %v", component, got, evts)
 		}
 	}
-	if got := countEventsContaining(evts, operatorv1alpha1.EventSidecarDisabled); got != 4 {
-		t.Errorf("expected 4 SidecarDisabled events, got %d in %v", got, evts)
+	if got := countEventsContaining(evts, operatorv1alpha1.EventSidecarDisabled); got != 5 {
+		t.Errorf("expected 5 SidecarDisabled events, got %d in %v", got, evts)
 	}
-	// alloy nil → ComponentSkipped, not SidecarDisabled
 	if got := countEventsContaining(evts, "alloy"); got != 1 {
 		t.Errorf("expected one ComponentSkipped event for alloy, got %d in %v", got, evts)
 	}
@@ -622,6 +618,10 @@ func TestAddSidecarContainers_EnabledSidecars_NoSkipOrDisableEvents(t *testing.T
 		Enabled:         enabled,
 		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "gcr.io", ImageName: "backup", ImageTag: "1.0"},
 	}
+	capsule.Spec.PodProperties.Containers.UC = &operatorv1alpha1.UcSidecar{
+		Enabled:         enabled,
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "gcr.io", ImageName: "uc", ImageTag: "1.0"},
+	}
 	alloyEnabled := &operatorv1alpha1.AlloyConfig{Enabled: true,
 		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "gcr.io", ImageName: "alloy", ImageTag: "1.0"},
 	}
@@ -637,5 +637,54 @@ func TestAddSidecarContainers_EnabledSidecars_NoSkipOrDisableEvents(t *testing.T
 	}
 	if got := countEventsContaining(evts, operatorv1alpha1.EventSidecarDisabled); got != 0 {
 		t.Errorf("expected no SidecarDisabled events, got %d in %v", got, evts)
+	}
+}
+
+func TestBuildUcContainer_Defaults(t *testing.T) {
+	r := newStsReconciler()
+	config := &operatorv1alpha1.UcSidecar{
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "gcr.io", ImageName: "uc", ImageTag: "1.0"},
+		Enabled:         true,
+	}
+	c := r.buildUcContainer(config)
+	if c.Name != "uc" {
+		t.Errorf("name: got %q, want %q", c.Name, "uc")
+	}
+	if c.Image != "gcr.io/uc:1.0" {
+		t.Errorf("image: got %q, want %q", c.Image, "gcr.io/uc:1.0")
+	}
+	if c.ImagePullPolicy != corev1.PullIfNotPresent {
+		t.Errorf("imagePullPolicy: got %q, want IfNotPresent", c.ImagePullPolicy)
+	}
+}
+
+func TestBuildUcContainer_CustomNameAndImage(t *testing.T) {
+	r := newStsReconciler()
+	config := &operatorv1alpha1.UcSidecar{
+		Name:    "my-uc",
+		Image:   "custom.io/uc:latest",
+		Enabled: true,
+	}
+	c := r.buildUcContainer(config)
+	if c.Name != "my-uc" {
+		t.Errorf("name: got %q, want %q", c.Name, "my-uc")
+	}
+	if c.Image != "custom.io/uc:latest" {
+		t.Errorf("image: got %q, want %q", c.Image, "custom.io/uc:latest")
+	}
+}
+
+func TestBuildUcContainer_AdditionalVolumeMounts(t *testing.T) {
+	r := newStsReconciler()
+	config := &operatorv1alpha1.UcSidecar{
+		Image:   "gcr.io/uc:1.0",
+		Enabled: true,
+		AdditionalVolumeMounts: []corev1.VolumeMount{
+			{Name: "data", MountPath: "/data"},
+		},
+	}
+	c := r.buildUcContainer(config)
+	if len(c.VolumeMounts) != 1 || c.VolumeMounts[0].Name != "data" {
+		t.Errorf("volumeMounts: got %v", c.VolumeMounts)
 	}
 }
