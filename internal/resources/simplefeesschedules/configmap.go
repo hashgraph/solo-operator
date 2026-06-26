@@ -33,7 +33,7 @@ func NewConfigMapSubReconciler(c client.Client, scheme *runtime.Scheme, recorder
 }
 
 func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1alpha1.SimpleFeesSchedules) (ctrl.Result, error) {
-	if err := ValidateContent(obj.Spec.Content); err != nil {
+	if err := common.ValidateJSON(obj.Spec.Content, "simpleFeesSchedules.json"); err != nil {
 		return r.reject(obj, "InvalidContent", err.Error())
 	}
 
