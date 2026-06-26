@@ -11,9 +11,26 @@ Copied verbatim from [hiero-local-node](https://github.com/hiero-ledger/hiero-lo
 at commit `e2a7aeaa6664bc8eef580e16687ca9eea00e0d0d`, path
 `compose-network/network-node/`.
 
-These are **public test fixtures** (default local-node config, well-known test
-keys/certs) — not secrets. They exist only to make the package installable for
-local UC sidecar testing and must never be used for a real network.
+## ⚠️ TEST-ONLY CREDENTIALS — NOT SECRETS
+
+This directory intentionally contains private keys and certificates:
+
+- `data/keys/s-private-node{1..4}.pem`, `data/keys/s-public-node{1..4}.pem`
+- `hedera.key`, `hedera.crt`
+
+**These are well-known, publicly published fixtures** from the open-source
+[hiero-local-node](https://github.com/hiero-ledger/hiero-local-node) project
+(Apache-2.0). They are committed deliberately so the package is installable for
+local UC sidecar testing **without any external clone**.
+
+They are **NOT secrets** and carry **no security value**:
+
+- they are identical for every checkout of hiero-local-node and this repo,
+- they protect nothing — no real network, account, or environment uses them,
+- they **must NEVER be used in production** or any non-local environment.
+
+Any secret-scanning / security-audit finding on these files is a **false
+positive** and may be suppressed with this note as justification.
 
 ## Refreshing
 

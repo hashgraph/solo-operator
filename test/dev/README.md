@@ -11,6 +11,13 @@ platform. These are exactly what the operator recomputes and verifies in
 [`internal/registry/checker.go`](../../internal/registry/checker.go), so a
 package built here passes deterministic verification.
 
+> ⚠️ **Test-only credentials.** [`overlay/`](overlay/) contains private keys and
+> certs (`data/keys/*.pem`, `hedera.key`, `hedera.crt`) vendored from the public
+> [hiero-local-node](https://github.com/hiero-ledger/hiero-local-node) project.
+> They are **public, well-known test fixtures — not secrets** — and must **never
+> be used in production**. Any secret-scanner finding on them is a false
+> positive (see [overlay/README.md](overlay/README.md)).
+
 ## Prerequisites
 
 - `task` ([taskfile.dev](https://taskfile.dev))

@@ -151,8 +151,33 @@ live under `<marker-path>/manifests/`. The handler reads
 `manifests/consensus-node-components.yaml`, mints an `operationId`, and creates a
 `NetworkUpgradePrepare` CR.
 
-First lay out a minimal package manifest next to the markers (mirrors the real
-extracted layout):
+You can populate the marker directory two ways.
+
+**Option A — build a realistic `build.zip` (recommended).** The `test/dev`
+Taskfile builds the same deployment package the consensus node extracts,
+including `manifests/consensus-node-components.yaml` with **real deterministic
+layer hashes** (the RootFS `diff_ids` of the published consensus-node image, so
+the operator's deterministic verification passes). Requires `crane` + `jq`
+(`go install github.com/google/go-containerregistry/cmd/crane@latest`).
+
+```bash
+( cd test/dev && task setup && task build )   # -> test/dev/staging/build-v<ver>.zip
+
+# Extract it into the marker dir, mirroring what the CN does on-node:
+unzip -q test/dev/staging/build-v*.zip -d "$UCDIR/markers"
+ls "$UCDIR/markers/manifests/consensus-node-components.yaml"   # present
+
+# Now trigger the handler
+touch "$UCDIR/markers/execute_immediate.mf"
+```
+
+See [test/dev/README.md](../../test/dev/README.md) for build options (version,
+image, platforms) and the `overlay:update` task.
+
+**Option B — hand-write a minimal manifest (quick smoke test).** Lay out just
+the manifest the handler reads. The layer hash below is a placeholder — fine for
+exercising the UC parse/create path, but it will not pass real deterministic
+verification (use Option A for that):
 
 ```bash
 mkdir -p "$UCDIR/markers/manifests"
@@ -167,7 +192,7 @@ images:
         linux/amd64:
           - "sha256:abc123"
     registries:
-      - image: "ghcr.io/hashgraph/consensus-node:0.75.0"
+      - image: "gcr.io/hedera-registry/consensus-node:0.75.0"
 YAML
 
 # Now trigger the handler
