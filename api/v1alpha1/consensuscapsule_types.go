@@ -47,6 +47,41 @@ type ConsensusCapsuleSpec struct {
 	// +kubebuilder:validation:MinLength=1
 	ApplicationPropertiesRef string `json:"applicationPropertiesRef"`
 
+	// references an ApiPermissionProperties CR whose managed ConfigMap is subPath-mounted
+	// at data/config/api-permission.properties. Optional — CN falls back to defaults.
+	// +optional
+	ApiPermissionPropertiesRef string `json:"apiPermissionPropertiesRef,omitempty"`
+
+	// references a NodeProperties CR whose managed ConfigMap is subPath-mounted
+	// at data/config/node.properties. Optional — CN falls back to defaults.
+	// +optional
+	NodePropertiesRef string `json:"nodePropertiesRef,omitempty"`
+
+	// references a ThrottlesConfig CR whose managed ConfigMap is subPath-mounted
+	// at data/config/throttles.json. Optional — CN falls back to defaults.
+	// +optional
+	ThrottlesConfigRef string `json:"throttlesConfigRef,omitempty"`
+
+	// references a FeeSchedules CR whose managed ConfigMap is subPath-mounted
+	// at data/config/feeSchedules.json. Optional — CN falls back to defaults.
+	// +optional
+	FeeSchedulesRef string `json:"feeSchedulesRef,omitempty"`
+
+	// references a SimpleFeesSchedules CR whose managed ConfigMap is subPath-mounted
+	// at data/config/simpleFeesSchedules.json. Optional — CN falls back to defaults.
+	// +optional
+	SimpleFeesSchedulesRef string `json:"simpleFeesSchedulesRef,omitempty"`
+
+	// references an ApplicationOverrideProperties CR whose managed ConfigMap is subPath-mounted
+	// at data/config/application-override.properties. Optional — CN falls back to defaults.
+	// +optional
+	ApplicationOverridePropertiesRef string `json:"applicationOverridePropertiesRef,omitempty"`
+
+	// references a BootstrapProperties CR whose managed ConfigMap is subPath-mounted
+	// at data/config/bootstrap.properties. Optional — CN falls back to defaults.
+	// +optional
+	BootstrapPropertiesRef string `json:"bootstrapPropertiesRef,omitempty"`
+
 	// sets CONSENSUS_NODE_ALIAS env consumed by entrypoint.sh
 	// +optional
 	NodeAlias string `json:"nodeAlias,omitempty"`

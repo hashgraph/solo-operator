@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 )
 
@@ -129,4 +130,20 @@ type genesisNodeMetadata struct {
 
 type genesisNetworkFile struct {
 	NodeMetadata []genesisNodeMetadata `json:"nodeMetadata"`
+}
+
+// ValidatePassthroughJSON checks that raw is valid JSON containing a non-empty
+// "nodeMetadata" array — the minimum shape of the Network proto projection.
+func ValidatePassthroughJSON(raw string) error {
+	if !json.Valid([]byte(raw)) {
+		return errors.New("not valid JSON")
+	}
+	var probe genesisNetworkFile
+	if err := json.Unmarshal([]byte(raw), &probe); err != nil {
+		return fmt.Errorf("parse failed: %w", err)
+	}
+	if len(probe.NodeMetadata) == 0 {
+		return errors.New("nodeMetadata array is missing or empty")
+	}
+	return nil
 }

@@ -56,6 +56,13 @@ spec:
               Spec.Roster is set the reconciler uses it directly; otherwise it discovers
               nodes from ConsensusCapsule CRs and Orbit external addresses.
             properties:
+              genesisNetworkJSON:
+                description: |-
+                  GenesisNetworkJSON is an optional pre-built genesis-network.json (complete Network proto,
+                  JSON-encoded). When set, its content is written verbatim to the genesis-config ConfigMap,
+                  skipping roster assembly and discovery. Intended for fresh cluster-only genesis; the
+                  mainnet-daemon provisioning path does not populate this field.
+                type: string
               operationId:
                 type: string
               orbit:

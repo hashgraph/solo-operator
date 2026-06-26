@@ -90,8 +90,8 @@ func TestResourceNames(t *testing.T) {
 		t.Errorf("expected role binding name node0-rb, got %s", got)
 	}
 
-	if got := DataConfigMapName(capsule); got != "node0-data-config-cm" {
-		t.Errorf("expected data config map name node0-data-config-cm, got %s", got)
+	if got := DataConfigMapName(capsule); got != "node0-genesis-properties-cm" {
+		t.Errorf("expected data config map name node0-genesis-properties-cm, got %s", got)
 	}
 
 	if got := BlockNodesConfigMapName(capsule); got != "node0-block-nodes-cm" {
@@ -381,19 +381,16 @@ func TestDataConfigMapSubReconciler(t *testing.T) {
 	}
 
 	cm := &corev1.ConfigMap{}
-	if err := c.Get(ctx, client.ObjectKey{Name: "node0-data-config-cm", Namespace: "test-namespace"}, cm); err != nil {
-		t.Fatalf("failed to get data-config ConfigMap: %v", err)
+	if err := c.Get(ctx, client.ObjectKey{Name: "node0-genesis-properties-cm", Namespace: "test-namespace"}, cm); err != nil {
+		t.Fatalf("failed to get genesis-properties ConfigMap: %v", err)
 	}
 
 	if _, ok := cm.Data["application.properties"]; ok {
-		t.Error("application.properties must not be in data-config-cm (owned by ApplicationProperties CR)")
+		t.Error("application.properties must not be in genesis-properties-cm (owned by ApplicationProperties CR)")
 	}
 
-	if cm.Data["api-permission.properties"] == "" {
-		t.Error("expected api-permission.properties to be populated from Orbit")
-	}
-	if got := cm.Data["api-permission.properties"]; got != "getVersionInfo=EVERYBODY\n" {
-		t.Errorf("unexpected api-permission.properties: %q", got)
+	if _, ok := cm.Data["api-permission.properties"]; ok {
+		t.Error("api-permission.properties must not be in genesis-properties-cm (owned by ApiPermissionProperties CR)")
 	}
 }
 
@@ -665,7 +662,7 @@ func TestStatefulSetVolumes_DefaultEmptyDir(t *testing.T) {
 	}
 
 	// ConfigMap volumes must be present
-	for _, cmVol := range []string{"log4j2-config", "settings-config", "data-config"} {
+	for _, cmVol := range []string{"log4j2-config", "settings-config", "genesis-properties-config"} {
 		v, ok := volByName[cmVol]
 		if !ok {
 			t.Errorf("expected volume %s", cmVol)

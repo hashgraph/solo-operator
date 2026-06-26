@@ -23,10 +23,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/resources/apipermissionproperties"
+	"github.com/hashgraph/solo-operator/internal/resources/applicationoverrideproperties"
 	"github.com/hashgraph/solo-operator/internal/resources/applicationproperties"
+	"github.com/hashgraph/solo-operator/internal/resources/bootstrapproperties"
 	"github.com/hashgraph/solo-operator/internal/resources/consensus"
+	"github.com/hashgraph/solo-operator/internal/resources/feeschedules"
 	"github.com/hashgraph/solo-operator/internal/resources/log4j2config"
+	"github.com/hashgraph/solo-operator/internal/resources/nodeproperties"
 	"github.com/hashgraph/solo-operator/internal/resources/nodesettings"
+	"github.com/hashgraph/solo-operator/internal/resources/simplefeesschedules"
+	"github.com/hashgraph/solo-operator/internal/resources/throttlesconfig"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -138,11 +145,32 @@ type configRef struct {
 }
 
 func (r *ConsensusCapsuleReconciler) configRefs(c *operatorv1alpha1.ConsensusCapsule) []configRef {
-	return []configRef{
+	// Required refs — always checked regardless of whether they are set.
+	refs := []configRef{
 		{"Log4j2ConfigReady", c.Spec.Log4j2ConfigRef, log4j2config.ConfigMapNameForRef(c.Spec.Log4j2ConfigRef)},
 		{"NodeSettingsReady", c.Spec.SettingsConfigRef, nodesettings.ConfigMapNameForRef(c.Spec.SettingsConfigRef)},
 		{"ApplicationPropertiesReady", c.Spec.ApplicationPropertiesRef, applicationproperties.ConfigMapNameForRef(c.Spec.ApplicationPropertiesRef)},
 	}
+	// Optional refs — only checked when the ref field is non-empty; no condition is
+	// set when unset so the capsule is never blocked by an absent optional config.
+	for _, opt := range []struct {
+		condType string
+		ref      string
+		fn       func(string) string
+	}{
+		{"ApiPermissionPropertiesReady", c.Spec.ApiPermissionPropertiesRef, apipermissionproperties.ConfigMapNameForRef},
+		{"NodePropertiesReady", c.Spec.NodePropertiesRef, nodeproperties.ConfigMapNameForRef},
+		{"ThrottlesConfigReady", c.Spec.ThrottlesConfigRef, throttlesconfig.ConfigMapNameForRef},
+		{"FeeSchedulesReady", c.Spec.FeeSchedulesRef, feeschedules.ConfigMapNameForRef},
+		{"SimpleFeesSchedulesReady", c.Spec.SimpleFeesSchedulesRef, simplefeesschedules.ConfigMapNameForRef},
+		{"ApplicationOverridePropertiesReady", c.Spec.ApplicationOverridePropertiesRef, applicationoverrideproperties.ConfigMapNameForRef},
+		{"BootstrapPropertiesReady", c.Spec.BootstrapPropertiesRef, bootstrapproperties.ConfigMapNameForRef},
+	} {
+		if opt.ref != "" {
+			refs = append(refs, configRef{opt.condType, opt.ref, opt.fn(opt.ref)})
+		}
+	}
+	return refs
 }
 
 func (r *ConsensusCapsuleReconciler) checkConfigRefs(ctx context.Context, c *operatorv1alpha1.ConsensusCapsule) (bool, error) {

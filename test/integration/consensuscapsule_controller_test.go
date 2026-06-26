@@ -139,14 +139,14 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 
-			By("Verifying the data-config ConfigMap is created")
-			cmLookupKey := types.NamespacedName{Name: fmt.Sprintf("%s-data-config-cm", capsuleName), Namespace: capsuleNamespace}
+			By("Verifying the genesis-properties ConfigMap is created")
+			cmLookupKey := types.NamespacedName{Name: fmt.Sprintf("%s-genesis-properties-cm", capsuleName), Namespace: capsuleNamespace}
 			createdCM := &corev1.ConfigMap{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, cmLookupKey, createdCM)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
-			Expect(createdCM.Data).To(HaveKey("api-permission.properties"))
+			Expect(createdCM.Data).NotTo(HaveKey("api-permission.properties"))
 			Expect(createdCM.Data).NotTo(HaveKey("application.properties"))
 			Expect(createdCM.Data).NotTo(HaveKey("settings.txt"))
 			Expect(createdCM.Data).NotTo(HaveKey("log4j2.xml"))

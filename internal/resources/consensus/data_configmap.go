@@ -62,7 +62,7 @@ func (r *DataConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *ope
 	err = r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("Creating data-config ConfigMap", "name", desired.Name, "namespace", desired.Namespace)
+			logger.Info("Creating genesis-properties ConfigMap", "name", desired.Name, "namespace", desired.Namespace)
 			if err := r.Client.Create(ctx, desired); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -72,7 +72,7 @@ func (r *DataConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *ope
 	}
 
 	if !maps.Equal(existing.Data, desired.Data) {
-		logger.V(1).Info("Updating data-config ConfigMap", "name", desired.Name, "namespace", desired.Namespace)
+		logger.V(1).Info("Updating genesis-properties ConfigMap", "name", desired.Name, "namespace", desired.Namespace)
 		existing.Data = desired.Data
 		existing.Labels = desired.Labels
 		if err := r.Client.Update(ctx, existing); err != nil {
@@ -92,9 +92,7 @@ func MergeApplicationProperties(overrides map[string]string) string {
 }
 
 func (r *DataConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1.ConsensusCapsule, orbit *operatorv1alpha1.Orbit) *corev1.ConfigMap {
-	data := map[string]string{
-		"api-permission.properties": RenderProperties(orbit.Spec.Consensus.PermissionConfiguration),
-	}
+	data := map[string]string{}
 	if len(orbit.Spec.Consensus.GenesisProperties) > 0 {
 		data[GenesisPropertiesFileName] = RenderProperties(orbit.Spec.Consensus.GenesisProperties)
 	}

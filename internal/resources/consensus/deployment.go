@@ -20,9 +20,16 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
+	"github.com/hashgraph/solo-operator/internal/resources/apipermissionproperties"
+	"github.com/hashgraph/solo-operator/internal/resources/applicationoverrideproperties"
 	"github.com/hashgraph/solo-operator/internal/resources/applicationproperties"
+	"github.com/hashgraph/solo-operator/internal/resources/bootstrapproperties"
+	"github.com/hashgraph/solo-operator/internal/resources/feeschedules"
 	"github.com/hashgraph/solo-operator/internal/resources/log4j2config"
+	"github.com/hashgraph/solo-operator/internal/resources/nodeproperties"
 	"github.com/hashgraph/solo-operator/internal/resources/nodesettings"
+	"github.com/hashgraph/solo-operator/internal/resources/simplefeesschedules"
+	"github.com/hashgraph/solo-operator/internal/resources/throttlesconfig"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -307,6 +314,7 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 
 	// ── ConfigMap volumes ────────────────────────────────────────────────────
 	defaultMode := int32(420) // 0644
+	optionalTrue := true
 	volumes := []corev1.Volume{
 		{
 			Name: "log4j2-config",
@@ -336,7 +344,7 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 			},
 		},
 		{
-			Name: "data-config",
+			Name: "genesis-properties-config",
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{Name: DataConfigMapName(capsule)},
@@ -351,7 +359,7 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{Name: GenesisConfigMapName},
 					DefaultMode:          &defaultMode,
-					Optional:             func() *bool { b := true; return &b }(),
+					Optional:             &optionalTrue,
 				},
 			},
 		},
@@ -371,8 +379,46 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 		// data-config-dir is the writable data/config directory; individual files overlaid via subPath.
 		{Name: "data-config-dir", MountPath: HapiBase + "/data/config"},
 		{Name: "app-config", MountPath: HapiBase + "/data/config/application.properties", SubPath: "application.properties"},
-		{Name: "data-config", MountPath: HapiBase + "/data/config/api-permission.properties", SubPath: "api-permission.properties"},
-		{Name: "data-config", MountPath: HapiBase + "/data/config/" + GenesisPropertiesFileName, SubPath: GenesisPropertiesFileName},
+		{Name: "genesis-properties-config", MountPath: HapiBase + "/data/config/" + GenesisPropertiesFileName, SubPath: GenesisPropertiesFileName},
+	}
+
+	// ── Optional config CR volumes (only mounted when the ref is set) ─────────
+	optionalConfigs := []struct {
+		ref        string
+		volumeName string
+		cmNameFn   func(string) string
+		mountPath  string
+		subPath    string
+	}{
+		{capsule.Spec.ApiPermissionPropertiesRef, "api-permission-config", apipermissionproperties.ConfigMapNameForRef, HapiBase + "/data/config/api-permission.properties", "api-permission.properties"},
+		{capsule.Spec.NodePropertiesRef, "node-properties-config", nodeproperties.ConfigMapNameForRef, HapiBase + "/data/config/node.properties", "node.properties"},
+		{capsule.Spec.ThrottlesConfigRef, "throttles-config", throttlesconfig.ConfigMapNameForRef, HapiBase + "/data/config/throttles.json", "throttles.json"},
+		{capsule.Spec.FeeSchedulesRef, "fee-schedules-config", feeschedules.ConfigMapNameForRef, HapiBase + "/data/config/feeSchedules.json", "feeSchedules.json"},
+		{capsule.Spec.SimpleFeesSchedulesRef, "simple-fee-schedules-config", simplefeesschedules.ConfigMapNameForRef, HapiBase + "/data/config/simpleFeesSchedules.json", "simpleFeesSchedules.json"},
+		{capsule.Spec.ApplicationOverridePropertiesRef, "app-override-config", applicationoverrideproperties.ConfigMapNameForRef, HapiBase + "/data/config/application-override.properties", "application-override.properties"},
+		{capsule.Spec.BootstrapPropertiesRef, "bootstrap-config", bootstrapproperties.ConfigMapNameForRef, HapiBase + "/data/config/bootstrap.properties", "bootstrap.properties"},
+	}
+	for _, om := range optionalConfigs {
+		if om.ref == "" {
+			continue
+		}
+		cmName := om.cmNameFn(om.ref)
+		volumes = append(volumes, corev1.Volume{
+			Name: om.volumeName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: cmName},
+					DefaultMode:          &defaultMode,
+					Optional:             &optionalTrue,
+				},
+			},
+		})
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      om.volumeName,
+			MountPath: om.mountPath,
+			SubPath:   om.subPath,
+			ReadOnly:  true,
+		})
 	}
 
 	// block-nodes.json — only when BlockNodes is configured

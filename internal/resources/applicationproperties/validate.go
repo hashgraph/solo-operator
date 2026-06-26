@@ -3,8 +3,9 @@
 package applicationproperties
 
 import (
-	"fmt"
 	"strings"
+
+	"github.com/hashgraph/solo-operator/internal/common"
 )
 
 // ParseLedgerID extracts the value of the ledger.id key from Java-properties content.
@@ -28,20 +29,5 @@ func ParseLedgerID(content string) (string, error) {
 }
 
 func ValidateContent(content string) error {
-	if strings.TrimSpace(content) == "" {
-		return fmt.Errorf("application.properties content must not be empty")
-	}
-
-	for i, line := range strings.Split(content, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "!") {
-			continue
-		}
-		idx := strings.Index(trimmed, "=")
-		if idx < 1 {
-			return fmt.Errorf("line %d is not in key=value format: %q", i+1, trimmed)
-		}
-	}
-
-	return nil
+	return common.ValidateJavaProperties(content, "application.properties")
 }

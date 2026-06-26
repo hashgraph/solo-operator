@@ -57,6 +57,16 @@ spec:
               accountId:
                 description: node account ID
                 type: string
+              apiPermissionPropertiesRef:
+                description: |-
+                  references an ApiPermissionProperties CR whose managed ConfigMap is subPath-mounted
+                  at data/config/api-permission.properties. Optional — CN falls back to defaults.
+                type: string
+              applicationOverridePropertiesRef:
+                description: |-
+                  references an ApplicationOverrideProperties CR whose managed ConfigMap is subPath-mounted
+                  at data/config/application-override.properties. Optional — CN falls back to defaults.
+                type: string
               applicationPropertiesRef:
                 description: |-
                   references an ApplicationProperties CR in the same namespace whose managed ConfigMap
@@ -83,6 +93,11 @@ spec:
                       type: object
                     type: array
                 type: object
+              bootstrapPropertiesRef:
+                description: |-
+                  references a BootstrapProperties CR whose managed ConfigMap is subPath-mounted
+                  at data/config/bootstrap.properties. Optional — CN falls back to defaults.
+                type: string
               configFolder:
                 description: hostPath volume containing config.txt
                 properties:
@@ -103,6 +118,11 @@ spec:
                 type: object
               externalAddress:
                 description: external FQDN or IP
+                type: string
+              feeSchedulesRef:
+                description: |-
+                  references a FeeSchedules CR whose managed ConfigMap is subPath-mounted
+                  at data/config/feeSchedules.json. Optional — CN falls back to defaults.
                 type: string
               gossipPort:
                 default: 50111
@@ -145,6 +165,11 @@ spec:
                   type: string
                 description: node.properties key-value pairs
                 type: object
+              nodePropertiesRef:
+                description: |-
+                  references a NodeProperties CR whose managed ConfigMap is subPath-mounted
+                  at data/config/node.properties. Optional — CN falls back to defaults.
+                type: string
               offline:
                 default: false
                 description: Offline keeps the consensus pod scaled to zero when true.
@@ -20960,6 +20985,16 @@ spec:
                   references a NodeSettings CR in the same namespace whose managed ConfigMap
                   is mounted as settings.txt. Changes take effect on the next pod restart.
                 minLength: 1
+                type: string
+              simpleFeesSchedulesRef:
+                description: |-
+                  references a SimpleFeesSchedules CR whose managed ConfigMap is subPath-mounted
+                  at data/config/simpleFeesSchedules.json. Optional — CN falls back to defaults.
+                type: string
+              throttlesConfigRef:
+                description: |-
+                  references a ThrottlesConfig CR whose managed ConfigMap is subPath-mounted
+                  at data/config/throttles.json. Optional — CN falls back to defaults.
                 type: string
               weight:
                 description: consensus weight
