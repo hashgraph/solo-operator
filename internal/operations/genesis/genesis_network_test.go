@@ -153,3 +153,28 @@ func TestBuildGenesisNetworkJSON_AdminKeyOmitted(t *testing.T) {
 		t.Errorf("adminKey should be omitted when no admin key set; got:\n%s", out)
 	}
 }
+
+func TestValidatePassthroughJSON(t *testing.T) {
+	validJSON := `{"nodeMetadata":[{"rosterEntry":{"nodeId":"0","weight":"1","gossipCaCertificate":"","gossipEndpoint":[{"domainName":"h","port":50111}]},"node":{"nodeId":"0","accountId":{"shardNum":"0","realmNum":"0","accountNum":"3"},"description":"","gossipEndpoint":[{"domainName":"h","port":50111}],"serviceEndpoint":[{"domainName":"h","port":50211}],"gossipCaCertificate":"","weight":"1"}}]}`
+
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		{"valid JSON with nodeMetadata", validJSON, false},
+		{"not valid JSON", `{bad json`, true},
+		{"missing nodeMetadata key", `{"other":"value"}`, true},
+		{"empty nodeMetadata array", `{"nodeMetadata":[]}`, true},
+		{"empty string", ``, true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidatePassthroughJSON(tc.input)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("ValidatePassthroughJSON(%q) error = %v, wantErr %v", tc.name, err, tc.wantErr)
+			}
+		})
+	}
+}

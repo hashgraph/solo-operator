@@ -18,6 +18,13 @@ type NetworkGenesisSpec struct {
 
 	// +optional
 	Roster []NetworkGenesisRosterEntry `json:"roster,omitempty"`
+
+	// GenesisNetworkJSON is an optional pre-built genesis-network.json (complete Network proto,
+	// JSON-encoded). When set, its content is written verbatim to the genesis-config ConfigMap,
+	// skipping roster assembly and discovery. Intended for fresh cluster-only genesis; the
+	// mainnet-daemon provisioning path does not populate this field.
+	// +optional
+	GenesisNetworkJSON string `json:"genesisNetworkJSON,omitempty"`
 }
 
 type NetworkGenesisRosterEntry struct {

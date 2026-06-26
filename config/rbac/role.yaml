@@ -108,7 +108,7 @@ rules:
   - networkupgradefreezeaborts
   - networkupgradefreezes
   - networkupgradeprepares
-  - nodeproperties
+  - nodepropertiesconfigs
   - nodesettings
   - orbits
   - simplefeesschedules
@@ -121,31 +121,6 @@ rules:
   - patch
   - update
   - watch
-- apiGroups:
-  - operator.solo.hedera.com
-  resources:
-  - apipermissionproperties/finalizers
-  - applicationoverrideproperties/finalizers
-  - applicationproperties/finalizers
-  - bootstrapproperties/finalizers
-  - consensuscapsules/finalizers
-  - envoyproxies/finalizers
-  - feeschedules/finalizers
-  - haproxycapsules/finalizers
-  - helmcapsules/finalizers
-  - log4j2configs/finalizers
-  - networkgeneses/finalizers
-  - networkupgradeexecutes/finalizers
-  - networkupgradefreezeaborts/finalizers
-  - networkupgradefreezes/finalizers
-  - networkupgradeprepares/finalizers
-  - nodeproperties/finalizers
-  - nodesettings/finalizers
-  - orbits/finalizers
-  - simplefeesschedules/finalizers
-  - throttlesconfigs/finalizers
-  verbs:
-  - update
 - apiGroups:
   - operator.solo.hedera.com
   resources:
@@ -164,7 +139,7 @@ rules:
   - networkupgradefreezeaborts/status
   - networkupgradefreezes/status
   - networkupgradeprepares/status
-  - nodeproperties/status
+  - nodepropertiesconfigs/status
   - nodesettings/status
   - orbits/status
   - simplefeesschedules/status
@@ -172,6 +147,21 @@ rules:
   verbs:
   - get
   - patch
+  - update
+- apiGroups:
+  - operator.solo.hedera.com
+  resources:
+  - consensuscapsules/finalizers
+  - envoyproxies/finalizers
+  - haproxycapsules/finalizers
+  - helmcapsules/finalizers
+  - networkgeneses/finalizers
+  - networkupgradeexecutes/finalizers
+  - networkupgradefreezeaborts/finalizers
+  - networkupgradefreezes/finalizers
+  - networkupgradeprepares/finalizers
+  - orbits/finalizers
+  verbs:
   - update
 - apiGroups:
   - policy

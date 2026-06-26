@@ -4,7 +4,6 @@ package log4j2config
 
 import (
 	"context"
-	"maps"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -18,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -75,7 +75,7 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 		return ctrl.Result{}, err
 	}
 
-	if r.needsUpdate(existing, desired) {
+	if common.ConfigMapNeedsUpdate(existing, desired) {
 		logger.V(1).Info("Updating Log4j2 ConfigMap", "name", desired.Name, "namespace", desired.Namespace)
 		existing.Data = desired.Data
 		existing.Labels = desired.Labels
@@ -101,21 +101,4 @@ func (r *ConfigMapSubReconciler) buildConfigMap(obj *operatorv1alpha1.Log4j2Conf
 			ConfigFileName: obj.Spec.Content,
 		},
 	}
-}
-
-func (r *ConfigMapSubReconciler) needsUpdate(existing, desired *corev1.ConfigMap) bool {
-	return !maps.Equal(existing.Data, desired.Data) ||
-		!maps.Equal(existing.Labels, desired.Labels) ||
-		!sameController(existing, desired)
-}
-
-// sameController reports whether existing and desired share the same controller owner
-// reference by UID. A missing controller ref on either side counts as a difference.
-func sameController(existing, desired *corev1.ConfigMap) bool {
-	ec := metav1.GetControllerOf(existing)
-	dc := metav1.GetControllerOf(desired)
-	if ec == nil || dc == nil {
-		return ec == nil && dc == nil
-	}
-	return ec.UID == dc.UID
 }

@@ -314,6 +314,7 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 
 	// ── ConfigMap volumes ────────────────────────────────────────────────────
 	defaultMode := int32(420) // 0644
+	optionalTrue := true
 	volumes := []corev1.Volume{
 		{
 			Name: "log4j2-config",
@@ -358,7 +359,7 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{Name: GenesisConfigMapName},
 					DefaultMode:          &defaultMode,
-					Optional:             func() *bool { b := true; return &b }(),
+					Optional:             &optionalTrue,
 				},
 			},
 		},
@@ -382,7 +383,6 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 	}
 
 	// ── Optional config CR volumes (only mounted when the ref is set) ─────────
-	trueVal := true
 	optionalConfigs := []struct {
 		ref        string
 		volumeName string
@@ -409,7 +409,7 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{Name: cmName},
 					DefaultMode:          &defaultMode,
-					Optional:             &trueVal,
+					Optional:             &optionalTrue,
 				},
 			},
 		})

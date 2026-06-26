@@ -21,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -490,6 +491,97 @@ func hasConditionTrue(conditions []operatorv1alpha1.Condition, typ string) bool 
 		}
 	}
 	return false
+}
+
+func TestNetworkGenesisReconciler_PassthroughPath(t *testing.T) {
+	scheme := ngTestScheme(t)
+
+	preBuilt := `{"nodeMetadata":[{"rosterEntry":{"nodeId":"0","weight":"1","gossipCaCertificate":"","gossipEndpoint":[{"domainName":"node0.example","port":50111}]},"node":{"nodeId":"0","accountId":{"shardNum":"0","realmNum":"0","accountNum":"3"},"description":"node0","gossipEndpoint":[{"domainName":"node0.example","port":50111}],"serviceEndpoint":[{"domainName":"node0.example","port":50211}],"gossipCaCertificate":"","weight":"1"}}]}`
+
+	orbit := &operatorv1alpha1.Orbit{ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"}}
+	ng := &operatorv1alpha1.NetworkGenesis{
+		ObjectMeta: metav1.ObjectMeta{Name: "genesis-passthrough", Namespace: "test"},
+		Spec: operatorv1alpha1.NetworkGenesisSpec{
+			Orbit:              "test-orbit",
+			OperationID:        "genesis-pt-001",
+			GenesisNetworkJSON: preBuilt,
+		},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithStatusSubresource(&operatorv1alpha1.NetworkGenesis{}).
+		WithObjects(orbit, ng).Build()
+
+	r := NewNetworkGenesisReconciler(c, scheme)
+	r.Recorder = events.NewFakeRecorder(8)
+	name := types.NamespacedName{Namespace: "test", Name: "genesis-passthrough"}
+	reconcileToCompletion(t, r, name)
+
+	got := &operatorv1alpha1.NetworkGenesis{}
+	if err := c.Get(context.Background(), name, got); err != nil {
+		t.Fatalf("get NetworkGenesis: %v", err)
+	}
+	if got.Status.Phase != operatorv1alpha1.PhaseSucceeded {
+		t.Fatalf("expected Phase=Succeeded, got %s; conditions=%v", got.Status.Phase, got.Status.Conditions)
+	}
+
+	cm := &corev1.ConfigMap{}
+	if err := c.Get(context.Background(), types.NamespacedName{Namespace: "test", Name: genesis.GenesisConfigMapName}, cm); err != nil {
+		t.Fatalf("genesis-config ConfigMap not created: %v", err)
+	}
+	if cm.Data[genesis.GenesisNetworkFileName] != preBuilt {
+		t.Errorf("genesis-config content mismatch:\ngot:  %s\nwant: %s", cm.Data[genesis.GenesisNetworkFileName], preBuilt)
+	}
+
+	// addressbook-bin and public-keys are NOT produced in passthrough mode.
+	abCM := &corev1.ConfigMap{}
+	if err := c.Get(context.Background(), types.NamespacedName{Namespace: "test", Name: genesis.AddressBookBinConfigMapName}, abCM); err == nil {
+		t.Error("addressbook-bin ConfigMap should not be created in passthrough mode")
+	}
+}
+
+func TestNetworkGenesisReconciler_InvalidPassthrough(t *testing.T) {
+	scheme := ngTestScheme(t)
+
+	orbit := &operatorv1alpha1.Orbit{ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"}}
+	ng := &operatorv1alpha1.NetworkGenesis{
+		ObjectMeta: metav1.ObjectMeta{Name: "genesis-invalid", Namespace: "test"},
+		Spec: operatorv1alpha1.NetworkGenesisSpec{
+			Orbit:              "test-orbit",
+			OperationID:        "genesis-bad-001",
+			GenesisNetworkJSON: `{not valid json`,
+		},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithStatusSubresource(&operatorv1alpha1.NetworkGenesis{}).
+		WithObjects(orbit, ng).Build()
+
+	r := NewNetworkGenesisReconciler(c, scheme)
+	name := types.NamespacedName{Namespace: "test", Name: "genesis-invalid"}
+
+	// First reconcile installs the finalizer.
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: name}); err != nil {
+		t.Fatalf("first reconcile (finalizer install): %v", err)
+	}
+	// Second reconcile should fail due to invalid JSON.
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: name}); err == nil {
+		t.Fatal("expected reconcile error for invalid genesisNetworkJSON")
+	}
+
+	got := &operatorv1alpha1.NetworkGenesis{}
+	if err := c.Get(context.Background(), name, got); err != nil {
+		t.Fatalf("get NetworkGenesis: %v", err)
+	}
+	if got.Status.Phase != operatorv1alpha1.PhaseFailed {
+		t.Fatalf("expected Phase=Failed, got %s; conditions=%v", got.Status.Phase, got.Status.Conditions)
+	}
+
+	// genesis-config must NOT be created when validation fails.
+	cm := &corev1.ConfigMap{}
+	if err := c.Get(context.Background(), types.NamespacedName{Namespace: "test", Name: genesis.GenesisConfigMapName}, cm); err == nil {
+		t.Error("genesis-config ConfigMap must not be created when genesisNetworkJSON is invalid")
+	}
 }
 
 // snapshotConfigMaps returns (name → deterministic flattened bytes) for

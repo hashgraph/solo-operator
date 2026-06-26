@@ -9,6 +9,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -30,7 +31,8 @@ const (
 // created by solo-provisioner — never by the operator itself.
 type NetworkGenesisReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder events.EventRecorder
 }
 
 func NewNetworkGenesisReconciler(c client.Client, scheme *runtime.Scheme) *NetworkGenesisReconciler {
@@ -100,40 +102,56 @@ func (r *NetworkGenesisReconciler) run(ctx context.Context, ng *operatorv1alpha1
 		return nil, fmt.Errorf("orbit %q not found: %w", ng.Spec.Orbit, err)
 	}
 
-	var (
-		materials []genesis.RosterMaterial
-		err       error
-	)
-	if len(ng.Spec.Roster) > 0 {
-		materials, err = genesis.MaterialsFromSpec(ng.Spec.Roster)
+	var materials []genesis.RosterMaterial
+
+	if ng.Spec.GenesisNetworkJSON != "" {
+		// Passthrough path: pre-built genesis-network.json supplied by provisioner.
+		// Validate before writing; on failure emit an event and surface the error.
+		if err := genesis.ValidatePassthroughJSON(ng.Spec.GenesisNetworkJSON); err != nil {
+			if r.Recorder != nil {
+				r.Recorder.Eventf(ng, nil, "Warning", "InvalidGenesisJSON", "networkgenesis",
+					"pre-built genesis-network.json rejected: %v", err)
+			}
+			return nil, fmt.Errorf("invalid genesisNetworkJSON: %w", err)
+		}
+		if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.GenesisConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,
+			map[string]string{genesis.GenesisNetworkFileName: ng.Spec.GenesisNetworkJSON}, nil); err != nil {
+			return nil, fmt.Errorf("upsert %s: %w", genesis.GenesisConfigMapName, err)
+		}
 	} else {
-		materials, err = genesis.MaterialsFromCluster(ctx, r.Client, ng.Namespace, orbit)
-	}
-	if err != nil {
-		return nil, err
-	}
+		// Generated path: build from inline Roster or by discovering from cluster.
+		var err error
+		if len(ng.Spec.Roster) > 0 {
+			materials, err = genesis.MaterialsFromSpec(ng.Spec.Roster)
+		} else {
+			materials, err = genesis.MaterialsFromCluster(ctx, r.Client, ng.Namespace, orbit)
+		}
+		if err != nil {
+			return nil, err
+		}
 
-	genesisJSON, err := genesis.BuildGenesisNetworkJSON(materials)
-	if err != nil {
-		return nil, fmt.Errorf("build genesis-network.json: %w", err)
-	}
-	if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.GenesisConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,
-		map[string]string{genesis.GenesisNetworkFileName: string(genesisJSON)}, nil); err != nil {
-		return nil, fmt.Errorf("upsert %s: %w", genesis.GenesisConfigMapName, err)
-	}
+		genesisJSON, err := genesis.BuildGenesisNetworkJSON(materials)
+		if err != nil {
+			return nil, fmt.Errorf("build genesis-network.json: %w", err)
+		}
+		if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.GenesisConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,
+			map[string]string{genesis.GenesisNetworkFileName: string(genesisJSON)}, nil); err != nil {
+			return nil, fmt.Errorf("upsert %s: %w", genesis.GenesisConfigMapName, err)
+		}
 
-	abBin, err := genesis.BuildAddressBookBin(materials)
-	if err != nil {
-		return nil, fmt.Errorf("build addressbook-bin: %w", err)
-	}
-	if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.AddressBookBinConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,
-		nil, map[string][]byte{genesis.AddressBookBinKey: abBin}); err != nil {
-		return nil, fmt.Errorf("upsert %s: %w", genesis.AddressBookBinConfigMapName, err)
-	}
+		abBin, err := genesis.BuildAddressBookBin(materials)
+		if err != nil {
+			return nil, fmt.Errorf("build addressbook-bin: %w", err)
+		}
+		if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.AddressBookBinConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,
+			nil, map[string][]byte{genesis.AddressBookBinKey: abBin}); err != nil {
+			return nil, fmt.Errorf("upsert %s: %w", genesis.AddressBookBinConfigMapName, err)
+		}
 
-	if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.PublicKeysConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,
-		genesis.BuildPublicKeys(materials), nil); err != nil {
-		return nil, fmt.Errorf("upsert %s: %w", genesis.PublicKeysConfigMapName, err)
+		if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.PublicKeysConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,
+			genesis.BuildPublicKeys(materials), nil); err != nil {
+			return nil, fmt.Errorf("upsert %s: %w", genesis.PublicKeysConfigMapName, err)
+		}
 	}
 
 	podIPs, err := genesis.CollectPodIPs(ctx, r.Client, ng.Namespace)
@@ -233,6 +251,9 @@ func setNetworkGenesisCondition(conditions *[]operatorv1alpha1.Condition, c meta
 }
 
 func (r *NetworkGenesisReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.Recorder == nil {
+		r.Recorder = mgr.GetEventRecorder("networkgenesis")
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.NetworkGenesis{}).
 		Named("networkgenesis").
