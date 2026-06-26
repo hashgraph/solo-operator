@@ -72,35 +72,14 @@ type OrbitConsensus struct {
 	// +optional
 	ProvisioningModel string `json:"provisioningModel,omitempty"`
 
-	// NetworkSettings holds network-wide common values (e.g. `ledger.id`); NOT the node settings.txt,
-	// which is owned by NodeSettings.
-	NetworkSettings map[string]string `json:"networkSettings"`
-
-	// ApplicationConfiguration is equivalent to application.properties
-	ApplicationConfiguration map[string]string `json:"applicationConfiguration"`
-
-	// PermissionConfiguration is equivalent to api-permission.properties
-	PermissionConfiguration map[string]string `json:"permissionConfiguration"`
-
-	// GenesisProperties is equivalent to genesis.properties
-	// +optional
-	GenesisProperties map[string]string `json:"genesisProperties,omitempty"`
-
 	// Genesis contains genesis-specific configuration
-	// +optional
-	Genesis *OrbitGenesis `json:"genesis,omitempty"`
+	Genesis OrbitGenesis `json:"genesis"`
 }
 
 // OrbitGenesis contains genesis initialization configuration
 type OrbitGenesis struct {
 	// AddressBook contains the address book configuration
-	// +optional
-	AddressBook *OrbitAddressBook `json:"addressBook,omitempty"`
-
-	// ThrottlesJson overrides the default genesis-throttles.json content written to all nodes.
-	// Must be a valid Hedera throttle definitions JSON. If empty, built-in defaults are used.
-	// +optional
-	ThrottlesJson string `json:"throttlesJson,omitempty"`
+	AddressBook OrbitAddressBook `json:"addressBook"`
 }
 
 // OrbitAddressBook contains address book configuration
@@ -118,8 +97,8 @@ type OrbitAddressBook struct {
 	ShardId int `json:"shardId,omitempty"`
 
 	// LedgerId is the ledger identifier (swirld entry)
-	// +optional
-	LedgerId string `json:"ledgerId,omitempty"`
+	// +kubebuilder:validation:MinLength=1
+	LedgerId string `json:"ledgerId"`
 
 	// ExternalAddresses lists external nodes not managed by this operator
 	// +optional

@@ -80,10 +80,7 @@ func injectComponentValues(ctx context.Context, c client.Client, namespace strin
 		return nil, fmt.Errorf("getting orbit %s: %w", spec.OrbitRef.Name, err)
 	}
 
-	var ledgerID string
-	if orbit.Spec.Consensus.NetworkSettings != nil {
-		ledgerID = orbit.Spec.Consensus.NetworkSettings["ledger.id"]
-	}
+	ledgerID := orbit.Spec.Consensus.Genesis.AddressBook.LedgerId
 
 	switch *spec.Component {
 	case operatorv1alpha1.HelmComponentMirror:

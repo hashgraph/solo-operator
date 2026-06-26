@@ -170,9 +170,9 @@ var _ = Describe("HelmCapsule Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
 					Consensus: operatorv1alpha1.OrbitConsensus{
-						NetworkSettings:          map[string]string{"ledger.id": "03"},
-						ApplicationConfiguration: map[string]string{},
-						PermissionConfiguration:  map[string]string{},
+						Genesis: operatorv1alpha1.OrbitGenesis{
+							AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "03"},
+						},
 					},
 				},
 			}
@@ -458,9 +458,9 @@ var _ = Describe("HelmCapsule Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
 					Consensus: operatorv1alpha1.OrbitConsensus{
-						NetworkSettings:          map[string]string{"ledger.id": "04"},
-						ApplicationConfiguration: map[string]string{},
-						PermissionConfiguration:  map[string]string{},
+						Genesis: operatorv1alpha1.OrbitGenesis{
+							AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "04"},
+						},
 					},
 				},
 			}
@@ -568,9 +568,9 @@ var _ = Describe("HelmCapsule Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
 					Consensus: operatorv1alpha1.OrbitConsensus{
-						NetworkSettings:          map[string]string{"ledger.id": "05"},
-						ApplicationConfiguration: map[string]string{},
-						PermissionConfiguration:  map[string]string{},
+						Genesis: operatorv1alpha1.OrbitGenesis{
+							AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "05"},
+						},
 					},
 				},
 			}
@@ -630,9 +630,9 @@ var _ = Describe("HelmCapsule Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
 					Consensus: operatorv1alpha1.OrbitConsensus{
-						NetworkSettings:          map[string]string{"ledger.id": "06"},
-						ApplicationConfiguration: map[string]string{},
-						PermissionConfiguration:  map[string]string{},
+						Genesis: operatorv1alpha1.OrbitGenesis{
+							AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "06"},
+						},
 					},
 				},
 			}

@@ -47,34 +47,29 @@ func TestBuildClusterConfig_ContainsExpectedKeys(t *testing.T) {
 	}
 }
 
-func TestBuildClusterConfig_OrbitOverridesWin(t *testing.T) {
+func TestBuildClusterConfig_DefaultsAlwaysUsed(t *testing.T) {
 	orbit := &operatorv1alpha1.Orbit{
 		Spec: operatorv1alpha1.OrbitSpec{
 			Consensus: operatorv1alpha1.OrbitConsensus{
-				NetworkSettings:          map[string]string{"showInternalStats": "0"},
-				ApplicationConfiguration: map[string]string{"contracts.chainId": "9999"},
-				PermissionConfiguration:  map[string]string{"freeze": "0-*"},
-				Genesis: &operatorv1alpha1.OrbitGenesis{
-					ThrottlesJson: `{"override": true}`,
+				Genesis: operatorv1alpha1.OrbitGenesis{
+					AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x00"},
 				},
 			},
 		},
 	}
 	data := BuildClusterConfig(orbit, []RosterMaterial{{NodeID: 0, GossipHost: "h", GossipPort: 1, Weight: 1}}, nil)
 
-	// settings.txt uses comma-padded "key, value" — the override changes the
-	// default of "1" to "0".
-	if !strings.Contains(data["settings.txt"], "showInternalStats,") || !strings.Contains(data["settings.txt"], " 0\n") {
-		t.Errorf("settings.txt override (showInternalStats=0) not applied; got:\n%s", data["settings.txt"])
+	if !strings.Contains(data["settings.txt"], "showInternalStats,") || !strings.Contains(data["settings.txt"], " 1\n") {
+		t.Errorf("settings.txt should contain default showInternalStats=1; got:\n%s", data["settings.txt"])
 	}
-	if !strings.Contains(data["application.properties"], "contracts.chainId=9999") {
-		t.Errorf("application.properties override (contracts.chainId) not applied; got:\n%s", data["application.properties"])
+	if !strings.Contains(data["application.properties"], "ledger.id=0x00") {
+		t.Errorf("application.properties should contain ledger.id from AddressBook; got:\n%s", data["application.properties"])
 	}
-	if !strings.Contains(data["api-permission.properties"], "freeze=0-*") {
-		t.Errorf("api-permission.properties override (freeze) not applied; got:\n%s", data["api-permission.properties"])
+	if !strings.Contains(data["api-permission.properties"], "freeze=2-58") {
+		t.Errorf("api-permission.properties should contain default freeze=2-58; got:\n%s", data["api-permission.properties"])
 	}
-	if data["genesis-throttles.json"] != `{"override": true}` {
-		t.Errorf("genesis-throttles.json override not applied verbatim; got: %s", data["genesis-throttles.json"])
+	if data["genesis-throttles.json"] != defaultThrottlesJSON {
+		t.Errorf("genesis-throttles.json should be the built-in default; got: %s", data["genesis-throttles.json"])
 	}
 }
 
@@ -82,8 +77,8 @@ func TestBuildClusterConfig_LedgerIDPropagates(t *testing.T) {
 	orbit := &operatorv1alpha1.Orbit{
 		Spec: operatorv1alpha1.OrbitSpec{
 			Consensus: operatorv1alpha1.OrbitConsensus{
-				Genesis: &operatorv1alpha1.OrbitGenesis{
-					AddressBook: &operatorv1alpha1.OrbitAddressBook{LedgerId: "0x01"},
+				Genesis: operatorv1alpha1.OrbitGenesis{
+					AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x01"},
 				},
 			},
 		},

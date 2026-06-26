@@ -33,9 +33,9 @@ var _ = Describe("E2E Tests", func() {
 					Spec: operatorv1alpha1.OrbitSpec{
 						Lifetime: "24h",
 						Consensus: operatorv1alpha1.OrbitConsensus{
-							NetworkSettings:          map[string]string{"ledger.id": "0x03"},
-							ApplicationConfiguration: map[string]string{"hedera.realm": "0"},
-							PermissionConfiguration:  map[string]string{"permission": "default"},
+							Genesis: operatorv1alpha1.OrbitGenesis{
+								AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x03"},
+							},
 						},
 					},
 				}
@@ -73,9 +73,9 @@ var _ = Describe("E2E Tests", func() {
 							},
 						},
 						Consensus: operatorv1alpha1.OrbitConsensus{
-							NetworkSettings:          map[string]string{"ledger.id": "0x03"},
-							ApplicationConfiguration: map[string]string{"hedera.realm": "0"},
-							PermissionConfiguration:  map[string]string{"permission": "default"},
+							Genesis: operatorv1alpha1.OrbitGenesis{
+								AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x03"},
+							},
 						},
 					},
 				}
@@ -425,21 +425,8 @@ var _ = Describe("E2E Tests", func() {
 				Spec: operatorv1alpha1.OrbitSpec{
 					Lifetime: "1h",
 					Consensus: operatorv1alpha1.OrbitConsensus{
-						NetworkSettings: map[string]string{
-							"ledger.id":           "0x03",
-							"hedera.realm":        "0",
-							"hedera.shard":        "0",
-							"netty.mode":          "DEV",
-							"netty.prod.tls.on":   "false",
-							"netty.prod.tls.key":  "",
-							"netty.prod.tls.cert": "",
-						},
-						ApplicationConfiguration: map[string]string{
-							"hedera.realm": "0",
-							"hedera.shard": "0",
-						},
-						PermissionConfiguration: map[string]string{
-							"default": "ALL",
+						Genesis: operatorv1alpha1.OrbitGenesis{
+							AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x03"},
 						},
 					},
 				},
@@ -542,9 +529,9 @@ var _ = Describe("E2E Tests", func() {
 					},
 					Spec: operatorv1alpha1.OrbitSpec{
 						Consensus: operatorv1alpha1.OrbitConsensus{
-							NetworkSettings:          map[string]string{"ledger.id": "0x03"},
-							ApplicationConfiguration: map[string]string{"hedera.realm": "0"},
-							PermissionConfiguration:  map[string]string{"permission": "default"},
+							Genesis: operatorv1alpha1.OrbitGenesis{
+								AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x03"},
+							},
 						},
 					},
 				}

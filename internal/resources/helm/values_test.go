@@ -213,18 +213,16 @@ func TestMergeValues_requiredMissingConfigMapErrors(t *testing.T) {
 // ─── Per-component injection ──────────────────────────────────────────────────
 
 func makeOrbit(name, ledgerID string) *operatorv1alpha1.Orbit {
-	o := &operatorv1alpha1.Orbit{
+	return &operatorv1alpha1.Orbit{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Spec: operatorv1alpha1.OrbitSpec{
 			Consensus: operatorv1alpha1.OrbitConsensus{
-				NetworkSettings: map[string]string{},
+				Genesis: operatorv1alpha1.OrbitGenesis{
+					AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: ledgerID},
+				},
 			},
 		},
 	}
-	if ledgerID != "" {
-		o.Spec.Consensus.NetworkSettings["ledger.id"] = ledgerID
-	}
-	return o
 }
 
 func makeCapsule(name, namespace, orbit, hostname string, port int32) *operatorv1alpha1.ConsensusCapsule {

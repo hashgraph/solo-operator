@@ -85,14 +85,12 @@ func MaterialsFromCluster(ctx context.Context, c client.Client, namespace string
 		out = append(out, m)
 	}
 
-	if orbit.Spec.Consensus.Genesis != nil && orbit.Spec.Consensus.Genesis.AddressBook != nil {
-		for _, ext := range orbit.Spec.Consensus.Genesis.AddressBook.ExternalAddresses {
-			m, err := materialFromExternal(ext)
-			if err != nil {
-				return nil, fmt.Errorf("external node %d: %w", ext.NodeId, err)
-			}
-			out = append(out, m)
+	for _, ext := range orbit.Spec.Consensus.Genesis.AddressBook.ExternalAddresses {
+		m, err := materialFromExternal(ext)
+		if err != nil {
+			return nil, fmt.Errorf("external node %d: %w", ext.NodeId, err)
 		}
+		out = append(out, m)
 	}
 
 	if len(out) == 0 {

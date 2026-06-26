@@ -1,0 +1,36 @@
+apiVersion: operator.solo.hedera.com/v1alpha1
+kind: NetworkGenesis
+metadata:
+  name: network-genesis
+  namespace: solo-orbit
+  labels:
+    "app.kubernetes.io/managed-by": "solo-operator"
+spec:
+  orbit: solo-orbit
+  operationId: network-genesis
+  # genesisNetworkJSON supplies a pre-built genesis-network.json for fresh,
+  # cluster-only deployments. When set, the operator writes it verbatim to the
+  # genesis-config ConfigMap, skipping roster assembly and discovery.
+  # The mainnet-daemon provisioning path does not populate this field.
+  genesisNetworkJSON: |
+    {
+      "nodeMetadata": [
+        {
+          "rosterEntry": {
+            "nodeId": "0",
+            "weight": "1",
+            "gossipCaCertificate": "<base64-encoded-DER>",
+            "gossipEndpoint": [{"domainName": "node0.solo-orbit.svc.cluster.local", "port": 50111}]
+          },
+          "node": {
+            "nodeId": "0",
+            "accountId": {"shardNum": "0", "realmNum": "0", "accountNum": "3"},
+            "description": "node0",
+            "gossipEndpoint": [{"domainName": "node0.solo-orbit.svc.cluster.local", "port": 50111}],
+            "serviceEndpoint": [{"domainName": "node0.solo-orbit.svc.cluster.local", "port": 50211}],
+            "gossipCaCertificate": "<base64-encoded-DER>",
+            "weight": "1"
+          }
+        }
+      ]
+    }

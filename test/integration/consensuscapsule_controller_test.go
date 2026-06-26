@@ -39,9 +39,9 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
 				Spec: operatorv1alpha1.OrbitSpec{
 					Consensus: operatorv1alpha1.OrbitConsensus{
-						NetworkSettings:          map[string]string{},
-						ApplicationConfiguration: map[string]string{},
-						PermissionConfiguration:  map[string]string{},
+						Genesis: operatorv1alpha1.OrbitGenesis{
+							AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x00"},
+						},
 					},
 				},
 			}
@@ -192,9 +192,9 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
 				Spec: operatorv1alpha1.OrbitSpec{
 					Consensus: operatorv1alpha1.OrbitConsensus{
-						NetworkSettings:          map[string]string{},
-						ApplicationConfiguration: map[string]string{},
-						PermissionConfiguration:  map[string]string{},
+						Genesis: operatorv1alpha1.OrbitGenesis{
+							AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x00"},
+						},
 					},
 				},
 			}
