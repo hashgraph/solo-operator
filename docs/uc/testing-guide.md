@@ -41,6 +41,11 @@ ldflags will show the `dev` placeholders — that is expected.
 
 ## 2. Prepare the cluster (install the CRDs)
 
+> **Kubernetes ≥ 1.32 required.** The UC dedup query filters `NetworkUpgrade*`
+> CRs **server-side** on the `spec.operationId` `selectableField`, which is GA in
+> 1.32 (`kubeVersion: ">=1.32.0-0"` in `Chart.yaml`). On an older cluster the
+> CRDs install but the field-selector List is rejected by the API server.
+
 The UC creates and lists `NetworkUpgrade*` Custom Resources, so their CRDs must
 exist in the target cluster. If they are missing you will see the sidecar retry
 forever with:
@@ -222,9 +227,12 @@ fresh `$UCDIR` (or leave the marker in place) to observe stable behaviour.
 
 **Deduplication (#997).** The marker stays on disk (cleanup is #998), so the
 handler re-sees it every tick. Two layers stop a duplicate create: an
-authoritative cluster query for a CR carrying the same
-`operator.solo.hedera.com/operation-id` label, fronted by an in-memory cache so
-steady-state ticks skip the API call entirely. After the first `CRDelivered` you
+authoritative cluster query for a CR with the same `spec.operationId`
+(filtered **server-side** via the CRD `selectableField` on that field — see the
+k8s 1.32 note in §2), fronted by an in-memory cache so steady-state ticks skip
+the API call entirely. (`spec.operationId` is the source of truth; the
+`operator.solo.hedera.com/operation-id` label is an auxiliary convenience.)
+After the first `CRDelivered` you
 will see **no further** `kubectl`-visible activity for that marker — the second
 and later ticks are served from the cache and never reach the API server. On
 restart, `RecoverOnStartup` re-seeds the cache by listing existing
@@ -524,6 +532,30 @@ go test ./internal/uc/ -run TestControlClient -v
 The `ControlClient` covers the full daemonkit control surface (`/status` and
 `/health`); add a method (and `uc` subcommand) here for any new endpoint the
 server registers.
+
+**Integration tests — real API server** (`test/integration/uc/`):
+
+The suites above use the **fake** dynamic client, which **ignores field
+selectors**. The UC dedup query filters server-side on the `spec.operationId`
+`selectableField`, so that mechanism can only be validated against a real API
+server. The envtest suite (run on Kubernetes 1.32) closes that gap — it
+codifies the manual steps in §4a/§4b into automated checks:
+
+```bash
+task test:integration            # envtest 1.32; runs ./test/integration/...
+```
+
+| Test | Asserts |
+|------|---------|
+| `TestSelectableFieldFiltersServerSide` | A `dynamic` List with `FieldSelector: spec.operationId=…` narrows to exactly the matching CR server-side; a selector on the non-selectable `spec.orbit` is **rejected** (proving enforcement is real). **Fails if `selectableFields` is removed from the CRDs** — guards the dedup mechanism against regression. |
+| `TestDedupIdempotentAndRecovery` | Repeated ticks create exactly one CR against a real server; a fresh process reseeded via `RecoverOnStartup` does not re-create it. |
+| `TestHandleFreezeAbortedResolvesOperationID` | `HandleFreezeAborted` resolves the operationId from the existing Prepare's `spec.operationId` (read back from the apiserver) and creates a matching `NetworkUpgradeFreezeAbort`. |
+| `TestCRStoreListSkipsCorruptFile` | A single corrupt persisted CR is skipped (warned), not fatal — the good CR still recovers. |
+
+Each test runs in its own namespace for isolation, and the suite does **not**
+start the controllers (the UC client behaviour is exercised on its own). Real
+CRD validation also covers what the fake client cannot — e.g. the
+`Sha256Digest` pattern on `layerHashes`.
 
 Build-time version metadata is now provided by the shared, dependency-free
 [`github.com/automa-saga/version`](https://github.com/automa-saga/version)
