@@ -59,11 +59,12 @@ func (f *Factory) resolveOperationID(ctx context.Context) (string, error) {
 		if _, terminal := prepareTerminalPhases[phase]; terminal {
 			continue
 		}
-		opID := item.GetLabels()[operatorv1alpha1.LabelOperationID]
+		// spec.operationId is the source of truth — it is a hard-required field on
+		// every NetworkUpgrade* CR. The label is a human-facing convenience and is
+		// only a fallback for a CR that somehow lacks the spec field.
+		opID, _, _ := unstructured.NestedString(item.Object, "spec", "operationId")
 		if opID == "" {
-			// The label is authoritative, but fall back to the spec field in case a
-			// CR was created without it.
-			opID, _, _ = unstructured.NestedString(item.Object, "spec", "operationId")
+			opID = item.GetLabels()[operatorv1alpha1.LabelOperationID]
 		}
 		if opID == "" {
 			continue
