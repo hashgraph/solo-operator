@@ -8,10 +8,12 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/automa-saga/logx"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/yaml"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/sanity"
 )
@@ -147,10 +149,18 @@ func (s *CRStore) List() ([]PersistedCR, error) {
 		}
 		obj := map[string]interface{}{}
 		if err := yaml.Unmarshal(data, &obj); err != nil {
-			return nil, errx.WithHints(
-				errx.WithReason(errPersist.Wrap(err, "unmarshal persisted CR %s", path), ReasonCRPersistCorrupt),
-				"A persisted CR file is corrupt; remove it from --cr-persist-path to let recovery proceed",
-			)
+			// A single corrupt file must not halt the whole recovery scan — that would
+			// retry-loop the handler forever. Skip it with a warning so the remaining
+			// CRs still recover; the operator can remove the bad file out-of-band.
+			common.LogErr(
+				logx.As().Warn(),
+				errx.WithHints(
+					errx.WithReason(errPersist.Wrap(err, "unmarshal persisted CR %s", path), ReasonCRPersistCorrupt),
+					"A persisted CR file is corrupt; remove it from --cr-persist-path to let recovery proceed",
+				),
+				ReasonCRPersistCorrupt,
+			).Str("path", path).Msg("skipping corrupt persisted CR")
+			continue
 		}
 		out = append(out, PersistedCR{
 			OperationID: operationID,

@@ -872,6 +872,8 @@ spec:
                 type: string
             type: object
         type: object
+    selectableFields:
+    - jsonPath: .spec.operationId
     served: true
     storage: true
     subresources:

@@ -39,6 +39,7 @@ type NetworkUpgradeFreezeStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=nuf
+// +kubebuilder:selectablefield:JSONPath=".spec.operationId"
 // +kubebuilder:printcolumn:name="Orbit",type="string",JSONPath=".spec.orbit"
 // +kubebuilder:printcolumn:name="OperationID",type="string",JSONPath=".spec.operationId"
 // +kubebuilder:printcolumn:name="Scheduled",type="string",JSONPath=".spec.scheduledTime"

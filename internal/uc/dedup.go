@@ -6,12 +6,20 @@ import (
 	"context"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/errx"
 )
+
+// specOperationIDField is the CR field the UC filters on. The NetworkUpgrade*
+// CRDs declare it as a selectableField (apiextensions; requires k8s >=1.32), so
+// a FieldSelector on it is honoured server-side. spec.operationId — not the
+// operation-id label — is the source of truth: it is a hard-required field on
+// every CR, whereas the label is a human-facing convenience.
+const specOperationIDField = "spec.operationId"
 
 // Operation-id deduplication (HIP-1496 §"Operation-id Deduplication").
 //
@@ -20,7 +28,7 @@ import (
 // that:
 //
 //   - Authoritative guard: a cluster query for an existing CR carrying the same
-//     operation-id label. This is crash-safe — a restart re-queries and finds
+//     spec.operationId. This is crash-safe — a restart re-queries and finds
 //     the CR the previous process created. Backed by AlreadyExists on Create as
 //     the ultimate, race-proof guard (first-detection-wins), so a stale or
 //     missing cache entry can never cause a duplicate CR.
@@ -33,8 +41,8 @@ import (
 
 // alreadyCreated reports whether a CR for operationID+step already exists. It
 // consults the in-memory cache first; on a miss it falls back to the
-// authoritative cluster query (by operation-id label on gvr) and records every
-// step it observes. A K8s API error invalidates the cache for operationID and
+// authoritative cluster query (by spec.operationId field selector on gvr) and
+// records every step it observes. A K8s API error invalidates the cache and
 // is returned to the caller so the action is retried on the next tick rather
 // than proceeding on stale state.
 func (f *Factory) alreadyCreated(ctx context.Context, gvr schema.GroupVersionResource, operationID, step string) (bool, error) {
@@ -50,9 +58,8 @@ func (f *Factory) alreadyCreated(ctx context.Context, gvr schema.GroupVersionRes
 	listCtx, cancel := context.WithTimeout(ctx, listTimeout)
 	defer cancel()
 
-	selector := labels.SelectorFromSet(labels.Set{operatorv1alpha1.LabelOperationID: operationID}).String()
 	list, err := f.client.Resource(gvr).Namespace(f.cfg.Namespace).
-		List(listCtx, metav1.ListOptions{LabelSelector: selector})
+		List(listCtx, metav1.ListOptions{FieldSelector: fields.OneTermEqualSelector(specOperationIDField, operationID).String()})
 	if err != nil {
 		// Cache accuracy is suspect after an API failure — drop this operationId so
 		// the next tick re-queries instead of trusting a stale (in)existence.
@@ -66,13 +73,13 @@ func (f *Factory) alreadyCreated(ctx context.Context, gvr schema.GroupVersionRes
 
 	found := false
 	for i := range list.Items {
-		l := list.Items[i].GetLabels()
-		// Defend against a server/fake-client that does not honour the label
-		// selector: only credit CRs whose operation-id label actually matches.
-		if l[operatorv1alpha1.LabelOperationID] != operationID {
+		item := &list.Items[i]
+		// Re-verify against the spec field rather than trusting a server/fake-client
+		// that might not honour the field selector.
+		if obsOpID, _, _ := unstructured.NestedString(item.Object, "spec", "operationId"); obsOpID != operationID {
 			continue
 		}
-		observed := l[operatorv1alpha1.LabelStep]
+		observed := item.GetLabels()[operatorv1alpha1.LabelStep]
 		if observed == "" {
 			continue
 		}
@@ -107,7 +114,7 @@ func (f *Factory) invalidate(operationID string) {
 }
 
 // seedCache populates the in-memory cache by querying every NetworkUpgrade* CR
-// in the namespace and recording its operation-id + step labels. It is the
+// in the namespace and recording its spec.operationId + step label. It is the
 // startup half of dedup: after seeding, steady-state ticks for already-handled
 // markers are served from cache without an API call. A query error is returned
 // so startup recovery can surface it; the cache stays best-effort (partial
@@ -125,8 +132,13 @@ func (f *Factory) seedCache(ctx context.Context) error {
 			)
 		}
 		for i := range list.Items {
-			l := list.Items[i].GetLabels()
-			operationID, step := l[operatorv1alpha1.LabelOperationID], l[operatorv1alpha1.LabelStep]
+			item := &list.Items[i]
+			// spec.operationId is the source of truth; the label is only a fallback.
+			operationID, _, _ := unstructured.NestedString(item.Object, "spec", "operationId")
+			if operationID == "" {
+				operationID = item.GetLabels()[operatorv1alpha1.LabelOperationID]
+			}
+			step := item.GetLabels()[operatorv1alpha1.LabelStep]
 			if operationID == "" || step == "" {
 				continue
 			}

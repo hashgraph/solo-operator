@@ -186,7 +186,8 @@ for errors that leave a package boundary.
 ## Key Conventions
 
 - Go version is specified in `go.mod`; use `actions/setup-go` with `go-version-file: go.mod`
-- Kubernetes ≥ 1.27.0 required (enforced in `Chart.yaml` via `kubeVersion`)
+- Kubernetes ≥ 1.32.0 required (enforced in `Chart.yaml` via `kubeVersion`) — the
+  UC dedup path filters on the CRD `selectableField` `spec.operationId`, GA in 1.32
 - Operator image: `ghcr.io/hashgraph/solo-operator` (multi-platform: `linux/amd64`, `linux/arm64`)
 - Release branches: `main`, `release/X.Y`, pre-release channels: `alpha/*`, `beta/*`, `rc/*`, `ci/*`
 - Conventional commits are enforced — semantic-release uses them to determine version bumps

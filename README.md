@@ -103,7 +103,7 @@ kubectl delete -f https://github.com/hashgraph/solo-operator/releases/latest/dow
 ### Prerequisites
 
 - Go 1.26+
-- Kubernetes 1.28+
+- Kubernetes 1.32+ (CRD `selectableFields` is used for upgrade-controller dedup; GA in 1.32)
 - [Task](https://taskfile.dev/) (optional, for build automation)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/)
 - [Helm](https://helm.sh/) (for chart development)
