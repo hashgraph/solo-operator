@@ -9,6 +9,7 @@ vars:
   DEV_IMG: us-central1-docker.pkg.dev/hashsphere-development/solo-operator/solo-operator
   DEV_TAG: dev
   ENVTEST_K8S_VERSION: "1.32.0"
+  SETUP_ENVTEST_CMD: "go run sigs.k8s.io/controller-runtime/tools/setup-envtest@latest"
   COVERAGE_FILE: coverage.out
   COVERAGE_HTML: coverage.html
   # Build metadata injected into the shared github.com/automa-saga/version
@@ -89,7 +90,7 @@ tasks:
     desc: Setup envtest binaries for integration tests
     internal: true
     cmds:
-      - setup-envtest use {{.ENVTEST_K8S_VERSION}} --bin-dir $(pwd)/bin -p path
+      - '{{.SETUP_ENVTEST_CMD}} use {{.ENVTEST_K8S_VERSION}} --bin-dir $(pwd)/bin -p path'
     status:
       - test -d bin/k8s
 
@@ -98,7 +99,7 @@ tasks:
     deps: [test:setup]
     env:
       KUBEBUILDER_ASSETS:
-        sh: setup-envtest use {{.ENVTEST_K8S_VERSION}} --bin-dir $(pwd)/bin -p path
+        sh: '{{.SETUP_ENVTEST_CMD}} use {{.ENVTEST_K8S_VERSION}} --bin-dir $(pwd)/bin -p path'
     cmds:
       - go test ./... -coverprofile {{.COVERAGE_FILE}}
 
@@ -113,7 +114,7 @@ tasks:
     deps: [test:setup]
     env:
       KUBEBUILDER_ASSETS:
-        sh: setup-envtest use {{.ENVTEST_K8S_VERSION}} --bin-dir $(pwd)/bin -p path
+        sh: '{{.SETUP_ENVTEST_CMD}} use {{.ENVTEST_K8S_VERSION}} --bin-dir $(pwd)/bin -p path'
     cmds:
       - go test ./test/integration/... -v
 
@@ -127,7 +128,7 @@ tasks:
     deps: [test:setup]
     env:
       KUBEBUILDER_ASSETS:
-        sh: setup-envtest use {{.ENVTEST_K8S_VERSION}} --bin-dir $(pwd)/bin -p path
+        sh: '{{.SETUP_ENVTEST_CMD}} use {{.ENVTEST_K8S_VERSION}} --bin-dir $(pwd)/bin -p path'
     cmds:
       - go test ./... -coverprofile {{.COVERAGE_FILE}}
       - go tool cover -html={{.COVERAGE_FILE}} -o {{.COVERAGE_HTML}}
