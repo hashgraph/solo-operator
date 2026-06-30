@@ -101,10 +101,14 @@ var _ = Describe("NodeSettings Controller", func() {
 			updatedContent := "checkSignedStateFromDisk,              0\nuseTLS,                                1"
 
 			crKey := types.NamespacedName{Name: crName, Namespace: namespace}
-			fetchedCR := &operatorv1alpha1.NodeSettings{}
-			Expect(k8sClient.Get(ctx, crKey, fetchedCR)).Should(Succeed())
-			fetchedCR.Spec.Content = updatedContent
-			Expect(k8sClient.Update(ctx, fetchedCR)).Should(Succeed())
+			Eventually(func() error {
+				fetchedCR := &operatorv1alpha1.NodeSettings{}
+				if err := k8sClient.Get(ctx, crKey, fetchedCR); err != nil {
+					return err
+				}
+				fetchedCR.Spec.Content = updatedContent
+				return k8sClient.Update(ctx, fetchedCR)
+			}, timeout, interval).Should(Succeed())
 
 			By("Verifying the ConfigMap is updated")
 			Eventually(func() string {
@@ -115,7 +119,9 @@ var _ = Describe("NodeSettings Controller", func() {
 			}, timeout, interval).Should(Equal(updatedContent))
 
 			By("Cleaning up")
-			Expect(k8sClient.Delete(ctx, fetchedCR)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, &operatorv1alpha1.NodeSettings{
+				ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: namespace},
+			})).Should(Succeed())
 		})
 	})
 
