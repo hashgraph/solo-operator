@@ -208,9 +208,9 @@ func TestRunStopsOnContextCancel(t *testing.T) {
 	m, _, _ := newTestMonitor(t)
 	m.cfg.EventsPath = t.TempDir()
 	m.cfg.CRPersistPath = t.TempDir()
-	// Use a real factory so RecoverOnStartup is exercised; nil client is unused
-	// by the current stub.
-	m.factory = NewFactory(m.cfg, nil)
+	// Use a real factory so RecoverOnStartup (op-id cache seed) is exercised
+	// against a fake cluster.
+	m.factory = newFakeFactory(t, m.cfg)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

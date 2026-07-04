@@ -49,7 +49,7 @@ permissions:
   statuses: write
 
 env:
-  KIND_NODE_IMAGE: kindest/node:v1.31.4@sha256:2cb39f7295fe7eafee0842b1052a599a4fb0f8bcf3f83d96c7f4864c357c6c30
+  KIND_NODE_IMAGE: kindest/node:v1.32.2@sha256:142f543559cc55d64e1ab9341df08e5ced84bd2e893736da8f51320f26f5950b
 
 jobs:
   compile:
@@ -136,7 +136,7 @@ jobs:
           install_only: true
           node_image: ${{ env.KIND_NODE_IMAGE }}
           version: v0.31.0
-          kubectl_version: v1.31.4
+          kubectl_version: v1.32.2
           verbosity: 3
 
       - name: Kubernetes KinD Cluster with Registry
@@ -145,7 +145,7 @@ jobs:
         uses: container-tools/kind-action@0ad70e2299366b0e1552c7240f4e4567148f723e # v2.0.4
         with:
           version: 0.31.0
-          kubectl_version: v1.31.4
+          kubectl_version: v1.32.2
           registry: true
           node_image: ${{ env.KIND_NODE_IMAGE }}
 
