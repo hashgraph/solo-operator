@@ -29,7 +29,11 @@ func registriesFor(images ...string) []operatorv1alpha1.UpgradeRegistrySpec {
 
 func newPrepareForTest() *operatorv1alpha1.NetworkUpgradePrepare {
 	return &operatorv1alpha1.NetworkUpgradePrepare{
-		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "test"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "demo",
+			Namespace: "test",
+			Labels:    map[string]string{operatorv1alpha1.LabelOperationID: "op-001"},
+		},
 		Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
 			Orbit:       "test-orbit",
 			OperationID: "op-001",
@@ -390,6 +394,46 @@ func TestPrepareReconcile_EmitsSidecarDisabled(t *testing.T) {
 	// newPrepareForTest has RSU present with enabled=false → SidecarDisabled.
 	if got := countContaining(res.events, "SidecarDisabled recordStreamUploader"); got != 1 {
 		t.Errorf("expected one SidecarDisabled event for recordStreamUploader, got %d in %v", got, res.events)
+	}
+}
+
+func TestPrepareReconcile_OperationIDLabelMissing(t *testing.T) {
+	prepare := newPrepareForTest()
+	prepare.Labels = nil
+
+	res := reconcilePrepare(t, prepare, newPrepareChecker(nil, nil))
+
+	if res.prepare.Status.Phase != operatorv1alpha1.PhaseFailed {
+		t.Errorf("expected phase Failed, got %s", res.prepare.Status.Phase)
+	}
+	if got := countContaining(res.events, operatorv1alpha1.EventOperationIDLabelInvalid); got != 1 {
+		t.Errorf("expected one OperationIDLabelInvalid event, got %d in %v", got, res.events)
+	}
+	cond := findCondition(res.prepare.Status.Conditions, operatorv1alpha1.CondOperationIDLabelValid)
+	if cond == nil || cond.Status != metav1.ConditionFalse {
+		t.Errorf("expected CondOperationIDLabelValid=False, got %v", cond)
+	}
+	if cond != nil && cond.Reason != operatorv1alpha1.ReasonOperationIDLabelInvalid {
+		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonOperationIDLabelInvalid, cond.Reason)
+	}
+	// Invalid identity must not advance to registry auditing.
+	if got := countContaining(res.events, operatorv1alpha1.EventRegistryAuditComplete); got != 0 {
+		t.Errorf("invalid CR must not audit registries, got %d audit events", got)
+	}
+}
+
+func TestPrepareReconcile_OperationIDLabelMismatch(t *testing.T) {
+	prepare := newPrepareForTest()
+	prepare.Labels[operatorv1alpha1.LabelOperationID] = "op-does-not-match"
+
+	res := reconcilePrepare(t, prepare, newPrepareChecker(nil, nil))
+
+	if res.prepare.Status.Phase != operatorv1alpha1.PhaseFailed {
+		t.Errorf("expected phase Failed, got %s", res.prepare.Status.Phase)
+	}
+	cond := findCondition(res.prepare.Status.Conditions, operatorv1alpha1.CondOperationIDLabelValid)
+	if cond == nil || cond.Reason != operatorv1alpha1.ReasonOperationIDLabelInvalid {
+		t.Errorf("expected reason %s, got %v", operatorv1alpha1.ReasonOperationIDLabelInvalid, cond)
 	}
 }
 

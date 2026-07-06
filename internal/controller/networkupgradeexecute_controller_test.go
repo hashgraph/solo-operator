@@ -33,7 +33,11 @@ func newExecuteChecker(unreachable, mismatch map[string]bool) fakeUpgradeChecker
 func newExecuteForTest() *operatorv1alpha1.NetworkUpgradeExecute {
 	now := metav1.Now()
 	return &operatorv1alpha1.NetworkUpgradeExecute{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-execute", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-execute",
+			Namespace: "default",
+			Labels:    map[string]string{operatorv1alpha1.LabelOperationID: "op-001"},
+		},
 		Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
 			Orbit:         "test-orbit",
 			OperationID:   "op-001",
@@ -186,7 +190,11 @@ func newOfflineCapsule(name string) *operatorv1alpha1.ConsensusCapsule {
 
 func TestExecuteReconcile_InitializesStatus(t *testing.T) {
 	execute := &operatorv1alpha1.NetworkUpgradeExecute{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-execute", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-execute",
+			Namespace: "default",
+			Labels:    map[string]string{operatorv1alpha1.LabelOperationID: "op-001"},
+		},
 		Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
 			Orbit: "test-orbit", OperationID: "op-001", ConsensusNode: "node0",
 			Images:          operatorv1alpha1.UpgradeImagesSpec{ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{Version: "0.75.0", Registries: registriesFor("reg-a/cn:0.75.0")}},
@@ -209,6 +217,48 @@ func TestExecuteReconcile_InitializesStatus(t *testing.T) {
 	}
 	if got := countContaining(res.events, "ReadyForProvisionerDaemon"); got != 1 {
 		t.Errorf("expected one ReadyForProvisionerDaemon event, got %d in %v", got, res.events)
+	}
+}
+
+func TestExecuteReconcile_OperationIDLabelMissing(t *testing.T) {
+	execute := newExecuteForTest()
+	execute.Labels = nil
+
+	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil))
+
+	if res.err != nil {
+		t.Fatalf("unexpected error: %v", res.err)
+	}
+	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhaseFailed {
+		t.Errorf("expected phase Failed, got %s", res.execute.Status.Phase)
+	}
+	if got := countContaining(res.events, operatorv1alpha1.EventOperationIDLabelInvalid); got != 1 {
+		t.Errorf("expected one OperationIDLabelInvalid event, got %d in %v", got, res.events)
+	}
+	cond := findCondition(res.execute.Status.Conditions, operatorv1alpha1.CondOperationIDLabelValid)
+	if cond == nil || cond.Status != metav1.ConditionFalse {
+		t.Errorf("expected CondOperationIDLabelValid=False, got %v", cond)
+	}
+	if cond != nil && cond.Reason != operatorv1alpha1.ReasonOperationIDLabelInvalid {
+		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonOperationIDLabelInvalid, cond.Reason)
+	}
+}
+
+func TestExecuteReconcile_OperationIDLabelMismatch(t *testing.T) {
+	execute := newExecuteForTest()
+	execute.Labels[operatorv1alpha1.LabelOperationID] = "op-does-not-match"
+
+	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil))
+
+	if res.err != nil {
+		t.Fatalf("unexpected error: %v", res.err)
+	}
+	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhaseFailed {
+		t.Errorf("expected phase Failed, got %s", res.execute.Status.Phase)
+	}
+	cond := findCondition(res.execute.Status.Conditions, operatorv1alpha1.CondOperationIDLabelValid)
+	if cond == nil || cond.Reason != operatorv1alpha1.ReasonOperationIDLabelInvalid {
+		t.Errorf("expected reason %s, got %v", operatorv1alpha1.ReasonOperationIDLabelInvalid, cond)
 	}
 }
 

@@ -147,6 +147,52 @@ func TestFreezeAbortReconcile_ExecuteCRExists(t *testing.T) {
 	}
 }
 
+func TestFreezeAbortReconcile_OperationIDLabelMissing(t *testing.T) {
+	abort := newFreezeAbortForTest()
+	abort.Labels = nil
+
+	res := reconcileFreezeAbort(t, abort, nil)
+
+	if res.err != nil {
+		t.Fatalf("unexpected error: %v", res.err)
+	}
+	if res.abort.Status.Phase != operatorv1alpha1.PhaseFailed {
+		t.Errorf("expected phase Failed, got %s", res.abort.Status.Phase)
+	}
+	if got := countContaining(res.events, operatorv1alpha1.EventOperationIDLabelInvalid); got != 1 {
+		t.Errorf("expected one OperationIDLabelInvalid event, got %d in %v", got, res.events)
+	}
+	cond := findCondition(res.abort.Status.Conditions, operatorv1alpha1.CondOperationIDLabelValid)
+	if cond == nil || cond.Status != metav1.ConditionFalse {
+		t.Errorf("expected CondOperationIDLabelValid=False, got %v", cond)
+	}
+	if cond != nil && cond.Reason != operatorv1alpha1.ReasonOperationIDLabelInvalid {
+		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonOperationIDLabelInvalid, cond.Reason)
+	}
+	// Invalid identity must not advance: no abort-processed side effects.
+	if got := countContaining(res.events, operatorv1alpha1.EventAbortProcessed); got != 0 {
+		t.Errorf("invalid CR must not process abort, got %d AbortProcessed events", got)
+	}
+}
+
+func TestFreezeAbortReconcile_OperationIDLabelMismatch(t *testing.T) {
+	abort := newFreezeAbortForTest()
+	abort.Labels[operatorv1alpha1.LabelOperationID] = "op-does-not-match"
+
+	res := reconcileFreezeAbort(t, abort, nil)
+
+	if res.err != nil {
+		t.Fatalf("unexpected error: %v", res.err)
+	}
+	if res.abort.Status.Phase != operatorv1alpha1.PhaseFailed {
+		t.Errorf("expected phase Failed, got %s", res.abort.Status.Phase)
+	}
+	cond := findCondition(res.abort.Status.Conditions, operatorv1alpha1.CondOperationIDLabelValid)
+	if cond == nil || cond.Reason != operatorv1alpha1.ReasonOperationIDLabelInvalid {
+		t.Errorf("expected reason %s, got %v", operatorv1alpha1.ReasonOperationIDLabelInvalid, cond)
+	}
+}
+
 func TestFreezeAbortReconcile_TerminalPhaseIsNoOp(t *testing.T) {
 	for _, phase := range []operatorv1alpha1.Phase{
 		operatorv1alpha1.PhaseSucceeded,

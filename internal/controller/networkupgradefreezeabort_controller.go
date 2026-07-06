@@ -43,6 +43,13 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, nil
 	}
 
+	if ok, msg := validateOperationIDLabel(abort.Labels, abort.Spec.OperationID); !ok {
+		return rejectInvalidOperationIDLabel(ctx, r.Client, &abort, &abort.Status.Conditions,
+			func(reason, m string) { r.eventf(&abort, corev1.EventTypeWarning, reason, "%s", m) },
+			func() { abort.Status.Phase = operatorv1alpha1.PhaseFailed },
+			msg)
+	}
+
 	if abort.Status.Phase == "" || abort.Status.Phase == operatorv1alpha1.PhasePending {
 		now := metav1.Now()
 		abort.Status.StartTime = &now
