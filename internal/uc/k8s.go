@@ -3,7 +3,6 @@
 package uc
 
 import (
-	"fmt"
 	"net"
 	"time"
 
@@ -14,19 +13,28 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // GVRs for the four NetworkUpgrade CRs the UC creates/watches. The group and
 // version are taken from the operator API package so they stay in sync with the
 // CRD definitions.
 var (
-	//nolint:unused // consumed by the factory CR handlers in #993
 	networkUpgradePrepareGVR = gvr("networkupgradeprepares")
 	//nolint:unused // consumed by the factory CR handlers in #994
-	networkUpgradeFreezeGVR  = gvr("networkupgradefreezes")
-	networkUpgradeExecuteGVR = gvr("networkupgradeexecutes")
-	//nolint:unused // consumed by the factory CR handlers in #996
+	networkUpgradeFreezeGVR = gvr("networkupgradefreezes")
+	//nolint:unused // consumed by the factory CR handlers in #995
+	networkUpgradeExecuteGVR     = gvr("networkupgradeexecutes")
 	networkUpgradeFreezeAbortGVR = gvr("networkupgradefreezeaborts")
+
+	// allUpgradeGVRs is the set the startup op-id cache seed (#997) and restart
+	// recovery (#998) iterate over to discover CRs already in the cluster.
+	allUpgradeGVRs = []schema.GroupVersionResource{
+		networkUpgradePrepareGVR,
+		networkUpgradeFreezeGVR,
+		networkUpgradeExecuteGVR,
+		networkUpgradeFreezeAbortGVR,
+	}
 )
 
 const (
@@ -41,6 +49,11 @@ const (
 	// governed by watch TimeoutSeconds server-side); see buildDynamicClient for
 	// why a client-wide rest.Config.Timeout is unsafe for watches.
 	listTimeout = 30 * time.Second
+
+	// createTimeout bounds a single CR Create call. Applied per-call via
+	// context.WithTimeout so a stalled API server cannot block the marker poll
+	// loop indefinitely — the handler fails fast and retries on the next tick.
+	createTimeout = 30 * time.Second
 )
 
 func gvr(resource string) schema.GroupVersionResource {
@@ -62,12 +75,18 @@ func buildDynamicClient(kubeconfigPath string) (dynamic.Interface, error) {
 	if kubeconfigPath == "" {
 		restCfg, err = rest.InClusterConfig()
 		if err != nil {
-			return nil, fmt.Errorf("load in-cluster config: %w", err)
+			return nil, errx.WithHints(
+				errx.WithReason(errClient.Wrap(err, "load in-cluster config"), ReasonInClusterConfigFailed),
+				"Run the UC as a pod with a mounted ServiceAccount token, or pass --kubeconfig for out-of-cluster use",
+			)
 		}
 	} else {
 		restCfg, err = clientcmd.BuildConfigFromFlags("", kubeconfigPath)
 		if err != nil {
-			return nil, fmt.Errorf("load kubeconfig %s: %w", kubeconfigPath, err)
+			return nil, errx.WithHints(
+				errx.WithReason(errClient.Wrap(err, "load kubeconfig %s", kubeconfigPath), ReasonKubeconfigLoadFailed),
+				"Confirm --kubeconfig points to a readable, valid kubeconfig file",
+			)
 		}
 	}
 	// Bound TCP connection establishment via a dial timeout — NOT rest.Config.Timeout,
@@ -79,7 +98,7 @@ func buildDynamicClient(kubeconfigPath string) (dynamic.Interface, error) {
 	restCfg.Dial = (&net.Dialer{Timeout: dialTimeout, KeepAlive: dialTimeout}).DialContext
 	client, err := dynamic.NewForConfig(restCfg)
 	if err != nil {
-		return nil, fmt.Errorf("build dynamic client: %w", err)
+		return nil, errx.WithReason(errClient.Wrap(err, "build dynamic client"), ReasonDynamicClientFailed)
 	}
 	return client, nil
 }

@@ -4,7 +4,7 @@ description: A Helm chart for the Hedera Solo Operator
 type: application
 version: 0.3.2
 appVersion: "0.3.2"
-kubeVersion: ">=1.27.0-0"
+kubeVersion: ">=1.32.0-0"
 keywords:
   - hedera
   - blockchain

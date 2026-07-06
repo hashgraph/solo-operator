@@ -35,6 +35,7 @@ type NetworkUpgradePrepareStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=nup
+// +kubebuilder:selectablefield:JSONPath=".spec.operationId"
 // +kubebuilder:printcolumn:name="Orbit",type="string",JSONPath=".spec.orbit"
 // +kubebuilder:printcolumn:name="OperationID",type="string",JSONPath=".spec.operationId"
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"

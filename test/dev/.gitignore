@@ -1,0 +1,7 @@
+# Generated build artifacts
+/extracted/
+/staging/
+# Downloaded consensus-node source packages
+/build-v*.zip
+# Leftover clone (now vendored under overlay/)
+/hiero-local-node/
