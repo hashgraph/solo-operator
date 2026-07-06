@@ -28,9 +28,9 @@ var _ = Describe("Orbit Controller", func() {
 				Spec: operatorv1alpha1.OrbitSpec{
 					Lifetime: "24h",
 					Consensus: operatorv1alpha1.OrbitConsensus{
-						NetworkSettings:          map[string]string{"ledger.id": "0x03"},
-						ApplicationConfiguration: map[string]string{"hedera.realm": "0"},
-						PermissionConfiguration:  map[string]string{"permission": "default"},
+						Genesis: operatorv1alpha1.OrbitGenesis{
+							AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x03"},
+						},
 					},
 				},
 			}
@@ -76,9 +76,9 @@ var _ = Describe("Orbit Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
 					Consensus: operatorv1alpha1.OrbitConsensus{
-						NetworkSettings:          map[string]string{"ledger.id": "0x03"},
-						ApplicationConfiguration: map[string]string{"hedera.realm": "0"},
-						PermissionConfiguration:  map[string]string{"permission": "default"},
+						Genesis: operatorv1alpha1.OrbitGenesis{
+							AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x03"},
+						},
 					},
 				},
 			})).Should(Succeed())

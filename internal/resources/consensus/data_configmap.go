@@ -91,18 +91,13 @@ func MergeApplicationProperties(overrides map[string]string) string {
 	return RenderProperties(merged)
 }
 
-func (r *DataConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1.ConsensusCapsule, orbit *operatorv1alpha1.Orbit) *corev1.ConfigMap {
-	data := map[string]string{}
-	if len(orbit.Spec.Consensus.GenesisProperties) > 0 {
-		data[GenesisPropertiesFileName] = RenderProperties(orbit.Spec.Consensus.GenesisProperties)
-	}
-
+func (r *DataConfigMapSubReconciler) buildConfigMap(capsule *operatorv1alpha1.ConsensusCapsule, _ *operatorv1alpha1.Orbit) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DataConfigMapName(capsule),
 			Namespace: capsule.Namespace,
 			Labels:    CommonLabels(capsule),
 		},
-		Data: data,
+		Data: map[string]string{},
 	}
 }

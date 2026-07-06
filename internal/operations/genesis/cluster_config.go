@@ -78,11 +78,7 @@ func buildConfigTxt(orbit *operatorv1alpha1.Orbit, materials []RosterMaterial) s
 }
 
 func orbitLedgerID(orbit *operatorv1alpha1.Orbit) string {
-	g := orbit.Spec.Consensus.Genesis
-	if g == nil || g.AddressBook == nil {
-		return ""
-	}
-	return g.AddressBook.LedgerId
+	return orbit.Spec.Consensus.Genesis.AddressBook.LedgerId
 }
 
 // configTxtLedgerID returns the decimal form the legacy config.txt swirld
@@ -97,7 +93,7 @@ func configTxtLedgerID(raw string) string {
 	return strings.TrimPrefix(raw, "0x")
 }
 
-func buildSettingsTxt(orbit *operatorv1alpha1.Orbit) string {
+func buildSettingsTxt(_ *operatorv1alpha1.Orbit) string {
 	settings := map[string]string{
 		"checkSignedStateFromDisk":              "1",
 		"csvFileName":                           "MainNetStats",
@@ -117,9 +113,6 @@ func buildSettingsTxt(orbit *operatorv1alpha1.Orbit) string {
 		"useLoopbackIp":                         "false",
 		"virtualMap.familyThrottleThreshold":    "6000000000",
 		"waitAtStartup":                         "false",
-	}
-	for k, v := range orbit.Spec.Consensus.NetworkSettings {
-		settings[k] = v
 	}
 	return consensus.RenderSettingsTxt(settings)
 }
@@ -148,9 +141,6 @@ func ledgerIDToHex(raw string) (ledgerID, chainID string) {
 func buildApplicationProperties(orbit *operatorv1alpha1.Orbit) string {
 	ledgerID, chainID := defaultedLedgerIDHex(orbit)
 	overrides := map[string]string{"ledger.id": ledgerID, "contracts.chainId": chainID}
-	for k, v := range orbit.Spec.Consensus.ApplicationConfiguration {
-		overrides[k] = v
-	}
 	return consensus.MergeApplicationProperties(overrides)
 }
 
@@ -180,9 +170,6 @@ func buildApiPermissionProperties(orbit *operatorv1alpha1.Orbit) string {
 		"tokenRevokeKycFromAccount": "0-*", "tokenUnfreezeAccount": "0-*", "tokenUnpause": "0-*", "tokenUpdate": "0-*",
 		"updateAccount": "0-*", "updateContract": "0-*", "updateFile": "0-*", "updateTopic": "0-*", "utilPrng": "0-*",
 	}
-	for k, v := range orbit.Spec.Consensus.PermissionConfiguration {
-		perms[k] = v
-	}
 	return consensus.RenderProperties(perms)
 }
 
@@ -199,16 +186,10 @@ func buildBootstrapProperties(orbit *operatorv1alpha1.Orbit) string {
 		"balances.compressOnCreation":                 "true",
 		"contracts.maxNumWithHapiSigsAccess":          "0",
 	}
-	for k, v := range orbit.Spec.Consensus.ApplicationConfiguration {
-		props[k] = v
-	}
 	return consensus.RenderProperties(props)
 }
 
-func buildGenesisThrottles(orbit *operatorv1alpha1.Orbit) string {
-	if orbit.Spec.Consensus.Genesis != nil && orbit.Spec.Consensus.Genesis.ThrottlesJson != "" {
-		return orbit.Spec.Consensus.Genesis.ThrottlesJson
-	}
+func buildGenesisThrottles(_ *operatorv1alpha1.Orbit) string {
 	return defaultThrottlesJSON
 }
 

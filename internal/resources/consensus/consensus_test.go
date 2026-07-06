@@ -207,16 +207,8 @@ func newTestOrbit() *operatorv1alpha1.Orbit {
 		},
 		Spec: operatorv1alpha1.OrbitSpec{
 			Consensus: operatorv1alpha1.OrbitConsensus{
-				NetworkSettings: map[string]string{
-					"maxTransactionBytesPerSec": "2097152",
-					"useTLS":                    "1",
-				},
-				ApplicationConfiguration: map[string]string{
-					"blockStream.streamMode": "BOTH",
-					"hedera.shard":           "0",
-				},
-				PermissionConfiguration: map[string]string{
-					"getVersionInfo": "EVERYBODY",
+				Genesis: operatorv1alpha1.OrbitGenesis{
+					AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x00"},
 				},
 			},
 		},

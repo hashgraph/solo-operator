@@ -51,11 +51,6 @@ spec:
               consensus:
                 description: Consensus contains shared configuration for all ConsensusCapsules
                 properties:
-                  applicationConfiguration:
-                    additionalProperties:
-                      type: string
-                    description: ApplicationConfiguration is equivalent to application.properties
-                    type: object
                   genesis:
                     description: Genesis contains genesis-specific configuration
                     properties:
@@ -135,6 +130,7 @@ spec:
                           ledgerId:
                             description: LedgerId is the ledger identifier (swirld
                               entry)
+                            minLength: 1
                             type: string
                           realmId:
                             default: 0
@@ -146,29 +142,11 @@ spec:
                             description: ShardId is the numeric shard ID
                             minimum: 0
                             type: integer
+                        required:
+                        - ledgerId
                         type: object
-                      throttlesJson:
-                        description: |-
-                          ThrottlesJson overrides the default genesis-throttles.json content written to all nodes.
-                          Must be a valid Hedera throttle definitions JSON. If empty, built-in defaults are used.
-                        type: string
-                    type: object
-                  genesisProperties:
-                    additionalProperties:
-                      type: string
-                    description: GenesisProperties is equivalent to genesis.properties
-                    type: object
-                  networkSettings:
-                    additionalProperties:
-                      type: string
-                    description: |-
-                      NetworkSettings holds network-wide common values (e.g. `ledger.id`); NOT the node settings.txt,
-                      which is owned by NodeSettings.
-                    type: object
-                  permissionConfiguration:
-                    additionalProperties:
-                      type: string
-                    description: PermissionConfiguration is equivalent to api-permission.properties
+                    required:
+                    - addressBook
                     type: object
                   provisioningModel:
                     description: ProvisioningModel specifies how consensus nodes are
@@ -179,9 +157,7 @@ spec:
                     - DeterministicContainerImage
                     type: string
                 required:
-                - applicationConfiguration
-                - networkSettings
-                - permissionConfiguration
+                - genesis
                 type: object
               deploymentModel:
                 description: DeploymentModel specifies whether this is a single or

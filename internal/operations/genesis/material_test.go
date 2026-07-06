@@ -148,8 +148,8 @@ func TestMaterialsFromCluster_MergesExternalAddresses(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
 		Spec: operatorv1alpha1.OrbitSpec{
 			Consensus: operatorv1alpha1.OrbitConsensus{
-				Genesis: &operatorv1alpha1.OrbitGenesis{
-					AddressBook: &operatorv1alpha1.OrbitAddressBook{
+				Genesis: operatorv1alpha1.OrbitGenesis{
+					AddressBook: operatorv1alpha1.OrbitAddressBook{
 						ExternalAddresses: []operatorv1alpha1.AddressBookEntry{{
 							NodeId:                   3,
 							SelfName:                 "ext3",
@@ -300,8 +300,8 @@ func TestMaterialsFromCluster_ExternalAddressMissingFieldsErrors(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
 		Spec: operatorv1alpha1.OrbitSpec{
 			Consensus: operatorv1alpha1.OrbitConsensus{
-				Genesis: &operatorv1alpha1.OrbitGenesis{
-					AddressBook: &operatorv1alpha1.OrbitAddressBook{
+				Genesis: operatorv1alpha1.OrbitGenesis{
+					AddressBook: operatorv1alpha1.OrbitAddressBook{
 						ExternalAddresses: []operatorv1alpha1.AddressBookEntry{{
 							NodeId:           99,
 							ExternalHostname: "", // intentionally empty
