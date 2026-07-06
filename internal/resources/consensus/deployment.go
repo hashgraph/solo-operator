@@ -724,6 +724,18 @@ func (r *StatefulSetSubReconciler) addSidecarContainers(sts *appsv1.StatefulSet,
 			r.buildBackupUploaderContainer(containers.BackupUploader))
 	}
 
+	switch {
+	case containers.UC == nil:
+		r.event(capsule, corev1.EventTypeNormal, operatorv1alpha1.EventComponentSkipped,
+			"uc: omitted from spec; no change made")
+	case !containers.UC.Enabled:
+		r.event(capsule, corev1.EventTypeNormal, operatorv1alpha1.EventSidecarDisabled,
+			"uc: enabled=false; container removed from StatefulSet")
+	default:
+		sts.Spec.Template.Spec.Containers = append(sts.Spec.Template.Spec.Containers,
+			r.buildUcContainer(containers.UC))
+	}
+
 	if resolvedAlloy == nil || !resolvedAlloy.Enabled {
 		r.event(capsule, corev1.EventTypeNormal, operatorv1alpha1.EventComponentSkipped,
 			"alloy: omitted from spec; no change made")
@@ -870,6 +882,37 @@ func (r *StatefulSetSubReconciler) buildCheetahUploaderContainer(uploader *opera
 	}
 
 	return container, nil
+}
+
+func (r *StatefulSetSubReconciler) buildUcContainer(config *operatorv1alpha1.UcSidecar) corev1.Container {
+	image := common.BuildImageOrDefault(config.SoftwareVersion, config.Image)
+
+	name := config.Name
+	if name == "" {
+		name = "uc"
+	}
+
+	container := corev1.Container{
+		Name:                     name,
+		Image:                    image,
+		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
+		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+		ImagePullPolicy:          corev1.PullIfNotPresent,
+	}
+
+	if config.ImagePullPolicy != "" {
+		container.ImagePullPolicy = config.ImagePullPolicy
+	}
+
+	if config.Resources != nil {
+		container.Resources = *config.Resources
+	}
+
+	if len(config.AdditionalVolumeMounts) > 0 {
+		container.VolumeMounts = config.AdditionalVolumeMounts
+	}
+
+	return container
 }
 
 // applyCheetahFSGroup sets fsGroup on the pod security context when any Cheetah uploader is enabled.

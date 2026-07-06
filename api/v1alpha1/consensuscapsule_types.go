@@ -270,6 +270,35 @@ type ConsensusContainers struct {
 
 	// +optional
 	Alloy *AlloyConfig `json:"alloy,omitempty"`
+
+	// +optional
+	UC *UcSidecar `json:"uc,omitempty"`
+}
+
+// UcSidecar configures the Update Coordinator sidecar container.
+type UcSidecar struct {
+	// +optional
+	Name string `json:"name,omitempty"`
+
+	// +optional
+	Image string `json:"image,omitempty"`
+
+	// +kubebuilder:default=IfNotPresent
+	// +optional
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+
+	// +optional
+	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
+
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// +kubebuilder:default=false
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// +optional
+	AdditionalVolumeMounts []corev1.VolumeMount `json:"additionalVolumeMounts,omitempty"`
 }
 
 // ConsensusNodeContainer configures the main consensus node container.
