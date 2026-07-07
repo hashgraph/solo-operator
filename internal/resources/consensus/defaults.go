@@ -2,6 +2,15 @@
 
 package consensus
 
+import "github.com/automa-saga/version"
+
+const UCDefaultImageRepo = "ghcr.io/hashgraph/solo-operator-uc"
+
+// UCDefaultImage returns the uc sidecar image at the operator's build version.
+func UCDefaultImage() string {
+	return UCDefaultImageRepo + ":" + version.Version
+}
+
 const (
 	// HapiBase is the working directory inside the consensus-node container.
 	HapiBase = "/opt/hgcapp/services-hedera/HapiApp2.0"

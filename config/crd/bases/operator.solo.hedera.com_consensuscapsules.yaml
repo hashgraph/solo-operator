@@ -3603,9 +3603,6 @@ spec:
                             default: false
                             description: Enabled enables the uploader
                             type: boolean
-                          image:
-                            description: Image is the container image
-                            type: string
                           imagePullPolicy:
                             default: IfNotPresent
                             description: ImagePullPolicy specifies when to pull the
@@ -3824,9 +3821,6 @@ spec:
                                 description: UseSsl enables SSL
                                 type: boolean
                             type: object
-                          image:
-                            description: Image is the container image
-                            type: string
                           imagePullPolicy:
                             default: IfNotPresent
                             description: ImagePullPolicy specifies when to pull the
@@ -4505,9 +4499,6 @@ spec:
                                 description: UseSsl enables SSL
                                 type: boolean
                             type: object
-                          image:
-                            description: Image is the container image
-                            type: string
                           imagePullPolicy:
                             default: IfNotPresent
                             description: ImagePullPolicy specifies when to pull the
@@ -4764,9 +4755,6 @@ spec:
                                 description: UseSsl enables SSL
                                 type: boolean
                             type: object
-                          image:
-                            description: Image is the container image
-                            type: string
                           imagePullPolicy:
                             default: IfNotPresent
                             description: ImagePullPolicy specifies when to pull the
@@ -5024,8 +5012,6 @@ spec:
                           enabled:
                             default: false
                             type: boolean
-                          image:
-                            type: string
                           imagePullPolicy:
                             default: IfNotPresent
                             description: PullPolicy describes a policy for if/when
