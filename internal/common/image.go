@@ -5,6 +5,8 @@ package common
 import (
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
+
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
@@ -34,6 +36,14 @@ func BuildImageOrDefault(sv *operatorv1alpha1.SoftwareVersion, defaultImage stri
 		return image
 	}
 	return defaultImage
+}
+
+// PullPolicyOrDefault returns the pull policy from a SoftwareVersion, or def if unset.
+func PullPolicyOrDefault(sv *operatorv1alpha1.SoftwareVersion, def corev1.PullPolicy) corev1.PullPolicy {
+	if sv != nil && sv.ImagePullPolicy != "" {
+		return corev1.PullPolicy(sv.ImagePullPolicy)
+	}
+	return def
 }
 
 // ParseImage splits a full OCI image reference "[[repo/]name[:tag]]" into its three components.

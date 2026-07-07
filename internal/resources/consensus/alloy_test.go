@@ -52,7 +52,11 @@ func TestBuildAlloyContainer_CustomNameAndImage(t *testing.T) {
 	config := &operatorv1alpha1.AlloyConfig{
 		Enabled: true,
 		Name:    "my-alloy",
-		Image:   "grafana/alloy:v1.8.1",
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+			Repository: "grafana",
+			ImageName:  "alloy",
+			ImageTag:   "v1.8.1",
+		},
 	}
 
 	container := reconciler.buildAlloyContainer(capsule, config)
@@ -71,8 +75,10 @@ func TestBuildAlloyContainer_ImagePullPolicy(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test-node", Namespace: "test-ns"},
 	}
 	config := &operatorv1alpha1.AlloyConfig{
-		Enabled:         true,
-		ImagePullPolicy: corev1.PullAlways,
+		Enabled: true,
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+			ImagePullPolicy: operatorv1alpha1.ImagePullPolicyAlways,
+		},
 	}
 
 	container := reconciler.buildAlloyContainer(capsule, config)
@@ -223,7 +229,11 @@ func TestAddSidecarContainers_Alloy(t *testing.T) {
 					},
 					Alloy: &operatorv1alpha1.AlloyConfig{
 						Enabled: true,
-						Image:   "grafana/alloy:v1.8.1",
+						SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+							Repository: "grafana",
+							ImageName:  "alloy",
+							ImageTag:   "v1.8.1",
+						},
 					},
 				},
 			},

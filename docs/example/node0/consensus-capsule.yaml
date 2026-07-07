@@ -131,6 +131,12 @@ spec:
       # Loki log shipping is disabled by default; enable via exporters.loki in common/orbit.yaml.
       alloy:
         enabled: true
+        # image inherited from orbit defaults; uncomment to override per-capsule:
+        # softwareVersion:
+        #   repository: "grafana"
+        #   imageName: "alloy"
+        #   imageTag: "v1.14.2"
+        #   imagePullPolicy: IfNotPresent
         config:
           labels:
             zone: "us-east-1a"

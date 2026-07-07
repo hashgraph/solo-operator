@@ -47,14 +47,9 @@ type OrbitAlloyDefaults struct {
 	// +optional
 	Enabled bool `json:"enabled,omitempty"`
 
-	// Image is the default Alloy container image
+	// SoftwareVersion is the default Alloy container image spec
 	// +optional
-	Image string `json:"image,omitempty"`
-
-	// ImagePullPolicy is the default image pull policy
-	// +kubebuilder:default=IfNotPresent
-	// +optional
-	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
 
 	// Resources is the default resource requirements for the Alloy sidecar
 	// +optional
