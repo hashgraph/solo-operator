@@ -64,6 +64,7 @@ const (
 	ReasonMarkerHandlerFailed  errx.Reason = "MarkerHandlerFailed"
 	ReasonAbortWithoutPrepare  errx.Reason = "AbortWithoutPrepare"
 	ReasonFreezeWithoutPrepare errx.Reason = "FreezeWithoutPrepare"
+	ReasonPrepareFailed        errx.Reason = "PrepareFailed"
 
 	// Startup recovery / cache.
 	ReasonUCCacheSeedFailed      errx.Reason = "UCCacheSeedFailed"

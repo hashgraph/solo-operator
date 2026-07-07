@@ -20,21 +20,26 @@ const wantFreezeName = "upgrade-0.75.0-20260413t120000z-freeze"
 // wantScheduledTime is the freeze marker mtime pinned for stable tests.
 var wantScheduledTime = time.Date(2026, 4, 14, 6, 0, 0, 0, time.UTC)
 
-// writeFreezeMarker writes freeze_scheduled.mf with a pinned mtime.
-func writeFreezeMarker(t *testing.T, dir string, mtime time.Time) {
+// writeFreezePackage writes both execute_immediate.mf (needed for operationId
+// re-derivation) and freeze_scheduled.mf into root, reusing writePackage for the
+// components manifest + execute marker, then adding the freeze marker.
+func writeFreezePackage(t *testing.T, componentsYAML string, freezeMtime time.Time) string {
 	t.Helper()
-	p := filepath.Join(dir, MarkerFreezeScheduled)
+	root := writePackage(t, componentsYAML) // writes execute_immediate.mf + manifests/
+	p := filepath.Join(root, MarkerFreezeScheduled)
 	if err := os.WriteFile(p, []byte("FREEZE_SCHEDULED"), 0o644); err != nil {
 		t.Fatalf("write freeze marker: %v", err)
 	}
-	if err := os.Chtimes(p, mtime, mtime); err != nil {
+	if err := os.Chtimes(p, freezeMtime, freezeMtime); err != nil {
 		t.Fatalf("chtimes freeze marker: %v", err)
 	}
+	return root
 }
 
-// seedPrepareCRWithImages creates a NetworkUpgradePrepare CR pre-populated with
-// images and an optional status.selectedSources.
-func seedPrepareCRWithImages(t *testing.T, f *Factory, operationID, phase string, selectedSources *operatorv1alpha1.SelectedSources) {
+// seedSucceededPrepare seeds a NetworkUpgradePrepare CR in Succeeded phase with
+// images and an optional status.selectedSources, as would be the normal state
+// when freeze_scheduled.mf is written.
+func seedSucceededPrepare(t *testing.T, f *Factory, operationID string, selectedSources *operatorv1alpha1.SelectedSources) {
 	t.Helper()
 	images := operatorv1alpha1.UpgradeImagesSpec{
 		ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{Version: "0.75.0"},
@@ -43,10 +48,8 @@ func seedPrepareCRWithImages(t *testing.T, f *Factory, operationID, phase string
 	if err != nil {
 		t.Fatalf("build prepare: %v", err)
 	}
-	if phase != "" {
-		if err := unstructured.SetNestedField(cr.Object, phase, "status", "phase"); err != nil {
-			t.Fatalf("set phase: %v", err)
-		}
+	if err := unstructured.SetNestedField(cr.Object, string(operatorv1alpha1.PhaseSucceeded), "status", "phase"); err != nil {
+		t.Fatalf("set phase: %v", err)
 	}
 	if selectedSources != nil {
 		srcMap := map[string]interface{}{
@@ -61,7 +64,7 @@ func seedPrepareCRWithImages(t *testing.T, f *Factory, operationID, phase string
 	}
 	if _, err := f.client.Resource(networkUpgradePrepareGVR).Namespace(f.cfg.Namespace).
 		Create(context.Background(), cr, metav1.CreateOptions{}); err != nil {
-		t.Fatalf("seed prepare with images: %v", err)
+		t.Fatalf("seed succeeded prepare: %v", err)
 	}
 }
 
@@ -75,11 +78,22 @@ func getFreeze(t *testing.T, f *Factory, operationID string) *unstructured.Unstr
 	return cr
 }
 
+func assertNoFreeze(t *testing.T, f *Factory) {
+	t.Helper()
+	list, err := f.client.Resource(networkUpgradeFreezeGVR).Namespace(f.cfg.Namespace).
+		List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list.Items) != 0 {
+		t.Fatalf("expected no freeze CR, got %d", len(list.Items))
+	}
+}
+
 func TestHandleFreezeScheduledCreatesFreezeCR(t *testing.T) {
-	root := t.TempDir()
+	root := writeFreezePackage(t, validComponentsYAML, wantScheduledTime)
 	f := newFakeFactory(t, testConfig(root, t.TempDir()))
-	writeFreezeMarker(t, root, wantScheduledTime)
-	seedPrepareCRWithImages(t, f, wantOperationID, "", nil)
+	seedSucceededPrepare(t, f, wantOperationID, nil)
 
 	if err := f.HandleFreezeScheduled(context.Background()); err != nil {
 		t.Fatalf("HandleFreezeScheduled: %v", err)
@@ -108,7 +122,6 @@ func TestHandleFreezeScheduledCreatesFreezeCR(t *testing.T) {
 	if opID != wantOperationID {
 		t.Fatalf("spec.operationId = %q", opID)
 	}
-
 	// persist-before-send: the file is removed after a successful create.
 	if rest, _ := f.store.List(); len(rest) != 0 {
 		t.Fatalf("persisted CR not cleaned up after create: %v", rest)
@@ -116,10 +129,9 @@ func TestHandleFreezeScheduledCreatesFreezeCR(t *testing.T) {
 }
 
 func TestHandleFreezeScheduledCopiesImagesFromPrepare(t *testing.T) {
-	root := t.TempDir()
+	root := writeFreezePackage(t, validComponentsYAML, wantScheduledTime)
 	f := newFakeFactory(t, testConfig(root, t.TempDir()))
-	writeFreezeMarker(t, root, wantScheduledTime)
-	seedPrepareCRWithImages(t, f, wantOperationID, "", nil)
+	seedSucceededPrepare(t, f, wantOperationID, nil)
 
 	if err := f.HandleFreezeScheduled(context.Background()); err != nil {
 		t.Fatalf("HandleFreezeScheduled: %v", err)
@@ -133,43 +145,94 @@ func TestHandleFreezeScheduledCopiesImagesFromPrepare(t *testing.T) {
 }
 
 func TestHandleFreezeScheduledCopiesSelectedSourcesWhenPresent(t *testing.T) {
-	root := t.TempDir()
+	root := writeFreezePackage(t, validComponentsYAML, wantScheduledTime)
 	f := newFakeFactory(t, testConfig(root, t.TempDir()))
-	writeFreezeMarker(t, root, wantScheduledTime)
 	ss := &operatorv1alpha1.SelectedSources{}
-	seedPrepareCRWithImages(t, f, wantOperationID, "", ss)
+	seedSucceededPrepare(t, f, wantOperationID, ss)
 
 	if err := f.HandleFreezeScheduled(context.Background()); err != nil {
 		t.Fatalf("HandleFreezeScheduled: %v", err)
 	}
-	// The CR is created successfully whether selectedSources is populated or empty.
 	getFreeze(t, f, wantOperationID)
 }
 
+// TestHandleFreezeScheduledNoPrepareIsNoOp covers the case where no Prepare CR
+// exists yet (anomalous — execute_immediate.mf precedes freeze_scheduled.mf in
+// normal protocol, so a Prepare should already be in the cluster).
 func TestHandleFreezeScheduledNoPrepareIsNoOp(t *testing.T) {
-	root := t.TempDir()
+	root := writeFreezePackage(t, validComponentsYAML, wantScheduledTime)
 	f := newFakeFactory(t, testConfig(root, t.TempDir()))
-	writeFreezeMarker(t, root, wantScheduledTime)
 
-	// No Prepare in cluster: handler must return nil and create no CR.
 	if err := f.HandleFreezeScheduled(context.Background()); err != nil {
 		t.Fatalf("want nil with no Prepare, got %v", err)
 	}
-	list, err := f.client.Resource(networkUpgradeFreezeGVR).Namespace(f.cfg.Namespace).
-		List(context.Background(), metav1.ListOptions{})
+	assertNoFreeze(t, f)
+}
+
+// TestHandleFreezeScheduledPrepareFailed verifies that a Failed Prepare blocks
+// Freeze creation. The consensus node should not schedule a freeze after a
+// prepare failure, but the handler must be defensive.
+func TestHandleFreezeScheduledPrepareFailed(t *testing.T) {
+	root := writeFreezePackage(t, validComponentsYAML, wantScheduledTime)
+	f := newFakeFactory(t, testConfig(root, t.TempDir()))
+
+	images := operatorv1alpha1.UpgradeImagesSpec{
+		ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{Version: "0.75.0"},
+	}
+	cr, err := buildPrepareCR(f.cfg, wantOperationID, images)
 	if err != nil {
-		t.Fatalf("list: %v", err)
+		t.Fatalf("build prepare: %v", err)
 	}
-	if len(list.Items) != 0 {
-		t.Fatalf("expected no freeze CR, got %d", len(list.Items))
+	if err := unstructured.SetNestedField(cr.Object, string(operatorv1alpha1.PhaseFailed), "status", "phase"); err != nil {
+		t.Fatalf("set phase: %v", err)
 	}
+	if _, err := f.client.Resource(networkUpgradePrepareGVR).Namespace(f.cfg.Namespace).
+		Create(context.Background(), cr, metav1.CreateOptions{}); err != nil {
+		t.Fatalf("seed failed prepare: %v", err)
+	}
+
+	if err := f.HandleFreezeScheduled(context.Background()); err != nil {
+		t.Fatalf("want nil (halt not error), got %v", err)
+	}
+	assertNoFreeze(t, f)
+}
+
+// TestHandleFreezeScheduledPrepareInProgress verifies that the handler retries
+// (returns nil, no CR) when the Prepare CR exists but has not yet Succeeded.
+func TestHandleFreezeScheduledPrepareInProgress(t *testing.T) {
+	root := writeFreezePackage(t, validComponentsYAML, wantScheduledTime)
+	f := newFakeFactory(t, testConfig(root, t.TempDir()))
+	// Seed with empty phase = in-progress.
+	seedPrepareCR(t, f, wantOperationID, "")
+
+	if err := f.HandleFreezeScheduled(context.Background()); err != nil {
+		t.Fatalf("want nil (retry), got %v", err)
+	}
+	assertNoFreeze(t, f)
+}
+
+// TestHandleFreezeScheduledNoExecuteMarkerIsNoOp covers the anomalous case
+// where freeze_scheduled.mf exists but execute_immediate.mf is absent (cannot
+// derive operationId).
+func TestHandleFreezeScheduledNoExecuteMarkerIsNoOp(t *testing.T) {
+	root := t.TempDir()
+	// Write freeze marker but NOT execute_immediate.mf.
+	p := filepath.Join(root, MarkerFreezeScheduled)
+	if err := os.WriteFile(p, []byte("FREEZE_SCHEDULED"), 0o644); err != nil {
+		t.Fatalf("write freeze marker: %v", err)
+	}
+	f := newFakeFactory(t, testConfig(root, t.TempDir()))
+
+	if err := f.HandleFreezeScheduled(context.Background()); err != nil {
+		t.Fatalf("want nil (no execute marker), got %v", err)
+	}
+	assertNoFreeze(t, f)
 }
 
 func TestHandleFreezeScheduledIsIdempotent(t *testing.T) {
-	root := t.TempDir()
+	root := writeFreezePackage(t, validComponentsYAML, wantScheduledTime)
 	f := newFakeFactory(t, testConfig(root, t.TempDir()))
-	writeFreezeMarker(t, root, wantScheduledTime)
-	seedPrepareCRWithImages(t, f, wantOperationID, "", nil)
+	seedSucceededPrepare(t, f, wantOperationID, nil)
 
 	for i := 0; i < 3; i++ {
 		if err := f.HandleFreezeScheduled(context.Background()); err != nil {
@@ -183,26 +246,5 @@ func TestHandleFreezeScheduledIsIdempotent(t *testing.T) {
 	}
 	if len(list.Items) != 1 {
 		t.Fatalf("re-dispatch created %d freeze CRs, want exactly 1", len(list.Items))
-	}
-}
-
-func TestHandleFreezeScheduledSkipsTerminalPrepare(t *testing.T) {
-	root := t.TempDir()
-	f := newFakeFactory(t, testConfig(root, t.TempDir()))
-	writeFreezeMarker(t, root, wantScheduledTime)
-	// A terminal Prepare (Succeeded/Failed) must not be resolved as the in-flight
-	// upgrade; the handler sees no active Prepare and is a no-op.
-	seedPrepareCRWithImages(t, f, wantOperationID, string(operatorv1alpha1.PhaseSucceeded), nil)
-
-	if err := f.HandleFreezeScheduled(context.Background()); err != nil {
-		t.Fatalf("HandleFreezeScheduled: %v", err)
-	}
-	list, err := f.client.Resource(networkUpgradeFreezeGVR).Namespace(f.cfg.Namespace).
-		List(context.Background(), metav1.ListOptions{})
-	if err != nil {
-		t.Fatalf("list: %v", err)
-	}
-	if len(list.Items) != 0 {
-		t.Fatalf("expected no freeze CR for terminal Prepare, got %d", len(list.Items))
 	}
 }

@@ -195,37 +195,65 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 	return nil
 }
 
-// HandleFreezeScheduled creates a NetworkUpgradeFreeze CR. It resolves the
-// in-flight operationId from the most-recent non-terminal NetworkUpgradePrepare
-// CR (cluster → on-disk fallback), copies spec.images and status.selectedSources
-// from that Prepare CR verbatim, and delivers the Freeze CR via persist-before-send.
+// HandleFreezeScheduled creates a NetworkUpgradeFreeze CR. The consensus node
+// writes freeze_scheduled.mf after submitting a FREEZE_UPGRADE transaction, so
+// the co-present execute_immediate.mf package is used to re-derive the
+// operationId deterministically (same inputs as HandleExecuteImmediate; the value
+// is identical every tick — "minted once" by construction). The handler then
+// looks up the NetworkUpgradePrepare CR for that operationId to copy spec.images
+// and status.selectedSources.
 //
-// If no Prepare exists, the handler logs an anomaly and returns nil — the marker
-// persists on disk so the next poll tick retries once a Prepare appears. If the
-// Prepare has not yet reached Succeeded (selectedSources is nil), an empty
-// SelectedSources is carried forward; the FreezeReconciler re-derives it from
-// spec.images at reconcile time (HIP-1496 FreezeReconciler step 3).
+// Gate: the Prepare CR MUST be Succeeded before a Freeze is created. If it has
+// Failed, the consensus node should not have scheduled a freeze — the handler
+// logs and halts (no retry value: the same Prepare cannot transition away from
+// Failed). If the Prepare is still in-progress (PrepareReconciler not yet done),
+// the handler retries on the next tick.
 func (f *Factory) HandleFreezeScheduled(ctx context.Context) error {
-	markerPath := filepath.Join(f.cfg.MarkerPath, MarkerFreezeScheduled)
-	info, err := os.Stat(markerPath)
+	freezePath := filepath.Join(f.cfg.MarkerPath, MarkerFreezeScheduled)
+	freezeInfo, err := os.Stat(freezePath)
 	if err != nil {
 		return errx.WithReason(errPersist.Wrap(err, "stat marker %s", MarkerFreezeScheduled), ReasonMarkerStatFailed)
 	}
-	scheduledTime := info.ModTime()
+	scheduledTime := freezeInfo.ModTime()
 
-	operationID, err := f.resolveOperationID(ctx)
+	// Re-derive operationId from the co-present execute_immediate.mf package.
+	// execute_immediate.mf is always in the same directory (the CN does not remove
+	// it until cleanup); re-computing yields the same deterministic id every tick.
+	preparePath := filepath.Join(f.cfg.MarkerPath, MarkerExecuteImmediate)
+	prepareInfo, err := os.Stat(preparePath)
 	if err != nil {
-		return err
-	}
-	if operationID == "" {
-		logx.As().Warn().Str("reason", ReasonFreezeWithoutPrepare.String()).Str("marker", MarkerFreezeScheduled).
-			Msg("freeze_scheduled.mf with no corresponding NetworkUpgradePrepare — will retry next tick")
+		// execute_immediate.mf is missing — anomalous; retry next tick.
+		logx.As().Warn().Err(err).Str("reason", ReasonFreezeWithoutPrepare.String()).Str("marker", MarkerFreezeScheduled).
+			Msg("freeze_scheduled.mf present but execute_immediate.mf missing — will retry next tick")
 		return nil
 	}
 
-	images, selectedSources, err := f.fetchPreparePayload(ctx, operationID)
+	manifestPath := filepath.Join(f.cfg.MarkerPath, manifestsSubdir, componentsManifestFile)
+	manifest, err := parseComponentsManifest(manifestPath)
+	if err != nil {
+		if errorx.IsOfType(err, errManifestInvalid) {
+			logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).
+				Str("marker", MarkerFreezeScheduled).Str("manifest", manifestPath).
+				Msg("invalid consensus-node-components.yaml — halting freeze")
+			return nil
+		}
+		return err
+	}
+
+	operationID, err := mintOperationID(manifest.Images.ConsensusNode.Version, prepareInfo.ModTime())
+	if err != nil {
+		logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).
+			Str("marker", MarkerFreezeScheduled).Msg("cannot derive a valid operationId — halting freeze")
+		return nil
+	}
+
+	images, selectedSources, ready, err := f.fetchPreparePayload(ctx, operationID)
 	if err != nil {
 		return err
+	}
+	if !ready {
+		// Prepare not yet Succeeded (still in-progress or absent); retry next tick.
+		return nil
 	}
 
 	cr, err := buildFreezeCR(f.cfg, operationID, scheduledTime, images, selectedSources)
@@ -235,12 +263,17 @@ func (f *Factory) HandleFreezeScheduled(ctx context.Context) error {
 	return f.deliverCR(ctx, networkUpgradeFreezeGVR, operationID, operatorv1alpha1.StepFreeze, kindNetworkUpgradeFreeze, cr)
 }
 
-// fetchPreparePayload retrieves spec.images and status.selectedSources from the
-// NetworkUpgradePrepare CR for operationID. If the Prepare has not yet reached
-// Succeeded (status.selectedSources is nil), an empty SelectedSources is returned
-// so the Freeze CR carries the images at minimum and the FreezeReconciler can
-// re-derive selectedSources from spec.images.
-func (f *Factory) fetchPreparePayload(ctx context.Context, operationID string) (operatorv1alpha1.UpgradeImagesSpec, operatorv1alpha1.SelectedSources, error) {
+// fetchPreparePayload looks up the NetworkUpgradePrepare CR for operationID and
+// returns its spec.images and status.selectedSources.
+//
+// ready is true only when the Prepare CR exists and is in Succeeded phase. It is
+// false (and err is nil) in two cases:
+//   - the Prepare CR is not yet in the cluster (very early tick; retry),
+//   - the Prepare is still in-progress (PrepareReconciler not done; retry).
+//
+// ready is false and err is nil with a Halted log when the Prepare has Failed —
+// a Failed Prepare cannot recover, so there is no retry value.
+func (f *Factory) fetchPreparePayload(ctx context.Context, operationID string) (operatorv1alpha1.UpgradeImagesSpec, operatorv1alpha1.SelectedSources, bool, error) {
 	listCtx, cancel := context.WithTimeout(ctx, listTimeout)
 	defer cancel()
 
@@ -249,21 +282,40 @@ func (f *Factory) fetchPreparePayload(ctx context.Context, operationID string) (
 			FieldSelector: "spec.operationId=" + operationID,
 		})
 	if err != nil {
-		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, errx.WithHints(
+		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, false, errx.WithHints(
 			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradePrepare for operationId %s", operationID), ReasonPrepareListFailed),
 			"Confirm the UC ServiceAccount has list permission on networkupgradeprepares."+operatorv1alpha1.GroupVersion.Group,
 		)
 	}
-
 	if len(list.Items) == 0 {
-		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil
+		logx.As().Warn().Str("reason", ReasonFreezeWithoutPrepare.String()).
+			Str("operation_id", operationID).Str("marker", MarkerFreezeScheduled).
+			Msg("no NetworkUpgradePrepare CR found for operationId — will retry next tick")
+		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, false, nil
 	}
+
 	prepare := &list.Items[0]
+	phase, _, _ := unstructured.NestedString(prepare.Object, "status", "phase")
+	switch operatorv1alpha1.Phase(phase) {
+	case operatorv1alpha1.PhaseFailed:
+		logx.As().Error().Str("reason", ReasonPrepareFailed.String()).
+			Str("operation_id", operationID).Str("marker", MarkerFreezeScheduled).
+			Msg("NetworkUpgradePrepare has Failed — halting freeze; consensus node should not have scheduled a freeze")
+		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, false, nil
+	case operatorv1alpha1.PhaseSucceeded:
+		// fall through to copy payload
+	default:
+		// Still in-progress; retry next tick.
+		logx.As().Debug().Str("reason", ReasonFreezeWithoutPrepare.String()).
+			Str("operation_id", operationID).Str("phase", phase).Str("marker", MarkerFreezeScheduled).
+			Msg("NetworkUpgradePrepare not yet Succeeded — will retry next tick")
+		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, false, nil
+	}
 
 	var images operatorv1alpha1.UpgradeImagesSpec
 	if raw, ok, _ := unstructured.NestedMap(prepare.Object, "spec", "images"); ok {
 		if err2 := runtime.DefaultUnstructuredConverter.FromUnstructured(raw, &images); err2 != nil {
-			return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{},
+			return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, false,
 				errx.WithReason(errCRBuild.Wrap(err2, "decode NetworkUpgradePrepare spec.images for %s", operationID), ReasonCRBuildFailed)
 		}
 	}
@@ -273,7 +325,7 @@ func (f *Factory) fetchPreparePayload(ctx context.Context, operationID string) (
 		_ = runtime.DefaultUnstructuredConverter.FromUnstructured(raw, &selectedSources)
 	}
 
-	return images, selectedSources, nil
+	return images, selectedSources, true, nil
 }
 
 // HandleNowFrozen creates a NetworkUpgradeExecute CR. The operator (not the UC)

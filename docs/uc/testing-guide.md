@@ -255,12 +255,18 @@ handler creates a `NetworkUpgradeFreeze` CR, copying `spec.images` and
 `status.selectedSources` from the existing `NetworkUpgradePrepare` CR so the
 Freeze CR is self-contained.
 
-The Freeze **inherits** the in-flight upgrade's identity: the UC resolves the
-`operationId` from the most-recent non-terminal `NetworkUpgradePrepare` CR
-(cluster query → on-disk Prepare fallback), exactly as the abort handler does.
-`spec.scheduledTime` is derived from the marker file's modification time.
+The `operationId` is re-derived deterministically from the co-present
+`execute_immediate.mf` marker and the `consensus-node-components.yaml` manifest
+(same inputs as `HandleExecuteImmediate`; yields the same value every tick).
+`spec.scheduledTime` is derived from `freeze_scheduled.mf`'s modification time.
 
-With the Prepare CR from §4a still present:
+**Gate: the `NetworkUpgradePrepare` CR must be in `Succeeded` phase before a
+Freeze CR is created.** The consensus node submits `FREEZE_UPGRADE` only after
+the operator's `PrepareReconciler` completes successfully, so `Succeeded` is the
+expected state. If the Prepare is still in-progress (edge case on a very fast
+tick), the handler retries silently on the next tick.
+
+With the Prepare CR from §4a in Succeeded state:
 
 ```bash
 touch "$UCDIR/markers/freeze_scheduled.mf"
@@ -277,22 +283,21 @@ You should see a CR named `upgrade-0.75.0-<prepare-time-lowercased>-freeze` with
 - labels `operator.solo.hedera.com/operation-id` (matching the Prepare) and
   `operator.solo.hedera.com/step: freeze`,
 - annotation `operator.solo.hedera.com/created-by: UC`,
-- `spec.orbit`, `spec.operationId`, `spec.scheduledTime` (from the marker mtime),
-- `spec.images` copied verbatim from the Prepare CR,
-- `spec.selectedSources` copied from `status.selectedSources` of the Prepare CR
-  (empty if the `PrepareReconciler` has not yet populated it — the
-  `FreezeReconciler` will re-derive it from `spec.images`).
+- `spec.orbit`, `spec.operationId`, `spec.scheduledTime` (from the freeze marker mtime),
+- `spec.images` copied verbatim from the Prepare CR's `spec.images`,
+- `spec.selectedSources` copied from `status.selectedSources` of the Prepare CR.
 
-**No corresponding Prepare (anomaly):** drop `freeze_scheduled.mf` into a fresh
-`$UCDIR` with no Prepare CR — the handler logs `FreezeWithoutPrepare` and creates
-**no** CR. The marker stays on disk so the next tick retries.
+**Prepare has Failed:** if the `NetworkUpgradePrepare` CR is in `Failed` phase,
+the handler logs `PrepareFailed` and creates **no** Freeze CR. This is a halt
+(no retry) — a Failed Prepare cannot recover, and the consensus node should not
+have scheduled a freeze. This is a defensive guard against protocol violations.
 
-**Prepare not yet Succeeded:** if `status.selectedSources` is absent (the
-`PrepareReconciler` hasn't finished), the Freeze CR is created with an empty
-`selectedSources`; the `FreezeReconciler` re-derives it from `spec.images` at
-reconcile time (HIP-1496 FreezeReconciler step 3). This is intentional — the UC
-prefers creating a slightly under-populated CR immediately over waiting an unknown
-number of ticks.
+**No corresponding Prepare (anomaly):** if no Prepare CR exists for the derived
+`operationId`, the handler logs `FreezeWithoutPrepare` and retries the next tick.
+
+**Missing `execute_immediate.mf` (anomaly):** if the co-present prepare marker is
+absent, the handler logs `FreezeWithoutPrepare` and retries — it cannot safely
+derive the `operationId` without the package manifest.
 
 Processing this marker switches the poll cadence to `--freeze-poll-interval`
 (§5).
