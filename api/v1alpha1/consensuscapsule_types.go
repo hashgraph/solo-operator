@@ -280,9 +280,6 @@ type UcSidecar struct {
 	// +optional
 	Name string `json:"name,omitempty"`
 
-	// +optional
-	Image string `json:"image,omitempty"`
-
 	// +kubebuilder:default=IfNotPresent
 	// +optional
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`

@@ -661,9 +661,9 @@ func TestBuildUcContainer_Defaults(t *testing.T) {
 func TestBuildUcContainer_CustomNameAndImage(t *testing.T) {
 	r := newStsReconciler()
 	config := &operatorv1alpha1.UcSidecar{
-		Name:    "my-uc",
-		Image:   "custom.io/uc:latest",
-		Enabled: true,
+		Name:            "my-uc",
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "custom.io", ImageName: "uc", ImageTag: "latest"},
+		Enabled:         true,
 	}
 	c := r.buildUcContainer(config)
 	if c.Name != "my-uc" {
@@ -677,8 +677,8 @@ func TestBuildUcContainer_CustomNameAndImage(t *testing.T) {
 func TestBuildUcContainer_AdditionalVolumeMounts(t *testing.T) {
 	r := newStsReconciler()
 	config := &operatorv1alpha1.UcSidecar{
-		Image:   "gcr.io/uc:1.0",
-		Enabled: true,
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "gcr.io", ImageName: "uc", ImageTag: "1.0"},
+		Enabled:         true,
 		AdditionalVolumeMounts: []corev1.VolumeMount{
 			{Name: "data", MountPath: "/data"},
 		},
@@ -686,5 +686,50 @@ func TestBuildUcContainer_AdditionalVolumeMounts(t *testing.T) {
 	c := r.buildUcContainer(config)
 	if len(c.VolumeMounts) != 1 || c.VolumeMounts[0].Name != "data" {
 		t.Errorf("volumeMounts: got %v", c.VolumeMounts)
+	}
+}
+
+func TestBuildUcContainer_NoSoftwareVersion_UsesDefault(t *testing.T) {
+	r := newStsReconciler()
+	config := &operatorv1alpha1.UcSidecar{Enabled: true}
+	c := r.buildUcContainer(config)
+	if c.Image != UCDefaultImage() {
+		t.Errorf("image: got %q, want default %q", c.Image, UCDefaultImage())
+	}
+}
+
+func containerNames(sts *appsv1.StatefulSet) map[string]bool {
+	out := map[string]bool{}
+	for _, c := range sts.Spec.Template.Spec.Containers {
+		out[c.Name] = true
+	}
+	return out
+}
+
+func TestBuildStatefulSet_OmittedSidecarRemoved(t *testing.T) {
+	r := newStsReconciler()
+
+	capsule := capsuleWithImage("gcr.io/repo/cn:0.62.0")
+	capsule.Spec.AccountId = "0.0.3"
+	capsule.Spec.PodProperties.Containers.UC = &operatorv1alpha1.UcSidecar{
+		Enabled:         true,
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "gcr.io", ImageName: "uc", ImageTag: "1.0"},
+	}
+
+	withUC, err := r.buildStatefulSet(context.Background(), capsule)
+	if err != nil {
+		t.Fatalf("buildStatefulSet (with uc): %v", err)
+	}
+	if !containerNames(withUC)["uc"] {
+		t.Fatalf("expected uc container present, got %v", containerNames(withUC))
+	}
+
+	capsule.Spec.PodProperties.Containers.UC = nil
+	withoutUC, err := r.buildStatefulSet(context.Background(), capsule)
+	if err != nil {
+		t.Fatalf("buildStatefulSet (without uc): %v", err)
+	}
+	if containerNames(withoutUC)["uc"] {
+		t.Errorf("expected uc container removed when omitted, got %v", containerNames(withoutUC))
 	}
 }
