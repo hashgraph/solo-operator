@@ -3,6 +3,9 @@
 package uc
 
 import (
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,6 +26,24 @@ const kindNetworkUpgradeFreeze = "NetworkUpgradeFreeze"
 // operationId only so sequential upgrades never collide.
 func freezeCRName(operationID string) string {
 	return strings.ToLower(operationID) + "-" + operatorv1alpha1.StepFreeze
+}
+
+// parseFreezeScheduledTime reads the epoch-seconds timestamp written by the
+// consensus node into freeze_scheduled.mf and converts it to UTC time.Time.
+// The CN writes the scheduled freeze time as decimal seconds since Unix epoch.
+func parseFreezeScheduledTime(markerPath string) (time.Time, error) {
+	data, err := os.ReadFile(filepath.Join(markerPath, MarkerFreezeScheduled))
+	if err != nil {
+		return time.Time{}, errx.WithReason(errPersist.Wrap(err, "read %s", MarkerFreezeScheduled), ReasonMarkerStatFailed)
+	}
+	epochStr := strings.TrimSpace(string(data))
+	epoch, err := strconv.ParseInt(epochStr, 10, 64)
+	if err != nil {
+		return time.Time{}, errx.WithReason(
+			errManifestInvalid.Wrap(err, "parse epoch timestamp %q in %s", epochStr, MarkerFreezeScheduled),
+			ReasonManifestInvalid)
+	}
+	return time.Unix(epoch, 0).UTC(), nil
 }
 
 // buildFreezeCR constructs the NetworkUpgradeFreeze CR as an unstructured object

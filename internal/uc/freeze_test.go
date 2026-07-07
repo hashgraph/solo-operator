@@ -4,6 +4,7 @@ package uc
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,20 +18,25 @@ import (
 
 const wantFreezeName = "upgrade-0.75.0-20260413t120000z-freeze"
 
-// wantScheduledTime is the freeze marker mtime pinned for stable tests.
+// wantScheduledTime is the scheduled freeze time encoded as epoch seconds in
+// freeze_scheduled.mf file content. It is after markerCreatedAt (execute marker
+// mtime) so the staleness guard passes in all normal tests.
 var wantScheduledTime = time.Date(2026, 4, 14, 6, 0, 0, 0, time.UTC)
 
 // writeFreezePackage writes both execute_immediate.mf (needed for operationId
 // re-derivation) and freeze_scheduled.mf into root, reusing writePackage for the
 // components manifest + execute marker, then adding the freeze marker.
-func writeFreezePackage(t *testing.T, componentsYAML string, freezeMtime time.Time) string {
+// The freeze marker content is the scheduledTime as epoch seconds (written by CN).
+// The marker mtime is set to scheduledTime so it is newer than execute_immediate.mf.
+func writeFreezePackage(t *testing.T, componentsYAML string, scheduledTime time.Time) string {
 	t.Helper()
 	root := writePackage(t, componentsYAML) // writes execute_immediate.mf + manifests/
 	p := filepath.Join(root, MarkerFreezeScheduled)
-	if err := os.WriteFile(p, []byte("FREEZE_SCHEDULED"), 0o644); err != nil {
+	content := fmt.Sprintf("%d", scheduledTime.Unix())
+	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
 		t.Fatalf("write freeze marker: %v", err)
 	}
-	if err := os.Chtimes(p, freezeMtime, freezeMtime); err != nil {
+	if err := os.Chtimes(p, scheduledTime, scheduledTime); err != nil {
 		t.Fatalf("chtimes freeze marker: %v", err)
 	}
 	return root
@@ -211,22 +217,93 @@ func TestHandleFreezeScheduledPrepareInProgress(t *testing.T) {
 	assertNoFreeze(t, f)
 }
 
-// TestHandleFreezeScheduledNoExecuteMarkerIsNoOp covers the anomalous case
-// where freeze_scheduled.mf exists but execute_immediate.mf is absent (cannot
-// derive operationId).
+// TestHandleFreezeScheduledNoExecuteMarkerIsNoOp covers the case where both
+// execute_immediate.mf AND the manifest are absent — all fallbacks exhausted.
 func TestHandleFreezeScheduledNoExecuteMarkerIsNoOp(t *testing.T) {
 	root := t.TempDir()
-	// Write freeze marker but NOT execute_immediate.mf.
+	// Write freeze marker with valid epoch content but no execute_immediate.mf or manifest.
 	p := filepath.Join(root, MarkerFreezeScheduled)
-	if err := os.WriteFile(p, []byte("FREEZE_SCHEDULED"), 0o644); err != nil {
+	if err := os.WriteFile(p, []byte(fmt.Sprintf("%d", wantScheduledTime.Unix())), 0o644); err != nil {
 		t.Fatalf("write freeze marker: %v", err)
 	}
 	f := newFakeFactory(t, testConfig(root, t.TempDir()))
 
 	if err := f.HandleFreezeScheduled(context.Background()); err != nil {
-		t.Fatalf("want nil (no execute marker), got %v", err)
+		t.Fatalf("want nil (no execute marker, no manifest fallback), got %v", err)
 	}
 	assertNoFreeze(t, f)
+}
+
+// TestHandleFreezeScheduledSetsScheduledTimeFromContent verifies that
+// spec.scheduledTime in the Freeze CR is parsed from freeze_scheduled.mf file
+// content (epoch seconds), not from the marker's mtime.
+func TestHandleFreezeScheduledSetsScheduledTimeFromContent(t *testing.T) {
+	root := writeFreezePackage(t, validComponentsYAML, wantScheduledTime)
+	f := newFakeFactory(t, testConfig(root, t.TempDir()))
+	seedSucceededPrepare(t, f, wantOperationID, nil)
+
+	if err := f.HandleFreezeScheduled(context.Background()); err != nil {
+		t.Fatalf("HandleFreezeScheduled: %v", err)
+	}
+
+	cr := getFreeze(t, f, wantOperationID)
+	rawTime, _, _ := unstructured.NestedString(cr.Object, "spec", "scheduledTime")
+	got, err := time.Parse(time.RFC3339, rawTime)
+	if err != nil {
+		t.Fatalf("parse scheduledTime %q: %v", rawTime, err)
+	}
+	if !got.Equal(wantScheduledTime) {
+		t.Fatalf("scheduledTime = %v, want %v (from file content epoch seconds)", got, wantScheduledTime)
+	}
+}
+
+// TestHandleFreezeScheduledStaleMarkerIsSkipped verifies that a freeze marker
+// whose mtime predates execute_immediate.mf is silently ignored (staleness guard 1).
+func TestHandleFreezeScheduledStaleMarkerIsSkipped(t *testing.T) {
+	root := writePackage(t, validComponentsYAML) // execute_immediate.mf mtime = markerCreatedAt
+	// Write freeze marker with mtime BEFORE execute_immediate.mf.
+	staleMtime := markerCreatedAt.Add(-1 * time.Hour)
+	p := filepath.Join(root, MarkerFreezeScheduled)
+	if err := os.WriteFile(p, []byte(fmt.Sprintf("%d", staleMtime.Unix())), 0o644); err != nil {
+		t.Fatalf("write freeze marker: %v", err)
+	}
+	if err := os.Chtimes(p, staleMtime, staleMtime); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+	f := newFakeFactory(t, testConfig(root, t.TempDir()))
+	seedSucceededPrepare(t, f, wantOperationID, nil)
+
+	if err := f.HandleFreezeScheduled(context.Background()); err != nil {
+		t.Fatalf("want nil (stale marker skipped), got %v", err)
+	}
+	assertNoFreeze(t, f)
+}
+
+// TestHandleFreezeScheduledFallbackWhenNoExecuteMarker verifies that when
+// execute_immediate.mf is absent the handler falls back to version-based cluster
+// lookup and still creates the Freeze CR.
+func TestHandleFreezeScheduledFallbackWhenNoExecuteMarker(t *testing.T) {
+	root := t.TempDir()
+	// Write manifest (no execute_immediate.mf) and freeze marker.
+	manifestDir := filepath.Join(root, manifestsSubdir)
+	if err := os.MkdirAll(manifestDir, 0o755); err != nil {
+		t.Fatalf("mkdir manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(manifestDir, componentsManifestFile), []byte(validComponentsYAML), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	p := filepath.Join(root, MarkerFreezeScheduled)
+	if err := os.WriteFile(p, []byte(fmt.Sprintf("%d", wantScheduledTime.Unix())), 0o644); err != nil {
+		t.Fatalf("write freeze marker: %v", err)
+	}
+	f := newFakeFactory(t, testConfig(root, t.TempDir()))
+	// Fallback resolves via version prefix — seed Succeeded Prepare.
+	seedSucceededPrepare(t, f, wantOperationID, nil)
+
+	if err := f.HandleFreezeScheduled(context.Background()); err != nil {
+		t.Fatalf("HandleFreezeScheduled: %v", err)
+	}
+	getFreeze(t, f, wantOperationID)
 }
 
 func TestHandleFreezeScheduledIsIdempotent(t *testing.T) {

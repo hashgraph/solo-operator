@@ -196,63 +196,111 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 }
 
 // HandleFreezeScheduled creates a NetworkUpgradeFreeze CR. The consensus node
-// writes freeze_scheduled.mf after submitting a FREEZE_UPGRADE transaction, so
-// the co-present execute_immediate.mf package is used to re-derive the
-// operationId deterministically (same inputs as HandleExecuteImmediate; the value
-// is identical every tick — "minted once" by construction). The handler then
-// looks up the NetworkUpgradePrepare CR for that operationId to copy spec.images
-// and status.selectedSources.
+// writes freeze_scheduled.mf after submitting a FREEZE_UPGRADE transaction.
 //
-// Gate: the Prepare CR MUST be Succeeded before a Freeze is created. If it has
-// Failed, the consensus node should not have scheduled a freeze — the handler
-// logs and halts (no retry value: the same Prepare cannot transition away from
-// Failed). If the Prepare is still in-progress (PrepareReconciler not yet done),
-// the handler retries on the next tick.
+// The handler re-derives the operationId deterministically from the co-present
+// execute_immediate.mf (same inputs as HandleExecuteImmediate — identical value
+// every tick). It then looks up the NetworkUpgradePrepare CR by exact operationId
+// to copy spec.images and status.selectedSources.
+//
+// Staleness guard 1: if freeze_scheduled.mf is older than execute_immediate.mf,
+// the marker is stale (leftover from a prior upgrade cycle while the CN has not
+// yet cleaned it up) and is skipped until refreshed.
+// Staleness guard 2: after the Prepare CR is resolved, if the marker predates
+// the Prepare CR creationTimestamp, it is also stale and skipped.
+//
+// Gate: the Prepare CR MUST be Succeeded. If Failed, the handler halts. If
+// in-progress, the handler retries on the next tick.
+//
+// Fallback: if execute_immediate.mf is absent, the handler attempts to resolve
+// the operationId via manifest version (cluster + disk Prepare lookup).
 func (f *Factory) HandleFreezeScheduled(ctx context.Context) error {
+	// Stat freeze marker for mtime — needed for staleness guards.
 	freezePath := filepath.Join(f.cfg.MarkerPath, MarkerFreezeScheduled)
 	freezeInfo, err := os.Stat(freezePath)
 	if err != nil {
 		return errx.WithReason(errPersist.Wrap(err, "stat marker %s", MarkerFreezeScheduled), ReasonMarkerStatFailed)
 	}
-	scheduledTime := freezeInfo.ModTime()
+	freezeMarkerMtime := freezeInfo.ModTime()
 
-	// Re-derive operationId from the co-present execute_immediate.mf package.
-	// execute_immediate.mf is always in the same directory (the CN does not remove
-	// it until cleanup); re-computing yields the same deterministic id every tick.
-	preparePath := filepath.Join(f.cfg.MarkerPath, MarkerExecuteImmediate)
-	prepareInfo, err := os.Stat(preparePath)
-	if err != nil {
-		// execute_immediate.mf is missing — anomalous; retry next tick.
-		logx.As().Warn().Err(err).Str("reason", ReasonFreezeWithoutPrepare.String()).Str("marker", MarkerFreezeScheduled).
-			Msg("freeze_scheduled.mf present but execute_immediate.mf missing — will retry next tick")
-		return nil
-	}
-
-	manifestPath := filepath.Join(f.cfg.MarkerPath, manifestsSubdir, componentsManifestFile)
-	manifest, err := parseComponentsManifest(manifestPath)
+	// Parse scheduledTime from file content (epoch seconds written by CN), not mtime.
+	scheduledTime, err := parseFreezeScheduledTime(f.cfg.MarkerPath)
 	if err != nil {
 		if errorx.IsOfType(err, errManifestInvalid) {
 			logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).
-				Str("marker", MarkerFreezeScheduled).Str("manifest", manifestPath).
-				Msg("invalid consensus-node-components.yaml — halting freeze")
+				Str("marker", MarkerFreezeScheduled).
+				Msg("cannot parse scheduled timestamp in freeze_scheduled.mf — halting; delete freeze_scheduled.mf to stop retrying")
 			return nil
 		}
 		return err
 	}
 
-	operationID, err := mintOperationID(manifest.Images.ConsensusNode.Version, prepareInfo.ModTime())
+	// Primary: re-derive operationId from co-present execute_immediate.mf.
+	operationID, executeMtime, _, found, err := deriveOperationIDPrimary(f.cfg.MarkerPath)
 	if err != nil {
-		logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).
-			Str("marker", MarkerFreezeScheduled).Msg("cannot derive a valid operationId — halting freeze")
-		return nil
+		if errorx.IsOfType(err, errManifestInvalid) {
+			logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).
+				Str("marker", MarkerFreezeScheduled).
+				Msg("invalid consensus-node-components.yaml — halting freeze; delete freeze_scheduled.mf to stop retrying")
+			return nil
+		}
+		return err
 	}
 
-	images, selectedSources, ready, err := f.fetchPreparePayload(ctx, operationID)
+	if found {
+		// Staleness guard 1: marker must be newer than execute_immediate.mf.
+		if !freezeMarkerMtime.After(executeMtime) {
+			logx.As().Warn().Str("reason", ReasonStaleMarker.String()).
+				Str("marker", MarkerFreezeScheduled).
+				Time("freeze_mtime", freezeMarkerMtime).Time("execute_mtime", executeMtime).
+				Msg("stale freeze_scheduled.mf — marker predates current execute_immediate.mf; skipping until refreshed")
+			return nil
+		}
+	} else {
+		// execute_immediate.mf absent — attempt fallback via manifest version.
+		logx.As().Warn().Str("reason", ReasonFreezeWithoutPrepare.String()).
+			Str("marker", MarkerFreezeScheduled).
+			Msg("execute_immediate.mf missing — attempting fallback resolution via manifest version")
+
+		manifestPath := filepath.Join(f.cfg.MarkerPath, manifestsSubdir, componentsManifestFile)
+		manifest, mErr := parseComponentsManifest(manifestPath)
+		if mErr != nil {
+			logx.As().Error().Err(mErr).Str("reason", ReasonOperationIDExhausted.String()).
+				Str("marker", MarkerFreezeScheduled).
+				Msg("execute_immediate.mf and manifest both absent — cannot resolve operationId; delete freeze_scheduled.mf to stop retrying")
+			return nil
+		}
+
+		skipFailed := map[string]struct{}{string(operatorv1alpha1.PhaseFailed): {}}
+		operationID, err = f.resolveByVersion(ctx, manifest.Images.ConsensusNode.Version, skipFailed)
+		if err != nil {
+			return err
+		}
+		if operationID == "" {
+			logx.As().Error().Str("reason", ReasonOperationIDExhausted.String()).
+				Str("marker", MarkerFreezeScheduled).
+				Msg("all operationId fallbacks exhausted — no matching Prepare found; delete freeze_scheduled.mf to stop retrying")
+			return nil
+		}
+		logx.As().Warn().Str("reason", ReasonFreezeWithoutPrepare.String()).
+			Str("operation_id", operationID).Str("marker", MarkerFreezeScheduled).
+			Msg("resolved operationId via fallback (execute_immediate.mf was absent)")
+	}
+
+	images, selectedSources, prepare, ready, err := f.fetchPreparePayload(ctx, operationID)
 	if err != nil {
 		return err
 	}
 	if !ready {
-		// Prepare not yet Succeeded (still in-progress or absent); retry next tick.
+		return nil
+	}
+
+	// Staleness guard 2: marker must be newer than the Prepare CR.
+	if prepareCreationTime := prepare.GetCreationTimestamp().Time; !freezeMarkerMtime.After(prepareCreationTime) {
+		logx.As().Warn().Str("reason", ReasonStaleMarker.String()).
+			Str("marker", MarkerFreezeScheduled).Str("operation_id", operationID).
+			Time("freeze_mtime", freezeMarkerMtime).Time("prepare_created", prepareCreationTime).
+			Msg("stale freeze_scheduled.mf — marker predates Prepare CR; skipping until refreshed")
 		return nil
 	}
 
@@ -264,7 +312,8 @@ func (f *Factory) HandleFreezeScheduled(ctx context.Context) error {
 }
 
 // fetchPreparePayload looks up the NetworkUpgradePrepare CR for operationID and
-// returns its spec.images and status.selectedSources.
+// returns its spec.images, status.selectedSources, and the CR itself (for the
+// staleness guard in the caller).
 //
 // ready is true only when the Prepare CR exists and is in Succeeded phase. It is
 // false (and err is nil) in two cases:
@@ -273,7 +322,7 @@ func (f *Factory) HandleFreezeScheduled(ctx context.Context) error {
 //
 // ready is false and err is nil with a Halted log when the Prepare has Failed —
 // a Failed Prepare cannot recover, so there is no retry value.
-func (f *Factory) fetchPreparePayload(ctx context.Context, operationID string) (operatorv1alpha1.UpgradeImagesSpec, operatorv1alpha1.SelectedSources, bool, error) {
+func (f *Factory) fetchPreparePayload(ctx context.Context, operationID string) (operatorv1alpha1.UpgradeImagesSpec, operatorv1alpha1.SelectedSources, *unstructured.Unstructured, bool, error) {
 	listCtx, cancel := context.WithTimeout(ctx, listTimeout)
 	defer cancel()
 
@@ -282,7 +331,7 @@ func (f *Factory) fetchPreparePayload(ctx context.Context, operationID string) (
 			FieldSelector: "spec.operationId=" + operationID,
 		})
 	if err != nil {
-		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, false, errx.WithHints(
+		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil, false, errx.WithHints(
 			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradePrepare for operationId %s", operationID), ReasonPrepareListFailed),
 			"Confirm the UC ServiceAccount has list permission on networkupgradeprepares."+operatorv1alpha1.GroupVersion.Group,
 		)
@@ -291,7 +340,7 @@ func (f *Factory) fetchPreparePayload(ctx context.Context, operationID string) (
 		logx.As().Warn().Str("reason", ReasonFreezeWithoutPrepare.String()).
 			Str("operation_id", operationID).Str("marker", MarkerFreezeScheduled).
 			Msg("no NetworkUpgradePrepare CR found for operationId — will retry next tick")
-		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, false, nil
+		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil, false, nil
 	}
 
 	prepare := &list.Items[0]
@@ -300,8 +349,8 @@ func (f *Factory) fetchPreparePayload(ctx context.Context, operationID string) (
 	case operatorv1alpha1.PhaseFailed:
 		logx.As().Error().Str("reason", ReasonPrepareFailed.String()).
 			Str("operation_id", operationID).Str("marker", MarkerFreezeScheduled).
-			Msg("NetworkUpgradePrepare has Failed — halting freeze; consensus node should not have scheduled a freeze")
-		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, false, nil
+			Msg("NetworkUpgradePrepare has Failed — halting freeze; delete freeze_scheduled.mf to clear")
+		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil, false, nil
 	case operatorv1alpha1.PhaseSucceeded:
 		// fall through to copy payload
 	default:
@@ -309,13 +358,13 @@ func (f *Factory) fetchPreparePayload(ctx context.Context, operationID string) (
 		logx.As().Debug().Str("reason", ReasonFreezeWithoutPrepare.String()).
 			Str("operation_id", operationID).Str("phase", phase).Str("marker", MarkerFreezeScheduled).
 			Msg("NetworkUpgradePrepare not yet Succeeded — will retry next tick")
-		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, false, nil
+		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil, false, nil
 	}
 
 	var images operatorv1alpha1.UpgradeImagesSpec
 	if raw, ok, _ := unstructured.NestedMap(prepare.Object, "spec", "images"); ok {
 		if err2 := runtime.DefaultUnstructuredConverter.FromUnstructured(raw, &images); err2 != nil {
-			return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, false,
+			return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil, false,
 				errx.WithReason(errCRBuild.Wrap(err2, "decode NetworkUpgradePrepare spec.images for %s", operationID), ReasonCRBuildFailed)
 		}
 	}
@@ -325,7 +374,7 @@ func (f *Factory) fetchPreparePayload(ctx context.Context, operationID string) (
 		_ = runtime.DefaultUnstructuredConverter.FromUnstructured(raw, &selectedSources)
 	}
 
-	return images, selectedSources, true, nil
+	return images, selectedSources, prepare, true, nil
 }
 
 // HandleNowFrozen creates a NetworkUpgradeExecute CR. The operator (not the UC)
@@ -341,33 +390,77 @@ func (f *Factory) HandleNowFrozen(_ context.Context) error {
 	return nil
 }
 
-// HandleFreezeAborted creates a NetworkUpgradeFreezeAbort CR (#996). The UC
-// mints no new identity here: per HIP-1496 the operationId is resolved from the
-// most-recent non-terminal NetworkUpgradePrepare CR (cluster → on-disk
-// fallback), so the abort inherits the upgrade it is cancelling. The UC takes no
-// further action — the operator's FreezeAbortReconciler owns the logic
-// (including the AbortAfterFreeze guard); prior Prepare/Freeze CRs are left in
-// place as an audit trail.
+// HandleFreezeAborted creates a NetworkUpgradeFreezeAbort CR. The UC re-derives
+// the operationId deterministically from the co-present execute_immediate.mf and
+// manifest (same inputs as prepare — identical value every tick). No phase gate:
+// a cancellation must always be deliverable regardless of Prepare/Freeze state;
+// the FreezeAbortReconciler owns all state logic.
+//
+// Staleness guard: if freeze_aborted.mf is older than execute_immediate.mf, the
+// marker is stale (leftover from a prior upgrade cycle) and is skipped until
+// refreshed.
+//
+// Fallback: if execute_immediate.mf is absent, resolves via manifest version
+// (cluster + disk Prepare lookup, non-Failed phases).
 func (f *Factory) HandleFreezeAborted(ctx context.Context) error {
-	operationID, err := f.resolveOperationID(ctx)
+	// Stat abort marker for mtime — needed for the staleness guard.
+	abortPath := filepath.Join(f.cfg.MarkerPath, MarkerFreezeAborted)
+	abortInfo, err := os.Stat(abortPath)
 	if err != nil {
-		// Already an errx-decorated K8s/persist error from the resolver.
+		return errx.WithReason(errPersist.Wrap(err, "stat marker %s", MarkerFreezeAborted), ReasonMarkerStatFailed)
+	}
+	abortMarkerMtime := abortInfo.ModTime()
+
+	// Primary: re-derive operationId from co-present execute_immediate.mf.
+	operationID, executeMtime, _, found, err := deriveOperationIDPrimary(f.cfg.MarkerPath)
+	if err != nil {
+		if errorx.IsOfType(err, errManifestInvalid) {
+			logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).
+				Str("marker", MarkerFreezeAborted).
+				Msg("invalid consensus-node-components.yaml — halting abort; delete freeze_aborted.mf to stop retrying")
+			return nil
+		}
 		return err
 	}
-	if operationID == "" {
-		// No NetworkUpgradePrepare exists in the cluster (source of truth) or on
-		// disk. In the normal protocol this cannot happen: execute_immediate.mf
-		// precedes and co-resides with freeze_aborted.mf and is dispatched first
-		// each tick (so Prepare is re-ensured before this runs), and Prepare CRs
-		// are never deleted — an abort always finds its Prepare. Reaching here is a
-		// genuine anomaly: the abort has no corresponding upgrade in the operator's
-		// view, so there is nothing to cancel. The UC deliberately does NOT
-		// fabricate an identity — a synthesized operationId would correlate to no
-		// Prepare/Freeze/Execute CR, producing an orphan CR the operator cannot act
-		// on. It records the anomaly and creates no CR.
-		logx.As().Warn().Str("reason", ReasonAbortWithoutPrepare.String()).Str("marker", MarkerFreezeAborted).
-			Msg("freeze_aborted.mf with no corresponding NetworkUpgradePrepare — nothing to cancel; no CR created")
-		return nil
+
+	if found {
+		// Staleness guard: abort marker must be newer than execute_immediate.mf.
+		if !abortMarkerMtime.After(executeMtime) {
+			logx.As().Warn().Str("reason", ReasonStaleMarker.String()).
+				Str("marker", MarkerFreezeAborted).
+				Time("abort_mtime", abortMarkerMtime).Time("execute_mtime", executeMtime).
+				Msg("stale freeze_aborted.mf — marker predates current execute_immediate.mf; skipping until refreshed")
+			return nil
+		}
+	} else {
+		// execute_immediate.mf absent — attempt fallback via manifest version.
+		logx.As().Warn().Str("reason", ReasonAbortWithoutPrepare.String()).
+			Str("marker", MarkerFreezeAborted).
+			Msg("execute_immediate.mf missing — attempting fallback resolution via manifest version")
+
+		manifestPath := filepath.Join(f.cfg.MarkerPath, manifestsSubdir, componentsManifestFile)
+		manifest, mErr := parseComponentsManifest(manifestPath)
+		if mErr != nil {
+			logx.As().Error().Err(mErr).Str("reason", ReasonOperationIDExhausted.String()).
+				Str("marker", MarkerFreezeAborted).
+				Msg("execute_immediate.mf and manifest both absent — cannot resolve operationId; delete freeze_aborted.mf to stop retrying")
+			return nil
+		}
+
+		skipFailed := map[string]struct{}{string(operatorv1alpha1.PhaseFailed): {}}
+		operationID, err = f.resolveByVersion(ctx, manifest.Images.ConsensusNode.Version, skipFailed)
+		if err != nil {
+			return err
+		}
+		if operationID == "" {
+			logx.As().Error().Str("reason", ReasonOperationIDExhausted.String()).
+				Str("marker", MarkerFreezeAborted).
+				Msg("all operationId fallbacks exhausted — no matching Prepare found; delete freeze_aborted.mf to stop retrying")
+			return nil
+		}
+		logx.As().Warn().Str("reason", ReasonAbortWithoutPrepare.String()).
+			Str("operation_id", operationID).Str("marker", MarkerFreezeAborted).
+			Msg("resolved operationId via fallback (execute_immediate.mf was absent)")
 	}
 
 	cr, err := buildFreezeAbortCR(f.cfg, operationID)

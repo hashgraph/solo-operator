@@ -8,14 +8,15 @@ endpoints.
 It targets the foundational polling loop delivered in **story 8.1** (#991), the
 persist-before-send primitive from **story 8.2** (#992), the
 `execute_immediate.mf` → `NetworkUpgradePrepare` handler from **story 8.3**
-(#993), the `freeze_aborted.mf` → `NetworkUpgradeFreezeAbort` handler from
+(#993), the `freeze_scheduled.mf` → `NetworkUpgradeFreeze` handler from **story
+8.4** (#994), the `freeze_aborted.mf` → `NetworkUpgradeFreezeAbort` handler from
 **story 8.6** (#996), and the operation-id deduplication from **story 8.7**
 (#997). When you drop `execute_immediate.mf` you will now see the loop construct,
 persist, and create a real `NetworkUpgradePrepare` CR (§4a); dropping
-`freeze_aborted.mf` likewise creates a `NetworkUpgradeFreezeAbort` CR (§4b). The
-remaining per-marker handlers (#994 `freeze_scheduled.mf`, #995 `now_frozen.mf`)
-and cleanup/recovery (#998) are still stubbed — dropping one of those markers
-logs a "handler not yet implemented" line rather than a created CR.
+`freeze_scheduled.mf` (with a valid epoch-seconds content) creates a
+`NetworkUpgradeFreeze` CR (§4b); dropping `freeze_aborted.mf` creates a
+`NetworkUpgradeFreezeAbort` CR (§4c). The remaining per-marker handler (#995
+`now_frozen.mf`) and cleanup/recovery (#998) are still stubbed.
 
 ---
 
@@ -250,29 +251,51 @@ error line and creates **no** CR, rather than retrying forever.
 ## 4b. Schedule a freeze (`freeze_scheduled.mf`, #994)
 
 `freeze_scheduled.mf` is written by the consensus node once it has submitted a
-`FREEZE_UPGRADE` transaction and the freeze is scheduled at a specific time. The
-handler creates a `NetworkUpgradeFreeze` CR, copying `spec.images` and
-`status.selectedSources` from the existing `NetworkUpgradePrepare` CR so the
-Freeze CR is self-contained.
+`FREEZE_UPGRADE` transaction. The file **content** is the scheduled freeze time
+as decimal seconds since Unix epoch (e.g. `1744603200`). The handler creates a
+`NetworkUpgradeFreeze` CR, copying `spec.images` and `status.selectedSources`
+from the existing `NetworkUpgradePrepare` CR so the Freeze CR is self-contained.
 
-The `operationId` is re-derived deterministically from the co-present
-`execute_immediate.mf` marker and the `consensus-node-components.yaml` manifest
-(same inputs as `HandleExecuteImmediate`; yields the same value every tick).
-`spec.scheduledTime` is derived from `freeze_scheduled.mf`'s modification time.
+**`operationId` re-derivation.** The handler re-derives the `operationId`
+deterministically from the co-present `execute_immediate.mf` mtime and the
+`consensus-node-components.yaml` manifest — the same inputs as
+`HandleExecuteImmediate`, yielding the same value every tick.
 
-**Gate: the `NetworkUpgradePrepare` CR must be in `Succeeded` phase before a
-Freeze CR is created.** The consensus node submits `FREEZE_UPGRADE` only after
-the operator's `PrepareReconciler` completes successfully, so `Succeeded` is the
-expected state. If the Prepare is still in-progress (edge case on a very fast
-tick), the handler retries silently on the next tick.
+**`spec.scheduledTime` comes from the file content**, not the marker's mtime.
+The CN writes the freeze-transaction time as epoch seconds into the file; the
+handler parses that and stores it in the CR.
 
-With the Prepare CR from §4a in Succeeded state:
+**Gate: the `NetworkUpgradePrepare` CR must be in `Succeeded` phase** before a
+Freeze CR is created. If the Prepare is still in-progress, the handler retries
+silently on the next tick (DEBUG log). If the Prepare has `Failed`, the handler
+halts (ERROR log, no retry).
+
+**Staleness guard.** The handler compares the marker's mtime against two
+references and skips (WARN log) if either check fails:
+1. `freeze_scheduled.mf` mtime must be strictly newer than `execute_immediate.mf`
+   mtime — if not, the marker is stale (leftover from a prior upgrade cycle while
+   the CN has not yet cleaned up).
+2. After resolving the Prepare CR, the marker mtime must also be newer than the
+   Prepare CR's `creationTimestamp` — if not, it is also stale.
+
+**Fallback when `execute_immediate.mf` is absent.** If the prepare-package marker
+is missing, the handler logs `FreezeWithoutPrepare` at WARN and attempts to infer
+the `operationId` from the manifest version alone (cluster + disk Prepare lookup
+with the same version prefix). If all fallbacks are exhausted, the handler logs
+`OperationIDExhausted` at ERROR and waits — delete `freeze_scheduled.mf` to
+terminate the retry loop.
+
+### Writing the marker correctly
+
+The file must contain epoch seconds, **not** an empty file or arbitrary string.
+With the Prepare CR from §4a in `Succeeded` phase:
 
 ```bash
-touch "$UCDIR/markers/freeze_scheduled.mf"
+# Write current time (seconds since epoch) as the freeze-scheduled time.
+echo -n "$(date +%s)" > "$UCDIR/markers/freeze_scheduled.mf"
 ```
 
-Watch for a `CRDelivered` line, then confirm the CR:
+Watch for a `CRDelivered` log line, then confirm the CR:
 
 ```bash
 kubectl get networkupgradefreezes -n solo          # short name: nuf
@@ -283,21 +306,54 @@ You should see a CR named `upgrade-0.75.0-<prepare-time-lowercased>-freeze` with
 - labels `operator.solo.hedera.com/operation-id` (matching the Prepare) and
   `operator.solo.hedera.com/step: freeze`,
 - annotation `operator.solo.hedera.com/created-by: UC`,
-- `spec.orbit`, `spec.operationId`, `spec.scheduledTime` (from the freeze marker mtime),
+- `spec.orbit`, `spec.operationId`, and `spec.scheduledTime` (from the epoch
+  seconds in the file, converted to RFC3339),
 - `spec.images` copied verbatim from the Prepare CR's `spec.images`,
 - `spec.selectedSources` copied from `status.selectedSources` of the Prepare CR.
 
-**Prepare has Failed:** if the `NetworkUpgradePrepare` CR is in `Failed` phase,
-the handler logs `PrepareFailed` and creates **no** Freeze CR. This is a halt
-(no retry) — a Failed Prepare cannot recover, and the consensus node should not
-have scheduled a freeze. This is a defensive guard against protocol violations.
+### Exercising the staleness guard manually
 
-**No corresponding Prepare (anomaly):** if no Prepare CR exists for the derived
-`operationId`, the handler logs `FreezeWithoutPrepare` and retries the next tick.
+To confirm the guard works, create a stale marker (older than `execute_immediate.mf`):
 
-**Missing `execute_immediate.mf` (anomaly):** if the co-present prepare marker is
-absent, the handler logs `FreezeWithoutPrepare` and retries — it cannot safely
-derive the `operationId` without the package manifest.
+```bash
+# Set mtime to one hour in the past (before execute_immediate.mf was written).
+STALE_TIME=$(date -v-1H +%s 2>/dev/null || date -d '-1 hour' +%s)
+echo -n "$STALE_TIME" > "$UCDIR/markers/freeze_scheduled.mf"
+touch -t "$(date -d @$STALE_TIME '+%Y%m%d%H%M.%S' 2>/dev/null || date -r $STALE_TIME '+%Y%m%d%H%M.%S')" \
+  "$UCDIR/markers/freeze_scheduled.mf"
+```
+
+Watch for a `StaleMarker` WARN log: `"stale freeze_scheduled.mf — marker predates
+current execute_immediate.mf; skipping until refreshed"`. No Freeze CR will be
+created. Overwrite the marker with a fresh epoch time to resume:
+
+```bash
+echo -n "$(date +%s)" > "$UCDIR/markers/freeze_scheduled.mf"
+```
+
+### Exercising the fallback path manually
+
+Remove `execute_immediate.mf` while `freeze_scheduled.mf` is present to trigger
+the fallback:
+
+```bash
+rm "$UCDIR/markers/execute_immediate.mf"
+```
+
+Watch for `FreezeWithoutPrepare` WARN: `"execute_immediate.mf missing — attempting
+fallback resolution via manifest version"`. If a Prepare CR with the matching
+version prefix exists in the cluster, the handler resolves the `operationId` from
+it and creates the Freeze CR. If no match is found, watch for
+`OperationIDExhausted` ERROR.
+
+### Other anomalies
+
+**Prepare has Failed:** the handler logs `PrepareFailed` at ERROR and creates no
+Freeze CR. This is a halt — delete `freeze_scheduled.mf` to clear.
+
+**Invalid file content:** if the file contains non-numeric bytes, the handler logs
+`ManifestInvalid` at ERROR and halts (no retry). This is defensive — the CN
+always writes valid epoch seconds.
 
 Processing this marker switches the poll cadence to `--freeze-poll-interval`
 (§5).
@@ -311,11 +367,27 @@ pending upgrade (before the scheduled freeze time). The handler creates a
 `NetworkUpgradeFreezeAbort` CR and takes no further action — the operator's
 `FreezeAbortReconciler` owns the abort logic.
 
-The abort **inherits** the upgrade's identity: per HIP-1496 the UC mints an
-`operationId` only at prepare, and every later phase resolves it from the
-most-recent **non-terminal** `NetworkUpgradePrepare` CR (cluster query → an
-on-disk Prepare as fallback). So abort only does something once a Prepare CR
-exists. With the Prepare CR from §4a still present:
+**`operationId` re-derivation (no phase gate).** The abort re-derives the
+`operationId` deterministically from the co-present `execute_immediate.mf` mtime
+and manifest — the same inputs as prepare. Unlike `freeze_scheduled.mf`, **no
+Prepare CR gate applies**: a cancellation must be deliverable regardless of the
+state of any prior CRs; the FreezeAbortReconciler handles state checks. The UC
+also does not copy `spec.images` or `status.selectedSources` from the Prepare CR —
+the abort CR carries only identity (`orbit` + `operationId`).
+
+**Staleness guard.** The handler compares the abort marker's mtime against
+`execute_immediate.mf` mtime and skips (WARN log) if the marker is older — a
+stale `freeze_aborted.mf` leftover from a prior upgrade cycle will not latch onto
+the next upgrade's identity if a new `execute_immediate.mf` lands.
+
+**Fallback when `execute_immediate.mf` is absent.** The handler logs
+`AbortWithoutPrepare` at WARN and attempts fallback resolution via manifest version
+(cluster + disk Prepare lookup, non-Failed phases). If all fallbacks are
+exhausted, it logs `OperationIDExhausted` at ERROR — delete `freeze_aborted.mf`
+to terminate the retry loop.
+
+With `execute_immediate.mf` and the manifest in place (from §4a, or fresh from
+Option B):
 
 ```bash
 touch "$UCDIR/markers/freeze_aborted.mf"
@@ -329,7 +401,8 @@ kubectl get networkupgradefreezeaborts -n solo -o yaml | less
 ```
 
 You should see a CR named `upgrade-0.75.0-<prepare-time-lowercased>-abort` —
-**the same operationId as the Prepare CR**, with the `-abort` step suffix — and:
+**the same operationId as the Prepare CR** (re-derived from the same marker) —
+with the `-abort` step suffix, and:
 - labels `operator.solo.hedera.com/operation-id` (matching the Prepare) and
   `operator.solo.hedera.com/step: abort`,
 - annotation `operator.solo.hedera.com/created-by: UC`,
@@ -342,19 +415,33 @@ Confirm the **audit trail is preserved** — the abort does not delete sibling C
 kubectl get networkupgradeprepares -n solo   # the Prepare CR is still there
 ```
 
-**No corresponding Prepare (anomaly):** drop `freeze_aborted.mf` into a fresh
-`$UCDIR` with no Prepare CR — the handler logs `AbortWithoutPrepare` and creates
-**no** CR. This is an artificial scenario: in the real protocol the abort always
-has a Prepare to inherit from, because (1) the consensus node writes
-`execute_immediate.mf` before `freeze_aborted.mf` and it is the **UC** that later
-cleans the artifacts directory, so both markers co-reside on disk; (2) the poller
-dispatches `execute_immediate.mf` before `freeze_aborted.mf` in the same tick, so
-the Prepare CR is (re)ensured first; and (3) the cluster is the source of truth
-and `NetworkUpgrade*` CRs are never deleted. Reaching this branch therefore means
-the abort has **no upgrade to cancel** in the operator's view — so the UC records
-the anomaly rather than fabricating an `operationId` (a synthesized id would
-create an orphan CR that correlates to no Prepare/Freeze/Execute and the operator
-could not act on).
+### Exercising the staleness guard manually
+
+```bash
+# Write abort marker with mtime in the past (before execute_immediate.mf).
+STALE_TIME=$(date -v-1H +%s 2>/dev/null || date -d '-1 hour' +%s)
+touch "$UCDIR/markers/freeze_aborted.mf"
+touch -t "$(date -d @$STALE_TIME '+%Y%m%d%H%M.%S' 2>/dev/null || \
+  date -r $STALE_TIME '+%Y%m%d%H%M.%S')" "$UCDIR/markers/freeze_aborted.mf"
+```
+
+Watch for `StaleMarker` WARN: `"stale freeze_aborted.mf — marker predates current
+execute_immediate.mf; skipping until refreshed"`. No Abort CR is created.
+
+### Anomaly: `execute_immediate.mf` absent, no fallback
+
+Drop `freeze_aborted.mf` into a fresh `$UCDIR` with no `execute_immediate.mf` and
+no manifest — all fallbacks exhausted:
+
+```bash
+mkdir -p "$UCDIR2/markers"
+touch "$UCDIR2/markers/freeze_aborted.mf"
+# run UC pointing at $UCDIR2 — watch for OperationIDExhausted ERROR log
+```
+
+The handler logs `AbortWithoutPrepare` (WARN) then `OperationIDExhausted` (ERROR)
+and creates no CR. Delete `freeze_aborted.mf` or add `execute_immediate.mf` to
+resume.
 
 Processing this marker also reverts the poll cadence to `--poll-interval` (§5).
 
@@ -556,6 +643,26 @@ go test ./internal/uc/ -run 'TestDedup|TestHandleExecuteImmediateCache|TestHandl
 | `TestDedupAPIErrorInvalidatesCache` | A failed dedup query drops the cached entry and propagates the error; once the API recovers, the next tick re-queries and proceeds. |
 | `TestHandleExecuteImmediateConcurrentNeverDuplicates` | Eight concurrent ticks for the same op-id converge on exactly one CR (cache races are benign; `AlreadyExists` is authoritative). |
 
+**Freeze handler** (`internal/uc/freeze_test.go`):
+
+```bash
+go test ./internal/uc/ -run 'TestHandleFreezeScheduled' -v
+```
+
+| Test | Asserts |
+|------|---------|
+| `TestHandleFreezeScheduledCreatesFreezeCR` | Builds + creates a `NetworkUpgradeFreeze` named `<operationId>-freeze` with op-id + `step: freeze` labels, `created-by` annotation, `spec.orbit/operationId`; persisted file cleaned up. |
+| `TestHandleFreezeScheduledSetsScheduledTimeFromContent` | `spec.scheduledTime` in the CR matches the epoch seconds written into `freeze_scheduled.mf` file content, not the marker mtime. |
+| `TestHandleFreezeScheduledCopiesImagesFromPrepare` | `spec.images.consensusNode.version` is copied from the resolved Prepare CR. |
+| `TestHandleFreezeScheduledCopiesSelectedSourcesWhenPresent` | `spec.selectedSources` is carried forward from `status.selectedSources` of the Prepare CR when populated. |
+| `TestHandleFreezeScheduledNoPrepareIsNoOp` | No Prepare CR found for the derived `operationId` → WARN log, no Freeze CR created, returns nil (retry). |
+| `TestHandleFreezeScheduledPrepareFailed` | A Failed Prepare → ERROR log, no Freeze CR created, returns nil (halt). |
+| `TestHandleFreezeScheduledPrepareInProgress` | Prepare CR exists but phase is empty (in-progress) → DEBUG log, no Freeze CR, returns nil (retry). |
+| `TestHandleFreezeScheduledStaleMarkerIsSkipped` | Freeze marker mtime predates `execute_immediate.mf` mtime → WARN `StaleMarker` log, no Freeze CR created (staleness guard 1). |
+| `TestHandleFreezeScheduledNoExecuteMarkerIsNoOp` | `execute_immediate.mf` absent AND manifest absent → `OperationIDExhausted` ERROR log, no Freeze CR. |
+| `TestHandleFreezeScheduledFallbackWhenNoExecuteMarker` | `execute_immediate.mf` absent but manifest + Succeeded Prepare present → resolves via version prefix, Freeze CR created (fallback path). |
+| `TestHandleFreezeScheduledIsIdempotent` | Re-dispatching creates exactly one Freeze CR (dedup). |
+
 **FreezeAbort handler & op-id resolver** (`internal/uc/freeze_abort_test.go`):
 
 ```bash
@@ -565,13 +672,15 @@ go test ./internal/uc/ -run 'TestResolveOperationID|TestHandleFreezeAborted' -v
 | Test | Asserts |
 |------|---------|
 | `TestResolveOperationIDFromCluster` | Resolves the in-flight `operationId` from a non-terminal Prepare CR (cluster = source of truth). |
-| `TestResolveOperationIDSkipsTerminalPrepare` | A `Succeeded`/`Failed` Prepare is ignored, so a completed prior upgrade is never mistaken for the in-flight one. |
+| `TestResolveOperationIDSkipsTerminalPrepare` | A `Succeeded`/`Failed` Prepare is ignored by `resolveOperationID` (the skip-terminal variant). |
 | `TestResolveOperationIDDiskFallback` | With no CR in-cluster, resolves from a Prepare persisted on disk (crash window). |
+| `TestResolveOperationIDDiskFallbackPicksMostRecentByTimestamp` | When two persisted Prepares disagree between lexical and chronological order, the chronologically newer one is picked. |
 | `TestResolveOperationIDNoneReturnsEmpty` | No Prepare anywhere → empty id (caller no-ops and retries later), not an error. |
-| `TestHandleFreezeAbortedCreatesCR` | Builds + creates a `NetworkUpgradeFreezeAbort` named `<operationId>-abort` with op-id + `step: abort` labels, `created-by` annotation, `spec.orbit/operationId` (no images); persisted file cleaned up. |
-| `TestHandleFreezeAbortedNoPrepareCreatesNoCR` | No Prepare to inherit identity from → returns nil and creates no CR. |
-| `TestHandleFreezeAbortedIsIdempotent` | Re-dispatching the marker creates exactly one abort CR (dedup). |
-| `TestHandleFreezeAbortedDoesNotDeleteSiblings` | The Prepare CR survives the abort (audit trail; the UC never deletes sibling CRs). |
+| `TestHandleFreezeAbortedCreatesCR` | Re-derives `operationId` from `execute_immediate.mf` + manifest; builds + creates a `NetworkUpgradeFreezeAbort` with op-id + `step: abort` labels, `created-by` annotation, `spec.orbit/operationId` (no images); persisted file cleaned up. |
+| `TestHandleFreezeAbortedStaleMarkerIsSkipped` | Abort marker mtime predates `execute_immediate.mf` mtime → WARN `StaleMarker` log, no Abort CR created (staleness guard). |
+| `TestHandleFreezeAbortedNoExecuteMarkerIsNoOp` | `execute_immediate.mf` absent AND manifest absent → `OperationIDExhausted` ERROR log, no Abort CR. |
+| `TestHandleFreezeAbortedIsIdempotent` | Re-dispatching the marker creates exactly one Abort CR (dedup). |
+| `TestHandleFreezeAbortedDoesNotDeleteSiblings` | A co-existing Prepare CR survives the abort (audit trail; the UC never deletes sibling CRs). |
 
 **Control socket** (`internal/uc/control_client_test.go`):
 
