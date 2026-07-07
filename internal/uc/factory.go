@@ -93,34 +93,25 @@ func (f *Factory) RecoverOnStartup(ctx context.Context) error {
 // The UC copies spec.images verbatim and does NOT do registry selection or
 // layer-hash verification — that is the operator's PrepareReconciler.
 func (f *Factory) HandleExecuteImmediate(ctx context.Context) error {
-	markerPath := filepath.Join(f.cfg.MarkerPath, MarkerExecuteImmediate)
-	info, err := os.Stat(markerPath)
-	if err != nil {
-		// The poller only dispatches after a successful Stat, so a failure here is
-		// a genuine race/IO error worth retrying on the next tick.
-		return errx.WithReason(errPersist.Wrap(err, "stat marker %s", MarkerExecuteImmediate), ReasonMarkerStatFailed)
-	}
-
-	manifestPath := filepath.Join(f.cfg.MarkerPath, manifestsSubdir, componentsManifestFile)
-	manifest, err := parseComponentsManifest(manifestPath)
+	operationID, _, manifest, found, err := deriveOperationIDPrimary(f.cfg.MarkerPath)
 	if err != nil {
 		if errorx.IsOfType(err, errManifestInvalid) {
 			// ManifestInvalid is terminal — re-reading the same bytes will not fix
-			// it. Log and halt this dispatch without creating a CR (no retry value).
+			// it. Log and halt without creating a CR (no retry value).
 			logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).
-				Str("marker", MarkerExecuteImmediate).Str("manifest", manifestPath).
-				Msg("invalid consensus-node-components.yaml — halting prepare")
+				Str("marker", MarkerExecuteImmediate).
+				Msg("invalid consensus-node-components.yaml or operationId — halting prepare")
 			return nil
 		}
-		// Already an errx-decorated transient (read) error; surface as-is.
+		// Transient IO error — retry next tick.
 		return err
 	}
-
-	operationID, err := mintOperationID(manifest.Images.ConsensusNode.Version, info.ModTime())
-	if err != nil {
-		logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).
-			Str("marker", MarkerExecuteImmediate).Msg("cannot derive a valid operationId — halting prepare")
-		return nil
+	if !found {
+		// Marker vanished between the poller's Stat and this dispatch — IO race;
+		// retry next tick.
+		return errx.WithReason(
+			errPersist.New("execute_immediate.mf absent at dispatch time"),
+			ReasonMarkerStatFailed)
 	}
 
 	cr, err := buildPrepareCR(f.cfg, operationID, manifest.Images)
