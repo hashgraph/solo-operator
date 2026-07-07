@@ -13,6 +13,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 
@@ -194,14 +195,85 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 	return nil
 }
 
-// HandleFreezeScheduled creates a NetworkUpgradeFreeze CR, copying selectedSources
-// from the existing NetworkUpgradePrepare CR (looked up by operation-id label).
+// HandleFreezeScheduled creates a NetworkUpgradeFreeze CR. It resolves the
+// in-flight operationId from the most-recent non-terminal NetworkUpgradePrepare
+// CR (cluster → on-disk fallback), copies spec.images and status.selectedSources
+// from that Prepare CR verbatim, and delivers the Freeze CR via persist-before-send.
 //
-// TODO(#994): implement Prepare lookup + selectedSources copy + persist-before-send.
-func (f *Factory) HandleFreezeScheduled(_ context.Context) error {
-	logx.As().Info().Str("reason", ReasonMarkerHandlerPending.String()).Str("marker", MarkerFreezeScheduled).
-		Msg("freeze_scheduled.mf handler not yet implemented (#994)")
-	return nil
+// If no Prepare exists, the handler logs an anomaly and returns nil — the marker
+// persists on disk so the next poll tick retries once a Prepare appears. If the
+// Prepare has not yet reached Succeeded (selectedSources is nil), an empty
+// SelectedSources is carried forward; the FreezeReconciler re-derives it from
+// spec.images at reconcile time (HIP-1496 FreezeReconciler step 3).
+func (f *Factory) HandleFreezeScheduled(ctx context.Context) error {
+	markerPath := filepath.Join(f.cfg.MarkerPath, MarkerFreezeScheduled)
+	info, err := os.Stat(markerPath)
+	if err != nil {
+		return errx.WithReason(errPersist.Wrap(err, "stat marker %s", MarkerFreezeScheduled), ReasonMarkerStatFailed)
+	}
+	scheduledTime := info.ModTime()
+
+	operationID, err := f.resolveOperationID(ctx)
+	if err != nil {
+		return err
+	}
+	if operationID == "" {
+		logx.As().Warn().Str("reason", ReasonFreezeWithoutPrepare.String()).Str("marker", MarkerFreezeScheduled).
+			Msg("freeze_scheduled.mf with no corresponding NetworkUpgradePrepare — will retry next tick")
+		return nil
+	}
+
+	images, selectedSources, err := f.fetchPreparePayload(ctx, operationID)
+	if err != nil {
+		return err
+	}
+
+	cr, err := buildFreezeCR(f.cfg, operationID, scheduledTime, images, selectedSources)
+	if err != nil {
+		return err
+	}
+	return f.deliverCR(ctx, networkUpgradeFreezeGVR, operationID, operatorv1alpha1.StepFreeze, kindNetworkUpgradeFreeze, cr)
+}
+
+// fetchPreparePayload retrieves spec.images and status.selectedSources from the
+// NetworkUpgradePrepare CR for operationID. If the Prepare has not yet reached
+// Succeeded (status.selectedSources is nil), an empty SelectedSources is returned
+// so the Freeze CR carries the images at minimum and the FreezeReconciler can
+// re-derive selectedSources from spec.images.
+func (f *Factory) fetchPreparePayload(ctx context.Context, operationID string) (operatorv1alpha1.UpgradeImagesSpec, operatorv1alpha1.SelectedSources, error) {
+	listCtx, cancel := context.WithTimeout(ctx, listTimeout)
+	defer cancel()
+
+	list, err := f.client.Resource(networkUpgradePrepareGVR).Namespace(f.cfg.Namespace).
+		List(listCtx, metav1.ListOptions{
+			FieldSelector: "spec.operationId=" + operationID,
+		})
+	if err != nil {
+		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradePrepare for operationId %s", operationID), ReasonPrepareListFailed),
+			"Confirm the UC ServiceAccount has list permission on networkupgradeprepares."+operatorv1alpha1.GroupVersion.Group,
+		)
+	}
+
+	if len(list.Items) == 0 {
+		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil
+	}
+	prepare := &list.Items[0]
+
+	var images operatorv1alpha1.UpgradeImagesSpec
+	if raw, ok, _ := unstructured.NestedMap(prepare.Object, "spec", "images"); ok {
+		if err2 := runtime.DefaultUnstructuredConverter.FromUnstructured(raw, &images); err2 != nil {
+			return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{},
+				errx.WithReason(errCRBuild.Wrap(err2, "decode NetworkUpgradePrepare spec.images for %s", operationID), ReasonCRBuildFailed)
+		}
+	}
+
+	var selectedSources operatorv1alpha1.SelectedSources
+	if raw, ok, _ := unstructured.NestedMap(prepare.Object, "status", "selectedSources"); ok && raw != nil {
+		_ = runtime.DefaultUnstructuredConverter.FromUnstructured(raw, &selectedSources)
+	}
+
+	return images, selectedSources, nil
 }
 
 // HandleNowFrozen creates a NetworkUpgradeExecute CR. The operator (not the UC)

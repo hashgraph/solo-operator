@@ -125,12 +125,12 @@ In a second terminal, drop marker files into the marker directory. The loop
 re-scans every poll interval and dispatches each marker it finds.
 
 ```bash
-# A still-stubbed handler (#994) — logs rather than creating a CR
 touch "$UCDIR/markers/freeze_scheduled.mf"
 ```
 
 Watch the first terminal for (in `debug`):
-- a `MarkerHandlerPending` line naming `freeze_scheduled.mf`.
+- a `CRDelivered` line for a `NetworkUpgradeFreeze` CR, or
+- a `FreezeWithoutPrepare` warning if no non-terminal `NetworkUpgradePrepare` exists yet.
 
 Markers are **not** deleted on detection (cleanup is #998), so you will see the
 same marker re-dispatched on every tick. That is by design — repeat-work
@@ -141,7 +141,7 @@ The four recognised markers and what each routes to:
 | Marker file            | Routed handler (story)                | Status         |
 |------------------------|----------------------------------------|----------------|
 | `execute_immediate.mf` | `HandleExecuteImmediate` (#993)        | **implemented** — see §4a |
-| `freeze_scheduled.mf`  | `HandleFreezeScheduled` (#994)         | stubbed        |
+| `freeze_scheduled.mf`  | `HandleFreezeScheduled` (#994)         | **implemented** — see §4b |
 | `now_frozen.mf`        | `HandleNowFrozen` (#995)               | stubbed        |
 | `freeze_aborted.mf`    | `HandleFreezeAborted` (#996)           | **implemented** — see §4b |
 
@@ -247,7 +247,59 @@ error line and creates **no** CR, rather than retrying forever.
 
 ---
 
-## 4b. Cancel an upgrade (`freeze_aborted.mf`, #996)
+## 4b. Schedule a freeze (`freeze_scheduled.mf`, #994)
+
+`freeze_scheduled.mf` is written by the consensus node once it has submitted a
+`FREEZE_UPGRADE` transaction and the freeze is scheduled at a specific time. The
+handler creates a `NetworkUpgradeFreeze` CR, copying `spec.images` and
+`status.selectedSources` from the existing `NetworkUpgradePrepare` CR so the
+Freeze CR is self-contained.
+
+The Freeze **inherits** the in-flight upgrade's identity: the UC resolves the
+`operationId` from the most-recent non-terminal `NetworkUpgradePrepare` CR
+(cluster query → on-disk Prepare fallback), exactly as the abort handler does.
+`spec.scheduledTime` is derived from the marker file's modification time.
+
+With the Prepare CR from §4a still present:
+
+```bash
+touch "$UCDIR/markers/freeze_scheduled.mf"
+```
+
+Watch for a `CRDelivered` line, then confirm the CR:
+
+```bash
+kubectl get networkupgradefreezes -n solo          # short name: nuf
+kubectl get networkupgradefreezes -n solo -o yaml | less
+```
+
+You should see a CR named `upgrade-0.75.0-<prepare-time-lowercased>-freeze` with:
+- labels `operator.solo.hedera.com/operation-id` (matching the Prepare) and
+  `operator.solo.hedera.com/step: freeze`,
+- annotation `operator.solo.hedera.com/created-by: UC`,
+- `spec.orbit`, `spec.operationId`, `spec.scheduledTime` (from the marker mtime),
+- `spec.images` copied verbatim from the Prepare CR,
+- `spec.selectedSources` copied from `status.selectedSources` of the Prepare CR
+  (empty if the `PrepareReconciler` has not yet populated it — the
+  `FreezeReconciler` will re-derive it from `spec.images`).
+
+**No corresponding Prepare (anomaly):** drop `freeze_scheduled.mf` into a fresh
+`$UCDIR` with no Prepare CR — the handler logs `FreezeWithoutPrepare` and creates
+**no** CR. The marker stays on disk so the next tick retries.
+
+**Prepare not yet Succeeded:** if `status.selectedSources` is absent (the
+`PrepareReconciler` hasn't finished), the Freeze CR is created with an empty
+`selectedSources`; the `FreezeReconciler` re-derives it from `spec.images` at
+reconcile time (HIP-1496 FreezeReconciler step 3). This is intentional — the UC
+prefers creating a slightly under-populated CR immediately over waiting an unknown
+number of ticks.
+
+Processing this marker switches the poll cadence to `--freeze-poll-interval`
+(§5).
+
+---
+
+## 4c. Cancel an upgrade (`freeze_aborted.mf`, #996)
 
 `freeze_aborted.mf` is written when a `FREEZE_ABORT` transaction cancels a
 pending upgrade (before the scheduled freeze time). The handler creates a
