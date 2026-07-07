@@ -57,7 +57,11 @@ var _ = Describe("NetworkUpgradePrepare Controller", func() {
 		enabled := true
 		disabled := false
 		nup := &operatorv1alpha1.NetworkUpgradePrepare{
-			ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      nupName,
+				Namespace: ns,
+				Labels:    map[string]string{operatorv1alpha1.LabelOperationID: opID},
+			},
 			Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
 				Orbit:       ns,
 				OperationID: opID,
@@ -154,7 +158,11 @@ var _ = Describe("NetworkUpgradePrepare Controller", func() {
 		key := types.NamespacedName{Name: nupName, Namespace: ns}
 
 		nup := &operatorv1alpha1.NetworkUpgradePrepare{
-			ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      nupName,
+				Namespace: ns,
+				Labels:    map[string]string{operatorv1alpha1.LabelOperationID: opID},
+			},
 			Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
 				Orbit:       ns,
 				OperationID: opID,
@@ -211,7 +219,11 @@ var _ = Describe("NetworkUpgradePrepare Controller", func() {
 		key := types.NamespacedName{Name: nupName, Namespace: ns}
 
 		nup := &operatorv1alpha1.NetworkUpgradePrepare{
-			ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      nupName,
+				Namespace: ns,
+				Labels:    map[string]string{operatorv1alpha1.LabelOperationID: opID},
+			},
 			Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
 				Orbit:       ns,
 				OperationID: opID,
