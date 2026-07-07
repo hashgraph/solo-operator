@@ -360,10 +360,6 @@ type CheetahUploader struct {
 	// +optional
 	Name string `json:"name,omitempty"`
 
-	// Image is the container image
-	// +optional
-	Image string `json:"image,omitempty"`
-
 	// ImagePullPolicy specifies when to pull the image
 	// +kubebuilder:default=IfNotPresent
 	// +optional
@@ -599,10 +595,6 @@ type StreamUploader struct {
 	// Name is the container name
 	// +optional
 	Name string `json:"name,omitempty"`
-
-	// Image is the container image
-	// +optional
-	Image string `json:"image,omitempty"`
 
 	// ImagePullPolicy specifies when to pull the image
 	// +kubebuilder:default=IfNotPresent

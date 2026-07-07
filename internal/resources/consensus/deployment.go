@@ -85,7 +85,8 @@ func (r *StatefulSetSubReconciler) Reconcile(ctx context.Context, capsule *opera
 	return ctrl.Result{}, nil
 }
 
-// buildStatefulSet builds the desired StatefulSet.
+// buildStatefulSet builds the desired StatefulSet purely from the capsule spec; it
+// never reads the existing StatefulSet, so an omitted sidecar section is removed.
 func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (*appsv1.StatefulSet, error) {
 	replicas := int32(1)
 	if capsule.Spec.Offline {
@@ -699,7 +700,7 @@ func (r *StatefulSetSubReconciler) addSidecarContainers(sts *appsv1.StatefulSet,
 		switch {
 		case u.uploader == nil:
 			r.event(capsule, corev1.EventTypeNormal, operatorv1alpha1.EventComponentSkipped,
-				u.eventLabel+": omitted from spec; no change made")
+				u.eventLabel+": omitted from spec; not present in desired StatefulSet")
 		case !u.uploader.Enabled:
 			r.event(capsule, corev1.EventTypeNormal, operatorv1alpha1.EventSidecarDisabled,
 				u.eventLabel+": enabled=false; container removed from StatefulSet")
@@ -715,7 +716,7 @@ func (r *StatefulSetSubReconciler) addSidecarContainers(sts *appsv1.StatefulSet,
 	switch {
 	case containers.BackupUploader == nil:
 		r.event(capsule, corev1.EventTypeNormal, operatorv1alpha1.EventComponentSkipped,
-			"backupUploader: omitted from spec; no change made")
+			"backupUploader: omitted from spec; not present in desired StatefulSet")
 	case !containers.BackupUploader.Enabled:
 		r.event(capsule, corev1.EventTypeNormal, operatorv1alpha1.EventSidecarDisabled,
 			"backupUploader: enabled=false; container removed from StatefulSet")
@@ -727,7 +728,7 @@ func (r *StatefulSetSubReconciler) addSidecarContainers(sts *appsv1.StatefulSet,
 	switch {
 	case containers.UC == nil:
 		r.event(capsule, corev1.EventTypeNormal, operatorv1alpha1.EventComponentSkipped,
-			"uc: omitted from spec; no change made")
+			"uc: omitted from spec; not present in desired StatefulSet")
 	case !containers.UC.Enabled:
 		r.event(capsule, corev1.EventTypeNormal, operatorv1alpha1.EventSidecarDisabled,
 			"uc: enabled=false; container removed from StatefulSet")
@@ -738,7 +739,7 @@ func (r *StatefulSetSubReconciler) addSidecarContainers(sts *appsv1.StatefulSet,
 
 	if resolvedAlloy == nil || !resolvedAlloy.Enabled {
 		r.event(capsule, corev1.EventTypeNormal, operatorv1alpha1.EventComponentSkipped,
-			"alloy: omitted from spec; no change made")
+			"alloy: omitted from spec; not present in desired StatefulSet")
 	} else {
 		dm := int32(420)
 		sts.Spec.Template.Spec.Volumes = append(sts.Spec.Template.Spec.Volumes, corev1.Volume{
@@ -885,7 +886,7 @@ func (r *StatefulSetSubReconciler) buildCheetahUploaderContainer(uploader *opera
 }
 
 func (r *StatefulSetSubReconciler) buildUcContainer(config *operatorv1alpha1.UcSidecar) corev1.Container {
-	image := common.BuildImageOrDefault(config.SoftwareVersion, config.Image)
+	image := common.BuildImageOrDefault(config.SoftwareVersion, UCDefaultImage())
 
 	name := config.Name
 	if name == "" {
