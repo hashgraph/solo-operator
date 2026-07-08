@@ -296,6 +296,23 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&operatorv1alpha1.NetworkUpgradePrepareValidator{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to set up webhook", "webhook", "NetworkUpgradePrepare")
+		os.Exit(1)
+	}
+	if err = (&operatorv1alpha1.NetworkUpgradeFreezeValidator{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to set up webhook", "webhook", "NetworkUpgradeFreeze")
+		os.Exit(1)
+	}
+	if err = (&operatorv1alpha1.NetworkUpgradeExecuteValidator{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to set up webhook", "webhook", "NetworkUpgradeExecute")
+		os.Exit(1)
+	}
+	if err = (&operatorv1alpha1.NetworkUpgradeFreezeAbortValidator{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to set up webhook", "webhook", "NetworkUpgradeFreezeAbort")
+		os.Exit(1)
+	}
+
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)

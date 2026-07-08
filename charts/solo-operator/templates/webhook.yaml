@@ -1,0 +1,110 @@
+{{- if .Values.webhook.enabled }}
+{{- $svcName := printf "%s-webhook-service" (include "solo-operator.fullname" .) }}
+{{- $svcFQDN := printf "%s.%s.svc" $svcName .Release.Namespace }}
+{{- $ca := genCA "solo-operator-webhook-ca" 36500 }}
+{{- $cert := genSignedCert $svcFQDN nil (list $svcFQDN (printf "%s.cluster.local" $svcFQDN)) 36500 $ca }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "solo-operator.fullname" . }}-webhook-tls
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "solo-operator.labels" . | nindent 4 }}
+type: kubernetes.io/tls
+data:
+  tls.crt: {{ $cert.Cert | b64enc }}
+  tls.key: {{ $cert.Key | b64enc }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ include "solo-operator.fullname" . }}-validating-webhook
+  labels:
+    {{- include "solo-operator.labels" . | nindent 4 }}
+webhooks:
+  - name: vnetworkupgradeprepare.kb.io
+    rules:
+      - apiGroups: ["operator.solo.hedera.com"]
+        apiVersions: ["v1alpha1"]
+        resources: ["networkupgradeprepares"]
+        operations: ["UPDATE", "DELETE"]
+        scope: Namespaced
+    clientConfig:
+      service:
+        name: {{ $svcName }}
+        namespace: {{ .Release.Namespace }}
+        path: /validate-operator-solo-hedera-com-v1alpha1-networkupgradeprepare
+        port: 443
+      caBundle: {{ $ca.Cert | b64enc }}
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    failurePolicy: Fail
+  - name: vnetworkupgradefreeze.kb.io
+    rules:
+      - apiGroups: ["operator.solo.hedera.com"]
+        apiVersions: ["v1alpha1"]
+        resources: ["networkupgradefreezes"]
+        operations: ["UPDATE", "DELETE"]
+        scope: Namespaced
+    clientConfig:
+      service:
+        name: {{ $svcName }}
+        namespace: {{ .Release.Namespace }}
+        path: /validate-operator-solo-hedera-com-v1alpha1-networkupgradefreeze
+        port: 443
+      caBundle: {{ $ca.Cert | b64enc }}
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    failurePolicy: Fail
+  - name: vnetworkupgradeexecute.kb.io
+    rules:
+      - apiGroups: ["operator.solo.hedera.com"]
+        apiVersions: ["v1alpha1"]
+        resources: ["networkupgradeexecutes"]
+        operations: ["UPDATE", "DELETE"]
+        scope: Namespaced
+    clientConfig:
+      service:
+        name: {{ $svcName }}
+        namespace: {{ .Release.Namespace }}
+        path: /validate-operator-solo-hedera-com-v1alpha1-networkupgradeexecute
+        port: 443
+      caBundle: {{ $ca.Cert | b64enc }}
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    failurePolicy: Fail
+  - name: vnetworkupgradefreezeabort.kb.io
+    rules:
+      - apiGroups: ["operator.solo.hedera.com"]
+        apiVersions: ["v1alpha1"]
+        resources: ["networkupgradefreezeaborts"]
+        operations: ["UPDATE", "DELETE"]
+        scope: Namespaced
+    clientConfig:
+      service:
+        name: {{ $svcName }}
+        namespace: {{ .Release.Namespace }}
+        path: /validate-operator-solo-hedera-com-v1alpha1-networkupgradefreezeabort
+        port: 443
+      caBundle: {{ $ca.Cert | b64enc }}
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    failurePolicy: Fail
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $svcName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "solo-operator.labels" . | nindent 4 }}
+spec:
+  ports:
+    - port: 443
+      targetPort: {{ .Values.webhook.port }}
+      protocol: TCP
+  selector:
+    {{- include "solo-operator.selectorLabels" . | nindent 4 }}
+    control-plane: controller-manager
+{{- end }}
