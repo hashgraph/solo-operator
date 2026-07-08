@@ -195,6 +195,9 @@ const (
 
 	// Abort
 	CondAbortProcessed = "AbortProcessed"
+
+	// Shared across all NetworkUpgrade* CRs.
+	CondOperationIDLabelValid = "OperationIDLabelValid"
 )
 
 // Reason constants used in conditions and events.
@@ -220,6 +223,8 @@ const (
 
 	ReasonAbortSuccess     = "Success"
 	ReasonAbortAfterFreeze = "AbortAfterFreeze"
+
+	ReasonOperationIDLabelInvalid = "OperationIDLabelInvalid"
 )
 
 // DaemonResult condition reasons, written by the provisioner daemon.
@@ -255,4 +260,6 @@ const (
 
 	EventConfigCRReconciled = "ConfigCRReconciled"
 	EventConfigCRFailed     = "ConfigCRFailed"
+
+	EventOperationIDLabelInvalid = "OperationIDLabelInvalid"
 )

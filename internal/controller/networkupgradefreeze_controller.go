@@ -63,6 +63,13 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, nil
 	}
 
+	if ok, msg := validateOperationIDLabel(freeze.Labels, freeze.Spec.OperationID); !ok {
+		return rejectInvalidOperationIDLabel(ctx, r.Client, &freeze, &freeze.Status.Conditions,
+			func(reason, m string) { r.eventf(&freeze, corev1.EventTypeWarning, reason, "%s", m) },
+			func() { freeze.Status.Phase = operatorv1alpha1.PhaseFailed },
+			msg)
+	}
+
 	prepare, err := findPrepare(ctx, r.Client, freeze.Namespace, freeze.Spec.OperationID)
 	if err != nil {
 		return ctrl.Result{}, err

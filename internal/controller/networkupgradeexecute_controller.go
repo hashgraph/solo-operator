@@ -77,6 +77,13 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, nil
 	}
 
+	if ok, msg := validateOperationIDLabel(execute.Labels, execute.Spec.OperationID); !ok {
+		return rejectInvalidOperationIDLabel(ctx, r.Client, &execute, &execute.Status.Conditions,
+			func(reason, m string) { r.eventf(&execute, corev1.EventTypeWarning, reason, "%s", m) },
+			func() { execute.Status.Phase = operatorv1alpha1.ExecutePhaseFailed },
+			msg)
+	}
+
 	if execute.Status.Phase == "" || execute.Status.Phase == operatorv1alpha1.ExecutePhasePending {
 		prepare, err := findPrepare(ctx, r.Client, execute.Namespace, execute.Spec.OperationID)
 		if err != nil {

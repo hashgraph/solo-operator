@@ -127,6 +127,50 @@ func reconcileFreeze(t *testing.T, freeze *operatorv1alpha1.NetworkUpgradeFreeze
 	return freezeReconcileResult{events: recorded, freeze: &updated, err: err}
 }
 
+func TestFreezeReconcile_OperationIDLabelMissing(t *testing.T) {
+	freeze := newFreezeForTest()
+	freeze.Labels = nil
+
+	// prepare=nil: label validation runs before the prepare prereq wait,
+	// so an invalid CR fails terminally regardless of prerequisites.
+	res := reconcileFreeze(t, freeze, nil, nil)
+
+	if res.err != nil {
+		t.Fatalf("unexpected error: %v", res.err)
+	}
+	if res.freeze.Status.Phase != operatorv1alpha1.PhaseFailed {
+		t.Errorf("expected phase Failed, got %s", res.freeze.Status.Phase)
+	}
+	if got := countContaining(res.events, operatorv1alpha1.EventOperationIDLabelInvalid); got != 1 {
+		t.Errorf("expected one OperationIDLabelInvalid event, got %d in %v", got, res.events)
+	}
+	cond := findCondition(res.freeze.Status.Conditions, operatorv1alpha1.CondOperationIDLabelValid)
+	if cond == nil || cond.Status != metav1.ConditionFalse {
+		t.Errorf("expected CondOperationIDLabelValid=False, got %v", cond)
+	}
+	if cond != nil && cond.Reason != operatorv1alpha1.ReasonOperationIDLabelInvalid {
+		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonOperationIDLabelInvalid, cond.Reason)
+	}
+}
+
+func TestFreezeReconcile_OperationIDLabelMismatch(t *testing.T) {
+	freeze := newFreezeForTest()
+	freeze.Labels[operatorv1alpha1.LabelOperationID] = "op-does-not-match"
+
+	res := reconcileFreeze(t, freeze, nil, nil)
+
+	if res.err != nil {
+		t.Fatalf("unexpected error: %v", res.err)
+	}
+	if res.freeze.Status.Phase != operatorv1alpha1.PhaseFailed {
+		t.Errorf("expected phase Failed, got %s", res.freeze.Status.Phase)
+	}
+	cond := findCondition(res.freeze.Status.Conditions, operatorv1alpha1.CondOperationIDLabelValid)
+	if cond == nil || cond.Reason != operatorv1alpha1.ReasonOperationIDLabelInvalid {
+		t.Errorf("expected reason %s, got %v", operatorv1alpha1.ReasonOperationIDLabelInvalid, cond)
+	}
+}
+
 func assertFreezeWaitsForPrepare(t *testing.T, res freezeReconcileResult) {
 	t.Helper()
 	if res.err != nil {
