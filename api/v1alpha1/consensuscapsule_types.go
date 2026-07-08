@@ -280,10 +280,6 @@ type UcSidecar struct {
 	// +optional
 	Name string `json:"name,omitempty"`
 
-	// +kubebuilder:default=IfNotPresent
-	// +optional
-	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
-
 	// +optional
 	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
 
@@ -303,10 +299,6 @@ type ConsensusNodeContainer struct {
 	// +kubebuilder:default="consensus-node"
 	// +optional
 	Name string `json:"name,omitempty"`
-
-	// +kubebuilder:default=IfNotPresent
-	// +optional
-	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 
 	// container image spec
 	// +kubebuilder:validation:Required
@@ -339,13 +331,6 @@ type AlloyConfig struct {
 	// +kubebuilder:default="alloy"
 	// +optional
 	Name string `json:"name,omitempty"`
-
-	// +optional
-	Image string `json:"image,omitempty"`
-
-	// +kubebuilder:default=IfNotPresent
-	// +optional
-	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 
 	// +optional
 	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`

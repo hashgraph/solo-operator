@@ -71,8 +71,7 @@ func fetchOrbitAlloyDefaults(ctx context.Context, c client.Client, orbitName str
 func alloyConfigFromOrbitDefaults(defaults *operatorv1alpha1.OrbitAlloyDefaults) *operatorv1alpha1.AlloyConfig {
 	return &operatorv1alpha1.AlloyConfig{
 		Enabled:         defaults.Enabled,
-		Image:           defaults.Image,
-		ImagePullPolicy: defaults.ImagePullPolicy,
+		SoftwareVersion: defaults.SoftwareVersion,
 		Resources:       defaults.Resources,
 		Config:          defaults.Config,
 	}
@@ -86,11 +85,8 @@ func mergeAlloyConfig(orbitDefaults *operatorv1alpha1.OrbitAlloyDefaults, capsul
 	merged := *capsule // shallow copy
 
 	// Container-level fields: capsule wins if set, otherwise orbit
-	if merged.Image == "" && orbitDefaults.Image != "" {
-		merged.Image = orbitDefaults.Image
-	}
-	if merged.ImagePullPolicy == "" && orbitDefaults.ImagePullPolicy != "" {
-		merged.ImagePullPolicy = orbitDefaults.ImagePullPolicy
+	if merged.SoftwareVersion == nil && orbitDefaults.SoftwareVersion != nil {
+		merged.SoftwareVersion = orbitDefaults.SoftwareVersion
 	}
 	if merged.Resources == nil && orbitDefaults.Resources != nil {
 		merged.Resources = orbitDefaults.Resources

@@ -281,11 +281,7 @@ func (r *StatefulSetSubReconciler) buildConsensusNodeContainer(capsule *operator
 		VolumeMounts:             volumeMounts,
 		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-		ImagePullPolicy:          corev1.PullIfNotPresent,
-	}
-
-	if cn.ImagePullPolicy != "" {
-		container.ImagePullPolicy = cn.ImagePullPolicy
+		ImagePullPolicy:          common.PullPolicyOrDefault(cn.SoftwareVersion, corev1.PullIfNotPresent),
 	}
 
 	if cn.SecurityContext != nil {
@@ -865,11 +861,7 @@ func (r *StatefulSetSubReconciler) buildCheetahUploaderContainer(uploader *opera
 		VolumeMounts:             volumeMounts,
 		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-		ImagePullPolicy:          corev1.PullIfNotPresent,
-	}
-
-	if uploader.ImagePullPolicy != "" {
-		container.ImagePullPolicy = uploader.ImagePullPolicy
+		ImagePullPolicy:          common.PullPolicyOrDefault(uploader.SoftwareVersion, corev1.PullIfNotPresent),
 	}
 
 	if uploader.Resources != nil {
@@ -898,11 +890,7 @@ func (r *StatefulSetSubReconciler) buildUcContainer(config *operatorv1alpha1.UcS
 		Image:                    image,
 		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-		ImagePullPolicy:          corev1.PullIfNotPresent,
-	}
-
-	if config.ImagePullPolicy != "" {
-		container.ImagePullPolicy = config.ImagePullPolicy
+		ImagePullPolicy:          common.PullPolicyOrDefault(config.SoftwareVersion, corev1.PullIfNotPresent),
 	}
 
 	if config.Resources != nil {
@@ -974,11 +962,7 @@ func (r *StatefulSetSubReconciler) buildBackupUploaderContainer(config *operator
 		Image:                    image,
 		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-		ImagePullPolicy:          corev1.PullIfNotPresent,
-	}
-
-	if config.ImagePullPolicy != "" {
-		container.ImagePullPolicy = config.ImagePullPolicy
+		ImagePullPolicy:          common.PullPolicyOrDefault(config.SoftwareVersion, corev1.PullIfNotPresent),
 	}
 
 	if config.Resources != nil {
@@ -1033,10 +1017,7 @@ func (r *StatefulSetSubReconciler) buildAlloyContainer(capsule *operatorv1alpha1
 		containerName = "alloy"
 	}
 
-	image := common.BuildImageOrDefault(config.SoftwareVersion, config.Image)
-	if image == "" {
-		image = AlloyDefaultImage
-	}
+	image := common.BuildImageOrDefault(config.SoftwareVersion, AlloyDefaultImage)
 
 	container := corev1.Container{
 		Name:  containerName,
@@ -1050,7 +1031,7 @@ func (r *StatefulSetSubReconciler) buildAlloyContainer(capsule *operatorv1alpha1
 		},
 		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-		ImagePullPolicy:          corev1.PullIfNotPresent,
+		ImagePullPolicy:          common.PullPolicyOrDefault(config.SoftwareVersion, corev1.PullIfNotPresent),
 	}
 
 	// Share the logs volume with the consensus node (read-only) for log scraping.
@@ -1090,10 +1071,6 @@ func (r *StatefulSetSubReconciler) buildAlloyContainer(capsule *operatorv1alpha1
 				},
 			},
 		)
-	}
-
-	if config.ImagePullPolicy != "" {
-		container.ImagePullPolicy = config.ImagePullPolicy
 	}
 
 	if config.Resources != nil {

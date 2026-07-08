@@ -3270,13 +3270,6 @@ spec:
                           enabled:
                             default: false
                             type: boolean
-                          image:
-                            type: string
-                          imagePullPolicy:
-                            default: IfNotPresent
-                            description: PullPolicy describes a policy for if/when
-                              to pull a container image
-                            type: string
                           name:
                             default: alloy
                             type: string
@@ -3603,11 +3596,6 @@ spec:
                             default: false
                             description: Enabled enables the uploader
                             type: boolean
-                          imagePullPolicy:
-                            default: IfNotPresent
-                            description: ImagePullPolicy specifies when to pull the
-                              image
-                            type: string
                           name:
                             description: Name is the container name
                             type: string
@@ -3821,11 +3809,6 @@ spec:
                                 description: UseSsl enables SSL
                                 type: boolean
                             type: object
-                          imagePullPolicy:
-                            default: IfNotPresent
-                            description: ImagePullPolicy specifies when to pull the
-                              image
-                            type: string
                           logLevel:
                             default: Info
                             description: LogLevel is the log level
@@ -4075,11 +4058,6 @@ spec:
                               - name
                               type: object
                             type: array
-                          imagePullPolicy:
-                            default: IfNotPresent
-                            description: PullPolicy describes a policy for if/when
-                              to pull a container image
-                            type: string
                           javaHeapMax:
                             description: sets JAVA_HEAP_MAX (e.g. "8g" → -Xmx8g)
                             type: string
@@ -4499,11 +4477,6 @@ spec:
                                 description: UseSsl enables SSL
                                 type: boolean
                             type: object
-                          imagePullPolicy:
-                            default: IfNotPresent
-                            description: ImagePullPolicy specifies when to pull the
-                              image
-                            type: string
                           logLevel:
                             default: Info
                             description: LogLevel is the log level
@@ -4755,11 +4728,6 @@ spec:
                                 description: UseSsl enables SSL
                                 type: boolean
                             type: object
-                          imagePullPolicy:
-                            default: IfNotPresent
-                            description: ImagePullPolicy specifies when to pull the
-                              image
-                            type: string
                           logLevel:
                             default: Info
                             description: LogLevel is the log level
@@ -5012,11 +4980,6 @@ spec:
                           enabled:
                             default: false
                             type: boolean
-                          imagePullPolicy:
-                            default: IfNotPresent
-                            description: PullPolicy describes a policy for if/when
-                              to pull a container image
-                            type: string
                           name:
                             type: string
                           resources:

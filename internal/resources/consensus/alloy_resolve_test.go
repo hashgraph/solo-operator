@@ -13,37 +13,37 @@ import (
 
 // --- mergeAlloyConfig tests ---
 
-func TestMergeAlloyConfig_CapsuleOverridesImage(t *testing.T) {
+func TestMergeAlloyConfig_CapsuleOverridesSoftwareVersion(t *testing.T) {
 	orbit := &operatorv1alpha1.OrbitAlloyDefaults{
-		Enabled: true,
-		Image:   "grafana/alloy:v1.10.0",
+		Enabled:         true,
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "grafana", ImageName: "alloy", ImageTag: "v1.10.0"},
 	}
 	capsule := &operatorv1alpha1.AlloyConfig{
-		Enabled: true,
-		Image:   "grafana/alloy:v1.14.2",
+		Enabled:         true,
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "grafana", ImageName: "alloy", ImageTag: "v1.14.2"},
 	}
 
 	merged := mergeAlloyConfig(orbit, capsule)
 
-	if merged.Image != "grafana/alloy:v1.14.2" {
-		t.Errorf("expected capsule image, got %q", merged.Image)
+	if merged.SoftwareVersion.ImageTag != "v1.14.2" {
+		t.Errorf("expected capsule software version, got %q", merged.SoftwareVersion.ImageTag)
 	}
 }
 
-func TestMergeAlloyConfig_InheritsImageFromOrbit(t *testing.T) {
+func TestMergeAlloyConfig_InheritsSoftwareVersionFromOrbit(t *testing.T) {
 	orbit := &operatorv1alpha1.OrbitAlloyDefaults{
-		Enabled: true,
-		Image:   "grafana/alloy:v1.10.0",
+		Enabled:         true,
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "grafana", ImageName: "alloy", ImageTag: "v1.10.0"},
 	}
 	capsule := &operatorv1alpha1.AlloyConfig{
 		Enabled: true,
-		// No image set
+		// No software version set
 	}
 
 	merged := mergeAlloyConfig(orbit, capsule)
 
-	if merged.Image != "grafana/alloy:v1.10.0" {
-		t.Errorf("expected orbit image, got %q", merged.Image)
+	if merged.SoftwareVersion == nil || merged.SoftwareVersion.ImageTag != "v1.10.0" {
+		t.Errorf("expected orbit software version, got %+v", merged.SoftwareVersion)
 	}
 }
 
@@ -253,9 +253,13 @@ func TestMergeExporters_NilCapsule(t *testing.T) {
 
 func TestAlloyConfigFromOrbitDefaults(t *testing.T) {
 	defaults := &operatorv1alpha1.OrbitAlloyDefaults{
-		Enabled:         true,
-		Image:           "grafana/alloy:v1.14.2",
-		ImagePullPolicy: corev1.PullAlways,
+		Enabled: true,
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+			Repository:      "grafana",
+			ImageName:       "alloy",
+			ImageTag:        "v1.14.2",
+			ImagePullPolicy: operatorv1alpha1.ImagePullPolicyAlways,
+		},
 		Config: &operatorv1alpha1.AlloyCollectorConfig{
 			AppName:     "hedera-node",
 			Environment: "production",
@@ -273,11 +277,11 @@ func TestAlloyConfigFromOrbitDefaults(t *testing.T) {
 	if !result.Enabled {
 		t.Error("expected enabled")
 	}
-	if result.Image != "grafana/alloy:v1.14.2" {
-		t.Errorf("expected orbit image, got %q", result.Image)
+	if result.SoftwareVersion == nil || result.SoftwareVersion.ImageTag != "v1.14.2" {
+		t.Errorf("expected orbit software version, got %+v", result.SoftwareVersion)
 	}
-	if result.ImagePullPolicy != corev1.PullAlways {
-		t.Errorf("expected PullAlways, got %v", result.ImagePullPolicy)
+	if result.SoftwareVersion.ImagePullPolicy != operatorv1alpha1.ImagePullPolicyAlways {
+		t.Errorf("expected PullAlways, got %v", result.SoftwareVersion.ImagePullPolicy)
 	}
 	if result.Config == nil || result.Config.Exporters == nil || result.Config.Exporters.Loki == nil {
 		t.Fatal("expected Loki config from orbit")
@@ -291,8 +295,8 @@ func TestAlloyConfigFromOrbitDefaults(t *testing.T) {
 
 func TestMergeAlloyConfig_FullScenario_OrbitLokiCapsulePrometheus(t *testing.T) {
 	orbit := &operatorv1alpha1.OrbitAlloyDefaults{
-		Enabled: true,
-		Image:   "grafana/alloy:v1.14.2",
+		Enabled:         true,
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "grafana", ImageName: "alloy", ImageTag: "v1.14.2"},
 		Config: &operatorv1alpha1.AlloyCollectorConfig{
 			AppName:     "hedera-node",
 			Environment: "production",
@@ -321,9 +325,9 @@ func TestMergeAlloyConfig_FullScenario_OrbitLokiCapsulePrometheus(t *testing.T) 
 
 	merged := mergeAlloyConfig(orbit, capsule)
 
-	// Image from orbit (capsule empty)
-	if merged.Image != "grafana/alloy:v1.14.2" {
-		t.Errorf("expected orbit image, got %q", merged.Image)
+	// SoftwareVersion from orbit (capsule empty)
+	if merged.SoftwareVersion == nil || merged.SoftwareVersion.ImageTag != "v1.14.2" {
+		t.Errorf("expected orbit software version, got %+v", merged.SoftwareVersion)
 	}
 	// AppName from orbit (capsule empty)
 	if merged.Config.AppName != "hedera-node" {

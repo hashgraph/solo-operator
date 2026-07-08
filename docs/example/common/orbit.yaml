@@ -6,8 +6,11 @@ spec:
   telemetry:
     alloy:
       enabled: true
-      image: "grafana/alloy:v1.14.2"
-      imagePullPolicy: IfNotPresent
+      softwareVersion:
+        repository: "grafana"
+        imageName: "alloy"
+        imageTag: "v1.14.2"
+        imagePullPolicy: IfNotPresent
       resources:
         limits:
           cpu: 200m

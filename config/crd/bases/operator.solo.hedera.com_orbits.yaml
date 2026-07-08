@@ -296,13 +296,6 @@ spec:
                         description: Enabled enables Alloy sidecar for all capsules
                           in this orbit by default
                         type: boolean
-                      image:
-                        description: Image is the default Alloy container image
-                        type: string
-                      imagePullPolicy:
-                        default: IfNotPresent
-                        description: ImagePullPolicy is the default image pull policy
-                        type: string
                       resources:
                         description: Resources is the default resource requirements
                           for the Alloy sidecar
@@ -362,6 +355,85 @@ spec:
                               otherwise to an implementation-defined value. Requests cannot exceed Limits.
                               More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                             type: object
+                        type: object
+                      softwareVersion:
+                        description: SoftwareVersion is the default Alloy container
+                          image spec
+                        properties:
+                          imageName:
+                            description: ImageName is the name of the image (e.g.,
+                              ubuntu)
+                            type: string
+                          imagePullPolicy:
+                            default: IfNotPresent
+                            description: ImagePullPolicy specifies when to pull the
+                              image
+                            enum:
+                            - Always
+                            - Never
+                            - IfNotPresent
+                            type: string
+                          imagePullSecrets:
+                            description: ImagePullSecrets is a list of references
+                              to secrets for pulling images
+                            items:
+                              description: |-
+                                LocalObjectReference contains enough information to let you locate the
+                                referenced object inside the same namespace.
+                              properties:
+                                name:
+                                  default: ""
+                                  description: |-
+                                    Name of the referent.
+                                    This field is effectively required, but due to backwards compatibility is
+                                    allowed to be empty. Instances of this type with an empty value here are
+                                    almost certainly wrong.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            type: array
+                          imageTag:
+                            description: ImageTag is the tag of the image (e.g., focal)
+                            type: string
+                          imageVerificationSpec:
+                            description: ImageVerificationSpec contains hash verification
+                              details
+                            properties:
+                              architecture:
+                                description: Architecture is the target CPU architecture
+                                enum:
+                                - amd64
+                                - arm64
+                                type: string
+                              layerHashes:
+                                description: LayerHashes are the expected layer digest
+                                  hashes
+                                items:
+                                  type: string
+                                type: array
+                              os:
+                                description: OS is the target operating system
+                                enum:
+                                - darwin
+                                - linux
+                                - windows
+                                type: string
+                            required:
+                            - layerHashes
+                            type: object
+                          manifestHash:
+                            description: ManifestHash is the optional manifest hash
+                              for verification
+                            type: string
+                          repository:
+                            description: Repository is the container registry (e.g.,
+                              docker.io/library)
+                            type: string
+                        required:
+                        - imageName
+                        - imageTag
+                        - repository
                         type: object
                     type: object
                 type: object
