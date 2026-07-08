@@ -23,7 +23,7 @@ import (
 
 // managedAnnotationsAnnotation records which annotation keys were last written by the operator.
 // This enables deletion of annotations removed from spec.serviceAnnotations.
-const managedAnnotationsAnnotation = "operator.solo.hedera.com/managed-annotations"
+const managedAnnotationsAnnotation = "hedera.com/managed-annotations"
 
 // managedAnnotationsKey extracts the sorted annotation keys stored in the marker annotation.
 func managedAnnotationsKeys(svc *corev1.Service) []string {

@@ -50,6 +50,28 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 			msg)
 	}
 
+	sibling, err := abortSiblingExists(ctx, r.Client, abort.Namespace, string(abort.UID), abort.Spec.OperationID)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if sibling {
+		msg := fmt.Sprintf("operationId %q already used by another NetworkUpgradeFreezeAbort", abort.Spec.OperationID)
+		r.eventf(&abort, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
+		abort.Status.Phase = operatorv1alpha1.PhaseFailed
+		abort.Status.ObservedGeneration = abort.Generation
+		setCondition(&abort.Status.Conditions, metav1.Condition{
+			Type:               operatorv1alpha1.CondAbortProcessed,
+			Status:             metav1.ConditionFalse,
+			Reason:             operatorv1alpha1.ReasonDuplicateOpID,
+			Message:            msg,
+			ObservedGeneration: abort.Generation,
+		})
+		if err := r.Status().Update(ctx, &abort); err != nil {
+			return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+		}
+		return ctrl.Result{}, fmt.Errorf("%s", msg)
+	}
+
 	if abort.Status.Phase == "" || abort.Status.Phase == operatorv1alpha1.PhasePending {
 		now := metav1.Now()
 		abort.Status.StartTime = &now
@@ -113,6 +135,17 @@ func (r *NetworkUpgradeFreezeAbortReconciler) eventf(obj *operatorv1alpha1.Netwo
 	if r.Recorder != nil {
 		r.Recorder.Eventf(obj, nil, eventtype, reason, "FreezeAbort", format, args...)
 	}
+}
+
+func RegisterFreezeAbortIndex(mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&operatorv1alpha1.NetworkUpgradeFreezeAbort{},
+		fieldOperationID,
+		func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradeFreezeAbort).Spec.OperationID}
+		},
+	)
 }
 
 func (r *NetworkUpgradeFreezeAbortReconciler) SetupWithManager(mgr ctrl.Manager) error {

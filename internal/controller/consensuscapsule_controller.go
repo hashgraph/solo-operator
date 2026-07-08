@@ -38,7 +38,7 @@ import (
 )
 
 const (
-	ConsensusCapsuleFinalizer = "operator.solo.hedera.com/consensuscapsule-finalizer"
+	ConsensusCapsuleFinalizer = "hedera.com/consensuscapsule-finalizer"
 
 	// podReadinessRequeueAfter is how long to wait before rechecking when the pod is not yet ready.
 	podReadinessRequeueAfter = 10 * time.Second

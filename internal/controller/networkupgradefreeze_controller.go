@@ -70,6 +70,28 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 			msg)
 	}
 
+	sibling, err := freezeSiblingExists(ctx, r.Client, freeze.Namespace, string(freeze.UID), freeze.Spec.OperationID)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if sibling {
+		msg := fmt.Sprintf("operationId %q already used by another NetworkUpgradeFreeze", freeze.Spec.OperationID)
+		r.eventf(&freeze, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
+		freeze.Status.Phase = operatorv1alpha1.PhaseFailed
+		freeze.Status.ObservedGeneration = freeze.Generation
+		setCondition(&freeze.Status.Conditions, metav1.Condition{
+			Type:               operatorv1alpha1.CondManifestValidated,
+			Status:             metav1.ConditionFalse,
+			Reason:             operatorv1alpha1.ReasonDuplicateOpID,
+			Message:            msg,
+			ObservedGeneration: freeze.Generation,
+		})
+		if err := r.Status().Update(ctx, &freeze); err != nil {
+			return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+		}
+		return ctrl.Result{}, fmt.Errorf("%s", msg)
+	}
+
 	prepare, err := findPrepare(ctx, r.Client, freeze.Namespace, freeze.Spec.OperationID)
 	if err != nil {
 		return ctrl.Result{}, err

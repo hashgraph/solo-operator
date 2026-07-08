@@ -22,7 +22,7 @@ import (
 
 const (
 	// EnvoyProxyFinalizer is the finalizer for EnvoyProxy resources
-	EnvoyProxyFinalizer = "operator.solo.hedera.com/envoyproxy-finalizer"
+	EnvoyProxyFinalizer = "hedera.com/envoyproxy-finalizer"
 )
 
 // EnvoyProxyReconciler reconciles an EnvoyProxy object

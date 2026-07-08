@@ -53,6 +53,10 @@ func executeIndexFunc(o client.Object) []string {
 	return []string{o.(*operatorv1alpha1.NetworkUpgradeExecute).Spec.OperationID}
 }
 
+func abortIndexFunc(o client.Object) []string {
+	return []string{o.(*operatorv1alpha1.NetworkUpgradeFreezeAbort).Spec.OperationID}
+}
+
 func reconcileFreezeAbort(t *testing.T, abort *operatorv1alpha1.NetworkUpgradeFreezeAbort, execute *operatorv1alpha1.NetworkUpgradeExecute) abortReconcileResult {
 	t.Helper()
 	scheme := newControllerTestScheme()
@@ -60,6 +64,7 @@ func reconcileFreezeAbort(t *testing.T, abort *operatorv1alpha1.NetworkUpgradeFr
 	builder := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithIndex(&operatorv1alpha1.NetworkUpgradeExecute{}, fieldOperationID, executeIndexFunc).
+		WithIndex(&operatorv1alpha1.NetworkUpgradeFreezeAbort{}, fieldOperationID, abortIndexFunc).
 		WithObjects(abort).
 		WithStatusSubresource(abort)
 	if execute != nil {
@@ -205,6 +210,7 @@ func TestFreezeAbortReconcile_TerminalPhaseIsNoOp(t *testing.T) {
 			c := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithIndex(&operatorv1alpha1.NetworkUpgradeExecute{}, fieldOperationID, executeIndexFunc).
+				WithIndex(&operatorv1alpha1.NetworkUpgradeFreezeAbort{}, fieldOperationID, abortIndexFunc).
 				WithObjects(abort).
 				WithStatusSubresource(abort).
 				Build()

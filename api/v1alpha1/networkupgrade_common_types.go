@@ -163,8 +163,8 @@ type SelectedSource struct {
 
 // Labels linking all CRs of one upgrade operation.
 const (
-	LabelOperationID = "operator.solo.hedera.com/operation-id"
-	LabelStep        = "operator.solo.hedera.com/step"
+	LabelOperationID = "hedera.com/operation-id"
+	LabelStep        = "hedera.com/step"
 )
 
 const (

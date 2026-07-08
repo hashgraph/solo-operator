@@ -85,6 +85,28 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	if execute.Status.Phase == "" || execute.Status.Phase == operatorv1alpha1.ExecutePhasePending {
+		sibling, err := executeSiblingExists(ctx, r.Client, execute.Namespace, string(execute.UID), execute.Spec.OperationID)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if sibling {
+			msg := fmt.Sprintf("operationId %q already used by another NetworkUpgradeExecute", execute.Spec.OperationID)
+			r.eventf(&execute, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
+			execute.Status.Phase = operatorv1alpha1.ExecutePhaseFailed
+			execute.Status.ObservedGeneration = execute.Generation
+			setCondition(&execute.Status.Conditions, metav1.Condition{
+				Type:               operatorv1alpha1.CondManifestValidated,
+				Status:             metav1.ConditionFalse,
+				Reason:             operatorv1alpha1.ReasonDuplicateOpID,
+				Message:            msg,
+				ObservedGeneration: execute.Generation,
+			})
+			if err := r.Status().Update(ctx, &execute); err != nil {
+				return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+			}
+			return ctrl.Result{}, fmt.Errorf("%s", msg)
+		}
+
 		prepare, err := findPrepare(ctx, r.Client, execute.Namespace, execute.Spec.OperationID)
 		if err != nil {
 			return ctrl.Result{}, err
@@ -129,9 +151,11 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	switch execute.Status.Phase {
-	case operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon,
-		operatorv1alpha1.ExecutePhasePendingInfraUpgrade:
+	case operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon:
 		return r.reconcileWaitingForDaemon(ctx, &execute)
+
+	case operatorv1alpha1.ExecutePhasePendingInfraUpgrade:
+		return r.reconcilePendingInfraUpgrade(ctx, &execute)
 
 	case operatorv1alpha1.ExecutePhasePendingNodeUpgrade:
 		return r.reconcilePendingNodeUpgrade(ctx, &execute)
@@ -169,10 +193,47 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 		return ctrl.Result{}, nil
 	}
 
+	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingInfraUpgrade
+	execute.Status.ObservedGeneration = execute.Generation
+	if err := r.Status().Update(ctx, execute); err != nil {
+		if apierrors.IsConflict(err) {
+			return ctrl.Result{Requeue: true}, nil
+		}
+		return ctrl.Result{}, fmt.Errorf("advancing to PendingInfraUpgrade: %w", err)
+	}
+	r.eventf(execute, corev1.EventTypeNormal, operatorv1alpha1.EventPendingNodeUpgrade,
+		"provisioner daemon succeeded; advancing to PendingInfraUpgrade for operationId %q", execute.Spec.OperationID)
+	return ctrl.Result{Requeue: true}, nil
+}
+
+func (r *NetworkUpgradeExecuteReconciler) reconcilePendingInfraUpgrade(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (ctrl.Result, error) {
+	// TODO(#943): populate entries from spec.configCRs once that field is added to
+	// NetworkUpgradeExecuteSpec. Until then the map is empty and this phase is a
+	// no-op pass-through, preserving the phase transition skeleton so future work
+	// only needs to populate the map.
+	entries := make(map[string]configCREntry)
+
+	done, err := r.reconcileConfigCRs(ctx, execute, entries)
+	if err != nil {
+		r.eventf(execute, corev1.EventTypeWarning, operatorv1alpha1.EventConfigCRFailed,
+			"config CR reconciliation failed for operationId %q: %v", execute.Spec.OperationID, err)
+		return ctrl.Result{}, err
+	}
+	if !done {
+		return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
+	}
+
 	now := metav1.Now()
 	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
 	execute.Status.NodeUpgradeStartTime = &now
 	execute.Status.ObservedGeneration = execute.Generation
+	setCondition(&execute.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.CondConfigCRsApplied,
+		Status:             metav1.ConditionTrue,
+		Reason:             "ConfigCRsApplied",
+		Message:            "all config CRs applied for this operation",
+		ObservedGeneration: execute.Generation,
+	})
 	if err := r.Status().Update(ctx, execute); err != nil {
 		if apierrors.IsConflict(err) {
 			return ctrl.Result{Requeue: true}, nil
@@ -180,7 +241,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 		return ctrl.Result{}, fmt.Errorf("advancing to PendingNodeUpgrade: %w", err)
 	}
 	r.eventf(execute, corev1.EventTypeNormal, operatorv1alpha1.EventPendingNodeUpgrade,
-		"provisioner daemon succeeded; advancing to PendingNodeUpgrade for operationId %q", execute.Spec.OperationID)
+		"config CRs applied; advancing to PendingNodeUpgrade for operationId %q", execute.Spec.OperationID)
 	return ctrl.Result{Requeue: true}, nil
 }
 

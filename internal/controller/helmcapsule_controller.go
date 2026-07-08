@@ -27,12 +27,12 @@ import (
 )
 
 const (
-	HelmCapsuleFinalizer = "operator.solo.hedera.com/helmcapsule-finalizer"
+	HelmCapsuleFinalizer = "hedera.com/helmcapsule-finalizer"
 	conditionReady       = "Ready"
 	// SkipUninstallAnnotation can be set to "true" on a HelmCapsule to bypass
 	// Helm uninstall during deletion. Useful when a release is stuck and an
 	// admin needs to unblock the finalizer without running helm uninstall.
-	SkipUninstallAnnotation = "operator.solo.hedera.com/skip-uninstall"
+	SkipUninstallAnnotation = "hedera.com/skip-uninstall"
 )
 
 type HelmCapsuleReconciler struct {

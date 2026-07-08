@@ -479,7 +479,7 @@ func TestExecuteReconcile_DaemonResultFalse_TerminalFailure(t *testing.T) {
 	}
 }
 
-func TestExecuteReconcile_DaemonResultTrue_AdvancesToPendingNodeUpgrade(t *testing.T) {
+func TestExecuteReconcile_DaemonResultTrue_AdvancesToPendingInfraUpgrade(t *testing.T) {
 	execute := newExecuteForTest()
 	execute.Status.Conditions = []operatorv1alpha1.Condition{
 		{
@@ -495,8 +495,11 @@ func TestExecuteReconcile_DaemonResultTrue_AdvancesToPendingNodeUpgrade(t *testi
 	if res.err != nil {
 		t.Fatalf("unexpected error: %v", res.err)
 	}
-	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhasePendingNodeUpgrade {
-		t.Errorf("expected PendingNodeUpgrade, got %s", res.execute.Status.Phase)
+	// Daemon success transitions to PendingInfraUpgrade on this tick; the next
+	// tick (via Requeue) will run reconcilePendingInfraUpgrade and advance to
+	// PendingNodeUpgrade.
+	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhasePendingInfraUpgrade {
+		t.Errorf("expected PendingInfraUpgrade, got %s", res.execute.Status.Phase)
 	}
 	if !res.result.Requeue {
 		t.Error("expected Requeue=true after advancing phase")

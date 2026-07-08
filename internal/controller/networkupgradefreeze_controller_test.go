@@ -83,6 +83,9 @@ func reconcileFreeze(t *testing.T, freeze *operatorv1alpha1.NetworkUpgradeFreeze
 	builder := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, prepareIndexFunc).
+		WithIndex(&operatorv1alpha1.NetworkUpgradeFreeze{}, fieldOperationID, func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradeFreeze).Spec.OperationID}
+		}).
 		WithObjects(freeze).
 		WithStatusSubresource(freeze)
 	if prepare != nil {

@@ -79,19 +79,12 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	// Step 1: validate operationId uniqueness within the namespace.
-	var siblings operatorv1alpha1.NetworkUpgradePrepareList
-	if err := r.List(ctx, &siblings,
-		client.InNamespace(prepare.Namespace),
-		client.MatchingFields{fieldOperationID: prepare.Spec.OperationID},
-	); err != nil {
-		return ctrl.Result{}, fmt.Errorf("listing siblings: %w", err)
+	sibling, err := prepareSiblingExists(ctx, r.Client, prepare.Namespace, string(prepare.UID), prepare.Spec.OperationID)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
-	for _, s := range siblings.Items {
-		if s.UID == prepare.UID || s.Spec.OperationID != prepare.Spec.OperationID {
-			continue
-		}
-		msg := fmt.Sprintf("operationId %q already used by %s/%s", prepare.Spec.OperationID, s.Namespace, s.Name)
+	if sibling {
+		msg := fmt.Sprintf("operationId %q already used by another NetworkUpgradePrepare", prepare.Spec.OperationID)
 		r.eventf(&prepare, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
 		prepare.Status.Phase = operatorv1alpha1.PhaseFailed
 		prepare.Status.ObservedGeneration = prepare.Generation

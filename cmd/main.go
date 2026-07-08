@@ -260,6 +260,18 @@ func main() {
 		setupLog.Error(err, "unable to register operationId index")
 		os.Exit(1)
 	}
+	if err = controller.RegisterFreezeIndex(mgr); err != nil {
+		setupLog.Error(err, "unable to register freeze operationId index")
+		os.Exit(1)
+	}
+	if err = controller.RegisterExecuteIndex(mgr); err != nil {
+		setupLog.Error(err, "unable to register execute operationId index")
+		os.Exit(1)
+	}
+	if err = controller.RegisterFreezeAbortIndex(mgr); err != nil {
+		setupLog.Error(err, "unable to register freeze-abort operationId index")
+		os.Exit(1)
+	}
 
 	prepareReconciler := controller.NewNetworkUpgradePrepareReconciler(
 		mgr.GetClient(),
