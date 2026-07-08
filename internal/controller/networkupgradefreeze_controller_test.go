@@ -277,6 +277,65 @@ func TestFreezeReconcile_NoValidRegistry(t *testing.T) {
 	}
 }
 
+func TestFreezeReconcile_DuplicateOperationID_SetsPhaseFailed(t *testing.T) {
+	existing := newFreezeForTest()
+	existing.Name = "existing"
+	existing.UID = "uid-existing"
+
+	freeze := newFreezeForTest()
+	freeze.Name = "duplicate"
+	freeze.UID = "uid-duplicate"
+
+	scheme := newControllerTestScheme()
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, prepareIndexFunc).
+		WithIndex(&operatorv1alpha1.NetworkUpgradeFreeze{}, fieldOperationID, func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradeFreeze).Spec.OperationID}
+		}).
+		WithObjects(existing, freeze).
+		WithStatusSubresource(existing, freeze).
+		Build()
+
+	rec := events.NewFakeRecorder(16)
+	r := NewNetworkUpgradeFreezeReconciler(c, scheme)
+	r.Recorder = rec
+	r.Checker = newFreezeChecker(nil, nil)
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: client.ObjectKeyFromObject(freeze),
+	})
+	if err == nil {
+		t.Error("expected error for duplicate operationId")
+	}
+
+	var got operatorv1alpha1.NetworkUpgradeFreeze
+	if getErr := c.Get(context.Background(), client.ObjectKeyFromObject(freeze), &got); getErr != nil {
+		t.Fatalf("get: %v", getErr)
+	}
+	if got.Status.Phase != operatorv1alpha1.PhaseFailed {
+		t.Errorf("expected PhaseFailed, got %s", got.Status.Phase)
+	}
+	cond := findCondition(got.Status.Conditions, operatorv1alpha1.CondManifestValidated)
+	if cond == nil {
+		t.Fatal("ManifestValidated condition not set")
+	}
+	if cond.Status != metav1.ConditionFalse {
+		t.Errorf("expected ManifestValidated=False, got %s", cond.Status)
+	}
+	if cond.Reason != operatorv1alpha1.ReasonDuplicateOpID {
+		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonDuplicateOpID, cond.Reason)
+	}
+	close(rec.Events)
+	var recorded []string
+	for e := range rec.Events {
+		recorded = append(recorded, e)
+	}
+	if got := countContaining(recorded, "ManifestInvalid"); got != 1 {
+		t.Errorf("expected one ManifestInvalid event, got %d in %v", got, recorded)
+	}
+}
+
 func TestFreezeReconcile_AlreadySucceededIsNoOp(t *testing.T) {
 	freeze := newFreezeForTest()
 	freeze.Status.Phase = operatorv1alpha1.PhaseSucceeded

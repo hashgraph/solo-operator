@@ -198,6 +198,62 @@ func TestFreezeAbortReconcile_OperationIDLabelMismatch(t *testing.T) {
 	}
 }
 
+func TestFreezeAbortReconcile_DuplicateOperationID_SetsPhaseFailed(t *testing.T) {
+	existing := newFreezeAbortForTest()
+	existing.Name = "existing"
+	existing.UID = "uid-existing"
+
+	abort := newFreezeAbortForTest()
+	abort.Name = "duplicate"
+	abort.UID = "uid-duplicate"
+
+	scheme := newControllerTestScheme()
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithIndex(&operatorv1alpha1.NetworkUpgradeExecute{}, fieldOperationID, executeIndexFunc).
+		WithIndex(&operatorv1alpha1.NetworkUpgradeFreezeAbort{}, fieldOperationID, abortIndexFunc).
+		WithObjects(existing, abort).
+		WithStatusSubresource(existing, abort).
+		Build()
+
+	rec := events.NewFakeRecorder(16)
+	r := NewNetworkUpgradeFreezeAbortReconciler(c, scheme)
+	r.Recorder = rec
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: client.ObjectKeyFromObject(abort),
+	})
+	if err == nil {
+		t.Error("expected error for duplicate operationId")
+	}
+
+	var got operatorv1alpha1.NetworkUpgradeFreezeAbort
+	if getErr := c.Get(context.Background(), client.ObjectKeyFromObject(abort), &got); getErr != nil {
+		t.Fatalf("get: %v", getErr)
+	}
+	if got.Status.Phase != operatorv1alpha1.PhaseFailed {
+		t.Errorf("expected PhaseFailed, got %s", got.Status.Phase)
+	}
+	cond := findCondition(got.Status.Conditions, operatorv1alpha1.CondAbortProcessed)
+	if cond == nil {
+		t.Fatal("CondAbortProcessed condition not set")
+	}
+	if cond.Status != metav1.ConditionFalse {
+		t.Errorf("expected CondAbortProcessed=False, got %s", cond.Status)
+	}
+	if cond.Reason != operatorv1alpha1.ReasonDuplicateOpID {
+		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonDuplicateOpID, cond.Reason)
+	}
+	close(rec.Events)
+	var recorded []string
+	for e := range rec.Events {
+		recorded = append(recorded, e)
+	}
+	if got := countContaining(recorded, "ManifestInvalid"); got != 1 {
+		t.Errorf("expected one ManifestInvalid event, got %d in %v", got, recorded)
+	}
+}
+
 func TestFreezeAbortReconcile_TerminalPhaseIsNoOp(t *testing.T) {
 	for _, phase := range []operatorv1alpha1.Phase{
 		operatorv1alpha1.PhaseSucceeded,
