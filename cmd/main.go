@@ -47,6 +47,7 @@ func main() {
 	var secureMetrics bool
 	var enableHTTP2 bool
 	var registryOrder string
+	var webhookPort int
 	var showVersion bool
 	var tlsOpts []func(*tls.Config)
 
@@ -63,6 +64,7 @@ func main() {
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.StringVar(&registryOrder, "registry-order", registry.StrategyRandom,
 		"Order in which registries are checked during the upgrade Prepare phase: Random or Sequential.")
+	flag.IntVar(&webhookPort, "webhook-port", 9443, "Port the webhook server listens on.")
 
 	opts := zap.Options{
 		Development: true,
@@ -91,6 +93,7 @@ func main() {
 	}
 
 	webhookServer := webhook.NewServer(webhook.Options{
+		Port:    webhookPort,
 		TLSOpts: tlsOpts,
 	})
 

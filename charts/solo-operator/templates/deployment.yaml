@@ -50,7 +50,7 @@ spec:
             - --registry-order={{ . }}
             {{- end }}
             {{- if .Values.webhook.enabled }}
-            - --webhook-bind-address=:{{ .Values.webhook.port }}
+            - --webhook-port={{ .Values.webhook.port }}
             {{- end }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
