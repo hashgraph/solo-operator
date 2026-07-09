@@ -28,7 +28,7 @@ func sampleCR(operationID, step string) *unstructured.Unstructured {
 				operatorv1alpha1.LabelStep:        step,
 			},
 			"annotations": map[string]interface{}{
-				"hedera.com/created-by": "UC",
+				"operator.solo.hedera.com/created-by": "UC",
 			},
 		},
 		"spec": map[string]interface{}{

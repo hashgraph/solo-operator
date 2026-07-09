@@ -24,7 +24,7 @@ const (
 	// annotationCreatedBy records the component that authored a CR. The UC stamps
 	// "UC" on every CR it creates so operators can distinguish UC-authored CRs
 	// from daemon- or human-authored ones (HIP-1496).
-	annotationCreatedBy = "hedera.com/created-by"
+	annotationCreatedBy = "operator.solo.hedera.com/created-by"
 	createdByUC         = "UC"
 )
 

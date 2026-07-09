@@ -60,7 +60,7 @@ func TestPodLabels(t *testing.T) {
 		t.Errorf("expected orbit test-orbit, got %s", labels[LabelOrbit])
 	}
 
-	// solo.hedera.com labels
+	// operator.solo.hedera.com labels
 	checks := map[string]string{
 		LabelNodeId:        "0",
 		LabelSoloNodeName:  "node0",
@@ -497,7 +497,7 @@ func TestServiceSubReconciler(t *testing.T) {
 		t.Errorf("expected service type ClusterIP, got %s", svc.Spec.Type)
 	}
 
-	// solo.hedera.com service labels
+	// operator.solo.hedera.com service labels
 	svcLabelChecks := map[string]string{
 		LabelSoloType:      "network-node-svc",
 		LabelSoloPromEndpt: "active",

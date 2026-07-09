@@ -20,7 +20,7 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
-const OrbitFinalizer = "hedera.com/orbit-finalizer"
+const OrbitFinalizer = "operator.solo.hedera.com/orbit-finalizer"
 
 type OrbitReconciler struct {
 	client.Client

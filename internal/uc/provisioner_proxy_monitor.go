@@ -385,7 +385,7 @@ func (pm *ProvisionerProxyMonitor) handleExecute(ctx context.Context, cr *unstru
 
 // operationIDOf returns the authoritative operation id from spec.operationId.
 // This mirrors the operator's indexed field and solo-weaver's upgrade monitor:
-// spec.operationId is identity, while the hedera.com/operation-id
+// spec.operationId is identity, while the operator.solo.hedera.com/operation-id
 // label is only for List/Watch selection.
 func operationIDOf(cr *unstructured.Unstructured) string {
 	id, _, _ := unstructured.NestedString(cr.Object, "spec", "operationId")

@@ -58,7 +58,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 					return false
 				}
 				for _, f := range got.Finalizers {
-					if f == "hedera.com/helmcapsule-finalizer" {
+					if f == "operator.solo.hedera.com/helmcapsule-finalizer" {
 						return true
 					}
 				}

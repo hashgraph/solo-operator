@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	NetworkGenesisFinalizer = "hedera.com/networkgenesis-finalizer"
+	NetworkGenesisFinalizer = "operator.solo.hedera.com/networkgenesis-finalizer"
 
 	networkGenesisConditionReady    = "Ready"
 	networkGenesisConditionFailed   = "Failed"

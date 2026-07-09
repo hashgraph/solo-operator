@@ -22,7 +22,7 @@ import (
 
 const (
 	// HAProxyCapsuleFinalizer is the finalizer for HAProxyCapsule resources
-	HAProxyCapsuleFinalizer = "hedera.com/haproxycapsule-finalizer"
+	HAProxyCapsuleFinalizer = "operator.solo.hedera.com/haproxycapsule-finalizer"
 )
 
 // HAProxyCapsuleReconciler reconciles a HAProxyCapsule object

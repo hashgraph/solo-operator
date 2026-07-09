@@ -13,8 +13,8 @@ const (
 
 // Hedera / solo-operator specific label keys.
 const (
-	LabelOrbit       = "hedera.com/orbit"
-	LabelOperationID = "hedera.com/operation-id"
+	LabelOrbit       = "operator.solo.hedera.com/orbit"
+	LabelOperationID = "operator.solo.hedera.com/operation-id"
 )
 
 // Standard label values.
