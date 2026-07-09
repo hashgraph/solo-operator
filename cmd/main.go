@@ -66,7 +66,7 @@ func main() {
 	flag.StringVar(&registryOrder, "registry-order", registry.StrategyRandom,
 		"Order in which registries are checked during the upgrade Prepare phase: Random or Sequential.")
 	flag.IntVar(&webhookPort, "webhook-port", 9443, "Port the webhook server listens on.")
-	flag.BoolVar(&enableWebhooks, "enable-webhooks", true, "Enable admission webhooks.")
+	flag.BoolVar(&enableWebhooks, "enable-webhooks", false, "Enable admission webhooks.")
 
 	opts := zap.Options{
 		Development: true,
