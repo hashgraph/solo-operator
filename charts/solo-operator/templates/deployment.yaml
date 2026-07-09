@@ -50,6 +50,7 @@ spec:
             - --registry-order={{ . }}
             {{- end }}
             {{- if .Values.webhook.enabled }}
+            - --enable-webhooks
             - --webhook-port={{ .Values.webhook.port }}
             {{- end }}
           securityContext:

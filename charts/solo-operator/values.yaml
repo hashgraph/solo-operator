@@ -83,7 +83,7 @@ health:
 
 # Webhook configuration (if using admission webhooks)
 webhook:
-  enabled: false
+  enabled: true
   port: 9443
 
 # CRD installation
