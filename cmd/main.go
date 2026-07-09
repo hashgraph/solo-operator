@@ -101,7 +101,7 @@ func main() {
 			TLSOpts: tlsOpts,
 		})
 	} else {
-		setupLog.Error(nil, "WARNING: admission webhooks are disabled — NetworkUpgrade CRs can be freely mutated and deleted; this is not suitable for production")
+		setupLog.Info("admission webhooks are disabled — NetworkUpgrade CRs can be freely mutated and deleted; this is not suitable for production")
 	}
 
 	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
