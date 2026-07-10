@@ -6,6 +6,7 @@ import (
 	"context"
 	"testing"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -13,6 +14,30 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
+
+func TestEnsureFinalizer_SkipsDeletingObject(t *testing.T) {
+	now := metav1.Now()
+	obj := &operatorv1alpha1.NetworkUpgradePrepare{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "deleting",
+			Namespace:         "default",
+			DeletionTimestamp: &now,
+			Finalizers:        []string{"other/keep-me"},
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(newControllerTestScheme()).WithObjects(obj).Build()
+
+	res, err := ensureFinalizer(context.Background(), c, obj, FinalizerNetworkUpgradePrepare)
+	if err != nil {
+		t.Fatalf("expected no error for deleting object, got %v", err)
+	}
+	if res == nil {
+		t.Fatal("expected short-circuit result for deleting object, got nil")
+	}
+	if controllerutil.ContainsFinalizer(obj, FinalizerNetworkUpgradePrepare) {
+		t.Error("finalizer must not be re-added to a deleting object")
+	}
+}
 
 func TestPrepareReconcile_AddsFinalizer(t *testing.T) {
 	res := reconcilePrepare(t, newPrepareForTest(), newPrepareChecker(nil, nil))

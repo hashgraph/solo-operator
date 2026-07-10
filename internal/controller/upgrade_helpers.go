@@ -23,10 +23,14 @@ const (
 	FinalizerNetworkUpgradeFreezeAbort = "operator.solo.hedera.com/networkupgradefreezeabort"
 )
 
-// ensureFinalizer adds finalizer to obj if absent. It returns a non-nil result
-// (which the caller should return, short-circuiting reconcile) when it wrote the
-// finalizer or the write failed, and nil when the finalizer was already present.
+// ensureFinalizer adds finalizer to obj if absent. A non-nil result means the
+// caller should return it, short-circuiting reconcile; nil means proceed.
 func ensureFinalizer(ctx context.Context, c client.Client, obj client.Object, finalizer string) (*ctrl.Result, error) {
+	// Never re-add a finalizer to a deleting object: the API server rejects it,
+	// and there is nothing to reconcile on a doomed object.
+	if !obj.GetDeletionTimestamp().IsZero() {
+		return &ctrl.Result{}, nil
+	}
 	if controllerutil.ContainsFinalizer(obj, finalizer) {
 		return nil, nil
 	}
