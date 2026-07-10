@@ -206,8 +206,8 @@ func TestNetworkGenesisReconciler_StampsOperationIDLabel(t *testing.T) {
 		if err := c.Get(context.Background(), types.NamespacedName{Namespace: "test", Name: cmName}, cm); err != nil {
 			t.Fatalf("ConfigMap %s not created: %v", cmName, err)
 		}
-		if got := cm.Labels["operator.solo.hedera.com/operation-id"]; got != opID {
-			t.Errorf("ConfigMap %s: operator.solo.hedera.com/operation-id = %q, want %q", cmName, got, opID)
+		if got := cm.Labels["operator.solo.hiero.org/operation-id"]; got != opID {
+			t.Errorf("ConfigMap %s: operator.solo.hiero.org/operation-id = %q, want %q", cmName, got, opID)
 		}
 	}
 }

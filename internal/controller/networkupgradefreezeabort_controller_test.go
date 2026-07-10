@@ -234,12 +234,12 @@ func TestFreezeAbortReconcile_DuplicateOperationID_SetsPhaseFailed(t *testing.T)
 	if got.Status.Phase != operatorv1alpha1.PhaseFailed {
 		t.Errorf("expected PhaseFailed, got %s", got.Status.Phase)
 	}
-	cond := findCondition(got.Status.Conditions, operatorv1alpha1.CondAbortProcessed)
+	cond := findCondition(got.Status.Conditions, operatorv1alpha1.CondManifestValidated)
 	if cond == nil {
-		t.Fatal("CondAbortProcessed condition not set")
+		t.Fatal("CondManifestValidated condition not set")
 	}
 	if cond.Status != metav1.ConditionFalse {
-		t.Errorf("expected CondAbortProcessed=False, got %s", cond.Status)
+		t.Errorf("expected CondManifestValidated=False, got %s", cond.Status)
 	}
 	if cond.Reason != operatorv1alpha1.ReasonDuplicateOpID {
 		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonDuplicateOpID, cond.Reason)

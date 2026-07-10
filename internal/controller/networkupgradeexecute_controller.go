@@ -56,12 +56,12 @@ func (r *NetworkUpgradeExecuteReconciler) WithStrategy(name string) *NetworkUpgr
 	return r
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradeexecutes,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradeexecutes/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradeexecutes/finalizers,verbs=update
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradeprepares,verbs=get;list;watch
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradefreezes,verbs=get;list;watch
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=consensuscapsules,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeexecutes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeexecutes/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeexecutes/finalizers,verbs=update
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeprepares,verbs=get;list;watch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradefreezes,verbs=get;list;watch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=consensuscapsules,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch
 
 func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -201,25 +201,15 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 		}
 		return ctrl.Result{}, fmt.Errorf("advancing to PendingInfraUpgrade: %w", err)
 	}
-	r.eventf(execute, corev1.EventTypeNormal, operatorv1alpha1.EventPendingNodeUpgrade,
+	r.eventf(execute, corev1.EventTypeNormal, operatorv1alpha1.EventPendingInfraUpgrade,
 		"provisioner daemon succeeded; advancing to PendingInfraUpgrade for operationId %q", execute.Spec.OperationID)
 	return ctrl.Result{Requeue: true}, nil
 }
 
 func (r *NetworkUpgradeExecuteReconciler) reconcilePendingInfraUpgrade(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (ctrl.Result, error) {
-	// TODO(#943): populate entries from spec.configCRs once that field is added to
-	// NetworkUpgradeExecuteSpec. Until then the map is empty and this phase is a
-	// no-op pass-through, preserving the phase transition skeleton so future work
-	// only needs to populate the map.
-	entries := make(map[string]configCREntry)
-
-	done, err := r.reconcileConfigCRs(ctx, execute, entries)
-	if err != nil {
-		r.eventf(execute, corev1.EventTypeWarning, operatorv1alpha1.EventConfigCRFailed,
-			"config CR reconciliation failed for operationId %q: %v", execute.Spec.OperationID, err)
-		return ctrl.Result{}, err
-	}
-	if !done {
+	cond := findCondition(execute.Status.Conditions, operatorv1alpha1.CondConfigCRsApplied)
+	if cond == nil || cond.Status != metav1.ConditionTrue {
+		log.FromContext(ctx).Info("waiting for daemon to set CondConfigCRsApplied=True", "operationId", execute.Spec.OperationID)
 		return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
 	}
 
@@ -227,13 +217,6 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingInfraUpgrade(ctx conte
 	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
 	execute.Status.NodeUpgradeStartTime = &now
 	execute.Status.ObservedGeneration = execute.Generation
-	setCondition(&execute.Status.Conditions, metav1.Condition{
-		Type:               operatorv1alpha1.CondConfigCRsApplied,
-		Status:             metav1.ConditionTrue,
-		Reason:             "ConfigCRsApplied",
-		Message:            "all config CRs applied for this operation",
-		ObservedGeneration: execute.Generation,
-	})
 	if err := r.Status().Update(ctx, execute); err != nil {
 		if apierrors.IsConflict(err) {
 			return ctrl.Result{Requeue: true}, nil
@@ -241,7 +224,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingInfraUpgrade(ctx conte
 		return ctrl.Result{}, fmt.Errorf("advancing to PendingNodeUpgrade: %w", err)
 	}
 	r.eventf(execute, corev1.EventTypeNormal, operatorv1alpha1.EventPendingNodeUpgrade,
-		"config CRs applied; advancing to PendingNodeUpgrade for operationId %q", execute.Spec.OperationID)
+		"daemon applied config CRs; advancing to PendingNodeUpgrade for operationId %q", execute.Spec.OperationID)
 	return ctrl.Result{Requeue: true}, nil
 }
 

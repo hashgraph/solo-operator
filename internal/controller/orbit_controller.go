@@ -20,7 +20,7 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
-const OrbitFinalizer = "operator.solo.hedera.com/orbit-finalizer"
+const OrbitFinalizer = "operator.solo.hiero.org/orbit-finalizer"
 
 type OrbitReconciler struct {
 	client.Client
@@ -31,23 +31,23 @@ func NewOrbitReconciler(c client.Client, scheme *runtime.Scheme) *OrbitReconcile
 	return &OrbitReconciler{Client: c, Scheme: scheme}
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=orbits,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=orbits/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=orbits/finalizers,verbs=update
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=consensuscapsules,verbs=get;list;watch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=helmcapsules,verbs=get;list;watch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=haproxycapsules,verbs=get;list;watch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=envoyproxies,verbs=get;list;watch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=log4j2configs,verbs=get;list;watch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=nodesettings,verbs=get;list;watch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=applicationproperties,verbs=get;list;watch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=apipermissionproperties,verbs=get;list;watch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=nodepropertiesconfigs,verbs=get;list;watch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=throttlesconfigs,verbs=get;list;watch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=feeschedules,verbs=get;list;watch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=simplefeesschedules,verbs=get;list;watch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=applicationoverrideproperties,verbs=get;list;watch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=bootstrapproperties,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits/finalizers,verbs=update
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=consensuscapsules,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=helmcapsules,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=haproxycapsules,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=envoyproxies,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=log4j2configs,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=nodesettings,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=applicationproperties,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=apipermissionproperties,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=nodepropertiesconfigs,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=throttlesconfigs,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=feeschedules,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=simplefeesschedules,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=applicationoverrideproperties,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=bootstrapproperties,verbs=get;list;watch;delete
 
 func (r *OrbitReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)

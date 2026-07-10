@@ -23,11 +23,11 @@ const (
 	LabelOrbit     = common.LabelOrbit
 	LabelComponent = common.LabelComponent
 
-	LabelNodeId        = "operator.solo.hedera.com/node-id"
-	LabelSoloNodeName  = "operator.solo.hedera.com/node-name"
-	LabelSoloAccountId = "operator.solo.hedera.com/account-id"
-	LabelSoloType      = "operator.solo.hedera.com/type"
-	LabelSoloPromEndpt = "operator.solo.hedera.com/prometheus-endpoint"
+	LabelNodeId        = "operator.solo.hiero.org/node-id"
+	LabelSoloNodeName  = "operator.solo.hiero.org/node-name"
+	LabelSoloAccountId = "operator.solo.hiero.org/account-id"
+	LabelSoloType      = "operator.solo.hiero.org/type"
+	LabelSoloPromEndpt = "operator.solo.hiero.org/prometheus-endpoint"
 )
 
 // Label values — generic values alias common; consensus-specific values defined here.

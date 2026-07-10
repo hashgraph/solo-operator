@@ -563,9 +563,30 @@ func TestExecuteReconcile_DaemonResultTrue_AdvancesToPendingInfraUpgrade(t *test
 	}
 }
 
+func TestExecuteReconcile_PendingInfraUpgrade_WaitsForDaemon(t *testing.T) {
+	execute := newExecuteForTest()
+	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingInfraUpgrade
+	// CondConfigCRsApplied not set — daemon hasn't written it yet.
+
+	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil), prereqsWithCapsule()...)
+
+	if res.err != nil {
+		t.Fatalf("unexpected error: %v", res.err)
+	}
+	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhasePendingInfraUpgrade {
+		t.Errorf("expected PendingInfraUpgrade (still waiting), got %s", res.execute.Status.Phase)
+	}
+}
+
 func TestExecuteReconcile_PendingInfraUpgrade_AdvancesToPendingNodeUpgrade(t *testing.T) {
 	execute := newExecuteForTest()
 	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingInfraUpgrade
+	// Simulate daemon having written CondConfigCRsApplied=True.
+	setCondition(&execute.Status.Conditions, metav1.Condition{
+		Type:   operatorv1alpha1.CondConfigCRsApplied,
+		Status: metav1.ConditionTrue,
+		Reason: operatorv1alpha1.ReasonDaemonSucceeded,
+	})
 
 	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil), prereqsWithCapsule()...)
 
@@ -574,10 +595,6 @@ func TestExecuteReconcile_PendingInfraUpgrade_AdvancesToPendingNodeUpgrade(t *te
 	}
 	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhasePendingNodeUpgrade {
 		t.Errorf("expected PendingNodeUpgrade, got %s", res.execute.Status.Phase)
-	}
-	cond := findCondition(res.execute.Status.Conditions, operatorv1alpha1.CondConfigCRsApplied)
-	if cond == nil || cond.Status != metav1.ConditionTrue {
-		t.Errorf("expected CondConfigCRsApplied=True, got %v", cond)
 	}
 }
 

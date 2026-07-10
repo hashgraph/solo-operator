@@ -928,8 +928,8 @@ func TestDeploymentSubReconciler_AdditionalLabels(t *testing.T) {
 	scheme := newTestScheme()
 	haproxy := newTestHAProxy()
 	haproxy.Spec.AdditionalLabels = map[string]string{
-		"solo.hedera.com/node-id":   "0",
-		"solo.hedera.com/node-name": "node1",
+		"operator.solo.hiero.org/node-id":   "0",
+		"operator.solo.hiero.org/node-name": "node1",
 	}
 	c := newTestClient(scheme, haproxy)
 
@@ -944,15 +944,15 @@ func TestDeploymentSubReconciler_AdditionalLabels(t *testing.T) {
 	}
 
 	// Extra labels appear on the deployment and pod template
-	if deploy.Labels["solo.hedera.com/node-id"] != "0" {
-		t.Errorf("expected deployment label solo.hedera.com/node-id=0, got %v", deploy.Labels)
+	if deploy.Labels["operator.solo.hiero.org/node-id"] != "0" {
+		t.Errorf("expected deployment label operator.solo.hiero.org/node-id=0, got %v", deploy.Labels)
 	}
-	if deploy.Spec.Template.Labels["solo.hedera.com/node-name"] != "node1" {
-		t.Errorf("expected pod label solo.hedera.com/node-name=node1, got %v", deploy.Spec.Template.Labels)
+	if deploy.Spec.Template.Labels["operator.solo.hiero.org/node-name"] != "node1" {
+		t.Errorf("expected pod label operator.solo.hiero.org/node-name=node1, got %v", deploy.Spec.Template.Labels)
 	}
 
 	// Selector must not include additional labels
-	if _, ok := deploy.Spec.Selector.MatchLabels["solo.hedera.com/node-id"]; ok {
+	if _, ok := deploy.Spec.Selector.MatchLabels["operator.solo.hiero.org/node-id"]; ok {
 		t.Error("additional labels must not bleed into the pod selector")
 	}
 }
@@ -961,7 +961,7 @@ func TestServiceSubReconciler_AdditionalLabels(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	haproxy := newTestHAProxy()
-	haproxy.Spec.AdditionalLabels = map[string]string{"solo.hedera.com/prometheus-endpoint": "active"}
+	haproxy.Spec.AdditionalLabels = map[string]string{"operator.solo.hiero.org/prometheus-endpoint": "active"}
 	c := newTestClient(scheme, haproxy)
 
 	_, err := NewServiceSubReconciler(c, scheme).Reconcile(ctx, haproxy)
@@ -974,12 +974,12 @@ func TestServiceSubReconciler_AdditionalLabels(t *testing.T) {
 		t.Fatalf("failed to get service: %v", err)
 	}
 
-	if svc.Labels["solo.hedera.com/prometheus-endpoint"] != "active" {
-		t.Errorf("expected service label solo.hedera.com/prometheus-endpoint=active, got %v", svc.Labels)
+	if svc.Labels["operator.solo.hiero.org/prometheus-endpoint"] != "active" {
+		t.Errorf("expected service label operator.solo.hiero.org/prometheus-endpoint=active, got %v", svc.Labels)
 	}
 
 	// Selector must not include additional labels
-	if _, ok := svc.Spec.Selector["solo.hedera.com/prometheus-endpoint"]; ok {
+	if _, ok := svc.Spec.Selector["operator.solo.hiero.org/prometheus-endpoint"]; ok {
 		t.Error("additional labels must not bleed into the service selector")
 	}
 }
@@ -1502,7 +1502,7 @@ func TestServiceSubReconciler_UpdateOnLabelChange(t *testing.T) {
 	}
 
 	// Add an additional label — needsUpdate must detect this
-	haproxy.Spec.AdditionalLabels = map[string]string{"solo.hedera.com/env": "prod"}
+	haproxy.Spec.AdditionalLabels = map[string]string{"operator.solo.hiero.org/env": "prod"}
 	if _, err := reconciler.Reconcile(ctx, haproxy); err != nil {
 		t.Fatalf("unexpected error on update: %v", err)
 	}
@@ -1511,7 +1511,7 @@ func TestServiceSubReconciler_UpdateOnLabelChange(t *testing.T) {
 	if err := c.Get(ctx, client.ObjectKey{Name: "test-haproxy", Namespace: "test-namespace"}, svc); err != nil {
 		t.Fatalf("failed to get service: %v", err)
 	}
-	if svc.Labels["solo.hedera.com/env"] != "prod" {
+	if svc.Labels["operator.solo.hiero.org/env"] != "prod" {
 		t.Errorf("expected service label to be updated, got %v", svc.Labels)
 	}
 }

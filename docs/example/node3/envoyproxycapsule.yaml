@@ -1,4 +1,4 @@
-apiVersion: operator.solo.hedera.com/v1alpha1
+apiVersion: operator.solo.hiero.org/v1alpha1
 kind: EnvoyProxy
 metadata:
   name: envoy-node3
@@ -24,10 +24,10 @@ spec:
   #   cloud.google.com/neg: '{"ingress":true}'
 
   # additionalLabels:
-  #   solo.hedera.com/account-id: "0.0.6"
-  #   solo.hedera.com/node-id: "3"
-  #   solo.hedera.com/node-name: node3
-  #   solo.hedera.com/type: envoy-proxy
+  #   operator.solo.hiero.org/account-id: "0.0.6"
+  #   operator.solo.hiero.org/node-id: "3"
+  #   operator.solo.hiero.org/node-name: node3
+  #   operator.solo.hiero.org/type: envoy-proxy
 
   # nodeSelector:
   #   sphere.hashgraph.io/role: auxiliary

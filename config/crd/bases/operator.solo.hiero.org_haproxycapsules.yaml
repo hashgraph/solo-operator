@@ -4,32 +4,29 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: envoyproxies.operator.solo.hedera.com
+  name: haproxycapsules.operator.solo.hiero.org
 spec:
-  group: operator.solo.hedera.com
+  group: operator.solo.hiero.org
   names:
-    kind: EnvoyProxy
-    listKind: EnvoyProxyList
-    plural: envoyproxies
+    kind: HAProxyCapsule
+    listKind: HAProxyCapsuleList
+    plural: haproxycapsules
     shortNames:
-    - envoy
-    singular: envoyproxy
+    - haproxy
+    singular: haproxycapsule
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.replicas
-      name: Replicas
-      type: integer
-    - jsonPath: .status.readyReplicas
-      name: Ready
-      type: integer
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: EnvoyProxy is the Schema for the envoyproxies API
+        description: HAProxyCapsule is the Schema for the haproxycapsules API
         properties:
           apiVersion:
             description: |-
@@ -49,7 +46,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: EnvoyProxySpec defines the desired state of EnvoyProxy
+            description: HAProxyCapsuleSpec defines the desired state of HAProxyCapsule
             properties:
               additionalLabels:
                 additionalProperties:
@@ -57,13 +54,6 @@ spec:
                 description: AdditionalLabels are merged into all managed resources.
                   Don't affect the pod selector.
                 type: object
-              adminPort:
-                default: 9901
-                description: AdminPort is the Envoy admin interface port.
-                format: int32
-                maximum: 65535
-                minimum: 1
-                type: integer
               affinity:
                 description: Affinity configures pod scheduling affinity.
                 properties:
@@ -976,35 +966,6 @@ spec:
                         x-kubernetes-list-type: atomic
                     type: object
                 type: object
-              corsConfig:
-                description: CORSConfig customizes CORS in the operator-generated
-                  config. Ignored if Files is set.
-                properties:
-                  allowHeaders:
-                    description: AllowHeaders overrides the list of allowed request
-                      headers.
-                    items:
-                      type: string
-                    type: array
-                  allowMethods:
-                    description: AllowMethods overrides the allowed HTTP methods.
-                    type: string
-                  allowOrigins:
-                    description: AllowOrigins is a list of allowed origins (prefix
-                      match). Defaults to wildcard.
-                    items:
-                      type: string
-                    type: array
-                  exposeHeaders:
-                    description: ExposeHeaders overrides the list of headers exposed
-                      to the browser.
-                    items:
-                      type: string
-                    type: array
-                  maxAge:
-                    description: MaxAge overrides the preflight cache duration.
-                    type: string
-                type: object
               env:
                 description: Env are environment variables for the container.
                 items:
@@ -1162,11 +1123,6 @@ spec:
                   - name
                   type: object
                 type: array
-              exposeAdmin:
-                description: |-
-                  ExposeAdmin binds the Envoy admin interface to 0.0.0.0 and adds the admin port to the container ports.
-                  By default admin is bound to 127.0.0.1 only (not reachable outside the pod).
-                type: boolean
               externalTrafficPolicy:
                 default: Local
                 description: ExternalTrafficPolicy controls routing for external traffic.
@@ -1174,15 +1130,72 @@ spec:
                 - Cluster
                 - Local
                 type: string
-              files:
-                additionalProperties:
-                  type: string
-                description: Files overrides the operator-generated envoy.yaml. Map
-                  of filename → content.
+              grpcPort:
+                default: 50211
+                description: GrpcPort is the plain gRPC frontend port.
+                format: int32
+                maximum: 65535
+                minimum: 1
+                type: integer
+              grpcsPort:
+                default: 50212
+                description: GrpcsPort is the TLS gRPC frontend port.
+                format: int32
+                maximum: 65535
+                minimum: 1
+                type: integer
+              healthCheck:
+                description: HealthCheck configures probes. Defaults match the GKE
+                  reference deployment.
+                properties:
+                  enabled:
+                    default: true
+                    description: Enabled turns on startup, liveness, and readiness
+                      probes.
+                    type: boolean
+                  failureThreshold:
+                    default: 3
+                    description: FailureThreshold is the number of consecutive liveness/readiness
+                      failures before the pod is unhealthy.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  periodSeconds:
+                    default: 10
+                    description: PeriodSeconds is the liveness/readiness probe interval.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  startupFailureThreshold:
+                    default: 720
+                    description: StartupFailureThreshold is the number of startup
+                      probe failures before restart. 720 × 5s = 60 min window.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  startupInitialDelaySeconds:
+                    default: 60
+                    description: StartupInitialDelaySeconds is the delay before the
+                      startup probe first runs.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  startupPeriodSeconds:
+                    default: 5
+                    description: StartupPeriodSeconds is the startup probe interval.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  timeoutSeconds:
+                    default: 1
+                    description: TimeoutSeconds is the probe timeout.
+                    format: int32
+                    minimum: 1
+                    type: integer
                 type: object
               image:
-                default: envoyproxy/envoy-distroless:v1.21.6
-                description: Image is the Envoy container image.
+                default: haproxy:2.8.10-alpine3.20
+                description: Image is the HAProxy container image.
                 type: string
               ingressSpec:
                 description: IngressSpec is required when serviceType is Ingress.
@@ -1464,19 +1477,6 @@ spec:
                 description: Orbit is the owning Orbit's name. Set so the Orbit can
                   cascade-delete this proxy.
                 type: string
-              proxyPort:
-                default: 8081
-                description: ProxyPort is the gRPC-Web listener port.
-                format: int32
-                maximum: 65535
-                minimum: 1
-                type: integer
-              replicas:
-                default: 2
-                description: Replicas is the number of proxy replicas.
-                format: int32
-                minimum: 0
-                type: integer
               serviceAnnotations:
                 additionalProperties:
                   type: string
@@ -1841,7 +1841,7 @@ spec:
                 type: integer
               tlsSecretName:
                 description: |-
-                  TLSSecretName is a kubernetes.io/tls secret (tls.crt + tls.key). Enables TLS termination on proxyPort.
+                  TLSSecretName is a kubernetes.io/tls secret (tls.crt + tls.key). Enables TLS termination on grpcsPort.
                   Works directly with cert-manager Certificate secrets.
                 type: string
               tolerations:
@@ -1884,17 +1884,10 @@ spec:
                       type: string
                   type: object
                 type: array
-              upstreamPort:
-                default: 50211
-                description: UpstreamPort is the upstream gRPC port.
-                format: int32
-                maximum: 65535
-                minimum: 1
-                type: integer
               upstreamService:
                 description: |-
                   UpstreamService is the consensus node Service to route traffic to.
-                  Defaults to the CR name with "envoy-" stripped (envoy-node1 → node1). Accepts any DNS name or FQDN.
+                  Defaults to the CR name with "haproxy-" stripped (haproxy-node1 → node1). Accepts any DNS name or FQDN.
                 pattern: ^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$
                 type: string
             type: object
@@ -1902,70 +1895,22 @@ spec:
             - message: ingressSpec is required when serviceType is Ingress
               rule: self.serviceType != 'Ingress' || has(self.ingressSpec)
           status:
-            description: EnvoyProxyStatus defines the observed state of EnvoyProxy
+            description: HAProxyCapsuleStatus defines the observed state of HAProxyCapsule
             properties:
-              availableReplicas:
-                description: AvailableReplicas is the number of available replicas.
-                format: int32
-                type: integer
-              conditions:
-                description: Conditions are the deployment conditions.
-                items:
-                  description: DeploymentCondition describes the state of a deployment
-                    at a certain point.
-                  properties:
-                    lastTransitionTime:
-                      description: Last time the condition transitioned from one status
-                        to another.
-                      format: date-time
-                      type: string
-                    lastUpdateTime:
-                      description: The last time this condition was updated.
-                      format: date-time
-                      type: string
-                    message:
-                      description: A human readable message indicating details about
-                        the transition.
-                      type: string
-                    reason:
-                      description: The reason for the condition's last transition.
-                      type: string
-                    status:
-                      description: Status of the condition, one of True, False, Unknown.
-                      type: string
-                    type:
-                      description: Type of deployment condition.
-                      type: string
-                  required:
-                  - status
-                  - type
-                  type: object
-                type: array
               observedGeneration:
                 description: ObservedGeneration is the last generation the controller
                   acted on.
                 format: int64
                 type: integer
-              readyReplicas:
-                description: ReadyReplicas is the number of ready replicas.
-                format: int32
-                type: integer
-              replicas:
-                description: Replicas is the total replica count.
-                format: int32
-                type: integer
-              terminatingReplicas:
-                description: TerminatingReplicas is the number of terminating replicas.
-                format: int32
-                type: integer
-              unavailableReplicas:
-                description: UnavailableReplicas is the number of unavailable replicas.
-                format: int32
-                type: integer
-              updatedReplicas:
-                description: UpdatedReplicas is the number of updated replicas.
-                format: int32
-                type: integer
+              phase:
+                description: Phase is the current reconciliation phase.
+                enum:
+                - Pending
+                - Running
+                - Succeeded
+                - Failed
+                - Unknown
+                type: string
             type: object
         type: object
     served: true

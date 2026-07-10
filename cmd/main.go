@@ -117,9 +117,9 @@ func main() {
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		// LeaderElectionID matches the API group (operator.solo.hedera.com) so the lock
+		// LeaderElectionID matches the API group (operator.solo.hiero.org) so the lock
 		// name is consistent with CRD group, finalizer, and label key naming conventions.
-		LeaderElectionID: "operator.solo.hedera.com",
+		LeaderElectionID: "operator.solo.hiero.org",
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")

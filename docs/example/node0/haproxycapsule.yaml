@@ -1,4 +1,4 @@
-apiVersion: operator.solo.hedera.com/v1alpha1
+apiVersion: operator.solo.hiero.org/v1alpha1
 kind: HAProxyCapsule
 metadata:
   name: haproxy-node0
@@ -24,10 +24,10 @@ spec:
   #   cloud.google.com/neg: '{"ingress":true}'
 
   # additionalLabels:
-  #   solo.hedera.com/account-id: "0.0.3"
-  #   solo.hedera.com/node-id: "0"
-  #   solo.hedera.com/node-name: node0
-  #   solo.hedera.com/type: haproxy
+  #   operator.solo.hiero.org/account-id: "0.0.3"
+  #   operator.solo.hiero.org/node-id: "0"
+  #   operator.solo.hiero.org/node-name: node0
+  #   operator.solo.hiero.org/type: haproxy
 
   # nodeSelector:
   #   sphere.hashgraph.io/role: auxiliary

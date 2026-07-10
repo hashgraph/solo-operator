@@ -91,7 +91,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - operator.solo.hedera.com
+  - operator.solo.hiero.org
   resources:
   - apipermissionproperties
   - applicationoverrideproperties
@@ -122,7 +122,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - operator.solo.hedera.com
+  - operator.solo.hiero.org
   resources:
   - apipermissionproperties/status
   - applicationoverrideproperties/status
@@ -149,7 +149,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - operator.solo.hedera.com
+  - operator.solo.hiero.org
   resources:
   - consensuscapsules/finalizers
   - envoyproxies/finalizers

@@ -27,10 +27,10 @@ func NewNetworkUpgradeFreezeAbortReconciler(c client.Client, scheme *runtime.Sch
 	return &NetworkUpgradeFreezeAbortReconciler{Client: c, Scheme: scheme}
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradefreezeaborts,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradefreezeaborts/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradefreezeaborts/finalizers,verbs=update
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradeexecutes,verbs=get;list;watch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradefreezeaborts,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradefreezeaborts/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradefreezeaborts/finalizers,verbs=update
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeexecutes,verbs=get;list;watch
 
 func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var abort operatorv1alpha1.NetworkUpgradeFreezeAbort
@@ -60,7 +60,7 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 		abort.Status.Phase = operatorv1alpha1.PhaseFailed
 		abort.Status.ObservedGeneration = abort.Generation
 		setCondition(&abort.Status.Conditions, metav1.Condition{
-			Type:               operatorv1alpha1.CondAbortProcessed,
+			Type:               operatorv1alpha1.CondManifestValidated,
 			Status:             metav1.ConditionFalse,
 			Reason:             operatorv1alpha1.ReasonDuplicateOpID,
 			Message:            msg,

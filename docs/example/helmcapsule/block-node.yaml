@@ -12,7 +12,7 @@
 # The block-node chart uses a flexible blockNode.config map to pass environment
 # variables; any additional config keys can be added via the Values field.
 #
-apiVersion: operator.solo.hedera.com/v1alpha1
+apiVersion: operator.solo.hiero.org/v1alpha1
 kind: HelmCapsule
 metadata:
   name: block-node

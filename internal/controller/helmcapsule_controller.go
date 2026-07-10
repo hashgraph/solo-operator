@@ -27,12 +27,12 @@ import (
 )
 
 const (
-	HelmCapsuleFinalizer = "operator.solo.hedera.com/helmcapsule-finalizer"
+	HelmCapsuleFinalizer = "operator.solo.hiero.org/helmcapsule-finalizer"
 	conditionReady       = "Ready"
 	// SkipUninstallAnnotation can be set to "true" on a HelmCapsule to bypass
 	// Helm uninstall during deletion. Useful when a release is stuck and an
 	// admin needs to unblock the finalizer without running helm uninstall.
-	SkipUninstallAnnotation = "operator.solo.hedera.com/skip-uninstall"
+	SkipUninstallAnnotation = "operator.solo.hiero.org/skip-uninstall"
 )
 
 type HelmCapsuleReconciler struct {
@@ -51,11 +51,11 @@ func NewHelmCapsuleReconciler(c client.Client, scheme *runtime.Scheme, helmClien
 	}
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=helmcapsules,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=helmcapsules/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=helmcapsules/finalizers,verbs=update
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=orbits,verbs=get;list;watch
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=consensuscapsules,verbs=get;list;watch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=helmcapsules,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=helmcapsules/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=helmcapsules/finalizers,verbs=update
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits,verbs=get;list;watch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=consensuscapsules,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // Secrets: read for ValuesFrom/CredentialsRef; full CRUD for Helm release storage (driver=secrets).
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
