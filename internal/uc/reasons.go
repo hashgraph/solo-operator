@@ -61,8 +61,12 @@ const (
 	ReasonWatchErrorEvent       errx.Reason = "WatchErrorEvent"
 
 	// Marker handling.
-	ReasonMarkerHandlerFailed errx.Reason = "MarkerHandlerFailed"
-	ReasonAbortWithoutPrepare errx.Reason = "AbortWithoutPrepare"
+	ReasonMarkerHandlerFailed  errx.Reason = "MarkerHandlerFailed"
+	ReasonAbortWithoutPrepare  errx.Reason = "AbortWithoutPrepare"
+	ReasonFreezeWithoutPrepare errx.Reason = "FreezeWithoutPrepare"
+	ReasonPrepareFailed        errx.Reason = "PrepareFailed"
+	ReasonStaleMarker          errx.Reason = "StaleMarker"
+	ReasonOperationIDExhausted errx.Reason = "OperationIDExhausted"
 
 	// Startup recovery / cache.
 	ReasonUCCacheSeedFailed      errx.Reason = "UCCacheSeedFailed"
