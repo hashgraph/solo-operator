@@ -4,7 +4,10 @@ package uc
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -13,6 +16,22 @@ import (
 )
 
 const wantAbortName = "upgrade-0.75.0-20260413t120000z-abort"
+
+// abortMtime is the fixed mtime for freeze_aborted.mf in tests — after
+// markerCreatedAt (execute_immediate.mf mtime) so the staleness guard passes.
+var abortMtime = markerCreatedAt.Add(2 * time.Hour)
+
+// writeAbortMarker writes freeze_aborted.mf with abortMtime into root.
+func writeAbortMarker(t *testing.T, root string) {
+	t.Helper()
+	p := filepath.Join(root, MarkerFreezeAborted)
+	if err := os.WriteFile(p, []byte("FREEZE_ABORTED"), 0o644); err != nil {
+		t.Fatalf("write abort marker: %v", err)
+	}
+	if err := os.Chtimes(p, abortMtime, abortMtime); err != nil {
+		t.Fatalf("chtimes abort marker: %v", err)
+	}
+}
 
 // seedPrepareCR creates a NetworkUpgradePrepare CR in the fake cluster with the
 // given operationId and optional status.phase, mirroring what a prior tick (or a
@@ -138,8 +157,10 @@ func TestResolveOperationIDNoneReturnsEmpty(t *testing.T) {
 }
 
 func TestHandleFreezeAbortedCreatesCR(t *testing.T) {
-	f := newFakeFactory(t, testConfig(t.TempDir(), t.TempDir()))
-	seedPrepareCR(t, f, wantOperationID, "")
+	// Abort handler re-derives operationId from execute_immediate.mf + manifest.
+	root := writePackage(t, validComponentsYAML)
+	writeAbortMarker(t, root)
+	f := newFakeFactory(t, testConfig(root, t.TempDir()))
 
 	if err := f.HandleFreezeAborted(context.Background()); err != nil {
 		t.Fatalf("HandleFreezeAborted: %v", err)
@@ -170,20 +191,20 @@ func TestHandleFreezeAbortedCreatesCR(t *testing.T) {
 	if opID != wantOperationID {
 		t.Fatalf("spec.operationId = %q", opID)
 	}
-
-	// persist-before-send: the file is removed after a successful create.
 	if rest, _ := f.store.List(); len(rest) != 0 {
 		t.Fatalf("persisted CR not cleaned up after create: %v", rest)
 	}
 }
 
-func TestHandleFreezeAbortedNoPrepareCreatesNoCR(t *testing.T) {
-	f := newFakeFactory(t, testConfig(t.TempDir(), t.TempDir()))
+// TestHandleFreezeAbortedNoExecuteMarkerIsNoOp covers the case where both
+// execute_immediate.mf and the manifest are absent — all fallbacks exhausted.
+func TestHandleFreezeAbortedNoExecuteMarkerIsNoOp(t *testing.T) {
+	root := t.TempDir()
+	writeAbortMarker(t, root) // no execute_immediate.mf, no manifest
+	f := newFakeFactory(t, testConfig(root, t.TempDir()))
 
-	// No Prepare to inherit identity from: the handler is a no-op (returns nil,
-	// retries on a later tick) and creates nothing.
 	if err := f.HandleFreezeAborted(context.Background()); err != nil {
-		t.Fatalf("want nil with no Prepare, got %v", err)
+		t.Fatalf("want nil (no execute marker, no manifest), got %v", err)
 	}
 	list, err := f.client.Resource(networkUpgradeFreezeAbortGVR).Namespace("solo").
 		List(context.Background(), metav1.ListOptions{})
@@ -195,9 +216,38 @@ func TestHandleFreezeAbortedNoPrepareCreatesNoCR(t *testing.T) {
 	}
 }
 
+// TestHandleFreezeAbortedStaleMarkerIsSkipped verifies that an abort marker
+// whose mtime predates execute_immediate.mf is silently ignored (staleness guard).
+func TestHandleFreezeAbortedStaleMarkerIsSkipped(t *testing.T) {
+	root := writePackage(t, validComponentsYAML) // execute_immediate.mf mtime = markerCreatedAt
+	// Write abort marker with mtime BEFORE execute_immediate.mf.
+	staleMtime := markerCreatedAt.Add(-1 * time.Hour)
+	p := filepath.Join(root, MarkerFreezeAborted)
+	if err := os.WriteFile(p, []byte("FREEZE_ABORTED"), 0o644); err != nil {
+		t.Fatalf("write abort marker: %v", err)
+	}
+	if err := os.Chtimes(p, staleMtime, staleMtime); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+	f := newFakeFactory(t, testConfig(root, t.TempDir()))
+
+	if err := f.HandleFreezeAborted(context.Background()); err != nil {
+		t.Fatalf("want nil (stale marker), got %v", err)
+	}
+	list, err := f.client.Resource(networkUpgradeFreezeAbortGVR).Namespace("solo").
+		List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list.Items) != 0 {
+		t.Fatalf("expected no abort CR (stale), got %d", len(list.Items))
+	}
+}
+
 func TestHandleFreezeAbortedIsIdempotent(t *testing.T) {
-	f := newFakeFactory(t, testConfig(t.TempDir(), t.TempDir()))
-	seedPrepareCR(t, f, wantOperationID, "")
+	root := writePackage(t, validComponentsYAML)
+	writeAbortMarker(t, root)
+	f := newFakeFactory(t, testConfig(root, t.TempDir()))
 
 	for i := 0; i < 3; i++ {
 		if err := f.HandleFreezeAborted(context.Background()); err != nil {
@@ -215,14 +265,16 @@ func TestHandleFreezeAbortedIsIdempotent(t *testing.T) {
 }
 
 func TestHandleFreezeAbortedDoesNotDeleteSiblings(t *testing.T) {
-	f := newFakeFactory(t, testConfig(t.TempDir(), t.TempDir()))
-	seedPrepareCR(t, f, wantOperationID, "")
+	root := writePackage(t, validComponentsYAML)
+	writeAbortMarker(t, root)
+	f := newFakeFactory(t, testConfig(root, t.TempDir()))
+	// Seed a Prepare CR as a sibling audit record — must survive the abort.
+	seedPrepareCR(t, f, wantOperationID, string(operatorv1alpha1.PhaseSucceeded))
 
 	if err := f.HandleFreezeAborted(context.Background()); err != nil {
 		t.Fatalf("HandleFreezeAborted: %v", err)
 	}
 
-	// The Prepare CR is an audit-trail record and must survive the abort.
 	if _, err := f.client.Resource(networkUpgradePrepareGVR).Namespace("solo").
 		Get(context.Background(), prepareCRName(wantOperationID), metav1.GetOptions{}); err != nil {
 		t.Fatalf("sibling Prepare CR was removed by abort: %v", err)

@@ -4,6 +4,8 @@ package uc
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -15,12 +17,11 @@ import (
 	"github.com/hashgraph/solo-operator/internal/sanity"
 )
 
-// prepareTerminalPhases are the NetworkUpgradePrepare status.phase values that
-// mean the prepare has finished. A CR in one of these is ignored when resolving
-// the in-flight upgrade's identity, so a new upgrade's Prepare is preferred over
-// a previous completed one (CRs are never deleted, so stale terminal Prepares
-// linger as an audit trail).
-var prepareTerminalPhases = map[string]struct{}{
+// skipTerminal defines which NetworkUpgradePrepare status.phase values
+// disqualify a CR from being the resolved upgrade identity in resolveOperationID.
+// Succeeded AND Failed are both excluded: a Succeeded Prepare belongs to a
+// completed upgrade and must not shadow a new in-progress one.
+var skipTerminal = map[string]struct{}{
 	string(operatorv1alpha1.PhaseSucceeded): {},
 	string(operatorv1alpha1.PhaseFailed):    {},
 }
@@ -36,7 +37,14 @@ var prepareTerminalPhases = map[string]struct{}{
 // treats that as "no identity to act on this tick". The marker persists, so a
 // later tick retries once the Prepare CR appears. A query/IO failure is returned
 // as an error (transient — retry next tick) rather than mistaken for "absent".
+// resolveOperationID resolves the operationId of the in-flight upgrade by
+// finding the most-recent NetworkUpgradePrepare CR whose phase is not in
+// skipPhases, cluster-first with a disk fallback.
 func (f *Factory) resolveOperationID(ctx context.Context) (string, error) {
+	return f.resolveOperationIDWith(ctx, skipTerminal)
+}
+
+func (f *Factory) resolveOperationIDWith(ctx context.Context, skipPhases map[string]struct{}) (string, error) {
 	listCtx, cancel := context.WithTimeout(ctx, listTimeout)
 	defer cancel()
 	list, err := f.client.Resource(networkUpgradePrepareGVR).Namespace(f.cfg.Namespace).
@@ -56,7 +64,7 @@ func (f *Factory) resolveOperationID(ctx context.Context) (string, error) {
 	for i := range list.Items {
 		item := &list.Items[i]
 		phase, _, _ := unstructured.NestedString(item.Object, "status", "phase")
-		if _, terminal := prepareTerminalPhases[phase]; terminal {
+		if _, skip := skipPhases[phase]; skip {
 			continue
 		}
 		// spec.operationId is the source of truth — it is a hard-required field on
@@ -97,6 +105,103 @@ func (f *Factory) resolveOperationID(ctx context.Context) (string, error) {
 			// A persisted Prepare the UC wrote always carries a parseable timestamp
 			// (mintOperationID guarantees it); skip anything that does not rather
 			// than risk emitting a malformed identity.
+			continue
+		}
+		if !found || ts.After(bestTS) {
+			best, bestTS, found = p.OperationID, ts, true
+		}
+	}
+	return best, nil
+}
+
+// deriveOperationIDPrimary attempts to re-derive the operationId from the
+// co-present execute_immediate.mf marker and consensus-node-components.yaml.
+// Returns (operationID, executeMtime, manifest, true, nil) on success.
+// Returns ("", zero, nil, false, nil) when execute_immediate.mf is absent —
+// caller should fall back to version-based resolution.
+// Returns ("", zero, nil, false, err) on IO or parse error — caller should retry.
+func deriveOperationIDPrimary(markerPath string) (operationID string, executeMtime time.Time, manifest *componentsManifest, found bool, err error) {
+	preparePath := filepath.Join(markerPath, MarkerExecuteImmediate)
+	prepareInfo, err := os.Stat(preparePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", time.Time{}, nil, false, nil
+		}
+		return "", time.Time{}, nil, false,
+			errx.WithReason(errPersist.Wrap(err, "stat %s", MarkerExecuteImmediate), ReasonMarkerStatFailed)
+	}
+
+	manifestPath := filepath.Join(markerPath, manifestsSubdir, componentsManifestFile)
+	manifest, err = parseComponentsManifest(manifestPath)
+	if err != nil {
+		return "", time.Time{}, nil, false, err
+	}
+
+	operationID, err = mintOperationID(manifest.Images.ConsensusNode.Version, prepareInfo.ModTime())
+	if err != nil {
+		return "", time.Time{}, nil, false,
+			errx.WithReason(errManifestInvalid.Wrap(err, "mint operationId"), ReasonManifestInvalid)
+	}
+	return operationID, prepareInfo.ModTime(), manifest, true, nil
+}
+
+// resolveByVersion finds the most-recent operationId whose version segment matches
+// the given semver, among NetworkUpgradePrepare CRs whose phase is not in
+// skipPhases. Checks the cluster first, then persisted-on-disk Prepare CRs as a
+// fallback. Used when execute_immediate.mf is absent and identity must be inferred
+// from the manifest version alone.
+func (f *Factory) resolveByVersion(ctx context.Context, version string, skipPhases map[string]struct{}) (string, error) {
+	prefix := "upgrade-" + version + "-"
+
+	listCtx, cancel := context.WithTimeout(ctx, listTimeout)
+	defer cancel()
+	list, err := f.client.Resource(networkUpgradePrepareGVR).Namespace(f.cfg.Namespace).
+		List(listCtx, metav1.ListOptions{})
+	if err != nil {
+		return "", errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradePrepare for version %s", version), ReasonPrepareListFailed),
+			"Confirm the UC ServiceAccount has list permission on networkupgradeprepares."+operatorv1alpha1.GroupVersion.Group,
+		)
+	}
+
+	var best string
+	var bestTS time.Time
+	var found bool
+	for i := range list.Items {
+		item := &list.Items[i]
+		phase, _, _ := unstructured.NestedString(item.Object, "status", "phase")
+		if _, skip := skipPhases[phase]; skip {
+			continue
+		}
+		opID, _, _ := unstructured.NestedString(item.Object, "spec", "operationId")
+		if opID == "" {
+			opID = item.GetLabels()[operatorv1alpha1.LabelOperationID]
+		}
+		if !strings.HasPrefix(opID, prefix) {
+			continue
+		}
+		if ts := item.GetCreationTimestamp().Time; !found || ts.After(bestTS) {
+			best, bestTS, found = opID, ts, true
+		}
+	}
+	if found {
+		return best, nil
+	}
+
+	// Disk fallback: a Prepare persisted before its Create was acknowledged.
+	persisted, err := f.store.List()
+	if err != nil {
+		return "", err
+	}
+	for _, p := range persisted {
+		if p.Step != operatorv1alpha1.StepPrepare {
+			continue
+		}
+		if !strings.HasPrefix(p.OperationID, prefix) {
+			continue
+		}
+		ts, ok := operationIDTimestamp(p.OperationID)
+		if !ok {
 			continue
 		}
 		if !found || ts.After(bestTS) {
