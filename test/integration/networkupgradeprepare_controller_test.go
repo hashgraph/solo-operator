@@ -90,7 +90,7 @@ var _ = Describe("NetworkUpgradePrepare Controller", func() {
 		})
 
 		AfterEach(func() {
-			Expect(k8sClient.Delete(ctx, nup.DeepCopy())).To(Succeed())
+			deleteAndPurge(ctx, nup.DeepCopy())
 		})
 
 		It("reconciles to Succeeded with all conditions, events, and selectedSources", func() {
@@ -183,7 +183,7 @@ var _ = Describe("NetworkUpgradePrepare Controller", func() {
 		})
 
 		AfterEach(func() {
-			Expect(k8sClient.Delete(ctx, nup.DeepCopy())).To(Succeed())
+			deleteAndPurge(ctx, nup.DeepCopy())
 		})
 
 		It("succeeds, emits RegistryUnreachable, and selects the valid registry", func() {
@@ -244,7 +244,7 @@ var _ = Describe("NetworkUpgradePrepare Controller", func() {
 		})
 
 		AfterEach(func() {
-			Expect(k8sClient.Delete(ctx, nup.DeepCopy())).To(Succeed())
+			deleteAndPurge(ctx, nup.DeepCopy())
 		})
 
 		It("stays Running, sets RegistrySelected=False, emits RegistryInvalid, and skips selectedSources", func() {

@@ -602,6 +602,9 @@ spec:
             - scheduledTime
             - selectedSources
             type: object
+            x-kubernetes-validations:
+            - message: spec is immutable after creation
+              rule: self == oldSelf
           status:
             properties:
               completionTime:

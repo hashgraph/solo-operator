@@ -47,8 +47,6 @@ func main() {
 	var secureMetrics bool
 	var enableHTTP2 bool
 	var registryOrder string
-	var webhookPort int
-	var enableWebhooks bool
 	var showVersion bool
 	var tlsOpts []func(*tls.Config)
 
@@ -65,8 +63,6 @@ func main() {
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.StringVar(&registryOrder, "registry-order", registry.StrategyRandom,
 		"Order in which registries are checked during the upgrade Prepare phase: Random or Sequential.")
-	flag.IntVar(&webhookPort, "webhook-port", 9443, "Port the webhook server listens on.")
-	flag.BoolVar(&enableWebhooks, "enable-webhooks", false, "Enable admission webhooks.")
 
 	opts := zap.Options{
 		Development: true,
@@ -94,15 +90,12 @@ func main() {
 		tlsOpts = append(tlsOpts, disableHTTP2)
 	}
 
-	var webhookServer webhook.Server
-	if enableWebhooks {
-		webhookServer = webhook.NewServer(webhook.Options{
-			Port:    webhookPort,
-			TLSOpts: tlsOpts,
-		})
-	} else {
-		setupLog.Info("admission webhooks are disabled — NetworkUpgrade CRs can be freely mutated and deleted; this is not suitable for production")
-	}
+	// Immutability and delete-protection for NetworkUpgrade CRs are enforced via
+	// CEL validation rules on the CRD and finalizers set by the reconcilers, so no
+	// admission webhook is registered. The webhook server is left at defaults.
+	webhookServer := webhook.NewServer(webhook.Options{
+		TLSOpts: tlsOpts,
+	})
 
 	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
 	// More info:
@@ -304,25 +297,6 @@ func main() {
 	).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkUpgradeFreezeAbort")
 		os.Exit(1)
-	}
-
-	if enableWebhooks {
-		if err = (&operatorv1alpha1.NetworkUpgradePrepareValidator{}).SetupWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to set up webhook", "webhook", "NetworkUpgradePrepare")
-			os.Exit(1)
-		}
-		if err = (&operatorv1alpha1.NetworkUpgradeFreezeValidator{}).SetupWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to set up webhook", "webhook", "NetworkUpgradeFreeze")
-			os.Exit(1)
-		}
-		if err = (&operatorv1alpha1.NetworkUpgradeExecuteValidator{}).SetupWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to set up webhook", "webhook", "NetworkUpgradeExecute")
-			os.Exit(1)
-		}
-		if err = (&operatorv1alpha1.NetworkUpgradeFreezeAbortValidator{}).SetupWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to set up webhook", "webhook", "NetworkUpgradeFreezeAbort")
-			os.Exit(1)
-		}
 	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

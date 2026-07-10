@@ -460,10 +460,20 @@ func TestPrepareReconcile_DuplicateOperationID_SetsPhaseFailed(t *testing.T) {
 	r.Recorder = rec
 	r.Checker = newPrepareChecker(nil, nil)
 
+	// First reconcile stamps the finalizer and requeues before any phase work.
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: client.ObjectKey{Name: "duplicate", Namespace: "test"},
+	}); err != nil {
+		t.Fatalf("finalizer reconcile: %v", err)
+	}
+
 	// Advance "duplicate" to Running phase so uniqueness check runs.
-	dup := prepare.DeepCopy()
+	var dup operatorv1alpha1.NetworkUpgradePrepare
+	if err := c.Get(context.Background(), client.ObjectKey{Name: "duplicate", Namespace: "test"}, &dup); err != nil {
+		t.Fatalf("get duplicate: %v", err)
+	}
 	dup.Status.Phase = operatorv1alpha1.PhaseRunning
-	if err := c.Status().Update(context.Background(), dup); err != nil {
+	if err := c.Status().Update(context.Background(), &dup); err != nil {
 		t.Fatalf("pre-set phase: %v", err)
 	}
 

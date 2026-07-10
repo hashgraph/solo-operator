@@ -81,11 +81,6 @@ metrics:
 health:
   port: 8081
 
-# Webhook configuration (if using admission webhooks)
-webhook:
-  enabled: true
-  port: 9443
-
 # CRD installation
 crds:
   # Install CRDs with the chart

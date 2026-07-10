@@ -49,20 +49,11 @@ spec:
             {{- with .Values.registry.order }}
             - --registry-order={{ . }}
             {{- end }}
-            {{- if .Values.webhook.enabled }}
-            - --enable-webhooks
-            - --webhook-port={{ .Values.webhook.port }}
-            {{- end }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp
-            {{- if .Values.webhook.enabled }}
-            - name: webhook-tls
-              mountPath: /tmp/k8s-webhook-server/serving-certs
-              readOnly: true
-            {{- end }}
           ports:
             {{- if .Values.metrics.enabled }}
             - name: metrics
@@ -72,11 +63,6 @@ spec:
             - name: health
               containerPort: {{ .Values.health.port }}
               protocol: TCP
-            {{- if .Values.webhook.enabled }}
-            - name: webhook
-              containerPort: {{ .Values.webhook.port }}
-              protocol: TCP
-            {{- end }}
           livenessProbe:
             httpGet:
               path: /healthz
@@ -94,11 +80,6 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
-        {{- if .Values.webhook.enabled }}
-        - name: webhook-tls
-          secret:
-            secretName: {{ include "solo-operator.fullname" . }}-webhook-tls
-        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

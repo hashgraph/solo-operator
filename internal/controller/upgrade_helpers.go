@@ -6,10 +6,36 @@ import (
 	"context"
 	"fmt"
 
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
+
+// NetworkUpgrade CRs record an audit trail of an upgrade operation and must not
+// be deleted casually. These finalizers block accidental deletion; an admin who
+// genuinely needs to remove a CR patches the finalizer off as a deliberate step.
+const (
+	FinalizerNetworkUpgradePrepare     = "operator.solo.hedera.com/networkupgradeprepare"
+	FinalizerNetworkUpgradeFreeze      = "operator.solo.hedera.com/networkupgradefreeze"
+	FinalizerNetworkUpgradeExecute     = "operator.solo.hedera.com/networkupgradeexecute"
+	FinalizerNetworkUpgradeFreezeAbort = "operator.solo.hedera.com/networkupgradefreezeabort"
+)
+
+// ensureUpgradeFinalizer stamps finalizer on obj if absent. It returns
+// (done=true) once the finalizer is present so callers can proceed; when it
+// adds the finalizer it persists the change and signals a requeue.
+func ensureUpgradeFinalizer(ctx context.Context, c client.Client, obj client.Object, finalizer string) (done bool, res ctrl.Result, err error) {
+	if controllerutil.ContainsFinalizer(obj, finalizer) {
+		return true, ctrl.Result{}, nil
+	}
+	controllerutil.AddFinalizer(obj, finalizer)
+	if err := c.Update(ctx, obj); err != nil {
+		return false, ctrl.Result{}, fmt.Errorf("adding finalizer: %w", err)
+	}
+	return false, ctrl.Result{Requeue: true}, nil
+}
 
 func findOneByOperationID[T any, TList client.ObjectList](
 	ctx context.Context,

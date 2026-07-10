@@ -91,12 +91,12 @@ var _ = Describe("NetworkUpgradeFreeze Controller", func() {
 		})
 
 		AfterEach(func() {
-			Expect(k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradeFreeze{
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradeFreeze{
 				ObjectMeta: metav1.ObjectMeta{Name: nufName, Namespace: ns},
-			})).To(Succeed())
-			Expect(k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradePrepare{
+			})
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradePrepare{
 				ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns},
-			})).To(Succeed())
+			})
 		})
 
 		It("reconciles to Succeeded with StartTime, both conditions True", func() {
@@ -214,12 +214,12 @@ var _ = Describe("NetworkUpgradeFreeze Controller", func() {
 		})
 
 		AfterEach(func() {
-			Expect(k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradeFreeze{
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradeFreeze{
 				ObjectMeta: metav1.ObjectMeta{Name: nufName, Namespace: ns},
-			})).To(Succeed())
-			Expect(k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradePrepare{
+			})
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradePrepare{
 				ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns},
-			})).To(Succeed())
+			})
 		})
 
 		It("reconciles to Succeeded, emits RegistryFailover, updates selectedSources", func() {
@@ -323,12 +323,12 @@ var _ = Describe("NetworkUpgradeFreeze Controller", func() {
 		})
 
 		AfterEach(func() {
-			Expect(k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradeFreeze{
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradeFreeze{
 				ObjectMeta: metav1.ObjectMeta{Name: nufName, Namespace: ns},
-			})).To(Succeed())
-			Expect(k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradePrepare{
+			})
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradePrepare{
 				ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns},
-			})).To(Succeed())
+			})
 		})
 
 		It("stays Running, sets both conditions False", func() {
@@ -417,12 +417,12 @@ var _ = Describe("NetworkUpgradeFreeze Controller", func() {
 		})
 
 		AfterEach(func() {
-			Expect(k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradeFreeze{
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradeFreeze{
 				ObjectMeta: metav1.ObjectMeta{Name: nufName, Namespace: ns},
-			})).To(Succeed())
-			Expect(k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradePrepare{
+			})
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradePrepare{
 				ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns},
-			})).To(Succeed())
+			})
 		})
 
 		It("eventually reaches Succeeded once Prepare completes", func() {

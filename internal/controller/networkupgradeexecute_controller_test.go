@@ -34,9 +34,10 @@ func newExecuteForTest() *operatorv1alpha1.NetworkUpgradeExecute {
 	now := metav1.Now()
 	return &operatorv1alpha1.NetworkUpgradeExecute{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-execute",
-			Namespace: "default",
-			Labels:    map[string]string{operatorv1alpha1.LabelOperationID: "op-001"},
+			Name:       "test-execute",
+			Namespace:  "default",
+			Labels:     map[string]string{operatorv1alpha1.LabelOperationID: "op-001"},
+			Finalizers: []string{FinalizerNetworkUpgradeExecute},
 		},
 		Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
 			Orbit:         "test-orbit",
@@ -191,9 +192,10 @@ func newOfflineCapsule(name string) *operatorv1alpha1.ConsensusCapsule {
 func TestExecuteReconcile_InitializesStatus(t *testing.T) {
 	execute := &operatorv1alpha1.NetworkUpgradeExecute{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-execute",
-			Namespace: "default",
-			Labels:    map[string]string{operatorv1alpha1.LabelOperationID: "op-001"},
+			Name:       "test-execute",
+			Namespace:  "default",
+			Labels:     map[string]string{operatorv1alpha1.LabelOperationID: "op-001"},
+			Finalizers: []string{FinalizerNetworkUpgradeExecute},
 		},
 		Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
 			Orbit: "test-orbit", OperationID: "op-001", ConsensusNode: "node0",
