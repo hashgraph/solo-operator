@@ -90,9 +90,8 @@ func main() {
 		tlsOpts = append(tlsOpts, disableHTTP2)
 	}
 
-	// Immutability and delete-protection for NetworkUpgrade CRs are enforced via
-	// CEL validation rules on the CRD and finalizers set by the reconcilers, so no
-	// admission webhook is registered. The webhook server is left at defaults.
+	// No admission webhooks are registered: NetworkUpgrade CR immutability and
+	// delete-protection are enforced via CRD CEL rules and reconciler finalizers.
 	webhookServer := webhook.NewServer(webhook.Options{
 		TLSOpts: tlsOpts,
 	})

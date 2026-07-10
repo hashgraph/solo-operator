@@ -287,11 +287,9 @@ func createNamespaceIgnoreExisting(ctx context.Context, name string) {
 	}
 }
 
-// deleteAndPurge deletes obj and strips any finalizers so envtest actually
-// removes it. NetworkUpgrade CRs carry a finalizer that the operator never
-// removes (delete-protection by design), so a plain Delete only sets a
-// deletionTimestamp and a same-name Create in the next spec would 409. Tests
-// clear the finalizer here to stand in for the deliberate admin escape hatch.
+// deleteAndPurge deletes obj and strips its finalizers. NetworkUpgrade CRs
+// carry a finalizer the operator never removes, so a plain Delete only sets a
+// deletionTimestamp and a same-name Create in the next spec would 409.
 func deleteAndPurge(ctx context.Context, obj client.Object) {
 	if err := k8sClient.Delete(ctx, obj); err != nil {
 		Expect(apierrors.IsNotFound(err)).To(BeTrue(), "delete: %v", err)

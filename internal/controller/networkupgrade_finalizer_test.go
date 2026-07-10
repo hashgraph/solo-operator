@@ -14,10 +14,6 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
-// The NetworkUpgrade reconcilers stamp a finalizer on the first reconcile tick,
-// before any other work, so accidental deletion is blocked. These tests assert
-// each reconciler adds its finalizer.
-
 func TestPrepareReconcile_AddsFinalizer(t *testing.T) {
 	res := reconcilePrepare(t, newPrepareForTest(), newPrepareChecker(nil, nil))
 	if !controllerutil.ContainsFinalizer(res.prepare, FinalizerNetworkUpgradePrepare) {

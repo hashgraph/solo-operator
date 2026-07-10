@@ -13,9 +13,9 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
-// NetworkUpgrade CRs record an audit trail of an upgrade operation and must not
-// be deleted casually. These finalizers block accidental deletion; an admin who
-// genuinely needs to remove a CR patches the finalizer off as a deliberate step.
+// These finalizers block accidental deletion of NetworkUpgrade CRs; the
+// operator never removes them, so deletion requires an admin patching the
+// finalizer off deliberately.
 const (
 	FinalizerNetworkUpgradePrepare     = "operator.solo.hedera.com/networkupgradeprepare"
 	FinalizerNetworkUpgradeFreeze      = "operator.solo.hedera.com/networkupgradefreeze"
@@ -23,9 +23,8 @@ const (
 	FinalizerNetworkUpgradeFreezeAbort = "operator.solo.hedera.com/networkupgradefreezeabort"
 )
 
-// ensureUpgradeFinalizer stamps finalizer on obj if absent. It returns
-// (done=true) once the finalizer is present so callers can proceed; when it
-// adds the finalizer it persists the change and signals a requeue.
+// ensureUpgradeFinalizer adds finalizer if absent, returning done=false with a
+// requeue when it did so, so the caller returns before the object is refetched.
 func ensureUpgradeFinalizer(ctx context.Context, c client.Client, obj client.Object, finalizer string) (done bool, res ctrl.Result, err error) {
 	if controllerutil.ContainsFinalizer(obj, finalizer) {
 		return true, ctrl.Result{}, nil
