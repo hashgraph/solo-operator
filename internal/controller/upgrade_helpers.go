@@ -23,17 +23,18 @@ const (
 	FinalizerNetworkUpgradeFreezeAbort = "operator.solo.hedera.com/networkupgradefreezeabort"
 )
 
-// ensureUpgradeFinalizer adds finalizer if absent, returning done=false with a
-// requeue when it did so, so the caller returns before the object is refetched.
-func ensureUpgradeFinalizer(ctx context.Context, c client.Client, obj client.Object, finalizer string) (done bool, res ctrl.Result, err error) {
+// ensureFinalizer adds finalizer to obj if absent. It returns a non-nil result
+// (which the caller should return, short-circuiting reconcile) when it wrote the
+// finalizer or the write failed, and nil when the finalizer was already present.
+func ensureFinalizer(ctx context.Context, c client.Client, obj client.Object, finalizer string) (*ctrl.Result, error) {
 	if controllerutil.ContainsFinalizer(obj, finalizer) {
-		return true, ctrl.Result{}, nil
+		return nil, nil
 	}
 	controllerutil.AddFinalizer(obj, finalizer)
 	if err := c.Update(ctx, obj); err != nil {
-		return false, ctrl.Result{}, fmt.Errorf("adding finalizer: %w", err)
+		return &ctrl.Result{}, fmt.Errorf("adding finalizer: %w", err)
 	}
-	return false, ctrl.Result{Requeue: true}, nil
+	return &ctrl.Result{Requeue: true}, nil
 }
 
 func findOneByOperationID[T any, TList client.ObjectList](

@@ -58,8 +58,8 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if done, res, err := ensureUpgradeFinalizer(ctx, r.Client, &freeze, FinalizerNetworkUpgradeFreeze); !done {
-		return res, err
+	if res, err := ensureFinalizer(ctx, r.Client, &freeze, FinalizerNetworkUpgradeFreeze); res != nil {
+		return *res, err
 	}
 
 	if freeze.Status.Phase == operatorv1alpha1.PhaseSucceeded ||
