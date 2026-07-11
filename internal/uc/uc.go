@@ -39,18 +39,21 @@ func New(cfg Config) (*UC, error) {
 		return nil, err
 	}
 
+	factory := NewFactory(cfg, client)
 	monitors := []daemonkit.MonitorRunner{
-		NewMarkerMonitor(cfg, client),
+		NewMarkerMonitorWithFactory(cfg, factory),
 	}
 	if cfg.ProvisionerProxyEnabled() {
-		monitors = append(monitors, NewProvisionerProxyMonitorWithClient(
+		pm := NewProvisionerProxyMonitorWithClient(
 			ProvisionerProxyMonitorConfig{
 				Namespace:           cfg.Namespace,
 				NodeID:              cfg.NodeID,
 				UpgradePath:         cfg.UpgradePath,
 				PreviousUpgradePath: cfg.PreviousUpgradePath,
 			},
-			client))
+			client)
+		pm.onPhaseUpdate = factory.markCreated
+		monitors = append(monitors, pm)
 	}
 
 	return &UC{cfg: cfg, client: client, monitors: monitors}, nil
@@ -168,19 +171,24 @@ func (u *UC) ensureDirs() error {
 func mkdirInherit(dir, root string) error {
 	// Walk up from dir to find the nearest existing ancestor, stopping at root.
 	ancestor := dir
+	hitFSRoot := false
 	for ancestor != root {
 		if _, err := os.Stat(ancestor); err == nil {
 			break // this ancestor exists — use its mode
 		}
 		parent := filepath.Dir(ancestor)
 		if parent == ancestor {
-			break // filesystem root reached before cap
+			hitFSRoot = true // filesystem root reached before cap — don't inherit
+			break
 		}
 		ancestor = parent
 	}
+	if hitFSRoot {
+		return os.MkdirAll(dir, 0o750)
+	}
 	info, err := os.Stat(ancestor)
 	if err != nil {
-		// root itself doesn't exist — fall back to a safe default.
+		// cap root itself doesn't exist — fall back to a safe default.
 		return os.MkdirAll(dir, 0o750)
 	}
 	return os.MkdirAll(dir, info.Mode().Perm())

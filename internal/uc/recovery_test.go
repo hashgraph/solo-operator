@@ -115,7 +115,7 @@ func TestRecoverPersistedCRs_DiskOnlyResent(t *testing.T) {
 	}
 
 	// Cache must reflect the created step.
-	exists, err := f.alreadyCreated(context.Background(), networkUpgradePrepareGVR, wantOperationID, operatorv1alpha1.StepPrepare)
+	exists, _, err := f.alreadyCreated(context.Background(), networkUpgradePrepareGVR, wantOperationID, operatorv1alpha1.StepPrepare)
 	if err != nil || !exists {
 		t.Fatalf("expected CR to be in cache after re-send; exists=%v err=%v", exists, err)
 	}
@@ -156,143 +156,16 @@ func TestRecoverPersistedCRs_NoPersisted(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// cleanupCompletedArtifacts
-// --------------------------------------------------------------------------
-
-func TestCleanupCompletedArtifacts_SucceededRemovesAll(t *testing.T) {
-	// writePackage creates the full package structure including execute_immediate.mf
-	// with a fixed mtime so deriveOperationIDPrimary can resolve wantOperationID.
-	markerRoot := writePackage(t, validComponentsYAML)
-	crDir := t.TempDir()
-	f := newFakeFactory(t, testConfig(markerRoot, crDir))
-
-	seedExecuteCR(t, f, wantOperationID, operatorv1alpha1.ExecutePhaseSucceeded)
-	persistCROnDisk(t, f, wantOperationID, operatorv1alpha1.StepPrepare)
-	writeMarkers(t, markerRoot, MarkerFreezeScheduled)
-
-	if err := f.cleanupCompletedArtifacts(context.Background()); err != nil {
-		t.Fatalf("cleanupCompletedArtifacts: %v", err)
-	}
-
-	// Marker dir should be gone (Succeeded → full cleanup).
-	if _, err := os.Stat(markerRoot); !os.IsNotExist(err) {
-		t.Fatalf("expected marker dir to be removed after Succeeded; stat err=%v", err)
-	}
-
-	// Persisted CRs should be gone.
-	remaining, _ := f.store.List()
-	if len(remaining) != 0 {
-		t.Fatalf("expected 0 persisted CRs after cleanup; got %d", len(remaining))
-	}
-}
-
-func TestCleanupCompletedArtifacts_FailedRemovesMarkersNotDir(t *testing.T) {
-	markerRoot := writePackage(t, validComponentsYAML)
-	crDir := t.TempDir()
-	f := newFakeFactory(t, testConfig(markerRoot, crDir))
-
-	seedExecuteCR(t, f, wantOperationID, operatorv1alpha1.ExecutePhaseFailed)
-	persistCROnDisk(t, f, wantOperationID, operatorv1alpha1.StepPrepare)
-
-	if err := f.cleanupCompletedArtifacts(context.Background()); err != nil {
-		t.Fatalf("cleanupCompletedArtifacts: %v", err)
-	}
-
-	// Marker dir must be preserved for diagnostics after Failed.
-	if _, err := os.Stat(markerRoot); err != nil {
-		t.Fatalf("expected marker dir to be preserved after Failed; stat err=%v", err)
-	}
-
-	// execute_immediate.mf written by writePackage should be gone.
-	if _, err := os.Stat(filepath.Join(markerRoot, MarkerExecuteImmediate)); !os.IsNotExist(err) {
-		t.Fatalf("expected marker file to be removed; stat err=%v", err)
-	}
-
-	// Persisted CRs should be gone.
-	remaining, _ := f.store.List()
-	if len(remaining) != 0 {
-		t.Fatalf("expected 0 persisted CRs after cleanup; got %d", len(remaining))
-	}
-}
-
-func TestCleanupCompletedArtifacts_InFlightNotCleaned(t *testing.T) {
-	markerRoot := writePackage(t, validComponentsYAML)
-	crDir := t.TempDir()
-	f := newFakeFactory(t, testConfig(markerRoot, crDir))
-
-	// Execute CR is in a non-terminal phase — markers must not be touched.
-	seedExecuteCR(t, f, wantOperationID, operatorv1alpha1.ExecutePhasePendingNodeUpgrade)
-	persistCROnDisk(t, f, wantOperationID, operatorv1alpha1.StepPrepare)
-
-	if err := f.cleanupCompletedArtifacts(context.Background()); err != nil {
-		t.Fatalf("cleanupCompletedArtifacts: %v", err)
-	}
-
-	// Marker file must be preserved.
-	if _, err := os.Stat(filepath.Join(markerRoot, MarkerExecuteImmediate)); err != nil {
-		t.Fatalf("expected marker file to be preserved for in-flight CR; stat err=%v", err)
-	}
-
-	// Persisted CRs must be preserved.
-	remaining, _ := f.store.List()
-	if len(remaining) != 1 {
-		t.Fatalf("expected 1 persisted CR to be preserved; got %d", len(remaining))
-	}
-}
-
-// TestCleanupCompletedArtifacts_OldSucceededCRDoesNotWipeNewMarkers is the
-// regression test for the reviewer-identified bug: a historical Succeeded Execute
-// CR must not trigger cleanup of marker files that belong to a different,
-// in-flight upgrade cycle.
-func TestCleanupCompletedArtifacts_OldSucceededCRDoesNotWipeNewMarkers(t *testing.T) {
-	// Marker dir contains a NEW upgrade package (different operationId from the
-	// old Succeeded Execute CR).
-	markerRoot := writePackage(t, validComponentsYAML) // resolves to wantOperationID
-	crDir := t.TempDir()
-	f := newFakeFactory(t, testConfig(markerRoot, crDir))
-
-	// A historical Execute CR from a prior cycle — different operationId.
-	oldOpID := "upgrade-0.74.0-20260101T000000Z"
-	seedExecuteCR(t, f, oldOpID, operatorv1alpha1.ExecutePhaseSucceeded)
-
-	if err := f.cleanupCompletedArtifacts(context.Background()); err != nil {
-		t.Fatalf("cleanupCompletedArtifacts: %v", err)
-	}
-
-	// The NEW cycle's execute_immediate.mf must NOT be removed.
-	if _, err := os.Stat(filepath.Join(markerRoot, MarkerExecuteImmediate)); err != nil {
-		t.Fatalf("marker file for new cycle was incorrectly removed: %v", err)
-	}
-
-	// The marker dir must NOT be removed.
-	if _, err := os.Stat(markerRoot); err != nil {
-		t.Fatalf("marker dir for new cycle was incorrectly removed: %v", err)
-	}
-}
-
-func TestCleanupCompletedArtifacts_NoExecuteCRs(t *testing.T) {
-	f := newFakeFactory(t, testConfig(t.TempDir(), t.TempDir()))
-	if err := f.cleanupCompletedArtifacts(context.Background()); err != nil {
-		t.Fatalf("cleanupCompletedArtifacts: %v", err)
-	}
-}
-
-// --------------------------------------------------------------------------
-// RecoverOnStartup (integration: seed + re-send + cleanup)
+// RecoverOnStartup (integration: seed + re-send)
 // --------------------------------------------------------------------------
 
 func TestRecoverOnStartup_FullFlow(t *testing.T) {
-	// markerRoot contains a full package for wantOperationID so
-	// deriveOperationIDPrimary resolves the current operationId correctly.
-	markerRoot := writePackage(t, validComponentsYAML)
+	markerRoot := t.TempDir()
 	crDir := t.TempDir()
 	f := newFakeFactory(t, testConfig(markerRoot, crDir))
 
 	// A persisted CR from the crash window — not yet in the cluster.
 	persistCROnDisk(t, f, wantOperationID, operatorv1alpha1.StepPrepare)
-
-	// The Execute CR for the same operationId has already reached Succeeded.
-	seedExecuteCR(t, f, wantOperationID, operatorv1alpha1.ExecutePhaseSucceeded)
 
 	if err := f.RecoverOnStartup(context.Background()); err != nil {
 		t.Fatalf("RecoverOnStartup: %v", err)
@@ -305,8 +178,9 @@ func TestRecoverOnStartup_FullFlow(t *testing.T) {
 		t.Fatalf("expected 1 prepare CR after recovery; got %d", len(prepList.Items))
 	}
 
-	// Marker dir removed (Succeeded Execute CR with matching disk operationId).
-	if _, err := os.Stat(markerRoot); !os.IsNotExist(err) {
-		t.Fatalf("expected marker dir removed; stat err=%v", err)
+	// Marker dir and its contents must be untouched — rotation is the
+	// provisioner-proxy monitor's responsibility.
+	if _, err := os.Stat(markerRoot); err != nil {
+		t.Fatalf("marker dir should not be touched by RecoverOnStartup: %v", err)
 	}
 }

@@ -10,13 +10,13 @@ persist-before-send primitive from **story 8.2** (#992), the
 `execute_immediate.mf` → `NetworkUpgradePrepare` handler from **story 8.3**
 (#993), the `freeze_scheduled.mf` → `NetworkUpgradeFreeze` handler from **story
 8.4** (#994), the `freeze_aborted.mf` → `NetworkUpgradeFreezeAbort` handler from
-**story 8.6** (#996), and the operation-id deduplication from **story 8.7**
-(#997). When you drop `execute_immediate.mf` you will now see the loop construct,
-persist, and create a real `NetworkUpgradePrepare` CR (§4a); dropping
-`freeze_scheduled.mf` (with a valid epoch-seconds content) creates a
-`NetworkUpgradeFreeze` CR (§4b); dropping `freeze_aborted.mf` creates a
-`NetworkUpgradeFreezeAbort` CR (§4c). The remaining per-marker handler (#995
-`now_frozen.mf`) and cleanup/recovery (#998) are still stubbed.
+**story 8.6** (#996), the operation-id deduplication from **story 8.7** (#997),
+and the restart recovery from **story 8.8** (#998). When you drop
+`execute_immediate.mf` you will now see the loop construct, persist, and create a
+real `NetworkUpgradePrepare` CR (§4a); dropping `freeze_scheduled.mf` (with a
+valid epoch-seconds content) creates a `NetworkUpgradeFreeze` CR (§4b); dropping
+`freeze_aborted.mf` creates a `NetworkUpgradeFreezeAbort` CR (§4c). The
+remaining per-marker handler (#995 `now_frozen.mf`) is still stubbed.
 
 ---
 
@@ -114,7 +114,7 @@ Notes:
 - `--poll-interval 5s` shortens the normal 60s cadence so you don't have to wait
   a minute between ticks while testing.
 - Every flag can also be set via a `UC_`-prefixed env var, e.g.
-  `UC_MARKER_PATH`, `UC_POLL_INTERVAL`. CLI flag > env var > default.
+  `UC_UPGRADE_PATH`, `UC_POLL_INTERVAL`. CLI flag > env var > default.
 
 On startup you should see a `MarkerMonitorStarted` log line with the marker path
 and poll interval.
@@ -227,21 +227,21 @@ handler recomputes the same name and the create is a safe no-op. Re-running the
 `touch` updates the marker mtime and therefore mints a *new* operationId; use a
 fresh `$UCDIR` (or leave the marker in place) to observe stable behaviour.
 
-**Deduplication (#997).** The marker stays on disk (cleanup is #998), so the
-handler re-sees it every tick. Two layers stop a duplicate create: an
+**Deduplication (#997).** The marker stays on disk — markers are never deleted
+individually; they are cleared only when the upgrade-path directory is rotated
+(`current → previous`) on terminal state. Two layers stop a duplicate create: an
 authoritative cluster query for a CR with the same `spec.operationId`
 (filtered **server-side** via the CRD `selectableField` on that field — see the
 k8s 1.32 note in §2), fronted by an in-memory cache so steady-state ticks skip
 the API call entirely. (`spec.operationId` is the source of truth; the
 `operator.solo.hedera.com/operation-id` label is an auxiliary convenience.)
-After the first `CRDelivered` you
-will see **no further** `kubectl`-visible activity for that marker — the second
-and later ticks are served from the cache and never reach the API server. On
-restart, `RecoverOnStartup` re-seeds the cache by listing existing
-`NetworkUpgrade*` CRs, so a restarted sidecar does not re-create a CR it already
-delivered. The cache is a hint only: any K8s API error drops the entry and the
-next tick re-queries, and the create's own `AlreadyExists` check is the ultimate
-guard against a race.
+After the first `CRDelivered` you will see **no further** `kubectl`-visible
+activity for that marker — the second and later ticks are served from the cache
+and never reach the API server. On restart, `RecoverOnStartup` re-seeds the cache
+by listing existing `NetworkUpgrade*` CRs, so a restarted sidecar does not
+re-create a CR it already delivered. The cache is a hint only: any K8s API error
+drops the entry and the next tick re-queries, and the create's own `AlreadyExists`
+check is the ultimate guard against a race.
 
 **Invalid manifest:** set `schemaVersion: 99` (or remove
 `images.consensusNode.version`) and re-run — the handler logs a `ManifestInvalid`
@@ -445,6 +445,61 @@ and creates no CR. Delete `freeze_aborted.mf` or add `execute_immediate.mf` to
 resume.
 
 Processing this marker also reverts the poll cadence to `--poll-interval` (§5).
+
+---
+
+## 4d. Upgrade-path rotation (`current → previous`) on terminal state
+
+Marker files are **never deleted individually**. The upgrade-path directory is
+rotated (`current → previous`) by the `provisioner-proxy-monitor` whenever an
+upgrade reaches any terminal state:
+
+| CR | Phase | `current/` | `previous/` | Rationale |
+|---|---|---|---|---|
+| `NetworkUpgradeExecute` | `Succeeded` | Rotated out (moved to `previous/`) | Receives old `current/` | Package just installed — keep it as a rollback copy |
+| `NetworkUpgradeFreezeAbort` | `Succeeded` | **Wiped** (contents deleted, dir preserved) | Untouched | Package never installed — discard it, protect the real rollback copy |
+| Any CR | `Failed` | Untouched | Untouched | Human intervention required; preserve state for diagnosis |
+
+The distinction is **has the package been applied?**
+
+- **Execute.Succeeded** — the node is now running the new package. Rotating `current → previous` preserves what was just replaced as a rollback copy.
+- **FreezeAbort.Succeeded** — the freeze was cancelled before anything was applied. The staged package in `current/` was never installed — rotating it into `previous/` would clobber the genuine rollback copy with useless data. Instead, `current/` is wiped and recreated empty.
+- **Any Failed** — `current/` is left intact for the operator to inspect and retry.
+
+On each rotation, everything under `$UCDIR/current` (marker files, manifests,
+and any other package contents) is moved atomically into `$UCDIR/previous`. The
+`current` directory is left empty and ready for the next upgrade cycle.
+
+The rotation is **idempotent** — if `current` is already empty (e.g. the UC
+crashed mid-rotation and restarted), the operation is a no-op.
+
+To observe rotation in cluster-only mode:
+
+1. Complete the full marker sequence (§4a → §4b optional → trigger Execute CR to
+   `Succeeded` or `Failed` by patching its status):
+   ```bash
+   kubectl patch networkupgradeexecutes -n solo <execute-cr-name> \
+     --subresource=status --type=merge \
+     -p '{"status":{"phase":"Succeeded"}}'
+   ```
+2. Watch the provisioner-proxy-monitor log for a `UpgradePackageRotated` line.
+3. Confirm `current` is empty and `previous` holds the package:
+   ```bash
+   ls "$UCDIR/current"    # empty
+   ls "$UCDIR/previous"   # manifests/, marker files, etc.
+   ```
+
+For the abort path, `current/` is wiped (not rotated) and `previous/` is left untouched — the staged package was never applied so there is nothing to roll back to:
+```bash
+kubectl patch networkupgradefreezeaborts -n solo <abort-cr-name> \
+  --subresource=status --type=merge \
+  -p '{"status":{"phase":"Succeeded"}}'
+```
+Watch for a `UpgradePackageDiscarded` log line, then confirm:
+```bash
+ls "$UCDIR/current"    # empty
+ls "$UCDIR/previous"   # unchanged — genuine rollback copy preserved
+```
 
 ---
 
@@ -686,7 +741,7 @@ go test ./internal/uc/ -run 'TestResolveOperationID|TestHandleFreezeAborted' -v
 **Restart recovery** (`internal/uc/recovery_test.go`, story 8.8, #998):
 
 ```bash
-go test ./internal/uc/ -run 'TestRecover|TestCleanup' -v
+go test ./internal/uc/ -run 'TestRecover' -v
 ```
 
 | Test | Asserts |
@@ -694,12 +749,7 @@ go test ./internal/uc/ -run 'TestRecover|TestCleanup' -v
 | `TestRecoverPersistedCRs_DiskOnlyResent` | A CR persisted to disk but absent from the cluster is re-sent to the K8s API on startup; the disk copy is deleted and the dedup cache is updated. |
 | `TestRecoverPersistedCRs_AlreadyInCluster` | A disk CR that was already delivered before the crash has its stale disk copy removed without creating a duplicate CR. |
 | `TestRecoverPersistedCRs_NoPersisted` | No persisted files → no-op, no error. |
-| `TestCleanupCompletedArtifacts_SucceededRemovesAll` | When an Execute CR has reached `Succeeded`, startup cleanup removes persisted CRs, marker files, and the entire upgrade artifacts directory (upgrade-path). |
-| `TestCleanupCompletedArtifacts_FailedRemovesMarkersNotDir` | When an Execute CR has `Failed`, marker files and persisted CRs are removed, but the upgrade-path directory is preserved for operator diagnostics. |
-| `TestCleanupCompletedArtifacts_InFlightNotCleaned` | An Execute CR in a non-terminal phase (e.g. `PendingNodeUpgrade`) is not touched — marker files and persisted CRs are preserved. |
-| `TestCleanupCompletedArtifacts_NoExecuteCRs` | No Execute CRs in the cluster → no-op, no error. |
-| `TestCleanupCompletedArtifacts_OldSucceededCRDoesNotWipeNewMarkers` | A historical Succeeded Execute CR (from a prior upgrade cycle) does not remove marker files that belong to a newer, in-flight upgrade whose on-disk operationId differs. |
-| `TestRecoverOnStartup_FullFlow` | End-to-end: a crash-window disk CR is re-sent AND a completed-operation's marker files are cleaned, both in one `RecoverOnStartup` call. |
+| `TestRecoverOnStartup_FullFlow` | End-to-end: a crash-window disk CR is re-sent in one `RecoverOnStartup` call; marker files and upgrade-path are untouched (rotation is the provisioner-proxy monitor's responsibility). |
 
 **Control socket** (`internal/uc/control_client_test.go`):
 

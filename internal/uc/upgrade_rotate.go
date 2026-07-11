@@ -10,15 +10,18 @@ import (
 )
 
 // rotateUpgradePackage moves the contents of currentPath into previousPath after
-// a successful upgrade, mirroring what the consensus node itself does on install:
+// a successful upgrade (Execute.Succeeded). previous always holds the last
+// successfully installed package — this is the invariant that makes rollback
+// meaningful. Only Execute.Succeeded triggers rotation; failed and aborted
+// upgrades must never write to previous.
 //
 //  1. If previousPath exists: clear it (rm -rf previous/*), then move current
 //     contents into it (mv -f current/* previous/). current is left empty.
 //  2. Fallback: if previousPath does not exist or clearing it fails, delete
 //     current contents outright (rm -rf current/*). current is left empty.
 //
-// In both cases the directory itself is preserved so incron can continue
-// watching it for the next upgrade cycle.
+// In both cases the directory itself is preserved so the MarkerMonitor can
+// continue watching it for the next upgrade cycle.
 func rotateUpgradePackage(currentPath, previousPath, operationID string) {
 	entries, err := os.ReadDir(currentPath)
 	if err != nil {
@@ -114,6 +117,37 @@ func rotateIntoPrevious(currentPath, previousPath, operationID string) bool {
 		Str("previous_path", previousPath).
 		Msg("upgrade package rotated: current → previous")
 	return true
+}
+
+// discardUpgradePackage wipes current/* without touching previous. Called on
+// FreezeAbort.Succeeded — the staged package was never applied (the freeze was
+// cancelled before the node installed it), so there is nothing to rotate.
+// previous always holds the last successfully installed package; discarding
+// current preserves that invariant by never overwriting previous with a
+// staged-but-never-used package. The current directory itself is preserved so
+// the MarkerMonitor can continue watching it for the next upgrade cycle.
+func discardUpgradePackage(currentPath, operationID string) {
+	entries, err := os.ReadDir(currentPath)
+	if err != nil {
+		logx.As().Warn().Err(err).
+			Str("reason", ReasonUpgradePackageRotateFailed.String()).
+			Str("operation_id", operationID).Str("path", currentPath).
+			Msg("abort: cannot read current dir — staged package may remain")
+		return
+	}
+	for _, e := range entries {
+		target := filepath.Join(currentPath, e.Name())
+		if rmErr := os.RemoveAll(target); rmErr != nil {
+			logx.As().Warn().Err(rmErr).
+				Str("reason", ReasonUpgradePackageRotateFailed.String()).
+				Str("operation_id", operationID).Str("path", target).
+				Msg("abort: failed to remove entry from current — manual cleanup may be required")
+		}
+	}
+	logx.As().Info().
+		Str("reason", ReasonUpgradePackageDiscarded.String()).
+		Str("operation_id", operationID).Str("path", currentPath).
+		Msg("discarded staged upgrade package on abort (current wiped, previous untouched)")
 }
 
 // clearDir removes all entries inside dir, leaving the directory itself intact.

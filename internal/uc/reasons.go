@@ -20,6 +20,7 @@ const (
 	ReasonMarkerHandlerPending           errx.Reason = "MarkerHandlerPending"
 	ReasonCRDelivered                    errx.Reason = "CRDelivered"
 	ReasonCRExists                       errx.Reason = "CRExists"
+	ReasonCRFailed                       errx.Reason = "CRFailed"
 	ReasonUCCacheSeeded                  errx.Reason = "UCCacheSeeded"
 	ReasonReadyForProvisionerDaemon      errx.Reason = "ReadyForProvisionerDaemon"
 	ReasonPendingNodeUpgrade             errx.Reason = "PendingNodeUpgrade"
@@ -56,7 +57,8 @@ const (
 	ReasonDedupQueryFailed      errx.Reason = "DedupQueryFailed"
 	ReasonCacheSeedFailed       errx.Reason = "CacheSeedFailed"
 	ReasonPrepareListFailed     errx.Reason = "PrepareListFailed"
-	ReasonExecuteListFailed     errx.Reason = "ExecuteListFailed"
+	ReasonExecuteListFailed      errx.Reason = "ExecuteListFailed"
+	ReasonFreezeAbortListFailed  errx.Reason = "FreezeAbortListFailed"
 	ReasonExecutePatchFailed    errx.Reason = "ExecutePatchFailed"
 	ReasonWatchFailed           errx.Reason = "WatchFailed"
 	ReasonWatchErrorEvent       errx.Reason = "WatchErrorEvent"
@@ -93,6 +95,7 @@ const (
 	ReasonProvisionerProxyWatchError         errx.Reason = "ProvisionerProxyWatchError"
 	ReasonProvisionerProxyWatchPanic         errx.Reason = "ProvisionerProxyWatchPanic"
 	ReasonUpgradePackageRotated              errx.Reason = "UpgradePackageRotated"
+	ReasonUpgradePackageDiscarded            errx.Reason = "UpgradePackageDiscarded"
 	ReasonUpgradePackageRotateFailed         errx.Reason = "UpgradePackageRotateFailed"
 
 	// systemd notify.

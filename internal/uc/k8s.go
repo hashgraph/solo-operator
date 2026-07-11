@@ -36,6 +36,16 @@ var (
 		operatorv1alpha1.StepAbort:   networkUpgradeFreezeAbortGVR,
 	}
 
+	// stepToMarker maps a CR step label value to the marker file that triggered it.
+	// Used to include the file name in ERROR logs when a CR is in Failed state so
+	// the operator knows which marker file to delete to clear the stuck upgrade.
+	stepToMarker = map[string]string{
+		operatorv1alpha1.StepPrepare: MarkerExecuteImmediate,
+		operatorv1alpha1.StepFreeze:  MarkerFreezeScheduled,
+		operatorv1alpha1.StepExecute: MarkerNowFrozen,
+		operatorv1alpha1.StepAbort:   MarkerFreezeAborted,
+	}
+
 	// allUpgradeGVRs is the set the startup op-id cache seed (#997) and restart
 	// recovery (#998) iterate over to discover CRs already in the cluster.
 	allUpgradeGVRs = []schema.GroupVersionResource{

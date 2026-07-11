@@ -41,7 +41,7 @@ type Factory struct {
 	// only; correctness rests on the K8s API existence check before each create,
 	// backstopped by AlreadyExists on Create (first-detection-wins).
 	mu    sync.Mutex
-	cache map[string]map[string]struct{} // operationId -> set of created steps
+	cache map[string]map[string]string // operationId -> step -> phase (empty = unknown)
 }
 
 // NewFactory constructs the CR factory.
@@ -50,14 +50,14 @@ func NewFactory(cfg Config, client dynamic.Interface) *Factory {
 		cfg:    cfg,
 		client: client,
 		store:  NewCRStore(cfg.CRPersistPath),
-		cache:  make(map[string]map[string]struct{}),
+		cache:  make(map[string]map[string]string),
 	}
 }
 
-// RecoverOnStartup reconciles cluster state, persisted CRs on disk, and marker
-// files so the UC resumes in-flight upgrades without re-signalling.
+// RecoverOnStartup reconciles cluster state and persisted CRs on disk so the
+// UC resumes in-flight upgrades without re-signalling.
 //
-// It runs three passes in sequence:
+// It runs two passes in sequence:
 //
 //  1. Seed the op-id dedup cache from all existing NetworkUpgrade* CRs in the
 //     cluster, so steady-state ticks for already-handled markers are served from
@@ -67,9 +67,10 @@ func NewFactory(cfg Config, client dynamic.Interface) *Factory {
 //     in the cluster. These are crash-window survivors: the prior process wrote
 //     the file but crashed before the K8s API Create completed.
 //
-//  3. Clean up upgrade artifacts — persisted disk CRs, marker files, and (for
-//     Succeeded) the marker directory — for upgrades that already reached a
-//     terminal phase before the restart.
+// Marker files and upgrade-path rotation (current→previous) are never touched
+// here. Rotation is the exclusive responsibility of ProvisionerProxyMonitor,
+// which handles it on every terminal Execute or FreezeAbort CR observation —
+// both on startup (list) and live (watch).
 func (f *Factory) RecoverOnStartup(ctx context.Context) error {
 	if err := f.seedCache(ctx); err != nil {
 		common.LogErr(logx.As().Warn(), err, ReasonUCCacheSeedFailed).
@@ -85,12 +86,6 @@ func (f *Factory) RecoverOnStartup(ctx context.Context) error {
 		// defensive against future refactors that promote individual errors.
 		common.LogErr(logx.As().Warn(), err, ReasonUCStartupRecoveryError).
 			Msg("startup CR re-send pass encountered an error — continuing")
-	}
-
-	// Clean up artifacts for upgrades that already reached a terminal phase.
-	if err := f.cleanupCompletedArtifacts(ctx); err != nil {
-		common.LogErr(logx.As().Warn(), err, ReasonUCStartupRecoveryError).
-			Msg("startup artifact cleanup pass encountered an error — continuing")
 	}
 
 	return nil
@@ -151,14 +146,21 @@ func (f *Factory) HandleExecuteImmediate(ctx context.Context) error {
 // file is intentionally left on disk for the restart-recovery flow (#998) and
 // the cache entry is invalidated so a stale hint cannot mask a missing CR.
 func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource, operationID, step, kind string, cr *unstructured.Unstructured) error {
-	exists, err := f.alreadyCreated(ctx, gvr, operationID, step)
+	exists, phase, err := f.alreadyCreated(ctx, gvr, operationID, step)
 	if err != nil {
 		// Already an errx-decorated K8s API error from the dedup query.
 		return err
 	}
 	if exists {
-		logx.As().Debug().Str("reason", ReasonCRExists.String()).Str("operation_id", operationID).
-			Str("step", step).Str("cr_name", cr.GetName()).Msg("CR already exists — skipping create")
+		if phase == "Failed" {
+			markerFile := stepToMarker[step]
+			logx.As().Error().Str("reason", ReasonCRFailed.String()).Str("operation_id", operationID).
+				Str("step", step).Str("cr_name", cr.GetName()).
+				Msgf("%s CR has Failed — delete %s to clear", kind, markerFile)
+		} else {
+			logx.As().Debug().Str("reason", ReasonCRExists.String()).Str("operation_id", operationID).
+				Str("step", step).Str("cr_name", cr.GetName()).Msg("CR already exists — skipping create")
+		}
 		return nil
 	}
 
@@ -175,7 +177,7 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 			// Created on a prior tick (e.g. a race past the dedup query). Record it
 			// so future ticks hit the cache, drop the now-redundant persisted file,
 			// and treat as success.
-			f.markCreated(operationID, step)
+			f.markCreated(operationID, step, "")
 			if delErr := f.store.Delete(operationID, step); delErr != nil {
 				logx.As().Warn().Err(delErr).Str("reason", ReasonCRPersistCleanupFailed.String()).
 					Str("operation_id", operationID).Msg("failed to delete persisted CR after AlreadyExists")
@@ -194,7 +196,7 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 
 	// Success — record in the cache so steady-state ticks skip the API query, and
 	// drop the persisted copy now that the cluster owns the CR.
-	f.markCreated(operationID, step)
+	f.markCreated(operationID, step, "")
 	if err := f.store.Delete(operationID, step); err != nil {
 		logx.As().Warn().Err(err).Str("reason", ReasonCRPersistCleanupFailed.String()).
 			Str("operation_id", operationID).Msg("failed to delete persisted CR after create")
@@ -393,6 +395,14 @@ func (f *Factory) fetchPreparePayload(ctx context.Context, operationID string) (
 //
 // TODO(#995): implement CR construction + persist-before-send + status watch for
 // the DaemonResult / NodeStarting conditions.
+//
+// IMPORTANT: when implementing, add a Freeze.Failed gate before calling deliverCR
+// (mirroring the Prepare.Failed gate in HandleFreezeScheduled). If the
+// NetworkUpgradeFreeze CR has Failed, log at ERROR with reason=CRFailed and
+// instruct the operator to delete now_frozen.mf to clear — do NOT attempt to
+// create the Execute CR. Without this gate, a Failed Freeze would cause
+// deliverCR to log DEBUG ("CR already exists") instead of the expected ERROR,
+// hiding the failure from the operator.
 func (f *Factory) HandleNowFrozen(_ context.Context) error {
 	logx.As().Info().Str("reason", ReasonMarkerHandlerPending.String()).Str("marker", MarkerNowFrozen).
 		Msg("now_frozen.mf handler not yet implemented (#995)")

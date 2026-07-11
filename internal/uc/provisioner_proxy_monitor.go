@@ -81,6 +81,11 @@ type ProvisionerProxyMonitor struct {
 	// onTransition is called at the start of each handleExecute; nil in production,
 	// set in tests to observe invocations.
 	onTransition func(operationID string)
+
+	// onPhaseUpdate is called whenever a watch event delivers a phase transition for
+	// a known CR. Used to keep the Factory dedup cache current so deliverCR can log
+	// the correct severity (ERROR on Failed) without a re-query. Nil is safe.
+	onPhaseUpdate func(operationID, step, phase string)
 }
 
 // NewProvisionerProxyMonitor builds a ProvisionerProxyMonitor with a dynamic
@@ -130,15 +135,16 @@ func (pm *ProvisionerProxyMonitor) clearConnectivityError() {
 }
 
 // Run blocks until ctx is cancelled. Each iteration lists all
-// NetworkUpgradeExecute CRs (seeding completedOpIDs and dispatching any already at
-// ReadyForProvisionerDaemon), then watches from the List's ResourceVersion.
+// NetworkUpgradeExecute and NetworkUpgradeFreezeAbort CRs (seeding completedOpIDs,
+// rotating for terminal states, and dispatching any already at
+// ReadyForProvisionerDaemon), then watches both CR types from their List ResourceVersions.
 func (pm *ProvisionerProxyMonitor) Run(ctx context.Context) error {
 	logx.As().Info().Str("reason", ReasonProvisionerProxyMonitorStarted.String()).
 		Str("namespace", pm.cfg.Namespace).Msg("provisioner-proxy monitor started")
 
 	backoff := proxyBackoffInitial
 	for {
-		listRV, listErr := pm.listAndSeed(ctx)
+		executeRV, abortRV, listErr := pm.listAndSeed(ctx)
 		if ctx.Err() != nil {
 			logx.As().Info().Str("reason", ReasonProvisionerProxyMonitorStopped.String()).Msg("provisioner-proxy monitor stopped")
 			return nil
@@ -156,7 +162,7 @@ func (pm *ProvisionerProxyMonitor) Run(ctx context.Context) error {
 		}
 		pm.clearConnectivityError()
 
-		err := pm.runWatch(ctx, listRV)
+		err := pm.runWatch(ctx, executeRV, abortRV)
 		if ctx.Err() != nil {
 			logx.As().Info().Str("reason", ReasonProvisionerProxyMonitorStopped.String()).Msg("provisioner-proxy monitor stopped")
 			return nil
@@ -187,12 +193,16 @@ func (pm *ProvisionerProxyMonitor) Run(ctx context.Context) error {
 	}
 }
 
-// listAndSeed lists all Execute CRs, seeds completedOpIDs from terminal-phase CRs,
-// and dispatches any CR already at ReadyForProvisionerDaemon (recovery for CRs that
-// arrived while the UC was offline). Returns the List ResourceVersion for a gapless
-// watch.
-func (pm *ProvisionerProxyMonitor) listAndSeed(ctx context.Context) (string, error) {
-	resource := pm.client.Resource(networkUpgradeExecuteGVR).Namespace(pm.cfg.Namespace)
+// listAndSeed lists all Execute and FreezeAbort CRs, seeds completedOpIDs from
+// terminal-phase Execute CRs (Succeeded, Failed, PendingNodeUpgrade), rotates
+// the upgrade package into previous/ on Execute.Succeeded, discards current/ on
+// FreezeAbort.Succeeded (package never installed — do not clobber the real
+// rollback copy), and dispatches any Execute CR already at
+// ReadyForProvisionerDaemon (recovery for CRs that arrived while the UC was
+// offline). Execute.Failed is intentionally excluded from rotation — current is
+// preserved for diagnostics, same as Prepare/Freeze failures. Returns the
+// Execute and FreezeAbort List ResourceVersions for a gapless watch.
+func (pm *ProvisionerProxyMonitor) listAndSeed(ctx context.Context) (executeRV, abortRV string, _ error) {
 	// Bound the List with a per-call deadline. The dynamic client has no
 	// client-wide request timeout (see buildDynamicClient), so without this a
 	// stalled List would block the Run loop indefinitely. Scoped to the List only —
@@ -200,18 +210,29 @@ func (pm *ProvisionerProxyMonitor) listAndSeed(ctx context.Context) (string, err
 	// cancelled after listTimeout.
 	listCtx, cancel := context.WithTimeout(ctx, listTimeout)
 	defer cancel()
-	list, err := resource.List(listCtx, metav1.ListOptions{})
+
+	execList, err := pm.client.Resource(networkUpgradeExecuteGVR).Namespace(pm.cfg.Namespace).
+		List(listCtx, metav1.ListOptions{})
 	if err != nil {
-		return "", errx.WithHints(
+		return "", "", errx.WithHints(
 			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradeExecute"), ReasonExecuteListFailed),
 			"Confirm the UC ServiceAccount has list permission on networkupgradeexecutes."+operatorv1alpha1.GroupVersion.Group,
 		)
 	}
 
+	abortList, err := pm.client.Resource(networkUpgradeFreezeAbortGVR).Namespace(pm.cfg.Namespace).
+		List(listCtx, metav1.ListOptions{})
+	if err != nil {
+		return "", "", errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradeFreezeAbort"), ReasonFreezeAbortListFailed),
+			"Confirm the UC ServiceAccount has list permission on networkupgradefreezeaborts."+operatorv1alpha1.GroupVersion.Group,
+		)
+	}
+
 	pm.mu.Lock()
-	for i := range list.Items {
-		phase, _, _ := unstructured.NestedString(list.Items[i].Object, "status", "phase")
-		opID := operationIDOf(&list.Items[i])
+	for i := range execList.Items {
+		phase, _, _ := unstructured.NestedString(execList.Items[i].Object, "status", "phase")
+		opID := operationIDOf(&execList.Items[i])
 		if opID == "" {
 			continue
 		}
@@ -224,22 +245,33 @@ func (pm *ProvisionerProxyMonitor) listAndSeed(ctx context.Context) (string, err
 	}
 	pm.mu.Unlock()
 
-	// Dispatch Succeeded CRs first so current is rotated before any new
+	// Rotate on Execute.Succeeded so current is cleared before any new
 	// ReadyForProvisionerDaemon transition acquires the slot. rotateUpgradePackage
-	// is idempotent — a no-op if current is already empty.
-	for i := range list.Items {
-		phase, _, _ := unstructured.NestedString(list.Items[i].Object, "status", "phase")
+	// is idempotent — a no-op if current is already empty. Execute.Failed is
+	// intentionally excluded: like Prepare/Freeze failures it requires human
+	// intervention; current is preserved for diagnostics.
+	for i := range execList.Items {
+		phase, _, _ := unstructured.NestedString(execList.Items[i].Object, "status", "phase")
 		if ExecutePhaseOf(phase) == operatorv1alpha1.ExecutePhaseSucceeded {
-			pm.handleSucceeded(&list.Items[i])
+			pm.handleTerminalExecute(&execList.Items[i])
+		}
+	}
+
+	// Rotate on FreezeAbort.Succeeded (abort cycle complete). Failed means the
+	// abort reconciler itself failed — the abort was not processed, so no rotation.
+	for i := range abortList.Items {
+		phase, _, _ := unstructured.NestedString(abortList.Items[i].Object, "status", "phase")
+		if operatorv1alpha1.Phase(phase) == operatorv1alpha1.PhaseSucceeded {
+			pm.handleTerminalAbort(&abortList.Items[i])
 		}
 	}
 
 	// Oldest-first so the longest-waiting operation acquires the slot first.
 	var pending []*unstructured.Unstructured
-	for i := range list.Items {
-		phase, _, _ := unstructured.NestedString(list.Items[i].Object, "status", "phase")
+	for i := range execList.Items {
+		phase, _, _ := unstructured.NestedString(execList.Items[i].Object, "status", "phase")
 		if ExecutePhaseOf(phase) == operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon {
-			pending = append(pending, &list.Items[i])
+			pending = append(pending, &execList.Items[i])
 		}
 	}
 	sort.Slice(pending, func(i, j int) bool {
@@ -250,12 +282,12 @@ func (pm *ProvisionerProxyMonitor) listAndSeed(ctx context.Context) (string, err
 	for _, cr := range pending {
 		pm.handleEvent(ctx, cr)
 	}
-	return list.GetResourceVersion(), nil
+	return execList.GetResourceVersion(), abortList.GetResourceVersion(), nil
 }
 
-// runWatch performs a single watch cycle from resourceVersion. Returns nil on a
-// clean channel close, or an error to back off and retry.
-func (pm *ProvisionerProxyMonitor) runWatch(ctx context.Context, resourceVersion string) (retErr error) {
+// runWatch performs a single watch cycle from executeRV and abortRV. Returns nil
+// on a clean channel close, or an error to back off and retry.
+func (pm *ProvisionerProxyMonitor) runWatch(ctx context.Context, executeRV, abortRV string) (retErr error) {
 	defer func() {
 		if r := recover(); r != nil {
 			logx.As().Error().Str("reason", ReasonProvisionerProxyWatchPanic.String()).Interface("panic", r).
@@ -263,25 +295,33 @@ func (pm *ProvisionerProxyMonitor) runWatch(ctx context.Context, resourceVersion
 			retErr = errx.WithReason(errorx.InternalError.New("recovered panic in watch loop: %v", r), ReasonProvisionerProxyWatchPanic)
 		}
 	}()
-	resource := pm.client.Resource(networkUpgradeExecuteGVR).Namespace(pm.cfg.Namespace)
 	timeoutSec := proxyWatchTimeoutSeconds
-	watcher, err := resource.Watch(ctx, metav1.ListOptions{
-		ResourceVersion: resourceVersion,
-		TimeoutSeconds:  &timeoutSec,
-	})
+
+	execWatcher, err := pm.client.Resource(networkUpgradeExecuteGVR).Namespace(pm.cfg.Namespace).
+		Watch(ctx, metav1.ListOptions{ResourceVersion: executeRV, TimeoutSeconds: &timeoutSec})
 	if err != nil {
 		return errx.WithHints(
 			errx.WithReason(errK8sAPI.Wrap(err, "watch NetworkUpgradeExecute"), ReasonWatchFailed),
 			"Confirm the UC ServiceAccount has watch permission on networkupgradeexecutes."+operatorv1alpha1.GroupVersion.Group,
 		)
 	}
-	defer watcher.Stop()
+	defer execWatcher.Stop()
+
+	abortWatcher, err := pm.client.Resource(networkUpgradeFreezeAbortGVR).Namespace(pm.cfg.Namespace).
+		Watch(ctx, metav1.ListOptions{ResourceVersion: abortRV, TimeoutSeconds: &timeoutSec})
+	if err != nil {
+		return errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "watch NetworkUpgradeFreezeAbort"), ReasonWatchFailed),
+			"Confirm the UC ServiceAccount has watch permission on networkupgradefreezeaborts."+operatorv1alpha1.GroupVersion.Group,
+		)
+	}
+	defer abortWatcher.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
-		case event, ok := <-watcher.ResultChan():
+		case event, ok := <-execWatcher.ResultChan():
 			if !ok {
 				return nil
 			}
@@ -297,21 +337,51 @@ func (pm *ProvisionerProxyMonitor) runWatch(ctx context.Context, resourceVersion
 				continue
 			}
 			pm.handleEvent(ctx, cr)
+		case event, ok := <-abortWatcher.ResultChan():
+			if !ok {
+				return nil
+			}
+			if event.Type == watch.Error {
+				return errx.WithReason(
+					errK8sAPI.Wrap(k8serrors.FromObject(event.Object), "abort watch error event"), ReasonWatchErrorEvent)
+			}
+			if event.Type != watch.Added && event.Type != watch.Modified {
+				continue
+			}
+			cr, ok := event.Object.(*unstructured.Unstructured)
+			if !ok {
+				continue
+			}
+			phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
+			if pm.onPhaseUpdate != nil {
+				if opID := operationIDOf(cr); opID != "" {
+					pm.onPhaseUpdate(opID, cr.GetLabels()[operatorv1alpha1.LabelStep], phase)
+				}
+			}
+			if operatorv1alpha1.Phase(phase) == operatorv1alpha1.PhaseSucceeded {
+				pm.handleTerminalAbort(cr)
+			}
 		}
 	}
 }
 
 // handleEvent dispatches on the CR's current phase:
-//   - ReadyForProvisionerDaemon: deploys config CRs and advances to PendingNodeUpgrade.
 //   - Succeeded: rotates the upgrade package out of the current directory.
+//   - ReadyForProvisionerDaemon: deploys config CRs and advances to PendingNodeUpgrade.
+//   - Failed: no action — human intervention required; current is preserved for diagnostics.
 //
 // The ReadyForProvisionerDaemon path is deduplicated by operationId at two levels
 // (mirroring solo-provisioner-daemon): completedOpIDs stops a rerun of an
 // already-advanced operation, and activeOpID stops concurrent transitions.
 func (pm *ProvisionerProxyMonitor) handleEvent(ctx context.Context, cr *unstructured.Unstructured) {
 	phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
+	if pm.onPhaseUpdate != nil {
+		if opID := operationIDOf(cr); opID != "" {
+			pm.onPhaseUpdate(opID, cr.GetLabels()[operatorv1alpha1.LabelStep], phase)
+		}
+	}
 	if ExecutePhaseOf(phase) == operatorv1alpha1.ExecutePhaseSucceeded {
-		pm.handleSucceeded(cr)
+		pm.handleTerminalExecute(cr)
 		return
 	}
 	if ExecutePhaseOf(phase) != operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon {
@@ -414,25 +484,42 @@ func (pm *ProvisionerProxyMonitor) handleExecute(ctx context.Context, cr *unstru
 	return nil
 }
 
-// handleSucceeded rotates the upgrade package when the Execute CR reaches
-// Succeeded. Before rotating it confirms the CR's operationId matches the one
-// on disk (derived from execute_immediate.mf) so that a stale Succeeded CR from
-// a previous upgrade cycle cannot clear a new upgrade package currently in the
-// current directory.
-func (pm *ProvisionerProxyMonitor) handleSucceeded(cr *unstructured.Unstructured) {
+// handleTerminalExecute rotates the upgrade package when the Execute CR reaches
+// Succeeded. Failed is intentionally excluded — like Prepare/Freeze failures it
+// requires human intervention; current is preserved for diagnostics. Before
+// rotating it confirms the CR's operationId matches the one on disk so that a
+// stale CR from a previous cycle cannot clear a new upgrade package.
+func (pm *ProvisionerProxyMonitor) handleTerminalExecute(cr *unstructured.Unstructured) {
 	operationID := operationIDOf(cr)
 	if operationID == "" {
 		return
 	}
-
-	if !pm.matchesDiskOperationID(operationID, cr.GetName(), map[string]string{"phase": string(operatorv1alpha1.ExecutePhaseSucceeded)}) {
+	phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
+	if !pm.matchesDiskOperationID(operationID, cr.GetName(), map[string]string{"phase": phase}) {
 		return
 	}
-
-	logx.As().Info().Str("reason", ReasonUpgradePackageRotated.String()).
-		Str("operation_id", operationID).Str("cr_name", cr.GetName()).
-		Msg("Execute CR succeeded — rotating upgrade package")
 	rotateUpgradePackage(pm.cfg.UpgradePath, pm.cfg.PreviousUpgradePath, operationID)
+}
+
+// handleTerminalAbort discards the staged upgrade package when a FreezeAbort CR
+// reaches Succeeded. Abort means the freeze was cancelled before the package was
+// applied — the staged contents of current/ are garbage, not a rollback candidate.
+// Discarding (wipe current/*, leave previous/ untouched) is the correct action:
+// rotating into previous would clobber the genuine last-good rollback copy with
+// a package that was never installed. Failed is excluded — a Failed FreezeAbort
+// means the abort reconciler itself failed; leave current/ intact for diagnosis.
+// The same disk-operationId guard applies to prevent stale CRs from prior cycles
+// from wiping a new upgrade package.
+func (pm *ProvisionerProxyMonitor) handleTerminalAbort(cr *unstructured.Unstructured) {
+	operationID := operationIDOf(cr)
+	if operationID == "" {
+		return
+	}
+	phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
+	if !pm.matchesDiskOperationID(operationID, cr.GetName(), map[string]string{"phase": phase, "cr_type": "FreezeAbort"}) {
+		return
+	}
+	discardUpgradePackage(pm.cfg.UpgradePath, operationID)
 }
 
 // matchesDiskOperationID returns true only when operationID matches the one
@@ -455,8 +542,8 @@ func (pm *ProvisionerProxyMonitor) matchesDiskOperationID(operationID, crName st
 		return false
 	}
 	if !found {
-		addExtra(logx.As().Warn().Str("reason", ReasonProvisionerProxyMissingOperationID.String())).
-			Msg("no execute_immediate.mf on disk — skipping (current may be empty)")
+		addExtra(logx.As().Debug().Str("reason", ReasonProvisionerProxyMissingOperationID.String())).
+			Msg("no execute_immediate.mf on disk — skipping (current may be empty after rotation)")
 		return false
 	}
 	if diskOpID != operationID {

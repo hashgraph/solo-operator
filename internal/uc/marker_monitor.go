@@ -46,9 +46,15 @@ type markerDispatcher interface {
 
 // NewMarkerMonitor constructs the marker monitor.
 func NewMarkerMonitor(cfg Config, client dynamic.Interface) *MarkerMonitor {
+	return NewMarkerMonitorWithFactory(cfg, NewFactory(cfg, client))
+}
+
+// NewMarkerMonitorWithFactory constructs the marker monitor with an injected factory.
+// Use when the factory must be shared (e.g. to wire onPhaseUpdate on ProvisionerProxyMonitor).
+func NewMarkerMonitorWithFactory(cfg Config, f *Factory) *MarkerMonitor {
 	return &MarkerMonitor{
 		cfg:     cfg,
-		factory: NewFactory(cfg, client),
+		factory: f,
 	}
 }
 
