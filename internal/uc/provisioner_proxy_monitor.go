@@ -68,12 +68,18 @@ type ProvisionerProxyMonitor struct {
 	// activeOpID is non-empty while a transition is in-flight; guards the single
 	// execution slot so two operations cannot transition concurrently.
 	activeOpID string
-	// completedOpIDs holds operationIds already advanced past
-	// ReadyForProvisionerDaemon, stopping a rerun of the same operation. It guards
-	// the patch round-trip window (the gap before the CR's new phase is observed by
-	// the watch loop). Seeded at every Run entry from the cluster List, so surviving
-	// a restart needs no disk persistence — the CR's phase is the durable source of
+	// completedOpIDs holds operationIds for which this monitor has already patched
+	// (or observed) the Execute CR past ReadyForProvisionerDaemon. It prevents a
+	// second patch attempt during the window between the status write and the watch
+	// loop observing the new phase. Seeded at every Run entry from the cluster List
+	// — no disk persistence needed because the CR's phase is the durable source of
 	// truth. Mirrors solo-weaver UpgradeMonitor.
+	//
+	// Note: this is NOT the Factory op-id dedup cache. The Factory cache deduplicates
+	// CR creation (marker → Create). This set deduplicates the provisioner-proxy
+	// status patch (ReadyForProvisionerDaemon → PendingNodeUpgrade). The UC never
+	// sets ReadyForProvisionerDaemon; the operator does. The monitor's only write
+	// action is the status patch.
 	completedOpIDs map[string]struct{}
 
 	connectivityErr atomic.Pointer[daemonkit.StatusError]
@@ -193,15 +199,25 @@ func (pm *ProvisionerProxyMonitor) Run(ctx context.Context) error {
 	}
 }
 
-// listAndSeed lists all Execute and FreezeAbort CRs, seeds completedOpIDs from
-// terminal-phase Execute CRs (Succeeded, Failed, PendingNodeUpgrade), rotates
-// the upgrade package into previous/ on Execute.Succeeded, discards current/ on
-// FreezeAbort.Succeeded (package never installed — do not clobber the real
-// rollback copy), and dispatches any Execute CR already at
-// ReadyForProvisionerDaemon (recovery for CRs that arrived while the UC was
-// offline). Execute.Failed is intentionally excluded from rotation — current is
-// preserved for diagnostics, same as Prepare/Freeze failures. Returns the
-// Execute and FreezeAbort List ResourceVersions for a gapless watch.
+// listAndSeed lists all Execute and FreezeAbort CRs on startup. It does three things:
+//
+//  1. Seeds completedOpIDs with any Execute CR whose phase is already past the
+//     provisioner-proxy action point (PendingNodeUpgrade, Succeeded, Failed).
+//     These are operations the monitor must not re-patch — either it already did
+//     so in a prior run, or the operation resolved independently. The three phases
+//     cover every state where a second patch would be wrong: PendingNodeUpgrade
+//     means the patch already landed; Succeeded/Failed mean the upgrade reconciler
+//     finished, so patching again would be meaningless or harmful.
+//
+//  2. Rotates/discards upgrade packages for terminal CRs (Execute.Succeeded →
+//     rotate into previous/; FreezeAbort.Succeeded → discard current/).
+//     Execute.Failed is intentionally excluded: current/ is preserved for
+//     diagnostics, same as Prepare/Freeze failures.
+//
+//  3. Dispatches any Execute CR already at ReadyForProvisionerDaemon so the
+//     monitor recovers operations that arrived while the UC was offline.
+//
+// Returns the Execute and FreezeAbort List ResourceVersions for a gapless watch.
 func (pm *ProvisionerProxyMonitor) listAndSeed(ctx context.Context) (executeRV, abortRV string, _ error) {
 	// Bound the List with a per-call deadline. The dynamic client has no
 	// client-wide request timeout (see buildDynamicClient), so without this a
