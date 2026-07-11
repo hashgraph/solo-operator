@@ -149,6 +149,21 @@ func (m *MarkerMonitor) Run(ctx context.Context) error {
 // poll scans the marker directory once and dispatches any markers found. It
 // returns the poll interval to use for the next tick (fast during the freeze
 // window, normal otherwise).
+//
+// Polling (not inotify/fsnotify) is intentional and load-bearing:
+//   - It is resilient to a transiently absent UpgradePath directory. During
+//     upgrade-package rotation, rotateUpgradePackage atomically renames
+//     current/ to previous/ and then recreates current/. Between those two
+//     steps current/ does not exist. A stat-based poll simply finds nothing and
+//     moves on; an inotify watcher would receive a DELETE event, lose its watch
+//     descriptor, and require re-registration logic. The poll interval (60 s
+//     normal, 1 s during freeze) is far longer than the mkdir round-trip, so
+//     the window is invisible in practice.
+//   - inotify (and FSEvents/kqueue) are unreliable on network-backed volume
+//     mounts (NFS, CIFS/SMB, FUSE). Polling works correctly regardless of
+//     whether the shared volume is hostPath, emptyDir, or network-backed.
+//   - It also survives volume remounts and container restarts without any watch
+//     re-registration plumbing.
 func (m *MarkerMonitor) poll(ctx context.Context, current time.Duration) time.Duration {
 	next := current
 	for _, name := range AllMarkers {

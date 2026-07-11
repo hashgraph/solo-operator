@@ -3,26 +3,61 @@
 package uc
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 
 	"github.com/automa-saga/logx"
 )
 
-// rotateUpgradePackage moves the contents of currentPath into previousPath after
-// a successful upgrade (Execute.Succeeded). previous always holds the last
+// rotateUpgradePackage atomically replaces previousPath with currentPath after a
+// successful upgrade (Execute.Succeeded). previous always holds the last
 // successfully installed package — this is the invariant that makes rollback
 // meaningful. Only Execute.Succeeded triggers rotation; failed and aborted
 // upgrades must never write to previous.
 //
-//  1. If previousPath exists: clear it (rm -rf previous/*), then move current
-//     contents into it (mv -f current/* previous/). current is left empty.
-//  2. Fallback: if previousPath does not exist or clearing it fails, delete
-//     current contents outright (rm -rf current/*). current is left empty.
+// Atomicity model:
 //
-// In both cases the directory itself is preserved so the MarkerMonitor can
-// continue watching it for the next upgrade cycle.
+//	The move is implemented as os.Rename(currentPath, previousPath), which maps
+//	to a single rename(2) syscall and is atomic on any POSIX filesystem. This
+//	eliminates partial-move: either the whole package moves or nothing does.
+//
+//	IMPORTANT: currentPath and previousPath MUST reside on the same filesystem
+//	(same mount point). rename(2) fails with EXDEV across devices. In production
+//	both paths share the same parent (data/upgrade/), so this is guaranteed; if
+//	the operator mounts them separately they must still be on the same block
+//	device. This constraint is checked at startup by ensureDirs.
+//
+// Crash recovery:
+//
+//	The function detects mid-rotation crashes purely from filesystem state —
+//	no external state file is required:
+//
+//	  currentPath absent, previousPath present → crashed after rename but before
+//	  mkdir; previous holds the complete package. Recover by recreating current/.
+//
+//	  currentPath present, previousPath absent → crashed after rmdir but before
+//	  rename; rename directly (no rmdir needed).
+//
+//	  Both present → normal first run or crash before any destructive step;
+//	  clear previous/, rmdir it, then rename.
+//
+// After rotation currentPath is recreated as an empty directory so the
+// MarkerMonitor can continue polling it for the next upgrade cycle.
 func rotateUpgradePackage(currentPath, previousPath, operationID string) {
+	// Crash recovery: current/ is absent means we crashed after rename(current→previous)
+	// but before mkdir(current). previous already holds the complete package —
+	// just recreate current/ and we are done.
+	if _, err := os.Stat(currentPath); errors.Is(err, os.ErrNotExist) {
+		logx.As().Info().
+			Str("reason", ReasonUpgradePackageRotated.String()).
+			Str("operation_id", operationID).
+			Str("current_path", currentPath).
+			Msg("rotate: current/ absent — recreating after post-rename crash")
+		recreateDir(currentPath, previousPath, operationID)
+		return
+	}
+
 	entries, err := os.ReadDir(currentPath)
 	if err != nil {
 		logx.As().Warn().Err(err).
@@ -33,7 +68,6 @@ func rotateUpgradePackage(currentPath, previousPath, operationID string) {
 		return
 	}
 	if len(entries) == 0 {
-		// Nothing to rotate.
 		return
 	}
 
@@ -41,74 +75,83 @@ func rotateUpgradePackage(currentPath, previousPath, operationID string) {
 		return
 	}
 
-	// Fallback: could not move contents to previous — clear current instead.
+	// Fallback: rename failed (e.g. EXDEV — cross-device, which should never
+	// happen in production but could occur in tests or unusual mounts).
 	logx.As().Warn().
 		Str("reason", ReasonUpgradePackageRotateFailed.String()).
 		Str("operation_id", operationID).
 		Str("current_path", currentPath).
 		Str("previous_path", previousPath).
-		Msg("rotate: could not archive upgrade package to previous — deleting current contents")
+		Msg("rotate: atomic rename failed — deleting current contents (package not archived)")
 	clearDir(currentPath, operationID)
 }
 
-// rotateIntoPrevious clears previousPath then moves all entries from currentPath
-// into it. Returns true on success.
+// rotateIntoPrevious atomically replaces previousPath with currentPath via
+// rename(2), then recreates an empty currentPath.
+//
+// Steps (and their crash-recovery behaviour):
+//  1. If previousPath exists: clear its contents and rmdir it.
+//     Crash here → both dirs still exist; retry restarts from step 1.
+//  2. os.Rename(currentPath, previousPath) — single atomic syscall.
+//     Crash here → currentPath absent, previousPath complete; rotateUpgradePackage
+//     detects this and calls recreateDir on the next run.
+//  3. Recreate currentPath as an empty directory (inherit permissions from
+//     previousPath, which was currentPath moments ago).
+//     Crash here → same as step 2 crash; handled identically.
+//
+// Returns true on success (or when current is empty after a fallback clear).
 func rotateIntoPrevious(currentPath, previousPath, operationID string) bool {
-	if _, err := os.Stat(previousPath); err != nil {
-		logx.As().Warn().Err(err).
-			Str("reason", ReasonUpgradePackageRotateFailed.String()).
-			Str("operation_id", operationID).
-			Str("previous_path", previousPath).
-			Msg("rotate: previous dir not accessible — falling back to delete current")
-		return false
-	}
-
-	// Clear previous/* so stale data from the last upgrade is gone.
-	prevEntries, err := os.ReadDir(previousPath)
-	if err != nil {
-		logx.As().Warn().Err(err).
-			Str("reason", ReasonUpgradePackageRotateFailed.String()).
-			Str("operation_id", operationID).
-			Str("previous_path", previousPath).
-			Msg("rotate: cannot read previous dir — falling back to delete current")
-		return false
-	}
-	for _, e := range prevEntries {
-		target := filepath.Join(previousPath, e.Name())
-		if rmErr := os.RemoveAll(target); rmErr != nil {
+	// Step 1: remove previous/ if it exists so rename can replace it.
+	// Crash during this step leaves previous/ partially cleared but current/
+	// intact — safe to retry from scratch.
+	if _, statErr := os.Stat(previousPath); statErr == nil {
+		prevEntries, err := os.ReadDir(previousPath)
+		if err != nil {
+			logx.As().Warn().Err(err).
+				Str("reason", ReasonUpgradePackageRotateFailed.String()).
+				Str("operation_id", operationID).
+				Str("previous_path", previousPath).
+				Msg("rotate: cannot read previous dir — falling back to delete current")
+			return false
+		}
+		for _, e := range prevEntries {
+			target := filepath.Join(previousPath, e.Name())
+			if rmErr := os.RemoveAll(target); rmErr != nil {
+				logx.As().Warn().Err(rmErr).
+					Str("reason", ReasonUpgradePackageRotateFailed.String()).
+					Str("operation_id", operationID).
+					Str("path", target).
+					Msg("rotate: failed to clear previous entry — falling back to delete current")
+				return false
+			}
+		}
+		if rmErr := os.Remove(previousPath); rmErr != nil {
 			logx.As().Warn().Err(rmErr).
 				Str("reason", ReasonUpgradePackageRotateFailed.String()).
 				Str("operation_id", operationID).
-				Str("path", target).
-				Msg("rotate: failed to clear previous entry — falling back to delete current")
+				Str("previous_path", previousPath).
+				Msg("rotate: failed to rmdir previous — falling back to delete current")
 			return false
 		}
 	}
 
-	// Move current/* into previous/.
-	curEntries, err := os.ReadDir(currentPath)
-	if err != nil {
-		logx.As().Warn().Err(err).
+	// Step 2: atomic rename — the entire package moves in one syscall.
+	// currentPath and previousPath must be on the same filesystem; rename(2)
+	// returns EXDEV otherwise. In production both are siblings under data/upgrade/
+	// on the same volume, so this is always satisfied.
+	if mvErr := os.Rename(currentPath, previousPath); mvErr != nil {
+		logx.As().Warn().Err(mvErr).
 			Str("reason", ReasonUpgradePackageRotateFailed.String()).
 			Str("operation_id", operationID).
-			Str("current_path", currentPath).
-			Msg("rotate: cannot read current dir after clearing previous — falling back to delete current")
+			Str("src", currentPath).Str("dst", previousPath).
+			Msg("rotate: atomic rename failed — falling back to delete current")
 		return false
 	}
-	for _, e := range curEntries {
-		src := filepath.Join(currentPath, e.Name())
-		dst := filepath.Join(previousPath, e.Name())
-		if mvErr := os.Rename(src, dst); mvErr != nil {
-			logx.As().Warn().Err(mvErr).
-				Str("reason", ReasonUpgradePackageRotateFailed.String()).
-				Str("operation_id", operationID).
-				Str("src", src).Str("dst", dst).
-				Msg("rotate: move failed — falling back to delete remaining current entries")
-			// Partial move: clean up whatever is left in current.
-			clearDir(currentPath, operationID)
-			return true // current is now empty either way
-		}
-	}
+
+	// Step 3: recreate currentPath so MarkerMonitor can poll it next cycle.
+	// previousPath (the just-renamed directory) carries the original permissions;
+	// reuse them so current/ is created with the same mode.
+	recreateDir(currentPath, previousPath, operationID)
 
 	logx.As().Info().
 		Str("reason", ReasonUpgradePackageRotated.String()).
@@ -117,6 +160,23 @@ func rotateIntoPrevious(currentPath, previousPath, operationID string) bool {
 		Str("previous_path", previousPath).
 		Msg("upgrade package rotated: current → previous")
 	return true
+}
+
+// recreateDir creates an empty directory at path, inheriting permissions from
+// permSource (typically previousPath immediately after the rename). Called after
+// rename(current→previous) to restore current/ for the next upgrade cycle.
+func recreateDir(path, permSource, operationID string) {
+	perm := os.FileMode(0o750) // safe default
+	if info, err := os.Stat(permSource); err == nil {
+		perm = info.Mode().Perm()
+	}
+	if err := os.Mkdir(path, perm); err != nil && !errors.Is(err, os.ErrExist) {
+		logx.As().Warn().Err(err).
+			Str("reason", ReasonUpgradePackageRotateFailed.String()).
+			Str("operation_id", operationID).
+			Str("path", path).
+			Msg("rotate: failed to recreate current dir — MarkerMonitor will retry on next poll")
+	}
 }
 
 // discardUpgradePackage wipes current/* without touching previous. Called on

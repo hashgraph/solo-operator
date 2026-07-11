@@ -55,9 +55,19 @@ type Config struct {
 	KubeconfigPath string
 
 	// UpgradePath is the directory polled for marker files.
+	//
+	// SAME-FILESYSTEM CONSTRAINT: UpgradePath and PreviousUpgradePath must reside
+	// on the same filesystem (same mount point). Package rotation is implemented
+	// via os.Rename(current, previous), which maps to a single atomic rename(2)
+	// syscall. rename(2) fails with EXDEV when src and dst are on different
+	// devices; there is no fallback that preserves atomicity across filesystems.
+	// In the default layout both paths share data/upgrade/ on the same volume.
+	// If the operator mounts them separately they must still be on the same block
+	// device or bind-mount from the same source.
 	UpgradePath string
 	// PreviousUpgradePath is the directory holding the last applied upgrade package.
 	// Used as a fallback when UpgradePath has already been rotated out after a successful install.
+	// See UpgradePath for the same-filesystem constraint.
 	PreviousUpgradePath string
 	// EventsPath is the JSONL event-log directory.
 	EventsPath string
