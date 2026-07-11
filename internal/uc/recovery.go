@@ -152,9 +152,8 @@ func (f *Factory) cleanupCompletedArtifacts(ctx context.Context) error {
 
 	for i := range list.Items {
 		item := &list.Items[i]
-		phase := operatorv1alpha1.ExecutePhase(
-			must(unstructured.NestedString(item.Object, "status", "phase")),
-		)
+		phaseStr, _, _ := unstructured.NestedString(item.Object, "status", "phase")
+		phase := operatorv1alpha1.ExecutePhase(phaseStr)
 		if phase != operatorv1alpha1.ExecutePhaseSucceeded && phase != operatorv1alpha1.ExecutePhaseFailed {
 			continue
 		}
@@ -223,7 +222,3 @@ func (f *Factory) cleanupForOperation(operationID string, phase operatorv1alpha1
 	}
 }
 
-// must extracts the string result of a NestedString call, discarding the ok and
-// error return values. Used only where the field is optional (an empty string is
-// the correct sentinel for "absent").
-func must(s string, _ bool, _ error) string { return s }
