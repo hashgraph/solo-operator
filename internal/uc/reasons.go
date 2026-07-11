@@ -71,6 +71,10 @@ const (
 	// Startup recovery / cache.
 	ReasonUCCacheSeedFailed      errx.Reason = "UCCacheSeedFailed"
 	ReasonUCStartupRecoveryError errx.Reason = "UCStartupRecoveryError"
+	ReasonCRResent               errx.Reason = "CRResent"
+	ReasonCRResentFailed         errx.Reason = "CRResentFailed"
+	ReasonArtifactCleanup        errx.Reason = "ArtifactCleanup"
+	ReasonArtifactCleanupFailed  errx.Reason = "ArtifactCleanupFailed"
 
 	// Control socket client.
 	ReasonControlRequestFailed errx.Reason = "ControlRequestFailed"

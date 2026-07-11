@@ -57,24 +57,42 @@ func NewFactory(cfg Config, client dynamic.Interface) *Factory {
 // RecoverOnStartup reconciles cluster state, persisted CRs on disk, and marker
 // files so the UC resumes in-flight upgrades without re-signalling.
 //
-// Today it seeds the operation-id dedup cache (#997) by querying every
-// NetworkUpgrade* CR already in the namespace, so a restart does not re-create
-// CRs for markers it handled before the restart. A seed query failure is logged
-// but not fatal: the per-action cluster query remains authoritative, so an
-// unseeded cache only costs one extra API call per operation.
+// It runs three passes in sequence:
 //
-// TODO(#998): re-send any CR persisted on disk but not yet in the cluster; clean
-// up artifacts for upgrades that have already reached a terminal phase.
+//  1. Seed the op-id dedup cache from all existing NetworkUpgrade* CRs in the
+//     cluster, so steady-state ticks for already-handled markers are served from
+//     cache. A seed failure is logged but not fatal.
+//
+//  2. Re-send any CR persisted to disk (--cr-persist-path) but not yet present
+//     in the cluster. These are crash-window survivors: the prior process wrote
+//     the file but crashed before the K8s API Create completed.
+//
+//  3. Clean up upgrade artifacts — persisted disk CRs, marker files, and (for
+//     Succeeded) the marker directory — for upgrades that already reached a
+//     terminal phase before the restart.
 func (f *Factory) RecoverOnStartup(ctx context.Context) error {
 	if err := f.seedCache(ctx); err != nil {
-		// Use the error's own reason (ReasonCacheSeedFailed from seedCache) so the
-		// log line and the error share one identifier; fall back only if absent.
 		common.LogErr(logx.As().Warn(), err, ReasonUCCacheSeedFailed).
 			Msg("could not seed op-id dedup cache on startup; per-action queries remain authoritative")
-		return nil
+	} else {
+		logx.As().Info().Str("reason", ReasonUCCacheSeeded.String()).
+			Msg("seeded op-id dedup cache from existing NetworkUpgrade CRs")
 	}
-	logx.As().Info().Str("reason", ReasonUCCacheSeeded.String()).
-		Msg("seeded op-id dedup cache from existing NetworkUpgrade CRs")
+
+	// Re-send crash-window survivors (persist-before-send, #992).
+	if err := f.recoverPersistedCRs(ctx); err != nil {
+		// recoverPersistedCRs is already best-effort and returns nil; this guard is
+		// defensive against future refactors that promote individual errors.
+		common.LogErr(logx.As().Warn(), err, ReasonUCStartupRecoveryError).
+			Msg("startup CR re-send pass encountered an error — continuing")
+	}
+
+	// Clean up artifacts for upgrades that already reached a terminal phase.
+	if err := f.cleanupCompletedArtifacts(ctx); err != nil {
+		common.LogErr(logx.As().Warn(), err, ReasonUCStartupRecoveryError).
+			Msg("startup artifact cleanup pass encountered an error — continuing")
+	}
+
 	return nil
 }
 

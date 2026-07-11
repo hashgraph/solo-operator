@@ -20,12 +20,21 @@ import (
 // version are taken from the operator API package so they stay in sync with the
 // CRD definitions.
 var (
-	networkUpgradePrepareGVR = gvr("networkupgradeprepares")
-	//nolint:unused // consumed by the factory CR handlers in #994
-	networkUpgradeFreezeGVR = gvr("networkupgradefreezes")
-	//nolint:unused // consumed by the factory CR handlers in #995
+	networkUpgradePrepareGVR     = gvr("networkupgradeprepares")
+	networkUpgradeFreezeGVR      = gvr("networkupgradefreezes")
 	networkUpgradeExecuteGVR     = gvr("networkupgradeexecutes")
 	networkUpgradeFreezeAbortGVR = gvr("networkupgradefreezeaborts")
+
+	// stepToGVR maps a CR step label value to the GVR of the corresponding
+	// NetworkUpgrade* resource. Used by restart recovery (#998) to re-deliver
+	// persisted CRs and to query Execute CRs by step without hard-coding strings
+	// at multiple call sites.
+	stepToGVR = map[string]schema.GroupVersionResource{
+		operatorv1alpha1.StepPrepare: networkUpgradePrepareGVR,
+		operatorv1alpha1.StepFreeze:  networkUpgradeFreezeGVR,
+		operatorv1alpha1.StepExecute: networkUpgradeExecuteGVR,
+		operatorv1alpha1.StepAbort:   networkUpgradeFreezeAbortGVR,
+	}
 
 	// allUpgradeGVRs is the set the startup op-id cache seed (#997) and restart
 	// recovery (#998) iterate over to discover CRs already in the cluster.

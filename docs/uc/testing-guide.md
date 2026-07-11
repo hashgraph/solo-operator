@@ -682,6 +682,23 @@ go test ./internal/uc/ -run 'TestResolveOperationID|TestHandleFreezeAborted' -v
 | `TestHandleFreezeAbortedIsIdempotent` | Re-dispatching the marker creates exactly one Abort CR (dedup). |
 | `TestHandleFreezeAbortedDoesNotDeleteSiblings` | A co-existing Prepare CR survives the abort (audit trail; the UC never deletes sibling CRs). |
 
+**Restart recovery** (`internal/uc/recovery_test.go`, story 8.8, #998):
+
+```bash
+go test ./internal/uc/ -run 'TestRecover|TestCleanup' -v
+```
+
+| Test | Asserts |
+|------|---------|
+| `TestRecoverPersistedCRs_DiskOnlyResent` | A CR persisted to disk but absent from the cluster is re-sent to the K8s API on startup; the disk copy is deleted and the dedup cache is updated. |
+| `TestRecoverPersistedCRs_AlreadyInCluster` | A disk CR that was already delivered before the crash has its stale disk copy removed without creating a duplicate CR. |
+| `TestRecoverPersistedCRs_NoPersisted` | No persisted files → no-op, no error. |
+| `TestCleanupCompletedArtifacts_SucceededRemovesAll` | When an Execute CR has reached `Succeeded`, startup cleanup removes persisted CRs, marker files, and the entire upgrade artifacts directory (marker-path). |
+| `TestCleanupCompletedArtifacts_FailedRemovesMarkersNotDir` | When an Execute CR has `Failed`, marker files and persisted CRs are removed, but the marker-path directory is preserved for operator diagnostics. |
+| `TestCleanupCompletedArtifacts_InFlightNotCleaned` | An Execute CR in a non-terminal phase (e.g. `PendingNodeUpgrade`) is not touched — marker files and persisted CRs are preserved. |
+| `TestCleanupCompletedArtifacts_NoExecuteCRs` | No Execute CRs in the cluster → no-op, no error. |
+| `TestRecoverOnStartup_FullFlow` | End-to-end: a crash-window disk CR is re-sent AND a completed-operation's marker files are cleaned, both in one `RecoverOnStartup` call. |
+
 **Control socket** (`internal/uc/control_client_test.go`):
 
 ```bash
