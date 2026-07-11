@@ -127,18 +127,24 @@ func (f *Factory) recoverPersistedCRs(ctx context.Context) error {
 // cleanupCompletedArtifacts removes stale upgrade artifacts left on disk when
 // the UC restarts after an upgrade has already reached a terminal phase.
 //
-// For each Execute CR in Succeeded or Failed phase it:
-//   - Deletes all persisted disk CRs for that operationId (all steps).
-//   - Removes every marker file from --marker-path.
-//   - If the phase is Succeeded, also removes the entire marker-path directory
-//     (upgrade artifacts). This is deferred past PendingNodeUpgrade per the
-//     ordering constraint: the daemon reads manifests/config from there during
-//     the execute phase, so the directory must remain until the upgrade fully
-//     completes.
+// Execute CRs are never deleted (audit trail), so the cleanup pass must
+// only act on artifacts that demonstrably belong to a completed operation —
+// not every historical Execute CR in the namespace. Two sources of disk
+// presence are cross-referenced against the set of terminal Execute CRs:
+//
+//  1. Persisted CRs (--cr-persist-path): keyed by operationId, so any persisted
+//     file whose operationId maps to a terminal Execute CR is safe to delete.
+//
+//  2. Marker files (--marker-path): the current operationId is derived from the
+//     execute_immediate.mf + manifest on disk. Marker files and the marker-path
+//     directory are only removed when that derived operationId matches a terminal
+//     Execute CR — guaranteeing we never wipe markers that belong to a newer,
+//     in-flight upgrade whose Execute CR is not yet terminal.
 //
 // Errors during cleanup are logged and tolerated — a failed cleanup does not
-// prevent the UC from entering the poll loop and resuming normal operation.
+// prevent the UC from entering the poll loop.
 func (f *Factory) cleanupCompletedArtifacts(ctx context.Context) error {
+	// Query all Execute CRs and build the set of terminal operationIds.
 	listCtx, cancel := context.WithTimeout(ctx, listTimeout)
 	list, err := f.client.Resource(networkUpgradeExecuteGVR).Namespace(f.cfg.Namespace).
 		List(listCtx, metav1.ListOptions{})
@@ -150,6 +156,7 @@ func (f *Factory) cleanupCompletedArtifacts(ctx context.Context) error {
 		return nil
 	}
 
+	terminal := make(map[string]operatorv1alpha1.ExecutePhase, len(list.Items))
 	for i := range list.Items {
 		item := &list.Items[i]
 		phaseStr, _, _ := unstructured.NestedString(item.Object, "status", "phase")
@@ -157,68 +164,82 @@ func (f *Factory) cleanupCompletedArtifacts(ctx context.Context) error {
 		if phase != operatorv1alpha1.ExecutePhaseSucceeded && phase != operatorv1alpha1.ExecutePhaseFailed {
 			continue
 		}
-
 		operationID, _, _ := unstructured.NestedString(item.Object, "spec", "operationId")
 		if operationID == "" {
 			operationID = item.GetLabels()[operatorv1alpha1.LabelOperationID]
 		}
-		if operationID == "" {
-			continue
-		}
-
-		f.cleanupForOperation(operationID, phase)
-	}
-	return nil
-}
-
-// cleanupForOperation deletes persisted disk CRs and marker files for a
-// completed operationId, and removes the marker directory when phase is
-// Succeeded (safe after the daemon has finished reading upgrade artifacts).
-func (f *Factory) cleanupForOperation(operationID string, phase operatorv1alpha1.ExecutePhase) {
-	// Delete all persisted CRs for this operationId.
-	for step := range validSteps {
-		if err := f.store.Delete(operationID, step); err != nil {
-			logx.As().Warn().Err(err).
-				Str("reason", ReasonArtifactCleanupFailed.String()).
-				Str("operation_id", operationID).Str("step", step).
-				Msg("failed to delete persisted CR during artifact cleanup")
+		if operationID != "" {
+			terminal[operationID] = phase
 		}
 	}
+	if len(terminal) == 0 {
+		return nil
+	}
 
-	// Remove marker files.
+	// Pass 1: delete persisted disk CRs whose operationId is terminal.
+	// Persisted files are named "<operationId>.<step>.yaml" so they are already
+	// tied to a specific operationId — safe to remove without consulting markers.
+	if persisted, listErr := f.store.List(); listErr == nil {
+		for _, pcr := range persisted {
+			if _, ok := terminal[pcr.OperationID]; ok {
+				if delErr := f.store.Delete(pcr.OperationID, pcr.Step); delErr != nil {
+					logx.As().Warn().Err(delErr).
+						Str("reason", ReasonArtifactCleanupFailed.String()).
+						Str("operation_id", pcr.OperationID).Str("step", pcr.Step).
+						Msg("failed to delete persisted CR during artifact cleanup")
+				}
+			}
+		}
+	}
+
+	// Pass 2: clean marker files and (for Succeeded) the marker directory, but
+	// ONLY when the on-disk execute_immediate.mf resolves to a terminal
+	// operationId. This prevents wiping markers that belong to a newer upgrade
+	// whose Execute CR has not yet reached a terminal phase.
+	diskOpID, _, _, found, err := deriveOperationIDPrimary(f.cfg.MarkerPath)
+	if err != nil || !found {
+		// No current execute_immediate.mf or it can't be parsed — skip marker
+		// cleanup. Persisted CRs were already handled above.
+		return nil
+	}
+	phase, isTerminal := terminal[diskOpID]
+	if !isTerminal {
+		return nil
+	}
+
 	for _, marker := range AllMarkers {
 		p := filepath.Join(f.cfg.MarkerPath, marker)
 		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
 			logx.As().Warn().Err(err).
 				Str("reason", ReasonArtifactCleanupFailed.String()).
-				Str("operation_id", operationID).Str("marker", marker).
+				Str("operation_id", diskOpID).Str("marker", marker).
 				Msg("failed to remove marker file during artifact cleanup")
 		}
 	}
 
-	// Remove the upgrade artifacts directory only when the Execute CR has
-	// reached Succeeded — the daemon reads manifests/config from there until at
-	// least PendingNodeUpgrade, so we must not delete earlier.
+	// Remove the upgrade artifacts directory only for Succeeded — the daemon
+	// reads manifests/config from there until at least PendingNodeUpgrade, so
+	// the directory must not be removed while the upgrade is still in progress.
 	if phase == operatorv1alpha1.ExecutePhaseSucceeded {
 		if err := os.RemoveAll(f.cfg.MarkerPath); err != nil {
 			logx.As().Warn().Err(err).
 				Str("reason", ReasonArtifactCleanupFailed.String()).
-				Str("operation_id", operationID).
+				Str("operation_id", diskOpID).
 				Str("marker_path", f.cfg.MarkerPath).
 				Msg("failed to remove upgrade artifacts directory during cleanup")
 		} else {
 			logx.As().Info().
 				Str("reason", ReasonArtifactCleanup.String()).
-				Str("operation_id", operationID).
+				Str("operation_id", diskOpID).
 				Str("marker_path", f.cfg.MarkerPath).
 				Msg("removed upgrade artifacts directory after Succeeded Execute CR")
 		}
 	} else {
 		logx.As().Info().
 			Str("reason", ReasonArtifactCleanup.String()).
-			Str("operation_id", operationID).
-			Str("phase", string(phase)).
+			Str("operation_id", diskOpID).Str("phase", string(phase)).
 			Msg("cleaned up marker files and persisted CRs for completed upgrade (marker dir retained for diagnostics)")
 	}
+	return nil
 }
 

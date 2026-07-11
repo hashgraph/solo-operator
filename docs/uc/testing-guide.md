@@ -697,6 +697,7 @@ go test ./internal/uc/ -run 'TestRecover|TestCleanup' -v
 | `TestCleanupCompletedArtifacts_FailedRemovesMarkersNotDir` | When an Execute CR has `Failed`, marker files and persisted CRs are removed, but the marker-path directory is preserved for operator diagnostics. |
 | `TestCleanupCompletedArtifacts_InFlightNotCleaned` | An Execute CR in a non-terminal phase (e.g. `PendingNodeUpgrade`) is not touched — marker files and persisted CRs are preserved. |
 | `TestCleanupCompletedArtifacts_NoExecuteCRs` | No Execute CRs in the cluster → no-op, no error. |
+| `TestCleanupCompletedArtifacts_OldSucceededCRDoesNotWipeNewMarkers` | A historical Succeeded Execute CR (from a prior upgrade cycle) does not remove marker files that belong to a newer, in-flight upgrade whose on-disk operationId differs. |
 | `TestRecoverOnStartup_FullFlow` | End-to-end: a crash-window disk CR is re-sent AND a completed-operation's marker files are cleaned, both in one `RecoverOnStartup` call. |
 
 **Control socket** (`internal/uc/control_client_test.go`):
