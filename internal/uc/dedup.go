@@ -45,7 +45,7 @@ const specOperationIDField = "spec.operationId"
 // authoritative cluster query (by spec.operationId field selector on gvr) and
 // records every step+phase it observes. A K8s API error invalidates the cache
 // and is returned to the caller so the action is retried on the next tick.
-func (f *Factory) alreadyCreated(ctx context.Context, gvr schema.GroupVersionResource, operationID, step string) (bool, string, error) {
+func (f *Factory) alreadyCreated(ctx context.Context, gvr schema.GroupVersionResource, operationID, step string) (exists bool, phase string, _ error) {
 	f.mu.Lock()
 	if steps, ok := f.cache[operationID]; ok {
 		if phase, done := steps[step]; done {

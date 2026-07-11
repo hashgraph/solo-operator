@@ -146,18 +146,19 @@ func (u *UC) ensureDirs() error {
 		}
 	}
 
-	// Upgrade dirs share a parent (data/upgrade/); inherit its mode so we don't
-	// override ownership set by the consensus-node container. The walk is capped
-	// at the shared parent so we never inherit permissions from an unrelated root.
-	upgradeParent := filepath.Dir(u.cfg.UpgradePath)
+	// Upgrade dirs inherit permissions from their own parent so we don't override
+	// ownership set by the consensus-node container. Each dir's walk is capped at
+	// its own parent — not a shared ancestor — so the cap is always meaningful
+	// regardless of whether UpgradePath and PreviousUpgradePath are siblings.
 	for _, dir := range []string{u.cfg.UpgradePath, u.cfg.PreviousUpgradePath} {
 		if dir == "" {
 			continue
 		}
-		if err := mkdirInherit(dir, upgradeParent); err != nil {
+		parent := filepath.Dir(dir)
+		if err := mkdirInherit(dir, parent); err != nil {
 			return errx.WithHints(
 				errx.WithReason(errPersist.Wrap(err, "create upgrade dir %s", dir), ReasonWorkDirCreateFailed),
-				"Confirm the upgrade directory parent ("+upgradeParent+") is writable and mounted",
+				"Confirm the upgrade directory parent ("+parent+") is writable and mounted",
 			)
 		}
 	}
@@ -165,9 +166,9 @@ func (u *UC) ensureDirs() error {
 }
 
 // mkdirInherit creates dir (and any missing parents) using the permission bits
-// of the nearest existing ancestor, walking no higher than root (the cap
-// directory). This ensures newly created dirs inherit the mode of the upgrade
-// mount rather than an unrelated filesystem root.
+// of the nearest existing ancestor, walking no higher than root. Callers pass
+// filepath.Dir(dir) as root so the walk is always capped at the direct parent
+// of the directory being created — it never inherits from an unrelated ancestor.
 func mkdirInherit(dir, root string) error {
 	// Walk up from dir to find the nearest existing ancestor, stopping at root.
 	ancestor := dir

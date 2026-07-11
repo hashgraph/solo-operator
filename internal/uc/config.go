@@ -3,6 +3,7 @@
 package uc
 
 import (
+	"path/filepath"
 	"time"
 
 	"github.com/hashgraph/solo-operator/internal/errx"
@@ -138,6 +139,19 @@ func (c Config) Validate() error {
 		return errx.WithHints(
 			errx.WithReason(errConfigInvalid.New("previous-upgrade-path is required"), ReasonConfigInvalid),
 			"Set --previous-upgrade-path to the consensus node's previous upgrade-artifacts directory (e.g. data/upgrade/previous)",
+		)
+	}
+	// Upgrade-path rotation uses os.Rename(current, previous), which is only
+	// atomic when both paths are on the same filesystem. Siblings under the same
+	// parent directory guarantee this — enforce it here so an EXDEV failure at
+	// rotation time is impossible.
+	if filepath.Dir(c.UpgradePath) != filepath.Dir(c.PreviousUpgradePath) {
+		return errx.WithHints(
+			errx.WithReason(
+				errConfigInvalid.New("upgrade-path and previous-upgrade-path must be siblings (same parent directory): got %q and %q",
+					c.UpgradePath, c.PreviousUpgradePath),
+				ReasonConfigInvalid),
+			"Set --upgrade-path and --previous-upgrade-path to directories under the same parent (e.g. data/upgrade/current and data/upgrade/previous)",
 		)
 	}
 	if c.CRPersistPath == "" {
