@@ -68,7 +68,7 @@ func NewFactory(cfg Config, client dynamic.Interface) *Factory {
 //     the file but crashed before the K8s API Create completed.
 //
 // Marker files and upgrade-path rotation (current→previous) are never touched
-// here. Rotation is the exclusive responsibility of ProvisionerProxyMonitor,
+// here. Rotation is the exclusive responsibility of UpgradeOutcomeMonitor,
 // which handles it on every terminal Execute or FreezeAbort CR observation —
 // both on startup (list) and live (watch).
 func (f *Factory) RecoverOnStartup(ctx context.Context) error {

@@ -232,8 +232,8 @@ func clearDir(dir, operationID string) {
 		}
 	}
 	logx.As().Info().
-		Str("reason", ReasonUpgradePackageRotated.String()).
+		Str("reason", ReasonUpgradePackageDiscarded.String()).
 		Str("operation_id", operationID).
 		Str("path", dir).
-		Msg("upgrade package cleared from current (no previous dir)")
+		Msg("upgrade package cleared from current (no previous dir — contents discarded, not archived)")
 }

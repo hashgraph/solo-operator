@@ -50,7 +50,7 @@ func NewMarkerMonitor(cfg Config, client dynamic.Interface) *MarkerMonitor {
 }
 
 // NewMarkerMonitorWithFactory constructs the marker monitor with an injected factory.
-// Use when the factory must be shared (e.g. to wire onPhaseUpdate on ProvisionerProxyMonitor).
+// Use when the factory must be shared (e.g. to wire onPhaseUpdate on UpgradeOutcomeMonitor).
 func NewMarkerMonitorWithFactory(cfg Config, f *Factory) *MarkerMonitor {
 	return &MarkerMonitor{
 		cfg:     cfg,
@@ -66,10 +66,11 @@ func (m *MarkerMonitor) ConnectivityError() *daemonkit.StatusError {
 	return m.connectivityErr.Load()
 }
 
-// RequiredProbe implements daemonkit.ProbableMonitor: the marker directory and
+// RequiredProbe implements daemonkit.ProbableMonitor: the upgrade directory and
 // the CR-persist directory must be present and writable before polling begins.
-// In cluster-only mode the previous upgrade directory is also probed for write
-// access, since the provisioner-proxy rotates upgrade packages into it.
+// The previous upgrade directory is also probed for writability in all modes
+// because UpgradeOutcomeMonitor rotates/discards upgrade packages into it
+// regardless of whether the provisioner-proxy is enabled.
 func (m *MarkerMonitor) RequiredProbe() daemonkit.Probe {
 	probes := []daemonkit.Probe{
 		&daemonkit.TaggedProbe{
@@ -82,13 +83,11 @@ func (m *MarkerMonitor) RequiredProbe() daemonkit.Probe {
 			Reason:     ReasonCRPersistPathUnwritable.String(),
 			Resolution: "Verify the CR-persist directory exists and is writable: ls -la " + m.cfg.CRPersistPath,
 		},
-	}
-	if m.cfg.ProvisionerProxyEnabled() {
-		probes = append(probes, &daemonkit.TaggedProbe{
+		&daemonkit.TaggedProbe{
 			Inner:      &daemonkit.DiskWriteTestProbe{Dir: m.cfg.PreviousUpgradePath},
 			Reason:     ReasonPreviousUpgradePathUnwritable.String(),
 			Resolution: "Verify the previous upgrade directory is writable: ls -la " + m.cfg.PreviousUpgradePath,
-		})
+		},
 	}
 	return daemonkit.NewCompositeProbe("uc-marker", probes...)
 }

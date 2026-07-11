@@ -5,6 +5,7 @@ package uc
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -129,9 +130,10 @@ func (m *UpgradeOutcomeMonitor) Run(ctx context.Context) error {
 			return nil
 		}
 		if listErr != nil {
-			m.setConnectivityError(ReasonProvisionerProxyListError.String(), listErr.Error(),
-				fmt.Sprintf("Verify RBAC for networkupgradeexecutes in namespace %s", m.cfg.Namespace))
-			logx.As().Warn().Err(listErr).Str("reason", ReasonProvisionerProxyListError.String()).
+			listReason, _ := errx.ReasonOf(listErr)
+			m.setConnectivityError(listReason.String(), listErr.Error(),
+				fmt.Sprintf("Verify RBAC for networkupgradeexecutes and networkupgradefreezeaborts in namespace %s", m.cfg.Namespace))
+			logx.As().Warn().Err(listErr).Str("reason", listReason.String()).
 				Dur("retry_in", backoff).Msg("list error — retrying")
 			if !sleepCtx(ctx, backoff) {
 				return nil
@@ -155,9 +157,9 @@ func (m *UpgradeOutcomeMonitor) Run(ctx context.Context) error {
 		}
 		if isAuthError(err) {
 			m.setConnectivityError(ReasonProvisionerProxyAuthError.String(), err.Error(),
-				"Restore RBAC for the UC ServiceAccount on networkupgradeexecutes")
+				"Restore RBAC for the UC ServiceAccount on networkupgradeexecutes and networkupgradefreezeaborts")
 			logx.As().Warn().Err(err).Str("reason", ReasonProvisionerProxyAuthError.String()).
-				Dur("retry_in", backoff).Msg("auth error watching NetworkUpgradeExecute")
+				Dur("retry_in", backoff).Msg("auth error watching NetworkUpgrade* CRs")
 		} else {
 			m.setConnectivityError(ReasonProvisionerProxyWatchError.String(), err.Error(),
 				"Check connectivity to the Kubernetes API server")
@@ -236,6 +238,11 @@ func (m *UpgradeOutcomeMonitor) listAndSeed(ctx context.Context) (executeRV, abo
 		}
 	}
 	// Oldest-first so the longest-waiting operation acquires the slot first.
+	sort.Slice(pending, func(i, j int) bool {
+		ti := pending[i].GetCreationTimestamp().Time
+		tj := pending[j].GetCreationTimestamp().Time
+		return ti.Before(tj)
+	})
 	for _, cr := range pending {
 		if proxy != nil {
 			proxy.Handle(ctx, cr)

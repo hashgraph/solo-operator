@@ -116,7 +116,7 @@ Notes:
 - Every flag can also be set via a `UC_`-prefixed env var, e.g.
   `UC_UPGRADE_PATH`, `UC_POLL_INTERVAL`. CLI flag > env var > default.
 
-On startup you should see a `MarkerMonitorStarted` log line with the marker path
+On startup you should see a `MarkerMonitorStarted` log line with the upgrade path
 and poll interval.
 
 ---
@@ -451,8 +451,8 @@ Processing this marker also reverts the poll cadence to `--poll-interval` (§5).
 ## 4d. Upgrade-path rotation (`current → previous`) on terminal state
 
 Marker files are **never deleted individually**. The upgrade-path directory is
-rotated (`current → previous`) by the `provisioner-proxy-monitor` whenever an
-upgrade reaches any terminal state:
+rotated (`current → previous`) by the `upgrade-outcome-monitor` whenever an
+upgrade reaches a terminal state:
 
 | CR | Phase | `current/` | `previous/` | Rationale |
 |---|---|---|---|---|
@@ -482,7 +482,7 @@ To observe rotation in cluster-only mode:
      --subresource=status --type=merge \
      -p '{"status":{"phase":"Succeeded"}}'
    ```
-2. Watch the provisioner-proxy-monitor log for a `UpgradePackageRotated` line.
+2. Watch the upgrade-outcome-monitor log for a `UpgradePackageRotated` line.
 3. Confirm `current` is empty and `previous` holds the package:
    ```bash
    ls "$UCDIR/current"    # empty

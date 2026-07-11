@@ -145,7 +145,9 @@ func (c Config) Validate() error {
 	// atomic when both paths are on the same filesystem. Siblings under the same
 	// parent directory guarantee this — enforce it here so an EXDEV failure at
 	// rotation time is impossible.
-	if filepath.Dir(c.UpgradePath) != filepath.Dir(c.PreviousUpgradePath) {
+	upgradeDir := filepath.Dir(filepath.Clean(c.UpgradePath))
+	previousDir := filepath.Dir(filepath.Clean(c.PreviousUpgradePath))
+	if upgradeDir != previousDir {
 		return errx.WithHints(
 			errx.WithReason(
 				errConfigInvalid.New("upgrade-path and previous-upgrade-path must be siblings (same parent directory): got %q and %q",
