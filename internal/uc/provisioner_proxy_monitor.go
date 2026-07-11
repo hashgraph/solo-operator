@@ -13,6 +13,7 @@ import (
 	"github.com/automa-saga/daemonkit"
 	"github.com/automa-saga/logx"
 	"github.com/joomcode/errorx"
+	"github.com/rs/zerolog"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -223,6 +224,16 @@ func (pm *ProvisionerProxyMonitor) listAndSeed(ctx context.Context) (string, err
 	}
 	pm.mu.Unlock()
 
+	// Dispatch Succeeded CRs first so current is rotated before any new
+	// ReadyForProvisionerDaemon transition acquires the slot. rotateUpgradePackage
+	// is idempotent — a no-op if current is already empty.
+	for i := range list.Items {
+		phase, _, _ := unstructured.NestedString(list.Items[i].Object, "status", "phase")
+		if ExecutePhaseOf(phase) == operatorv1alpha1.ExecutePhaseSucceeded {
+			pm.handleSucceeded(&list.Items[i])
+		}
+	}
+
 	// Oldest-first so the longest-waiting operation acquires the slot first.
 	var pending []*unstructured.Unstructured
 	for i := range list.Items {
@@ -290,12 +301,19 @@ func (pm *ProvisionerProxyMonitor) runWatch(ctx context.Context, resourceVersion
 	}
 }
 
-// handleEvent advances a CR at ReadyForProvisionerDaemon to PendingNodeUpgrade,
-// deduplicated by operationId at two levels (mirroring solo-provisioner-daemon):
-// completedOpIDs stops a rerun of an already-advanced operation, and activeOpID
-// stops a second transition running simultaneously.
+// handleEvent dispatches on the CR's current phase:
+//   - ReadyForProvisionerDaemon: deploys config CRs and advances to PendingNodeUpgrade.
+//   - Succeeded: rotates the upgrade package out of the current directory.
+//
+// The ReadyForProvisionerDaemon path is deduplicated by operationId at two levels
+// (mirroring solo-provisioner-daemon): completedOpIDs stops a rerun of an
+// already-advanced operation, and activeOpID stops concurrent transitions.
 func (pm *ProvisionerProxyMonitor) handleEvent(ctx context.Context, cr *unstructured.Unstructured) {
 	phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
+	if ExecutePhaseOf(phase) == operatorv1alpha1.ExecutePhaseSucceeded {
+		pm.handleSucceeded(cr)
+		return
+	}
 	if ExecutePhaseOf(phase) != operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon {
 		return
 	}
@@ -303,6 +321,14 @@ func (pm *ProvisionerProxyMonitor) handleEvent(ctx context.Context, cr *unstruct
 	if operationID == "" {
 		logx.As().Warn().Str("reason", ReasonProvisionerProxyMissingOperationID.String()).
 			Str("cr_name", cr.GetName()).Msg("Execute CR has no spec.operationId — ignoring")
+		return
+	}
+
+	// Validate that this CR's operationId matches the current upgrade on disk
+	// before acquiring the slot. Without this check a stale ReadyForProvisionerDaemon
+	// CR from a prior cycle (whose phase patch was lost) would incorrectly trigger a
+	// new transition when the UC restarts with a different upgrade in current.
+	if !pm.matchesDiskOperationID(operationID, cr.GetName(), map[string]string{"phase": string(operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon)}) {
 		return
 	}
 
@@ -385,11 +411,60 @@ func (pm *ProvisionerProxyMonitor) handleExecute(ctx context.Context, cr *unstru
 	logx.As().Info().Str("reason", ReasonPendingNodeUpgrade.String()).
 		Str("operation_id", operationID).Str("cr_name", cr.GetName()).
 		Msg("advanced Execute CR to PendingNodeUpgrade")
-
-	// Rotate the upgrade package out of current now that the install succeeded.
-	// Errors are logged but not fatal — the phase advance already landed.
-	rotateUpgradePackage(pm.cfg.UpgradePath, pm.cfg.PreviousUpgradePath, operationID)
 	return nil
+}
+
+// handleSucceeded rotates the upgrade package when the Execute CR reaches
+// Succeeded. Before rotating it confirms the CR's operationId matches the one
+// on disk (derived from execute_immediate.mf) so that a stale Succeeded CR from
+// a previous upgrade cycle cannot clear a new upgrade package currently in the
+// current directory.
+func (pm *ProvisionerProxyMonitor) handleSucceeded(cr *unstructured.Unstructured) {
+	operationID := operationIDOf(cr)
+	if operationID == "" {
+		return
+	}
+
+	if !pm.matchesDiskOperationID(operationID, cr.GetName(), map[string]string{"phase": string(operatorv1alpha1.ExecutePhaseSucceeded)}) {
+		return
+	}
+
+	logx.As().Info().Str("reason", ReasonUpgradePackageRotated.String()).
+		Str("operation_id", operationID).Str("cr_name", cr.GetName()).
+		Msg("Execute CR succeeded — rotating upgrade package")
+	rotateUpgradePackage(pm.cfg.UpgradePath, pm.cfg.PreviousUpgradePath, operationID)
+}
+
+// matchesDiskOperationID returns true only when operationID matches the one
+// derived from execute_immediate.mf on disk. extra is merged into every log
+// line so callers can inject context (e.g. {"phase": "Succeeded"}) without
+// coupling this helper to a specific call site. Returns false (with a log) on
+// IO error, missing marker, or mismatch.
+func (pm *ProvisionerProxyMonitor) matchesDiskOperationID(operationID, crName string, extra map[string]string) bool {
+	addExtra := func(ev *zerolog.Event) *zerolog.Event {
+		for k, v := range extra {
+			ev = ev.Str(k, v)
+		}
+		return ev.Str("operation_id", operationID).Str("cr_name", crName)
+	}
+
+	diskOpID, _, _, found, err := deriveOperationIDPrimary(pm.cfg.UpgradePath)
+	if err != nil {
+		addExtra(logx.As().Warn().Err(err).Str("reason", ReasonUpgradePackageRotateFailed.String())).
+			Msg("could not read disk operationId — skipping")
+		return false
+	}
+	if !found {
+		addExtra(logx.As().Warn().Str("reason", ReasonProvisionerProxyMissingOperationID.String())).
+			Msg("no execute_immediate.mf on disk — skipping (current may be empty)")
+		return false
+	}
+	if diskOpID != operationID {
+		addExtra(logx.As().Info().Str("disk_operation_id", diskOpID)).
+			Msg("CR operationId does not match disk — skipping (stale CR)")
+		return false
+	}
+	return true
 }
 
 // operationIDOf returns the authoritative operation id from spec.operationId.
