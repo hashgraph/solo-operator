@@ -20,9 +20,10 @@ import (
 //
 //  1. MarkerMonitor — polls marker files and creates NetworkUpgrade* CRs (the
 //     core UC behaviour, all deployment modes).
-//  2. ProvisionerProxyMonitor — cluster-only mode only; stands in for the host
-//     solo-provisioner daemon, advancing Execute CRs ReadyForProvisionerDaemon ->
-//     PendingNodeUpgrade.
+//  2. UpgradeOutcomeMonitor — watches Execute and FreezeAbort CRs for terminal
+//     phases; rotates/discards the upgrade package accordingly (all modes). In
+//     cluster-only mode it also drives ProvisionerProxy, which advances Execute
+//     CRs from ReadyForProvisionerDaemon -> PendingNodeUpgrade.
 //
 // A daemonkit.Server exposes a Unix-socket control plane (/health, /status).
 type UC struct {
@@ -40,20 +41,28 @@ func New(cfg Config) (*UC, error) {
 	}
 
 	factory := NewFactory(cfg, client)
+
+	outcomeCfg := UpgradeOutcomeMonitorConfig{
+		Namespace:           cfg.Namespace,
+		NodeID:              cfg.NodeID,
+		UpgradePath:         cfg.UpgradePath,
+		PreviousUpgradePath: cfg.PreviousUpgradePath,
+	}
+	outcomeMonitor := NewUpgradeOutcomeMonitorWithClient(outcomeCfg, client)
+	outcomeMonitor.onPhaseUpdate = factory.markCreated
+
+	if cfg.ProvisionerProxyEnabled() {
+		proxy := NewProvisionerProxyWithClient(
+			ProvisionerProxyConfig{Namespace: cfg.Namespace, NodeID: cfg.NodeID},
+			client)
+		outcomeMonitor.mu.Lock()
+		outcomeMonitor.proxy = proxy
+		outcomeMonitor.mu.Unlock()
+	}
+
 	monitors := []daemonkit.MonitorRunner{
 		NewMarkerMonitorWithFactory(cfg, factory),
-	}
-	if cfg.ProvisionerProxyEnabled() {
-		pm := NewProvisionerProxyMonitorWithClient(
-			ProvisionerProxyMonitorConfig{
-				Namespace:           cfg.Namespace,
-				NodeID:              cfg.NodeID,
-				UpgradePath:         cfg.UpgradePath,
-				PreviousUpgradePath: cfg.PreviousUpgradePath,
-			},
-			client)
-		pm.onPhaseUpdate = factory.markCreated
-		monitors = append(monitors, pm)
+		outcomeMonitor,
 	}
 
 	return &UC{cfg: cfg, client: client, monitors: monitors}, nil
