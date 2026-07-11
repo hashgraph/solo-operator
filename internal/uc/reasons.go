@@ -44,8 +44,9 @@ const (
 	ReasonCRPersistCorrupt        errx.Reason = "CRPersistCorrupt"
 	ReasonCRPersistCleanupFailed  errx.Reason = "CRPersistCleanupFailed"
 	ReasonEventLogPruneFailed     errx.Reason = "EventLogPruneFailed"
-	ReasonUpgradePathUnreadable   errx.Reason = "MarkerPathUnreadable"
-	ReasonCRPersistPathUnwritable errx.Reason = "CRPersistPathUnwritable"
+	ReasonUpgradePathUnreadable         errx.Reason = "UpgradePathUnreadable"
+	ReasonPreviousUpgradePathUnwritable errx.Reason = "PreviousUpgradePathUnwritable"
+	ReasonCRPersistPathUnwritable       errx.Reason = "CRPersistPathUnwritable"
 
 	// Kubernetes API.
 	ReasonInClusterConfigFailed errx.Reason = "InClusterConfigFailed"

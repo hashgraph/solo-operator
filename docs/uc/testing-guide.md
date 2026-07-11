@@ -88,7 +88,7 @@ testing, point every path at a scratch directory so nothing requires root:
 
 ```bash
 export UCDIR=$(mktemp -d)
-mkdir -p "$UCDIR/markers" "$UCDIR/events" "$UCDIR/crs" "$UCDIR/backup"
+mkdir -p "$UCDIR/current" "$UCDIR/previous" "$UCDIR/events" "$UCDIR/crs" "$UCDIR/backup"
 
 ./bin/uc \
   --mode cluster-only \
@@ -96,7 +96,8 @@ mkdir -p "$UCDIR/markers" "$UCDIR/events" "$UCDIR/crs" "$UCDIR/backup"
   --orbit my-orbit \
   --namespace solo \
   --kubeconfig "$HOME/.kube/config" \
-  --marker-path  "$UCDIR/markers" \
+  --upgrade-path  "$UCDIR/current" \
+  --previous-upgrade-path "$UCDIR/previous" \
   --events-path  "$UCDIR/events" \
   --cr-persist-path "$UCDIR/crs" \
   --backup-path  "$UCDIR/backup" \
@@ -126,7 +127,7 @@ In a second terminal, drop marker files into the marker directory. The loop
 re-scans every poll interval and dispatches each marker it finds.
 
 ```bash
-touch "$UCDIR/markers/freeze_scheduled.mf"
+touch "$UCDIR/current/freeze_scheduled.mf"
 ```
 
 Watch the first terminal for (in `debug`):
@@ -153,7 +154,7 @@ The four recognised markers and what each routes to:
 `execute_immediate.mf` is the first marker the consensus node writes when it
 extracts an upgrade package. The CN unzips the archive **into the marker
 directory itself** and writes the marker there too, so the package manifests
-live under `<marker-path>/manifests/`. The handler reads
+live under `<upgrade-path>/manifests/`. The handler reads
 `manifests/consensus-node-components.yaml`, mints an `operationId`, and creates a
 `NetworkUpgradePrepare` CR.
 
@@ -170,11 +171,11 @@ the operator's deterministic verification passes). Requires `crane` + `jq`
 ( cd test/dev && task setup && task build )   # -> test/dev/staging/build-v<ver>.zip
 
 # Extract it into the marker dir, mirroring what the CN does on-node:
-unzip -q test/dev/staging/build-v*.zip -d "$UCDIR/markers"
-ls "$UCDIR/markers/manifests/consensus-node-components.yaml"   # present
+unzip -q test/dev/staging/build-v*.zip -d "$UCDIR/current"
+ls "$UCDIR/current/manifests/consensus-node-components.yaml"   # present
 
 # Now trigger the handler
-touch "$UCDIR/markers/execute_immediate.mf"
+touch "$UCDIR/current/execute_immediate.mf"
 ```
 
 See [test/dev/README.md](../../test/dev/README.md) for build options (version,
@@ -186,8 +187,8 @@ exercising the UC parse/create path, but it will not pass real deterministic
 verification (use Option A for that):
 
 ```bash
-mkdir -p "$UCDIR/markers/manifests"
-cat > "$UCDIR/markers/manifests/consensus-node-components.yaml" <<'YAML'
+mkdir -p "$UCDIR/current/manifests"
+cat > "$UCDIR/current/manifests/consensus-node-components.yaml" <<'YAML'
 schemaVersion: 1
 images:
   consensusNode:
@@ -202,7 +203,7 @@ images:
 YAML
 
 # Now trigger the handler
-touch "$UCDIR/markers/execute_immediate.mf"
+touch "$UCDIR/current/execute_immediate.mf"
 ```
 
 Watch the first terminal for a `CRDelivered` log line with the `operation_id`
@@ -292,7 +293,7 @@ With the Prepare CR from §4a in `Succeeded` phase:
 
 ```bash
 # Write current time (seconds since epoch) as the freeze-scheduled time.
-echo -n "$(date +%s)" > "$UCDIR/markers/freeze_scheduled.mf"
+echo -n "$(date +%s)" > "$UCDIR/current/freeze_scheduled.mf"
 ```
 
 Watch for a `CRDelivered` log line, then confirm the CR:
@@ -318,9 +319,9 @@ To confirm the guard works, create a stale marker (older than `execute_immediate
 ```bash
 # Set mtime to one hour in the past (before execute_immediate.mf was written).
 STALE_TIME=$(date -v-1H +%s 2>/dev/null || date -d '-1 hour' +%s)
-echo -n "$STALE_TIME" > "$UCDIR/markers/freeze_scheduled.mf"
+echo -n "$STALE_TIME" > "$UCDIR/current/freeze_scheduled.mf"
 touch -t "$(date -d @$STALE_TIME '+%Y%m%d%H%M.%S' 2>/dev/null || date -r $STALE_TIME '+%Y%m%d%H%M.%S')" \
-  "$UCDIR/markers/freeze_scheduled.mf"
+  "$UCDIR/current/freeze_scheduled.mf"
 ```
 
 Watch for a `StaleMarker` WARN log: `"stale freeze_scheduled.mf — marker predates
@@ -328,7 +329,7 @@ current execute_immediate.mf; skipping until refreshed"`. No Freeze CR will be
 created. Overwrite the marker with a fresh epoch time to resume:
 
 ```bash
-echo -n "$(date +%s)" > "$UCDIR/markers/freeze_scheduled.mf"
+echo -n "$(date +%s)" > "$UCDIR/current/freeze_scheduled.mf"
 ```
 
 ### Exercising the fallback path manually
@@ -337,7 +338,7 @@ Remove `execute_immediate.mf` while `freeze_scheduled.mf` is present to trigger
 the fallback:
 
 ```bash
-rm "$UCDIR/markers/execute_immediate.mf"
+rm "$UCDIR/current/execute_immediate.mf"
 ```
 
 Watch for `FreezeWithoutPrepare` WARN: `"execute_immediate.mf missing — attempting
@@ -390,7 +391,7 @@ With `execute_immediate.mf` and the manifest in place (from §4a, or fresh from
 Option B):
 
 ```bash
-touch "$UCDIR/markers/freeze_aborted.mf"
+touch "$UCDIR/current/freeze_aborted.mf"
 ```
 
 Watch for a `CRDelivered` line, then confirm the CR:
@@ -420,9 +421,9 @@ kubectl get networkupgradeprepares -n solo   # the Prepare CR is still there
 ```bash
 # Write abort marker with mtime in the past (before execute_immediate.mf).
 STALE_TIME=$(date -v-1H +%s 2>/dev/null || date -d '-1 hour' +%s)
-touch "$UCDIR/markers/freeze_aborted.mf"
+touch "$UCDIR/current/freeze_aborted.mf"
 touch -t "$(date -d @$STALE_TIME '+%Y%m%d%H%M.%S' 2>/dev/null || \
-  date -r $STALE_TIME '+%Y%m%d%H%M.%S')" "$UCDIR/markers/freeze_aborted.mf"
+  date -r $STALE_TIME '+%Y%m%d%H%M.%S')" "$UCDIR/current/freeze_aborted.mf"
 ```
 
 Watch for `StaleMarker` WARN: `"stale freeze_aborted.mf — marker predates current
@@ -434,8 +435,8 @@ Drop `freeze_aborted.mf` into a fresh `$UCDIR` with no `execute_immediate.mf` an
 no manifest — all fallbacks exhausted:
 
 ```bash
-mkdir -p "$UCDIR2/markers"
-touch "$UCDIR2/markers/freeze_aborted.mf"
+mkdir -p "$UCDIR2/current"
+touch "$UCDIR2/current/freeze_aborted.mf"
 # run UC pointing at $UCDIR2 — watch for OperationIDExhausted ERROR log
 ```
 
@@ -455,14 +456,14 @@ minimise `now_frozen.mf` detection latency.
 
 ```bash
 # 1. Enter the freeze window — interval drops to freeze-poll-interval
-touch "$UCDIR/markers/freeze_scheduled.mf"
+touch "$UCDIR/current/freeze_scheduled.mf"
 ```
 
 Look for a `PollIntervalChanged` log line with `from=5s to=1s`.
 
 ```bash
 # 2. End the freeze window — interval reverts to poll-interval
-touch "$UCDIR/markers/now_frozen.mf"      # OR freeze_aborted.mf
+touch "$UCDIR/current/now_frozen.mf"      # OR freeze_aborted.mf
 ```
 
 Look for a `PollIntervalChanged` line with `from=1s to=5s`.
@@ -693,8 +694,8 @@ go test ./internal/uc/ -run 'TestRecover|TestCleanup' -v
 | `TestRecoverPersistedCRs_DiskOnlyResent` | A CR persisted to disk but absent from the cluster is re-sent to the K8s API on startup; the disk copy is deleted and the dedup cache is updated. |
 | `TestRecoverPersistedCRs_AlreadyInCluster` | A disk CR that was already delivered before the crash has its stale disk copy removed without creating a duplicate CR. |
 | `TestRecoverPersistedCRs_NoPersisted` | No persisted files → no-op, no error. |
-| `TestCleanupCompletedArtifacts_SucceededRemovesAll` | When an Execute CR has reached `Succeeded`, startup cleanup removes persisted CRs, marker files, and the entire upgrade artifacts directory (marker-path). |
-| `TestCleanupCompletedArtifacts_FailedRemovesMarkersNotDir` | When an Execute CR has `Failed`, marker files and persisted CRs are removed, but the marker-path directory is preserved for operator diagnostics. |
+| `TestCleanupCompletedArtifacts_SucceededRemovesAll` | When an Execute CR has reached `Succeeded`, startup cleanup removes persisted CRs, marker files, and the entire upgrade artifacts directory (upgrade-path). |
+| `TestCleanupCompletedArtifacts_FailedRemovesMarkersNotDir` | When an Execute CR has `Failed`, marker files and persisted CRs are removed, but the upgrade-path directory is preserved for operator diagnostics. |
 | `TestCleanupCompletedArtifacts_InFlightNotCleaned` | An Execute CR in a non-terminal phase (e.g. `PendingNodeUpgrade`) is not touched — marker files and persisted CRs are preserved. |
 | `TestCleanupCompletedArtifacts_NoExecuteCRs` | No Execute CRs in the cluster → no-op, no error. |
 | `TestCleanupCompletedArtifacts_OldSucceededCRDoesNotWipeNewMarkers` | A historical Succeeded Execute CR (from a prior upgrade cycle) does not remove marker files that belong to a newer, in-flight upgrade whose on-disk operationId differs. |

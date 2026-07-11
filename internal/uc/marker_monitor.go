@@ -80,7 +80,7 @@ func (m *MarkerMonitor) RequiredProbe() daemonkit.Probe {
 	if m.cfg.ProvisionerProxyEnabled() {
 		probes = append(probes, &daemonkit.TaggedProbe{
 			Inner:      &daemonkit.DiskWriteTestProbe{Dir: m.cfg.PreviousUpgradePath},
-			Reason:     ReasonUpgradePathUnreadable.String(),
+			Reason:     ReasonPreviousUpgradePathUnwritable.String(),
 			Resolution: "Verify the previous upgrade directory is writable: ls -la " + m.cfg.PreviousUpgradePath,
 		})
 	}
@@ -98,7 +98,7 @@ func (m *MarkerMonitor) RequiredProbe() daemonkit.Probe {
 func (m *MarkerMonitor) Run(ctx context.Context) error {
 	logx.As().Info().
 		Str("reason", ReasonMarkerMonitorStarted.String()).
-		Str("marker_path", m.cfg.UpgradePath).
+		Str("upgrade_path", m.cfg.UpgradePath).
 		Dur("poll_interval", m.cfg.PollInterval).
 		Msg("marker monitor started")
 
