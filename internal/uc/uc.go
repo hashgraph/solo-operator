@@ -44,7 +44,12 @@ func New(cfg Config) (*UC, error) {
 	}
 	if cfg.ProvisionerProxyEnabled() {
 		monitors = append(monitors, NewProvisionerProxyMonitorWithClient(
-			ProvisionerProxyMonitorConfig{Namespace: cfg.Namespace, NodeID: cfg.NodeID},
+			ProvisionerProxyMonitorConfig{
+				Namespace:           cfg.Namespace,
+				NodeID:              cfg.NodeID,
+				UpgradePath:         cfg.UpgradePath,
+				PreviousUpgradePath: cfg.PreviousUpgradePath,
+			},
 			client))
 	}
 
@@ -118,6 +123,8 @@ func (u *UC) status(tracker *daemonkit.StatusTracker) map[string]daemonkit.Monit
 }
 
 // ensureDirs creates the UC working directories if they do not exist.
+// Upgrade directories (current/previous) are created with permissions inherited
+// from their parent so ownership matches the consensus-node mount.
 func (u *UC) ensureDirs() error {
 	for _, dir := range []string{
 		u.cfg.EventsPath,
@@ -135,5 +142,46 @@ func (u *UC) ensureDirs() error {
 			)
 		}
 	}
+
+	// Upgrade dirs share a parent (data/upgrade/); inherit its mode so we don't
+	// override ownership set by the consensus-node container. The walk is capped
+	// at the shared parent so we never inherit permissions from an unrelated root.
+	upgradeParent := filepath.Dir(u.cfg.UpgradePath)
+	for _, dir := range []string{u.cfg.UpgradePath, u.cfg.PreviousUpgradePath} {
+		if dir == "" {
+			continue
+		}
+		if err := mkdirInherit(dir, upgradeParent); err != nil {
+			return errx.WithHints(
+				errx.WithReason(errPersist.Wrap(err, "create upgrade dir %s", dir), ReasonWorkDirCreateFailed),
+				"Confirm the upgrade directory parent ("+upgradeParent+") is writable and mounted",
+			)
+		}
+	}
 	return nil
+}
+
+// mkdirInherit creates dir (and any missing parents) using the permission bits
+// of the nearest existing ancestor, walking no higher than root (the cap
+// directory). This ensures newly created dirs inherit the mode of the upgrade
+// mount rather than an unrelated filesystem root.
+func mkdirInherit(dir, root string) error {
+	// Walk up from dir to find the nearest existing ancestor, stopping at root.
+	ancestor := dir
+	for ancestor != root {
+		if _, err := os.Stat(ancestor); err == nil {
+			break // this ancestor exists — use its mode
+		}
+		parent := filepath.Dir(ancestor)
+		if parent == ancestor {
+			break // filesystem root reached before cap
+		}
+		ancestor = parent
+	}
+	info, err := os.Stat(ancestor)
+	if err != nil {
+		// root itself doesn't exist — fall back to a safe default.
+		return os.MkdirAll(dir, 0o750)
+	}
+	return os.MkdirAll(dir, info.Mode().Perm())
 }

@@ -196,7 +196,7 @@ func (f *Factory) cleanupCompletedArtifacts(ctx context.Context) error {
 	// ONLY when the on-disk execute_immediate.mf resolves to a terminal
 	// operationId. This prevents wiping markers that belong to a newer upgrade
 	// whose Execute CR has not yet reached a terminal phase.
-	diskOpID, _, _, found, err := deriveOperationIDPrimary(f.cfg.MarkerPath)
+	diskOpID, _, _, found, err := deriveOperationIDPrimary(f.cfg.UpgradePath)
 	if err != nil || !found {
 		// No current execute_immediate.mf or it can't be parsed — skip marker
 		// cleanup. Persisted CRs were already handled above.
@@ -208,7 +208,7 @@ func (f *Factory) cleanupCompletedArtifacts(ctx context.Context) error {
 	}
 
 	for _, marker := range AllMarkers {
-		p := filepath.Join(f.cfg.MarkerPath, marker)
+		p := filepath.Join(f.cfg.UpgradePath, marker)
 		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
 			logx.As().Warn().Err(err).
 				Str("reason", ReasonArtifactCleanupFailed.String()).
@@ -221,17 +221,17 @@ func (f *Factory) cleanupCompletedArtifacts(ctx context.Context) error {
 	// reads manifests/config from there until at least PendingNodeUpgrade, so
 	// the directory must not be removed while the upgrade is still in progress.
 	if phase == operatorv1alpha1.ExecutePhaseSucceeded {
-		if err := os.RemoveAll(f.cfg.MarkerPath); err != nil {
+		if err := os.RemoveAll(f.cfg.UpgradePath); err != nil {
 			logx.As().Warn().Err(err).
 				Str("reason", ReasonArtifactCleanupFailed.String()).
 				Str("operation_id", diskOpID).
-				Str("marker_path", f.cfg.MarkerPath).
+				Str("marker_path", f.cfg.UpgradePath).
 				Msg("failed to remove upgrade artifacts directory during cleanup")
 		} else {
 			logx.As().Info().
 				Str("reason", ReasonArtifactCleanup.String()).
 				Str("operation_id", diskOpID).
-				Str("marker_path", f.cfg.MarkerPath).
+				Str("marker_path", f.cfg.UpgradePath).
 				Msg("removed upgrade artifacts directory after Succeeded Execute CR")
 		}
 	} else {
@@ -242,4 +242,3 @@ func (f *Factory) cleanupCompletedArtifacts(ctx context.Context) error {
 	}
 	return nil
 }
-

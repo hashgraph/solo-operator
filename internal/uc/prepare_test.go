@@ -80,7 +80,7 @@ func testConfig(markerRoot, crPersist string) Config {
 		NodeID:        0,
 		Orbit:         "my-orbit",
 		Namespace:     "solo",
-		MarkerPath:    markerRoot,
+		UpgradePath:   markerRoot,
 		CRPersistPath: crPersist,
 	}
 }

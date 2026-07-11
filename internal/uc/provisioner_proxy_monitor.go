@@ -40,6 +40,11 @@ type ProvisionerProxyMonitorConfig struct {
 	Namespace string
 	// NodeID is the Hedera node identifier (a non-negative integer), used in log context.
 	NodeID int
+	// UpgradePath is the current upgrade-package directory (data/upgrade/current).
+	UpgradePath string
+	// PreviousUpgradePath is the previous upgrade-package directory (data/upgrade/previous),
+	// used as the rotation target after a successful install.
+	PreviousUpgradePath string
 }
 
 // ProvisionerProxyMonitor stands in for the host-level solo-provisioner daemon
@@ -380,6 +385,10 @@ func (pm *ProvisionerProxyMonitor) handleExecute(ctx context.Context, cr *unstru
 	logx.As().Info().Str("reason", ReasonPendingNodeUpgrade.String()).
 		Str("operation_id", operationID).Str("cr_name", cr.GetName()).
 		Msg("advanced Execute CR to PendingNodeUpgrade")
+
+	// Rotate the upgrade package out of current now that the install succeeded.
+	// Errors are logged but not fatal — the phase advance already landed.
+	rotateUpgradePackage(pm.cfg.UpgradePath, pm.cfg.PreviousUpgradePath, operationID)
 	return nil
 }
 

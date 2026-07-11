@@ -44,7 +44,7 @@ const (
 	ReasonCRPersistCorrupt        errx.Reason = "CRPersistCorrupt"
 	ReasonCRPersistCleanupFailed  errx.Reason = "CRPersistCleanupFailed"
 	ReasonEventLogPruneFailed     errx.Reason = "EventLogPruneFailed"
-	ReasonMarkerPathUnreadable    errx.Reason = "MarkerPathUnreadable"
+	ReasonUpgradePathUnreadable   errx.Reason = "MarkerPathUnreadable"
 	ReasonCRPersistPathUnwritable errx.Reason = "CRPersistPathUnwritable"
 
 	// Kubernetes API.
@@ -91,6 +91,8 @@ const (
 	ReasonProvisionerProxyTransitionPanic    errx.Reason = "ProvisionerProxyTransitionPanic"
 	ReasonProvisionerProxyWatchError         errx.Reason = "ProvisionerProxyWatchError"
 	ReasonProvisionerProxyWatchPanic         errx.Reason = "ProvisionerProxyWatchPanic"
+	ReasonUpgradePackageRotated              errx.Reason = "UpgradePackageRotated"
+	ReasonUpgradePackageRotateFailed         errx.Reason = "UpgradePackageRotateFailed"
 
 	// systemd notify.
 	ReasonSdNotifyReadyFailed    errx.Reason = "SdNotifyReadyFailed"

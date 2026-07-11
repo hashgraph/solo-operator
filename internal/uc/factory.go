@@ -111,7 +111,7 @@ func (f *Factory) RecoverOnStartup(ctx context.Context) error {
 // The UC copies spec.images verbatim and does NOT do registry selection or
 // layer-hash verification — that is the operator's PrepareReconciler.
 func (f *Factory) HandleExecuteImmediate(ctx context.Context) error {
-	operationID, _, manifest, found, err := deriveOperationIDPrimary(f.cfg.MarkerPath)
+	operationID, _, manifest, found, err := deriveOperationIDPrimary(f.cfg.UpgradePath)
 	if err != nil {
 		if errorx.IsOfType(err, errManifestInvalid) {
 			// ManifestInvalid is terminal — re-reading the same bytes will not fix
@@ -225,7 +225,7 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 // the operationId via manifest version (cluster + disk Prepare lookup).
 func (f *Factory) HandleFreezeScheduled(ctx context.Context) error {
 	// Stat freeze marker for mtime — needed for staleness guards.
-	freezePath := filepath.Join(f.cfg.MarkerPath, MarkerFreezeScheduled)
+	freezePath := filepath.Join(f.cfg.UpgradePath, MarkerFreezeScheduled)
 	freezeInfo, err := os.Stat(freezePath)
 	if err != nil {
 		return errx.WithReason(errPersist.Wrap(err, "stat marker %s", MarkerFreezeScheduled), ReasonMarkerStatFailed)
@@ -233,7 +233,7 @@ func (f *Factory) HandleFreezeScheduled(ctx context.Context) error {
 	freezeMarkerMtime := freezeInfo.ModTime()
 
 	// Parse scheduledTime from file content (epoch seconds written by CN), not mtime.
-	scheduledTime, err := parseFreezeScheduledTime(f.cfg.MarkerPath)
+	scheduledTime, err := parseFreezeScheduledTime(f.cfg.UpgradePath)
 	if err != nil {
 		if errorx.IsOfType(err, errManifestInvalid) {
 			logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).
@@ -245,7 +245,7 @@ func (f *Factory) HandleFreezeScheduled(ctx context.Context) error {
 	}
 
 	// Primary: re-derive operationId from co-present execute_immediate.mf.
-	operationID, executeMtime, _, found, err := deriveOperationIDPrimary(f.cfg.MarkerPath)
+	operationID, executeMtime, _, found, err := deriveOperationIDPrimary(f.cfg.UpgradePath)
 	if err != nil {
 		if errorx.IsOfType(err, errManifestInvalid) {
 			logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).
@@ -271,7 +271,7 @@ func (f *Factory) HandleFreezeScheduled(ctx context.Context) error {
 			Str("marker", MarkerFreezeScheduled).
 			Msg("execute_immediate.mf missing — attempting fallback resolution via manifest version")
 
-		manifestPath := filepath.Join(f.cfg.MarkerPath, manifestsSubdir, componentsManifestFile)
+		manifestPath := filepath.Join(f.cfg.UpgradePath, manifestsSubdir, componentsManifestFile)
 		manifest, mErr := parseComponentsManifest(manifestPath)
 		if mErr != nil {
 			logx.As().Error().Err(mErr).Str("reason", ReasonOperationIDExhausted.String()).
@@ -413,7 +413,7 @@ func (f *Factory) HandleNowFrozen(_ context.Context) error {
 // (cluster + disk Prepare lookup, non-Failed phases).
 func (f *Factory) HandleFreezeAborted(ctx context.Context) error {
 	// Stat abort marker for mtime — needed for the staleness guard.
-	abortPath := filepath.Join(f.cfg.MarkerPath, MarkerFreezeAborted)
+	abortPath := filepath.Join(f.cfg.UpgradePath, MarkerFreezeAborted)
 	abortInfo, err := os.Stat(abortPath)
 	if err != nil {
 		return errx.WithReason(errPersist.Wrap(err, "stat marker %s", MarkerFreezeAborted), ReasonMarkerStatFailed)
@@ -421,7 +421,7 @@ func (f *Factory) HandleFreezeAborted(ctx context.Context) error {
 	abortMarkerMtime := abortInfo.ModTime()
 
 	// Primary: re-derive operationId from co-present execute_immediate.mf.
-	operationID, executeMtime, _, found, err := deriveOperationIDPrimary(f.cfg.MarkerPath)
+	operationID, executeMtime, _, found, err := deriveOperationIDPrimary(f.cfg.UpgradePath)
 	if err != nil {
 		if errorx.IsOfType(err, errManifestInvalid) {
 			logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).
@@ -447,7 +447,7 @@ func (f *Factory) HandleFreezeAborted(ctx context.Context) error {
 			Str("marker", MarkerFreezeAborted).
 			Msg("execute_immediate.mf missing — attempting fallback resolution via manifest version")
 
-		manifestPath := filepath.Join(f.cfg.MarkerPath, manifestsSubdir, componentsManifestFile)
+		manifestPath := filepath.Join(f.cfg.UpgradePath, manifestsSubdir, componentsManifestFile)
 		manifest, mErr := parseComponentsManifest(manifestPath)
 		if mErr != nil {
 			logx.As().Error().Err(mErr).Str("reason", ReasonOperationIDExhausted.String()).

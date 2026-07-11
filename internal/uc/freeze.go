@@ -31,8 +31,8 @@ func freezeCRName(operationID string) string {
 // parseFreezeScheduledTime reads the epoch-seconds timestamp written by the
 // consensus node into freeze_scheduled.mf and converts it to UTC time.Time.
 // The CN writes the scheduled freeze time as decimal seconds since Unix epoch.
-func parseFreezeScheduledTime(markerPath string) (time.Time, error) {
-	data, err := os.ReadFile(filepath.Join(markerPath, MarkerFreezeScheduled))
+func parseFreezeScheduledTime(upgradePath string) (time.Time, error) {
+	data, err := os.ReadFile(filepath.Join(upgradePath, MarkerFreezeScheduled))
 	if err != nil {
 		return time.Time{}, errx.WithReason(errPersist.Wrap(err, "read %s", MarkerFreezeScheduled), ReasonMarkerStatFailed)
 	}

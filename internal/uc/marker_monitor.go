@@ -62,20 +62,29 @@ func (m *MarkerMonitor) ConnectivityError() *daemonkit.StatusError {
 
 // RequiredProbe implements daemonkit.ProbableMonitor: the marker directory and
 // the CR-persist directory must be present and writable before polling begins.
+// In cluster-only mode the previous upgrade directory is also probed for write
+// access, since the provisioner-proxy rotates upgrade packages into it.
 func (m *MarkerMonitor) RequiredProbe() daemonkit.Probe {
-	return daemonkit.NewCompositeProbe(
-		"uc-marker",
+	probes := []daemonkit.Probe{
 		&daemonkit.TaggedProbe{
-			Inner:      &daemonkit.DiskPermissionProbe{Path: m.cfg.MarkerPath, Permission: 0o555},
-			Reason:     ReasonMarkerPathUnreadable.String(),
-			Resolution: "Verify the marker directory is mounted and readable: ls -la " + m.cfg.MarkerPath,
+			Inner:      &daemonkit.DiskPermissionProbe{Path: m.cfg.UpgradePath, Permission: 0o555},
+			Reason:     ReasonUpgradePathUnreadable.String(),
+			Resolution: "Verify the upgrade directory is mounted and readable: ls -la " + m.cfg.UpgradePath,
 		},
 		&daemonkit.TaggedProbe{
 			Inner:      &daemonkit.DiskWriteTestProbe{Dir: m.cfg.CRPersistPath},
 			Reason:     ReasonCRPersistPathUnwritable.String(),
 			Resolution: "Verify the CR-persist directory exists and is writable: ls -la " + m.cfg.CRPersistPath,
 		},
-	)
+	}
+	if m.cfg.ProvisionerProxyEnabled() {
+		probes = append(probes, &daemonkit.TaggedProbe{
+			Inner:      &daemonkit.DiskWriteTestProbe{Dir: m.cfg.PreviousUpgradePath},
+			Reason:     ReasonUpgradePathUnreadable.String(),
+			Resolution: "Verify the previous upgrade directory is writable: ls -la " + m.cfg.PreviousUpgradePath,
+		})
+	}
+	return daemonkit.NewCompositeProbe("uc-marker", probes...)
 }
 
 // Run polls the marker directory until ctx is cancelled.
@@ -89,7 +98,7 @@ func (m *MarkerMonitor) RequiredProbe() daemonkit.Probe {
 func (m *MarkerMonitor) Run(ctx context.Context) error {
 	logx.As().Info().
 		Str("reason", ReasonMarkerMonitorStarted.String()).
-		Str("marker_path", m.cfg.MarkerPath).
+		Str("marker_path", m.cfg.UpgradePath).
 		Dur("poll_interval", m.cfg.PollInterval).
 		Msg("marker monitor started")
 
@@ -137,7 +146,7 @@ func (m *MarkerMonitor) Run(ctx context.Context) error {
 func (m *MarkerMonitor) poll(ctx context.Context, current time.Duration) time.Duration {
 	next := current
 	for _, name := range AllMarkers {
-		if _, err := os.Stat(filepath.Join(m.cfg.MarkerPath, name)); err != nil {
+		if _, err := os.Stat(filepath.Join(m.cfg.UpgradePath, name)); err != nil {
 			continue
 		}
 		if err := m.dispatch(ctx, name); err != nil {
