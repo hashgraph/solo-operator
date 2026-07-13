@@ -51,6 +51,9 @@ spec:
           metadata:
             type: object
           spec:
+            description: |-
+              NetworkUpgradePrepareSpec is immutable after creation; the CEL rule below
+              rejects any spec mutation at admission time.
             properties:
               images:
                 description: |-

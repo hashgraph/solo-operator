@@ -54,6 +54,9 @@ spec:
           metadata:
             type: object
           spec:
+            description: |-
+              NetworkUpgradeExecuteSpec is immutable after creation; the CEL rule below
+              rejects any spec mutation at admission time.
             properties:
               consensusNode:
                 minLength: 1
