@@ -27,10 +27,10 @@ func NewNetworkUpgradeFreezeAbortReconciler(c client.Client, scheme *runtime.Sch
 	return &NetworkUpgradeFreezeAbortReconciler{Client: c, Scheme: scheme}
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradefreezeaborts,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradefreezeaborts/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradefreezeaborts/finalizers,verbs=update
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradeexecutes,verbs=get;list;watch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradefreezeaborts,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradefreezeaborts/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradefreezeaborts/finalizers,verbs=update
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeexecutes,verbs=get;list;watch
 
 func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var abort operatorv1alpha1.NetworkUpgradeFreezeAbort
@@ -52,6 +52,28 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 			func(reason, m string) { r.eventf(&abort, corev1.EventTypeWarning, reason, "%s", m) },
 			func() { abort.Status.Phase = operatorv1alpha1.PhaseFailed },
 			msg)
+	}
+
+	sibling, err := abortSiblingExists(ctx, r.Client, abort.Namespace, string(abort.UID), abort.Spec.OperationID)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if sibling {
+		msg := fmt.Sprintf("operationId %q already used by another NetworkUpgradeFreezeAbort", abort.Spec.OperationID)
+		r.eventf(&abort, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
+		abort.Status.Phase = operatorv1alpha1.PhaseFailed
+		abort.Status.ObservedGeneration = abort.Generation
+		setCondition(&abort.Status.Conditions, metav1.Condition{
+			Type:               operatorv1alpha1.CondManifestValidated,
+			Status:             metav1.ConditionFalse,
+			Reason:             operatorv1alpha1.ReasonDuplicateOpID,
+			Message:            msg,
+			ObservedGeneration: abort.Generation,
+		})
+		if err := r.Status().Update(ctx, &abort); err != nil {
+			return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+		}
+		return ctrl.Result{}, fmt.Errorf("%s", msg)
 	}
 
 	if abort.Status.Phase == "" || abort.Status.Phase == operatorv1alpha1.PhasePending {
@@ -117,6 +139,17 @@ func (r *NetworkUpgradeFreezeAbortReconciler) eventf(obj *operatorv1alpha1.Netwo
 	if r.Recorder != nil {
 		r.Recorder.Eventf(obj, nil, eventtype, reason, "FreezeAbort", format, args...)
 	}
+}
+
+func RegisterFreezeAbortIndex(mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&operatorv1alpha1.NetworkUpgradeFreezeAbort{},
+		fieldOperationID,
+		func(o client.Object) []string {
+			return []string{o.(*operatorv1alpha1.NetworkUpgradeFreezeAbort).Spec.OperationID}
+		},
+	)
 }
 
 func (r *NetworkUpgradeFreezeAbortReconciler) SetupWithManager(mgr ctrl.Manager) error {

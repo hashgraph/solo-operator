@@ -4,16 +4,16 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: networkupgradeexecutes.operator.solo.hedera.com
+  name: networkupgradeprepares.operator.solo.hiero.org
 spec:
-  group: operator.solo.hedera.com
+  group: operator.solo.hiero.org
   names:
-    kind: NetworkUpgradeExecute
-    listKind: NetworkUpgradeExecuteList
-    plural: networkupgradeexecutes
+    kind: NetworkUpgradePrepare
+    listKind: NetworkUpgradePrepareList
+    plural: networkupgradeprepares
     shortNames:
-    - nux
-    singular: networkupgradeexecute
+    - nup
+    singular: networkupgradeprepare
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -22,9 +22,6 @@ spec:
       type: string
     - jsonPath: .spec.operationId
       name: OperationID
-      type: string
-    - jsonPath: .spec.consensusNode
-      name: ConsensusNode
       type: string
     - jsonPath: .status.phase
       name: Phase
@@ -55,9 +52,6 @@ spec:
             type: object
           spec:
             properties:
-              consensusNode:
-                minLength: 1
-                type: string
               images:
                 description: |-
                   UpgradeImagesSpec is the verbatim "images:" section of consensus-node-components.yaml.
@@ -403,204 +397,10 @@ spec:
                 type: string
               orbit:
                 type: string
-              selectedSources:
-                description: |-
-                  SelectedSources is the per-component validation outcome. Lives in
-                  Prepare.status; UC copies it into Freeze.spec and Execute.spec verbatim.
-                properties:
-                  backupUploader:
-                    properties:
-                      digest:
-                        description: Sha256Digest is an OCI sha256 digest ("sha256:"
-                          + 64 lowercase hex chars).
-                        pattern: ^sha256:[a-f0-9]{64}$
-                        type: string
-                      image:
-                        type: string
-                      layerHashes:
-                        additionalProperties:
-                          items:
-                            description: Sha256Digest is an OCI sha256 digest ("sha256:"
-                              + 64 lowercase hex chars).
-                            pattern: ^sha256:[a-f0-9]{64}$
-                            type: string
-                          type: array
-                        description: |-
-                          LayerHashes stores the per-platform hashes used during initial selection so
-                          re-validation doesn't need to re-scan comp.Registries. Keyed by platform.
-                        type: object
-                      layerHashesVerified:
-                        description: |-
-                          LayerHashesVerified is true when expected hashes were configured and matched
-                          what the registry served; false when no hashes were configured or on mismatch.
-                        type: boolean
-                    required:
-                    - digest
-                    - image
-                    - layerHashesVerified
-                    type: object
-                  blockStreamUploader:
-                    properties:
-                      digest:
-                        description: Sha256Digest is an OCI sha256 digest ("sha256:"
-                          + 64 lowercase hex chars).
-                        pattern: ^sha256:[a-f0-9]{64}$
-                        type: string
-                      image:
-                        type: string
-                      layerHashes:
-                        additionalProperties:
-                          items:
-                            description: Sha256Digest is an OCI sha256 digest ("sha256:"
-                              + 64 lowercase hex chars).
-                            pattern: ^sha256:[a-f0-9]{64}$
-                            type: string
-                          type: array
-                        description: |-
-                          LayerHashes stores the per-platform hashes used during initial selection so
-                          re-validation doesn't need to re-scan comp.Registries. Keyed by platform.
-                        type: object
-                      layerHashesVerified:
-                        description: |-
-                          LayerHashesVerified is true when expected hashes were configured and matched
-                          what the registry served; false when no hashes were configured or on mismatch.
-                        type: boolean
-                    required:
-                    - digest
-                    - image
-                    - layerHashesVerified
-                    type: object
-                  consensusNode:
-                    properties:
-                      digest:
-                        description: Sha256Digest is an OCI sha256 digest ("sha256:"
-                          + 64 lowercase hex chars).
-                        pattern: ^sha256:[a-f0-9]{64}$
-                        type: string
-                      image:
-                        type: string
-                      layerHashes:
-                        additionalProperties:
-                          items:
-                            description: Sha256Digest is an OCI sha256 digest ("sha256:"
-                              + 64 lowercase hex chars).
-                            pattern: ^sha256:[a-f0-9]{64}$
-                            type: string
-                          type: array
-                        description: |-
-                          LayerHashes stores the per-platform hashes used during initial selection so
-                          re-validation doesn't need to re-scan comp.Registries. Keyed by platform.
-                        type: object
-                      layerHashesVerified:
-                        description: |-
-                          LayerHashesVerified is true when expected hashes were configured and matched
-                          what the registry served; false when no hashes were configured or on mismatch.
-                        type: boolean
-                    required:
-                    - digest
-                    - image
-                    - layerHashesVerified
-                    type: object
-                  eventStreamUploader:
-                    properties:
-                      digest:
-                        description: Sha256Digest is an OCI sha256 digest ("sha256:"
-                          + 64 lowercase hex chars).
-                        pattern: ^sha256:[a-f0-9]{64}$
-                        type: string
-                      image:
-                        type: string
-                      layerHashes:
-                        additionalProperties:
-                          items:
-                            description: Sha256Digest is an OCI sha256 digest ("sha256:"
-                              + 64 lowercase hex chars).
-                            pattern: ^sha256:[a-f0-9]{64}$
-                            type: string
-                          type: array
-                        description: |-
-                          LayerHashes stores the per-platform hashes used during initial selection so
-                          re-validation doesn't need to re-scan comp.Registries. Keyed by platform.
-                        type: object
-                      layerHashesVerified:
-                        description: |-
-                          LayerHashesVerified is true when expected hashes were configured and matched
-                          what the registry served; false when no hashes were configured or on mismatch.
-                        type: boolean
-                    required:
-                    - digest
-                    - image
-                    - layerHashesVerified
-                    type: object
-                  recordStreamUploader:
-                    properties:
-                      digest:
-                        description: Sha256Digest is an OCI sha256 digest ("sha256:"
-                          + 64 lowercase hex chars).
-                        pattern: ^sha256:[a-f0-9]{64}$
-                        type: string
-                      image:
-                        type: string
-                      layerHashes:
-                        additionalProperties:
-                          items:
-                            description: Sha256Digest is an OCI sha256 digest ("sha256:"
-                              + 64 lowercase hex chars).
-                            pattern: ^sha256:[a-f0-9]{64}$
-                            type: string
-                          type: array
-                        description: |-
-                          LayerHashes stores the per-platform hashes used during initial selection so
-                          re-validation doesn't need to re-scan comp.Registries. Keyed by platform.
-                        type: object
-                      layerHashesVerified:
-                        description: |-
-                          LayerHashesVerified is true when expected hashes were configured and matched
-                          what the registry served; false when no hashes were configured or on mismatch.
-                        type: boolean
-                    required:
-                    - digest
-                    - image
-                    - layerHashesVerified
-                    type: object
-                  uc:
-                    properties:
-                      digest:
-                        description: Sha256Digest is an OCI sha256 digest ("sha256:"
-                          + 64 lowercase hex chars).
-                        pattern: ^sha256:[a-f0-9]{64}$
-                        type: string
-                      image:
-                        type: string
-                      layerHashes:
-                        additionalProperties:
-                          items:
-                            description: Sha256Digest is an OCI sha256 digest ("sha256:"
-                              + 64 lowercase hex chars).
-                            pattern: ^sha256:[a-f0-9]{64}$
-                            type: string
-                          type: array
-                        description: |-
-                          LayerHashes stores the per-platform hashes used during initial selection so
-                          re-validation doesn't need to re-scan comp.Registries. Keyed by platform.
-                        type: object
-                      layerHashesVerified:
-                        description: |-
-                          LayerHashesVerified is true when expected hashes were configured and matched
-                          what the registry served; false when no hashes were configured or on mismatch.
-                        type: boolean
-                    required:
-                    - digest
-                    - image
-                    - layerHashesVerified
-                    type: object
-                type: object
             required:
-            - consensusNode
             - images
             - operationId
             - orbit
-            - selectedSources
             type: object
             x-kubernetes-validations:
             - message: spec is immutable after creation
@@ -666,21 +466,17 @@ spec:
                   - type
                   type: object
                 type: array
-              nodeUpgradeStartTime:
-                format: date-time
-                type: string
               observedGeneration:
                 format: int64
                 type: integer
               phase:
-                description: ExecutePhase is the phase enum for NetworkUpgradeExecute.
+                description: Phase represents the current phase of a resource
                 enum:
                 - Pending
-                - ReadyForProvisionerDaemon
-                - PendingInfraUpgrade
-                - PendingNodeUpgrade
+                - Running
                 - Succeeded
                 - Failed
+                - Unknown
                 type: string
               selectedSources:
                 description: |-
@@ -877,10 +673,6 @@ spec:
               startTime:
                 format: date-time
                 type: string
-              upgradedNodes:
-                items:
-                  type: string
-                type: array
             type: object
         type: object
     selectableFields:

@@ -5,15 +5,15 @@ module github.com/hashgraph/solo-operator
 go 1.26.5
 
 require (
-	github.com/automa-saga/daemonkit v0.1.0
-	github.com/automa-saga/logx v0.5.0
-	github.com/automa-saga/version v1.0.0
+	github.com/automa-saga/daemonkit v0.1.1
+	github.com/automa-saga/logx v0.5.1
+	github.com/automa-saga/version v1.0.1
 	github.com/google/go-containerregistry v0.21.6
 	github.com/hiero-ledger/hiero-sdk-go/v2 v2.78.1
 	github.com/joomcode/errorx v1.2.0
 	github.com/onsi/ginkgo/v2 v2.28.1
 	github.com/onsi/gomega v1.39.1
-	github.com/rs/zerolog v1.35.0
+	github.com/rs/zerolog v1.35.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	golang.org/x/sync v0.21.0

@@ -32,8 +32,8 @@ func NewSimpleFeesSchedulesReconciler(c client.Client, scheme *runtime.Scheme) *
 	}
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=simplefeesschedules,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=simplefeesschedules/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=simplefeesschedules,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=simplefeesschedules/status,verbs=get;update;patch
 
 func (r *SimpleFeesSchedulesReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)

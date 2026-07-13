@@ -4,21 +4,27 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: log4j2configs.operator.solo.hedera.com
+  name: networkgeneses.operator.solo.hiero.org
 spec:
-  group: operator.solo.hedera.com
+  group: operator.solo.hiero.org
   names:
-    kind: Log4j2Config
-    listKind: Log4j2ConfigList
-    plural: log4j2configs
+    kind: NetworkGenesis
+    listKind: NetworkGenesisList
+    plural: networkgeneses
     shortNames:
-    - log4j2
-    singular: log4j2config
+    - ng
+    singular: networkgenesis
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.configMapName
-      name: ConfigMap
+    - jsonPath: .spec.orbit
+      name: Orbit
+      type: string
+    - jsonPath: .spec.operationId
+      name: OperationID
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
@@ -45,22 +51,83 @@ spec:
           metadata:
             type: object
           spec:
+            description: |-
+              NetworkGenesisSpec defines the desired state of a NetworkGenesis. When
+              Spec.Roster is set the reconciler uses it directly; otherwise it discovers
+              nodes from ConsensusCapsule CRs and Orbit external addresses.
             properties:
-              content:
-                minLength: 1
+              genesisNetworkJSON:
+                description: |-
+                  GenesisNetworkJSON is an optional pre-built genesis-network.json (complete Network proto,
+                  JSON-encoded). When set, its content is written verbatim to the genesis-config ConfigMap,
+                  skipping roster assembly and discovery. Intended for fresh cluster-only genesis; the
+                  mainnet-daemon provisioning path does not populate this field.
+                type: string
+              operationId:
                 type: string
               orbit:
-                description: Set so the Orbit can cascade-delete this resource.
                 type: string
+              roster:
+                items:
+                  properties:
+                    accountId:
+                      description: AccountID is "shard.realm.account" (e.g. "0.0.3").
+                      type: string
+                    adminKey:
+                      description: Hex-encoded ED25519 admin public key.
+                      type: string
+                    description:
+                      type: string
+                    gossipCaCertificate:
+                      description: PEM-encoded gossip signing certificate.
+                      type: string
+                    gossipHost:
+                      type: string
+                    gossipPort:
+                      format: int32
+                      maximum: 65535
+                      minimum: 1
+                      type: integer
+                    grpcCertificate:
+                      description: PEM-encoded gRPC TLS certificate.
+                      type: string
+                    nodeId:
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    serviceHost:
+                      type: string
+                    servicePort:
+                      format: int32
+                      maximum: 65535
+                      minimum: 1
+                      type: integer
+                    weight:
+                      description: Weight defaults to 1 when zero.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                  required:
+                  - accountId
+                  - gossipCaCertificate
+                  - gossipHost
+                  - gossipPort
+                  - grpcCertificate
+                  - nodeId
+                  - serviceHost
+                  - servicePort
+                  type: object
+                type: array
             required:
-            - content
+            - operationId
+            - orbit
             type: object
           status:
             properties:
+              completionTime:
+                format: date-time
+                type: string
               conditions:
-                description: |-
-                  Conditions contains the latest observations of the Log4j2Config state.
-                  The "Valid" condition reflects whether spec.content is valid log4j2 XML.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -116,14 +183,22 @@ spec:
                   - type
                   type: object
                 type: array
-                x-kubernetes-list-map-keys:
-                - type
-                x-kubernetes-list-type: map
-              configMapName:
-                type: string
+              generatedConfigMaps:
+                items:
+                  type: string
+                type: array
               observedGeneration:
                 format: int64
                 type: integer
+              phase:
+                description: Phase represents the current phase of a resource
+                enum:
+                - Pending
+                - Running
+                - Succeeded
+                - Failed
+                - Unknown
+                type: string
             type: object
         type: object
     served: true

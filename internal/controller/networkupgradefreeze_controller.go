@@ -45,10 +45,10 @@ func (r *NetworkUpgradeFreezeReconciler) WithStrategy(name string) *NetworkUpgra
 	return r
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradefreezes,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradefreezes/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradefreezes/finalizers,verbs=update
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkupgradeprepares,verbs=get;list;watch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradefreezes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradefreezes/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradefreezes/finalizers,verbs=update
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeprepares,verbs=get;list;watch
 
 func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -72,6 +72,28 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 			func(reason, m string) { r.eventf(&freeze, corev1.EventTypeWarning, reason, "%s", m) },
 			func() { freeze.Status.Phase = operatorv1alpha1.PhaseFailed },
 			msg)
+	}
+
+	sibling, err := freezeSiblingExists(ctx, r.Client, freeze.Namespace, string(freeze.UID), freeze.Spec.OperationID)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if sibling {
+		msg := fmt.Sprintf("operationId %q already used by another NetworkUpgradeFreeze", freeze.Spec.OperationID)
+		r.eventf(&freeze, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
+		freeze.Status.Phase = operatorv1alpha1.PhaseFailed
+		freeze.Status.ObservedGeneration = freeze.Generation
+		setCondition(&freeze.Status.Conditions, metav1.Condition{
+			Type:               operatorv1alpha1.CondManifestValidated,
+			Status:             metav1.ConditionFalse,
+			Reason:             operatorv1alpha1.ReasonDuplicateOpID,
+			Message:            msg,
+			ObservedGeneration: freeze.Generation,
+		})
+		if err := r.Status().Update(ctx, &freeze); err != nil {
+			return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+		}
+		return ctrl.Result{}, fmt.Errorf("%s", msg)
 	}
 
 	prepare, err := findPrepare(ctx, r.Client, freeze.Namespace, freeze.Spec.OperationID)

@@ -111,9 +111,9 @@ func main() {
 		Metrics:                metricsServerOptions,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		// LeaderElectionID matches the API group (operator.solo.hedera.com) so the lock
+		// LeaderElectionID matches the API group (operator.solo.hiero.org) so the lock
 		// name is consistent with CRD group, finalizer, and label key naming conventions.
-		LeaderElectionID: "operator.solo.hedera.com",
+		LeaderElectionID: "operator.solo.hiero.org",
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -252,6 +252,18 @@ func main() {
 
 	if err = controller.RegisterPrepareIndex(mgr); err != nil {
 		setupLog.Error(err, "unable to register operationId index")
+		os.Exit(1)
+	}
+	if err = controller.RegisterFreezeIndex(mgr); err != nil {
+		setupLog.Error(err, "unable to register freeze operationId index")
+		os.Exit(1)
+	}
+	if err = controller.RegisterExecuteIndex(mgr); err != nil {
+		setupLog.Error(err, "unable to register execute operationId index")
+		os.Exit(1)
+	}
+	if err = controller.RegisterFreezeAbortIndex(mgr); err != nil {
+		setupLog.Error(err, "unable to register freeze-abort operationId index")
 		os.Exit(1)
 	}
 

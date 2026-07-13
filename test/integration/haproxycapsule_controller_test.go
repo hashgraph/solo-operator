@@ -323,8 +323,8 @@ var _ = Describe("HAProxyCapsule Controller", func() {
 					Image:       "haproxy:2.8.10-alpine3.20",
 					ServiceType: operatorv1alpha1.HAProxyServiceTypeClusterIP,
 					AdditionalLabels: map[string]string{
-						"solo.hedera.com/node-id":   "0",
-						"solo.hedera.com/node-name": "node1",
+						"operator.solo.hiero.org/node-id":   "0",
+						"operator.solo.hiero.org/node-name": "node1",
 					},
 				},
 			}
@@ -338,16 +338,16 @@ var _ = Describe("HAProxyCapsule Controller", func() {
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 
-			Expect(createdDeploy.Labels).To(HaveKeyWithValue("solo.hedera.com/node-id", "0"))
-			Expect(createdDeploy.Labels).To(HaveKeyWithValue("solo.hedera.com/node-name", "node1"))
+			Expect(createdDeploy.Labels).To(HaveKeyWithValue("operator.solo.hiero.org/node-id", "0"))
+			Expect(createdDeploy.Labels).To(HaveKeyWithValue("operator.solo.hiero.org/node-name", "node1"))
 
 			By("Verifying additional labels appear on the pod template")
-			Expect(createdDeploy.Spec.Template.Labels).To(HaveKeyWithValue("solo.hedera.com/node-id", "0"))
-			Expect(createdDeploy.Spec.Template.Labels).To(HaveKeyWithValue("solo.hedera.com/node-name", "node1"))
+			Expect(createdDeploy.Spec.Template.Labels).To(HaveKeyWithValue("operator.solo.hiero.org/node-id", "0"))
+			Expect(createdDeploy.Spec.Template.Labels).To(HaveKeyWithValue("operator.solo.hiero.org/node-name", "node1"))
 
 			By("Verifying additional labels do NOT appear in the pod selector")
-			Expect(createdDeploy.Spec.Selector.MatchLabels).ToNot(HaveKey("solo.hedera.com/node-id"))
-			Expect(createdDeploy.Spec.Selector.MatchLabels).ToNot(HaveKey("solo.hedera.com/node-name"))
+			Expect(createdDeploy.Spec.Selector.MatchLabels).ToNot(HaveKey("operator.solo.hiero.org/node-id"))
+			Expect(createdDeploy.Spec.Selector.MatchLabels).ToNot(HaveKey("operator.solo.hiero.org/node-name"))
 
 			By("Verifying additional labels appear on the Service")
 			svcLookupKey := types.NamespacedName{Name: haproxyName, Namespace: haproxyNamespace}
@@ -357,12 +357,12 @@ var _ = Describe("HAProxyCapsule Controller", func() {
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 
-			Expect(createdSvc.Labels).To(HaveKeyWithValue("solo.hedera.com/node-id", "0"))
-			Expect(createdSvc.Labels).To(HaveKeyWithValue("solo.hedera.com/node-name", "node1"))
+			Expect(createdSvc.Labels).To(HaveKeyWithValue("operator.solo.hiero.org/node-id", "0"))
+			Expect(createdSvc.Labels).To(HaveKeyWithValue("operator.solo.hiero.org/node-name", "node1"))
 
 			By("Verifying additional labels do NOT appear in the service selector")
-			Expect(createdSvc.Spec.Selector).ToNot(HaveKey("solo.hedera.com/node-id"))
-			Expect(createdSvc.Spec.Selector).ToNot(HaveKey("solo.hedera.com/node-name"))
+			Expect(createdSvc.Spec.Selector).ToNot(HaveKey("operator.solo.hiero.org/node-id"))
+			Expect(createdSvc.Spec.Selector).ToNot(HaveKey("operator.solo.hiero.org/node-name"))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, haproxy)).Should(Succeed())

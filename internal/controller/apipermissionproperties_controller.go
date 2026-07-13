@@ -32,8 +32,8 @@ func NewApiPermissionPropertiesReconciler(c client.Client, scheme *runtime.Schem
 	}
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=apipermissionproperties,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=apipermissionproperties/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=apipermissionproperties,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=apipermissionproperties/status,verbs=get;update;patch
 
 func (r *ApiPermissionPropertiesReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)

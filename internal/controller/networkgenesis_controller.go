@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	NetworkGenesisFinalizer = "operator.solo.hedera.com/networkgenesis-finalizer"
+	NetworkGenesisFinalizer = "operator.solo.hiero.org/networkgenesis-finalizer"
 
 	networkGenesisConditionReady    = "Ready"
 	networkGenesisConditionFailed   = "Failed"
@@ -39,11 +39,11 @@ func NewNetworkGenesisReconciler(c client.Client, scheme *runtime.Scheme) *Netwo
 	return &NetworkGenesisReconciler{Client: c, Scheme: scheme}
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkgeneses,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkgeneses/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=networkgeneses/finalizers,verbs=update
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=orbits,verbs=get;list;watch
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=consensuscapsules,verbs=get;list;watch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkgeneses,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkgeneses/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkgeneses/finalizers,verbs=update
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits,verbs=get;list;watch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=consensuscapsules,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch

@@ -4,16 +4,16 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: feeschedules.operator.solo.hedera.com
+  name: log4j2configs.operator.solo.hiero.org
 spec:
-  group: operator.solo.hedera.com
+  group: operator.solo.hiero.org
   names:
-    kind: FeeSchedules
-    listKind: FeeSchedulesList
-    plural: feeschedules
+    kind: Log4j2Config
+    listKind: Log4j2ConfigList
+    plural: log4j2configs
     shortNames:
-    - feesched
-    singular: feeschedules
+    - log4j2
+    singular: log4j2config
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -58,6 +58,9 @@ spec:
           status:
             properties:
               conditions:
+                description: |-
+                  Conditions contains the latest observations of the Log4j2Config state.
+                  The "Valid" condition reflects whether spec.content is valid log4j2 XML.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.

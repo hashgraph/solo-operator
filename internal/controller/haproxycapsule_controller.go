@@ -22,7 +22,7 @@ import (
 
 const (
 	// HAProxyCapsuleFinalizer is the finalizer for HAProxyCapsule resources
-	HAProxyCapsuleFinalizer = "operator.solo.hedera.com/haproxycapsule-finalizer"
+	HAProxyCapsuleFinalizer = "operator.solo.hiero.org/haproxycapsule-finalizer"
 )
 
 // HAProxyCapsuleReconciler reconciles a HAProxyCapsule object
@@ -41,9 +41,9 @@ func NewHAProxyCapsuleReconciler(c client.Client, scheme *runtime.Scheme) *HAPro
 	}
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=haproxycapsules,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=haproxycapsules/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=haproxycapsules/finalizers,verbs=update
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=haproxycapsules,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=haproxycapsules/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=haproxycapsules/finalizers,verbs=update
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 

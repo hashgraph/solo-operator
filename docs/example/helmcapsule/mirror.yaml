@@ -12,7 +12,7 @@
 #
 # The Values section below overrides or extends the auto-injected values.
 # All three layers are merged (auto-inject → ValuesFrom → Values).
-apiVersion: operator.solo.hedera.com/v1alpha1
+apiVersion: operator.solo.hiero.org/v1alpha1
 kind: HelmCapsule
 metadata:
   name: mirror

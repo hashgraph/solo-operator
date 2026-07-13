@@ -1,4 +1,4 @@
-apiVersion: operator.solo.hedera.com/v1alpha1
+apiVersion: operator.solo.hiero.org/v1alpha1
 kind: ConsensusCapsule
 metadata:
   name: node3

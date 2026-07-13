@@ -245,15 +245,23 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 				return got.Status.Phase
 			}, timeout, interval).Should(Equal(operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon))
 
-			By("simulating daemon writing DaemonResult=True")
+			By("simulating daemon writing DaemonResult=True and CondConfigCRsApplied=True")
 			got := &operatorv1alpha1.NetworkUpgradeExecute{}
 			Expect(k8sClient.Get(ctx, nuxKey, got)).To(Succeed())
-			got.Status.Conditions = append(got.Status.Conditions, operatorv1alpha1.Condition{
-				Type:               operatorv1alpha1.CondDaemonResult,
-				Status:             metav1.ConditionTrue,
-				Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
-				LastTransitionTime: metav1.Now(),
-			})
+			got.Status.Conditions = append(got.Status.Conditions,
+				operatorv1alpha1.Condition{
+					Type:               operatorv1alpha1.CondDaemonResult,
+					Status:             metav1.ConditionTrue,
+					Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
+					LastTransitionTime: metav1.Now(),
+				},
+				operatorv1alpha1.Condition{
+					Type:               operatorv1alpha1.CondConfigCRsApplied,
+					Status:             metav1.ConditionTrue,
+					Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
+					LastTransitionTime: metav1.Now(),
+				},
+			)
 			Expect(k8sClient.Status().Update(ctx, got)).To(Succeed())
 
 			By("expecting PendingNodeUpgrade or beyond")
@@ -275,15 +283,23 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 				return got.Status.Phase
 			}, timeout, interval).Should(Equal(operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon))
 
-			By("writing DaemonResult=True")
+			By("writing DaemonResult=True and CondConfigCRsApplied=True")
 			got := &operatorv1alpha1.NetworkUpgradeExecute{}
 			Expect(k8sClient.Get(ctx, nuxKey, got)).To(Succeed())
-			got.Status.Conditions = append(got.Status.Conditions, operatorv1alpha1.Condition{
-				Type:               operatorv1alpha1.CondDaemonResult,
-				Status:             metav1.ConditionTrue,
-				Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
-				LastTransitionTime: metav1.Now(),
-			})
+			got.Status.Conditions = append(got.Status.Conditions,
+				operatorv1alpha1.Condition{
+					Type:               operatorv1alpha1.CondDaemonResult,
+					Status:             metav1.ConditionTrue,
+					Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
+					LastTransitionTime: metav1.Now(),
+				},
+				operatorv1alpha1.Condition{
+					Type:               operatorv1alpha1.CondConfigCRsApplied,
+					Status:             metav1.ConditionTrue,
+					Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
+					LastTransitionTime: metav1.Now(),
+				},
+			)
 			Expect(k8sClient.Status().Update(ctx, got)).To(Succeed())
 
 			By("expecting Succeeded phase")
@@ -513,15 +529,23 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 				return got.Status.Phase
 			}, timeout, interval).Should(Equal(operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon))
 
-			By("writing DaemonResult=True")
+			By("writing DaemonResult=True and CondConfigCRsApplied=True")
 			got := &operatorv1alpha1.NetworkUpgradeExecute{}
 			Expect(k8sClient.Get(ctx, nuxKey, got)).To(Succeed())
-			got.Status.Conditions = append(got.Status.Conditions, operatorv1alpha1.Condition{
-				Type:               operatorv1alpha1.CondDaemonResult,
-				Status:             metav1.ConditionTrue,
-				Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
-				LastTransitionTime: metav1.Now(),
-			})
+			got.Status.Conditions = append(got.Status.Conditions,
+				operatorv1alpha1.Condition{
+					Type:               operatorv1alpha1.CondDaemonResult,
+					Status:             metav1.ConditionTrue,
+					Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
+					LastTransitionTime: metav1.Now(),
+				},
+				operatorv1alpha1.Condition{
+					Type:               operatorv1alpha1.CondConfigCRsApplied,
+					Status:             metav1.ConditionTrue,
+					Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
+					LastTransitionTime: metav1.Now(),
+				},
+			)
 			Expect(k8sClient.Status().Update(ctx, got)).To(Succeed())
 
 			By("waiting for RegistrySelected=True after failover")
@@ -602,15 +626,23 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 				return got.Status.Phase
 			}, timeout, interval).Should(Equal(operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon))
 
-			By("writing DaemonResult=True")
+			By("writing DaemonResult=True and CondConfigCRsApplied=True")
 			got := &operatorv1alpha1.NetworkUpgradeExecute{}
 			Expect(k8sClient.Get(ctx, nuxKey, got)).To(Succeed())
-			got.Status.Conditions = append(got.Status.Conditions, operatorv1alpha1.Condition{
-				Type:               operatorv1alpha1.CondDaemonResult,
-				Status:             metav1.ConditionTrue,
-				Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
-				LastTransitionTime: metav1.Now(),
-			})
+			got.Status.Conditions = append(got.Status.Conditions,
+				operatorv1alpha1.Condition{
+					Type:               operatorv1alpha1.CondDaemonResult,
+					Status:             metav1.ConditionTrue,
+					Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
+					LastTransitionTime: metav1.Now(),
+				},
+				operatorv1alpha1.Condition{
+					Type:               operatorv1alpha1.CondConfigCRsApplied,
+					Status:             metav1.ConditionTrue,
+					Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
+					LastTransitionTime: metav1.Now(),
+				},
+			)
 			Expect(k8sClient.Status().Update(ctx, got)).To(Succeed())
 
 			By("waiting for ConsensusCapsulePatched condition")
@@ -683,15 +715,23 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 				return got.Status.Phase
 			}, timeout, interval).Should(Equal(operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon))
 
-			By("writing DaemonResult=True to drive to Succeeded")
+			By("writing DaemonResult=True and CondConfigCRsApplied=True to drive to Succeeded")
 			got := &operatorv1alpha1.NetworkUpgradeExecute{}
 			Expect(k8sClient.Get(ctx, nuxKey, got)).To(Succeed())
-			got.Status.Conditions = append(got.Status.Conditions, operatorv1alpha1.Condition{
-				Type:               operatorv1alpha1.CondDaemonResult,
-				Status:             metav1.ConditionTrue,
-				Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
-				LastTransitionTime: metav1.Now(),
-			})
+			got.Status.Conditions = append(got.Status.Conditions,
+				operatorv1alpha1.Condition{
+					Type:               operatorv1alpha1.CondDaemonResult,
+					Status:             metav1.ConditionTrue,
+					Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
+					LastTransitionTime: metav1.Now(),
+				},
+				operatorv1alpha1.Condition{
+					Type:               operatorv1alpha1.CondConfigCRsApplied,
+					Status:             metav1.ConditionTrue,
+					Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
+					LastTransitionTime: metav1.Now(),
+				},
+			)
 			Expect(k8sClient.Status().Update(ctx, got)).To(Succeed())
 
 			Eventually(func() operatorv1alpha1.ExecutePhase {

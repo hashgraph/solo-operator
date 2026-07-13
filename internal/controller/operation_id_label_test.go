@@ -27,28 +27,28 @@ func TestValidateOperationIDLabel(t *testing.T) {
 			labels:  map[string]string{"other": "x"},
 			specID:  "op-001",
 			wantOK:  false,
-			wantMsg: `operation-id label "operator.solo.hedera.com/operation-id" is required but missing`,
+			wantMsg: `operation-id label "operator.solo.hiero.org/operation-id" is required but missing`,
 		},
 		{
 			name:    "nil label map",
 			labels:  nil,
 			specID:  "op-001",
 			wantOK:  false,
-			wantMsg: `operation-id label "operator.solo.hedera.com/operation-id" is required but missing`,
+			wantMsg: `operation-id label "operator.solo.hiero.org/operation-id" is required but missing`,
 		},
 		{
 			name:    "label present but empty",
 			labels:  map[string]string{operatorv1alpha1.LabelOperationID: ""},
 			specID:  "op-001",
 			wantOK:  false,
-			wantMsg: `operation-id label "operator.solo.hedera.com/operation-id" is required but missing`,
+			wantMsg: `operation-id label "operator.solo.hiero.org/operation-id" is required but missing`,
 		},
 		{
 			name:    "label mismatches spec",
 			labels:  map[string]string{operatorv1alpha1.LabelOperationID: "op-999"},
 			specID:  "op-001",
 			wantOK:  false,
-			wantMsg: `operation-id label "operator.solo.hedera.com/operation-id"="op-999" does not match spec.operationId "op-001"`,
+			wantMsg: `operation-id label "operator.solo.hiero.org/operation-id"="op-999" does not match spec.operationId "op-001"`,
 		},
 	}
 
