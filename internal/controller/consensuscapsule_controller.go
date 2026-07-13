@@ -38,7 +38,7 @@ import (
 )
 
 const (
-	ConsensusCapsuleFinalizer = "operator.solo.hedera.com/consensuscapsule-finalizer"
+	ConsensusCapsuleFinalizer = "operator.solo.hiero.org/consensuscapsule-finalizer"
 
 	// podReadinessRequeueAfter is how long to wait before rechecking when the pod is not yet ready.
 	podReadinessRequeueAfter = 10 * time.Second
@@ -60,10 +60,10 @@ func NewConsensusCapsuleReconciler(c client.Client, scheme *runtime.Scheme) *Con
 	}
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=orbits,verbs=get;list;watch
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=consensuscapsules,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=consensuscapsules/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=consensuscapsules/finalizers,verbs=update
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits,verbs=get;list;watch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=consensuscapsules,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=consensuscapsules/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=consensuscapsules/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete

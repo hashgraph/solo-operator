@@ -1246,8 +1246,8 @@ func TestDeploymentSubReconciler_AdditionalLabels(t *testing.T) {
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
 	envoy.Spec.AdditionalLabels = map[string]string{
-		"solo.hedera.com/node-id":   "0",
-		"solo.hedera.com/node-name": "node1",
+		"operator.solo.hiero.org/node-id":   "0",
+		"operator.solo.hiero.org/node-name": "node1",
 	}
 	c := newTestClient(scheme, envoy)
 
@@ -1261,15 +1261,15 @@ func TestDeploymentSubReconciler_AdditionalLabels(t *testing.T) {
 		t.Fatalf("failed to get deployment: %v", err)
 	}
 
-	if deploy.Labels["solo.hedera.com/node-id"] != "0" {
-		t.Errorf("expected deployment label solo.hedera.com/node-id=0, got %v", deploy.Labels)
+	if deploy.Labels["operator.solo.hiero.org/node-id"] != "0" {
+		t.Errorf("expected deployment label operator.solo.hiero.org/node-id=0, got %v", deploy.Labels)
 	}
-	if deploy.Spec.Template.Labels["solo.hedera.com/node-name"] != "node1" {
-		t.Errorf("expected pod label solo.hedera.com/node-name=node1, got %v", deploy.Spec.Template.Labels)
+	if deploy.Spec.Template.Labels["operator.solo.hiero.org/node-name"] != "node1" {
+		t.Errorf("expected pod label operator.solo.hiero.org/node-name=node1, got %v", deploy.Spec.Template.Labels)
 	}
 
 	// Selector must not include additional labels
-	if _, ok := deploy.Spec.Selector.MatchLabels["solo.hedera.com/node-id"]; ok {
+	if _, ok := deploy.Spec.Selector.MatchLabels["operator.solo.hiero.org/node-id"]; ok {
 		t.Error("additional labels must not bleed into the pod selector")
 	}
 }
@@ -1278,7 +1278,7 @@ func TestServiceSubReconciler_AdditionalLabels(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.AdditionalLabels = map[string]string{"solo.hedera.com/prometheus-endpoint": "active"}
+	envoy.Spec.AdditionalLabels = map[string]string{"operator.solo.hiero.org/prometheus-endpoint": "active"}
 	c := newTestClient(scheme, envoy)
 
 	_, err := NewServiceSubReconciler(c, scheme).Reconcile(ctx, envoy)
@@ -1291,12 +1291,12 @@ func TestServiceSubReconciler_AdditionalLabels(t *testing.T) {
 		t.Fatalf("failed to get service: %v", err)
 	}
 
-	if svc.Labels["solo.hedera.com/prometheus-endpoint"] != "active" {
-		t.Errorf("expected service label solo.hedera.com/prometheus-endpoint=active, got %v", svc.Labels)
+	if svc.Labels["operator.solo.hiero.org/prometheus-endpoint"] != "active" {
+		t.Errorf("expected service label operator.solo.hiero.org/prometheus-endpoint=active, got %v", svc.Labels)
 	}
 
 	// Selector must not include additional labels
-	if _, ok := svc.Spec.Selector["solo.hedera.com/prometheus-endpoint"]; ok {
+	if _, ok := svc.Spec.Selector["operator.solo.hiero.org/prometheus-endpoint"]; ok {
 		t.Error("additional labels must not bleed into the service selector")
 	}
 }

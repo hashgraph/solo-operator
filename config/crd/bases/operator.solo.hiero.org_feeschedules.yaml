@@ -4,16 +4,16 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: nodesettings.operator.solo.hedera.com
+  name: feeschedules.operator.solo.hiero.org
 spec:
-  group: operator.solo.hedera.com
+  group: operator.solo.hiero.org
   names:
-    kind: NodeSettings
-    listKind: NodeSettingsList
-    plural: nodesettings
+    kind: FeeSchedules
+    listKind: FeeSchedulesList
+    plural: feeschedules
     shortNames:
-    - nodesettings
-    singular: nodesettings
+    - feesched
+    singular: feeschedules
   scope: Namespaced
   versions:
   - additionalPrinterColumns:

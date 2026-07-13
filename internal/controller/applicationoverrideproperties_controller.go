@@ -32,8 +32,8 @@ func NewApplicationOverridePropertiesReconciler(c client.Client, scheme *runtime
 	}
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=applicationoverrideproperties,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.solo.hedera.com,resources=applicationoverrideproperties/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=applicationoverrideproperties,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=applicationoverrideproperties/status,verbs=get;update;patch
 
 func (r *ApplicationOverridePropertiesReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)

@@ -4,16 +4,16 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: bootstrapproperties.operator.solo.hedera.com
+  name: nodesettings.operator.solo.hiero.org
 spec:
-  group: operator.solo.hedera.com
+  group: operator.solo.hiero.org
   names:
-    kind: BootstrapProperties
-    listKind: BootstrapPropertiesList
-    plural: bootstrapproperties
+    kind: NodeSettings
+    listKind: NodeSettingsList
+    plural: nodesettings
     shortNames:
-    - bootprops
-    singular: bootstrapproperties
+    - nodesettings
+    singular: nodesettings
   scope: Namespaced
   versions:
   - additionalPrinterColumns:

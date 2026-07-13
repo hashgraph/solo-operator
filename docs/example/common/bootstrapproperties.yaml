@@ -9,7 +9,7 @@
 #
 # This field is optional. When omitted the file is not mounted. Updating spec.content
 # propagates the new file to all referencing nodes on the next pod restart.
-apiVersion: operator.solo.hedera.com/v1alpha1
+apiVersion: operator.solo.hiero.org/v1alpha1
 kind: BootstrapProperties
 metadata:
   name: network-bootprops

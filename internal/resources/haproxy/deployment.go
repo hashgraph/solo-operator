@@ -23,7 +23,7 @@ import (
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
-const configChecksumAnnotation = "operator.solo.hedera.com/config-checksum"
+const configChecksumAnnotation = "operator.solo.hiero.org/config-checksum"
 
 type DeploymentSubReconciler struct {
 	*subreconciler.BaseSubReconciler[*operatorv1alpha1.HAProxyCapsule]

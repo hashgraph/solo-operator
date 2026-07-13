@@ -4,16 +4,16 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: networkupgradefreezes.operator.solo.hedera.com
+  name: networkupgradeexecutes.operator.solo.hiero.org
 spec:
-  group: operator.solo.hedera.com
+  group: operator.solo.hiero.org
   names:
-    kind: NetworkUpgradeFreeze
-    listKind: NetworkUpgradeFreezeList
-    plural: networkupgradefreezes
+    kind: NetworkUpgradeExecute
+    listKind: NetworkUpgradeExecuteList
+    plural: networkupgradeexecutes
     shortNames:
-    - nuf
-    singular: networkupgradefreeze
+    - nux
+    singular: networkupgradeexecute
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -23,8 +23,8 @@ spec:
     - jsonPath: .spec.operationId
       name: OperationID
       type: string
-    - jsonPath: .spec.scheduledTime
-      name: Scheduled
+    - jsonPath: .spec.consensusNode
+      name: ConsensusNode
       type: string
     - jsonPath: .status.phase
       name: Phase
@@ -55,6 +55,9 @@ spec:
             type: object
           spec:
             properties:
+              consensusNode:
+                minLength: 1
+                type: string
               images:
                 description: |-
                   UpgradeImagesSpec is the verbatim "images:" section of consensus-node-components.yaml.
@@ -400,9 +403,6 @@ spec:
                 type: string
               orbit:
                 type: string
-              scheduledTime:
-                format: date-time
-                type: string
               selectedSources:
                 description: |-
                   SelectedSources is the per-component validation outcome. Lives in
@@ -596,10 +596,10 @@ spec:
                     type: object
                 type: object
             required:
+            - consensusNode
             - images
             - operationId
             - orbit
-            - scheduledTime
             - selectedSources
             type: object
           status:
@@ -663,17 +663,21 @@ spec:
                   - type
                   type: object
                 type: array
+              nodeUpgradeStartTime:
+                format: date-time
+                type: string
               observedGeneration:
                 format: int64
                 type: integer
               phase:
-                description: Phase represents the current phase of a resource
+                description: ExecutePhase is the phase enum for NetworkUpgradeExecute.
                 enum:
                 - Pending
-                - Running
+                - ReadyForProvisionerDaemon
+                - PendingInfraUpgrade
+                - PendingNodeUpgrade
                 - Succeeded
                 - Failed
-                - Unknown
                 type: string
               selectedSources:
                 description: |-
@@ -870,6 +874,10 @@ spec:
               startTime:
                 format: date-time
                 type: string
+              upgradedNodes:
+                items:
+                  type: string
+                type: array
             type: object
         type: object
     selectableFields:

@@ -479,7 +479,64 @@ func TestExecuteReconcile_DaemonResultFalse_TerminalFailure(t *testing.T) {
 	}
 }
 
-func TestExecuteReconcile_DaemonResultTrue_AdvancesToPendingNodeUpgrade(t *testing.T) {
+func TestExecuteReconcile_DuplicateOperationID_SetsPhaseFailed(t *testing.T) {
+	existing := newExecuteForTest()
+	existing.Name = "existing"
+	existing.UID = "uid-existing"
+	existing.Status = operatorv1alpha1.NetworkUpgradeExecuteStatus{}
+
+	execute := newExecuteForTest()
+	execute.Name = "duplicate"
+	execute.UID = "uid-duplicate"
+	execute.Status = operatorv1alpha1.NetworkUpgradeExecuteStatus{}
+
+	scheme := newControllerTestScheme()
+	c := withExecuteIndexes(fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(existing, execute).
+		WithStatusSubresource(existing, execute)).
+		Build()
+
+	rec := events.NewFakeRecorder(16)
+	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
+	r.Recorder = rec
+	r.Checker = newExecuteChecker(nil, nil)
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: client.ObjectKeyFromObject(execute),
+	})
+	if err == nil {
+		t.Error("expected error for duplicate operationId")
+	}
+
+	var got operatorv1alpha1.NetworkUpgradeExecute
+	if getErr := c.Get(context.Background(), client.ObjectKeyFromObject(execute), &got); getErr != nil {
+		t.Fatalf("get: %v", getErr)
+	}
+	if got.Status.Phase != operatorv1alpha1.ExecutePhaseFailed {
+		t.Errorf("expected ExecutePhaseFailed, got %s", got.Status.Phase)
+	}
+	cond := findCondition(got.Status.Conditions, operatorv1alpha1.CondManifestValidated)
+	if cond == nil {
+		t.Fatal("ManifestValidated condition not set")
+	}
+	if cond.Status != metav1.ConditionFalse {
+		t.Errorf("expected ManifestValidated=False, got %s", cond.Status)
+	}
+	if cond.Reason != operatorv1alpha1.ReasonDuplicateOpID {
+		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonDuplicateOpID, cond.Reason)
+	}
+	close(rec.Events)
+	var recorded []string
+	for e := range rec.Events {
+		recorded = append(recorded, e)
+	}
+	if got := countContaining(recorded, "ManifestInvalid"); got != 1 {
+		t.Errorf("expected one ManifestInvalid event, got %d in %v", got, recorded)
+	}
+}
+
+func TestExecuteReconcile_DaemonResultTrue_AdvancesToPendingInfraUpgrade(t *testing.T) {
 	execute := newExecuteForTest()
 	execute.Status.Conditions = []operatorv1alpha1.Condition{
 		{
@@ -495,11 +552,49 @@ func TestExecuteReconcile_DaemonResultTrue_AdvancesToPendingNodeUpgrade(t *testi
 	if res.err != nil {
 		t.Fatalf("unexpected error: %v", res.err)
 	}
-	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhasePendingNodeUpgrade {
-		t.Errorf("expected PendingNodeUpgrade, got %s", res.execute.Status.Phase)
+	// Daemon success transitions to PendingInfraUpgrade on this tick; the next
+	// tick (via Requeue) will run reconcilePendingInfraUpgrade and advance to
+	// PendingNodeUpgrade.
+	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhasePendingInfraUpgrade {
+		t.Errorf("expected PendingInfraUpgrade, got %s", res.execute.Status.Phase)
 	}
 	if !res.result.Requeue {
 		t.Error("expected Requeue=true after advancing phase")
+	}
+}
+
+func TestExecuteReconcile_PendingInfraUpgrade_WaitsForDaemon(t *testing.T) {
+	execute := newExecuteForTest()
+	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingInfraUpgrade
+	// CondConfigCRsApplied not set — daemon hasn't written it yet.
+
+	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil), prereqsWithCapsule()...)
+
+	if res.err != nil {
+		t.Fatalf("unexpected error: %v", res.err)
+	}
+	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhasePendingInfraUpgrade {
+		t.Errorf("expected PendingInfraUpgrade (still waiting), got %s", res.execute.Status.Phase)
+	}
+}
+
+func TestExecuteReconcile_PendingInfraUpgrade_AdvancesToPendingNodeUpgrade(t *testing.T) {
+	execute := newExecuteForTest()
+	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingInfraUpgrade
+	// Simulate daemon having written CondConfigCRsApplied=True.
+	setCondition(&execute.Status.Conditions, metav1.Condition{
+		Type:   operatorv1alpha1.CondConfigCRsApplied,
+		Status: metav1.ConditionTrue,
+		Reason: operatorv1alpha1.ReasonDaemonSucceeded,
+	})
+
+	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil), prereqsWithCapsule()...)
+
+	if res.err != nil {
+		t.Fatalf("unexpected error: %v", res.err)
+	}
+	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhasePendingNodeUpgrade {
+		t.Errorf("expected PendingNodeUpgrade, got %s", res.execute.Status.Phase)
 	}
 }
 

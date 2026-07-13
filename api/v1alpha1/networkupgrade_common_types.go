@@ -163,8 +163,8 @@ type SelectedSource struct {
 
 // Labels linking all CRs of one upgrade operation.
 const (
-	LabelOperationID = "operator.solo.hedera.com/operation-id"
-	LabelStep        = "operator.solo.hedera.com/step"
+	LabelOperationID = "operator.solo.hiero.org/operation-id"
+	LabelStep        = "operator.solo.hiero.org/step"
 )
 
 const (
@@ -247,13 +247,14 @@ const (
 	EventComponentSkipped      = "ComponentSkipped"
 	EventSidecarDisabled       = "SidecarDisabled"
 
-	EventPodScaledDown      = "PodScaledDown"
-	EventReadyForDaemon     = "ReadyForProvisionerDaemon"
-	EventPendingNodeUpgrade = "PendingNodeUpgrade"
-	EventCapsulePatched     = "CapsulePatched"
-	EventCapsulesOnline     = "CapsulesOnline"
-	EventUpgradeSucceeded   = "UpgradeSucceeded"
-	EventUpgradeFailed      = "UpgradeFailed"
+	EventPodScaledDown       = "PodScaledDown"
+	EventReadyForDaemon      = "ReadyForProvisionerDaemon"
+	EventPendingInfraUpgrade = "PendingInfraUpgrade"
+	EventPendingNodeUpgrade  = "PendingNodeUpgrade"
+	EventCapsulePatched      = "CapsulePatched"
+	EventCapsulesOnline      = "CapsulesOnline"
+	EventUpgradeSucceeded    = "UpgradeSucceeded"
+	EventUpgradeFailed       = "UpgradeFailed"
 
 	EventAbortProcessed   = "AbortProcessed"
 	EventAbortAfterFreeze = "AbortAfterFreeze"

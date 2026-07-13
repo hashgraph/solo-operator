@@ -147,6 +147,7 @@ var _ = BeforeSuite(func() {
 
 	Expect(controller.RegisterFreezeIndex(k8sManager)).To(Succeed())
 	Expect(controller.RegisterExecuteIndex(k8sManager)).To(Succeed())
+	Expect(controller.RegisterFreezeAbortIndex(k8sManager)).To(Succeed())
 
 	executeReconciler := controller.NewNetworkUpgradeExecuteReconciler(
 		k8sManager.GetClient(),

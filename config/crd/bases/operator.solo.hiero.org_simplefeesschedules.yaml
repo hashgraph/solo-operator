@@ -4,16 +4,16 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: applicationproperties.operator.solo.hedera.com
+  name: simplefeesschedules.operator.solo.hiero.org
 spec:
-  group: operator.solo.hedera.com
+  group: operator.solo.hiero.org
   names:
-    kind: ApplicationProperties
-    listKind: ApplicationPropertiesList
-    plural: applicationproperties
+    kind: SimpleFeesSchedules
+    listKind: SimpleFeesSchedulesList
+    plural: simplefeesschedules
     shortNames:
-    - appprops
-    singular: applicationproperties
+    - simplefeesched
+    singular: simplefeesschedules
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -117,10 +117,6 @@ spec:
                 - type
                 x-kubernetes-list-type: map
               configMapName:
-                type: string
-              ledgerID:
-                description: LedgerID is the ledger.id value parsed from spec.content
-                  (observability only).
                 type: string
               observedGeneration:
                 format: int64
