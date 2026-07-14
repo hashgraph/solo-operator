@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -58,6 +59,18 @@ var configFileKinds = map[string]kindEntry{
 // data/config/). They are checked separately from the config subdirectory scan.
 var packageRootFiles = []string{"log4j2.xml", "settings.txt"}
 
+// knownConfigFilenames returns a sorted slice of all filenames recognised by
+// configFileKinds. Used in warning logs so operators can see the full list
+// without consulting source code.
+func knownConfigFilenames() []string {
+	names := make([]string, 0, len(configFileKinds))
+	for name := range configFileKinds {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
 // scannedFile is a single recognised config file found in the upgrade package.
 // Content is NOT stored here; it is read on demand in deployConfigCRs so that
 // large or numerous files are never all held in memory simultaneously.
@@ -101,6 +114,7 @@ func scanConfigFiles(upgradePath string) ([]scannedFile, error) {
 		if !ok {
 			logx.As().Warn().Str("reason", ReasonConfigFileUnrecognised.String()).
 				Str("filename", name).Str("dir", configDir).
+				Strs("recognised", knownConfigFilenames()).
 				Msg("unrecognised config filename — skipping (not in filename→CR-kind map)")
 			continue
 		}
@@ -180,9 +194,10 @@ type configCRRef struct {
 // config files are found the function returns nil immediately.
 func (p *ProvisionerProxy) deployConfigCRs(ctx context.Context, operationID string) error {
 	if p.cfg.UpgradePath == "" {
-		logx.As().Warn().Str("operation_id", operationID).
-			Msg("UpgradePath not set — skipping config CR deployment")
-		return nil
+		return errx.WithHints(
+			errx.WithReason(errPersist.New("UpgradePath is empty — cannot deploy config CRs"), ReasonUpgradePathUnreadable),
+			"Ensure --upgrade-path is set in the UC configuration",
+		)
 	}
 
 	scanned, err := scanConfigFiles(p.cfg.UpgradePath)
@@ -248,10 +263,62 @@ func waitForConfigCRsValid(ctx context.Context, client dynamic.Interface, namesp
 		pending[r.name] = r
 	}
 
+	// checkPending gets each pending CR once and advances the map. Returns a
+	// terminal error if any CR is Valid=False; nil otherwise (callers re-enter
+	// on the next tick if pending is still non-empty).
+	checkPending := func() error {
+		for name, ref := range pending {
+			getCtx, cancel := context.WithTimeout(ctx, listTimeout)
+			obj, err := client.Resource(ref.gvr).Namespace(namespace).Get(getCtx, name, metav1.GetOptions{})
+			cancel()
+			if err != nil {
+				logx.As().Warn().Err(err).Str("reason", ReasonConfigCRGetFailed.String()).
+					Str("operation_id", operationID).Str("cr_kind", ref.kind).Str("cr_name", name).
+					Msg("could not get config CR — will retry")
+				continue
+			}
+
+			condStatus, condFound := conditionStatus(obj, "Valid")
+			if !condFound {
+				logx.As().Debug().
+					Str("operation_id", operationID).Str("cr_kind", ref.kind).Str("cr_name", name).
+					Msg("config CR has no Valid condition yet — waiting")
+				continue
+			}
+
+			switch condStatus {
+			case string(metav1.ConditionTrue):
+				logx.As().Info().Str("reason", ReasonConfigCRsDeployed.String()).
+					Str("operation_id", operationID).Str("cr_kind", ref.kind).Str("cr_name", name).
+					Msg("config CR reconciled — Valid=True")
+				delete(pending, name)
+
+			case string(metav1.ConditionFalse):
+				msg := conditionMessage(obj, "Valid")
+				return errx.WithHints(
+					errx.WithReason(errK8sAPI.New("%s %s is Valid=False: %s", ref.kind, name, msg), ReasonConfigCRFailed),
+					"Inspect the "+ref.kind+" CR status and fix the config file content in the upgrade package",
+					"Delete the config CR and the now_frozen.mf marker once the content is corrected",
+				)
+			}
+		}
+		return nil
+	}
+
 	ticker := time.NewTicker(configCRPollInterval)
 	defer ticker.Stop()
 
 	for len(pending) > 0 {
+		// Immediate first check before waiting for the ticker — avoids a full
+		// configCRPollInterval delay when CRs are already Valid (common in tests
+		// and fast-reconciling clusters).
+		if err := checkPending(); err != nil {
+			return err
+		}
+		if len(pending) == 0 {
+			break
+		}
+
 		select {
 		case <-ctx.Done():
 			names := make([]string, 0, len(pending))
@@ -263,42 +330,9 @@ func waitForConfigCRsValid(ctx context.Context, client dynamic.Interface, namesp
 				"Check operator logs — config CR reconciliation may have stalled",
 				"Confirm the UC ServiceAccount has get permission on the config CR resources",
 			)
-
 		case <-ticker.C:
-			for name, ref := range pending {
-				getCtx, cancel := context.WithTimeout(ctx, listTimeout)
-				obj, err := client.Resource(ref.gvr).Namespace(namespace).Get(getCtx, name, metav1.GetOptions{})
-				cancel()
-				if err != nil {
-					logx.As().Warn().Err(err).Str("reason", ReasonConfigCRGetFailed.String()).
-						Str("operation_id", operationID).Str("cr_kind", ref.kind).Str("cr_name", name).
-						Msg("could not get config CR — will retry")
-					continue
-				}
-
-				condStatus, condFound := conditionStatus(obj, "Valid")
-				if !condFound {
-					logx.As().Debug().
-						Str("operation_id", operationID).Str("cr_kind", ref.kind).Str("cr_name", name).
-						Msg("config CR has no Valid condition yet — waiting")
-					continue
-				}
-
-				switch condStatus {
-				case string(metav1.ConditionTrue):
-					logx.As().Info().Str("reason", ReasonConfigCRsDeployed.String()).
-						Str("operation_id", operationID).Str("cr_kind", ref.kind).Str("cr_name", name).
-						Msg("config CR reconciled — Valid=True")
-					delete(pending, name)
-
-				case string(metav1.ConditionFalse):
-					msg := conditionMessage(obj, "Valid")
-					return errx.WithHints(
-						errx.WithReason(errK8sAPI.New("%s %s is Valid=False: %s", ref.kind, name, msg), ReasonConfigCRFailed),
-						"Inspect the "+ref.kind+" CR status and fix the config file content in the upgrade package",
-						"Delete the config CR and the now_frozen.mf marker once the content is corrected",
-					)
-				}
+			if err := checkPending(); err != nil {
+				return err
 			}
 		}
 	}
