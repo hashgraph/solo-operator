@@ -5,6 +5,7 @@ package uc
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -362,7 +363,7 @@ func (m *UpgradeOutcomeMonitor) handleExecuteEvent(ctx context.Context, cr *unst
 		// Disk opId guard lives here (not in ProvisionerProxy) because UpgradePath
 		// belongs to the monitor's config. A stale ReadyForProvisionerDaemon CR from
 		// a prior cycle must not trigger a new transition for a different upgrade.
-		if !m.matchesDiskOperationID(operationID, cr.GetName(),
+		if !m.matchesDiskOperationID(cr,
 			map[string]string{"phase": string(operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon)}) {
 			return
 		}
@@ -375,15 +376,14 @@ func (m *UpgradeOutcomeMonitor) handleExecuteEvent(ctx context.Context, cr *unst
 // The disk-operationId guard prevents a stale CR from a prior cycle from
 // rotating a new upgrade package.
 func (m *UpgradeOutcomeMonitor) handleTerminalExecute(cr *unstructured.Unstructured) {
-	operationID := operationIDOf(cr)
-	if operationID == "" {
+	if operationIDOf(cr) == "" {
 		return
 	}
 	phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
-	if !m.matchesDiskOperationID(operationID, cr.GetName(), map[string]string{"phase": phase}) {
+	if !m.matchesDiskOperationID(cr, map[string]string{"phase": phase}) {
 		return
 	}
-	rotateUpgradePackage(m.cfg.UpgradePath, m.cfg.PreviousUpgradePath, operationID)
+	rotateUpgradePackage(m.cfg.UpgradePath, m.cfg.PreviousUpgradePath, operationIDOf(cr))
 }
 
 // handleTerminalAbort discards the staged upgrade package when a FreezeAbort CR
@@ -394,21 +394,29 @@ func (m *UpgradeOutcomeMonitor) handleTerminalExecute(cr *unstructured.Unstructu
 // a package that was never installed. Failed is excluded — a Failed FreezeAbort
 // means the abort reconciler itself failed; leave current/ intact for diagnosis.
 func (m *UpgradeOutcomeMonitor) handleTerminalAbort(cr *unstructured.Unstructured) {
-	operationID := operationIDOf(cr)
-	if operationID == "" {
+	if operationIDOf(cr) == "" {
 		return
 	}
 	phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
-	if !m.matchesDiskOperationID(operationID, cr.GetName(), map[string]string{"phase": phase, "cr_type": "FreezeAbort"}) {
+	if !m.matchesDiskOperationID(cr, map[string]string{"phase": phase, "cr_type": "FreezeAbort"}) {
 		return
 	}
-	discardUpgradePackage(m.cfg.UpgradePath, operationID)
+	discardUpgradePackage(m.cfg.UpgradePath, operationIDOf(cr))
 }
 
-// matchesDiskOperationID returns true only when operationID matches the one
-// derived from execute_immediate.mf on disk. Returns false (with a log) on IO
-// error, missing marker, or mismatch.
-func (m *UpgradeOutcomeMonitor) matchesDiskOperationID(operationID, crName string, extra map[string]string) bool {
+// matchesDiskOperationID returns true when the CR's operationID matches the
+// current upgrade package on disk. Two resolution strategies are tried in order:
+//
+//  1. Primary: derive operationId from execute_immediate.mf + manifest (exact match).
+//  2. Fallback: when execute_immediate.mf is absent, compare the version embedded
+//     in operationID against VERSION in current/. A version match means this CR's
+//     package is still on disk (e.g. marker not yet written); a mismatch means
+//     the CN is writing a different version — skip to avoid touching it.
+//
+// Returns false (with a log) on IO error or mismatch.
+func (m *UpgradeOutcomeMonitor) matchesDiskOperationID(cr *unstructured.Unstructured, extra map[string]string) bool {
+	operationID := operationIDOf(cr)
+	crName := cr.GetName()
 	addExtra := func(ev *zerolog.Event) *zerolog.Event {
 		for k, v := range extra {
 			ev = ev.Str(k, v)
@@ -422,15 +430,71 @@ func (m *UpgradeOutcomeMonitor) matchesDiskOperationID(operationID, crName strin
 			Msg("could not read disk operationId — skipping")
 		return false
 	}
-	if !found {
+	if found {
+		if diskOpID != operationID {
+			addExtra(logx.As().Info().Str("disk_operation_id", diskOpID)).
+				Msg("CR operationId does not match disk — skipping (stale CR)")
+			return false
+		}
+		return true
+	}
+
+	// execute_immediate.mf absent — use file-age and version as fallback guards.
+	crCreatedAt := cr.GetCreationTimestamp().Time
+
+	// Step 1 — temporal guard: find the newest mtime among all files in current/.
+	// If current/ is empty there is nothing to rotate/discard.
+	// If any file is newer than the CR's creationTimestamp the CN is still
+	// writing the package — leave current/ untouched.
+	entries, err := os.ReadDir(m.cfg.UpgradePath)
+	if err != nil {
+		addExtra(logx.As().Warn().Err(err).Str("reason", ReasonUpgradePackageRotateFailed.String())).
+			Msg("could not read upgrade dir for fallback timestamp check — skipping")
+		return false
+	}
+	if len(entries) == 0 {
 		addExtra(logx.As().Debug().Str("reason", ReasonProvisionerProxyMissingOperationID.String())).
-			Msg("no execute_immediate.mf on disk — skipping (current may be empty after rotation)")
+			Msg("no execute_immediate.mf and current/ is empty — already rotated, skipping")
 		return false
 	}
-	if diskOpID != operationID {
-		addExtra(logx.As().Info().Str("disk_operation_id", diskOpID)).
-			Msg("CR operationId does not match disk — skipping (stale CR)")
+	if !crCreatedAt.IsZero() {
+		var newestMtime time.Time
+		for _, e := range entries {
+			if info, infoErr := e.Info(); infoErr == nil && info.ModTime().After(newestMtime) {
+				newestMtime = info.ModTime()
+			}
+		}
+		if newestMtime.After(crCreatedAt) {
+			addExtra(logx.As().Info().
+				Str("newest_file_mtime", newestMtime.UTC().Format(time.RFC3339)).
+				Str("cr_created_at", crCreatedAt.UTC().Format(time.RFC3339))).
+				Msg("files in current/ are newer than CR — CN is writing a new package, skipping")
+			return false
+		}
+	}
+
+	// Step 2 — version identity (if VERSION exists): the version embedded in the
+	// operationId must match VERSION= on disk. A mismatch means the package is
+	// for a different operation entirely.
+	crVersion, ok := versionFromOperationID(operationID)
+	if !ok {
+		addExtra(logx.As().Debug().Str("reason", ReasonProvisionerProxyMissingOperationID.String())).
+			Msg("no execute_immediate.mf and operationId has unrecognised format — skipping")
 		return false
 	}
+	diskVersion, _, versionFound, versionErr := parseVersionFile(m.cfg.UpgradePath)
+	if versionErr != nil {
+		addExtra(logx.As().Warn().Err(versionErr).Str("reason", ReasonUpgradePackageRotateFailed.String())).
+			Msg("could not read VERSION file — skipping")
+		return false
+	}
+	if versionFound && diskVersion != crVersion {
+		addExtra(logx.As().Info().Str("disk_version", diskVersion).Str("cr_version", crVersion)).
+			Msg("VERSION file version differs from CR operationId — different operation's package, skipping")
+		return false
+	}
+
+	addExtra(logx.As().Debug().Str("disk_version", diskVersion)).
+		Msg("no execute_immediate.mf but files predate CR and version matches — treating current/ as stale package")
 	return true
 }

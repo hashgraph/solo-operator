@@ -142,6 +142,26 @@ func deriveOperationIDPrimary(upgradePath string) (operationID string, executeMt
 		return "", time.Time{}, nil, false,
 			errx.WithReason(errManifestInvalid.Wrap(err, "mint operationId"), ReasonManifestInvalid)
 	}
+
+	// Cross-check: VERSION file must agree with the manifest version so the
+	// operationId accurately represents the package on disk. A mismatch means
+	// the CN wrote a package for a different version than the manifest declares —
+	// treat as a transient inconsistency and retry next tick.
+	diskVersion, _, versionFound, versionErr := parseVersionFile(upgradePath)
+	if versionErr != nil {
+		return "", time.Time{}, nil, false, versionErr
+	}
+	if versionFound && diskVersion != manifest.Images.ConsensusNode.Version {
+		return "", time.Time{}, nil, false,
+			errx.WithHints(
+				errx.WithReason(
+					errManifestInvalid.New("VERSION file reports %q but manifest declares %q — package write may be in progress",
+						diskVersion, manifest.Images.ConsensusNode.Version),
+					ReasonManifestInvalid),
+				"Wait for the consensus node to finish writing the upgrade package",
+			)
+	}
+
 	return operationID, prepareInfo.ModTime(), manifest, true, nil
 }
 
@@ -209,6 +229,50 @@ func (f *Factory) resolveByVersion(ctx context.Context, version string, skipPhas
 		}
 	}
 	return best, nil
+}
+
+const versionFile = "VERSION"
+
+// parseVersionFile reads VERSION from upgradePath and returns the value of the
+// VERSION= line (e.g. "0.74.0") and the file's modification time.
+// Returns ("", zero, false, nil) when the file is absent.
+func parseVersionFile(upgradePath string) (version string, mtime time.Time, found bool, err error) {
+	path := filepath.Join(upgradePath, versionFile)
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", time.Time{}, false, nil
+		}
+		return "", time.Time{}, false, errx.WithReason(errPersist.Wrap(err, "stat VERSION file"), ReasonMarkerStatFailed)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", time.Time{}, false, errx.WithReason(errPersist.Wrap(err, "read VERSION file"), ReasonMarkerStatFailed)
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if v, ok := strings.CutPrefix(line, "VERSION="); ok {
+			return strings.TrimSpace(v), info.ModTime(), true, nil
+		}
+	}
+	return "", time.Time{}, false, nil
+}
+
+// versionFromOperationID extracts the version segment from an operationId of
+// the form "upgrade-<version>-<timestamp>". It strips the "upgrade-" prefix and
+// the trailing "-<timestamp>" suffix. Returns ("", false) if the format is
+// unrecognised.
+func versionFromOperationID(operationID string) (string, bool) {
+	// Must start with "upgrade-"
+	rest, ok := strings.CutPrefix(operationID, "upgrade-")
+	if !ok {
+		return "", false
+	}
+	// Strip the trailing "-<timestamp>" — split on last "-"
+	idx := strings.LastIndex(rest, "-")
+	if idx <= 0 {
+		return "", false
+	}
+	return rest[:idx], true
 }
 
 // operationIDTimestamp extracts and parses the prepare timestamp embedded in an

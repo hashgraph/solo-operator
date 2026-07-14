@@ -473,6 +473,27 @@ and any other package contents) is moved atomically into `$UCDIR/previous`. The
 The rotation is **idempotent** — if `current` is already empty (e.g. the UC
 crashed mid-rotation and restarted), the operation is a no-op.
 
+### Disk identity guard
+
+Before rotating or discarding, the `upgrade-outcome-monitor` verifies that the
+package in `current/` belongs to the CR being processed and is not an
+in-progress write by the consensus node. Two strategies are tried in order:
+
+1. **Primary** — `execute_immediate.mf` present: the operationId is derived from
+   the marker + manifest and compared directly against the CR's `spec.operationId`.
+2. **Fallback** — `execute_immediate.mf` absent (e.g. the CN hasn't written it yet):
+   - **Temporal guard**: the newest `mtime` among root-level entries in `current/`
+     must predate the CR's `creationTimestamp`. If any file is newer the CN is
+     still writing the package — skip.
+   - **Version identity** (if `VERSION` file present): the `VERSION=` line must
+     match the version embedded in the CR's operationId. A mismatch means the
+     package on disk is for a different operation — skip.
+
+At `execute_immediate.mf` write time, the UC also cross-checks the `VERSION`
+file against the manifest version. If they differ, the handler retries next tick
+rather than minting a wrong operationId — guarding against a race where the CN
+is still writing the package when the marker appears.
+
 To observe rotation in cluster-only mode:
 
 1. Complete the full marker sequence (§4a → §4b optional → trigger Execute CR to
@@ -749,7 +770,32 @@ go test ./internal/uc/ -run 'TestRecover' -v
 | `TestRecoverPersistedCRs_DiskOnlyResent` | A CR persisted to disk but absent from the cluster is re-sent to the K8s API on startup; the disk copy is deleted and the dedup cache is updated. |
 | `TestRecoverPersistedCRs_AlreadyInCluster` | A disk CR that was already delivered before the crash has its stale disk copy removed without creating a duplicate CR. |
 | `TestRecoverPersistedCRs_NoPersisted` | No persisted files → no-op, no error. |
-| `TestRecoverOnStartup_FullFlow` | End-to-end: a crash-window disk CR is re-sent in one `RecoverOnStartup` call; marker files and upgrade-path are untouched (rotation is the provisioner-proxy monitor's responsibility). |
+| `TestRecoverOnStartup_FullFlow` | End-to-end: a crash-window disk CR is re-sent in one `RecoverOnStartup` call; marker files and upgrade-path are untouched (rotation is the upgrade-outcome monitor's responsibility). |
+
+**VERSION file and disk identity guard** (`internal/uc/resolve_test.go`, `internal/uc/upgrade_outcome_monitor_test.go`):
+
+```bash
+go test ./internal/uc/ -run 'TestParseVersionFile|TestVersionFromOperationID|TestDeriveOperationIDPrimary|TestMatchesDiskOperationID' -v
+```
+
+| Test | Asserts |
+|------|---------|
+| `TestParseVersionFilePresent` | A `VERSION` file with `VERSION=0.74.0` returns the version string and a non-zero mtime. |
+| `TestParseVersionFileAbsent` | Absent `VERSION` file returns `("", zero, false, nil)` — not an error. |
+| `TestParseVersionFileNoVersionLine` | `VERSION` file exists but has no `VERSION=` line → returns `("", zero, false, nil)`. |
+| `TestVersionFromOperationID` | Extracts the version segment from `upgrade-0.74.0-20260521T182531Z` → `"0.74.0"`. |
+| `TestVersionFromOperationIDWithDash` | Pre-release version `upgrade-0.74.0-rc1-20260521T182531Z` → `"0.74.0-rc1"` (splits on last `-`). |
+| `TestVersionFromOperationIDInvalid` | Malformed or empty operationId → `("", false)`. |
+| `TestDeriveOperationIDPrimaryVersionMatch` | `execute_immediate.mf` present, `VERSION` matches manifest → operationId minted normally. |
+| `TestDeriveOperationIDPrimaryVersionMismatch` | `execute_immediate.mf` present, `VERSION` disagrees with manifest → returns `ManifestInvalid` error (CN still writing). |
+| `TestDeriveOperationIDPrimaryVersionAbsent` | `execute_immediate.mf` present, no `VERSION` file → cross-check skipped, succeeds normally. |
+| `TestMatchesDiskOperationIDPrimaryMatch` | `execute_immediate.mf` present, operationId matches → `true`. |
+| `TestMatchesDiskOperationIDPrimaryMismatch` | `execute_immediate.mf` present, operationId mismatches → `false`. |
+| `TestMatchesDiskOperationIDEmptyDir` | `execute_immediate.mf` absent, `current/` empty → `false` (already rotated). |
+| `TestMatchesDiskOperationIDFilesNewerThanCR` | `execute_immediate.mf` absent, a file in `current/` has mtime after CR creationTimestamp → `false` (CN writing). |
+| `TestMatchesDiskOperationIDStaleFilesVersionMatch` | `execute_immediate.mf` absent, all files older than CR, `VERSION` matches → `true` (stale package, safe to act). |
+| `TestMatchesDiskOperationIDStaleFilesNoVersion` | `execute_immediate.mf` absent, all files older than CR, no `VERSION` file → `true` (temporal guard passed, no version to reject). |
+| `TestMatchesDiskOperationIDStaleFilesVersionMismatch` | `execute_immediate.mf` absent, all files older than CR, `VERSION` has different version → `false` (different operation's package). |
 
 **Control socket** (`internal/uc/control_client_test.go`):
 
