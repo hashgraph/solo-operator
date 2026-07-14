@@ -53,7 +53,12 @@ func New(cfg Config) (*UC, error) {
 
 	if cfg.ProvisionerProxyEnabled() {
 		proxy := NewProvisionerProxyWithClient(
-			ProvisionerProxyConfig{Namespace: cfg.Namespace, NodeID: cfg.NodeID},
+			ProvisionerProxyConfig{
+				Namespace:   cfg.Namespace,
+				NodeID:      cfg.NodeID,
+				UpgradePath: cfg.UpgradePath,
+				Orbit:       cfg.Orbit,
+			},
 			client)
 		outcomeMonitor.mu.Lock()
 		outcomeMonitor.proxy = proxy

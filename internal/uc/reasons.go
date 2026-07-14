@@ -99,6 +99,14 @@ const (
 	ReasonUpgradePackageDiscarded            errx.Reason = "UpgradePackageDiscarded"
 	ReasonUpgradePackageRotateFailed         errx.Reason = "UpgradePackageRotateFailed"
 
+	// Config-CR deployment (execute-phase, cluster-only).
+	ReasonConfigDirAbsent        errx.Reason = "ConfigDirAbsent"
+	ReasonConfigFileUnrecognised errx.Reason = "ConfigFileUnrecognised"
+	ReasonConfigCRCreateFailed   errx.Reason = "ConfigCRCreateFailed"
+	ReasonConfigCRFailed         errx.Reason = "ConfigCRFailed"
+	ReasonConfigCRsDeployed      errx.Reason = "ConfigCRsDeployed"
+	ReasonConfigCRWaitTimeout    errx.Reason = "ConfigCRWaitTimeout"
+
 	// systemd notify.
 	ReasonSdNotifyReadyFailed    errx.Reason = "SdNotifyReadyFailed"
 	ReasonSdNotifyStoppingFailed errx.Reason = "SdNotifyStoppingFailed"

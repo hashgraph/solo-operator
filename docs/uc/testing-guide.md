@@ -11,12 +11,17 @@ persist-before-send primitive from **story 8.2** (#992), the
 (#993), the `freeze_scheduled.mf` → `NetworkUpgradeFreeze` handler from **story
 8.4** (#994), the `freeze_aborted.mf` → `NetworkUpgradeFreezeAbort` handler from
 **story 8.6** (#996), the operation-id deduplication from **story 8.7** (#997),
-and the restart recovery from **story 8.8** (#998). When you drop
+the restart recovery from **story 8.8** (#998), and the **cluster-only
+execute-phase config-CR workflow from story 8.9** (#1038). When you drop
 `execute_immediate.mf` you will now see the loop construct, persist, and create a
 real `NetworkUpgradePrepare` CR (§4a); dropping `freeze_scheduled.mf` (with a
 valid epoch-seconds content) creates a `NetworkUpgradeFreeze` CR (§4b); dropping
-`freeze_aborted.mf` creates a `NetworkUpgradeFreezeAbort` CR (§4c). The
-remaining per-marker handler (#995 `now_frozen.mf`) is still stubbed.
+`freeze_aborted.mf` creates a `NetworkUpgradeFreezeAbort` CR (§4c). In
+cluster-only mode (`--mode=cluster-only`), when a `NetworkUpgradeExecute` CR
+reaches `ReadyForProvisionerDaemon`, the UC scans the upgrade package for config
+files, creates the appropriate ConsensusConfig CRs, and advances the phase to
+`PendingNodeUpgrade` once they are all `Valid=True` (§4e). The remaining
+per-marker handler (#995 `now_frozen.mf`) is still stubbed.
 
 ---
 
@@ -524,6 +529,91 @@ ls "$UCDIR/previous"   # unchanged — genuine rollback copy preserved
 
 ---
 
+## 4e. Execute-phase config-CR workflow in cluster-only mode (#1038)
+
+This section exercises the `ProvisionerProxy` — the component that handles
+`ReadyForProvisionerDaemon` in the cluster-only profile. When an
+`NetworkUpgradeExecute` CR reaches that phase the proxy:
+
+1. Scans `<upgrade-path>/data/config/` and the package root for recognised
+   config files.
+2. Creates the corresponding ConsensusConfig CRs (e.g. `Log4j2Config`,
+   `NodeSettings`, `ApplicationProperties`).
+3. Waits for all of them to reach `status.conditions[type=Valid].status=True`.
+4. Patches the Execute CR's `status.phase` to `PendingNodeUpgrade`.
+
+**Prerequisites:** CRDs for the config CR kinds must be installed in the cluster
+(`task install` installs all CRDs). The UC must be started with
+`--mode=cluster-only` and `--upgrade-path` pointing at the prepared directory.
+
+### Manual test steps
+
+```bash
+# 1. Prepare an upgrade-path root with a recognised config file.
+UPGRADEDIR=$(mktemp -d)
+mkdir -p "$UPGRADEDIR/data/config"
+cat > "$UPGRADEDIR/data/config/application.properties" <<'EOF'
+[hedera]
+ledger.id=0x00
+EOF
+cat > "$UPGRADEDIR/log4j2.xml" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN"/>
+EOF
+
+# 2. Start the UC in cluster-only mode (real cluster, CRDs installed).
+./bin/uc run \
+  --mode=cluster-only \
+  --namespace=<your-namespace> \
+  --orbit=<your-orbit> \
+  --upgrade-path="$UPGRADEDIR" \
+  --previous-upgrade-path="$(dirname $UPGRADEDIR)/previous" \
+  --cr-persist-path=/tmp/uc-crs \
+  --events-path=/tmp/uc-events &
+
+# 3. Simulate the operator setting ReadyForProvisionerDaemon on an Execute CR.
+kubectl patch networkupgradeexecute <execute-name> \
+  --subresource=status \
+  --type=merge \
+  -p '{"status":{"phase":"ReadyForProvisionerDaemon"}}'
+
+# 4. Observe UC logs — you should see:
+#   reason=CRDelivered  cr_kind=ApplicationProperties
+#   reason=CRDelivered  cr_kind=Log4j2Config
+#   (then, after operator reconciliation sets Valid=True on each:)
+#   reason=ConfigCRsDeployed  count=2
+#   reason=PendingNodeUpgrade
+
+# 5. Confirm the config CRs were created.
+kubectl get applicationproperties -l operator.solo.hiero.org/operation-id=<id>
+kubectl get log4j2configs        -l operator.solo.hiero.org/operation-id=<id>
+
+# 6. Confirm the Execute CR phase was advanced.
+kubectl get networkupgradeexecute <execute-name> -o jsonpath='{.status.phase}'
+# Expected: PendingNodeUpgrade
+```
+
+### Unrecognised filename
+
+If the package includes a filename not in the hardcoded map, the UC logs a
+`reason=ConfigFileUnrecognised` WARN and skips that file — the upgrade is not
+stalled. Verify with:
+
+```bash
+echo "ignored" > "$UPGRADEDIR/data/config/some-unknown-file.conf"
+# Restart or re-trigger — the UC should log a WARN but still complete.
+```
+
+### Valid=False failure path
+
+If the operator reconciler sets `Valid=False` on a config CR (e.g. malformed XML
+in `log4j2.xml`), the UC logs `reason=ConfigCRFailed` at ERROR and returns an
+error — the Execute CR stays at `ReadyForProvisionerDaemon` for operator
+intervention. The slot is released so the monitor can retry once the operator
+corrects the content.
+
+---
+
 ## 5. Test the freeze-window interval switch
 
 The loop polls at the normal cadence (`--poll-interval`) and drops to the fast
@@ -813,6 +903,27 @@ go test ./internal/uc/ -run TestControlClient -v
 The `ControlClient` covers the full daemonkit control surface (`/status` and
 `/health`); add a method (and `uc` subcommand) here for any new endpoint the
 server registers.
+
+**Config-CR workflow — cluster-only execute phase** (`internal/uc/config_cr_test.go`):
+
+```bash
+go test ./internal/uc/ -run 'TestScanConfigFiles|TestBuildConfigCR|TestDeployConfigCRs|TestHandleExecute' -v
+```
+
+| Test | Asserts |
+|------|---------|
+| `TestScanConfigFiles_empty` | No recognised files → empty slice, no error. |
+| `TestScanConfigFiles_configDir` | Files in `data/config/` are picked up with the correct kind. |
+| `TestScanConfigFiles_rootFiles` | `log4j2.xml` and `settings.txt` at the package root are picked up. |
+| `TestScanConfigFiles_unrecognised` | An unknown filename is warned and skipped — not an error; the recognised file is still returned. |
+| `TestScanConfigFiles_allRecognised` | All ten recognised filenames scan without error. |
+| `TestBuildConfigCR_nameAndLabels` | CR name, namespace, kind, `LabelOperationID`, `annotationCreatedBy`, `spec.content`, and `spec.orbit` are all set correctly. |
+| `TestBuildConfigCR_noOrbit` | `spec.orbit` is absent when `Orbit` is empty. |
+| `TestDeployConfigCRs_noFiles` | No config files → returns nil immediately. |
+| `TestDeployConfigCRs_happyPath` | Creates a config CR; Valid=True stamped concurrently → returns nil. |
+| `TestDeployConfigCRs_validFalse` | Valid=False on one CR → returns error (phase advance is blocked). |
+| `TestDeployConfigCRs_timeout` | Context deadline expires before Valid=True → returns timeout error. |
+| `TestHandleExecute_configCRsThenPhaseAdvance` | Full flow: config CR created, Valid=True set, Execute CR phase advanced to PendingNodeUpgrade. |
 
 **Integration tests — real API server** (`test/integration/uc/`):
 
