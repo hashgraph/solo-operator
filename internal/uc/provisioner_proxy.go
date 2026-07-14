@@ -60,7 +60,8 @@ type ProvisionerProxyConfig struct {
 	// UpgradePath is the root of the extracted upgrade package
 	// (data/upgrade/current). The proxy scans <UpgradePath>/data/config/ and
 	// <UpgradePath>/ (for log4j2.xml and settings.txt) during the execute phase.
-	// Required in cluster-only mode; deployConfigCRs returns an error when empty.
+	// Required; deployConfigCRs returns an error when empty. If data/config/ is
+	// absent or contains no recognised files the deploy step is a no-op.
 	UpgradePath string
 	// Orbit is the owning Orbit name, written into spec.orbit on each config CR
 	// so the Orbit controller can cascade-delete them.
