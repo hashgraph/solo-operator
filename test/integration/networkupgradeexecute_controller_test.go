@@ -218,9 +218,9 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 		})
 
 		AfterEach(func() {
-			_ = k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradeExecute{ObjectMeta: metav1.ObjectMeta{Name: nuxName, Namespace: ns}})
-			_ = k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradeFreeze{ObjectMeta: metav1.ObjectMeta{Name: nufName, Namespace: ns}})
-			_ = k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradePrepare{ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns}})
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradeExecute{ObjectMeta: metav1.ObjectMeta{Name: nuxName, Namespace: ns}})
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradeFreeze{ObjectMeta: metav1.ObjectMeta{Name: nufName, Namespace: ns}})
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradePrepare{ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns}})
 			_ = k8sClient.Delete(ctx, &operatorv1alpha1.ConsensusCapsule{ObjectMeta: metav1.ObjectMeta{Name: "node0-happy", Namespace: ns}})
 			_ = k8sClient.Delete(ctx, &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "node0-happy", Namespace: ns}})
 		})
@@ -373,9 +373,9 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 		})
 
 		AfterEach(func() {
-			_ = k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradeExecute{ObjectMeta: metav1.ObjectMeta{Name: nuxName, Namespace: ns}})
-			_ = k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradeFreeze{ObjectMeta: metav1.ObjectMeta{Name: nufName, Namespace: ns}})
-			_ = k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradePrepare{ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns}})
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradeExecute{ObjectMeta: metav1.ObjectMeta{Name: nuxName, Namespace: ns}})
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradeFreeze{ObjectMeta: metav1.ObjectMeta{Name: nufName, Namespace: ns}})
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradePrepare{ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns}})
 			_ = k8sClient.Delete(ctx, &operatorv1alpha1.ConsensusCapsule{ObjectMeta: metav1.ObjectMeta{Name: "node0-daemon-fail", Namespace: ns}})
 			_ = k8sClient.Delete(ctx, &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "node0-daemon-fail", Namespace: ns}})
 		})
@@ -451,7 +451,7 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 		})
 
 		AfterEach(func() {
-			_ = k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradeExecute{ObjectMeta: metav1.ObjectMeta{Name: nuxName, Namespace: ns}})
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradeExecute{ObjectMeta: metav1.ObjectMeta{Name: nuxName, Namespace: ns}})
 		})
 
 		It("stays in Pending while waiting for prereqs", func() {
@@ -512,9 +512,9 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 		})
 
 		AfterEach(func() {
-			_ = k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradeExecute{ObjectMeta: metav1.ObjectMeta{Name: nuxName, Namespace: ns}})
-			_ = k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradeFreeze{ObjectMeta: metav1.ObjectMeta{Name: nufName, Namespace: ns}})
-			_ = k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradePrepare{ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns}})
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradeExecute{ObjectMeta: metav1.ObjectMeta{Name: nuxName, Namespace: ns}})
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradeFreeze{ObjectMeta: metav1.ObjectMeta{Name: nufName, Namespace: ns}})
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradePrepare{ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns}})
 			_ = k8sClient.Delete(ctx, &operatorv1alpha1.ConsensusCapsule{ObjectMeta: metav1.ObjectMeta{Name: "node0-failover", Namespace: ns}})
 			_ = k8sClient.Delete(ctx, &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "node0-failover", Namespace: ns}})
 		})
@@ -611,9 +611,9 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 		})
 
 		AfterEach(func() {
-			_ = k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradeExecute{ObjectMeta: metav1.ObjectMeta{Name: nuxName, Namespace: ns}})
-			_ = k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradeFreeze{ObjectMeta: metav1.ObjectMeta{Name: nufName, Namespace: ns}})
-			_ = k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradePrepare{ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns}})
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradeExecute{ObjectMeta: metav1.ObjectMeta{Name: nuxName, Namespace: ns}})
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradeFreeze{ObjectMeta: metav1.ObjectMeta{Name: nufName, Namespace: ns}})
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradePrepare{ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns}})
 			_ = k8sClient.Delete(ctx, &operatorv1alpha1.ConsensusCapsule{ObjectMeta: metav1.ObjectMeta{Name: capsName, Namespace: ns}})
 			_ = k8sClient.Delete(ctx, &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: capsName, Namespace: ns}})
 		})
@@ -742,9 +742,9 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 		})
 
 		AfterEach(func() {
-			_ = k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradeExecute{ObjectMeta: metav1.ObjectMeta{Name: nuxName, Namespace: ns}})
-			_ = k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradeFreeze{ObjectMeta: metav1.ObjectMeta{Name: nufName, Namespace: ns}})
-			_ = k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradePrepare{ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns}})
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradeExecute{ObjectMeta: metav1.ObjectMeta{Name: nuxName, Namespace: ns}})
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradeFreeze{ObjectMeta: metav1.ObjectMeta{Name: nufName, Namespace: ns}})
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradePrepare{ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns}})
 			_ = k8sClient.Delete(ctx, &operatorv1alpha1.ConsensusCapsule{ObjectMeta: metav1.ObjectMeta{Name: capsName, Namespace: ns}})
 			_ = k8sClient.Delete(ctx, &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: capsName, Namespace: ns}})
 		})

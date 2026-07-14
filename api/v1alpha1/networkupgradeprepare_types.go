@@ -4,6 +4,9 @@ package v1alpha1
 
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+// NetworkUpgradePrepareSpec is immutable after creation; the CEL rule below
+// rejects any spec mutation at admission time.
+// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec is immutable after creation"
 type NetworkUpgradePrepareSpec struct {
 	Orbit string `json:"orbit"`
 

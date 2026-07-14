@@ -54,6 +54,9 @@ spec:
           metadata:
             type: object
           spec:
+            description: |-
+              NetworkUpgradeExecuteSpec is immutable after creation; the CEL rule below
+              rejects any spec mutation at admission time.
             properties:
               consensusNode:
                 minLength: 1
@@ -602,6 +605,9 @@ spec:
             - orbit
             - selectedSources
             type: object
+            x-kubernetes-validations:
+            - message: spec is immutable after creation
+              rule: self == oldSelf
           status:
             properties:
               completionTime:

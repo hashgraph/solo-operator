@@ -72,6 +72,10 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	if res, err := ensureFinalizer(ctx, r.Client, &execute, FinalizerNetworkUpgradeExecute); res != nil {
+		return *res, err
+	}
+
 	if execute.Status.Phase == operatorv1alpha1.ExecutePhaseSucceeded ||
 		execute.Status.Phase == operatorv1alpha1.ExecutePhaseFailed {
 		return ctrl.Result{}, nil

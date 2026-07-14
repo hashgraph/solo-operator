@@ -48,9 +48,9 @@ var _ = Describe("NetworkUpgradeFreezeAbort Controller", func() {
 		})
 
 		AfterEach(func() {
-			Expect(k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradeFreezeAbort{
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradeFreezeAbort{
 				ObjectMeta: metav1.ObjectMeta{Name: nuaName, Namespace: ns},
-			})).To(Succeed())
+			})
 		})
 
 		It("reconciles to Succeeded with AbortProcessed=True", func() {
@@ -141,12 +141,12 @@ var _ = Describe("NetworkUpgradeFreezeAbort Controller", func() {
 		})
 
 		AfterEach(func() {
-			Expect(k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradeFreezeAbort{
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradeFreezeAbort{
 				ObjectMeta: metav1.ObjectMeta{Name: nuaName, Namespace: ns},
-			})).To(Succeed())
-			Expect(k8sClient.Delete(ctx, &operatorv1alpha1.NetworkUpgradeExecute{
+			})
+			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradeExecute{
 				ObjectMeta: metav1.ObjectMeta{Name: nueName, Namespace: ns},
-			})).To(Succeed())
+			})
 		})
 
 		It("reconciles to Failed with AbortProcessed=False", func() {

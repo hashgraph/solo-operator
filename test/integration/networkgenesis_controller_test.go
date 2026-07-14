@@ -20,6 +20,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/operations/genesis"
@@ -284,6 +285,34 @@ func createNamespaceIgnoreExisting(ctx context.Context, name string) {
 	if err != nil {
 		Expect(err.Error()).To(ContainSubstring("already exists"))
 	}
+}
+
+// deleteAndPurge deletes obj and strips its finalizers. NetworkUpgrade CRs
+// carry a finalizer the operator never removes, so a plain Delete only sets a
+// deletionTimestamp and a same-name Create in the next spec would 409.
+func deleteAndPurge(ctx context.Context, obj client.Object) {
+	if err := k8sClient.Delete(ctx, obj); err != nil {
+		Expect(apierrors.IsNotFound(err)).To(BeTrue(), "delete: %v", err)
+		return
+	}
+	key := client.ObjectKeyFromObject(obj)
+	Eventually(func() error {
+		fresh := obj.DeepCopyObject().(client.Object)
+		err := k8sClient.Get(ctx, key, fresh)
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if len(fresh.GetFinalizers()) > 0 {
+			fresh.SetFinalizers(nil)
+			if err := k8sClient.Update(ctx, fresh); err != nil && !apierrors.IsConflict(err) {
+				return err
+			}
+		}
+		return fmt.Errorf("still present")
+	}, time.Second*10, time.Millisecond*100).Should(Succeed())
 }
 
 func createSimpleOrbit(ctx context.Context, name string) {

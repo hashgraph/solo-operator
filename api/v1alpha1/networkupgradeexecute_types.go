@@ -17,6 +17,9 @@ const (
 	ExecutePhaseFailed                    ExecutePhase = "Failed"
 )
 
+// NetworkUpgradeExecuteSpec is immutable after creation; the CEL rule below
+// rejects any spec mutation at admission time.
+// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec is immutable after creation"
 type NetworkUpgradeExecuteSpec struct {
 	Orbit string `json:"orbit"`
 

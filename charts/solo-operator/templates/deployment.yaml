@@ -63,11 +63,6 @@ spec:
             - name: health
               containerPort: {{ .Values.health.port }}
               protocol: TCP
-            {{- if .Values.webhook.enabled }}
-            - name: webhook
-              containerPort: {{ .Values.webhook.port }}
-              protocol: TCP
-            {{- end }}
           livenessProbe:
             httpGet:
               path: /healthz
