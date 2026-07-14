@@ -123,10 +123,14 @@ var _ = Describe("Log4j2Config Controller", func() {
 </Configuration>`
 
 			crKey := types.NamespacedName{Name: crName, Namespace: namespace}
-			fetchedCR := &operatorv1alpha1.Log4j2Config{}
-			Expect(k8sClient.Get(ctx, crKey, fetchedCR)).Should(Succeed())
-			fetchedCR.Spec.Content = updatedXML
-			Expect(k8sClient.Update(ctx, fetchedCR)).Should(Succeed())
+			Eventually(func() error {
+				fetchedCR := &operatorv1alpha1.Log4j2Config{}
+				if err := k8sClient.Get(ctx, crKey, fetchedCR); err != nil {
+					return err
+				}
+				fetchedCR.Spec.Content = updatedXML
+				return k8sClient.Update(ctx, fetchedCR)
+			}, timeout, interval).Should(Succeed())
 
 			By("Verifying the ConfigMap is updated")
 			Eventually(func() string {
@@ -137,7 +141,9 @@ var _ = Describe("Log4j2Config Controller", func() {
 			}, timeout, interval).Should(Equal(updatedXML))
 
 			By("Cleaning up")
-			Expect(k8sClient.Delete(ctx, fetchedCR)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, &operatorv1alpha1.Log4j2Config{
+				ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: namespace},
+			})).Should(Succeed())
 		})
 	})
 
