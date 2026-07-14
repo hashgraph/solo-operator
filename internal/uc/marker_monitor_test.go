@@ -53,7 +53,7 @@ func newTestMonitor(t *testing.T) (*MarkerMonitor, *fakeDispatcher, string) {
 	disp := newFakeDispatcher()
 	m := &MarkerMonitor{
 		cfg: Config{
-			MarkerPath:         dir,
+			UpgradePath:        dir,
 			PollInterval:       DefaultPollInterval,
 			FreezePollInterval: FreezePollInterval,
 		},
@@ -190,7 +190,7 @@ func TestPollContinuesAfterHandlerError(t *testing.T) {
 // no dispatches and no panic — the loop simply finds nothing.
 func TestPollMissingDirectoryIsTolerated(t *testing.T) {
 	m, disp, dir := newTestMonitor(t)
-	m.cfg.MarkerPath = filepath.Join(dir, "does-not-exist")
+	m.cfg.UpgradePath = filepath.Join(dir, "does-not-exist")
 
 	if got := m.poll(context.Background(), m.cfg.PollInterval); got != m.cfg.PollInterval {
 		t.Fatalf("next interval = %v, want %v", got, m.cfg.PollInterval)

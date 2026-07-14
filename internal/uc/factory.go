@@ -41,7 +41,7 @@ type Factory struct {
 	// only; correctness rests on the K8s API existence check before each create,
 	// backstopped by AlreadyExists on Create (first-detection-wins).
 	mu    sync.Mutex
-	cache map[string]map[string]struct{} // operationId -> set of created steps
+	cache map[string]map[string]string // operationId -> step -> phase (empty = unknown)
 }
 
 // NewFactory constructs the CR factory.
@@ -50,31 +50,44 @@ func NewFactory(cfg Config, client dynamic.Interface) *Factory {
 		cfg:    cfg,
 		client: client,
 		store:  NewCRStore(cfg.CRPersistPath),
-		cache:  make(map[string]map[string]struct{}),
+		cache:  make(map[string]map[string]string),
 	}
 }
 
-// RecoverOnStartup reconciles cluster state, persisted CRs on disk, and marker
-// files so the UC resumes in-flight upgrades without re-signalling.
+// RecoverOnStartup reconciles cluster state and persisted CRs on disk so the
+// UC resumes in-flight upgrades without re-signalling.
 //
-// Today it seeds the operation-id dedup cache (#997) by querying every
-// NetworkUpgrade* CR already in the namespace, so a restart does not re-create
-// CRs for markers it handled before the restart. A seed query failure is logged
-// but not fatal: the per-action cluster query remains authoritative, so an
-// unseeded cache only costs one extra API call per operation.
+// It runs two passes in sequence:
 //
-// TODO(#998): re-send any CR persisted on disk but not yet in the cluster; clean
-// up artifacts for upgrades that have already reached a terminal phase.
+//  1. Seed the op-id dedup cache from all existing NetworkUpgrade* CRs in the
+//     cluster, so steady-state ticks for already-handled markers are served from
+//     cache. A seed failure is logged but not fatal.
+//
+//  2. Re-send any CR persisted to disk (--cr-persist-path) but not yet present
+//     in the cluster. These are crash-window survivors: the prior process wrote
+//     the file but crashed before the K8s API Create completed.
+//
+// Marker files and upgrade-path rotation (current→previous) are never touched
+// here. Rotation is the exclusive responsibility of UpgradeOutcomeMonitor,
+// which handles it on every terminal Execute or FreezeAbort CR observation —
+// both on startup (list) and live (watch).
 func (f *Factory) RecoverOnStartup(ctx context.Context) error {
 	if err := f.seedCache(ctx); err != nil {
-		// Use the error's own reason (ReasonCacheSeedFailed from seedCache) so the
-		// log line and the error share one identifier; fall back only if absent.
 		common.LogErr(logx.As().Warn(), err, ReasonUCCacheSeedFailed).
 			Msg("could not seed op-id dedup cache on startup; per-action queries remain authoritative")
-		return nil
+	} else {
+		logx.As().Info().Str("reason", ReasonUCCacheSeeded.String()).
+			Msg("seeded op-id dedup cache from existing NetworkUpgrade CRs")
 	}
-	logx.As().Info().Str("reason", ReasonUCCacheSeeded.String()).
-		Msg("seeded op-id dedup cache from existing NetworkUpgrade CRs")
+
+	// Re-send crash-window survivors (persist-before-send, #992).
+	if err := f.recoverPersistedCRs(ctx); err != nil {
+		// recoverPersistedCRs is already best-effort and returns nil; this guard is
+		// defensive against future refactors that promote individual errors.
+		common.LogErr(logx.As().Warn(), err, ReasonUCStartupRecoveryError).
+			Msg("startup CR re-send pass encountered an error — continuing")
+	}
+
 	return nil
 }
 
@@ -93,7 +106,7 @@ func (f *Factory) RecoverOnStartup(ctx context.Context) error {
 // The UC copies spec.images verbatim and does NOT do registry selection or
 // layer-hash verification — that is the operator's PrepareReconciler.
 func (f *Factory) HandleExecuteImmediate(ctx context.Context) error {
-	operationID, _, manifest, found, err := deriveOperationIDPrimary(f.cfg.MarkerPath)
+	operationID, _, manifest, found, err := deriveOperationIDPrimary(f.cfg.UpgradePath)
 	if err != nil {
 		if errorx.IsOfType(err, errManifestInvalid) {
 			// ManifestInvalid is terminal — re-reading the same bytes will not fix
@@ -133,14 +146,21 @@ func (f *Factory) HandleExecuteImmediate(ctx context.Context) error {
 // file is intentionally left on disk for the restart-recovery flow (#998) and
 // the cache entry is invalidated so a stale hint cannot mask a missing CR.
 func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource, operationID, step, kind string, cr *unstructured.Unstructured) error {
-	exists, err := f.alreadyCreated(ctx, gvr, operationID, step)
+	exists, phase, err := f.alreadyCreated(ctx, gvr, operationID, step)
 	if err != nil {
 		// Already an errx-decorated K8s API error from the dedup query.
 		return err
 	}
 	if exists {
-		logx.As().Debug().Str("reason", ReasonCRExists.String()).Str("operation_id", operationID).
-			Str("step", step).Str("cr_name", cr.GetName()).Msg("CR already exists — skipping create")
+		if phase == "Failed" {
+			markerFile := stepToMarker[step]
+			logx.As().Error().Str("reason", ReasonCRFailed.String()).Str("operation_id", operationID).
+				Str("step", step).Str("cr_name", cr.GetName()).
+				Msgf("%s CR has Failed — delete %s to clear", kind, markerFile)
+		} else {
+			logx.As().Debug().Str("reason", ReasonCRExists.String()).Str("operation_id", operationID).
+				Str("step", step).Str("cr_name", cr.GetName()).Msg("CR already exists — skipping create")
+		}
 		return nil
 	}
 
@@ -157,7 +177,7 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 			// Created on a prior tick (e.g. a race past the dedup query). Record it
 			// so future ticks hit the cache, drop the now-redundant persisted file,
 			// and treat as success.
-			f.markCreated(operationID, step)
+			f.markCreated(operationID, step, "")
 			if delErr := f.store.Delete(operationID, step); delErr != nil {
 				logx.As().Warn().Err(delErr).Str("reason", ReasonCRPersistCleanupFailed.String()).
 					Str("operation_id", operationID).Msg("failed to delete persisted CR after AlreadyExists")
@@ -176,7 +196,7 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 
 	// Success — record in the cache so steady-state ticks skip the API query, and
 	// drop the persisted copy now that the cluster owns the CR.
-	f.markCreated(operationID, step)
+	f.markCreated(operationID, step, "")
 	if err := f.store.Delete(operationID, step); err != nil {
 		logx.As().Warn().Err(err).Str("reason", ReasonCRPersistCleanupFailed.String()).
 			Str("operation_id", operationID).Msg("failed to delete persisted CR after create")
@@ -207,7 +227,7 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 // the operationId via manifest version (cluster + disk Prepare lookup).
 func (f *Factory) HandleFreezeScheduled(ctx context.Context) error {
 	// Stat freeze marker for mtime — needed for staleness guards.
-	freezePath := filepath.Join(f.cfg.MarkerPath, MarkerFreezeScheduled)
+	freezePath := filepath.Join(f.cfg.UpgradePath, MarkerFreezeScheduled)
 	freezeInfo, err := os.Stat(freezePath)
 	if err != nil {
 		return errx.WithReason(errPersist.Wrap(err, "stat marker %s", MarkerFreezeScheduled), ReasonMarkerStatFailed)
@@ -215,7 +235,7 @@ func (f *Factory) HandleFreezeScheduled(ctx context.Context) error {
 	freezeMarkerMtime := freezeInfo.ModTime()
 
 	// Parse scheduledTime from file content (epoch seconds written by CN), not mtime.
-	scheduledTime, err := parseFreezeScheduledTime(f.cfg.MarkerPath)
+	scheduledTime, err := parseFreezeScheduledTime(f.cfg.UpgradePath)
 	if err != nil {
 		if errorx.IsOfType(err, errManifestInvalid) {
 			logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).
@@ -227,7 +247,7 @@ func (f *Factory) HandleFreezeScheduled(ctx context.Context) error {
 	}
 
 	// Primary: re-derive operationId from co-present execute_immediate.mf.
-	operationID, executeMtime, _, found, err := deriveOperationIDPrimary(f.cfg.MarkerPath)
+	operationID, executeMtime, _, found, err := deriveOperationIDPrimary(f.cfg.UpgradePath)
 	if err != nil {
 		if errorx.IsOfType(err, errManifestInvalid) {
 			logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).
@@ -253,7 +273,7 @@ func (f *Factory) HandleFreezeScheduled(ctx context.Context) error {
 			Str("marker", MarkerFreezeScheduled).
 			Msg("execute_immediate.mf missing — attempting fallback resolution via manifest version")
 
-		manifestPath := filepath.Join(f.cfg.MarkerPath, manifestsSubdir, componentsManifestFile)
+		manifestPath := filepath.Join(f.cfg.UpgradePath, manifestsSubdir, componentsManifestFile)
 		manifest, mErr := parseComponentsManifest(manifestPath)
 		if mErr != nil {
 			logx.As().Error().Err(mErr).Str("reason", ReasonOperationIDExhausted.String()).
@@ -375,6 +395,14 @@ func (f *Factory) fetchPreparePayload(ctx context.Context, operationID string) (
 //
 // TODO(#995): implement CR construction + persist-before-send + status watch for
 // the DaemonResult / NodeStarting conditions.
+//
+// IMPORTANT: when implementing, add a Freeze.Failed gate before calling deliverCR
+// (mirroring the Prepare.Failed gate in HandleFreezeScheduled). If the
+// NetworkUpgradeFreeze CR has Failed, log at ERROR with reason=CRFailed and
+// instruct the operator to delete now_frozen.mf to clear — do NOT attempt to
+// create the Execute CR. Without this gate, a Failed Freeze would cause
+// deliverCR to log DEBUG ("CR already exists") instead of the expected ERROR,
+// hiding the failure from the operator.
 func (f *Factory) HandleNowFrozen(_ context.Context) error {
 	logx.As().Info().Str("reason", ReasonMarkerHandlerPending.String()).Str("marker", MarkerNowFrozen).
 		Msg("now_frozen.mf handler not yet implemented (#995)")
@@ -395,7 +423,7 @@ func (f *Factory) HandleNowFrozen(_ context.Context) error {
 // (cluster + disk Prepare lookup, non-Failed phases).
 func (f *Factory) HandleFreezeAborted(ctx context.Context) error {
 	// Stat abort marker for mtime — needed for the staleness guard.
-	abortPath := filepath.Join(f.cfg.MarkerPath, MarkerFreezeAborted)
+	abortPath := filepath.Join(f.cfg.UpgradePath, MarkerFreezeAborted)
 	abortInfo, err := os.Stat(abortPath)
 	if err != nil {
 		return errx.WithReason(errPersist.Wrap(err, "stat marker %s", MarkerFreezeAborted), ReasonMarkerStatFailed)
@@ -403,7 +431,7 @@ func (f *Factory) HandleFreezeAborted(ctx context.Context) error {
 	abortMarkerMtime := abortInfo.ModTime()
 
 	// Primary: re-derive operationId from co-present execute_immediate.mf.
-	operationID, executeMtime, _, found, err := deriveOperationIDPrimary(f.cfg.MarkerPath)
+	operationID, executeMtime, _, found, err := deriveOperationIDPrimary(f.cfg.UpgradePath)
 	if err != nil {
 		if errorx.IsOfType(err, errManifestInvalid) {
 			logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).
@@ -429,7 +457,7 @@ func (f *Factory) HandleFreezeAborted(ctx context.Context) error {
 			Str("marker", MarkerFreezeAborted).
 			Msg("execute_immediate.mf missing — attempting fallback resolution via manifest version")
 
-		manifestPath := filepath.Join(f.cfg.MarkerPath, manifestsSubdir, componentsManifestFile)
+		manifestPath := filepath.Join(f.cfg.UpgradePath, manifestsSubdir, componentsManifestFile)
 		manifest, mErr := parseComponentsManifest(manifestPath)
 		if mErr != nil {
 			logx.As().Error().Err(mErr).Str("reason", ReasonOperationIDExhausted.String()).

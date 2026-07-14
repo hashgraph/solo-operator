@@ -46,9 +46,15 @@ type markerDispatcher interface {
 
 // NewMarkerMonitor constructs the marker monitor.
 func NewMarkerMonitor(cfg Config, client dynamic.Interface) *MarkerMonitor {
+	return NewMarkerMonitorWithFactory(cfg, NewFactory(cfg, client))
+}
+
+// NewMarkerMonitorWithFactory constructs the marker monitor with an injected factory.
+// Use when the factory must be shared (e.g. to wire onPhaseUpdate on UpgradeOutcomeMonitor).
+func NewMarkerMonitorWithFactory(cfg Config, f *Factory) *MarkerMonitor {
 	return &MarkerMonitor{
 		cfg:     cfg,
-		factory: NewFactory(cfg, client),
+		factory: f,
 	}
 }
 
@@ -60,22 +66,30 @@ func (m *MarkerMonitor) ConnectivityError() *daemonkit.StatusError {
 	return m.connectivityErr.Load()
 }
 
-// RequiredProbe implements daemonkit.ProbableMonitor: the marker directory and
+// RequiredProbe implements daemonkit.ProbableMonitor: the upgrade directory and
 // the CR-persist directory must be present and writable before polling begins.
+// The previous upgrade directory is also probed for writability in all modes
+// because UpgradeOutcomeMonitor rotates/discards upgrade packages into it
+// regardless of whether the provisioner-proxy is enabled.
 func (m *MarkerMonitor) RequiredProbe() daemonkit.Probe {
-	return daemonkit.NewCompositeProbe(
-		"uc-marker",
+	probes := []daemonkit.Probe{
 		&daemonkit.TaggedProbe{
-			Inner:      &daemonkit.DiskPermissionProbe{Path: m.cfg.MarkerPath, Permission: 0o555},
-			Reason:     ReasonMarkerPathUnreadable.String(),
-			Resolution: "Verify the marker directory is mounted and readable: ls -la " + m.cfg.MarkerPath,
+			Inner:      &daemonkit.DiskPermissionProbe{Path: m.cfg.UpgradePath, Permission: 0o555},
+			Reason:     ReasonUpgradePathUnreadable.String(),
+			Resolution: "Verify the upgrade directory is mounted and readable: ls -la " + m.cfg.UpgradePath,
 		},
 		&daemonkit.TaggedProbe{
 			Inner:      &daemonkit.DiskWriteTestProbe{Dir: m.cfg.CRPersistPath},
 			Reason:     ReasonCRPersistPathUnwritable.String(),
 			Resolution: "Verify the CR-persist directory exists and is writable: ls -la " + m.cfg.CRPersistPath,
 		},
-	)
+		&daemonkit.TaggedProbe{
+			Inner:      &daemonkit.DiskWriteTestProbe{Dir: m.cfg.PreviousUpgradePath},
+			Reason:     ReasonPreviousUpgradePathUnwritable.String(),
+			Resolution: "Verify the previous upgrade directory is writable: ls -la " + m.cfg.PreviousUpgradePath,
+		},
+	}
+	return daemonkit.NewCompositeProbe("uc-marker", probes...)
 }
 
 // Run polls the marker directory until ctx is cancelled.
@@ -89,7 +103,7 @@ func (m *MarkerMonitor) RequiredProbe() daemonkit.Probe {
 func (m *MarkerMonitor) Run(ctx context.Context) error {
 	logx.As().Info().
 		Str("reason", ReasonMarkerMonitorStarted.String()).
-		Str("marker_path", m.cfg.MarkerPath).
+		Str("upgrade_path", m.cfg.UpgradePath).
 		Dur("poll_interval", m.cfg.PollInterval).
 		Msg("marker monitor started")
 
@@ -134,10 +148,25 @@ func (m *MarkerMonitor) Run(ctx context.Context) error {
 // poll scans the marker directory once and dispatches any markers found. It
 // returns the poll interval to use for the next tick (fast during the freeze
 // window, normal otherwise).
+//
+// Polling (not inotify/fsnotify) is intentional and load-bearing:
+//   - It is resilient to a transiently absent UpgradePath directory. During
+//     upgrade-package rotation, rotateUpgradePackage atomically renames
+//     current/ to previous/ and then recreates current/. Between those two
+//     steps current/ does not exist. A stat-based poll simply finds nothing and
+//     moves on; an inotify watcher would receive a DELETE event, lose its watch
+//     descriptor, and require re-registration logic. The poll interval (60 s
+//     normal, 1 s during freeze) is far longer than the mkdir round-trip, so
+//     the window is invisible in practice.
+//   - inotify (and FSEvents/kqueue) are unreliable on network-backed volume
+//     mounts (NFS, CIFS/SMB, FUSE). Polling works correctly regardless of
+//     whether the shared volume is hostPath, emptyDir, or network-backed.
+//   - It also survives volume remounts and container restarts without any watch
+//     re-registration plumbing.
 func (m *MarkerMonitor) poll(ctx context.Context, current time.Duration) time.Duration {
 	next := current
 	for _, name := range AllMarkers {
-		if _, err := os.Stat(filepath.Join(m.cfg.MarkerPath, name)); err != nil {
+		if _, err := os.Stat(filepath.Join(m.cfg.UpgradePath, name)); err != nil {
 			continue
 		}
 		if err := m.dispatch(ctx, name); err != nil {

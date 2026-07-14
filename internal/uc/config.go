@@ -3,6 +3,7 @@
 package uc
 
 import (
+	"path/filepath"
 	"time"
 
 	"github.com/hashgraph/solo-operator/internal/errx"
@@ -26,11 +27,12 @@ const (
 // Default filesystem locations and intervals for the UC sidecar. These mirror
 // the configuration parameters documented in HIP XXXX2 §919.
 const (
-	DefaultMarkerPath    = "/opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade/current"
-	DefaultEventsPath    = "/opt/solo/weaver/uc/events"
-	DefaultCRPersistPath = "/opt/solo/weaver/uc/crs"
-	DefaultBackupPath    = "/opt/solo/weaver/uc/backup"
-	DefaultSocketPath    = "/opt/solo/weaver/uc/uc.sock"
+	DefaultUpgradePath         = "/opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade/current"
+	DefaultPreviousUpgradePath = "/opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade/previous"
+	DefaultEventsPath          = "/opt/solo/weaver/uc/events"
+	DefaultCRPersistPath       = "/opt/solo/weaver/uc/crs"
+	DefaultBackupPath          = "/opt/solo/weaver/uc/backup"
+	DefaultSocketPath          = "/opt/solo/weaver/uc/uc.sock"
 
 	// DefaultPollInterval is the normal marker-file polling cadence. It drops to
 	// FreezePollInterval after freeze_scheduled.mf is seen, then reverts.
@@ -53,8 +55,21 @@ type Config struct {
 	// KubeconfigPath is optional; empty means in-cluster config.
 	KubeconfigPath string
 
-	// MarkerPath is the directory polled for marker files.
-	MarkerPath string
+	// UpgradePath is the directory polled for marker files.
+	//
+	// SAME-FILESYSTEM CONSTRAINT: UpgradePath and PreviousUpgradePath must reside
+	// on the same filesystem (same mount point). Package rotation is implemented
+	// via os.Rename(current, previous), which maps to a single atomic rename(2)
+	// syscall. rename(2) fails with EXDEV when src and dst are on different
+	// devices; there is no fallback that preserves atomicity across filesystems.
+	// In the default layout both paths share data/upgrade/ on the same volume.
+	// If the operator mounts them separately they must still be on the same block
+	// device or bind-mount from the same source.
+	UpgradePath string
+	// PreviousUpgradePath is the directory holding the last applied upgrade package.
+	// Used as a fallback when UpgradePath has already been rotated out after a successful install.
+	// See UpgradePath for the same-filesystem constraint.
+	PreviousUpgradePath string
 	// EventsPath is the JSONL event-log directory.
 	EventsPath string
 	// CRPersistPath is where constructed CRs are written before the K8s API send.
@@ -73,15 +88,16 @@ type Config struct {
 // DefaultConfig returns a Config pre-populated with the documented defaults.
 func DefaultConfig() Config {
 	return Config{
-		Mode:               ModeMainnet,
-		NodeID:             -1,
-		MarkerPath:         DefaultMarkerPath,
-		EventsPath:         DefaultEventsPath,
-		CRPersistPath:      DefaultCRPersistPath,
-		BackupPath:         DefaultBackupPath,
-		SocketPath:         DefaultSocketPath,
-		PollInterval:       DefaultPollInterval,
-		FreezePollInterval: FreezePollInterval,
+		Mode:                ModeMainnet,
+		NodeID:              -1,
+		UpgradePath:         DefaultUpgradePath,
+		PreviousUpgradePath: DefaultPreviousUpgradePath,
+		EventsPath:          DefaultEventsPath,
+		CRPersistPath:       DefaultCRPersistPath,
+		BackupPath:          DefaultBackupPath,
+		SocketPath:          DefaultSocketPath,
+		PollInterval:        DefaultPollInterval,
+		FreezePollInterval:  FreezePollInterval,
 	}
 }
 
@@ -113,10 +129,31 @@ func (c Config) Validate() error {
 			"Set --namespace to the node's Kubernetes namespace",
 		)
 	}
-	if c.MarkerPath == "" {
+	if c.UpgradePath == "" {
 		return errx.WithHints(
-			errx.WithReason(errConfigInvalid.New("marker-path is required"), ReasonConfigInvalid),
-			"Set --marker-path to the consensus node's upgrade-artifacts directory (e.g. data/upgrade/current)",
+			errx.WithReason(errConfigInvalid.New("upgrade-path is required"), ReasonConfigInvalid),
+			"Set --upgrade-path to the consensus node's upgrade-artifacts directory (e.g. data/upgrade/current)",
+		)
+	}
+	if c.PreviousUpgradePath == "" {
+		return errx.WithHints(
+			errx.WithReason(errConfigInvalid.New("previous-upgrade-path is required"), ReasonConfigInvalid),
+			"Set --previous-upgrade-path to the consensus node's previous upgrade-artifacts directory (e.g. data/upgrade/previous)",
+		)
+	}
+	// Upgrade-path rotation uses os.Rename(current, previous), which is only
+	// atomic when both paths are on the same filesystem. Siblings under the same
+	// parent directory guarantee this — enforce it here so an EXDEV failure at
+	// rotation time is impossible.
+	upgradeDir := filepath.Dir(filepath.Clean(c.UpgradePath))
+	previousDir := filepath.Dir(filepath.Clean(c.PreviousUpgradePath))
+	if upgradeDir != previousDir {
+		return errx.WithHints(
+			errx.WithReason(
+				errConfigInvalid.New("upgrade-path and previous-upgrade-path must be siblings (same parent directory): got %q and %q",
+					c.UpgradePath, c.PreviousUpgradePath),
+				ReasonConfigInvalid),
+			"Set --upgrade-path and --previous-upgrade-path to directories under the same parent (e.g. data/upgrade/current and data/upgrade/previous)",
 		)
 	}
 	if c.CRPersistPath == "" {

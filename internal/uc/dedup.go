@@ -39,18 +39,18 @@ const specOperationIDField = "spec.operationId"
 //     hit short-circuits the query, but its accuracy is maintained by the query
 //     and create paths above — it is never the sole basis for correctness.
 
-// alreadyCreated reports whether a CR for operationID+step already exists. It
+// alreadyCreated reports whether a CR for operationID+step already exists and
+// returns its current status phase (empty string when not found or unknown). It
 // consults the in-memory cache first; on a miss it falls back to the
 // authoritative cluster query (by spec.operationId field selector on gvr) and
-// records every step it observes. A K8s API error invalidates the cache and
-// is returned to the caller so the action is retried on the next tick rather
-// than proceeding on stale state.
-func (f *Factory) alreadyCreated(ctx context.Context, gvr schema.GroupVersionResource, operationID, step string) (bool, error) {
+// records every step+phase it observes. A K8s API error invalidates the cache
+// and is returned to the caller so the action is retried on the next tick.
+func (f *Factory) alreadyCreated(ctx context.Context, gvr schema.GroupVersionResource, operationID, step string) (exists bool, phase string, _ error) {
 	f.mu.Lock()
 	if steps, ok := f.cache[operationID]; ok {
-		if _, done := steps[step]; done {
+		if phase, done := steps[step]; done {
 			f.mu.Unlock()
-			return true, nil
+			return true, phase, nil
 		}
 	}
 	f.mu.Unlock()
@@ -64,7 +64,7 @@ func (f *Factory) alreadyCreated(ctx context.Context, gvr schema.GroupVersionRes
 		// Cache accuracy is suspect after an API failure — drop this operationId so
 		// the next tick re-queries instead of trusting a stale (in)existence.
 		f.invalidate(operationID)
-		return false, errx.WithHints(
+		return false, "", errx.WithHints(
 			errx.WithReason(errK8sAPI.Wrap(err, "query existing %s for operation %q", gvr.Resource, operationID), ReasonDedupQueryFailed),
 			"Confirm the UC ServiceAccount has list permission on "+gvr.Resource+"."+gvr.Group,
 			"Check API server connectivity",
@@ -72,6 +72,7 @@ func (f *Factory) alreadyCreated(ctx context.Context, gvr schema.GroupVersionRes
 	}
 
 	found := false
+	foundPhase := ""
 	for i := range list.Items {
 		item := &list.Items[i]
 		// Re-verify against the spec field rather than trusting a server/fake-client
@@ -83,26 +84,28 @@ func (f *Factory) alreadyCreated(ctx context.Context, gvr schema.GroupVersionRes
 		if observed == "" {
 			continue
 		}
-		f.markCreated(operationID, observed)
+		phase, _, _ := unstructured.NestedString(item.Object, "status", "phase")
+		f.markCreated(operationID, observed, phase)
 		if observed == step {
 			found = true
+			foundPhase = phase
 		}
 	}
-	return found, nil
+	return found, foundPhase, nil
 }
 
-// markCreated records that operationID+step now exists in the cluster so future
-// ticks skip the API query. Safe to call after a successful create or after
-// observing the CR via a query.
-func (f *Factory) markCreated(operationID, step string) {
+// markCreated records that operationID+step now exists in the cluster and caches
+// its current phase so future ticks can log correctly without an API call.
+// phase may be empty when the phase is not yet known (e.g. immediately after Create).
+func (f *Factory) markCreated(operationID, step, phase string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	steps := f.cache[operationID]
 	if steps == nil {
-		steps = make(map[string]struct{})
+		steps = make(map[string]string)
 		f.cache[operationID] = steps
 	}
-	steps[step] = struct{}{}
+	steps[step] = phase
 }
 
 // invalidate drops the cached steps for operationID, forcing the next
@@ -142,7 +145,8 @@ func (f *Factory) seedCache(ctx context.Context) error {
 			if operationID == "" || step == "" {
 				continue
 			}
-			f.markCreated(operationID, step)
+			phase, _, _ := unstructured.NestedString(item.Object, "status", "phase")
+			f.markCreated(operationID, step, phase)
 		}
 	}
 	return nil

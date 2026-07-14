@@ -11,18 +11,19 @@ import "github.com/hashgraph/solo-operator/internal/errx"
 // call sites. Codes are PascalCase; names are grouped by subsystem.
 const (
 	// Lifecycle / informational (not failures).
-	ReasonUCStarted                      errx.Reason = "UCStarted"
-	ReasonMarkerMonitorStarted           errx.Reason = "MarkerMonitorStarted"
-	ReasonMarkerMonitorStopped           errx.Reason = "MarkerMonitorStopped"
-	ReasonProvisionerProxyMonitorStarted errx.Reason = "ProvisionerProxyMonitorStarted"
-	ReasonProvisionerProxyMonitorStopped errx.Reason = "ProvisionerProxyMonitorStopped"
-	ReasonPollIntervalChanged            errx.Reason = "PollIntervalChanged"
-	ReasonMarkerHandlerPending           errx.Reason = "MarkerHandlerPending"
-	ReasonCRDelivered                    errx.Reason = "CRDelivered"
-	ReasonCRExists                       errx.Reason = "CRExists"
-	ReasonUCCacheSeeded                  errx.Reason = "UCCacheSeeded"
-	ReasonReadyForProvisionerDaemon      errx.Reason = "ReadyForProvisionerDaemon"
-	ReasonPendingNodeUpgrade             errx.Reason = "PendingNodeUpgrade"
+	ReasonUCStarted                    errx.Reason = "UCStarted"
+	ReasonMarkerMonitorStarted         errx.Reason = "MarkerMonitorStarted"
+	ReasonMarkerMonitorStopped         errx.Reason = "MarkerMonitorStopped"
+	ReasonUpgradeOutcomeMonitorStarted errx.Reason = "UpgradeOutcomeMonitorStarted"
+	ReasonUpgradeOutcomeMonitorStopped errx.Reason = "UpgradeOutcomeMonitorStopped"
+	ReasonPollIntervalChanged          errx.Reason = "PollIntervalChanged"
+	ReasonMarkerHandlerPending         errx.Reason = "MarkerHandlerPending"
+	ReasonCRDelivered                  errx.Reason = "CRDelivered"
+	ReasonCRExists                     errx.Reason = "CRExists"
+	ReasonCRFailed                     errx.Reason = "CRFailed"
+	ReasonUCCacheSeeded                errx.Reason = "UCCacheSeeded"
+	ReasonReadyForProvisionerDaemon    errx.Reason = "ReadyForProvisionerDaemon"
+	ReasonPendingNodeUpgrade           errx.Reason = "PendingNodeUpgrade"
 
 	// Config.
 	ReasonConfigInvalid errx.Reason = "ConfigInvalid"
@@ -35,17 +36,18 @@ const (
 	ReasonCRBuildFailed errx.Reason = "CRBuildFailed"
 
 	// Persist-before-send (disk / --cr-persist-path).
-	ReasonMarkerStatFailed        errx.Reason = "MarkerStatFailed"
-	ReasonWorkDirCreateFailed     errx.Reason = "WorkDirCreateFailed"
-	ReasonCRPersistWriteFailed    errx.Reason = "CRPersistWriteFailed"
-	ReasonCRPersistDeleteFailed   errx.Reason = "CRPersistDeleteFailed"
-	ReasonCRPersistListFailed     errx.Reason = "CRPersistListFailed"
-	ReasonCRPersistReadFailed     errx.Reason = "CRPersistReadFailed"
-	ReasonCRPersistCorrupt        errx.Reason = "CRPersistCorrupt"
-	ReasonCRPersistCleanupFailed  errx.Reason = "CRPersistCleanupFailed"
-	ReasonEventLogPruneFailed     errx.Reason = "EventLogPruneFailed"
-	ReasonMarkerPathUnreadable    errx.Reason = "MarkerPathUnreadable"
-	ReasonCRPersistPathUnwritable errx.Reason = "CRPersistPathUnwritable"
+	ReasonMarkerStatFailed              errx.Reason = "MarkerStatFailed"
+	ReasonWorkDirCreateFailed           errx.Reason = "WorkDirCreateFailed"
+	ReasonCRPersistWriteFailed          errx.Reason = "CRPersistWriteFailed"
+	ReasonCRPersistDeleteFailed         errx.Reason = "CRPersistDeleteFailed"
+	ReasonCRPersistListFailed           errx.Reason = "CRPersistListFailed"
+	ReasonCRPersistReadFailed           errx.Reason = "CRPersistReadFailed"
+	ReasonCRPersistCorrupt              errx.Reason = "CRPersistCorrupt"
+	ReasonCRPersistCleanupFailed        errx.Reason = "CRPersistCleanupFailed"
+	ReasonEventLogPruneFailed           errx.Reason = "EventLogPruneFailed"
+	ReasonUpgradePathUnreadable         errx.Reason = "UpgradePathUnreadable"
+	ReasonPreviousUpgradePathUnwritable errx.Reason = "PreviousUpgradePathUnwritable"
+	ReasonCRPersistPathUnwritable       errx.Reason = "CRPersistPathUnwritable"
 
 	// Kubernetes API.
 	ReasonInClusterConfigFailed errx.Reason = "InClusterConfigFailed"
@@ -55,7 +57,9 @@ const (
 	ReasonDedupQueryFailed      errx.Reason = "DedupQueryFailed"
 	ReasonCacheSeedFailed       errx.Reason = "CacheSeedFailed"
 	ReasonPrepareListFailed     errx.Reason = "PrepareListFailed"
+	ReasonFreezeListFailed      errx.Reason = "FreezeListFailed"
 	ReasonExecuteListFailed     errx.Reason = "ExecuteListFailed"
+	ReasonFreezeAbortListFailed errx.Reason = "FreezeAbortListFailed"
 	ReasonExecutePatchFailed    errx.Reason = "ExecutePatchFailed"
 	ReasonWatchFailed           errx.Reason = "WatchFailed"
 	ReasonWatchErrorEvent       errx.Reason = "WatchErrorEvent"
@@ -71,6 +75,10 @@ const (
 	// Startup recovery / cache.
 	ReasonUCCacheSeedFailed      errx.Reason = "UCCacheSeedFailed"
 	ReasonUCStartupRecoveryError errx.Reason = "UCStartupRecoveryError"
+	ReasonCRResent               errx.Reason = "CRResent"
+	ReasonCRResentFailed         errx.Reason = "CRResentFailed"
+	ReasonArtifactCleanup        errx.Reason = "ArtifactCleanup"
+	ReasonArtifactCleanupFailed  errx.Reason = "ArtifactCleanupFailed"
 
 	// Control socket client.
 	ReasonControlRequestFailed errx.Reason = "ControlRequestFailed"
@@ -87,6 +95,9 @@ const (
 	ReasonProvisionerProxyTransitionPanic    errx.Reason = "ProvisionerProxyTransitionPanic"
 	ReasonProvisionerProxyWatchError         errx.Reason = "ProvisionerProxyWatchError"
 	ReasonProvisionerProxyWatchPanic         errx.Reason = "ProvisionerProxyWatchPanic"
+	ReasonUpgradePackageRotated              errx.Reason = "UpgradePackageRotated"
+	ReasonUpgradePackageDiscarded            errx.Reason = "UpgradePackageDiscarded"
+	ReasonUpgradePackageRotateFailed         errx.Reason = "UpgradePackageRotateFailed"
 
 	// systemd notify.
 	ReasonSdNotifyReadyFailed    errx.Reason = "SdNotifyReadyFailed"

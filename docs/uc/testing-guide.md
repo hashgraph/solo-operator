@@ -10,13 +10,13 @@ persist-before-send primitive from **story 8.2** (#992), the
 `execute_immediate.mf` → `NetworkUpgradePrepare` handler from **story 8.3**
 (#993), the `freeze_scheduled.mf` → `NetworkUpgradeFreeze` handler from **story
 8.4** (#994), the `freeze_aborted.mf` → `NetworkUpgradeFreezeAbort` handler from
-**story 8.6** (#996), and the operation-id deduplication from **story 8.7**
-(#997). When you drop `execute_immediate.mf` you will now see the loop construct,
-persist, and create a real `NetworkUpgradePrepare` CR (§4a); dropping
-`freeze_scheduled.mf` (with a valid epoch-seconds content) creates a
-`NetworkUpgradeFreeze` CR (§4b); dropping `freeze_aborted.mf` creates a
-`NetworkUpgradeFreezeAbort` CR (§4c). The remaining per-marker handler (#995
-`now_frozen.mf`) and cleanup/recovery (#998) are still stubbed.
+**story 8.6** (#996), the operation-id deduplication from **story 8.7** (#997),
+and the restart recovery from **story 8.8** (#998). When you drop
+`execute_immediate.mf` you will now see the loop construct, persist, and create a
+real `NetworkUpgradePrepare` CR (§4a); dropping `freeze_scheduled.mf` (with a
+valid epoch-seconds content) creates a `NetworkUpgradeFreeze` CR (§4b); dropping
+`freeze_aborted.mf` creates a `NetworkUpgradeFreezeAbort` CR (§4c). The
+remaining per-marker handler (#995 `now_frozen.mf`) is still stubbed.
 
 ---
 
@@ -88,7 +88,7 @@ testing, point every path at a scratch directory so nothing requires root:
 
 ```bash
 export UCDIR=$(mktemp -d)
-mkdir -p "$UCDIR/markers" "$UCDIR/events" "$UCDIR/crs" "$UCDIR/backup"
+mkdir -p "$UCDIR/current" "$UCDIR/previous" "$UCDIR/events" "$UCDIR/crs" "$UCDIR/backup"
 
 ./bin/uc \
   --mode cluster-only \
@@ -96,7 +96,8 @@ mkdir -p "$UCDIR/markers" "$UCDIR/events" "$UCDIR/crs" "$UCDIR/backup"
   --orbit my-orbit \
   --namespace solo \
   --kubeconfig "$HOME/.kube/config" \
-  --marker-path  "$UCDIR/markers" \
+  --upgrade-path  "$UCDIR/current" \
+  --previous-upgrade-path "$UCDIR/previous" \
   --events-path  "$UCDIR/events" \
   --cr-persist-path "$UCDIR/crs" \
   --backup-path  "$UCDIR/backup" \
@@ -113,9 +114,9 @@ Notes:
 - `--poll-interval 5s` shortens the normal 60s cadence so you don't have to wait
   a minute between ticks while testing.
 - Every flag can also be set via a `UC_`-prefixed env var, e.g.
-  `UC_MARKER_PATH`, `UC_POLL_INTERVAL`. CLI flag > env var > default.
+  `UC_UPGRADE_PATH`, `UC_POLL_INTERVAL`. CLI flag > env var > default.
 
-On startup you should see a `MarkerMonitorStarted` log line with the marker path
+On startup you should see a `MarkerMonitorStarted` log line with the upgrade path
 and poll interval.
 
 ---
@@ -126,7 +127,7 @@ In a second terminal, drop marker files into the marker directory. The loop
 re-scans every poll interval and dispatches each marker it finds.
 
 ```bash
-touch "$UCDIR/markers/freeze_scheduled.mf"
+touch "$UCDIR/current/freeze_scheduled.mf"
 ```
 
 Watch the first terminal for (in `debug`):
@@ -153,7 +154,7 @@ The four recognised markers and what each routes to:
 `execute_immediate.mf` is the first marker the consensus node writes when it
 extracts an upgrade package. The CN unzips the archive **into the marker
 directory itself** and writes the marker there too, so the package manifests
-live under `<marker-path>/manifests/`. The handler reads
+live under `<upgrade-path>/manifests/`. The handler reads
 `manifests/consensus-node-components.yaml`, mints an `operationId`, and creates a
 `NetworkUpgradePrepare` CR.
 
@@ -170,11 +171,11 @@ the operator's deterministic verification passes). Requires `crane` + `jq`
 ( cd test/dev && task setup && task build )   # -> test/dev/staging/build-v<ver>.zip
 
 # Extract it into the marker dir, mirroring what the CN does on-node:
-unzip -q test/dev/staging/build-v*.zip -d "$UCDIR/markers"
-ls "$UCDIR/markers/manifests/consensus-node-components.yaml"   # present
+unzip -q test/dev/staging/build-v*.zip -d "$UCDIR/current"
+ls "$UCDIR/current/manifests/consensus-node-components.yaml"   # present
 
 # Now trigger the handler
-touch "$UCDIR/markers/execute_immediate.mf"
+touch "$UCDIR/current/execute_immediate.mf"
 ```
 
 See [test/dev/README.md](../../test/dev/README.md) for build options (version,
@@ -186,8 +187,8 @@ exercising the UC parse/create path, but it will not pass real deterministic
 verification (use Option A for that):
 
 ```bash
-mkdir -p "$UCDIR/markers/manifests"
-cat > "$UCDIR/markers/manifests/consensus-node-components.yaml" <<'YAML'
+mkdir -p "$UCDIR/current/manifests"
+cat > "$UCDIR/current/manifests/consensus-node-components.yaml" <<'YAML'
 schemaVersion: 1
 images:
   consensusNode:
@@ -202,7 +203,7 @@ images:
 YAML
 
 # Now trigger the handler
-touch "$UCDIR/markers/execute_immediate.mf"
+touch "$UCDIR/current/execute_immediate.mf"
 ```
 
 Watch the first terminal for a `CRDelivered` log line with the `operation_id`
@@ -226,21 +227,21 @@ handler recomputes the same name and the create is a safe no-op. Re-running the
 `touch` updates the marker mtime and therefore mints a *new* operationId; use a
 fresh `$UCDIR` (or leave the marker in place) to observe stable behaviour.
 
-**Deduplication (#997).** The marker stays on disk (cleanup is #998), so the
-handler re-sees it every tick. Two layers stop a duplicate create: an
+**Deduplication (#997).** The marker stays on disk — markers are never deleted
+individually; they are cleared only when the upgrade-path directory is rotated
+(`current → previous`) on terminal state. Two layers stop a duplicate create: an
 authoritative cluster query for a CR with the same `spec.operationId`
 (filtered **server-side** via the CRD `selectableField` on that field — see the
 k8s 1.32 note in §2), fronted by an in-memory cache so steady-state ticks skip
 the API call entirely. (`spec.operationId` is the source of truth; the
 `operator.solo.hedera.com/operation-id` label is an auxiliary convenience.)
-After the first `CRDelivered` you
-will see **no further** `kubectl`-visible activity for that marker — the second
-and later ticks are served from the cache and never reach the API server. On
-restart, `RecoverOnStartup` re-seeds the cache by listing existing
-`NetworkUpgrade*` CRs, so a restarted sidecar does not re-create a CR it already
-delivered. The cache is a hint only: any K8s API error drops the entry and the
-next tick re-queries, and the create's own `AlreadyExists` check is the ultimate
-guard against a race.
+After the first `CRDelivered` you will see **no further** `kubectl`-visible
+activity for that marker — the second and later ticks are served from the cache
+and never reach the API server. On restart, `RecoverOnStartup` re-seeds the cache
+by listing existing `NetworkUpgrade*` CRs, so a restarted sidecar does not
+re-create a CR it already delivered. The cache is a hint only: any K8s API error
+drops the entry and the next tick re-queries, and the create's own `AlreadyExists`
+check is the ultimate guard against a race.
 
 **Invalid manifest:** set `schemaVersion: 99` (or remove
 `images.consensusNode.version`) and re-run — the handler logs a `ManifestInvalid`
@@ -292,7 +293,7 @@ With the Prepare CR from §4a in `Succeeded` phase:
 
 ```bash
 # Write current time (seconds since epoch) as the freeze-scheduled time.
-echo -n "$(date +%s)" > "$UCDIR/markers/freeze_scheduled.mf"
+echo -n "$(date +%s)" > "$UCDIR/current/freeze_scheduled.mf"
 ```
 
 Watch for a `CRDelivered` log line, then confirm the CR:
@@ -318,9 +319,9 @@ To confirm the guard works, create a stale marker (older than `execute_immediate
 ```bash
 # Set mtime to one hour in the past (before execute_immediate.mf was written).
 STALE_TIME=$(date -v-1H +%s 2>/dev/null || date -d '-1 hour' +%s)
-echo -n "$STALE_TIME" > "$UCDIR/markers/freeze_scheduled.mf"
+echo -n "$STALE_TIME" > "$UCDIR/current/freeze_scheduled.mf"
 touch -t "$(date -d @$STALE_TIME '+%Y%m%d%H%M.%S' 2>/dev/null || date -r $STALE_TIME '+%Y%m%d%H%M.%S')" \
-  "$UCDIR/markers/freeze_scheduled.mf"
+  "$UCDIR/current/freeze_scheduled.mf"
 ```
 
 Watch for a `StaleMarker` WARN log: `"stale freeze_scheduled.mf — marker predates
@@ -328,7 +329,7 @@ current execute_immediate.mf; skipping until refreshed"`. No Freeze CR will be
 created. Overwrite the marker with a fresh epoch time to resume:
 
 ```bash
-echo -n "$(date +%s)" > "$UCDIR/markers/freeze_scheduled.mf"
+echo -n "$(date +%s)" > "$UCDIR/current/freeze_scheduled.mf"
 ```
 
 ### Exercising the fallback path manually
@@ -337,7 +338,7 @@ Remove `execute_immediate.mf` while `freeze_scheduled.mf` is present to trigger
 the fallback:
 
 ```bash
-rm "$UCDIR/markers/execute_immediate.mf"
+rm "$UCDIR/current/execute_immediate.mf"
 ```
 
 Watch for `FreezeWithoutPrepare` WARN: `"execute_immediate.mf missing — attempting
@@ -390,7 +391,7 @@ With `execute_immediate.mf` and the manifest in place (from §4a, or fresh from
 Option B):
 
 ```bash
-touch "$UCDIR/markers/freeze_aborted.mf"
+touch "$UCDIR/current/freeze_aborted.mf"
 ```
 
 Watch for a `CRDelivered` line, then confirm the CR:
@@ -420,9 +421,9 @@ kubectl get networkupgradeprepares -n solo   # the Prepare CR is still there
 ```bash
 # Write abort marker with mtime in the past (before execute_immediate.mf).
 STALE_TIME=$(date -v-1H +%s 2>/dev/null || date -d '-1 hour' +%s)
-touch "$UCDIR/markers/freeze_aborted.mf"
+touch "$UCDIR/current/freeze_aborted.mf"
 touch -t "$(date -d @$STALE_TIME '+%Y%m%d%H%M.%S' 2>/dev/null || \
-  date -r $STALE_TIME '+%Y%m%d%H%M.%S')" "$UCDIR/markers/freeze_aborted.mf"
+  date -r $STALE_TIME '+%Y%m%d%H%M.%S')" "$UCDIR/current/freeze_aborted.mf"
 ```
 
 Watch for `StaleMarker` WARN: `"stale freeze_aborted.mf — marker predates current
@@ -434,8 +435,8 @@ Drop `freeze_aborted.mf` into a fresh `$UCDIR` with no `execute_immediate.mf` an
 no manifest — all fallbacks exhausted:
 
 ```bash
-mkdir -p "$UCDIR2/markers"
-touch "$UCDIR2/markers/freeze_aborted.mf"
+mkdir -p "$UCDIR2/current"
+touch "$UCDIR2/current/freeze_aborted.mf"
 # run UC pointing at $UCDIR2 — watch for OperationIDExhausted ERROR log
 ```
 
@@ -447,6 +448,82 @@ Processing this marker also reverts the poll cadence to `--poll-interval` (§5).
 
 ---
 
+## 4d. Upgrade-path rotation (`current → previous`) on terminal state
+
+Marker files are **never deleted individually**. The upgrade-path directory is
+rotated (`current → previous`) by the `upgrade-outcome-monitor` whenever an
+upgrade reaches a terminal state:
+
+| CR | Phase | `current/` | `previous/` | Rationale |
+|---|---|---|---|---|
+| `NetworkUpgradeExecute` | `Succeeded` | Rotated out (moved to `previous/`) | Receives old `current/` | Package just installed — keep it as a rollback copy |
+| `NetworkUpgradeFreezeAbort` | `Succeeded` | **Wiped** (contents deleted, dir preserved) | Untouched | Package never installed — discard it, protect the real rollback copy |
+| Any CR | `Failed` | Untouched | Untouched | Human intervention required; preserve state for diagnosis |
+
+The distinction is **has the package been applied?**
+
+- **Execute.Succeeded** — the node is now running the new package. Rotating `current → previous` preserves what was just replaced as a rollback copy.
+- **FreezeAbort.Succeeded** — the freeze was cancelled before anything was applied. The staged package in `current/` was never installed — rotating it into `previous/` would clobber the genuine rollback copy with useless data. Instead, `current/` is wiped and recreated empty.
+- **Any Failed** — `current/` is left intact for the operator to inspect and retry.
+
+On each rotation, everything under `$UCDIR/current` (marker files, manifests,
+and any other package contents) is moved atomically into `$UCDIR/previous`. The
+`current` directory is left empty and ready for the next upgrade cycle.
+
+The rotation is **idempotent** — if `current` is already empty (e.g. the UC
+crashed mid-rotation and restarted), the operation is a no-op.
+
+### Disk identity guard
+
+Before rotating or discarding, the `upgrade-outcome-monitor` verifies that the
+package in `current/` belongs to the CR being processed and is not an
+in-progress write by the consensus node. Two strategies are tried in order:
+
+1. **Primary** — `execute_immediate.mf` present: the operationId is derived from
+   the marker + manifest and compared directly against the CR's `spec.operationId`.
+2. **Fallback** — `execute_immediate.mf` absent (e.g. the CN hasn't written it yet):
+   - **Temporal guard**: the newest `mtime` among root-level entries in `current/`
+     must predate the CR's `creationTimestamp`. If any file is newer the CN is
+     still writing the package — skip.
+   - **Version identity** (if `VERSION` file present): the `VERSION=` line must
+     match the version embedded in the CR's operationId. A mismatch means the
+     package on disk is for a different operation — skip.
+
+At `execute_immediate.mf` write time, the UC also cross-checks the `VERSION`
+file against the manifest version. If they differ, the handler retries next tick
+rather than minting a wrong operationId — guarding against a race where the CN
+is still writing the package when the marker appears.
+
+To observe rotation in cluster-only mode:
+
+1. Complete the full marker sequence (§4a → §4b optional → trigger Execute CR to
+   `Succeeded` or `Failed` by patching its status):
+   ```bash
+   kubectl patch networkupgradeexecutes -n solo <execute-cr-name> \
+     --subresource=status --type=merge \
+     -p '{"status":{"phase":"Succeeded"}}'
+   ```
+2. Watch the upgrade-outcome-monitor log for a `UpgradePackageRotated` line.
+3. Confirm `current` is empty and `previous` holds the package:
+   ```bash
+   ls "$UCDIR/current"    # empty
+   ls "$UCDIR/previous"   # manifests/, marker files, etc.
+   ```
+
+For the abort path, `current/` is wiped (not rotated) and `previous/` is left untouched — the staged package was never applied so there is nothing to roll back to:
+```bash
+kubectl patch networkupgradefreezeaborts -n solo <abort-cr-name> \
+  --subresource=status --type=merge \
+  -p '{"status":{"phase":"Succeeded"}}'
+```
+Watch for a `UpgradePackageDiscarded` log line, then confirm:
+```bash
+ls "$UCDIR/current"    # empty
+ls "$UCDIR/previous"   # unchanged — genuine rollback copy preserved
+```
+
+---
+
 ## 5. Test the freeze-window interval switch
 
 The loop polls at the normal cadence (`--poll-interval`) and drops to the fast
@@ -455,14 +532,14 @@ minimise `now_frozen.mf` detection latency.
 
 ```bash
 # 1. Enter the freeze window — interval drops to freeze-poll-interval
-touch "$UCDIR/markers/freeze_scheduled.mf"
+touch "$UCDIR/current/freeze_scheduled.mf"
 ```
 
 Look for a `PollIntervalChanged` log line with `from=5s to=1s`.
 
 ```bash
 # 2. End the freeze window — interval reverts to poll-interval
-touch "$UCDIR/markers/now_frozen.mf"      # OR freeze_aborted.mf
+touch "$UCDIR/current/now_frozen.mf"      # OR freeze_aborted.mf
 ```
 
 Look for a `PollIntervalChanged` line with `from=1s to=5s`.
@@ -681,6 +758,44 @@ go test ./internal/uc/ -run 'TestResolveOperationID|TestHandleFreezeAborted' -v
 | `TestHandleFreezeAbortedNoExecuteMarkerIsNoOp` | `execute_immediate.mf` absent AND manifest absent → `OperationIDExhausted` ERROR log, no Abort CR. |
 | `TestHandleFreezeAbortedIsIdempotent` | Re-dispatching the marker creates exactly one Abort CR (dedup). |
 | `TestHandleFreezeAbortedDoesNotDeleteSiblings` | A co-existing Prepare CR survives the abort (audit trail; the UC never deletes sibling CRs). |
+
+**Restart recovery** (`internal/uc/recovery_test.go`, story 8.8, #998):
+
+```bash
+go test ./internal/uc/ -run 'TestRecover' -v
+```
+
+| Test | Asserts |
+|------|---------|
+| `TestRecoverPersistedCRs_DiskOnlyResent` | A CR persisted to disk but absent from the cluster is re-sent to the K8s API on startup; the disk copy is deleted and the dedup cache is updated. |
+| `TestRecoverPersistedCRs_AlreadyInCluster` | A disk CR that was already delivered before the crash has its stale disk copy removed without creating a duplicate CR. |
+| `TestRecoverPersistedCRs_NoPersisted` | No persisted files → no-op, no error. |
+| `TestRecoverOnStartup_FullFlow` | End-to-end: a crash-window disk CR is re-sent in one `RecoverOnStartup` call; marker files and upgrade-path are untouched (rotation is the upgrade-outcome monitor's responsibility). |
+
+**VERSION file and disk identity guard** (`internal/uc/resolve_test.go`, `internal/uc/upgrade_outcome_monitor_test.go`):
+
+```bash
+go test ./internal/uc/ -run 'TestParseVersionFile|TestVersionFromOperationID|TestDeriveOperationIDPrimary|TestMatchesDiskOperationID' -v
+```
+
+| Test | Asserts |
+|------|---------|
+| `TestParseVersionFilePresent` | A `VERSION` file with `VERSION=0.74.0` returns the version string and a non-zero mtime. |
+| `TestParseVersionFileAbsent` | Absent `VERSION` file returns `("", zero, false, nil)` — not an error. |
+| `TestParseVersionFileNoVersionLine` | `VERSION` file exists but has no `VERSION=` line → returns `("", zero, false, nil)`. |
+| `TestVersionFromOperationID` | Extracts the version segment from `upgrade-0.74.0-20260521T182531Z` → `"0.74.0"`. |
+| `TestVersionFromOperationIDWithDash` | Pre-release version `upgrade-0.74.0-rc1-20260521T182531Z` → `"0.74.0-rc1"` (splits on last `-`). |
+| `TestVersionFromOperationIDInvalid` | Malformed or empty operationId → `("", false)`. |
+| `TestDeriveOperationIDPrimaryVersionMatch` | `execute_immediate.mf` present, `VERSION` matches manifest → operationId minted normally. |
+| `TestDeriveOperationIDPrimaryVersionMismatch` | `execute_immediate.mf` present, `VERSION` disagrees with manifest → returns `ManifestInvalid` error (CN still writing). |
+| `TestDeriveOperationIDPrimaryVersionAbsent` | `execute_immediate.mf` present, no `VERSION` file → cross-check skipped, succeeds normally. |
+| `TestMatchesDiskOperationIDPrimaryMatch` | `execute_immediate.mf` present, operationId matches → `true`. |
+| `TestMatchesDiskOperationIDPrimaryMismatch` | `execute_immediate.mf` present, operationId mismatches → `false`. |
+| `TestMatchesDiskOperationIDEmptyDir` | `execute_immediate.mf` absent, `current/` empty → `false` (already rotated). |
+| `TestMatchesDiskOperationIDFilesNewerThanCR` | `execute_immediate.mf` absent, a file in `current/` has mtime after CR creationTimestamp → `false` (CN writing). |
+| `TestMatchesDiskOperationIDStaleFilesVersionMatch` | `execute_immediate.mf` absent, all files older than CR, `VERSION` matches → `true` (stale package, safe to act). |
+| `TestMatchesDiskOperationIDStaleFilesNoVersion` | `execute_immediate.mf` absent, all files older than CR, no `VERSION` file → `true` (temporal guard passed, no version to reject). |
+| `TestMatchesDiskOperationIDStaleFilesVersionMismatch` | `execute_immediate.mf` absent, all files older than CR, `VERSION` has different version → `false` (different operation's package). |
 
 **Control socket** (`internal/uc/control_client_test.go`):
 

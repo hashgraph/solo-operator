@@ -100,7 +100,7 @@ func newFactory(t *testing.T, root, ns string) *uc.Factory {
 		NodeID:        0,
 		Orbit:         "my-orbit",
 		Namespace:     ns,
-		MarkerPath:    root,
+		UpgradePath:   root,
 		CRPersistPath: t.TempDir(),
 	}, dynClient)
 }

@@ -107,7 +107,7 @@ func TestDedupAPIErrorInvalidatesCache(t *testing.T) {
 	f := newFakeFactory(t, testConfig(root, t.TempDir()))
 
 	// Prime the cache with a (now stale) entry to prove the error path clears it.
-	f.markCreated(wantOperationID, operatorv1alpha1.StepFreeze)
+	f.markCreated(wantOperationID, operatorv1alpha1.StepFreeze, "")
 
 	var fail atomic.Bool
 	fail.Store(true)

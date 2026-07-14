@@ -20,9 +20,10 @@ import (
 //
 //  1. MarkerMonitor — polls marker files and creates NetworkUpgrade* CRs (the
 //     core UC behaviour, all deployment modes).
-//  2. ProvisionerProxyMonitor — cluster-only mode only; stands in for the host
-//     solo-provisioner daemon, advancing Execute CRs ReadyForProvisionerDaemon ->
-//     PendingNodeUpgrade.
+//  2. UpgradeOutcomeMonitor — watches Execute and FreezeAbort CRs for terminal
+//     phases; rotates/discards the upgrade package accordingly (all modes). In
+//     cluster-only mode it also drives ProvisionerProxy, which advances Execute
+//     CRs from ReadyForProvisionerDaemon -> PendingNodeUpgrade.
 //
 // A daemonkit.Server exposes a Unix-socket control plane (/health, /status).
 type UC struct {
@@ -39,13 +40,29 @@ func New(cfg Config) (*UC, error) {
 		return nil, err
 	}
 
-	monitors := []daemonkit.MonitorRunner{
-		NewMarkerMonitor(cfg, client),
+	factory := NewFactory(cfg, client)
+
+	outcomeCfg := UpgradeOutcomeMonitorConfig{
+		Namespace:           cfg.Namespace,
+		NodeID:              cfg.NodeID,
+		UpgradePath:         cfg.UpgradePath,
+		PreviousUpgradePath: cfg.PreviousUpgradePath,
 	}
+	outcomeMonitor := NewUpgradeOutcomeMonitorWithClient(outcomeCfg, client)
+	outcomeMonitor.onPhaseUpdate = factory.markCreated
+
 	if cfg.ProvisionerProxyEnabled() {
-		monitors = append(monitors, NewProvisionerProxyMonitorWithClient(
-			ProvisionerProxyMonitorConfig{Namespace: cfg.Namespace, NodeID: cfg.NodeID},
-			client))
+		proxy := NewProvisionerProxyWithClient(
+			ProvisionerProxyConfig{Namespace: cfg.Namespace, NodeID: cfg.NodeID},
+			client)
+		outcomeMonitor.mu.Lock()
+		outcomeMonitor.proxy = proxy
+		outcomeMonitor.mu.Unlock()
+	}
+
+	monitors := []daemonkit.MonitorRunner{
+		NewMarkerMonitorWithFactory(cfg, factory),
+		outcomeMonitor,
 	}
 
 	return &UC{cfg: cfg, client: client, monitors: monitors}, nil
@@ -118,6 +135,8 @@ func (u *UC) status(tracker *daemonkit.StatusTracker) map[string]daemonkit.Monit
 }
 
 // ensureDirs creates the UC working directories if they do not exist.
+// Upgrade directories (current/previous) are created with permissions inherited
+// from their parent so ownership matches the consensus-node mount.
 func (u *UC) ensureDirs() error {
 	for _, dir := range []string{
 		u.cfg.EventsPath,
@@ -135,5 +154,52 @@ func (u *UC) ensureDirs() error {
 			)
 		}
 	}
+
+	// Upgrade dirs inherit permissions from their own parent so we don't override
+	// ownership set by the consensus-node container. Each dir's walk is capped at
+	// its own parent — not a shared ancestor — so the cap is always meaningful
+	// regardless of whether UpgradePath and PreviousUpgradePath are siblings.
+	for _, dir := range []string{u.cfg.UpgradePath, u.cfg.PreviousUpgradePath} {
+		if dir == "" {
+			continue
+		}
+		parent := filepath.Dir(dir)
+		if err := mkdirInherit(dir, parent); err != nil {
+			return errx.WithHints(
+				errx.WithReason(errPersist.Wrap(err, "create upgrade dir %s", dir), ReasonWorkDirCreateFailed),
+				"Confirm the upgrade directory parent ("+parent+") is writable and mounted",
+			)
+		}
+	}
 	return nil
+}
+
+// mkdirInherit creates dir (and any missing parents) using the permission bits
+// of the nearest existing ancestor, walking no higher than root. Callers pass
+// filepath.Dir(dir) as root so the walk is always capped at the direct parent
+// of the directory being created — it never inherits from an unrelated ancestor.
+func mkdirInherit(dir, root string) error {
+	// Walk up from dir to find the nearest existing ancestor, stopping at root.
+	ancestor := dir
+	hitFSRoot := false
+	for ancestor != root {
+		if _, err := os.Stat(ancestor); err == nil {
+			break // this ancestor exists — use its mode
+		}
+		parent := filepath.Dir(ancestor)
+		if parent == ancestor {
+			hitFSRoot = true // filesystem root reached before cap — don't inherit
+			break
+		}
+		ancestor = parent
+	}
+	if hitFSRoot {
+		return os.MkdirAll(dir, 0o750)
+	}
+	info, err := os.Stat(ancestor)
+	if err != nil {
+		// cap root itself doesn't exist — fall back to a safe default.
+		return os.MkdirAll(dir, 0o750)
+	}
+	return os.MkdirAll(dir, info.Mode().Perm())
 }

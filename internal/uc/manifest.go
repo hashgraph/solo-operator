@@ -50,7 +50,7 @@ func parseComponentsManifest(path string) (*componentsManifest, error) {
 		// the volume may be briefly unavailable; the caller may retry next tick.
 		return nil, errx.WithHints(
 			errx.WithReason(errPersist.Wrap(err, "read components manifest %s", path), ReasonManifestReadFailed),
-			"Confirm the consensus node extracted the package into --marker-path",
+			"Confirm the consensus node extracted the package into --upgrade-path",
 			"Check that manifests/consensus-node-components.yaml exists and is readable",
 		)
 	}
