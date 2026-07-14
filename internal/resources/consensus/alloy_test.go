@@ -253,7 +253,9 @@ func TestAddSidecarContainers_Alloy(t *testing.T) {
 		},
 	}
 
-	reconciler.addSidecarContainers(deploy, capsule, capsule.Spec.PodProperties.Containers.Alloy, uc.ModeClusterOnly)
+	if err := reconciler.addSidecarContainers(deploy, capsule, capsule.Spec.PodProperties.Containers.Alloy, uc.ModeClusterOnly); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	// Should have 2 containers: consensus-node + alloy
 	if len(deploy.Spec.Template.Spec.Containers) != 2 {
@@ -321,7 +323,9 @@ func TestAddSidecarContainers_AlloyDisabled(t *testing.T) {
 		},
 	}
 
-	reconciler.addSidecarContainers(deploy, capsule, capsule.Spec.PodProperties.Containers.Alloy, uc.ModeClusterOnly)
+	if err := reconciler.addSidecarContainers(deploy, capsule, capsule.Spec.PodProperties.Containers.Alloy, uc.ModeClusterOnly); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	// Should have only 1 container when alloy is disabled
 	if len(deploy.Spec.Template.Spec.Containers) != 1 {
@@ -364,7 +368,9 @@ func TestAddSidecarContainers_AlloyNil(t *testing.T) {
 		},
 	}
 
-	reconciler.addSidecarContainers(deploy, capsule, nil, uc.ModeClusterOnly)
+	if err := reconciler.addSidecarContainers(deploy, capsule, nil, uc.ModeClusterOnly); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	// Should have only 1 container when alloy is nil
 	if len(deploy.Spec.Template.Spec.Containers) != 1 {
