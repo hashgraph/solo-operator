@@ -195,19 +195,23 @@ func discardUpgradePackage(currentPath, operationID string) {
 			Msg("abort: cannot read current dir — staged package may remain")
 		return
 	}
+	var discardErr bool
 	for _, e := range entries {
 		target := filepath.Join(currentPath, e.Name())
 		if rmErr := os.RemoveAll(target); rmErr != nil {
+			discardErr = true
 			logx.As().Warn().Err(rmErr).
 				Str("reason", ReasonUpgradePackageRotateFailed.String()).
 				Str("operation_id", operationID).Str("path", target).
 				Msg("abort: failed to remove entry from current — manual cleanup may be required")
 		}
 	}
-	logx.As().Info().
-		Str("reason", ReasonUpgradePackageDiscarded.String()).
-		Str("operation_id", operationID).Str("path", currentPath).
-		Msg("discarded staged upgrade package on abort (current wiped, previous untouched)")
+	if !discardErr {
+		logx.As().Info().
+			Str("reason", ReasonUpgradePackageDiscarded.String()).
+			Str("operation_id", operationID).Str("path", currentPath).
+			Msg("discarded staged upgrade package on abort (current wiped, previous untouched)")
+	}
 }
 
 // clearDir removes all entries inside dir, leaving the directory itself intact.
@@ -221,9 +225,11 @@ func clearDir(dir, operationID string) {
 			Msg("rotate: cannot read dir for clearDir")
 		return
 	}
+	var clearErr bool
 	for _, e := range entries {
 		target := filepath.Join(dir, e.Name())
 		if rmErr := os.RemoveAll(target); rmErr != nil {
+			clearErr = true
 			logx.As().Warn().Err(rmErr).
 				Str("reason", ReasonUpgradePackageRotateFailed.String()).
 				Str("operation_id", operationID).
@@ -231,9 +237,11 @@ func clearDir(dir, operationID string) {
 				Msg("rotate: failed to remove entry from current")
 		}
 	}
-	logx.As().Info().
-		Str("reason", ReasonUpgradePackageDiscarded.String()).
-		Str("operation_id", operationID).
-		Str("path", dir).
-		Msg("upgrade package cleared from current (no previous dir — contents discarded, not archived)")
+	if !clearErr {
+		logx.As().Info().
+			Str("reason", ReasonUpgradePackageDiscarded.String()).
+			Str("operation_id", operationID).
+			Str("path", dir).
+			Msg("upgrade package cleared from current (no previous dir — contents discarded, not archived)")
+	}
 }
