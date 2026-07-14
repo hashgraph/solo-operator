@@ -33,7 +33,7 @@ var (
 	applicationPropertiesGVR         = gvr("applicationproperties")
 	applicationOverridePropertiesGVR = gvr("applicationoverrideproperties")
 	bootstrapPropertiesGVR           = gvr("bootstrapproperties")
-	nodePropertiesGVR                = gvr("nodeproperties")
+	nodePropertiesGVR                = gvr("nodepropertiesconfigs")
 	throttlesConfigGVR               = gvr("throttlesconfigs")
 	feeSchedulesGVR                  = gvr("feeschedules")
 	simpleFeesSchedulesGVR           = gvr("simplefeesschedules")

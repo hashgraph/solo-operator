@@ -78,6 +78,21 @@ func setValidCondition(t *testing.T, client *fake.FakeDynamicClient, resGVR sche
 	}
 }
 
+// waitForCR polls the fake client until the named resource exists or the
+// deadline (200 ms) elapses, avoiding timing-sensitive sleeps in tests.
+func waitForCR(t *testing.T, client *fake.FakeDynamicClient, resGVR schema.GroupVersionResource, name, namespace string) {
+	t.Helper()
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		_, err := client.Resource(resGVR).Namespace(namespace).Get(context.Background(), name, metav1.GetOptions{})
+		if err == nil {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s/%s to be created", resGVR.Resource, name)
+}
+
 // ── scanConfigFiles ────────────────────────────────────────────────────────────
 
 func TestScanConfigFiles_empty(t *testing.T) {
@@ -270,8 +285,8 @@ func TestDeployConfigCRs_happyPath(t *testing.T) {
 		errCh <- p.deployConfigCRs(context.Background(), testOperationID)
 	}()
 
-	// Wait briefly for the CR to be created, then stamp Valid=True.
-	time.Sleep(20 * time.Millisecond)
+	// Poll until the CR exists, then stamp Valid=True.
+	waitForCR(t, fakeClient, log4j2ConfigGVR, crName, "solo")
 	setValidCondition(t, fakeClient, log4j2ConfigGVR, crName, "solo", string(metav1.ConditionTrue))
 
 	if err := <-errCh; err != nil {
@@ -300,7 +315,7 @@ func TestDeployConfigCRs_validFalse(t *testing.T) {
 		errCh <- p.deployConfigCRs(context.Background(), testOperationID)
 	}()
 
-	time.Sleep(20 * time.Millisecond)
+	waitForCR(t, fakeClient, nodeSettingsGVR, crName, "solo")
 	setValidCondition(t, fakeClient, nodeSettingsGVR, crName, "solo", string(metav1.ConditionFalse))
 
 	err := <-errCh
@@ -354,8 +369,8 @@ func TestHandleExecute_configCRsThenPhaseAdvance(t *testing.T) {
 		errCh <- p.handleExecute(context.Background(), executeCR)
 	}()
 
-	// Stamp Valid=True so the wait completes.
-	time.Sleep(20 * time.Millisecond)
+	// Poll until the CR exists, then stamp Valid=True so the wait completes.
+	waitForCR(t, fakeClient, log4j2ConfigGVR, crName, "solo")
 	setValidCondition(t, fakeClient, log4j2ConfigGVR, crName, "solo", string(metav1.ConditionTrue))
 
 	if err := <-errCh; err != nil {

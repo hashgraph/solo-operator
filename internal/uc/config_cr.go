@@ -47,7 +47,7 @@ var configFileKinds = map[string]kindEntry{
 	"application.properties":          {gvr: applicationPropertiesGVR, kind: "ApplicationProperties", nameSuffix: "applicationproperties"},
 	"application-override.properties": {gvr: applicationOverridePropertiesGVR, kind: "ApplicationOverrideProperties", nameSuffix: "applicationoverrideproperties"},
 	"bootstrap.properties":            {gvr: bootstrapPropertiesGVR, kind: "BootstrapProperties", nameSuffix: "bootstrapproperties"},
-	"node.properties":                 {gvr: nodePropertiesGVR, kind: "NodeProperties", nameSuffix: "nodeproperties"},
+	"node.properties":                 {gvr: nodePropertiesGVR, kind: "NodePropertiesConfig", nameSuffix: "nodepropertiesconfig"},
 	"throttles.json":                  {gvr: throttlesConfigGVR, kind: "ThrottlesConfig", nameSuffix: "throttlesconfig"},
 	"feeSchedules.json":               {gvr: feeSchedulesGVR, kind: "FeeSchedules", nameSuffix: "feeschedules"},
 	"simpleFeesSchedules.json":        {gvr: simpleFeesSchedulesGVR, kind: "SimpleFeesSchedules", nameSuffix: "simplefeesschedules"},
@@ -87,7 +87,7 @@ func scanConfigFiles(upgradePath string) ([]scannedFile, error) {
 				Str("dir", configDir).Msg("data/config/ absent — no config CRs to deploy")
 		} else {
 			return nil, errx.WithHints(
-				errx.WithReason(errPersist.Wrap(err, "read config dir %s", configDir), ReasonMarkerStatFailed),
+				errx.WithReason(errPersist.Wrap(err, "read config dir %s", configDir), ReasonUpgradePathUnreadable),
 				"Confirm the upgrade package was extracted correctly and data/config/ is readable",
 			)
 		}
@@ -115,7 +115,7 @@ func scanConfigFiles(upgradePath string) ([]scannedFile, error) {
 				continue // optional — not all packages include these files
 			}
 			return nil, errx.WithHints(
-				errx.WithReason(errPersist.Wrap(err, "stat %s", path), ReasonMarkerStatFailed),
+				errx.WithReason(errPersist.Wrap(err, "stat %s", path), ReasonUpgradePathUnreadable),
 				"Confirm the upgrade package was extracted correctly",
 			)
 		}
@@ -292,7 +292,7 @@ func waitForConfigCRsValid(ctx context.Context, client dynamic.Interface, namesp
 					delete(pending, name)
 
 				case string(metav1.ConditionFalse):
-					msg, _, _ := unstructured.NestedString(obj.Object, "status", "conditions")
+					msg := conditionMessage(obj, "Valid")
 					return errx.WithHints(
 						errx.WithReason(errK8sAPI.New("%s %s is Valid=False: %s", ref.kind, name, msg), ReasonConfigCRFailed),
 						"Inspect the "+ref.kind+" CR status and fix the config file content in the upgrade package",
@@ -307,6 +307,28 @@ func waitForConfigCRsValid(ctx context.Context, client dynamic.Interface, namesp
 		Str("operation_id", operationID).Int("count", len(refs)).
 		Msg("all config CRs are Valid — proceeding to PendingNodeUpgrade")
 	return nil
+}
+
+// conditionMessage returns the message field of the named condition, or "" if
+// no matching condition exists.
+func conditionMessage(obj *unstructured.Unstructured, condType string) string {
+	conditions, ok, _ := unstructured.NestedSlice(obj.Object, "status", "conditions")
+	if !ok {
+		return ""
+	}
+	for _, raw := range conditions {
+		cond, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		t, _, _ := unstructured.NestedString(cond, "type")
+		if t != condType {
+			continue
+		}
+		m, _, _ := unstructured.NestedString(cond, "message")
+		return m
+	}
+	return ""
 }
 
 // conditionStatus returns the status string ("True"/"False"/"Unknown") and
