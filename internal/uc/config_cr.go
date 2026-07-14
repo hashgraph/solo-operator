@@ -112,11 +112,11 @@ func scanConfigFiles(upgradePath string) ([]scannedFile, error) {
 		name := de.Name()
 		entry, ok := configFileKinds[name]
 		if !ok {
-			logx.As().Warn().Str("reason", ReasonConfigFileUnrecognised.String()).
-				Str("filename", name).Str("dir", configDir).
-				Strs("recognised", knownConfigFilenames()).
-				Msg("unrecognised config filename — skipping (not in filename→CR-kind map)")
-			continue
+			return nil, errx.WithHints(
+				errx.WithReason(errPersist.New("unrecognised config filename %q in %s", name, configDir), ReasonConfigFileUnrecognised),
+				"Remove or rename the unrecognised file from data/config/ in the upgrade package",
+				"Recognised filenames: "+strings.Join(knownConfigFilenames(), ", "),
+			)
 		}
 		files = append(files, scannedFile{absPath: filepath.Join(configDir, name), entry: entry})
 	}

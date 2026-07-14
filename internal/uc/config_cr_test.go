@@ -156,20 +156,12 @@ func TestScanConfigFiles_rootFiles(t *testing.T) {
 
 func TestScanConfigFiles_unrecognised(t *testing.T) {
 	root := t.TempDir()
-	// Recognised file alongside an unrecognised one.
 	writeConfigFile(t, root, "application.properties", "[hedera]")
 	writeConfigFile(t, root, "unknown-file.txt", "ignore me")
 
-	got, err := scanConfigFiles(root)
-	if err != nil {
-		t.Fatalf("scanConfigFiles returned error for unrecognised file: %v", err)
-	}
-	// Only the recognised file is returned; the unrecognised one is warned + skipped.
-	if len(got) != 1 {
-		t.Fatalf("want 1 file, got %d: %v", len(got), got)
-	}
-	if got[0].entry.kind != "ApplicationProperties" {
-		t.Errorf("want ApplicationProperties, got %s", got[0].entry.kind)
+	_, err := scanConfigFiles(root)
+	if err == nil {
+		t.Fatal("expected error for unrecognised config file, got nil")
 	}
 }
 
