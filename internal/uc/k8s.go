@@ -95,9 +95,10 @@ const (
 	// ConfigMap-backed CRs within seconds under normal conditions.
 	configCRDeployTimeout = 20 * time.Minute
 
-	// configCRPollInterval is how often waitForConfigCRsValid re-checks each
-	// config CR's status.conditions while waiting for Valid=True.
-	configCRPollInterval = 5 * time.Second
+	// configCRPollInterval is the fallback poll cadence used when
+	// ProvisionerProxyConfig.ConfigCRPollInterval is zero (unset). Prefer
+	// setting ConfigCRPollInterval via --config-cr-poll-interval / UC_CONFIG_CR_POLL_INTERVAL.
+	configCRPollInterval = 1 * time.Second
 )
 
 func gvr(resource string) schema.GroupVersionResource {

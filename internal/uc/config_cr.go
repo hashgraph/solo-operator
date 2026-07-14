@@ -84,10 +84,10 @@ type scannedFile struct {
 //   - <upgradePath>/data/config/ for most config files
 //   - <upgradePath>/ (package root) for log4j2.xml and settings.txt
 //
-// Files whose names are not in configFileKinds are logged as WARN but not
-// returned as errors — a new or unexpected filename should not stall an upgrade.
-// An absent data/config/ directory is not an error (some upgrades include no
-// config changes).
+// Files whose names are not in configFileKinds are a terminal error — an
+// unrecognised file would be silently unapplied, which is unsafe before a
+// mainnet deploy. An absent data/config/ directory is not an error (some
+// upgrades include no config changes).
 func scanConfigFiles(upgradePath string) ([]scannedFile, error) {
 	var files []scannedFile
 
@@ -112,6 +112,10 @@ func scanConfigFiles(upgradePath string) ([]scannedFile, error) {
 		name := de.Name()
 		entry, ok := configFileKinds[name]
 		if !ok {
+			logx.As().Error().Str("reason", ReasonConfigFileUnrecognised.String()).
+				Str("filename", name).Str("dir", configDir).
+				Strs("recognised", knownConfigFilenames()).
+				Msg("unrecognised config filename — aborting execute phase")
 			return nil, errx.WithHints(
 				errx.WithReason(errPersist.New("unrecognised config filename %q in %s", name, configDir), ReasonConfigFileUnrecognised),
 				"Remove or rename the unrecognised file from data/config/ in the upgrade package",
@@ -295,6 +299,10 @@ func waitForConfigCRsValid(ctx context.Context, client dynamic.Interface, namesp
 
 			case string(metav1.ConditionFalse):
 				msg := conditionMessage(obj, "Valid")
+				logx.As().Error().Str("reason", ReasonConfigCRFailed.String()).
+					Str("operation_id", operationID).Str("cr_kind", ref.kind).Str("cr_name", name).
+					Str("condition_message", msg).
+					Msg("config CR is Valid=False — operator rejected content, aborting execute phase")
 				return errx.WithHints(
 					errx.WithReason(errK8sAPI.New("%s %s is Valid=False: %s", ref.kind, name, msg), ReasonConfigCRFailed),
 					"Inspect the "+ref.kind+" CR status and fix the config file content in the upgrade package",

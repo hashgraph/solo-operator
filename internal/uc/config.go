@@ -43,7 +43,7 @@ const (
 
 	// DefaultConfigCRPollInterval is how often the UC re-checks each config CR's
 	// status.conditions while waiting for Valid=True during the execute phase.
-	DefaultConfigCRPollInterval = 5 * time.Second
+	DefaultConfigCRPollInterval = 1 * time.Second
 	// DefaultConfigCRDeployTimeout is the total wall-clock budget for scanning,
 	// creating, and waiting for all config CRs to reach Valid=True. 20 minutes is
 	// generous; a healthy operator reconciles ConfigMap-backed CRs within seconds.
@@ -102,14 +102,14 @@ type Config struct {
 // DefaultConfig returns a Config pre-populated with the documented defaults.
 func DefaultConfig() Config {
 	return Config{
-		Mode:                ModeMainnet,
-		NodeID:              -1,
-		UpgradePath:         DefaultUpgradePath,
-		PreviousUpgradePath: DefaultPreviousUpgradePath,
-		EventsPath:          DefaultEventsPath,
-		CRPersistPath:       DefaultCRPersistPath,
-		BackupPath:          DefaultBackupPath,
-		SocketPath:          DefaultSocketPath,
+		Mode:                  ModeMainnet,
+		NodeID:                -1,
+		UpgradePath:           DefaultUpgradePath,
+		PreviousUpgradePath:   DefaultPreviousUpgradePath,
+		EventsPath:            DefaultEventsPath,
+		CRPersistPath:         DefaultCRPersistPath,
+		BackupPath:            DefaultBackupPath,
+		SocketPath:            DefaultSocketPath,
 		PollInterval:          DefaultPollInterval,
 		FreezePollInterval:    FreezePollInterval,
 		ConfigCRPollInterval:  DefaultConfigCRPollInterval,

@@ -595,13 +595,15 @@ kubectl get networkupgradeexecute <execute-name> -o jsonpath='{.status.phase}'
 
 ### Unrecognised filename
 
-If the package includes a filename not in the hardcoded map, the UC logs a
-`reason=ConfigFileUnrecognised` WARN and skips that file — the upgrade is not
-stalled. Verify with:
+If the package includes a filename not in the recognised map, the UC logs a
+`reason=ConfigFileUnrecognised` ERROR and aborts the execute phase — the Execute
+CR stays at `ReadyForProvisionerDaemon`. This is intentional: a present-but-unknown
+file would otherwise be silently unapplied, which is unsafe before a mainnet deploy.
+Remove the unrecognised file from `data/config/` and re-trigger the upgrade. Verify with:
 
 ```bash
 echo "ignored" > "$UPGRADEDIR/data/config/some-unknown-file.conf"
-# Restart or re-trigger — the UC should log a WARN but still complete.
+# Re-trigger — the UC should log ConfigFileUnrecognised ERROR and NOT advance the phase.
 ```
 
 ### Valid=False failure path
@@ -915,7 +917,7 @@ go test ./internal/uc/ -run 'TestScanConfigFiles|TestBuildConfigCR|TestDeployCon
 | `TestScanConfigFiles_empty` | No recognised files → empty slice, no error. |
 | `TestScanConfigFiles_configDir` | Files in `data/config/` are picked up with the correct kind. |
 | `TestScanConfigFiles_rootFiles` | `log4j2.xml` and `settings.txt` at the package root are picked up. |
-| `TestScanConfigFiles_unrecognised` | An unknown filename is warned and skipped — not an error; the recognised file is still returned. |
+| `TestScanConfigFiles_unrecognised` | An unknown filename in `data/config/` is a terminal error (`ReasonConfigFileUnrecognised`) — the execute phase is aborted to prevent silent config misses. |
 | `TestScanConfigFiles_allRecognised` | All ten recognised filenames scan without error. |
 | `TestBuildConfigCR_nameAndLabels` | CR name, namespace, kind, `LabelOperationID`, `annotationCreatedBy`, `spec.content`, and `spec.orbit` are all set correctly. |
 | `TestBuildConfigCR_noOrbit` | `spec.orbit` is absent when `Orbit` is empty. |
