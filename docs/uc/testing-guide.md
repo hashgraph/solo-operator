@@ -846,3 +846,132 @@ Build-time version metadata is now provided by the shared, dependency-free
 [`github.com/automa-saga/version`](https://github.com/automa-saga/version)
 package (stamped via `-ldflags -X`); it carries its own tests, so there is no
 in-repo version suite. `uc version` renders `text` (default) or `json`.
+
+---
+
+## 10. Provision the UC sidecar via the ConsensusCapsule operator (story 8.10, #1039)
+
+Before this story, `internal/uc` and `cmd/uc` were dead code — nothing deployed
+the binary inside a pod. Story 8.10 wires the UC sidecar into the
+`ConsensusCapsule` reconciler so the operator injects it as a real container.
+
+### 10.1 Minimal cluster-only example (emptyDir storage)
+
+Set `spec.consensusContainers.uc.enabled: true` on any `ConsensusCapsule`. The
+operator adds a `uc` sidecar container to the StatefulSet pod template. With
+`storage` omitted, the UC runtime directory (`/opt/solo/weaver/uc`) is backed by
+an **emptyDir** — state is lost on pod restart, which is fine for local dev and
+CI:
+
+```yaml
+spec:
+  consensusContainers:
+    uc:
+      enabled: true
+      softwareVersion:
+        repository: ghcr.io/hashgraph
+        imageName:  solo-operator-uc
+        imageTag:   "0.1.0"    # pin or omit to use the operator's own build version
+```
+
+The operator injects these env vars automatically (no need to set them manually):
+
+| Env var | Source |
+|---------|--------|
+| `UC_NODE_ID` | `spec.nodeId` |
+| `UC_ORBIT` | `spec.orbit` |
+| `UC_NAMESPACE` | downward API (`metadata.namespace`) |
+
+Two volume mounts are always present:
+
+| Volume | Mount path | Backed by |
+|--------|-----------|-----------|
+| `upgrade` (shared with consensus node) | `<hapiBase>/data/upgrade` | PVC or emptyDir — same volume the CN writes upgrade packages into |
+| `uc-data` | `/opt/solo/weaver/uc` | `storage` PVC if set, emptyDir otherwise |
+
+### 10.2 Cluster-only with persistent storage (PVC)
+
+For cluster-only deployments where UC state (event log, persisted CRs, backup)
+must survive pod restarts, set `spec.persistentVolumeClaims.ucData` — consistent
+with the existing `logs`, `stats`, `upgrade`, etc. fields:
+
+```yaml
+spec:
+  consensusContainers:
+    uc:
+      enabled: true
+  persistentVolumeClaims:
+    ucData:
+      storageClassName: standard
+      accessModes: [ReadWriteOnce]
+      resources:
+        requests:
+          storage: 1Gi
+```
+
+The operator creates a PVC named `<capsule-name>-uc-data` and backs the
+`uc-data` volume with it. Omit `storageClassName` to inherit the cluster default.
+
+### 10.3 Resource limits
+
+```yaml
+spec:
+  consensusContainers:
+    uc:
+      enabled: true
+      resources:
+        requests:
+          cpu: "50m"
+          memory: "64Mi"
+        limits:
+          cpu: "200m"
+          memory: "256Mi"
+```
+
+### 10.4 Additional volume mounts
+
+Use `additionalVolumeMounts` to attach extra volumes (e.g. a hostPath or secret)
+without modifying the operator. The volumes themselves must be declared in
+`spec.podProperties.volumes`.
+
+```yaml
+spec:
+  consensusContainers:
+    uc:
+      enabled: true
+      additionalVolumeMounts:
+        - name: my-secret
+          mountPath: /etc/uc-secret
+          readOnly: true
+```
+
+### 10.5 Verifying the sidecar is running
+
+```bash
+# Confirm the uc container appears in the StatefulSet pod template:
+kubectl get statefulset <capsule-name> -n <namespace> \
+  -o jsonpath='{.spec.template.spec.containers[*].name}'
+# Expected output includes: uc
+
+# Tail the UC logs directly:
+kubectl logs -n <namespace> <pod-name> -c uc -f
+
+# Check it can reach the API server (look for MarkerMonitorStarted log line):
+kubectl logs -n <namespace> <pod-name> -c uc | grep MarkerMonitorStarted
+```
+
+### 10.6 RBAC
+
+When `uc.enabled: true`, the operator extends the capsule's per-namespace `Role`
+with rules that allow the UC sidecar to create and list `NetworkUpgrade*` CRs
+and patch `NetworkUpgradeExecute/status`:
+
+```
+operator.solo.hiero.org: networkupgradeprepares, networkupgradefreezes,
+  networkupgradeexecutes, networkupgradefreezeaborts → create, get, list, watch
+operator.solo.hiero.org: networkupgradeexecutes/status → get, patch, update
+```
+
+These rules are added to the existing capsule `Role` and take effect on the next
+reconcile. No separate `ClusterRole` or `ClusterRoleBinding` is needed — the UC
+only interacts with CRs in its own namespace.

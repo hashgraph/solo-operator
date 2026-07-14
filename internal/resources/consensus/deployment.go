@@ -152,9 +152,12 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 		return nil, err
 	}
 
-	ucMode, err := ResolveUCMode(ctx, r.Client, capsule)
-	if err != nil {
-		return nil, err
+	ucMode := uc.ModeClusterOnly
+	if containers := capsule.Spec.PodProperties.Containers; containers.UC != nil && containers.UC.Enabled {
+		ucMode, err = ResolveUCMode(ctx, r.Client, capsule)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if err := r.addSidecarContainers(sts, capsule, resolvedAlloy, ucMode); err != nil {

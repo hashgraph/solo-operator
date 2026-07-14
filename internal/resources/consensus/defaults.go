@@ -8,7 +8,8 @@ const (
 	UCDefaultImageRepo = "ghcr.io/hashgraph/solo-operator-uc"
 
 	// UCDataPath is the root directory for all UC runtime state (crs/, events/, backup/, uc.sock).
-	// Backed by a single emptyDir volume named "uc-data"; the UC binary creates subdirs as needed.
+	// Backed by the "uc-data" volume, which is an emptyDir by default or a PVC when
+	// spec.persistentVolumeClaims.ucData is set. The UC binary creates subdirs as needed.
 	UCDataPath = "/opt/solo/weaver/uc"
 )
 
