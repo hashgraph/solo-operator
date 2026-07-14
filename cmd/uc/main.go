@@ -67,6 +67,8 @@ func main() {
 	f.StringVar(&cfg.SocketPath, "socket-path", cfg.SocketPath, "Unix socket for the control server")
 	f.DurationVar(&cfg.PollInterval, "poll-interval", cfg.PollInterval, "Normal marker polling interval")
 	f.DurationVar(&cfg.FreezePollInterval, "freeze-poll-interval", cfg.FreezePollInterval, "Polling interval during the freeze window")
+	f.DurationVar(&cfg.ConfigCRPollInterval, "config-cr-poll-interval", cfg.ConfigCRPollInterval, "Polling interval when waiting for config CRs to reach Valid=True (cluster-only mode)")
+	f.DurationVar(&cfg.ConfigCRDeployTimeout, "config-cr-deploy-timeout", cfg.ConfigCRDeployTimeout, "Total timeout for the config-CR deployment step during execute phase (cluster-only mode)")
 	f.StringVar(&flagLogLevel, "log-level", "info", "Log level: debug, info, warn, error")
 
 	if err := root.Execute(); err != nil {

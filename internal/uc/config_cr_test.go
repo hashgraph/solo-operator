@@ -30,10 +30,11 @@ func newProxyWithFakeClient(t *testing.T, upgradePath string, objs ...runtime.Ob
 	}
 	client := fake.NewSimpleDynamicClient(scheme, objs...)
 	return NewProvisionerProxyWithClient(ProvisionerProxyConfig{
-		Namespace:   "solo",
-		NodeID:      0,
-		UpgradePath: upgradePath,
-		Orbit:       "test-orbit",
+		Namespace:            "solo",
+		NodeID:               0,
+		UpgradePath:          upgradePath,
+		Orbit:                "test-orbit",
+		ConfigCRPollInterval: 5 * time.Millisecond,
 	}, client)
 }
 
@@ -264,9 +265,10 @@ func TestDeployConfigCRs_happyPath(t *testing.T) {
 	}
 	fakeClient := fake.NewSimpleDynamicClient(scheme)
 	p := NewProvisionerProxyWithClient(ProvisionerProxyConfig{
-		Namespace:   "solo",
-		UpgradePath: root,
-		Orbit:       "test-orbit",
+		Namespace:            "solo",
+		UpgradePath:          root,
+		Orbit:                "test-orbit",
+		ConfigCRPollInterval: 5 * time.Millisecond,
 	}, fakeClient)
 
 	crName := configCRName(testOperationID, configFileKinds["log4j2.xml"])
@@ -296,8 +298,9 @@ func TestDeployConfigCRs_validFalse(t *testing.T) {
 	}
 	fakeClient := fake.NewSimpleDynamicClient(scheme)
 	p := NewProvisionerProxyWithClient(ProvisionerProxyConfig{
-		Namespace:   "solo",
-		UpgradePath: root,
+		Namespace:            "solo",
+		UpgradePath:          root,
+		ConfigCRPollInterval: 5 * time.Millisecond,
 	}, fakeClient)
 
 	crName := configCRName(testOperationID, configFileKinds["settings.txt"])
@@ -349,9 +352,10 @@ func TestHandleExecute_configCRsThenPhaseAdvance(t *testing.T) {
 
 	fakeClient := fake.NewSimpleDynamicClient(scheme, executeCR)
 	p := NewProvisionerProxyWithClient(ProvisionerProxyConfig{
-		Namespace:   "solo",
-		UpgradePath: root,
-		Orbit:       "test-orbit",
+		Namespace:            "solo",
+		UpgradePath:          root,
+		Orbit:                "test-orbit",
+		ConfigCRPollInterval: 5 * time.Millisecond,
 	}, fakeClient)
 
 	crName := configCRName(testOperationID, configFileKinds["log4j2.xml"])

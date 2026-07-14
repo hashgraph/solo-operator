@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/automa-saga/logx"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -64,6 +65,12 @@ type ProvisionerProxyConfig struct {
 	// Orbit is the owning Orbit name, written into spec.orbit on each config CR
 	// so the Orbit controller can cascade-delete them.
 	Orbit string
+	// ConfigCRPollInterval overrides the default poll cadence when waiting for
+	// config CRs to reach Valid=True. Zero falls back to configCRPollInterval.
+	ConfigCRPollInterval time.Duration
+	// ConfigCRDeployTimeout overrides the default total budget for the config-CR
+	// deployment step. Zero falls back to configCRDeployTimeout.
+	ConfigCRDeployTimeout time.Duration
 }
 
 // NewProvisionerProxy constructs the proxy with an in-cluster or
@@ -180,7 +187,7 @@ func (p *ProvisionerProxy) handleExecute(ctx context.Context, cr *unstructured.U
 	}
 
 	// Step 1 + 2: deploy config CRs and wait for reconciliation.
-	deployCtx, deployCancel := context.WithTimeout(ctx, configCRDeployTimeout)
+	deployCtx, deployCancel := context.WithTimeout(ctx, p.cfg.deployTimeout())
 	defer deployCancel()
 	if err := p.deployConfigCRs(deployCtx, operationID); err != nil {
 		return err
@@ -206,4 +213,18 @@ func (p *ProvisionerProxy) handleExecute(ctx context.Context, cr *unstructured.U
 		Str("operation_id", operationID).Str("cr_name", cr.GetName()).
 		Msg("advanced Execute CR to PendingNodeUpgrade")
 	return nil
+}
+
+func (c ProvisionerProxyConfig) pollInterval() time.Duration {
+	if c.ConfigCRPollInterval > 0 {
+		return c.ConfigCRPollInterval
+	}
+	return configCRPollInterval
+}
+
+func (c ProvisionerProxyConfig) deployTimeout() time.Duration {
+	if c.ConfigCRDeployTimeout > 0 {
+		return c.ConfigCRDeployTimeout
+	}
+	return configCRDeployTimeout
 }

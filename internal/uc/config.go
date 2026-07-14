@@ -40,6 +40,14 @@ const (
 	// FreezePollInterval is the fast cadence used during the freeze window to
 	// minimise now_frozen.mf detection latency.
 	FreezePollInterval = 1 * time.Second
+
+	// DefaultConfigCRPollInterval is how often the UC re-checks each config CR's
+	// status.conditions while waiting for Valid=True during the execute phase.
+	DefaultConfigCRPollInterval = 5 * time.Second
+	// DefaultConfigCRDeployTimeout is the total wall-clock budget for scanning,
+	// creating, and waiting for all config CRs to reach Valid=True. 20 minutes is
+	// generous; a healthy operator reconciles ConfigMap-backed CRs within seconds.
+	DefaultConfigCRDeployTimeout = 20 * time.Minute
 )
 
 // Config holds the runtime configuration for the UC sidecar.
@@ -83,6 +91,12 @@ type Config struct {
 	PollInterval time.Duration
 	// FreezePollInterval is the freeze-window polling cadence.
 	FreezePollInterval time.Duration
+	// ConfigCRPollInterval is how often the UC polls each config CR for Valid=True
+	// during the execute phase (cluster-only mode). Env: UC_CONFIG_CR_POLL_INTERVAL.
+	ConfigCRPollInterval time.Duration
+	// ConfigCRDeployTimeout is the total budget for the config-CR deployment step
+	// (scan + create + wait for Valid=True). Env: UC_CONFIG_CR_DEPLOY_TIMEOUT.
+	ConfigCRDeployTimeout time.Duration
 }
 
 // DefaultConfig returns a Config pre-populated with the documented defaults.
@@ -96,8 +110,10 @@ func DefaultConfig() Config {
 		CRPersistPath:       DefaultCRPersistPath,
 		BackupPath:          DefaultBackupPath,
 		SocketPath:          DefaultSocketPath,
-		PollInterval:        DefaultPollInterval,
-		FreezePollInterval:  FreezePollInterval,
+		PollInterval:          DefaultPollInterval,
+		FreezePollInterval:    FreezePollInterval,
+		ConfigCRPollInterval:  DefaultConfigCRPollInterval,
+		ConfigCRDeployTimeout: DefaultConfigCRDeployTimeout,
 	}
 }
 
@@ -172,6 +188,18 @@ func (c Config) Validate() error {
 		return errx.WithHints(
 			errx.WithReason(errConfigInvalid.New("freeze-poll-interval %s must be positive", c.FreezePollInterval), ReasonConfigInvalid),
 			"Set --freeze-poll-interval to a positive duration (e.g. 1s)",
+		)
+	}
+	if c.ConfigCRPollInterval <= 0 {
+		return errx.WithHints(
+			errx.WithReason(errConfigInvalid.New("config-cr-poll-interval %s must be positive", c.ConfigCRPollInterval), ReasonConfigInvalid),
+			"Set --config-cr-poll-interval to a positive duration (e.g. 5s)",
+		)
+	}
+	if c.ConfigCRDeployTimeout <= 0 {
+		return errx.WithHints(
+			errx.WithReason(errConfigInvalid.New("config-cr-deploy-timeout %s must be positive", c.ConfigCRDeployTimeout), ReasonConfigInvalid),
+			"Set --config-cr-deploy-timeout to a positive duration (e.g. 20m)",
 		)
 	}
 	return nil

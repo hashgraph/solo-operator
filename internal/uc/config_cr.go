@@ -244,7 +244,7 @@ func (p *ProvisionerProxy) deployConfigCRs(ctx context.Context, operationID stri
 		refs = append(refs, configCRRef{name: cr.GetName(), gvr: sf.entry.gvr, kind: sf.entry.kind})
 	}
 
-	return waitForConfigCRsValid(ctx, p.client, p.cfg.Namespace, operationID, refs)
+	return waitForConfigCRsValid(ctx, p.client, p.cfg.Namespace, operationID, refs, p.cfg.pollInterval())
 }
 
 // waitForConfigCRsValid polls each config CR's status.conditions until all have
@@ -257,7 +257,7 @@ func (p *ProvisionerProxy) deployConfigCRs(ctx context.Context, operationID stri
 //
 // Context cancellation (including configCRDeployTimeout) causes a timeout error,
 // leaving the Execute CR at ReadyForProvisionerDaemon for operator intervention.
-func waitForConfigCRsValid(ctx context.Context, client dynamic.Interface, namespace, operationID string, refs []configCRRef) error {
+func waitForConfigCRsValid(ctx context.Context, client dynamic.Interface, namespace, operationID string, refs []configCRRef, pollInterval time.Duration) error {
 	pending := make(map[string]configCRRef, len(refs))
 	for _, r := range refs {
 		pending[r.name] = r
@@ -305,12 +305,12 @@ func waitForConfigCRsValid(ctx context.Context, client dynamic.Interface, namesp
 		return nil
 	}
 
-	ticker := time.NewTicker(configCRPollInterval)
+	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
 	for len(pending) > 0 {
 		// Immediate first check before waiting for the ticker — avoids a full
-		// configCRPollInterval delay when CRs are already Valid (common in tests
+		// poll-interval delay when CRs are already Valid (common in tests
 		// and fast-reconciling clusters).
 		if err := checkPending(); err != nil {
 			return err
