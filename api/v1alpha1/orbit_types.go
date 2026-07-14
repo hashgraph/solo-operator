@@ -67,6 +67,15 @@ type OrbitConsensus struct {
 	// +optional
 	ProvisioningModel string `json:"provisioningModel,omitempty"`
 
+	// ProvisionerDaemonEnabled indicates that a host-level provisioner daemon
+	// (solo-provisioner) runs on bare-metal nodes rather than inside Kubernetes.
+	// When true the UC sidecar runs as UC_MODE=mainnet (defers the execute phase
+	// to the host daemon). When false (default) the UC runs as UC_MODE=cluster-only
+	// and fulfils the provisioner role itself.
+	// +kubebuilder:default=false
+	// +optional
+	ProvisionerDaemonEnabled bool `json:"provisionerDaemonEnabled,omitempty"`
+
 	// Genesis contains genesis-specific configuration
 	Genesis OrbitGenesis `json:"genesis"`
 }

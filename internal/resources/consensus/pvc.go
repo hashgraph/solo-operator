@@ -57,6 +57,10 @@ func (r *PVCSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alp
 		pvcSpecs[VolumeTypeEvents] = pvcConfig.Streams.Events
 	}
 
+	if pvcConfig.UCData != nil {
+		pvcSpecs[VolumeTypeUCData] = pvcConfig.UCData
+	}
+
 	for volumeType, spec := range pvcSpecs {
 		if spec != nil {
 			if err := r.reconcilePVC(ctx, capsule, volumeType, spec); err != nil {
@@ -143,6 +147,10 @@ func GetPVCNames(capsule *operatorv1alpha1.ConsensusCapsule) []string {
 		if pvcConfig.Streams.Events != nil {
 			names = append(names, PVCName(capsule, VolumeTypeEvents))
 		}
+	}
+
+	if pvcConfig.UCData != nil {
+		names = append(names, PVCName(capsule, VolumeTypeUCData))
 	}
 
 	return names

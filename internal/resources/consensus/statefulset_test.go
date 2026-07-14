@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/uc"
 )
 
 func newStsTestScheme() *runtime.Scheme {
@@ -549,7 +550,7 @@ func TestAddSidecarContainers_NilSidecars_EmitsComponentSkipped(t *testing.T) {
 	// All sidecar fields left nil (default from capsuleWithImage).
 	sts := &appsv1.StatefulSet{}
 
-	if err := r.addSidecarContainers(sts, capsule, nil); err != nil {
+	if err := r.addSidecarContainers(sts, capsule, nil, uc.ModeClusterOnly); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -577,7 +578,7 @@ func TestAddSidecarContainers_DisabledSidecars_EmitsSidecarDisabled(t *testing.T
 	capsule.Spec.PodProperties.Containers.UC = &operatorv1alpha1.UcSidecar{Enabled: disabled}
 	sts := &appsv1.StatefulSet{}
 
-	if err := r.addSidecarContainers(sts, capsule, nil); err != nil {
+	if err := r.addSidecarContainers(sts, capsule, nil, uc.ModeClusterOnly); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -627,7 +628,7 @@ func TestAddSidecarContainers_EnabledSidecars_NoSkipOrDisableEvents(t *testing.T
 	}
 
 	sts := &appsv1.StatefulSet{Spec: appsv1.StatefulSetSpec{Template: corev1.PodTemplateSpec{}}}
-	if err := r.addSidecarContainers(sts, capsule, alloyEnabled); err != nil {
+	if err := r.addSidecarContainers(sts, capsule, alloyEnabled, uc.ModeClusterOnly); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -642,11 +643,12 @@ func TestAddSidecarContainers_EnabledSidecars_NoSkipOrDisableEvents(t *testing.T
 
 func TestBuildUcContainer_Defaults(t *testing.T) {
 	r := newStsReconciler()
+	capsule := capsuleWithImage("v0.50.0")
 	config := &operatorv1alpha1.UcSidecar{
 		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "gcr.io", ImageName: "uc", ImageTag: "1.0"},
 		Enabled:         true,
 	}
-	c := r.buildUcContainer(config)
+	c := r.buildUcContainer(capsule, config, uc.ModeClusterOnly)
 	if c.Name != "uc" {
 		t.Errorf("name: got %q, want %q", c.Name, "uc")
 	}
@@ -658,14 +660,82 @@ func TestBuildUcContainer_Defaults(t *testing.T) {
 	}
 }
 
+func TestBuildUcContainer_EnvVars(t *testing.T) {
+	r := newStsReconciler()
+	capsule := capsuleWithImage("v0.50.0")
+	capsule.Spec.NodeId = 3
+	capsule.Spec.Orbit = "my-orbit"
+	config := &operatorv1alpha1.UcSidecar{Enabled: true}
+	c := r.buildUcContainer(capsule, config, uc.ModeClusterOnly)
+
+	envMap := map[string]string{}
+	for _, e := range c.Env {
+		if e.Value != "" {
+			envMap[e.Name] = e.Value
+		}
+	}
+	if envMap["UC_NODE_ID"] != "3" {
+		t.Errorf("UC_NODE_ID: got %q, want %q", envMap["UC_NODE_ID"], "3")
+	}
+	if envMap["UC_ORBIT"] != "my-orbit" {
+		t.Errorf("UC_ORBIT: got %q, want %q", envMap["UC_ORBIT"], "my-orbit")
+	}
+	if envMap["UC_MODE"] != string(uc.ModeClusterOnly) {
+		t.Errorf("UC_MODE: got %q, want %q", envMap["UC_MODE"], uc.ModeClusterOnly)
+	}
+	foundNamespace := false
+	for _, e := range c.Env {
+		if e.Name == "UC_NAMESPACE" && e.ValueFrom != nil && e.ValueFrom.FieldRef != nil {
+			if e.ValueFrom.FieldRef.FieldPath == "metadata.namespace" {
+				foundNamespace = true
+			}
+		}
+	}
+	if !foundNamespace {
+		t.Error("UC_NAMESPACE downward-API env var not found")
+	}
+}
+
+func TestBuildUcContainer_ModeMainnet(t *testing.T) {
+	r := newStsReconciler()
+	capsule := capsuleWithImage("v0.50.0")
+	config := &operatorv1alpha1.UcSidecar{Enabled: true}
+	c := r.buildUcContainer(capsule, config, uc.ModeMainnet)
+	for _, e := range c.Env {
+		if e.Name == "UC_MODE" && e.Value == string(uc.ModeMainnet) {
+			return
+		}
+	}
+	t.Errorf("UC_MODE=mainnet not found in env")
+}
+
+func TestBuildUcContainer_VolumeMounts(t *testing.T) {
+	r := newStsReconciler()
+	capsule := capsuleWithImage("v0.50.0")
+	config := &operatorv1alpha1.UcSidecar{Enabled: true}
+	c := r.buildUcContainer(capsule, config, uc.ModeClusterOnly)
+
+	mountPaths := map[string]string{}
+	for _, m := range c.VolumeMounts {
+		mountPaths[m.Name] = m.MountPath
+	}
+	if mountPaths[VolumeTypeUpgrade] != HapiBase+"/data/upgrade" {
+		t.Errorf("upgrade mount: got %q", mountPaths[VolumeTypeUpgrade])
+	}
+	if mountPaths[VolumeTypeUCData] != UCDataPath {
+		t.Errorf("uc-data mount: got %q, want %q", mountPaths[VolumeTypeUCData], UCDataPath)
+	}
+}
+
 func TestBuildUcContainer_CustomNameAndImage(t *testing.T) {
 	r := newStsReconciler()
+	capsule := capsuleWithImage("v0.50.0")
 	config := &operatorv1alpha1.UcSidecar{
 		Name:            "my-uc",
 		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "custom.io", ImageName: "uc", ImageTag: "latest"},
 		Enabled:         true,
 	}
-	c := r.buildUcContainer(config)
+	c := r.buildUcContainer(capsule, config, uc.ModeClusterOnly)
 	if c.Name != "my-uc" {
 		t.Errorf("name: got %q, want %q", c.Name, "my-uc")
 	}
@@ -676,6 +746,7 @@ func TestBuildUcContainer_CustomNameAndImage(t *testing.T) {
 
 func TestBuildUcContainer_AdditionalVolumeMounts(t *testing.T) {
 	r := newStsReconciler()
+	capsule := capsuleWithImage("v0.50.0")
 	config := &operatorv1alpha1.UcSidecar{
 		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "gcr.io", ImageName: "uc", ImageTag: "1.0"},
 		Enabled:         true,
@@ -683,18 +754,80 @@ func TestBuildUcContainer_AdditionalVolumeMounts(t *testing.T) {
 			{Name: "data", MountPath: "/data"},
 		},
 	}
-	c := r.buildUcContainer(config)
-	if len(c.VolumeMounts) != 1 || c.VolumeMounts[0].Name != "data" {
-		t.Errorf("volumeMounts: got %v", c.VolumeMounts)
+	c := r.buildUcContainer(capsule, config, uc.ModeClusterOnly)
+	// should have upgrade + uc-crs + the additional mount
+	if len(c.VolumeMounts) != 3 {
+		t.Errorf("volumeMounts: expected 3 (upgrade + uc-crs + data), got %d: %v", len(c.VolumeMounts), c.VolumeMounts)
+	}
+	last := c.VolumeMounts[len(c.VolumeMounts)-1]
+	if last.Name != "data" {
+		t.Errorf("last volumeMount: got %q, want %q", last.Name, "data")
 	}
 }
 
 func TestBuildUcContainer_NoSoftwareVersion_UsesDefault(t *testing.T) {
 	r := newStsReconciler()
+	capsule := capsuleWithImage("v0.50.0")
 	config := &operatorv1alpha1.UcSidecar{Enabled: true}
-	c := r.buildUcContainer(config)
+	c := r.buildUcContainer(capsule, config, uc.ModeClusterOnly)
 	if c.Image != UCDefaultImage() {
 		t.Errorf("image: got %q, want default %q", c.Image, UCDefaultImage())
+	}
+}
+
+func TestBuildStatefulSet_UCEnabled_EmptyDirVolume(t *testing.T) {
+	r := newStsReconciler()
+	capsule := capsuleWithImage("gcr.io/repo/cn:0.62.0")
+	capsule.Spec.PodProperties.Containers.UC = &operatorv1alpha1.UcSidecar{
+		Enabled:         true,
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "gcr.io", ImageName: "uc", ImageTag: "1.0"},
+		// Storage nil → emptyDir
+	}
+	sts, err := r.buildStatefulSet(context.Background(), capsule)
+	if err != nil {
+		t.Fatalf("buildStatefulSet: %v", err)
+	}
+	var ucVol *corev1.Volume
+	for i := range sts.Spec.Template.Spec.Volumes {
+		if sts.Spec.Template.Spec.Volumes[i].Name == VolumeTypeUCData {
+			ucVol = &sts.Spec.Template.Spec.Volumes[i]
+			break
+		}
+	}
+	if ucVol == nil {
+		t.Fatalf("expected %q volume, not found", VolumeTypeUCData)
+	}
+	if ucVol.EmptyDir == nil {
+		t.Errorf("expected emptyDir when Storage is nil, got %+v", ucVol.VolumeSource)
+	}
+}
+
+func TestBuildStatefulSet_UCEnabled_PVCVolume(t *testing.T) {
+	r := newStsReconciler()
+	capsule := capsuleWithImage("gcr.io/repo/cn:0.62.0")
+	storageClass := "standard"
+	capsule.Spec.PodProperties.Containers.UC = &operatorv1alpha1.UcSidecar{Enabled: true}
+	capsule.Spec.PersistentVolumeClaims = &operatorv1alpha1.ConsensusPVCConfig{
+		UCData: &corev1.PersistentVolumeClaimSpec{
+			StorageClassName: &storageClass,
+		},
+	}
+	sts, err := r.buildStatefulSet(context.Background(), capsule)
+	if err != nil {
+		t.Fatalf("buildStatefulSet: %v", err)
+	}
+	var ucVol *corev1.Volume
+	for i := range sts.Spec.Template.Spec.Volumes {
+		if sts.Spec.Template.Spec.Volumes[i].Name == VolumeTypeUCData {
+			ucVol = &sts.Spec.Template.Spec.Volumes[i]
+			break
+		}
+	}
+	if ucVol == nil {
+		t.Fatalf("expected %q volume, not found", VolumeTypeUCData)
+	}
+	if ucVol.PersistentVolumeClaim == nil {
+		t.Errorf("expected PVC-backed volume when Storage is set, got %+v", ucVol.VolumeSource)
 	}
 }
 

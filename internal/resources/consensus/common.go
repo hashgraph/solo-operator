@@ -105,6 +105,7 @@ const (
 	VolumeTypeBlocks  = "blocks"
 	VolumeTypeRecords = "records"
 	VolumeTypeEvents  = "events"
+	VolumeTypeUCData  = "uc-data"
 )
 
 // Stream mount paths — single source of truth shared by volume builders and getVolumeNameForPath.

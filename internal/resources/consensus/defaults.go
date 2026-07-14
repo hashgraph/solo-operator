@@ -4,7 +4,13 @@ package consensus
 
 import "github.com/automa-saga/version"
 
-const UCDefaultImageRepo = "ghcr.io/hashgraph/solo-operator-uc"
+const (
+	UCDefaultImageRepo = "ghcr.io/hashgraph/solo-operator-uc"
+
+	// UCDataPath is the root directory for all UC runtime state (crs/, events/, backup/, uc.sock).
+	// Backed by a single emptyDir volume named "uc-data"; the UC binary creates subdirs as needed.
+	UCDataPath = "/opt/solo/weaver/uc"
+)
 
 // UCDefaultImage returns the uc sidecar image at the operator's build version.
 func UCDefaultImage() string {

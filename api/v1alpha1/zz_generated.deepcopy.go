@@ -1157,6 +1157,11 @@ func (in *ConsensusPVCConfig) DeepCopyInto(out *ConsensusPVCConfig) {
 		*out = new(v1.PersistentVolumeClaimSpec)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.UCData != nil {
+		in, out := &in.UCData, &out.UCData
+		*out = new(v1.PersistentVolumeClaimSpec)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.Streams != nil {
 		in, out := &in.Streams, &out.Streams
 		*out = new(ConsensusPVCStreams)
