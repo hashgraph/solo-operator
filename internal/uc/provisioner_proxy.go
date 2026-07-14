@@ -171,8 +171,11 @@ func (p *ProvisionerProxy) handleExecute(ctx context.Context, cr *unstructured.U
 	patch := []byte(fmt.Sprintf(
 		`{"status":{"phase":%q}}`, operatorv1alpha1.ExecutePhasePendingNodeUpgrade))
 
+	patchCtx, cancel := context.WithTimeout(ctx, createTimeout)
+	defer cancel()
+
 	resource := p.client.Resource(networkUpgradeExecuteGVR).Namespace(p.cfg.Namespace)
-	_, err := resource.Patch(ctx, cr.GetName(), types.MergePatchType, patch,
+	_, err := resource.Patch(patchCtx, cr.GetName(), types.MergePatchType, patch,
 		metav1.PatchOptions{}, "status")
 	if err != nil {
 		return errx.WithHints(

@@ -558,7 +558,7 @@ func (m *UpgradeOutcomeMonitor) matchesDiskOperationID(cr *unstructured.Unstruct
 		return false
 	}
 	if len(entries) == 0 {
-		addExtra(logx.As().Debug().Str("reason", ReasonProvisionerProxyMissingOperationID.String())).
+		addExtra(logx.As().Debug().Str("reason", ReasonUpgradePackageRotated.String())).
 			Msg("no execute_immediate.mf and current/ is empty — already rotated, skipping")
 		return false
 	}
@@ -583,7 +583,7 @@ func (m *UpgradeOutcomeMonitor) matchesDiskOperationID(cr *unstructured.Unstruct
 	// for a different operation entirely.
 	crVersion, ok := versionFromOperationID(operationID)
 	if !ok {
-		addExtra(logx.As().Debug().Str("reason", ReasonProvisionerProxyMissingOperationID.String())).
+		addExtra(logx.As().Debug().Str("reason", ReasonManifestInvalid.String())).
 			Msg("no execute_immediate.mf and operationId has unrecognised format — skipping")
 		return false
 	}
