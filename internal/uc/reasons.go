@@ -103,6 +103,7 @@ const (
 	ReasonConfigDirAbsent        errx.Reason = "ConfigDirAbsent"
 	ReasonConfigFileUnrecognised errx.Reason = "ConfigFileUnrecognised"
 	ReasonConfigCRCreateFailed   errx.Reason = "ConfigCRCreateFailed"
+	ReasonConfigCRGetFailed      errx.Reason = "ConfigCRGetFailed"
 	ReasonConfigCRFailed         errx.Reason = "ConfigCRFailed"
 	ReasonConfigCRsDeployed      errx.Reason = "ConfigCRsDeployed"
 	ReasonConfigCRWaitTimeout    errx.Reason = "ConfigCRWaitTimeout"

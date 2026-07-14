@@ -141,7 +141,7 @@ func buildConfigCR(cfg ProvisionerProxyConfig, operationID string, sf scannedFil
 	data, err := os.ReadFile(sf.absPath)
 	if err != nil {
 		return nil, errx.WithHints(
-			errx.WithReason(errPersist.Wrap(err, "read config file %s", sf.absPath), ReasonManifestReadFailed),
+			errx.WithReason(errPersist.Wrap(err, "read config file %s", sf.absPath), ReasonUpgradePathUnreadable),
 			"Confirm the upgrade package was extracted correctly and the file is readable",
 		)
 	}
@@ -270,7 +270,7 @@ func waitForConfigCRsValid(ctx context.Context, client dynamic.Interface, namesp
 				obj, err := client.Resource(ref.gvr).Namespace(namespace).Get(getCtx, name, metav1.GetOptions{})
 				cancel()
 				if err != nil {
-					logx.As().Warn().Err(err).Str("reason", ReasonConfigCRCreateFailed.String()).
+					logx.As().Warn().Err(err).Str("reason", ReasonConfigCRGetFailed.String()).
 						Str("operation_id", operationID).Str("cr_kind", ref.kind).Str("cr_name", name).
 						Msg("could not get config CR — will retry")
 					continue
