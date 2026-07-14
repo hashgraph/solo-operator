@@ -563,18 +563,15 @@ func (m *UpgradeOutcomeMonitor) matchesDiskOperationID(cr *unstructured.Unstruct
 		return false
 	}
 	if !crCreatedAt.IsZero() {
-		var newestMtime time.Time
 		for _, e := range entries {
-			if info, infoErr := e.Info(); infoErr == nil && info.ModTime().After(newestMtime) {
-				newestMtime = info.ModTime()
+			info, infoErr := e.Info()
+			if infoErr == nil && info.ModTime().After(crCreatedAt) {
+				addExtra(logx.As().Info().
+					Str("newest_file_mtime", info.ModTime().UTC().Format(time.RFC3339)).
+					Str("cr_created_at", crCreatedAt.UTC().Format(time.RFC3339))).
+					Msg("files in current/ are newer than CR — CN is writing a new package, skipping")
+				return false
 			}
-		}
-		if newestMtime.After(crCreatedAt) {
-			addExtra(logx.As().Info().
-				Str("newest_file_mtime", newestMtime.UTC().Format(time.RFC3339)).
-				Str("cr_created_at", crCreatedAt.UTC().Format(time.RFC3339))).
-				Msg("files in current/ are newer than CR — CN is writing a new package, skipping")
-			return false
 		}
 	}
 
