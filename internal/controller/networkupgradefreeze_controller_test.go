@@ -302,6 +302,23 @@ func TestFreezeReconcile_DuplicateOperationID_SetsPhaseFailed(t *testing.T) {
 	r.Recorder = rec
 	r.Checker = newFreezeChecker(nil, nil)
 
+	// First reconcile stamps the finalizer and requeues before any phase work.
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: client.ObjectKeyFromObject(freeze),
+	}); err != nil {
+		t.Fatalf("finalizer reconcile: %v", err)
+	}
+
+	// Advance "duplicate" to Running phase so the uniqueness check runs.
+	var dup operatorv1alpha1.NetworkUpgradeFreeze
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(freeze), &dup); err != nil {
+		t.Fatalf("get duplicate: %v", err)
+	}
+	dup.Status.Phase = operatorv1alpha1.PhaseRunning
+	if err := c.Status().Update(context.Background(), &dup); err != nil {
+		t.Fatalf("pre-set phase: %v", err)
+	}
+
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: client.ObjectKeyFromObject(freeze),
 	})
