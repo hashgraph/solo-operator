@@ -47,20 +47,25 @@ type UpgradeOutcomeMonitorConfig struct {
 }
 
 // UpgradeOutcomeMonitor is a core UC monitor that always runs (all deployment
-// modes). It watches NetworkUpgradeExecute and NetworkUpgradeFreezeAbort CRs
-// and reacts to terminal phases with filesystem actions:
+// modes). It watches all four NetworkUpgrade* CR types:
 //
-//   - Execute.Succeeded  → rotate current/ into previous/ (upgrade applied)
+//   - NetworkUpgradePrepare   — phase updates only (dedup cache)
+//   - NetworkUpgradeFreeze    — phase updates only (dedup cache)
+//   - NetworkUpgradeExecute   — phase updates + filesystem actions
+//   - NetworkUpgradeFreezeAbort — phase updates + filesystem actions
+//
+// Filesystem actions on terminal phases:
+//
+//   - Execute.Succeeded     → rotate current/ into previous/ (upgrade applied)
 //   - FreezeAbort.Succeeded → discard current/ (freeze cancelled, package unused)
-//   - Execute.Failed     → no action; current/ preserved for human diagnosis
+//   - Execute.Failed        → no action; current/ preserved for human diagnosis
 //
 // It also drives two callbacks:
 //
-//   - onPhaseUpdate: called on every phase transition so the Factory dedup cache
-//     stays current without extra API calls.
-//   - onReadyForProvisionerDaemon: called when an Execute CR reaches
-//     ReadyForProvisionerDaemon. Nil in mainnet mode; set to ProvisionerProxy.Handle
-//     in cluster-only mode.
+//   - onPhaseUpdate: called on every phase transition for all CR types so the
+//     Factory dedup cache stays current without extra API calls.
+//   - proxy.Handle: called when an Execute CR reaches ReadyForProvisionerDaemon.
+//     Nil in mainnet mode; set to ProvisionerProxy.Handle in cluster-only mode.
 type UpgradeOutcomeMonitor struct {
 	cfg    UpgradeOutcomeMonitorConfig
 	client dynamic.Interface
@@ -69,8 +74,8 @@ type UpgradeOutcomeMonitor struct {
 	// proxy is set when cluster-only mode is active. Seeded from the startup List.
 	proxy *ProvisionerProxy
 
-	// onPhaseUpdate is called on every Execute watch event to keep the Factory
-	// dedup cache current. Nil is safe.
+	// onPhaseUpdate is called on every phase transition for all NetworkUpgrade*
+	// CR types to keep the Factory dedup cache current. Nil is safe.
 	onPhaseUpdate func(operationID, step, phase string)
 
 	connectivityErr atomic.Pointer[daemonkit.StatusError]
@@ -125,7 +130,7 @@ func (m *UpgradeOutcomeMonitor) Run(ctx context.Context) error {
 
 	backoff := outcomeBackoffInitial
 	for {
-		executeRV, abortRV, listErr := m.listAndSeed(ctx)
+		prepareRV, freezeRV, executeRV, abortRV, listErr := m.listAndSeed(ctx)
 		if ctx.Err() != nil {
 			logx.As().Info().Str("reason", ReasonUpgradeOutcomeMonitorStopped.String()).Msg("upgrade-outcome monitor stopped")
 			return nil
@@ -133,7 +138,7 @@ func (m *UpgradeOutcomeMonitor) Run(ctx context.Context) error {
 		if listErr != nil {
 			listReason, _ := errx.ReasonOf(listErr)
 			m.setConnectivityError(listReason.String(), listErr.Error(),
-				fmt.Sprintf("Verify RBAC for networkupgradeexecutes and networkupgradefreezeaborts in namespace %s", m.cfg.Namespace))
+				fmt.Sprintf("Verify RBAC for all networkupgrade* CRs in namespace %s", m.cfg.Namespace))
 			logx.As().Warn().Err(listErr).Str("reason", listReason.String()).
 				Dur("retry_in", backoff).Msg("list error — retrying")
 			if !sleepCtx(ctx, backoff) {
@@ -144,7 +149,7 @@ func (m *UpgradeOutcomeMonitor) Run(ctx context.Context) error {
 		}
 		m.clearConnectivityError()
 
-		err := m.runWatch(ctx, executeRV, abortRV)
+		err := m.runWatch(ctx, prepareRV, freezeRV, executeRV, abortRV)
 		if ctx.Err() != nil {
 			logx.As().Info().Str("reason", ReasonUpgradeOutcomeMonitorStopped.String()).Msg("upgrade-outcome monitor stopped")
 			return nil
@@ -174,22 +179,40 @@ func (m *UpgradeOutcomeMonitor) Run(ctx context.Context) error {
 	}
 }
 
-// listAndSeed lists all Execute and FreezeAbort CRs. It:
-//  1. Seeds the ProvisionerProxy's completedOpIDs (if wired) from terminal Execute CRs.
-//  2. Rotates/discards upgrade packages for already-terminal CRs (idempotent).
-//  3. Dispatches any Execute CR already at ReadyForProvisionerDaemon via the
-//     onReadyForProvisionerDaemon callback (recovery for CRs that arrived while the
-//     UC was offline).
+// listAndSeed lists all four NetworkUpgrade* CR types. It:
+//  1. Calls onPhaseUpdate for every Prepare and Freeze CR to prime the dedup cache.
+//  2. Seeds the ProvisionerProxy's completedOpIDs (if wired) from terminal Execute CRs.
+//  3. Rotates/discards upgrade packages for already-terminal Execute/FreezeAbort CRs (idempotent).
+//  4. Dispatches any Execute CR already at ReadyForProvisionerDaemon via ProvisionerProxy.Handle
+//     (recovery for CRs that arrived while the UC was offline).
 //
-// Returns the Execute and FreezeAbort List ResourceVersions for a gapless watch.
-func (m *UpgradeOutcomeMonitor) listAndSeed(ctx context.Context) (executeRV, abortRV string, _ error) {
+// Returns the four List ResourceVersions for a gapless watch.
+func (m *UpgradeOutcomeMonitor) listAndSeed(ctx context.Context) (prepareRV, freezeRV, executeRV, abortRV string, _ error) {
 	listCtx, cancel := context.WithTimeout(ctx, listTimeout)
 	defer cancel()
+
+	prepareList, err := m.client.Resource(networkUpgradePrepareGVR).Namespace(m.cfg.Namespace).
+		List(listCtx, metav1.ListOptions{})
+	if err != nil {
+		return "", "", "", "", errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradePrepare"), ReasonPrepareListFailed),
+			"Confirm the UC ServiceAccount has list permission on networkupgradeprepares."+operatorv1alpha1.GroupVersion.Group,
+		)
+	}
+
+	freezeList, err := m.client.Resource(networkUpgradeFreezeGVR).Namespace(m.cfg.Namespace).
+		List(listCtx, metav1.ListOptions{})
+	if err != nil {
+		return "", "", "", "", errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradeFreeze"), ReasonFreezeListFailed),
+			"Confirm the UC ServiceAccount has list permission on networkupgradefreezes."+operatorv1alpha1.GroupVersion.Group,
+		)
+	}
 
 	execList, err := m.client.Resource(networkUpgradeExecuteGVR).Namespace(m.cfg.Namespace).
 		List(listCtx, metav1.ListOptions{})
 	if err != nil {
-		return "", "", errx.WithHints(
+		return "", "", "", "", errx.WithHints(
 			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradeExecute"), ReasonExecuteListFailed),
 			"Confirm the UC ServiceAccount has list permission on networkupgradeexecutes."+operatorv1alpha1.GroupVersion.Group,
 		)
@@ -198,10 +221,29 @@ func (m *UpgradeOutcomeMonitor) listAndSeed(ctx context.Context) (executeRV, abo
 	abortList, err := m.client.Resource(networkUpgradeFreezeAbortGVR).Namespace(m.cfg.Namespace).
 		List(listCtx, metav1.ListOptions{})
 	if err != nil {
-		return "", "", errx.WithHints(
+		return "", "", "", "", errx.WithHints(
 			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradeFreezeAbort"), ReasonFreezeAbortListFailed),
 			"Confirm the UC ServiceAccount has list permission on networkupgradefreezeaborts."+operatorv1alpha1.GroupVersion.Group,
 		)
+	}
+
+	// Prime dedup cache for Prepare and Freeze CRs so the Factory does not
+	// re-create CRs that already exist in the cluster.
+	if m.onPhaseUpdate != nil {
+		for i := range prepareList.Items {
+			cr := &prepareList.Items[i]
+			phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
+			if opID := operationIDOf(cr); opID != "" {
+				m.onPhaseUpdate(opID, cr.GetLabels()[operatorv1alpha1.LabelStep], phase)
+			}
+		}
+		for i := range freezeList.Items {
+			cr := &freezeList.Items[i]
+			phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
+			if opID := operationIDOf(cr); opID != "" {
+				m.onPhaseUpdate(opID, cr.GetLabels()[operatorv1alpha1.LabelStep], phase)
+			}
+		}
 	}
 
 	// Let ProvisionerProxy seed its completedOpIDs from the Execute list so it
@@ -250,10 +292,11 @@ func (m *UpgradeOutcomeMonitor) listAndSeed(ctx context.Context) (executeRV, abo
 		}
 	}
 
-	return execList.GetResourceVersion(), abortList.GetResourceVersion(), nil
+	return prepareList.GetResourceVersion(), freezeList.GetResourceVersion(),
+		execList.GetResourceVersion(), abortList.GetResourceVersion(), nil
 }
 
-func (m *UpgradeOutcomeMonitor) runWatch(ctx context.Context, executeRV, abortRV string) (retErr error) {
+func (m *UpgradeOutcomeMonitor) runWatch(ctx context.Context, prepareRV, freezeRV, executeRV, abortRV string) (retErr error) {
 	defer func() {
 		if r := recover(); r != nil {
 			logx.As().Error().Str("reason", ReasonProvisionerProxyWatchPanic.String()).Interface("panic", r).
@@ -262,6 +305,26 @@ func (m *UpgradeOutcomeMonitor) runWatch(ctx context.Context, executeRV, abortRV
 		}
 	}()
 	timeoutSec := outcomeWatchTimeoutSeconds
+
+	prepareWatcher, err := m.client.Resource(networkUpgradePrepareGVR).Namespace(m.cfg.Namespace).
+		Watch(ctx, metav1.ListOptions{ResourceVersion: prepareRV, TimeoutSeconds: &timeoutSec})
+	if err != nil {
+		return errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "watch NetworkUpgradePrepare"), ReasonWatchFailed),
+			"Confirm the UC ServiceAccount has watch permission on networkupgradeprepares."+operatorv1alpha1.GroupVersion.Group,
+		)
+	}
+	defer prepareWatcher.Stop()
+
+	freezeWatcher, err := m.client.Resource(networkUpgradeFreezeGVR).Namespace(m.cfg.Namespace).
+		Watch(ctx, metav1.ListOptions{ResourceVersion: freezeRV, TimeoutSeconds: &timeoutSec})
+	if err != nil {
+		return errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "watch NetworkUpgradeFreeze"), ReasonWatchFailed),
+			"Confirm the UC ServiceAccount has watch permission on networkupgradefreezes."+operatorv1alpha1.GroupVersion.Group,
+		)
+	}
+	defer freezeWatcher.Stop()
 
 	execWatcher, err := m.client.Resource(networkUpgradeExecuteGVR).Namespace(m.cfg.Namespace).
 		Watch(ctx, metav1.ListOptions{ResourceVersion: executeRV, TimeoutSeconds: &timeoutSec})
@@ -291,6 +354,48 @@ func (m *UpgradeOutcomeMonitor) runWatch(ctx context.Context, executeRV, abortRV
 		select {
 		case <-ctx.Done():
 			return nil
+		case event, ok := <-prepareWatcher.ResultChan():
+			if !ok {
+				return nil
+			}
+			if event.Type == watch.Error {
+				return errx.WithReason(
+					errK8sAPI.Wrap(k8serrors.FromObject(event.Object), "prepare watch error event"), ReasonWatchErrorEvent)
+			}
+			if event.Type != watch.Added && event.Type != watch.Modified {
+				continue
+			}
+			cr, ok := event.Object.(*unstructured.Unstructured)
+			if !ok {
+				continue
+			}
+			if m.onPhaseUpdate != nil {
+				if opID := operationIDOf(cr); opID != "" {
+					phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
+					m.onPhaseUpdate(opID, cr.GetLabels()[operatorv1alpha1.LabelStep], phase)
+				}
+			}
+		case event, ok := <-freezeWatcher.ResultChan():
+			if !ok {
+				return nil
+			}
+			if event.Type == watch.Error {
+				return errx.WithReason(
+					errK8sAPI.Wrap(k8serrors.FromObject(event.Object), "freeze watch error event"), ReasonWatchErrorEvent)
+			}
+			if event.Type != watch.Added && event.Type != watch.Modified {
+				continue
+			}
+			cr, ok := event.Object.(*unstructured.Unstructured)
+			if !ok {
+				continue
+			}
+			if m.onPhaseUpdate != nil {
+				if opID := operationIDOf(cr); opID != "" {
+					phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
+					m.onPhaseUpdate(opID, cr.GetLabels()[operatorv1alpha1.LabelStep], phase)
+				}
+			}
 		case event, ok := <-execWatcher.ResultChan():
 			if !ok {
 				return nil

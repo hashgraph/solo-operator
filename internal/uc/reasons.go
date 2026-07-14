@@ -57,6 +57,7 @@ const (
 	ReasonDedupQueryFailed      errx.Reason = "DedupQueryFailed"
 	ReasonCacheSeedFailed       errx.Reason = "CacheSeedFailed"
 	ReasonPrepareListFailed     errx.Reason = "PrepareListFailed"
+	ReasonFreezeListFailed      errx.Reason = "FreezeListFailed"
 	ReasonExecuteListFailed     errx.Reason = "ExecuteListFailed"
 	ReasonFreezeAbortListFailed errx.Reason = "FreezeAbortListFailed"
 	ReasonExecutePatchFailed    errx.Reason = "ExecutePatchFailed"
