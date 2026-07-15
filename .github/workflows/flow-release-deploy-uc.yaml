@@ -62,10 +62,19 @@ jobs:
       - name: Install Semantic Release & plugins
         run: |
           set -euo pipefail
+          # NOTE: The "release" key below makes cosmiconfig resolve THIS
+          # package.json first (before the repo-root .releaserc.json used by
+          # the operator release), so the UC release runs only the UC config.
+          # Do not pass --extends on the CLI; that would leave .releaserc.json
+          # as the discovered config and pull in its @semantic-release/git
+          # prepare step.
           cat > package.json <<'JSON'
           {
             "name": "solo-operator-uc-release-tooling",
             "private": true,
+            "release": {
+              "extends": "./.releaserc_uc.json"
+            },
             "devDependencies": {
               "semantic-release": "24.2.4",
               "@semantic-release/commit-analyzer": "13.0.1",
@@ -90,7 +99,7 @@ jobs:
             FLAGS="--dry-run"
           fi
 
-          npx semantic-release ${FLAGS} --extends "$(pwd)/.releaserc_uc.json" 2>&1 | tee semantic-release-output.txt
+          npx semantic-release ${FLAGS} 2>&1 | tee semantic-release-output.txt
 
           if [[ "${{ inputs.dry-run-enabled }}" == "true" ]]; then
             NEXT_VERSION=$(sed -n 's/.*The next release version is \([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\(-[0-9A-Za-z.-]\{1,\}\)\{0,1\}\).*/\1/p' semantic-release-output.txt || echo "")
