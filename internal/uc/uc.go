@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/automa-saga/daemonkit"
 	"github.com/automa-saga/logx"
@@ -29,6 +30,7 @@ import (
 type UC struct {
 	cfg      Config
 	client   dynamic.Interface
+	events   *eventSink
 	monitors []daemonkit.MonitorRunner
 }
 
@@ -40,7 +42,13 @@ func New(cfg Config) (*UC, error) {
 		return nil, err
 	}
 
+	// Per-operation JSONL audit sink (#1127). nodeID is stamped on every line;
+	// EventsPath is created by ensureDirs before the monitors run. Best-effort —
+	// the sink no-ops if a per-operation log cannot be opened.
+	sink := newEventSink(cfg.EventsPath, strconv.Itoa(cfg.NodeID))
+
 	factory := NewFactory(cfg, client)
+	factory.events = sink
 
 	outcomeCfg := UpgradeOutcomeMonitorConfig{
 		Namespace:           cfg.Namespace,
@@ -50,6 +58,7 @@ func New(cfg Config) (*UC, error) {
 	}
 	outcomeMonitor := NewUpgradeOutcomeMonitorWithClient(outcomeCfg, client)
 	outcomeMonitor.onPhaseUpdate = factory.markCreated
+	outcomeMonitor.events = sink
 
 	if cfg.ProvisionerProxyEnabled() {
 		proxy := NewProvisionerProxyWithClient(
@@ -72,7 +81,7 @@ func New(cfg Config) (*UC, error) {
 		outcomeMonitor,
 	}
 
-	return &UC{cfg: cfg, client: client, monitors: monitors}, nil
+	return &UC{cfg: cfg, client: client, events: sink, monitors: monitors}, nil
 }
 
 // Run starts the control server and all supervised monitors, blocking until ctx
@@ -116,6 +125,9 @@ func (u *UC) Run(ctx context.Context) error {
 		Msg("UC started")
 
 	err := g.Wait()
+	// Flush and close the per-operation JSONL writers after the monitors exit so
+	// late audit lines still drain.
+	u.events.Close()
 	if nerr := daemonkit.NotifyStopping(); nerr != nil {
 		logx.As().Warn().Err(nerr).Str("reason", ReasonSdNotifyStoppingFailed.String()).Msg("Failed to send STOPPING=1 to systemd")
 	}
