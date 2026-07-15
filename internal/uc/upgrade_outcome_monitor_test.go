@@ -64,6 +64,51 @@ func TestObservePhaseWritesOnTransitionOnly(t *testing.T) {
 	}
 }
 
+// TestPruneStaleOperations verifies the safety-net sweep evicts dedup state and
+// releases the event-log handle for a never-terminal operation past the age
+// window, while leaving a recent operation untouched.
+func TestPruneStaleOperations(t *testing.T) {
+	now := time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC)
+	oldOp := "upgrade-20260406T000000Z"   // 100 days before now → stale
+	freshOp := "upgrade-20260705T000000Z" // 10 days before now → kept
+
+	m := newOutcomeMonitor(t, t.TempDir())
+	m.events = newEventSink(t.TempDir(), "0")
+
+	// Seed dedup state and an open writer for each operation.
+	m.daemonTriggered[oldOp] = struct{}{}
+	m.daemonTriggered[freshOp] = struct{}{}
+	m.lastPhase[oldOp+"/execute"] = "Running"
+	m.lastPhase[freshOp+"/execute"] = "Running"
+	m.events.info(oldOp, "MarkerDetected", "x")
+	m.events.info(freshOp, "MarkerDetected", "x")
+
+	m.pruneStaleOperations(now)
+
+	if _, ok := m.daemonTriggered[oldOp]; ok {
+		t.Error("stale daemonTriggered entry not pruned")
+	}
+	if _, ok := m.lastPhase[oldOp+"/execute"]; ok {
+		t.Error("stale lastPhase entry not pruned")
+	}
+	if _, ok := m.daemonTriggered[freshOp]; !ok {
+		t.Error("fresh daemonTriggered entry wrongly pruned")
+	}
+	if _, ok := m.lastPhase[freshOp+"/execute"]; !ok {
+		t.Error("fresh lastPhase entry wrongly pruned")
+	}
+	m.events.mu.Lock()
+	_, oldWriterOpen := m.events.writers[oldOp]
+	_, freshWriterOpen := m.events.writers[freshOp]
+	m.events.mu.Unlock()
+	if oldWriterOpen {
+		t.Error("stale operation's event-log handle not released")
+	}
+	if !freshWriterOpen {
+		t.Error("fresh operation's event-log handle wrongly released")
+	}
+}
+
 // TestDaemonTriggeredEmittedOncePerOperation verifies DaemonTriggered is written
 // to JSONL exactly once even though the Execute CR is re-observed on every watch
 // tick while at ReadyForProvisionerDaemon, and that it fires with a nil proxy

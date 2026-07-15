@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -32,6 +33,15 @@ const (
 	// outcomeWatchTimeoutSeconds is the server-side watch timeout. The server
 	// closes the channel cleanly after this window; Run reconnects.
 	outcomeWatchTimeoutSeconds = int64(5 * 60)
+
+	// maxOperationAge bounds how long per-operation dedup state (lastPhase,
+	// daemonTriggered) and its event-log handle are retained for an operation that
+	// never reached a terminal phase. Terminal operations are cleaned up promptly
+	// in observePhase; this is the safety net for the pathological case — a UC
+	// running uninterrupted for months while an upgrade got stuck — so memory and
+	// open FDs cannot grow without bound. Keyed off the timestamp embedded in the
+	// operationId, so it mirrors the 90-day-ish window without wall-clock coupling.
+	maxOperationAge = 90 * 24 * time.Hour
 )
 
 // UpgradeOutcomeMonitorConfig configures the upgrade-outcome monitor.
@@ -204,6 +214,11 @@ func (m *UpgradeOutcomeMonitor) Run(ctx context.Context) error {
 //
 // Returns the four List ResourceVersions for a gapless watch.
 func (m *UpgradeOutcomeMonitor) listAndSeed(ctx context.Context) (prepareRV, freezeRV, executeRV, abortRV string, _ error) {
+	// Safety-net sweep of stuck-operation state on every list cycle (startup and
+	// each ~5-minute watch reconnect). Terminal operations are cleaned up inline in
+	// observePhase; this bounds the pathological never-terminal case.
+	m.pruneStaleOperations(time.Now())
+
 	listCtx, cancel := context.WithTimeout(ctx, listTimeout)
 	defer cancel()
 
@@ -572,6 +587,44 @@ func operationTerminal(step, phase string) bool {
 		return false
 	}
 	return step == operatorv1alpha1.StepExecute || step == operatorv1alpha1.StepAbort
+}
+
+// pruneStaleOperations evicts per-operation dedup state (and releases the
+// event-log handle) for operations whose embedded timestamp is older than
+// maxOperationAge. Terminal operations are already cleaned up in observePhase, so
+// this only reclaims state for operations that got stuck and never completed — a
+// safety net against unbounded growth in a UC that runs for months. Operations
+// whose operationId carries no parseable timestamp are left alone (they cannot be
+// aged and are rare, since the convention embeds one).
+func (m *UpgradeOutcomeMonitor) pruneStaleOperations(now time.Time) {
+	cutoff := now.Add(-maxOperationAge)
+	stale := make(map[string]struct{})
+
+	m.mu.Lock()
+	for opID := range m.daemonTriggered {
+		if ts, ok := operationIDTimestamp(opID); ok && ts.Before(cutoff) {
+			delete(m.daemonTriggered, opID)
+			stale[opID] = struct{}{}
+		}
+	}
+	for key := range m.lastPhase {
+		opID := key
+		if i := strings.IndexByte(key, '/'); i >= 0 {
+			opID = key[:i] // strip the "/<step>" suffix
+		}
+		if ts, ok := operationIDTimestamp(opID); ok && ts.Before(cutoff) {
+			delete(m.lastPhase, key)
+			stale[opID] = struct{}{}
+		}
+	}
+	m.mu.Unlock()
+
+	for opID := range stale {
+		m.events.closeOp(opID) // release the (still-open) event-log handle
+		logx.As().Warn().Str("reason", ReasonStaleOperationPruned.String()).
+			Str("operation_id", opID).
+			Msg("evicted in-memory state for an operation past the retention window that never reached a terminal phase")
+	}
 }
 
 // emitDaemonTriggered records the DaemonTriggered event (#1002) on both UC

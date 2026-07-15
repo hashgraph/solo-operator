@@ -128,6 +128,9 @@ func (s *eventSink) closeOp(operationID string) {
 		}
 		delete(s.writers, operationID)
 	}
+	// Drop any disabled-marker too, so an operation's cached state is fully
+	// released (terminal cleanup, and the stale-operation safety-net sweep).
+	delete(s.failed, operationID)
 }
 
 // Close flushes and closes every open per-operation Writer. Nil-safe; intended to
