@@ -8,6 +8,8 @@ import (
 
 	services "github.com/hiero-ledger/hiero-sdk-go/v2/proto/services"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 func BuildAddressBookBin(materials []RosterMaterial) ([]byte, error) {
@@ -19,7 +21,11 @@ func BuildAddressBookBin(materials []RosterMaterial) ([]byte, error) {
 		}
 		nodes = append(nodes, n)
 	}
-	return proto.Marshal(&services.NodeAddressBook{NodeAddress: nodes})
+	data, err := proto.Marshal(&services.NodeAddressBook{NodeAddress: nodes})
+	if err != nil {
+		return nil, errx.WithReason(errMaterial.Wrap(err, "marshal address book"), ReasonAddressBookMarshal)
+	}
+	return data, nil
 }
 
 func nodeAddressFromMaterial(m RosterMaterial) (*services.NodeAddress, error) {
@@ -50,13 +56,13 @@ func splitAccountID(accountID string, nodeID int64) (shard, realm, account int64
 		return 0, 0, 0, err
 	}
 	if shard, err = strconv.ParseInt(s, 10, 64); err != nil {
-		return 0, 0, 0, fmt.Errorf("shard: %w", err)
+		return 0, 0, 0, errx.WithReason(errValidation.Wrap(err, "shard"), ReasonAccountIDInvalid)
 	}
 	if realm, err = strconv.ParseInt(r, 10, 64); err != nil {
-		return 0, 0, 0, fmt.Errorf("realm: %w", err)
+		return 0, 0, 0, errx.WithReason(errValidation.Wrap(err, "realm"), ReasonAccountIDInvalid)
 	}
 	if account, err = strconv.ParseInt(a, 10, 64); err != nil {
-		return 0, 0, 0, fmt.Errorf("account: %w", err)
+		return 0, 0, 0, errx.WithReason(errValidation.Wrap(err, "account"), ReasonAccountIDInvalid)
 	}
 	return shard, realm, account, nil
 }

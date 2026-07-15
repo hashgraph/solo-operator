@@ -1,0 +1,29 @@
+// SPDX-License-Identifier: Apache-2.0
+
+package registry
+
+import (
+	"github.com/joomcode/errorx"
+
+	"github.com/hashgraph/solo-operator/internal/errx"
+)
+
+var (
+	errNS = errorx.NewNamespace("registry")
+
+	errIntegrity = errNS.NewType("integrity_failed")
+	errImageRef  = errNS.NewType("image_ref_invalid")
+	// Transient: worth a retry / failover to another registry.
+	errRegistryAPI = errNS.NewType("registry_api_failed", errorx.Temporary())
+	errNoRegistry  = errNS.NewType("no_valid_registry")
+)
+
+const (
+	ReasonNoLayerHashes     errx.Reason = "NoLayerHashes"
+	ReasonLayerHashMismatch errx.Reason = "LayerHashMismatch"
+	ReasonImageRefInvalid   errx.Reason = "ImageRefInvalid"
+	ReasonDigestResolve     errx.Reason = "DigestResolveFailed"
+	ReasonImageRead         errx.Reason = "ImageReadFailed"
+	ReasonConfigRead        errx.Reason = "ConfigReadFailed"
+	ReasonNoValidRegistry   errx.Reason = "NoValidRegistry"
+)

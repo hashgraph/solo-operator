@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/resources/applicationproperties"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
@@ -72,9 +73,9 @@ func (r *ApplicationPropertiesReconciler) updateStatus(ctx context.Context, obj 
 	return r.Status().Update(ctx, obj)
 }
 
-func (r *ApplicationPropertiesReconciler) event(obj *operatorv1alpha1.ApplicationProperties, eventtype, reason, msg string) {
+func (r *ApplicationPropertiesReconciler) event(obj *operatorv1alpha1.ApplicationProperties, eventtype string, reason errx.Reason, msg string) {
 	if r.Recorder != nil {
-		r.Recorder.Eventf(obj, nil, eventtype, reason, "ApplicationProperties", "%s", msg)
+		r.Recorder.Eventf(obj, nil, eventtype, reason.String(), "ApplicationProperties", "%s", msg)
 	}
 }
 

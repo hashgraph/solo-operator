@@ -2,6 +2,8 @@
 
 package v1alpha1
 
+import "github.com/hashgraph/solo-operator/internal/errx"
+
 type ComponentName string
 
 const (
@@ -200,67 +202,69 @@ const (
 	CondOperationIDLabelValid = "OperationIDLabelValid"
 )
 
-// Reason constants used in conditions and events.
+// Reason constants used in conditions and events. Typed as errx.Reason so one
+// identifier flows from an error through logs to Condition.Reason/Event.reason.
+// The string values are a public contract — never rename, only add.
 const (
-	ReasonSchemaValid       = "SchemaValid"
-	ReasonSchemaInvalid     = "SchemaInvalid"
-	ReasonDuplicateOpID     = "DuplicateOperationID"
-	ReasonAllImagesValid    = "AllImagesValid"
-	ReasonSelectionComplete = "SelectionComplete"
-	ReasonRegistryInvalid   = "RegistryInvalid"
-	ReasonRegistryFailover  = "RegistryFailover"
+	ReasonSchemaValid       errx.Reason = "SchemaValid"
+	ReasonSchemaInvalid     errx.Reason = "SchemaInvalid"
+	ReasonDuplicateOpID     errx.Reason = "DuplicateOperationID"
+	ReasonAllImagesValid    errx.Reason = "AllImagesValid"
+	ReasonSelectionComplete errx.Reason = "SelectionComplete"
+	ReasonRegistryInvalid   errx.Reason = "RegistryInvalid"
+	ReasonRegistryFailover  errx.Reason = "RegistryFailover"
 
-	ReasonHealthCheckPassed = "HealthCheckPassed"
-	ReasonPreFreezePassed   = "PreFreezePassed"
+	ReasonHealthCheckPassed errx.Reason = "HealthCheckPassed"
+	ReasonPreFreezePassed   errx.Reason = "PreFreezePassed"
 
-	ReasonScaledDown       = "ScaledDown"
-	ReasonReadyForDaemon   = "ReadyForProvisionerDaemon"
-	ReasonPatchApplied     = "PatchApplied"
-	ReasonCapsulesOnline   = "CapsulesOnline"
-	ReasonPodReady         = "PodReady"
-	ReasonUpgradeSucceeded = "UpgradeSucceeded"
-	ReasonUpgradeFailed    = "UpgradeFailed"
+	ReasonScaledDown       errx.Reason = "ScaledDown"
+	ReasonReadyForDaemon   errx.Reason = "ReadyForProvisionerDaemon"
+	ReasonPatchApplied     errx.Reason = "PatchApplied"
+	ReasonCapsulesOnline   errx.Reason = "CapsulesOnline"
+	ReasonPodReady         errx.Reason = "PodReady"
+	ReasonUpgradeSucceeded errx.Reason = "UpgradeSucceeded"
+	ReasonUpgradeFailed    errx.Reason = "UpgradeFailed"
 
-	ReasonAbortSuccess     = "Success"
-	ReasonAbortAfterFreeze = "AbortAfterFreeze"
+	ReasonAbortSuccess     errx.Reason = "Success"
+	ReasonAbortAfterFreeze errx.Reason = "AbortAfterFreeze"
 
-	ReasonOperationIDLabelInvalid = "OperationIDLabelInvalid"
+	ReasonOperationIDLabelInvalid errx.Reason = "OperationIDLabelInvalid"
 )
 
 // DaemonResult condition reasons, written by the provisioner daemon.
 const (
-	ReasonDaemonSucceeded          = "Succeeded"
-	ReasonDaemonFileDownloadFailed = "FileDownloadFailed"
-	ReasonDaemonFileHashMismatch   = "FileHashMismatch"
-	ReasonDaemonInfraUpgradeFailed = "InfraUpgradeFailed"
-	ReasonDaemonSelfUpgradeFailed  = "SelfUpgradeFailed"
+	ReasonDaemonSucceeded          errx.Reason = "Succeeded"
+	ReasonDaemonFileDownloadFailed errx.Reason = "FileDownloadFailed"
+	ReasonDaemonFileHashMismatch   errx.Reason = "FileHashMismatch"
+	ReasonDaemonInfraUpgradeFailed errx.Reason = "InfraUpgradeFailed"
+	ReasonDaemonSelfUpgradeFailed  errx.Reason = "SelfUpgradeFailed"
 )
 
 // Event reasons posted on NetworkUpgrade* CRs.
 const (
-	EventManifestInvalid       = "ManifestInvalid"
-	EventRegistryAuditComplete = "RegistryAuditComplete"
-	EventRegistryUnreachable   = "RegistryUnreachable"
-	EventRegistrySelected      = "RegistrySelected"
-	EventRegistryInvalid       = "RegistryInvalid"
-	EventRegistryFailover      = "RegistryFailover"
-	EventComponentSkipped      = "ComponentSkipped"
-	EventSidecarDisabled       = "SidecarDisabled"
+	EventManifestInvalid       errx.Reason = "ManifestInvalid"
+	EventRegistryAuditComplete errx.Reason = "RegistryAuditComplete"
+	EventRegistryUnreachable   errx.Reason = "RegistryUnreachable"
+	EventRegistrySelected      errx.Reason = "RegistrySelected"
+	EventRegistryInvalid       errx.Reason = "RegistryInvalid"
+	EventRegistryFailover      errx.Reason = "RegistryFailover"
+	EventComponentSkipped      errx.Reason = "ComponentSkipped"
+	EventSidecarDisabled       errx.Reason = "SidecarDisabled"
 
-	EventPodScaledDown       = "PodScaledDown"
-	EventReadyForDaemon      = "ReadyForProvisionerDaemon"
-	EventPendingInfraUpgrade = "PendingInfraUpgrade"
-	EventPendingNodeUpgrade  = "PendingNodeUpgrade"
-	EventCapsulePatched      = "CapsulePatched"
-	EventCapsulesOnline      = "CapsulesOnline"
-	EventUpgradeSucceeded    = "UpgradeSucceeded"
-	EventUpgradeFailed       = "UpgradeFailed"
+	EventPodScaledDown       errx.Reason = "PodScaledDown"
+	EventReadyForDaemon      errx.Reason = "ReadyForProvisionerDaemon"
+	EventPendingInfraUpgrade errx.Reason = "PendingInfraUpgrade"
+	EventPendingNodeUpgrade  errx.Reason = "PendingNodeUpgrade"
+	EventCapsulePatched      errx.Reason = "CapsulePatched"
+	EventCapsulesOnline      errx.Reason = "CapsulesOnline"
+	EventUpgradeSucceeded    errx.Reason = "UpgradeSucceeded"
+	EventUpgradeFailed       errx.Reason = "UpgradeFailed"
 
-	EventAbortProcessed   = "AbortProcessed"
-	EventAbortAfterFreeze = "AbortAfterFreeze"
+	EventAbortProcessed   errx.Reason = "AbortProcessed"
+	EventAbortAfterFreeze errx.Reason = "AbortAfterFreeze"
 
-	EventConfigCRReconciled = "ConfigCRReconciled"
-	EventConfigCRFailed     = "ConfigCRFailed"
+	EventConfigCRReconciled errx.Reason = "ConfigCRReconciled"
+	EventConfigCRFailed     errx.Reason = "ConfigCRFailed"
 
-	EventOperationIDLabelInvalid = "OperationIDLabelInvalid"
+	EventOperationIDLabelInvalid errx.Reason = "OperationIDLabelInvalid"
 )

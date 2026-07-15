@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // validateOperationIDLabel enforces the HIP-required operation-id label
@@ -38,7 +39,7 @@ func rejectInvalidOperationIDLabel(
 	c client.Client,
 	obj client.Object,
 	conds *[]operatorv1alpha1.Condition,
-	emit func(reason, msg string),
+	emit func(reason errx.Reason, msg string),
 	setPhase func(),
 	msg string,
 ) (ctrl.Result, error) {
@@ -47,12 +48,12 @@ func rejectInvalidOperationIDLabel(
 	setCondition(conds, metav1.Condition{
 		Type:               operatorv1alpha1.CondOperationIDLabelValid,
 		Status:             metav1.ConditionFalse,
-		Reason:             operatorv1alpha1.ReasonOperationIDLabelInvalid,
+		Reason:             operatorv1alpha1.ReasonOperationIDLabelInvalid.String(),
 		Message:            msg,
 		ObservedGeneration: obj.GetGeneration(),
 	})
 	if err := c.Status().Update(ctx, obj); err != nil {
-		return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+		return ctrl.Result{}, wrapStatusUpdate(err, "updating status")
 	}
 	return ctrl.Result{}, nil
 }

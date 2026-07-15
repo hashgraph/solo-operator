@@ -242,7 +242,7 @@ var _ = Describe("NetworkUpgradeFreeze Controller", func() {
 			Expect(got.Status.SelectedSources.ConsensusNode.Image).To(Equal("ghcr.io/valid/cn:0.75.0"))
 
 			By("emitting RegistryFailover warning event")
-			Expect(hasEvent(ctx, ns, nufName, operatorv1alpha1.EventRegistryFailover, "consensusNode")).To(BeTrue())
+			Expect(hasEvent(ctx, ns, nufName, operatorv1alpha1.EventRegistryFailover.String(), "consensusNode")).To(BeTrue())
 		})
 	})
 

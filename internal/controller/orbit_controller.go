@@ -336,7 +336,7 @@ func (r *OrbitReconciler) updateStatus(ctx context.Context, orbitObj *operatorv1
 		Type:               "Ready",
 		Status:             metav1.ConditionTrue,
 		LastTransitionTime: now,
-		Reason:             "ReconcileSuccess",
+		Reason:             ReasonReconcileSuccess.String(),
 		Message:            "Orbit is ready",
 	}
 	found := false

@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 const defaultValuesKey = "values.yaml"
@@ -47,7 +48,10 @@ func MergeValues(ctx context.Context, c client.Client, namespace string, spec *o
 	if spec.Values != nil && len(spec.Values.Raw) > 0 {
 		var inline map[string]interface{}
 		if err := json.Unmarshal(spec.Values.Raw, &inline); err != nil {
-			return nil, fmt.Errorf("unmarshalling inline values: %w", err)
+			return nil, errx.WithHints(
+				errx.WithReason(errValuesBuild.Wrap(err, "unmarshalling inline values"), ReasonValuesBuild),
+				"Fix the JSON/YAML in spec.values so it parses",
+			)
 		}
 		result = mergeMaps(result, inline)
 	}
@@ -59,11 +63,11 @@ func MergeValues(ctx context.Context, c client.Client, namespace string, spec *o
 func ComputeHash(chart operatorv1alpha1.HelmChartSpec, values map[string]interface{}) (string, error) {
 	valuesJSON, err := json.Marshal(values)
 	if err != nil {
-		return "", fmt.Errorf("marshalling values for hash: %w", err)
+		return "", errx.WithReason(errValuesBuild.Wrap(err, "marshalling values for hash"), ReasonValuesBuild)
 	}
 	h := sha256.New()
 	if _, err = fmt.Fprintf(h, "%s\x00%s\x00%s\x00", chart.Repo, chart.Chart, chart.Version); err != nil {
-		return "", fmt.Errorf("writing hash: %w", err)
+		return "", errx.WithReason(errValuesBuild.Wrap(err, "writing hash"), ReasonValuesBuild)
 	}
 	h.Write(valuesJSON)
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
@@ -75,9 +79,15 @@ func injectComponentValues(ctx context.Context, c client.Client, namespace strin
 	orbit := &operatorv1alpha1.Orbit{}
 	if err := c.Get(ctx, types.NamespacedName{Name: spec.OrbitRef.Name}, orbit); err != nil {
 		if apierrors.IsNotFound(err) {
-			return nil, fmt.Errorf("orbit %q not found — check spec.orbitRef.name", spec.OrbitRef.Name)
+			return nil, errx.WithHints(
+				errx.WithReason(errValuesBuild.New("orbit %q not found — check spec.orbitRef.name", spec.OrbitRef.Name), ReasonOrbitNotFound),
+				"Create the Orbit named in spec.orbitRef.name",
+			)
 		}
-		return nil, fmt.Errorf("getting orbit %s: %w", spec.OrbitRef.Name, err)
+		return nil, errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "getting orbit %s", spec.OrbitRef.Name), ReasonGetFailed),
+			"Confirm the ServiceAccount has get permission on orbits.operator.solo.hedera.com",
+		)
 	}
 
 	ledgerID := orbit.Spec.Consensus.Genesis.AddressBook.LedgerId
@@ -162,7 +172,7 @@ func explorerValues(orbit *operatorv1alpha1.Orbit, ledgerID string) (map[string]
 	}
 	configBytes, err := json.Marshal([]interface{}{entry})
 	if err != nil {
-		return nil, fmt.Errorf("marshalling explorer config: %w", err)
+		return nil, errx.WithReason(errValuesBuild.Wrap(err, "marshalling explorer config"), ReasonValuesBuild)
 	}
 	return map[string]interface{}{"config": string(configBytes)}, nil
 }
@@ -220,7 +230,7 @@ func hederaNetworkJSON(ctx context.Context, capsules []operatorv1alpha1.Consensu
 	}
 	b, err := json.Marshal(network)
 	if err != nil {
-		return "", fmt.Errorf("marshalling HEDERA_NETWORK: %w", err)
+		return "", errx.WithReason(errValuesBuild.Wrap(err, "marshalling HEDERA_NETWORK"), ReasonValuesBuild)
 	}
 	return string(b), nil
 }
@@ -228,7 +238,10 @@ func hederaNetworkJSON(ctx context.Context, capsules []operatorv1alpha1.Consensu
 func listConsensusCapsules(ctx context.Context, c client.Client, namespace, orbitName string) ([]operatorv1alpha1.ConsensusCapsule, error) {
 	list := &operatorv1alpha1.ConsensusCapsuleList{}
 	if err := c.List(ctx, list, client.InNamespace(namespace)); err != nil {
-		return nil, fmt.Errorf("listing consensus capsules: %w", err)
+		return nil, errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "listing consensus capsules"), ReasonListFailed),
+			"Confirm the ServiceAccount has list permission on consensuscapsules.operator.solo.hedera.com",
+		)
 	}
 	var matched []operatorv1alpha1.ConsensusCapsule
 	for _, cc := range list.Items {
@@ -258,11 +271,17 @@ func loadValuesReference(ctx context.Context, c client.Client, namespace string,
 			return map[string]interface{}{}, nil
 		}
 		if err != nil {
-			return nil, err
+			return nil, errx.WithHints(
+				errx.WithReason(errK8sAPI.Wrap(err, "get ConfigMap %s", ref.Name), ReasonGetFailed),
+				"Confirm the referenced ConfigMap exists and the operator has get permission on configmaps",
+			)
 		}
 		val, ok := cm.Data[key]
 		if !ok && !ref.Optional {
-			return nil, fmt.Errorf("key %q not found in ConfigMap %s", key, ref.Name)
+			return nil, errx.WithHints(
+				errx.WithReason(errValuesBuild.New("key %q not found in ConfigMap %s", key, ref.Name), ReasonKeyNotFound),
+				"Add the referenced key to the ConfigMap, or set the ref's valuesKey/optional",
+			)
 		}
 		raw = []byte(val)
 	case "Secret":
@@ -272,15 +291,24 @@ func loadValuesReference(ctx context.Context, c client.Client, namespace string,
 			return map[string]interface{}{}, nil
 		}
 		if err != nil {
-			return nil, err
+			return nil, errx.WithHints(
+				errx.WithReason(errK8sAPI.Wrap(err, "get Secret %s", ref.Name), ReasonGetFailed),
+				"Confirm the referenced Secret exists and the operator has get permission on secrets",
+			)
 		}
 		val, ok := secret.Data[key]
 		if !ok && !ref.Optional {
-			return nil, fmt.Errorf("key %q not found in Secret %s", key, ref.Name)
+			return nil, errx.WithHints(
+				errx.WithReason(errValuesBuild.New("key %q not found in Secret %s", key, ref.Name), ReasonKeyNotFound),
+				"Add the referenced key to the Secret, or set the ref's valuesKey/optional",
+			)
 		}
 		raw = val
 	default:
-		return nil, fmt.Errorf("unsupported ValuesReference kind %q; must be ConfigMap or Secret", ref.Kind)
+		return nil, errx.WithHints(
+			errx.WithReason(errValuesBuild.New("unsupported ValuesReference kind %q; must be ConfigMap or Secret", ref.Kind), ReasonUnsupportedKind),
+			"Set the valuesFrom ref kind to ConfigMap or Secret",
+		)
 	}
 
 	if len(raw) == 0 {
@@ -289,11 +317,14 @@ func loadValuesReference(ctx context.Context, c client.Client, namespace string,
 
 	jsonBytes, err := yaml.YAMLToJSON(raw)
 	if err != nil {
-		return nil, fmt.Errorf("converting values to JSON: %w", err)
+		return nil, errx.WithHints(
+			errx.WithReason(errValuesBuild.Wrap(err, "converting values to JSON"), ReasonValuesBuild),
+			"Fix the YAML in the referenced ConfigMap/Secret so it parses",
+		)
 	}
 	var out map[string]interface{}
 	if err := json.Unmarshal(jsonBytes, &out); err != nil {
-		return nil, fmt.Errorf("unmarshalling values: %w", err)
+		return nil, errx.WithReason(errValuesBuild.Wrap(err, "unmarshalling values"), ReasonValuesBuild)
 	}
 	return out, nil
 }

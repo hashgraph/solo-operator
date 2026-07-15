@@ -184,7 +184,7 @@ func (r *ConsensusCapsuleReconciler) checkConfigRefs(ctx context.Context, c *ope
 				Type:               ref.condType,
 				Status:             metav1.ConditionFalse,
 				ObservedGeneration: c.Generation,
-				Reason:             "ConfigMapNotFound",
+				Reason:             ReasonConfigMapNotFound.String(),
 				Message:            fmt.Sprintf("referenced config %q has no ConfigMap %q yet", ref.refName, ref.cmName),
 			})
 		case err != nil:
@@ -194,7 +194,7 @@ func (r *ConsensusCapsuleReconciler) checkConfigRefs(ctx context.Context, c *ope
 				Type:               ref.condType,
 				Status:             metav1.ConditionTrue,
 				ObservedGeneration: c.Generation,
-				Reason:             "ConfigMapFound",
+				Reason:             ReasonConfigMapFound.String(),
 				Message:            "referenced ConfigMap exists",
 			})
 		}

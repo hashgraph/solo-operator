@@ -3,13 +3,17 @@
 package nodesettings
 
 import (
-	"fmt"
 	"strings"
+
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 func ValidateContent(content string) error {
 	if strings.TrimSpace(content) == "" {
-		return fmt.Errorf("settings.txt content must not be empty")
+		return errx.WithHints(
+			errx.WithReason(errValidation.New("settings.txt content must not be empty"), ReasonContentEmpty),
+			"Populate the ConfigMap key with a non-empty settings.txt document",
+		)
 	}
 
 	for i, line := range strings.Split(content, "\n") {
@@ -19,7 +23,10 @@ func ValidateContent(content string) error {
 		}
 		idx := strings.Index(trimmed, ",")
 		if idx < 1 {
-			return fmt.Errorf("line %d is not in key,value format: %q", i+1, trimmed)
+			return errx.WithHints(
+				errx.WithReason(errValidation.New("line %d is not in key,value format: %q", i+1, trimmed), ReasonNotKeyValue),
+				"Each non-comment line must be key,value (comments start with #)",
+			)
 		}
 	}
 

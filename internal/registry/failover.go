@@ -4,11 +4,11 @@ package registry
 
 import (
 	"context"
-	"fmt"
 	"math/rand/v2"
 	"time"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 type FailoverResult struct {
@@ -41,7 +41,14 @@ func RevalidateAndFailover(
 
 	winner, ok := SelectValid(results, rng)
 	if !ok {
-		return FailoverResult{}, fmt.Errorf("no valid registry available for component (original %s unreachable)", current.Image)
+		return FailoverResult{}, errx.WithHints(
+			errx.WithReason(
+				errNoRegistry.New("no valid registry available for component (original %s unreachable)", current.Image),
+				ReasonNoValidRegistry,
+			),
+			"Confirm at least one registry in the component's failover set serves a valid image",
+			"Check network connectivity and pull credentials to the configured registries",
+		)
 	}
 
 	winnerSpec := SpecForImage(comp, winner.Image)

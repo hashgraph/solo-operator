@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -274,8 +275,8 @@ func TestReleaseSubReconciler_conflictWhenSameReleaseName(t *testing.T) {
 		if err == nil {
 			t.Fatalf("capsule %s: expected conflict error, got nil", hc.Name)
 		}
-		if !errors.Is(err, ErrReleaseNameConflict) {
-			t.Errorf("capsule %s: expected ErrReleaseNameConflict, got: %v", hc.Name, err)
+		if reason, _ := errx.ReasonOf(err); reason != ReasonReleaseNameConflict {
+			t.Errorf("capsule %s: expected reason %s, got: %v", hc.Name, ReasonReleaseNameConflict, err)
 		}
 	}
 }
@@ -311,8 +312,8 @@ func TestReleaseSubReconciler_conflictWhenNameDefaultsToObjectName(t *testing.T)
 		if err == nil {
 			t.Fatalf("capsule %s: expected conflict error, got nil", hc.Name)
 		}
-		if !errors.Is(err, ErrReleaseNameConflict) {
-			t.Errorf("capsule %s: expected ErrReleaseNameConflict, got: %v", hc.Name, err)
+		if reason, _ := errx.ReasonOf(err); reason != ReasonReleaseNameConflict {
+			t.Errorf("capsule %s: expected reason %s, got: %v", hc.Name, ReasonReleaseNameConflict, err)
 		}
 	}
 }
@@ -403,8 +404,8 @@ func TestReleaseSubReconciler_listFailurePropagatesError(t *testing.T) {
 		t.Fatal("expected error when list fails")
 	}
 	// A transient list failure must NOT be misreported as a release name conflict.
-	if errors.Is(err, ErrReleaseNameConflict) {
-		t.Errorf("transient list error must not be wrapped as ErrReleaseNameConflict, got: %v", err)
+	if reason, _ := errx.ReasonOf(err); reason == ReasonReleaseNameConflict {
+		t.Errorf("transient list error must not be reported as a release name conflict, got: %v", err)
 	}
 }
 

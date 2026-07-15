@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/resources/simplefeesschedules"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
@@ -72,9 +73,9 @@ func (r *SimpleFeesSchedulesReconciler) updateStatus(ctx context.Context, obj *o
 	return r.Status().Update(ctx, obj)
 }
 
-func (r *SimpleFeesSchedulesReconciler) event(obj *operatorv1alpha1.SimpleFeesSchedules, eventtype, reason, msg string) {
+func (r *SimpleFeesSchedulesReconciler) event(obj *operatorv1alpha1.SimpleFeesSchedules, eventtype string, reason errx.Reason, msg string) {
 	if r.Recorder != nil {
-		r.Recorder.Eventf(obj, nil, eventtype, reason, "SimpleFeesSchedules", "%s", msg)
+		r.Recorder.Eventf(obj, nil, eventtype, reason.String(), "SimpleFeesSchedules", "%s", msg)
 	}
 }
 

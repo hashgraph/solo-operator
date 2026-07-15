@@ -234,15 +234,15 @@ func TestExecuteReconcile_OperationIDLabelMissing(t *testing.T) {
 	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhaseFailed {
 		t.Errorf("expected phase Failed, got %s", res.execute.Status.Phase)
 	}
-	if got := countContaining(res.events, operatorv1alpha1.EventOperationIDLabelInvalid); got != 1 {
+	if got := countContaining(res.events, operatorv1alpha1.EventOperationIDLabelInvalid.String()); got != 1 {
 		t.Errorf("expected one OperationIDLabelInvalid event, got %d in %v", got, res.events)
 	}
 	cond := findCondition(res.execute.Status.Conditions, operatorv1alpha1.CondOperationIDLabelValid)
 	if cond == nil || cond.Status != metav1.ConditionFalse {
 		t.Errorf("expected CondOperationIDLabelValid=False, got %v", cond)
 	}
-	if cond != nil && cond.Reason != operatorv1alpha1.ReasonOperationIDLabelInvalid {
-		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonOperationIDLabelInvalid, cond.Reason)
+	if cond != nil && cond.Reason != operatorv1alpha1.ReasonOperationIDLabelInvalid.String() {
+		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonOperationIDLabelInvalid.String(), cond.Reason)
 	}
 }
 
@@ -259,8 +259,8 @@ func TestExecuteReconcile_OperationIDLabelMismatch(t *testing.T) {
 		t.Errorf("expected phase Failed, got %s", res.execute.Status.Phase)
 	}
 	cond := findCondition(res.execute.Status.Conditions, operatorv1alpha1.CondOperationIDLabelValid)
-	if cond == nil || cond.Reason != operatorv1alpha1.ReasonOperationIDLabelInvalid {
-		t.Errorf("expected reason %s, got %v", operatorv1alpha1.ReasonOperationIDLabelInvalid, cond)
+	if cond == nil || cond.Reason != operatorv1alpha1.ReasonOperationIDLabelInvalid.String() {
+		t.Errorf("expected reason %s, got %v", operatorv1alpha1.ReasonOperationIDLabelInvalid.String(), cond)
 	}
 }
 
@@ -463,7 +463,7 @@ func TestExecuteReconcile_DaemonResultFalse_TerminalFailure(t *testing.T) {
 		{
 			Type:               operatorv1alpha1.CondDaemonResult,
 			Status:             metav1.ConditionFalse,
-			Reason:             operatorv1alpha1.ReasonDaemonFileHashMismatch,
+			Reason:             operatorv1alpha1.ReasonDaemonFileHashMismatch.String(),
 			LastTransitionTime: metav1.Now(),
 		},
 	}
@@ -525,8 +525,8 @@ func TestExecuteReconcile_DuplicateOperationID_SetsPhaseFailed(t *testing.T) {
 	if cond.Status != metav1.ConditionFalse {
 		t.Errorf("expected ManifestValidated=False, got %s", cond.Status)
 	}
-	if cond.Reason != operatorv1alpha1.ReasonDuplicateOpID {
-		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonDuplicateOpID, cond.Reason)
+	if cond.Reason != operatorv1alpha1.ReasonDuplicateOpID.String() {
+		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonDuplicateOpID.String(), cond.Reason)
 	}
 	close(rec.Events)
 	var recorded []string
@@ -544,7 +544,7 @@ func TestExecuteReconcile_DaemonResultTrue_AdvancesToPendingInfraUpgrade(t *test
 		{
 			Type:               operatorv1alpha1.CondDaemonResult,
 			Status:             metav1.ConditionTrue,
-			Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
+			Reason:             operatorv1alpha1.ReasonDaemonSucceeded.String(),
 			LastTransitionTime: metav1.Now(),
 		},
 	}
@@ -587,7 +587,7 @@ func TestExecuteReconcile_PendingInfraUpgrade_AdvancesToPendingNodeUpgrade(t *te
 	setCondition(&execute.Status.Conditions, metav1.Condition{
 		Type:   operatorv1alpha1.CondConfigCRsApplied,
 		Status: metav1.ConditionTrue,
-		Reason: operatorv1alpha1.ReasonDaemonSucceeded,
+		Reason: operatorv1alpha1.ReasonDaemonSucceeded.String(),
 	})
 
 	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil), prereqsWithCapsule()...)
@@ -677,7 +677,7 @@ func TestExecuteReconcile_PendingNodeUpgrade_BringsCapsuleOnline(t *testing.T) {
 	setCondition(&execute.Status.Conditions, metav1.Condition{
 		Type:               operatorv1alpha1.CondConsensusCapsulePatched,
 		Status:             metav1.ConditionTrue,
-		Reason:             operatorv1alpha1.ReasonPatchApplied,
+		Reason:             operatorv1alpha1.ReasonPatchApplied.String(),
 		LastTransitionTime: metav1.Now(),
 	})
 
@@ -748,13 +748,13 @@ func TestExecuteReconcile_PendingNodeUpgrade_WaitsForPodReady(t *testing.T) {
 	setCondition(&execute.Status.Conditions, metav1.Condition{
 		Type:               operatorv1alpha1.CondConsensusCapsulePatched,
 		Status:             metav1.ConditionTrue,
-		Reason:             operatorv1alpha1.ReasonPatchApplied,
+		Reason:             operatorv1alpha1.ReasonPatchApplied.String(),
 		LastTransitionTime: metav1.Now(),
 	})
 	setCondition(&execute.Status.Conditions, metav1.Condition{
 		Type:               operatorv1alpha1.CondCapsulesOnline,
 		Status:             metav1.ConditionTrue,
-		Reason:             operatorv1alpha1.ReasonCapsulesOnline,
+		Reason:             operatorv1alpha1.ReasonCapsulesOnline.String(),
 		LastTransitionTime: metav1.Now(),
 	})
 
@@ -811,13 +811,13 @@ func TestExecuteReconcile_PendingNodeUpgrade_SucceedsWhenPodsReady(t *testing.T)
 	setCondition(&execute.Status.Conditions, metav1.Condition{
 		Type:               operatorv1alpha1.CondConsensusCapsulePatched,
 		Status:             metav1.ConditionTrue,
-		Reason:             operatorv1alpha1.ReasonPatchApplied,
+		Reason:             operatorv1alpha1.ReasonPatchApplied.String(),
 		LastTransitionTime: metav1.Now(),
 	})
 	setCondition(&execute.Status.Conditions, metav1.Condition{
 		Type:               operatorv1alpha1.CondCapsulesOnline,
 		Status:             metav1.ConditionTrue,
-		Reason:             operatorv1alpha1.ReasonCapsulesOnline,
+		Reason:             operatorv1alpha1.ReasonCapsulesOnline.String(),
 		LastTransitionTime: metav1.Now(),
 	})
 
@@ -884,13 +884,13 @@ func TestExecuteReconcile_PodReadyTimeout(t *testing.T) {
 	setCondition(&execute.Status.Conditions, metav1.Condition{
 		Type:               operatorv1alpha1.CondConsensusCapsulePatched,
 		Status:             metav1.ConditionTrue,
-		Reason:             operatorv1alpha1.ReasonPatchApplied,
+		Reason:             operatorv1alpha1.ReasonPatchApplied.String(),
 		LastTransitionTime: metav1.Now(),
 	})
 	setCondition(&execute.Status.Conditions, metav1.Condition{
 		Type:               operatorv1alpha1.CondCapsulesOnline,
 		Status:             metav1.ConditionTrue,
-		Reason:             operatorv1alpha1.ReasonCapsulesOnline,
+		Reason:             operatorv1alpha1.ReasonCapsulesOnline.String(),
 		LastTransitionTime: metav1.Now(),
 	})
 	pastTime := metav1.NewTime(time.Now().Add(-30 * time.Minute))

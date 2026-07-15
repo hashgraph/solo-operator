@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/resources/apipermissionproperties"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
@@ -72,9 +73,9 @@ func (r *ApiPermissionPropertiesReconciler) updateStatus(ctx context.Context, ob
 	return r.Status().Update(ctx, obj)
 }
 
-func (r *ApiPermissionPropertiesReconciler) event(obj *operatorv1alpha1.ApiPermissionProperties, eventtype, reason, msg string) {
+func (r *ApiPermissionPropertiesReconciler) event(obj *operatorv1alpha1.ApiPermissionProperties, eventtype string, reason errx.Reason, msg string) {
 	if r.Recorder != nil {
-		r.Recorder.Eventf(obj, nil, eventtype, reason, "ApiPermissionProperties", "%s", msg)
+		r.Recorder.Eventf(obj, nil, eventtype, reason.String(), "ApiPermissionProperties", "%s", msg)
 	}
 }
 

@@ -21,6 +21,7 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/registry"
 	consensusresources "github.com/hashgraph/solo-operator/internal/resources/consensus"
 )
@@ -83,7 +84,7 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 
 	if ok, msg := validateOperationIDLabel(execute.Labels, execute.Spec.OperationID); !ok {
 		return rejectInvalidOperationIDLabel(ctx, r.Client, &execute, &execute.Status.Conditions,
-			func(reason, m string) { r.eventf(&execute, corev1.EventTypeWarning, reason, "%s", m) },
+			func(reason errx.Reason, m string) { r.eventf(&execute, corev1.EventTypeWarning, reason, "%s", m) },
 			func() { execute.Status.Phase = operatorv1alpha1.ExecutePhaseFailed },
 			msg)
 	}
@@ -101,14 +102,14 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 			setCondition(&execute.Status.Conditions, metav1.Condition{
 				Type:               operatorv1alpha1.CondManifestValidated,
 				Status:             metav1.ConditionFalse,
-				Reason:             operatorv1alpha1.ReasonDuplicateOpID,
+				Reason:             operatorv1alpha1.ReasonDuplicateOpID.String(),
 				Message:            msg,
 				ObservedGeneration: execute.Generation,
 			})
 			if err := r.Status().Update(ctx, &execute); err != nil {
-				return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+				return ctrl.Result{}, wrapStatusUpdate(err, "updating status")
 			}
-			return ctrl.Result{}, fmt.Errorf("%s", msg)
+			return ctrl.Result{}, errx.WithReason(errReconcile.New("%s", msg), ReasonManifestInvalid)
 		}
 
 		prepare, err := findPrepare(ctx, r.Client, execute.Namespace, execute.Spec.OperationID)
@@ -147,7 +148,7 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		execute.Status.Phase = operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon
 		execute.Status.ObservedGeneration = execute.Generation
 		if err := r.Status().Update(ctx, &execute); err != nil {
-			return ctrl.Result{}, fmt.Errorf("initializing status: %w", err)
+			return ctrl.Result{}, wrapStatusInit(err)
 		}
 		r.eventf(&execute, corev1.EventTypeNormal, operatorv1alpha1.EventReadyForDaemon,
 			"waiting for provisioner daemon for operationId %q", execute.Spec.OperationID)
@@ -179,7 +180,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 			if apierrors.IsConflict(err) {
 				return ctrl.Result{Requeue: true}, nil
 			}
-			return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+			return ctrl.Result{}, wrapStatusUpdate(err, "updating status")
 		}
 		return ctrl.Result{RequeueAfter: executeDaemonRequeueAfter}, nil
 	}
@@ -190,7 +191,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 		execute.Status.CompletionTime = &now
 		execute.Status.ObservedGeneration = execute.Generation
 		if err := r.Status().Update(ctx, execute); err != nil {
-			return ctrl.Result{}, fmt.Errorf("updating status to failed: %w", err)
+			return ctrl.Result{}, wrapStatusUpdate(err, "updating status to failed")
 		}
 		r.eventf(execute, corev1.EventTypeWarning, operatorv1alpha1.EventUpgradeFailed,
 			"provisioner daemon reported failure: %s", daemonCond.Reason)
@@ -203,7 +204,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 		if apierrors.IsConflict(err) {
 			return ctrl.Result{Requeue: true}, nil
 		}
-		return ctrl.Result{}, fmt.Errorf("advancing to PendingInfraUpgrade: %w", err)
+		return ctrl.Result{}, wrapStatusUpdate(err, "advancing to PendingInfraUpgrade")
 	}
 	r.eventf(execute, corev1.EventTypeNormal, operatorv1alpha1.EventPendingInfraUpgrade,
 		"provisioner daemon succeeded; advancing to PendingInfraUpgrade for operationId %q", execute.Spec.OperationID)
@@ -225,7 +226,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingInfraUpgrade(ctx conte
 		if apierrors.IsConflict(err) {
 			return ctrl.Result{Requeue: true}, nil
 		}
-		return ctrl.Result{}, fmt.Errorf("advancing to PendingNodeUpgrade: %w", err)
+		return ctrl.Result{}, wrapStatusUpdate(err, "advancing to PendingNodeUpgrade")
 	}
 	r.eventf(execute, corev1.EventTypeNormal, operatorv1alpha1.EventPendingNodeUpgrade,
 		"daemon applied config CRs; advancing to PendingNodeUpgrade for operationId %q", execute.Spec.OperationID)
@@ -276,33 +277,37 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 			setCondition(&execute.Status.Conditions, metav1.Condition{
 				Type:    operatorv1alpha1.CondRegistrySelected,
 				Status:  metav1.ConditionFalse,
-				Reason:  operatorv1alpha1.ReasonRegistryInvalid,
+				Reason:  operatorv1alpha1.ReasonRegistryInvalid.String(),
 				Message: "no valid registry available for one or more components",
 			})
 			if err := r.Status().Update(ctx, execute); err != nil {
-				return ctrl.Result{}, fmt.Errorf("updating status to failed: %w", err)
+				return ctrl.Result{}, wrapStatusUpdate(err, "updating status to failed")
 			}
 			r.eventf(execute, corev1.EventTypeWarning, operatorv1alpha1.EventUpgradeFailed,
 				"registry validation failed for operationId %q", execute.Spec.OperationID)
-			return ctrl.Result{}, fmt.Errorf("no valid registry for one or more components")
+			return ctrl.Result{}, errx.WithHints(
+				errx.WithReason(errReconcile.New("no valid registry for one or more components"), ReasonNoValidRegistry),
+				"Confirm at least one configured registry serves a valid image for each component")
 		}
 		execute.Status.SelectedSources = updated
 		setCondition(&execute.Status.Conditions, metav1.Condition{
 			Type:    operatorv1alpha1.CondRegistrySelected,
 			Status:  metav1.ConditionTrue,
-			Reason:  operatorv1alpha1.ReasonSelectionComplete,
+			Reason:  operatorv1alpha1.ReasonSelectionComplete.String(),
 			Message: "all selected registries healthy",
 		})
 
 		patch := client.MergeFrom(capsule.DeepCopy())
 		r.applyImagePatch(execute, capsule)
 		if err := r.Patch(ctx, capsule, patch); err != nil {
-			return ctrl.Result{}, fmt.Errorf("patching capsule %s: %w", capsule.Name, err)
+			return ctrl.Result{}, errx.WithHints(
+				errx.WithReason(errK8sAPI.Wrap(err, "patching capsule %s", capsule.Name), ReasonPatchFailed),
+				"Confirm the operator has patch permission on consensuscapsules")
 		}
 		setCondition(&execute.Status.Conditions, metav1.Condition{
 			Type:    operatorv1alpha1.CondConsensusCapsulePatched,
 			Status:  metav1.ConditionTrue,
-			Reason:  operatorv1alpha1.ReasonPatchApplied,
+			Reason:  operatorv1alpha1.ReasonPatchApplied.String(),
 			Message: "ConsensusCapsule images updated",
 		})
 		execute.Status.ObservedGeneration = execute.Generation
@@ -310,7 +315,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 			if apierrors.IsConflict(err) {
 				return ctrl.Result{Requeue: true}, nil
 			}
-			return ctrl.Result{}, fmt.Errorf("updating status after capsule patch: %w", err)
+			return ctrl.Result{}, wrapStatusUpdate(err, "updating status after capsule patch")
 		}
 		r.eventf(execute, corev1.EventTypeNormal, operatorv1alpha1.EventCapsulePatched,
 			"ConsensusCapsule %s patched with new images for operationId %q", capsule.Name, execute.Spec.OperationID)
@@ -331,13 +336,15 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 			patch := client.MergeFrom(capsule.DeepCopy())
 			capsule.Spec.Offline = false
 			if err := r.Patch(ctx, capsule, patch); err != nil {
-				return ctrl.Result{}, fmt.Errorf("bringing capsule %s online: %w", capsule.Name, err)
+				return ctrl.Result{}, errx.WithHints(
+					errx.WithReason(errK8sAPI.Wrap(err, "bringing capsule %s online", capsule.Name), ReasonScaleFailed),
+					"Confirm the operator has patch permission on consensuscapsules")
 			}
 		}
 		setCondition(&execute.Status.Conditions, metav1.Condition{
 			Type:    operatorv1alpha1.CondCapsulesOnline,
 			Status:  metav1.ConditionTrue,
-			Reason:  operatorv1alpha1.ReasonCapsulesOnline,
+			Reason:  operatorv1alpha1.ReasonCapsulesOnline.String(),
 			Message: "ConsensusCapsule brought online",
 		})
 		execute.Status.ObservedGeneration = execute.Generation
@@ -345,7 +352,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 			if apierrors.IsConflict(err) {
 				return ctrl.Result{Requeue: true}, nil
 			}
-			return ctrl.Result{}, fmt.Errorf("updating status after bringing capsule online: %w", err)
+			return ctrl.Result{}, wrapStatusUpdate(err, "updating status after bringing capsule online")
 		}
 		r.eventf(execute, corev1.EventTypeNormal, operatorv1alpha1.EventCapsulesOnline,
 			"ConsensusCapsule %s brought online for operationId %q", capsule.Name, execute.Spec.OperationID)
@@ -365,11 +372,11 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 		setCondition(&execute.Status.Conditions, metav1.Condition{
 			Type:    operatorv1alpha1.CondNodesUpgraded,
 			Status:  metav1.ConditionFalse,
-			Reason:  operatorv1alpha1.ReasonUpgradeFailed,
+			Reason:  operatorv1alpha1.ReasonUpgradeFailed.String(),
 			Message: "timed out waiting for consensus pod to become ready",
 		})
 		if err := r.Status().Update(ctx, execute); err != nil {
-			return ctrl.Result{}, fmt.Errorf("updating status to failed: %w", err)
+			return ctrl.Result{}, wrapStatusUpdate(err, "updating status to failed")
 		}
 		r.eventf(execute, corev1.EventTypeWarning, operatorv1alpha1.EventUpgradeFailed,
 			"timed out waiting for consensus pod after upgrade for operationId %q", execute.Spec.OperationID)
@@ -387,14 +394,14 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 	setCondition(&execute.Status.Conditions, metav1.Condition{
 		Type:    operatorv1alpha1.CondNodesUpgraded,
 		Status:  metav1.ConditionTrue,
-		Reason:  operatorv1alpha1.ReasonUpgradeSucceeded,
+		Reason:  operatorv1alpha1.ReasonUpgradeSucceeded.String(),
 		Message: "consensus pod ready with upgraded images",
 	})
 	if err := r.Status().Update(ctx, execute); err != nil {
 		if apierrors.IsConflict(err) {
 			return ctrl.Result{Requeue: true}, nil
 		}
-		return ctrl.Result{}, fmt.Errorf("updating status to succeeded: %w", err)
+		return ctrl.Result{}, wrapStatusUpdate(err, "updating status to succeeded")
 	}
 	r.eventf(execute, corev1.EventTypeNormal, operatorv1alpha1.EventUpgradeSucceeded,
 		"upgrade succeeded for operationId %q capsule %s", execute.Spec.OperationID, capsule.Name)
@@ -407,7 +414,9 @@ func (r *NetworkUpgradeExecuteReconciler) allPeersOffline(ctx context.Context, e
 		client.InNamespace(execute.Namespace),
 		client.MatchingFields{fieldOperationID: execute.Spec.OperationID},
 	); err != nil {
-		return false, fmt.Errorf("listing Execute CRs for operationId %q: %w", execute.Spec.OperationID, err)
+		return false, errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "listing Execute CRs for operationId %q", execute.Spec.OperationID), ReasonListFailed),
+			"Confirm the operator has list permission on networkupgradeexecutes.operator.solo.hiero.org")
 	}
 	for i := range list.Items {
 		sibling := &list.Items[i]
@@ -420,7 +429,9 @@ func (r *NetworkUpgradeExecuteReconciler) allPeersOffline(ctx context.Context, e
 			continue
 		}
 		if err != nil {
-			return false, fmt.Errorf("getting capsule %s: %w", sibling.Spec.ConsensusNode, err)
+			return false, errx.WithHints(
+				errx.WithReason(errK8sAPI.Wrap(err, "getting capsule %s", sibling.Spec.ConsensusNode), ReasonGetFailed),
+				"Confirm the operator has get permission on consensuscapsules")
 		}
 		if !capsule.Spec.Offline {
 			return false, nil
@@ -435,7 +446,9 @@ func (r *NetworkUpgradeExecuteReconciler) allPeersPatched(ctx context.Context, e
 		client.InNamespace(execute.Namespace),
 		client.MatchingFields{fieldOperationID: execute.Spec.OperationID},
 	); err != nil {
-		return false, fmt.Errorf("listing Execute CRs for operationId %q: %w", execute.Spec.OperationID, err)
+		return false, errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "listing Execute CRs for operationId %q", execute.Spec.OperationID), ReasonListFailed),
+			"Confirm the operator has list permission on networkupgradeexecutes.operator.solo.hiero.org")
 	}
 	for i := range list.Items {
 		sibling := &list.Items[i]
@@ -457,7 +470,9 @@ func (r *NetworkUpgradeExecuteReconciler) getCapsule(ctx context.Context, execut
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("getting ConsensusCapsule %s: %w", execute.Spec.ConsensusNode, err)
+		return nil, errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "getting ConsensusCapsule %s", execute.Spec.ConsensusNode), ReasonGetFailed),
+			"Confirm the operator has get permission on consensuscapsules")
 	}
 	return &capsule, nil
 }
@@ -473,7 +488,9 @@ func (r *NetworkUpgradeExecuteReconciler) ensureCapsuleOffline(
 	patch := client.MergeFrom(capsule.DeepCopy())
 	capsule.Spec.Offline = true
 	if err := r.Patch(ctx, capsule, patch); err != nil {
-		return fmt.Errorf("scaling down capsule %s: %w", capsule.Name, err)
+		return errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "scaling down capsule %s", capsule.Name), ReasonScaleFailed),
+			"Confirm the operator has patch permission on consensuscapsules")
 	}
 	r.eventf(execute, corev1.EventTypeNormal, operatorv1alpha1.EventPodScaledDown,
 		"scaled down ConsensusCapsule %s/%s for operationId %q", capsule.Namespace, capsule.Name, execute.Spec.OperationID)
@@ -559,14 +576,16 @@ func (r *NetworkUpgradeExecuteReconciler) checkPodReady(
 		if apierrors.IsNotFound(err) {
 			return false, false, nil
 		}
-		return false, false, fmt.Errorf("getting StatefulSet for capsule %s: %w", capsule.Name, err)
+		return false, false, errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "getting StatefulSet for capsule %s", capsule.Name), ReasonGetFailed),
+			"Confirm the operator has get permission on statefulsets.apps")
 	}
 	return sts.Status.ReadyReplicas >= 1, false, nil
 }
 
-func (r *NetworkUpgradeExecuteReconciler) eventf(obj *operatorv1alpha1.NetworkUpgradeExecute, eventtype, reason, format string, args ...any) {
+func (r *NetworkUpgradeExecuteReconciler) eventf(obj *operatorv1alpha1.NetworkUpgradeExecute, eventtype string, reason errx.Reason, format string, args ...any) {
 	if r.Recorder != nil {
-		r.Recorder.Eventf(obj, nil, eventtype, reason, "NetworkUpgradeExecute", format, args...)
+		r.Recorder.Eventf(obj, nil, eventtype, reason.String(), "NetworkUpgradeExecute", format, args...)
 	}
 }
 

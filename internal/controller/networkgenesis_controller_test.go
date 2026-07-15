@@ -251,13 +251,13 @@ func TestNetworkGenesisReconciler_SpecMutationIsTerminal(t *testing.T) {
 	}
 	var rejected bool
 	for _, cond := range got.Status.Conditions {
-		if cond.Reason == networkGenesisReasonSpecMutated {
+		if cond.Reason == ReasonSpecMutated.String() {
 			rejected = true
 			break
 		}
 	}
 	if !rejected {
-		t.Errorf("expected condition with Reason=%s, got %v", networkGenesisReasonSpecMutated, got.Status.Conditions)
+		t.Errorf("expected condition with Reason=%s, got %v", ReasonSpecMutated, got.Status.Conditions)
 	}
 
 	// Terminal: subsequent reconcile must short-circuit and not produce any

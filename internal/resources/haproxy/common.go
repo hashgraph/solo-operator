@@ -13,6 +13,7 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -96,7 +97,7 @@ func HAProxyConfig(haproxy *operatorv1alpha1.HAProxyCapsule) (string, error) {
 	}
 	var buf bytes.Buffer
 	if err := haproxyTemplate.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("haproxy config template execution failed: %w", err)
+		return "", errx.WithReason(errTemplate.Wrap(err, "haproxy config template execution failed"), ReasonTemplateFailed)
 	}
 	return buf.String(), nil
 }

@@ -4,13 +4,13 @@ package controller
 
 import (
 	"context"
-	"fmt"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // These finalizers block accidental deletion of NetworkUpgrade CRs; the
@@ -36,7 +36,9 @@ func ensureFinalizer(ctx context.Context, c client.Client, obj client.Object, fi
 	}
 	controllerutil.AddFinalizer(obj, finalizer)
 	if err := c.Update(ctx, obj); err != nil {
-		return &ctrl.Result{}, fmt.Errorf("adding finalizer: %w", err)
+		return &ctrl.Result{}, errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "adding finalizer"), ReasonFinalizerFailed),
+			"Confirm the operator has update permission on the resource's finalizers")
 	}
 	return &ctrl.Result{Requeue: true}, nil
 }
@@ -53,14 +55,18 @@ func findOneByOperationID[T any, TList client.ObjectList](
 		client.InNamespace(namespace),
 		client.MatchingFields{fieldOperationID: operationID},
 	); err != nil {
-		return nil, fmt.Errorf("listing %s: %w", kind, err)
+		return nil, errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "listing %s", kind), ReasonListFailed),
+			"Confirm the operator has list permission on "+kind)
 	}
 	its := items(list)
 	if len(its) == 0 {
 		return nil, nil
 	}
 	if len(its) > 1 {
-		return nil, fmt.Errorf("expected at most one %s for operation %q, found %d", kind, operationID, len(its))
+		return nil, errx.WithHints(
+			errx.WithReason(errReconcile.New("expected at most one %s for operation %q, found %d", kind, operationID, len(its)), ReasonDuplicateSibling),
+			"Delete the duplicate "+kind+" CRs sharing this operationId")
 	}
 	return &its[0], nil
 }
@@ -77,7 +83,9 @@ func siblingExists[TList client.ObjectList](
 		client.InNamespace(namespace),
 		client.MatchingFields{fieldOperationID: operationID},
 	); err != nil {
-		return false, fmt.Errorf("listing %s siblings: %w", kind, err)
+		return false, errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "listing %s siblings", kind), ReasonListFailed),
+			"Confirm the operator has list permission on "+kind)
 	}
 	for i := range length(list) {
 		if getUID(list, i) != selfUID {

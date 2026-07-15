@@ -4,7 +4,6 @@ package registry
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"sync"
 
@@ -15,6 +14,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 const (
@@ -71,14 +71,20 @@ func (c OCIChecker) Check(ctx context.Context, spec operatorv1alpha1.UpgradeRegi
 
 	if len(expected) == 0 {
 		res.State = StateNoHashes
-		res.Err = fmt.Errorf("image %s has no layer hashes configured: cannot verify image integrity", spec.Image)
+		res.Err = errx.WithHints(
+			errx.WithReason(errIntegrity.New("image %s has no layer hashes configured: cannot verify image integrity", spec.Image), ReasonNoLayerHashes),
+			"Add layerHashes for this image to the deployment manifest",
+		)
 		return res
 	}
 
 	for platform, want := range expected {
 		if !slices.Equal(diffIDs[platform], want) {
 			res.State = StateHashMismatch
-			res.Err = fmt.Errorf("%s layer hash mismatch: got %v, want %v", platform, diffIDs[platform], want)
+			res.Err = errx.WithHints(
+				errx.WithReason(errIntegrity.New("%s layer hash mismatch: got %v, want %v", platform, diffIDs[platform], want), ReasonLayerHashMismatch),
+				"Confirm the published image matches the expected layerHashes, or update the manifest",
+			)
 			return res
 		}
 	}
@@ -95,13 +101,20 @@ type remoteSource struct {
 func (s remoteSource) Inspect(ctx context.Context, image string, platforms []string) (operatorv1alpha1.Sha256Digest, map[string][]operatorv1alpha1.Sha256Digest, error) {
 	ref, err := name.ParseReference(image)
 	if err != nil {
-		return "", nil, fmt.Errorf("parsing image reference: %w", err)
+		return "", nil, errx.WithHints(
+			errx.WithReason(errImageRef.Wrap(err, "parsing image reference %q", image), ReasonImageRefInvalid),
+			"Confirm the image reference is a valid registry/repository:tag",
+		)
 	}
 	opts := []remote.Option{remote.WithContext(ctx), remote.WithAuthFromKeychain(s.keychain)}
 
 	desc, err := remote.Get(ref, opts...)
 	if err != nil {
-		return "", nil, fmt.Errorf("resolving digest: %w", err)
+		return "", nil, errx.WithHints(
+			errx.WithReason(errRegistryAPI.Wrap(err, "resolving digest"), ReasonDigestResolve),
+			"Confirm the registry is reachable and the image exists",
+			"Check pull credentials for the registry",
+		)
 	}
 	digest := operatorv1alpha1.Sha256Digest(desc.Digest.String())
 
@@ -134,11 +147,17 @@ func (s remoteSource) platformDiffIDs(ctx context.Context, ref name.Reference, p
 	}
 	img, err := remote.Image(ref, remote.WithContext(ctx), remote.WithAuthFromKeychain(s.keychain), remote.WithPlatform(*plat))
 	if err != nil {
-		return nil, fmt.Errorf("reading %s image: %w", platform, err)
+		return nil, errx.WithHints(
+			errx.WithReason(errRegistryAPI.Wrap(err, "reading %s image", platform), ReasonImageRead),
+			"Confirm the registry is reachable and the image provides the requested platform",
+		)
 	}
 	cfg, err := img.ConfigFile()
 	if err != nil {
-		return nil, fmt.Errorf("reading %s config: %w", platform, err)
+		return nil, errx.WithHints(
+			errx.WithReason(errRegistryAPI.Wrap(err, "reading %s config", platform), ReasonConfigRead),
+			"Confirm the registry is reachable and the image config is readable",
+		)
 	}
 	hashes := make([]operatorv1alpha1.Sha256Digest, len(cfg.RootFS.DiffIDs))
 	for i, h := range cfg.RootFS.DiffIDs {

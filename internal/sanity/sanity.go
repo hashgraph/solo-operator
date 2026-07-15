@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/joomcode/errorx"
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // TimestampLayout is the compact ISO-8601 UTC layout embedded in the operationId
@@ -55,23 +55,35 @@ func isValidOperationIDChar(b byte) bool {
 // NOT enforce the <type>-[<version>-]<timestamp> convention; see TimestampLayout.
 func ValidateOperationID(s string) error {
 	if s == "" {
-		return errorx.IllegalArgument.New("operationId cannot be empty")
+		return errx.WithHints(
+			errx.WithReason(errInvalidOperationID.New("operationId cannot be empty"), ReasonOperationIDEmpty),
+			"Set a non-empty operationId on the resource",
+		)
 	}
 
 	// Check for path traversal attempts before the per-char loop.
 	if strings.Contains(s, "..") {
-		return errorx.IllegalArgument.New("operationId contains path traversal sequences: %s", s)
+		return errx.WithHints(
+			errx.WithReason(errInvalidOperationID.New("operationId contains path traversal sequences: %s", s), ReasonOperationIDTraversal),
+			"Remove '..' from the operationId; it is embedded in filesystem paths",
+		)
 	}
 
 	// Check for shell metacharacters (narrower, more specific message).
 	if shellMetachars.MatchString(s) {
-		return errorx.IllegalArgument.New("operationId contains shell metacharacters: %s", s)
+		return errx.WithHints(
+			errx.WithReason(errInvalidOperationID.New("operationId contains shell metacharacters: %s", s), ReasonOperationIDShellChars),
+			"Use only [A-Za-z0-9_.-] in the operationId",
+		)
 	}
 
 	// Every byte must be a valid operationId character.
 	for i := 0; i < len(s); i++ {
 		if !isValidOperationIDChar(s[i]) {
-			return errorx.IllegalArgument.New("operationId contains invalid characters: %s", s)
+			return errx.WithHints(
+				errx.WithReason(errInvalidOperationID.New("operationId contains invalid characters: %s", s), ReasonOperationIDInvalid),
+				"Use only [A-Za-z0-9_.-] in the operationId",
+			)
 		}
 	}
 

@@ -6,6 +6,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // HelmComponent identifies a known Hedera ecosystem component managed by a HelmCapsule.
@@ -227,14 +229,14 @@ type HelmCapsuleStatus struct {
 }
 
 const (
-	HelmCapsuleReasonDeployed             = "Deployed"
-	HelmCapsuleReasonChartFetchFailed     = "ChartFetchFailed"
-	HelmCapsuleReasonHelmFailed           = "HelmFailed"
-	HelmCapsuleReasonValuesBuildFailed    = "ValuesBuildFailed"
-	HelmCapsuleReasonReleaseNameConflict  = "ReleaseNameConflict"
-	HelmCapsuleReasonProgressing          = "Progressing"
-	HelmCapsuleReasonReleaseNotReady      = "ReleaseNotReady"
-	HelmCapsuleReasonUnknownReleaseStatus = "UnknownReleaseStatus"
+	HelmCapsuleReasonDeployed             errx.Reason = "Deployed"
+	HelmCapsuleReasonChartFetchFailed     errx.Reason = "ChartFetchFailed"
+	HelmCapsuleReasonHelmFailed           errx.Reason = "HelmFailed"
+	HelmCapsuleReasonValuesBuildFailed    errx.Reason = "ValuesBuildFailed"
+	HelmCapsuleReasonReleaseNameConflict  errx.Reason = "ReleaseNameConflict"
+	HelmCapsuleReasonProgressing          errx.Reason = "Progressing"
+	HelmCapsuleReasonReleaseNotReady      errx.Reason = "ReleaseNotReady"
+	HelmCapsuleReasonUnknownReleaseStatus errx.Reason = "UnknownReleaseStatus"
 )
 
 // +kubebuilder:object:root=true

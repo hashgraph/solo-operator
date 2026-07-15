@@ -4,6 +4,7 @@ package errx_test
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/joomcode/errorx"
@@ -41,6 +42,23 @@ func TestReasonWalksCauseChain(t *testing.T) {
 	reason, ok := errx.ReasonOf(outer)
 	if !ok || reason != "InnerReason" {
 		t.Fatalf("Reason() through chain = %q, %v; want InnerReason, true", reason, ok)
+	}
+}
+
+func TestReasonSurvivesFmtErrorfWrapper(t *testing.T) {
+	// A reason/hint on an inner errx error must survive an intervening plain
+	// fmt.Errorf("...: %w", err) propagation wrapper — the walk follows
+	// errors.Unwrap through non-errorx layers.
+	inner := errx.WithHints(errx.WithReason(testType.New("inner"), "InnerReason"), "do the thing")
+	wrapped := fmt.Errorf("adding context: %w", inner)
+
+	reason, ok := errx.ReasonOf(wrapped)
+	if !ok || reason != "InnerReason" {
+		t.Fatalf("Reason() through fmt.Errorf = %q, %v; want InnerReason, true", reason, ok)
+	}
+	hints, ok := errx.Hints(wrapped)
+	if !ok || len(hints) != 1 || hints[0] != "do the thing" {
+		t.Fatalf("Hints() through fmt.Errorf = %v, %v", hints, ok)
 	}
 }
 

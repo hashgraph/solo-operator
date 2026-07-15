@@ -4,9 +4,10 @@ package log4j2config
 
 import (
 	"encoding/xml"
-	"fmt"
 	"io"
 	"strings"
+
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 const (
@@ -24,10 +25,16 @@ func ValidateContent(content string) error {
 	for {
 		tok, err := decoder.Token()
 		if err == io.EOF {
-			return fmt.Errorf("log4j2 XML has no root element")
+			return errx.WithHints(
+				errx.WithReason(errValidation.New("log4j2 XML has no root element"), ReasonMalformedXML),
+				"Provide a <Configuration> root element in the log4j2 XML",
+			)
 		}
 		if err != nil {
-			return fmt.Errorf("log4j2 XML is not well-formed: %w", err)
+			return errx.WithHints(
+				errx.WithReason(errValidation.Wrap(err, "log4j2 XML is not well-formed"), ReasonMalformedXML),
+				"Fix the XML syntax so the document parses",
+			)
 		}
 		if se, ok := tok.(xml.StartElement); ok {
 			root = se
@@ -36,11 +43,17 @@ func ValidateContent(content string) error {
 	}
 
 	if root.Name.Local != configRootElement {
-		return fmt.Errorf("log4j2 XML root element must be <Configuration>, got <%s>", root.Name.Local)
+		return errx.WithHints(
+			errx.WithReason(errValidation.New("log4j2 XML root element must be <Configuration>, got <%s>", root.Name.Local), ReasonWrongRootElement),
+			"Use <Configuration> as the root element of the log4j2 XML",
+		)
 	}
 
 	if root.Name.Space != "" && root.Name.Space != log4jNamespace {
-		return fmt.Errorf("log4j2 XML root element has unexpected namespace %q (expected empty or %q)", root.Name.Space, log4jNamespace)
+		return errx.WithHints(
+			errx.WithReason(errValidation.New("log4j2 XML root element has unexpected namespace %q (expected empty or %q)", root.Name.Space, log4jNamespace), ReasonWrongNamespace),
+			"Use no namespace or "+log4jNamespace+" on the <Configuration> element",
+		)
 	}
 
 	// Consume the rest of the document to catch any remaining well-formedness errors.
@@ -50,7 +63,10 @@ func ValidateContent(content string) error {
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("log4j2 XML is not well-formed: %w", err)
+			return errx.WithHints(
+				errx.WithReason(errValidation.Wrap(err, "log4j2 XML is not well-formed"), ReasonMalformedXML),
+				"Fix the XML syntax so the document parses",
+			)
 		}
 	}
 

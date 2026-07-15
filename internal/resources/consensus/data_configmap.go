@@ -4,7 +4,6 @@ package consensus
 
 import (
 	"context"
-	"fmt"
 	"maps"
 
 	corev1 "k8s.io/api/core/v1"
@@ -17,17 +16,24 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
 func fetchOrbit(ctx context.Context, c client.Client, orbitName string) (*operatorv1alpha1.Orbit, error) {
 	if orbitName == "" {
-		return nil, fmt.Errorf("capsule has no orbit name set")
+		return nil, errx.WithHints(
+			errx.WithReason(errConfigInvalid.New("capsule has no orbit name set"), ReasonOrbitNameMissing),
+			"Set spec.orbit on the ConsensusCapsule",
+		)
 	}
 	orbit := &operatorv1alpha1.Orbit{}
 	if err := c.Get(ctx, client.ObjectKey{Name: orbitName}, orbit); err != nil {
 		if apierrors.IsNotFound(err) {
-			return nil, fmt.Errorf("orbit %q not found: will retry once Orbit is created", orbitName)
+			return nil, errx.WithHints(
+				errx.WithReason(errOrbitNotFound.New("orbit %q not found: will retry once Orbit is created", orbitName), ReasonOrbitNotFound),
+				"Create the referenced Orbit resource",
+			)
 		}
 		return nil, err
 	}

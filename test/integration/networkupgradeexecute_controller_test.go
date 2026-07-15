@@ -252,13 +252,13 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 				operatorv1alpha1.Condition{
 					Type:               operatorv1alpha1.CondDaemonResult,
 					Status:             metav1.ConditionTrue,
-					Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
+					Reason:             operatorv1alpha1.ReasonDaemonSucceeded.String(),
 					LastTransitionTime: metav1.Now(),
 				},
 				operatorv1alpha1.Condition{
 					Type:               operatorv1alpha1.CondConfigCRsApplied,
 					Status:             metav1.ConditionTrue,
-					Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
+					Reason:             operatorv1alpha1.ReasonDaemonSucceeded.String(),
 					LastTransitionTime: metav1.Now(),
 				},
 			)
@@ -290,13 +290,13 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 				operatorv1alpha1.Condition{
 					Type:               operatorv1alpha1.CondDaemonResult,
 					Status:             metav1.ConditionTrue,
-					Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
+					Reason:             operatorv1alpha1.ReasonDaemonSucceeded.String(),
 					LastTransitionTime: metav1.Now(),
 				},
 				operatorv1alpha1.Condition{
 					Type:               operatorv1alpha1.CondConfigCRsApplied,
 					Status:             metav1.ConditionTrue,
-					Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
+					Reason:             operatorv1alpha1.ReasonDaemonSucceeded.String(),
 					LastTransitionTime: metav1.Now(),
 				},
 			)
@@ -322,7 +322,7 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 			Expect(conditionTrue(final.Status.Conditions, operatorv1alpha1.CondConsensusCapsulePatched)).To(BeTrue())
 
 			By("emitting UpgradeSucceeded event")
-			Expect(hasEvent(ctx, ns, nuxName, operatorv1alpha1.EventUpgradeSucceeded, opID)).To(BeTrue())
+			Expect(hasEvent(ctx, ns, nuxName, operatorv1alpha1.EventUpgradeSucceeded.String(), opID)).To(BeTrue())
 		})
 	})
 
@@ -394,7 +394,7 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 			got.Status.Conditions = append(got.Status.Conditions, operatorv1alpha1.Condition{
 				Type:               operatorv1alpha1.CondDaemonResult,
 				Status:             metav1.ConditionFalse,
-				Reason:             operatorv1alpha1.ReasonDaemonFileHashMismatch,
+				Reason:             operatorv1alpha1.ReasonDaemonFileHashMismatch.String(),
 				LastTransitionTime: metav1.Now(),
 			})
 			Expect(k8sClient.Status().Update(ctx, got)).To(Succeed())
@@ -536,13 +536,13 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 				operatorv1alpha1.Condition{
 					Type:               operatorv1alpha1.CondDaemonResult,
 					Status:             metav1.ConditionTrue,
-					Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
+					Reason:             operatorv1alpha1.ReasonDaemonSucceeded.String(),
 					LastTransitionTime: metav1.Now(),
 				},
 				operatorv1alpha1.Condition{
 					Type:               operatorv1alpha1.CondConfigCRsApplied,
 					Status:             metav1.ConditionTrue,
-					Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
+					Reason:             operatorv1alpha1.ReasonDaemonSucceeded.String(),
 					LastTransitionTime: metav1.Now(),
 				},
 			)
@@ -564,7 +564,7 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 			Expect(final.Status.SelectedSources.ConsensusNode.Image).To(Equal("gcr.io/valid/cn:0.75.0"))
 
 			By("emitting RegistryFailover warning event")
-			Expect(hasEvent(ctx, ns, nuxName, operatorv1alpha1.EventRegistryFailover, "consensusNode")).To(BeTrue())
+			Expect(hasEvent(ctx, ns, nuxName, operatorv1alpha1.EventRegistryFailover.String(), "consensusNode")).To(BeTrue())
 		})
 	})
 
@@ -633,13 +633,13 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 				operatorv1alpha1.Condition{
 					Type:               operatorv1alpha1.CondDaemonResult,
 					Status:             metav1.ConditionTrue,
-					Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
+					Reason:             operatorv1alpha1.ReasonDaemonSucceeded.String(),
 					LastTransitionTime: metav1.Now(),
 				},
 				operatorv1alpha1.Condition{
 					Type:               operatorv1alpha1.CondConfigCRsApplied,
 					Status:             metav1.ConditionTrue,
-					Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
+					Reason:             operatorv1alpha1.ReasonDaemonSucceeded.String(),
 					LastTransitionTime: metav1.Now(),
 				},
 			)
@@ -664,7 +664,7 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 			Expect(sv.ImageTag).To(Equal("0.75.0"))
 
 			By("emitting CapsulePatched event")
-			Expect(hasEvent(ctx, ns, nuxName, operatorv1alpha1.EventCapsulePatched, opID)).To(BeTrue())
+			Expect(hasEvent(ctx, ns, nuxName, operatorv1alpha1.EventCapsulePatched.String(), opID)).To(BeTrue())
 		})
 	})
 
@@ -722,13 +722,13 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 				operatorv1alpha1.Condition{
 					Type:               operatorv1alpha1.CondDaemonResult,
 					Status:             metav1.ConditionTrue,
-					Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
+					Reason:             operatorv1alpha1.ReasonDaemonSucceeded.String(),
 					LastTransitionTime: metav1.Now(),
 				},
 				operatorv1alpha1.Condition{
 					Type:               operatorv1alpha1.CondConfigCRsApplied,
 					Status:             metav1.ConditionTrue,
-					Reason:             operatorv1alpha1.ReasonDaemonSucceeded,
+					Reason:             operatorv1alpha1.ReasonDaemonSucceeded.String(),
 					LastTransitionTime: metav1.Now(),
 				},
 			)

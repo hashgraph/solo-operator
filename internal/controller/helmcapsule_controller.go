@@ -4,7 +4,6 @@ package controller
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"reflect"
 
@@ -22,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/resources/helm"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
@@ -171,7 +171,7 @@ func (r *HelmCapsuleReconciler) updateStatus(ctx context.Context, hc *operatorv1
 				Type:               conditionReady,
 				Status:             metav1.ConditionTrue,
 				ObservedGeneration: hc.Generation,
-				Reason:             operatorv1alpha1.HelmCapsuleReasonDeployed,
+				Reason:             operatorv1alpha1.HelmCapsuleReasonDeployed.String(),
 				Message:            "Helm release deployed",
 			}
 		case "pending-install", "pending-upgrade", "pending-rollback":
@@ -180,7 +180,7 @@ func (r *HelmCapsuleReconciler) updateStatus(ctx context.Context, hc *operatorv1
 				Type:               conditionReady,
 				Status:             metav1.ConditionFalse,
 				ObservedGeneration: hc.Generation,
-				Reason:             operatorv1alpha1.HelmCapsuleReasonProgressing,
+				Reason:             operatorv1alpha1.HelmCapsuleReasonProgressing.String(),
 				Message:            fmt.Sprintf("Helm release is %s", hc.Status.ReleaseStatus),
 			}
 		case "failed", "uninstalling", "uninstalled", "superseded":
@@ -189,7 +189,7 @@ func (r *HelmCapsuleReconciler) updateStatus(ctx context.Context, hc *operatorv1
 				Type:               conditionReady,
 				Status:             metav1.ConditionFalse,
 				ObservedGeneration: hc.Generation,
-				Reason:             operatorv1alpha1.HelmCapsuleReasonReleaseNotReady,
+				Reason:             operatorv1alpha1.HelmCapsuleReasonReleaseNotReady.String(),
 				Message:            fmt.Sprintf("Helm release status: %s", hc.Status.ReleaseStatus),
 			}
 		default:
@@ -198,7 +198,7 @@ func (r *HelmCapsuleReconciler) updateStatus(ctx context.Context, hc *operatorv1
 				Type:               conditionReady,
 				Status:             metav1.ConditionUnknown,
 				ObservedGeneration: hc.Generation,
-				Reason:             operatorv1alpha1.HelmCapsuleReasonUnknownReleaseStatus,
+				Reason:             operatorv1alpha1.HelmCapsuleReasonUnknownReleaseStatus.String(),
 				Message:            fmt.Sprintf("Helm release status is unrecognised: %q", hc.Status.ReleaseStatus),
 			}
 		}
@@ -212,18 +212,11 @@ func (r *HelmCapsuleReconciler) updateStatus(ctx context.Context, hc *operatorv1
 	})
 }
 
-// recordFailure sets phase Failed and a Ready=False condition. Retries on conflict
-// by re-fetching the object, so the condition is reliably persisted.
+// recordFailure sets phase Failed and a Ready=False condition, retrying on
+// conflict. The condition Reason is the errx reason carried by cause (HelmFailed
+// if undecorated).
 func (r *HelmCapsuleReconciler) recordFailure(ctx context.Context, hc *operatorv1alpha1.HelmCapsule, cause error) {
-	reason := operatorv1alpha1.HelmCapsuleReasonHelmFailed
-	switch {
-	case errors.Is(cause, helm.ErrChartFetch):
-		reason = operatorv1alpha1.HelmCapsuleReasonChartFetchFailed
-	case errors.Is(cause, helm.ErrValuesBuild):
-		reason = operatorv1alpha1.HelmCapsuleReasonValuesBuildFailed
-	case errors.Is(cause, helm.ErrReleaseNameConflict):
-		reason = operatorv1alpha1.HelmCapsuleReasonReleaseNameConflict
-	}
+	reason := common.ReasonFrom(cause, operatorv1alpha1.HelmCapsuleReasonHelmFailed)
 
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		latest := &operatorv1alpha1.HelmCapsule{}
@@ -237,7 +230,7 @@ func (r *HelmCapsuleReconciler) recordFailure(ctx context.Context, hc *operatorv
 			Status:             metav1.ConditionFalse,
 			ObservedGeneration: latest.Generation,
 			Reason:             reason,
-			Message:            cause.Error(),
+			Message:            common.MessageWithHints(cause),
 		})
 		return r.Status().Update(ctx, latest)
 	}); err != nil {
