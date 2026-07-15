@@ -18,13 +18,6 @@ const (
 	unknownLabel = "unknown"
 	// nonePhase stands in for the "no previous phase" case on the first transition.
 	nonePhase = "none"
-
-	// maxWriteFailures is how many *consecutive* write failures an operation's log
-	// tolerates before it is disabled. A single successful write resets the count,
-	// so transient IO blips are retried rather than permanently silencing the log;
-	// only a sustained failure (full disk, revoked permissions) disables it — and
-	// then it is logged once, not on every watch tick.
-	maxWriteFailures = 3
 )
 
 // eventSink writes the UC's per-operation JSONL audit trail (HIP-1496
@@ -33,29 +26,30 @@ const (
 // operation's "<operationId>.jsonl" file.
 //
 // JSONL emission is best-effort observability, never a correctness dependency:
-// a bad path, full disk, or unsafe operationId disables the log for that
-// operation (logged once) but must never block an upgrade. All methods are
-// nil-safe, so a Factory or monitor with no sink wired (tests, or an events
-// directory that could not be created) simply no-ops.
+// a bad path or unsafe operationId disables the log for that operation on Open
+// (logged once) but must never block an upgrade. Individual write failures are
+// logged and dropped — writes only happen on a milestone/phase transition (each
+// deduped, with the tracking state advanced before the write), so a failed write
+// is never retried on later ticks and cannot spam. All methods are nil-safe, so
+// a Factory or monitor with no sink wired (tests, or an events directory that
+// could not be created) simply no-ops.
 type eventSink struct {
 	dir    string
 	nodeID string
 
-	mu       sync.Mutex
-	writers  map[string]*events.Writer
-	failed   map[string]struct{} // operationIds disabled (Open failed, or too many write failures)
-	writeErr map[string]int      // consecutive write-failure count per operationId; reset on success
+	mu      sync.Mutex
+	writers map[string]*events.Writer
+	failed  map[string]struct{} // operationIds whose Open failed — don't retry per line
 }
 
 // newEventSink returns a sink writing under dir with the given nodeID stamped on
 // every line. An empty dir yields a sink that no-ops (used when events are off).
 func newEventSink(dir, nodeID string) *eventSink {
 	return &eventSink{
-		dir:      dir,
-		nodeID:   nodeID,
-		writers:  make(map[string]*events.Writer),
-		failed:   make(map[string]struct{}),
-		writeErr: make(map[string]int),
+		dir:     dir,
+		nodeID:  nodeID,
+		writers: make(map[string]*events.Writer),
+		failed:  make(map[string]struct{}),
 	}
 }
 
@@ -81,51 +75,12 @@ func (s *eventSink) write(isErr bool, operationID, reason, msg string) {
 		err = w.Info(reason, msg)
 	}
 	if err != nil {
-		s.onWriteError(operationID, err)
-		return
+		// Log and drop. Writes only occur on a milestone/phase transition (each
+		// deduped, tracking state advanced before the write), so this is not retried
+		// on later ticks — no per-tick spam, and no need to disable the log.
+		logx.As().Warn().Err(err).Str("reason", ReasonEventLogWriteFailed.String()).
+			Str("operation_id", operationID).Msg("could not append UC event-log line")
 	}
-	// A successful write clears any prior consecutive-failure streak.
-	s.mu.Lock()
-	delete(s.writeErr, operationID)
-	s.mu.Unlock()
-}
-
-// onWriteError records a failed write. It retries (keeps the writer open) until
-// maxWriteFailures consecutive failures, then disables the operation's log so a
-// sustained IO error is logged once rather than on every watch tick.
-func (s *eventSink) onWriteError(operationID string, werr error) {
-	s.mu.Lock()
-	s.writeErr[operationID]++
-	n := s.writeErr[operationID]
-	s.mu.Unlock()
-
-	if n < maxWriteFailures {
-		logx.As().Warn().Err(werr).Str("reason", ReasonEventLogWriteFailed.String()).
-			Str("operation_id", operationID).Int("failures", n).
-			Msg("could not append UC event-log line; will retry")
-		return
-	}
-	logx.As().Warn().Err(werr).Str("reason", ReasonEventLogWriteFailed.String()).
-		Str("operation_id", operationID).Int("failures", n).
-		Msgf("disabling UC event log for this operation after %d consecutive write failures", maxWriteFailures)
-	s.disable(operationID)
-}
-
-// disable closes and drops the cached Writer for operationId and marks it failed
-// so writer() returns nil for it thereafter. Used to stop retrying (and
-// re-logging) a persistently failing per-operation log.
-func (s *eventSink) disable(operationID string) {
-	if s == nil {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if w, ok := s.writers[operationID]; ok {
-		_ = w.Close()
-		delete(s.writers, operationID)
-	}
-	delete(s.writeErr, operationID)
-	s.failed[operationID] = struct{}{}
 }
 
 // writer returns the cached Writer for operationId, opening it on first use.
