@@ -522,7 +522,7 @@ func (m *UpgradeOutcomeMonitor) observePhase(cr *unstructured.Unstructured) {
 		// API change) must not collapse the dedup key to "<opId>/" or drop context
 		// from the audit line. Fall back to the CR kind, then a sentinel.
 		if step = cr.GetKind(); step == "" {
-			step = "<unknown>"
+			step = unknownLabel
 		}
 	}
 	key := operationID + "/" + step
@@ -537,7 +537,7 @@ func (m *UpgradeOutcomeMonitor) observePhase(cr *unstructured.Unstructured) {
 
 	from := prev
 	if from == "" {
-		from = "<none>"
+		from = nonePhase
 	}
 	logx.As().Info().Str("reason", ReasonPhaseChanged.String()).Str("operation_id", operationID).
 		Str("step", step).Str("phase", phase).Str("previous_phase", from).Msg("CR phase changed")

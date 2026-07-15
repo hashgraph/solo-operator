@@ -178,7 +178,7 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 		// the audit line. Fall back to the step (or a sentinel) so the record stays
 		// diagnosable.
 		if marker = step; marker == "" {
-			marker = "<unknown>"
+			marker = unknownLabel
 		}
 	}
 	logx.As().Info().Str("reason", ReasonMarkerDetected.String()).Str("operation_id", operationID).

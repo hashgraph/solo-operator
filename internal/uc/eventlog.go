@@ -10,6 +10,16 @@ import (
 	"github.com/hashgraph/solo-operator/internal/uc/events"
 )
 
+// Placeholder values used in audit lines when an expected value is absent, so
+// records stay parseable without angle-bracket sentinels. Lowercase to match
+// real step/marker/phase values.
+const (
+	// unknownLabel stands in for a missing marker or step label.
+	unknownLabel = "unknown"
+	// nonePhase stands in for the "no previous phase" case on the first transition.
+	nonePhase = "none"
+)
+
 // eventSink writes the UC's per-operation JSONL audit trail (HIP-1496
 // "Channel 1"). It lazily opens one events.Writer per operationId under a single
 // directory and caches it, so every audit line for an operation lands in that
