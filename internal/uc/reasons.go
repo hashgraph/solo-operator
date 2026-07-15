@@ -45,6 +45,8 @@ const (
 	ReasonCRPersistCorrupt              errx.Reason = "CRPersistCorrupt"
 	ReasonCRPersistCleanupFailed        errx.Reason = "CRPersistCleanupFailed"
 	ReasonEventLogPruneFailed           errx.Reason = "EventLogPruneFailed"
+	ReasonEventLogOpenFailed            errx.Reason = "EventLogOpenFailed"
+	ReasonEventLogWriteFailed           errx.Reason = "EventLogWriteFailed"
 	ReasonUpgradePathUnreadable         errx.Reason = "UpgradePathUnreadable"
 	ReasonPreviousUpgradePathUnwritable errx.Reason = "PreviousUpgradePathUnwritable"
 	ReasonCRPersistPathUnwritable       errx.Reason = "CRPersistPathUnwritable"

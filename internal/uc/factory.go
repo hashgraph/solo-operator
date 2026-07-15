@@ -33,6 +33,10 @@ type Factory struct {
 	cfg    Config
 	client dynamic.Interface
 
+	// events writes the per-operation JSONL audit trail (#1127). Nil-safe: a nil
+	// sink no-ops, so tests and events-disabled configs need no special casing.
+	events *eventSink
+
 	// store implements persist-before-send (#992): each handler serializes its CR
 	// under cfg.CRPersistPath before Create and deletes the file on success.
 	store *CRStore
@@ -203,6 +207,8 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 	}
 	logx.As().Info().Str("reason", ReasonCRDelivered.String()).Str("operation_id", operationID).
 		Str("cr_name", cr.GetName()).Str("cr_kind", kind).Msg("created CR")
+	f.events.info(operationID, ReasonCRDelivered.String(),
+		"Created "+kind+"/"+cr.GetName())
 	return nil
 }
 
