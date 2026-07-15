@@ -544,12 +544,22 @@ func (m *UpgradeOutcomeMonitor) observePhase(cr *unstructured.Unstructured) {
 	m.events.info(operationID, ReasonPhaseChanged.String(),
 		fmt.Sprintf("%s phase %s -> %s", step, from, phase))
 
-	// Release the per-operation event-log handle once the operation is terminal.
-	// The Execute and FreezeAbort CRs are the operation's final steps, so their
-	// terminal phase (Succeeded/Failed) means no further audit lines are expected
-	// — bounding open writers to in-flight operations. This line was just written,
-	// so the close is safe; a stray later write would reopen in append mode.
+	// Release per-operation state once the operation is terminal. The Execute and
+	// FreezeAbort CRs are the operation's final steps, so their terminal phase
+	// (Succeeded/Failed) means no further audit lines are expected — close the
+	// event-log handle and drop the DaemonTriggered dedup entry, bounding both to
+	// in-flight operations. Deleting daemonTriggered is safe: a terminal CR cannot
+	// re-enter ReadyForProvisionerDaemon, so emitDaemonTriggered is never consulted
+	// for it again (even on a watch relist).
+	//
+	// lastPhase is deliberately NOT pruned here: watch relists re-deliver the
+	// terminal CR, and lastPhase is what suppresses re-emitting its terminal
+	// PhaseChanged line. Its growth is bounded by the number of operations the UC
+	// observes over its (short, per-node) lifetime.
 	if operationTerminal(step, phase) {
+		m.mu.Lock()
+		delete(m.daemonTriggered, operationID)
+		m.mu.Unlock()
 		m.events.closeOp(operationID)
 	}
 }

@@ -88,6 +88,16 @@ func TestDaemonTriggeredEmittedOncePerOperation(t *testing.T) {
 	if c := strings.Count(string(data), `"reason":"DaemonTriggered"`); c != 1 {
 		t.Fatalf("DaemonTriggered count = %d, want 1\n%s", c, data)
 	}
+
+	// A terminal Execute phase must drop the dedup entry to bound memory.
+	_ = unstructured.SetNestedField(cr.Object, string(operatorv1alpha1.ExecutePhaseSucceeded), "status", "phase")
+	m.handleExecuteEvent(context.Background(), cr, nil)
+	m.mu.Lock()
+	_, stillTracked := m.daemonTriggered["upgrade-0.75.0-20260413T120000Z"]
+	m.mu.Unlock()
+	if stillTracked {
+		t.Error("daemonTriggered entry not pruned after terminal phase")
+	}
 }
 
 // buildExecuteCR builds a minimal NetworkUpgradeExecute Unstructured object with

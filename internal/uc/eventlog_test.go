@@ -65,6 +65,43 @@ func TestEventSinkWritesPerOperationJSONL(t *testing.T) {
 	}
 }
 
+// TestEventSinkDisableStopsFurtherWrites verifies that once an operation's log is
+// disabled (as happens after the first write failure) its writer is dropped,
+// it is marked failed, and subsequent writes no-op instead of reopening.
+func TestEventSinkDisableStopsFurtherWrites(t *testing.T) {
+	dir := t.TempDir()
+	s := newEventSink(dir, "0")
+	op := "upgrade-20260415T143000Z"
+
+	s.info(op, "MarkerDetected", "detected")
+	s.disable(op)
+
+	s.mu.Lock()
+	_, hasWriter := s.writers[op]
+	_, failed := s.failed[op]
+	s.mu.Unlock()
+	if hasWriter {
+		t.Error("writer not dropped after disable")
+	}
+	if !failed {
+		t.Error("operation not marked failed after disable")
+	}
+	if w := s.writer(op); w != nil {
+		t.Error("writer() should return nil for a disabled operation")
+	}
+
+	s.info(op, "CRDelivered", "created") // must no-op, not reopen
+	s.Close()
+
+	data, err := os.ReadFile(filepath.Join(dir, op+".jsonl"))
+	if err != nil {
+		t.Fatalf("read jsonl: %v", err)
+	}
+	if c := strings.Count(string(data), "reason"); c != 1 {
+		t.Fatalf("expected only the pre-disable line, got %d lines:\n%s", c, data)
+	}
+}
+
 // TestEventSinkNilAndDisabledAreNoops verifies best-effort semantics: a nil sink,
 // an empty-dir sink, and an empty operationId never panic and never write.
 func TestEventSinkNilAndDisabledAreNoops(t *testing.T) {

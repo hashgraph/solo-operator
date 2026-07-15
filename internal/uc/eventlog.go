@@ -72,9 +72,29 @@ func (s *eventSink) write(isErr bool, operationID, reason, msg string) {
 		err = w.Info(reason, msg)
 	}
 	if err != nil {
+		// Disable this operation's log after the first write failure: log once,
+		// close/drop the writer, and mark it failed so subsequent writes no-op
+		// instead of re-logging the same IO error on every watch tick.
 		logx.As().Warn().Err(err).Str("reason", ReasonEventLogWriteFailed.String()).
-			Str("operation_id", operationID).Msg("could not append UC event-log line")
+			Str("operation_id", operationID).Msg("could not append UC event-log line; disabling audit for this operation")
+		s.disable(operationID)
 	}
+}
+
+// disable closes and drops the cached Writer for operationId and marks it failed
+// so writer() returns nil for it thereafter. Used to stop retrying (and
+// re-logging) a persistently failing per-operation log.
+func (s *eventSink) disable(operationID string) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if w, ok := s.writers[operationID]; ok {
+		_ = w.Close()
+		delete(s.writers, operationID)
+	}
+	s.failed[operationID] = struct{}{}
 }
 
 // writer returns the cached Writer for operationId, opening it on first use.
