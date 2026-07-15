@@ -161,9 +161,19 @@ func TestDaemonTriggeredEmittedOncePerOperation(t *testing.T) {
 	m.handleExecuteEvent(context.Background(), cr, nil)
 	m.mu.Lock()
 	_, stillTracked := m.daemonTriggered["upgrade-0.75.0-20260413T120000Z"]
+	_, lastPhaseKept := m.lastPhase["upgrade-0.75.0-20260413T120000Z/"+operatorv1alpha1.StepExecute]
+	_, firstSeenKept := m.opFirstSeen["upgrade-0.75.0-20260413T120000Z"]
 	m.mu.Unlock()
 	if stillTracked {
 		t.Error("daemonTriggered entry not pruned after terminal phase")
+	}
+	// lastPhase is retained to dedup relists; opFirstSeen MUST be retained with it
+	// so the stale sweep can still age the retained lastPhase out (no orphan leak).
+	if !lastPhaseKept {
+		t.Error("lastPhase entry wrongly dropped at terminal (needed to dedup relists)")
+	}
+	if !firstSeenKept {
+		t.Error("opFirstSeen dropped at terminal — orphans the retained lastPhase from the sweep")
 	}
 }
 

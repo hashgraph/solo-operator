@@ -575,14 +575,17 @@ func (m *UpgradeOutcomeMonitor) observePhase(cr *unstructured.Unstructured) {
 	// re-enter ReadyForProvisionerDaemon, so emitDaemonTriggered is never consulted
 	// for it again (even on a watch relist).
 	//
-	// lastPhase is deliberately NOT pruned here: watch relists re-deliver the
-	// terminal CR, and lastPhase is what suppresses re-emitting its terminal
-	// PhaseChanged line. Its growth is bounded by the number of operations the UC
-	// observes over its (short, per-node) lifetime.
+	// lastPhase and opFirstSeen are deliberately NOT pruned here. Watch relists
+	// re-deliver the terminal CR, and lastPhase is what suppresses re-emitting its
+	// terminal PhaseChanged line — so it must survive. opFirstSeen must survive
+	// with it: it is the age basis the stale sweep uses to eventually reclaim the
+	// retained lastPhase entries. Dropping opFirstSeen at terminal while keeping
+	// lastPhase would orphan those entries (the sweep could never find them),
+	// reintroducing the unbounded-growth leak. Both are aged out together by
+	// pruneStaleOperations at maxOperationAge.
 	if operationTerminal(step, phase) {
 		m.mu.Lock()
 		delete(m.daemonTriggered, operationID)
-		delete(m.opFirstSeen, operationID)
 		m.mu.Unlock()
 		m.events.closeOp(operationID)
 	}
