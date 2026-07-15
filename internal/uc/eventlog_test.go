@@ -65,40 +65,68 @@ func TestEventSinkWritesPerOperationJSONL(t *testing.T) {
 	}
 }
 
-// TestEventSinkDisableStopsFurtherWrites verifies that once an operation's log is
-// disabled (as happens after the first write failure) its writer is dropped,
-// it is marked failed, and subsequent writes no-op instead of reopening.
-func TestEventSinkDisableStopsFurtherWrites(t *testing.T) {
+// TestEventSinkDisablesAfterConsecutiveWriteFailures verifies that write failures
+// are tolerated (writer kept open) until maxWriteFailures consecutive failures,
+// after which the operation's log is disabled and further writes no-op. Failures
+// are forced by closing the underlying writer out from under the sink.
+func TestEventSinkDisablesAfterConsecutiveWriteFailures(t *testing.T) {
 	dir := t.TempDir()
 	s := newEventSink(dir, "0")
 	op := "upgrade-20260415T143000Z"
 
-	s.info(op, "MarkerDetected", "detected")
-	s.disable(op)
-
+	s.info(op, "MarkerDetected", "detected") // opens + writes ok
+	// Close the underlying writer so subsequent Info/Error calls fail.
 	s.mu.Lock()
-	_, hasWriter := s.writers[op]
-	_, failed := s.failed[op]
+	w := s.writers[op]
 	s.mu.Unlock()
+	if err := w.Close(); err != nil {
+		t.Fatalf("close underlying writer: %v", err)
+	}
+
+	// First maxWriteFailures-1 failures keep the log enabled (retry).
+	for i := 1; i < maxWriteFailures; i++ {
+		s.info(op, "PhaseChanged", "x")
+		s.mu.Lock()
+		_, disabled := s.failed[op]
+		s.mu.Unlock()
+		if disabled {
+			t.Fatalf("disabled prematurely after %d failure(s)", i)
+		}
+	}
+	// The maxWriteFailures-th consecutive failure disables it.
+	s.info(op, "PhaseChanged", "x")
+	s.mu.Lock()
+	_, disabled := s.failed[op]
+	_, hasWriter := s.writers[op]
+	s.mu.Unlock()
+	if !disabled {
+		t.Errorf("operation not disabled after %d consecutive failures", maxWriteFailures)
+	}
 	if hasWriter {
 		t.Error("writer not dropped after disable")
 	}
-	if !failed {
-		t.Error("operation not marked failed after disable")
-	}
-	if w := s.writer(op); w != nil {
+	if got := s.writer(op); got != nil {
 		t.Error("writer() should return nil for a disabled operation")
 	}
+}
 
-	s.info(op, "CRDelivered", "created") // must no-op, not reopen
-	s.Close()
+// TestEventSinkWriteSuccessResetsFailureStreak verifies a successful write clears
+// the consecutive-failure count so transient blips never accumulate to a disable.
+func TestEventSinkWriteSuccessResetsFailureStreak(t *testing.T) {
+	s := newEventSink(t.TempDir(), "0")
+	op := "upgrade-20260415T143000Z"
 
-	data, err := os.ReadFile(filepath.Join(dir, op+".jsonl"))
-	if err != nil {
-		t.Fatalf("read jsonl: %v", err)
-	}
-	if c := strings.Count(string(data), "reason"); c != 1 {
-		t.Fatalf("expected only the pre-disable line, got %d lines:\n%s", c, data)
+	s.info(op, "MarkerDetected", "ok") // success
+	s.mu.Lock()
+	s.writeErr[op] = maxWriteFailures - 1 // simulate a near-miss streak
+	s.mu.Unlock()
+
+	s.info(op, "CRDelivered", "ok") // success resets the streak
+	s.mu.Lock()
+	n := s.writeErr[op]
+	s.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("failure streak = %d after a successful write, want 0", n)
 	}
 }
 
