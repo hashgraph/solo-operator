@@ -243,11 +243,11 @@ func parseVersionFile(upgradePath string) (version string, mtime time.Time, foun
 		if os.IsNotExist(err) {
 			return "", time.Time{}, false, nil
 		}
-		return "", time.Time{}, false, errx.WithReason(errPersist.Wrap(err, "stat VERSION file"), ReasonMarkerStatFailed)
+		return "", time.Time{}, false, errx.WithReason(errPersist.Wrap(err, "stat VERSION file"), ReasonUpgradePathUnreadable)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", time.Time{}, false, errx.WithReason(errPersist.Wrap(err, "read VERSION file"), ReasonMarkerStatFailed)
+		return "", time.Time{}, false, errx.WithReason(errPersist.Wrap(err, "read VERSION file"), ReasonUpgradePathUnreadable)
 	}
 	for _, line := range strings.Split(string(data), "\n") {
 		if v, ok := strings.CutPrefix(line, "VERSION="); ok {

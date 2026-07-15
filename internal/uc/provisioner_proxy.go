@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/automa-saga/logx"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -56,6 +57,21 @@ type ProvisionerProxyConfig struct {
 	Namespace string
 	// NodeID is the Hedera node identifier, used in log context.
 	NodeID int
+	// UpgradePath is the root of the extracted upgrade package
+	// (data/upgrade/current). The proxy scans <UpgradePath>/data/config/ and
+	// <UpgradePath>/ (for log4j2.xml and settings.txt) during the execute phase.
+	// Required; deployConfigCRs returns an error when empty. If data/config/ is
+	// absent or contains no recognised files the deploy step is a no-op.
+	UpgradePath string
+	// Orbit is the owning Orbit name, written into spec.orbit on each config CR
+	// so the Orbit controller can cascade-delete them.
+	Orbit string
+	// ConfigCRPollInterval overrides the default poll cadence when waiting for
+	// config CRs to reach Valid=True. Zero falls back to configCRPollInterval.
+	ConfigCRPollInterval time.Duration
+	// ConfigCRDeployTimeout overrides the default total budget for the config-CR
+	// deployment step. Zero falls back to configCRDeployTimeout.
+	ConfigCRDeployTimeout time.Duration
 }
 
 // NewProvisionerProxy constructs the proxy with an in-cluster or
@@ -155,19 +171,30 @@ func (p *ProvisionerProxy) Handle(ctx context.Context, cr *unstructured.Unstruct
 	}()
 }
 
-// handleExecute runs the execute-phase workflow. In cluster-only mode the UC
-// owns config-CR deployment and the phase advance (host infra upgrade is
-// unsupported).
+// handleExecute runs the execute-phase workflow for the cluster-only profile.
+// Host infra upgrade is not supported; the UC owns config-CR deployment and the
+// phase advance.
 //
-// TODO: deploy the config CRs the upgrade requires before the phase advance.
-// Each step must use a context derived from ctx with an explicit timeout — if a
-// step hangs, activeOpID stays set and the proxy rejects all later upgrades silently.
+// Steps (each uses a context with an explicit timeout so a hung step cannot
+// silently stall the slot and block all later upgrades):
+//
+//  1. Deploy config CRs from the upgrade package (data/config/ + package root).
+//  2. Wait for all config CRs to reach Valid=True.
+//  3. Patch Execute CR status.phase to PendingNodeUpgrade.
 func (p *ProvisionerProxy) handleExecute(ctx context.Context, cr *unstructured.Unstructured) error {
 	operationID := operationIDOf(cr)
 	if p.onTransition != nil {
 		p.onTransition(operationID)
 	}
 
+	// Step 1 + 2: deploy config CRs and wait for reconciliation.
+	deployCtx, deployCancel := context.WithTimeout(ctx, p.cfg.deployTimeout())
+	defer deployCancel()
+	if err := p.deployConfigCRs(deployCtx, operationID); err != nil {
+		return err
+	}
+
+	// Step 3: advance Execute CR to PendingNodeUpgrade.
 	patch := []byte(fmt.Sprintf(
 		`{"status":{"phase":%q}}`, operatorv1alpha1.ExecutePhasePendingNodeUpgrade))
 
@@ -187,4 +214,18 @@ func (p *ProvisionerProxy) handleExecute(ctx context.Context, cr *unstructured.U
 		Str("operation_id", operationID).Str("cr_name", cr.GetName()).
 		Msg("advanced Execute CR to PendingNodeUpgrade")
 	return nil
+}
+
+func (c ProvisionerProxyConfig) pollInterval() time.Duration {
+	if c.ConfigCRPollInterval > 0 {
+		return c.ConfigCRPollInterval
+	}
+	return configCRPollInterval
+}
+
+func (c ProvisionerProxyConfig) deployTimeout() time.Duration {
+	if c.ConfigCRDeployTimeout > 0 {
+		return c.ConfigCRDeployTimeout
+	}
+	return configCRDeployTimeout
 }

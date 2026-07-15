@@ -25,6 +25,20 @@ var (
 	networkUpgradeExecuteGVR     = gvr("networkupgradeexecutes")
 	networkUpgradeFreezeAbortGVR = gvr("networkupgradefreezeaborts")
 
+	// GVRs for the ten ConsensusConfig CRs the provisioner-proxy creates during
+	// the execute phase (cluster-only mode). The resource names are the lowercase
+	// plural of each Kind, matching the CRD spec (HIP-1496 §§ filename-to-CR mapping).
+	log4j2ConfigGVR                  = gvr("log4j2configs")
+	nodeSettingsGVR                  = gvr("nodesettings")
+	applicationPropertiesGVR         = gvr("applicationproperties")
+	applicationOverridePropertiesGVR = gvr("applicationoverrideproperties")
+	bootstrapPropertiesGVR           = gvr("bootstrapproperties")
+	nodePropertiesGVR                = gvr("nodepropertiesconfigs")
+	throttlesConfigGVR               = gvr("throttlesconfigs")
+	feeSchedulesGVR                  = gvr("feeschedules")
+	simpleFeesSchedulesGVR           = gvr("simplefeesschedules")
+	apiPermissionPropertiesGVR       = gvr("apipermissionproperties")
+
 	// stepToGVR maps a CR step label value to the GVR of the corresponding
 	// NetworkUpgrade* resource. Used by restart recovery (#998) to re-deliver
 	// persisted CRs and to query Execute CRs by step without hard-coding strings
@@ -73,6 +87,18 @@ const (
 	// context.WithTimeout so a stalled API server cannot block the marker poll
 	// loop indefinitely — the handler fails fast and retries on the next tick.
 	createTimeout = 30 * time.Second
+
+	// configCRDeployTimeout is the wall-clock budget for the entire config-CR
+	// deployment step inside handleExecute (cluster-only). It covers scanning,
+	// creating all config CRs, and waiting for the operator to reconcile each
+	// one to Valid=True. 20 minutes is generous; the operator reconciles
+	// ConfigMap-backed CRs within seconds under normal conditions.
+	configCRDeployTimeout = 20 * time.Minute
+
+	// configCRPollInterval is the fallback poll cadence used when
+	// ProvisionerProxyConfig.ConfigCRPollInterval is zero (unset). Prefer
+	// setting ConfigCRPollInterval via --config-cr-poll-interval / UC_CONFIG_CR_POLL_INTERVAL.
+	configCRPollInterval = 1 * time.Second
 )
 
 func gvr(resource string) schema.GroupVersionResource {
