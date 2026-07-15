@@ -3,11 +3,41 @@
 package uc
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// TestHandlerEmitsMarkerDetectedAndCRDeliveredJSONL runs a real marker handler
+// and verifies both #1001 events land in the operation's JSONL, once each even
+// across repeated (idempotent) ticks.
+func TestHandlerEmitsMarkerDetectedAndCRDeliveredJSONL(t *testing.T) {
+	root := writePackage(t, validComponentsYAML)
+	evDir := t.TempDir()
+	f := newFakeFactory(t, testConfig(root, t.TempDir()))
+	f.events = newEventSink(evDir, "0")
+
+	for i := 0; i < 3; i++ { // ticks 2 and 3 are idempotent no-ops
+		if err := f.HandleExecuteImmediate(context.Background()); err != nil {
+			t.Fatalf("HandleExecuteImmediate tick %d: %v", i, err)
+		}
+	}
+	f.events.Close()
+
+	data, err := os.ReadFile(filepath.Join(evDir, wantOperationID+".jsonl"))
+	if err != nil {
+		t.Fatalf("read jsonl: %v", err)
+	}
+	got := string(data)
+	if c := strings.Count(got, `"reason":"MarkerDetected"`); c != 1 {
+		t.Errorf("MarkerDetected count = %d, want 1\n%s", c, got)
+	}
+	if c := strings.Count(got, `"reason":"CRDelivered"`); c != 1 {
+		t.Errorf("CRDelivered count = %d, want 1\n%s", c, got)
+	}
+}
 
 // TestEventSinkWritesPerOperationJSONL verifies the sink opens one file per
 // operationId, appends INFO/ERROR lines, and reuses the cached writer.

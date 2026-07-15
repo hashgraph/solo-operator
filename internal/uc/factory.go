@@ -168,6 +168,15 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 		return nil
 	}
 
+	// First tick that will actually create this operation's CR — record the
+	// marker detection once (both channels). Emitting here rather than at the top
+	// of deliverCR keeps it single-shot: re-detected markers whose CR already
+	// exists return above and never reach this line.
+	marker := stepToMarker[step]
+	logx.As().Info().Str("reason", ReasonMarkerDetected.String()).Str("operation_id", operationID).
+		Str("marker", marker).Str("step", step).Msg("upgrade marker detected")
+	f.events.info(operationID, ReasonMarkerDetected.String(), "Detected "+marker)
+
 	if _, err := f.store.Persist(operationID, step, cr); err != nil {
 		// Already an errx-decorated persist (disk) error.
 		return err
