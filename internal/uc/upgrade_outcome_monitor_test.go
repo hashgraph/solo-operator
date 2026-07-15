@@ -76,8 +76,9 @@ func TestPruneStaleOperations(t *testing.T) {
 	// wall-clock first-seen fallback.
 	timelessOp := "manual_recovery_op"
 
+	evDir := t.TempDir()
 	m := newOutcomeMonitor(t, t.TempDir())
-	m.events = newEventSink(t.TempDir(), "0")
+	m.events = newEventSink(evDir, "0")
 
 	// Seed dedup state, first-seen times, and an open writer for each operation.
 	for _, op := range []string{oldOp, freshOp, timelessOp} {
@@ -118,6 +119,15 @@ func TestPruneStaleOperations(t *testing.T) {
 	}
 	if !freshWriterOpen {
 		t.Error("fresh operation's event-log handle wrongly released")
+	}
+
+	// The stale op's JSONL trail records the eviction as its final line.
+	data, err := os.ReadFile(filepath.Join(evDir, oldOp+".jsonl"))
+	if err != nil {
+		t.Fatalf("read stale op jsonl: %v", err)
+	}
+	if !strings.Contains(string(data), `"reason":"StaleOperationPruned"`) {
+		t.Errorf("stale op JSONL missing StaleOperationPruned line:\n%s", data)
 	}
 }
 

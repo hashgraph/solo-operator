@@ -640,11 +640,27 @@ func (m *UpgradeOutcomeMonitor) pruneStaleOperations(now time.Time) {
 	}
 	m.mu.Unlock()
 
+	// The JSONL line and the log line below are the ONLY operator-facing signal that
+	// an operation got stuck (never reached a terminal phase) and had its tracking
+	// reclaimed. The UC emits NO Kubernetes events (HIP-1496: Channel 3 is
+	// operator-reconcilers only), so this is actionable ONLY if the observability
+	// pipeline is deployed wherever the UC runs:
+	//   - Channel 1 (JSONL): the per-operation *.jsonl files under the events dir
+	//     are collected/shipped to a durable store.
+	//   - Channel 2 (logs):  container stdout → OpenTelemetry Collector → Loki, with
+	//     alerting on reason="StaleOperationPruned".
+	// Without that pipeline a stuck upgrade — and its lingering data/upgrade/current
+	// package on disk — is silent. There is no K8s-event fallback by design.
 	for _, opID := range stale {
+		// Channel 1: final audit line in the operation's own JSONL, written before
+		// the handle is released so the trail records why tracking stopped.
+		m.events.error(opID, ReasonStaleOperationPruned.String(),
+			"evicted after exceeding the retention window without reaching a terminal phase; inspect the on-disk upgrade package")
 		m.events.closeOp(opID) // release the (still-open) event-log handle
+		// Channel 2: structured stdout log (reason= is alertable in Loki).
 		logx.As().Warn().Str("reason", ReasonStaleOperationPruned.String()).
 			Str("operation_id", opID).
-			Msg("evicted in-memory state for an operation past the retention window that never reached a terminal phase")
+			Msg("evicted in-memory state for an operation past the retention window that never reached a terminal phase; the on-disk data/upgrade/current package may warrant inspection")
 	}
 }
 
