@@ -3,8 +3,10 @@
 package uc
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +17,32 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
+
+// TestDaemonTriggeredEmittedOncePerOperation verifies DaemonTriggered is written
+// to JSONL exactly once even though the Execute CR is re-observed on every watch
+// tick while at ReadyForProvisionerDaemon, and that it fires with a nil proxy
+// (mainnet mode).
+func TestDaemonTriggeredEmittedOncePerOperation(t *testing.T) {
+	evDir := t.TempDir()
+	m := newOutcomeMonitor(t, t.TempDir())
+	m.events = newEventSink(evDir, "0")
+
+	cr := buildExecuteCR("upgrade-0.75.0-20260413T120000Z", crCreatedAt)
+	_ = unstructured.SetNestedField(cr.Object, string(operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon), "status", "phase")
+
+	for i := 0; i < 3; i++ {
+		m.handleExecuteEvent(context.Background(), cr, nil) // nil proxy = mainnet
+	}
+	m.events.Close()
+
+	data, err := os.ReadFile(filepath.Join(evDir, "upgrade-0.75.0-20260413T120000Z.jsonl"))
+	if err != nil {
+		t.Fatalf("read jsonl: %v", err)
+	}
+	if c := strings.Count(string(data), `"reason":"DaemonTriggered"`); c != 1 {
+		t.Fatalf("DaemonTriggered count = %d, want 1\n%s", c, data)
+	}
+}
 
 // buildExecuteCR builds a minimal NetworkUpgradeExecute Unstructured object with
 // the given operationId and creationTimestamp. It mirrors the structure used

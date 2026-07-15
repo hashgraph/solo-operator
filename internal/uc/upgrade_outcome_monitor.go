@@ -78,6 +78,13 @@ type UpgradeOutcomeMonitor struct {
 	// CR types to keep the Factory dedup cache current. Nil is safe.
 	onPhaseUpdate func(operationID, step, phase string)
 
+	// events writes the per-operation JSONL audit trail (#1127). Nil-safe.
+	events *eventSink
+	// daemonTriggered dedups the DaemonTriggered event (#1002) to once per
+	// operationId — the Execute CR is re-observed on every watch tick while it
+	// sits at ReadyForProvisionerDaemon. Guarded by mu.
+	daemonTriggered map[string]struct{}
+
 	connectivityErr atomic.Pointer[daemonkit.StatusError]
 }
 
@@ -94,7 +101,7 @@ func NewUpgradeOutcomeMonitor(cfg UpgradeOutcomeMonitorConfig, kubeconfigPath st
 // NewUpgradeOutcomeMonitorWithClient constructs the monitor with an injected
 // client (used in unit tests).
 func NewUpgradeOutcomeMonitorWithClient(cfg UpgradeOutcomeMonitorConfig, client dynamic.Interface) *UpgradeOutcomeMonitor {
-	return &UpgradeOutcomeMonitor{cfg: cfg, client: client}
+	return &UpgradeOutcomeMonitor{cfg: cfg, client: client, daemonTriggered: make(map[string]struct{})}
 }
 
 // Name implements daemonkit.MonitorRunner.
@@ -456,6 +463,11 @@ func (m *UpgradeOutcomeMonitor) handleExecuteEvent(ctx context.Context, cr *unst
 	case operatorv1alpha1.ExecutePhaseSucceeded:
 		m.handleTerminalExecute(cr)
 	case operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon:
+		// DaemonTriggered fires in all modes (#1002): ReadyForProvisionerDaemon is
+		// the hand-off where the operator triggers the provisioner daemon for every
+		// upgrade, whether or not the in-cluster proxy fulfils that role. Emitted
+		// before the proxy nil-check and deduped to once per operation.
+		m.emitDaemonTriggered(cr)
 		if proxy == nil {
 			return
 		}
@@ -474,6 +486,30 @@ func (m *UpgradeOutcomeMonitor) handleExecuteEvent(ctx context.Context, cr *unst
 		}
 		proxy.Handle(ctx, cr)
 	}
+}
+
+// emitDaemonTriggered records the DaemonTriggered event (#1002) on both UC
+// channels the first time an operation's Execute CR is observed at
+// ReadyForProvisionerDaemon. Subsequent observations (every watch tick) are
+// deduped. No-op when the CR carries no operationId.
+func (m *UpgradeOutcomeMonitor) emitDaemonTriggered(cr *unstructured.Unstructured) {
+	operationID := operationIDOf(cr)
+	if operationID == "" {
+		return
+	}
+	m.mu.Lock()
+	if _, seen := m.daemonTriggered[operationID]; seen {
+		m.mu.Unlock()
+		return
+	}
+	m.daemonTriggered[operationID] = struct{}{}
+	m.mu.Unlock()
+
+	logx.As().Info().Str("reason", ReasonDaemonTriggered.String()).
+		Str("operation_id", operationID).Str("cr_name", cr.GetName()).
+		Msg("Execute CR at ReadyForProvisionerDaemon; operator will trigger the provisioner daemon")
+	m.events.info(operationID, ReasonDaemonTriggered.String(),
+		"Execute CR "+cr.GetName()+" reached ReadyForProvisionerDaemon")
 }
 
 // handleTerminalExecute rotates the upgrade package when an Execute CR reaches

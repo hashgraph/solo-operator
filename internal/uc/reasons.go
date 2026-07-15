@@ -20,6 +20,7 @@ const (
 	ReasonMarkerHandlerPending         errx.Reason = "MarkerHandlerPending"
 	ReasonCRDelivered                  errx.Reason = "CRDelivered"
 	ReasonMarkerDetected               errx.Reason = "MarkerDetected"
+	ReasonDaemonTriggered              errx.Reason = "DaemonTriggered"
 	ReasonCRExists                     errx.Reason = "CRExists"
 	ReasonCRFailed                     errx.Reason = "CRFailed"
 	ReasonUCCacheSeeded                errx.Reason = "UCCacheSeeded"

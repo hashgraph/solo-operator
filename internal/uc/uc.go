@@ -58,6 +58,7 @@ func New(cfg Config) (*UC, error) {
 	}
 	outcomeMonitor := NewUpgradeOutcomeMonitorWithClient(outcomeCfg, client)
 	outcomeMonitor.onPhaseUpdate = factory.markCreated
+	outcomeMonitor.events = sink
 
 	if cfg.ProvisionerProxyEnabled() {
 		proxy := NewProvisionerProxyWithClient(
