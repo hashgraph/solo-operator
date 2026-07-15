@@ -582,6 +582,7 @@ func (m *UpgradeOutcomeMonitor) observePhase(cr *unstructured.Unstructured) {
 	if operationTerminal(step, phase) {
 		m.mu.Lock()
 		delete(m.daemonTriggered, operationID)
+		delete(m.opFirstSeen, operationID)
 		m.mu.Unlock()
 		m.events.closeOp(operationID)
 	}
