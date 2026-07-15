@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -32,6 +33,21 @@ const (
 	// outcomeWatchTimeoutSeconds is the server-side watch timeout. The server
 	// closes the channel cleanly after this window; Run reconnects.
 	outcomeWatchTimeoutSeconds = int64(5 * 60)
+
+	// kindNetworkUpgradeExecute is the Kind of the Execute CR. Terminal detection
+	// keys off the CR Kind (intrinsic, always present) rather than the step label,
+	// which may be absent on a malformed/manual CR. kindNetworkUpgradeFreezeAbort
+	// is declared alongside the FreezeAbort handler.
+	kindNetworkUpgradeExecute = "NetworkUpgradeExecute"
+
+	// maxOperationAge bounds how long per-operation dedup state (lastPhase,
+	// daemonTriggered) and its event-log handle are retained for an operation that
+	// never reached a terminal phase. Terminal operations are cleaned up promptly
+	// in observePhase; this is the safety net for the pathological case — a UC
+	// running uninterrupted for months while an upgrade got stuck — so memory and
+	// open FDs cannot grow without bound. Keyed off the timestamp embedded in the
+	// operationId, so it mirrors the 90-day-ish window without wall-clock coupling.
+	maxOperationAge = 90 * 24 * time.Hour
 )
 
 // UpgradeOutcomeMonitorConfig configures the upgrade-outcome monitor.
@@ -78,6 +94,23 @@ type UpgradeOutcomeMonitor struct {
 	// CR types to keep the Factory dedup cache current. Nil is safe.
 	onPhaseUpdate func(operationID, step, phase string)
 
+	// events writes the per-operation JSONL audit trail (#1127). Nil-safe.
+	events *eventSink
+	// daemonTriggered dedups the DaemonTriggered event (#1002) to once per
+	// operationId — the Execute CR is re-observed on every watch tick while it
+	// sits at ReadyForProvisionerDaemon. Guarded by mu.
+	daemonTriggered map[string]struct{}
+	// lastPhase records the last-observed status.phase per operationId+step so the
+	// PhaseChanged audit line (#1003) is written only on an actual transition, not
+	// on every watch tick. Guarded by mu.
+	lastPhase map[string]string
+	// opFirstSeen records when each operation's state was first tracked, seeded
+	// from the operationId's embedded timestamp when parseable and otherwise from
+	// wall-clock time. It is the age basis for the stale-operation sweep, so state
+	// is bounded even for operationIds that carry no parseable timestamp (upstream/
+	// manual/malformed ids the UC must not reject). Guarded by mu.
+	opFirstSeen map[string]time.Time
+
 	connectivityErr atomic.Pointer[daemonkit.StatusError]
 }
 
@@ -94,7 +127,13 @@ func NewUpgradeOutcomeMonitor(cfg UpgradeOutcomeMonitorConfig, kubeconfigPath st
 // NewUpgradeOutcomeMonitorWithClient constructs the monitor with an injected
 // client (used in unit tests).
 func NewUpgradeOutcomeMonitorWithClient(cfg UpgradeOutcomeMonitorConfig, client dynamic.Interface) *UpgradeOutcomeMonitor {
-	return &UpgradeOutcomeMonitor{cfg: cfg, client: client}
+	return &UpgradeOutcomeMonitor{
+		cfg:             cfg,
+		client:          client,
+		daemonTriggered: make(map[string]struct{}),
+		lastPhase:       make(map[string]string),
+		opFirstSeen:     make(map[string]time.Time),
+	}
 }
 
 // Name implements daemonkit.MonitorRunner.
@@ -188,6 +227,11 @@ func (m *UpgradeOutcomeMonitor) Run(ctx context.Context) error {
 //
 // Returns the four List ResourceVersions for a gapless watch.
 func (m *UpgradeOutcomeMonitor) listAndSeed(ctx context.Context) (prepareRV, freezeRV, executeRV, abortRV string, _ error) {
+	// Safety-net sweep of stuck-operation state on every list cycle (startup and
+	// each ~5-minute watch reconnect). Terminal operations are cleaned up inline in
+	// observePhase; this bounds the pathological never-terminal case.
+	m.pruneStaleOperations(time.Now())
+
 	listCtx, cancel := context.WithTimeout(ctx, listTimeout)
 	defer cancel()
 
@@ -369,6 +413,7 @@ func (m *UpgradeOutcomeMonitor) runWatch(ctx context.Context, prepareRV, freezeR
 			if !ok {
 				continue
 			}
+			m.observePhase(cr)
 			if m.onPhaseUpdate != nil {
 				if opID := operationIDOf(cr); opID != "" {
 					phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
@@ -390,6 +435,7 @@ func (m *UpgradeOutcomeMonitor) runWatch(ctx context.Context, prepareRV, freezeR
 			if !ok {
 				continue
 			}
+			m.observePhase(cr)
 			if m.onPhaseUpdate != nil {
 				if opID := operationIDOf(cr); opID != "" {
 					phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
@@ -427,6 +473,7 @@ func (m *UpgradeOutcomeMonitor) runWatch(ctx context.Context, prepareRV, freezeR
 			if !ok {
 				continue
 			}
+			m.observePhase(cr)
 			phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
 			if m.onPhaseUpdate != nil {
 				if opID := operationIDOf(cr); opID != "" {
@@ -446,6 +493,7 @@ func (m *UpgradeOutcomeMonitor) runWatch(ctx context.Context, prepareRV, freezeR
 //   - ReadyForProvisionerDaemon: validates disk opId then delegates to
 //     ProvisionerProxy.Handle (nil-safe; no-op in mainnet mode).
 func (m *UpgradeOutcomeMonitor) handleExecuteEvent(ctx context.Context, cr *unstructured.Unstructured, proxy *ProvisionerProxy) {
+	m.observePhase(cr)
 	phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
 	if m.onPhaseUpdate != nil {
 		if opID := operationIDOf(cr); opID != "" {
@@ -456,6 +504,11 @@ func (m *UpgradeOutcomeMonitor) handleExecuteEvent(ctx context.Context, cr *unst
 	case operatorv1alpha1.ExecutePhaseSucceeded:
 		m.handleTerminalExecute(cr)
 	case operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon:
+		// DaemonTriggered fires in all modes (#1002): ReadyForProvisionerDaemon is
+		// the hand-off where the operator triggers the provisioner daemon for every
+		// upgrade, whether or not the in-cluster proxy fulfils that role. Emitted
+		// before the proxy nil-check and deduped to once per operation.
+		m.emitDaemonTriggered(cr)
 		if proxy == nil {
 			return
 		}
@@ -474,6 +527,186 @@ func (m *UpgradeOutcomeMonitor) handleExecuteEvent(ctx context.Context, cr *unst
 		}
 		proxy.Handle(ctx, cr)
 	}
+}
+
+// observePhase writes a PhaseChanged audit line (#1003) to both UC channels when
+// a NetworkUpgrade* CR's status.phase differs from the last value observed for
+// the same operationId+step. It is the UC's background CR status monitor: called
+// for every watched CR of all four kinds, it dedups per-transition so a CR
+// re-delivered unchanged on each watch tick produces no line. No-op when the CR
+// has no operationId or no phase yet.
+func (m *UpgradeOutcomeMonitor) observePhase(cr *unstructured.Unstructured) {
+	operationID := operationIDOf(cr)
+	if operationID == "" {
+		return
+	}
+	phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
+	if phase == "" {
+		return
+	}
+	step := cr.GetLabels()[operatorv1alpha1.LabelStep]
+	if step == "" {
+		// Defensive: a CR missing the step label (malformed/manual CR, or a future
+		// API change) must not collapse the dedup key to "<opId>/" or drop context
+		// from the audit line. Fall back to the CR kind, then a sentinel.
+		if step = cr.GetKind(); step == "" {
+			step = unknownLabel
+		}
+	}
+	key := operationID + "/" + step
+	m.mu.Lock()
+	prev, seen := m.lastPhase[key]
+	if seen && prev == phase {
+		m.mu.Unlock()
+		return
+	}
+	m.lastPhase[key] = phase
+	m.recordFirstSeenLocked(operationID)
+	m.mu.Unlock()
+
+	from := prev
+	if from == "" {
+		from = nonePhase
+	}
+	logx.As().Info().Str("reason", ReasonPhaseChanged.String()).Str("operation_id", operationID).
+		Str("step", step).Str("phase", phase).Str("previous_phase", from).Msg("CR phase changed")
+	m.events.info(operationID, ReasonPhaseChanged.String(),
+		fmt.Sprintf("%s phase %s -> %s", step, from, phase))
+
+	// Release per-operation state once the operation is terminal. The Execute and
+	// FreezeAbort CRs are the operation's final steps, so their terminal phase
+	// (Succeeded/Failed) means no further audit lines are expected — close the
+	// event-log handle and drop the DaemonTriggered dedup entry, bounding both to
+	// in-flight operations. Deleting daemonTriggered is safe: a terminal CR cannot
+	// re-enter ReadyForProvisionerDaemon, so emitDaemonTriggered is never consulted
+	// for it again (even on a watch relist).
+	//
+	// lastPhase and opFirstSeen are deliberately NOT pruned here. Watch relists
+	// re-deliver the terminal CR, and lastPhase is what suppresses re-emitting its
+	// terminal PhaseChanged line — so it must survive. opFirstSeen must survive
+	// with it: it is the age basis the stale sweep uses to eventually reclaim the
+	// retained lastPhase entries. Dropping opFirstSeen at terminal while keeping
+	// lastPhase would orphan those entries (the sweep could never find them),
+	// reintroducing the unbounded-growth leak. Both are aged out together by
+	// pruneStaleOperations at maxOperationAge.
+	if isOperationTerminal(cr, phase) {
+		m.mu.Lock()
+		delete(m.daemonTriggered, operationID)
+		m.mu.Unlock()
+		m.events.closeOp(operationID)
+	}
+}
+
+// isOperationTerminal reports whether the CR ends the whole upgrade operation.
+// Prepare/Freeze reaching Succeeded are not operation-terminal (later steps
+// follow); only the Execute and FreezeAbort CRs close out the operation.
+//
+// It keys off the CR's intrinsic Kind, not the step label: the label can be
+// absent on a malformed/manual CR (in which case observePhase substitutes the
+// Kind for the dedup key), so a label-based check would silently miss terminal
+// cleanup for such CRs and leak the FD + dedup entry until the stale sweep.
+func isOperationTerminal(cr *unstructured.Unstructured, phase string) bool {
+	if phase != string(operatorv1alpha1.PhaseSucceeded) && phase != string(operatorv1alpha1.PhaseFailed) {
+		return false
+	}
+	switch cr.GetKind() {
+	case kindNetworkUpgradeExecute, kindNetworkUpgradeFreezeAbort:
+		return true
+	default:
+		return false
+	}
+}
+
+// recordFirstSeenLocked seeds opFirstSeen for operationID the first time its
+// state is tracked. Must be called with mu held. The age basis is the id's
+// embedded timestamp when parseable, otherwise wall-clock now — so an id with no
+// parseable timestamp (upstream/manual/malformed) is still bounded by when the UC
+// first saw it rather than escaping the sweep entirely.
+func (m *UpgradeOutcomeMonitor) recordFirstSeenLocked(operationID string) {
+	if _, ok := m.opFirstSeen[operationID]; ok {
+		return
+	}
+	if ts, ok := operationIDTimestamp(operationID); ok {
+		m.opFirstSeen[operationID] = ts
+	} else {
+		m.opFirstSeen[operationID] = time.Now().UTC()
+	}
+}
+
+// pruneStaleOperations evicts per-operation dedup state (and releases the
+// event-log handle) for operations first seen longer ago than maxOperationAge.
+// Terminal operations are cleaned up promptly in observePhase; this is the safety
+// net for operations that got stuck and never completed, so nothing grows without
+// bound in a UC that runs for months. Age is taken from opFirstSeen, which is
+// seeded from the operationId timestamp when available and wall-clock otherwise —
+// so even timestampless ids are eventually reclaimed.
+func (m *UpgradeOutcomeMonitor) pruneStaleOperations(now time.Time) {
+	cutoff := now.Add(-maxOperationAge)
+	var stale []string
+
+	m.mu.Lock()
+	for opID, firstSeen := range m.opFirstSeen {
+		if !firstSeen.Before(cutoff) {
+			continue
+		}
+		stale = append(stale, opID)
+		delete(m.opFirstSeen, opID)
+		delete(m.daemonTriggered, opID)
+		for key := range m.lastPhase {
+			if key == opID || strings.HasPrefix(key, opID+"/") {
+				delete(m.lastPhase, key)
+			}
+		}
+	}
+	m.mu.Unlock()
+
+	// The JSONL line and the log line below are the ONLY operator-facing signal that
+	// an operation got stuck (never reached a terminal phase) and had its tracking
+	// reclaimed. The UC emits NO Kubernetes events (HIP-1496: Channel 3 is
+	// operator-reconcilers only), so this is actionable ONLY if the observability
+	// pipeline is deployed wherever the UC runs:
+	//   - Channel 1 (JSONL): the per-operation *.jsonl files under the events dir
+	//     are collected/shipped to a durable store.
+	//   - Channel 2 (logs):  container stdout → OpenTelemetry Collector → Loki, with
+	//     alerting on reason="StaleOperationPruned".
+	// Without that pipeline a stuck upgrade — and its lingering data/upgrade/current
+	// package on disk — is silent. There is no K8s-event fallback by design.
+	for _, opID := range stale {
+		// Channel 1: final audit line in the operation's own JSONL, written before
+		// the handle is released so the trail records why tracking stopped.
+		m.events.error(opID, ReasonStaleOperationPruned.String(),
+			"evicted after exceeding the retention window without reaching a terminal phase; inspect the on-disk upgrade package")
+		m.events.closeOp(opID) // release the (still-open) event-log handle
+		// Channel 2: structured stdout log (reason= is alertable in Loki).
+		logx.As().Warn().Str("reason", ReasonStaleOperationPruned.String()).
+			Str("operation_id", opID).
+			Msg("evicted in-memory state for an operation past the retention window that never reached a terminal phase; the on-disk data/upgrade/current package may warrant inspection")
+	}
+}
+
+// emitDaemonTriggered records the DaemonTriggered event (#1002) on both UC
+// channels the first time an operation's Execute CR is observed at
+// ReadyForProvisionerDaemon. Subsequent observations (every watch tick) are
+// deduped. No-op when the CR carries no operationId.
+func (m *UpgradeOutcomeMonitor) emitDaemonTriggered(cr *unstructured.Unstructured) {
+	operationID := operationIDOf(cr)
+	if operationID == "" {
+		return
+	}
+	m.mu.Lock()
+	if _, seen := m.daemonTriggered[operationID]; seen {
+		m.mu.Unlock()
+		return
+	}
+	m.daemonTriggered[operationID] = struct{}{}
+	m.recordFirstSeenLocked(operationID)
+	m.mu.Unlock()
+
+	logx.As().Info().Str("reason", ReasonDaemonTriggered.String()).
+		Str("operation_id", operationID).Str("cr_name", cr.GetName()).
+		Msg("Execute CR at ReadyForProvisionerDaemon; operator will trigger the provisioner daemon")
+	m.events.info(operationID, ReasonDaemonTriggered.String(),
+		"Execute CR "+cr.GetName()+" reached ReadyForProvisionerDaemon")
 }
 
 // handleTerminalExecute rotates the upgrade package when an Execute CR reaches

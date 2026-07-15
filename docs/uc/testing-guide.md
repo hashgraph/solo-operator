@@ -552,32 +552,91 @@ Look for a `PollIntervalChanged` line with `from=1s to=5s`.
 
 ---
 
-## 6. Inspect the JSONL event log
+## 6. Observability (Epic 9, #999) — JSONL + logs
 
-The UC writes a structured audit log (story 9.1) under `--events-path`, one
-`upgrade-<operationId>.jsonl` file per upgrade.
+The UC surfaces upgrade progress on **two channels, and only two** (HIP-1496,
+"Channel 3: Kubernetes Events" is **operator-reconcilers only** — the UC emits
+**no** Kubernetes events by design):
 
-> **At story 8.1 the events directory stays empty — this is expected, not a
-> bug.** A `.jsonl` file is created only when a per-marker handler runs, and the
-> handlers are still stubs (#993+). On startup the monitor calls only
-> `events.Prune`, which *retains/deletes existing* logs to enforce the retention
-> limit — it never creates one. So with a fresh scratch directory there is
-> nothing to see yet. Dropping a marker (§4) logs `MarkerHandlerPending` to the
-> console but writes no event file.
+- **Channel 1 — JSONL audit trail**: one append-only `<operationId>.jsonl` file
+  per operation under `--events-path` (e.g.
+  `upgrade-0.75.0-20260413T120000Z.jsonl`). Durable, crash-safe (fsync per line),
+  the authoritative post-mortem record.
+- **Channel 2 — structured stdout logs** (`automa-saga/logx`): every audit event
+  is also a stdout line carrying a `reason=` field, shipped by an OpenTelemetry
+  Collector → Loki for querying and alerting.
 
-Once the handlers land, this is how you would inspect the log:
+Every event below appears on **both** channels except `ManifestInvalid`, which is
+logs-only (it is raised *before* an `operationId` is resolved, so there is no
+per-operation file to attribute it to — consistent with the per-operation JSONL
+model).
+
+| Event | Level | Channels | When |
+|-------|-------|----------|------|
+| `MarkerDetected` | Info | JSONL + logs | a validated marker is first turned into a CR (once per operation) |
+| `CRDelivered` | Info | JSONL + logs | a `NetworkUpgrade*` CR was created in the API |
+| `DaemonTriggered` | Info | JSONL + logs | an Execute CR was observed at `ReadyForProvisionerDaemon` (once per operation, all modes) |
+| `ManifestInvalid` | Error | logs only | manifest schema/content validation failed; upgrade halted |
+| `PhaseChanged` | Info | JSONL + logs | a watched CR's `status.phase` transitioned (deduped per transition) |
+| `StaleOperationPruned` | Error/warn | JSONL + logs | in-memory state for a never-terminal operation was aged out (see below) |
+
+### Inspect the JSONL trail
+
+Dropping a marker (§4a) now produces a real event file — the writer is wired into
+the marker handlers (#1127) and the phase monitor (#1003):
 
 ```bash
 ls -la "$UCDIR/events"
-# Tail an upgrade log as JSON lines:
-cat "$UCDIR/events"/upgrade-*.jsonl 2>/dev/null | jq .
+# Tail an operation's audit trail as JSON lines:
+cat "$UCDIR/events"/*.jsonl | jq .
+# Filter to one reason across all operations:
+cat "$UCDIR/events"/*.jsonl | jq 'select(.reason=="PhaseChanged")'
 ```
 
-Each line is a self-contained JSON object (timestamp, level, reason, message,
-and upgrade fields).
+Each line is a self-contained JSON object: `ts`, `level`, `reason`, `msg`,
+`operationId`, `nodeId`. After running §4a you should see, in the operation's
+file, `MarkerDetected` then `CRDelivered`; as the operator drives the Execute CR
+(§4d) you will see `PhaseChanged` lines and, at `ReadyForProvisionerDaemon`,
+`DaemonTriggered`.
 
-To exercise the writer/retention logic today, run its unit tests instead:
-`go test ./internal/uc/events/ -v`.
+### Watch the same events on the log channel
+
+Every JSONL line has a stdout twin. Filter the console by the `reason=` field:
+
+```bash
+# (UC logs go to stdout; if you piped them to a file, grep that instead)
+./bin/uc ... 2>&1 | grep -E 'reason=(MarkerDetected|CRDelivered|DaemonTriggered|PhaseChanged)'
+```
+
+### Retention
+
+On startup the monitor calls `events.Prune(--events-path)`: it *retains/deletes
+existing* logs (timestamp-first, mtime fallback; hard cap `RetainCount`) but never
+creates a file. So on a **fresh** scratch directory the events dir is empty until
+the first marker is handled — that is expected, not a bug.
+
+### Stuck-operation sweep (`StaleOperationPruned`)
+
+Terminal operations release their in-memory dedup state and JSONL handle promptly
+(in `observePhase`, on Execute/FreezeAbort `Succeeded`/`Failed`). As a **safety
+net** for an operation that gets stuck and never reaches a terminal phase, the
+upgrade-outcome monitor sweeps per-operation state older than `maxOperationAge`
+(**90 days**) on every list cycle (**~every 5 minutes** — startup plus each watch
+reconnect). Age is taken from a first-seen timestamp seeded from the
+operationId's embedded timestamp when parseable and wall-clock otherwise, so even
+non-conforming ids are bounded.
+
+When it fires it writes a final `StaleOperationPruned` line to the operation's
+JSONL, closes the handle, and logs a warning pointing at the on-disk
+`data/upgrade/current` package. **These two channels are the only operator signal
+for a stuck upgrade** — there is no K8s-event fallback — so the OTel→Loki pipeline
+and JSONL collection must be deployed wherever the UC runs (alert on
+`reason="StaleOperationPruned"`). The UC never deletes the `current/` package
+itself (it is consensus-node-owned; cleanup is protocol-driven rotation/discard on
+terminal phases).
+
+To exercise the writer, retention, and sweep logic directly, run the unit tests
+(see **Observability** under *Automated coverage*).
 
 ---
 
@@ -775,6 +834,28 @@ go test ./internal/uc/ -run 'TestRecover' -v
 | `TestRecoverPersistedCRs_AlreadyInCluster` | A disk CR that was already delivered before the crash has its stale disk copy removed without creating a duplicate CR. |
 | `TestRecoverPersistedCRs_NoPersisted` | No persisted files → no-op, no error. |
 | `TestRecoverOnStartup_FullFlow` | End-to-end: a crash-window disk CR is re-sent in one `RecoverOnStartup` call; marker files and upgrade-path are untouched (rotation is the upgrade-outcome monitor's responsibility). |
+
+**Observability — JSONL + logs** (Epic 9, #999; `internal/uc/eventlog_test.go`,
+`internal/uc/events/`, `internal/uc/upgrade_outcome_monitor_test.go`):
+
+```bash
+go test ./internal/uc/events/ -v   # writer + retention substrate (#1000)
+go test ./internal/uc/ -run 'TestEventSink|TestHandlerEmits|TestObservePhase|TestDaemonTriggered|TestPruneStale' -v
+```
+
+| Test | Asserts |
+|------|---------|
+| `TestEventSinkWritesPerOperationJSONL` | The sink opens one `<operationId>.jsonl` per operation, appends INFO/ERROR lines with the base fields (`reason`, `level`, `nodeId`), and reuses the cached writer. |
+| `TestEventSinkNilAndDisabledAreNoops` | A nil sink, an empty-dir (disabled) sink, and an empty `operationId` never panic and write nothing (best-effort, nil-safe). |
+| `TestHandlerEmitsMarkerDetectedAndCRDeliveredJSONL` | A real `HandleExecuteImmediate` run emits `MarkerDetected` then `CRDelivered` to the operation's JSONL — **once each** across repeated (idempotent) ticks. |
+| `TestObservePhaseWritesOnTransitionOnly` | `PhaseChanged` is written once per actual `status.phase` transition and suppressed when the CR is re-delivered unchanged; the writer is released when the Execute step goes terminal. |
+| `TestDaemonTriggeredEmittedOncePerOperation` | `DaemonTriggered` is written exactly once even though the Execute CR is re-observed each tick at `ReadyForProvisionerDaemon`, fires with a nil proxy (mainnet), and its dedup entry is pruned at the terminal phase. |
+| `TestPruneStaleOperations` | The 90-day sweep evicts dedup state + releases the JSONL handle for a stale operation (both a timestamped id **and** a timestampless one via the wall-clock fallback), leaves a recent operation untouched, and writes the final `StaleOperationPruned` line to the stale op's trail. |
+
+The `events` package tests cover the writer, base fields, and the timestamp-first
+/ mtime-fallback retention (`Prune`, `RetainCount`) directly. The sink and
+monitor tests use temp dirs and a fake dynamic client, so no cluster is needed.
+There is **no** K8s-event test for the UC — the UC emits none by design.
 
 **VERSION file and disk identity guard** (`internal/uc/resolve_test.go`, `internal/uc/upgrade_outcome_monitor_test.go`):
 

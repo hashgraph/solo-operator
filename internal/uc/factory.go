@@ -33,6 +33,10 @@ type Factory struct {
 	cfg    Config
 	client dynamic.Interface
 
+	// events writes the per-operation JSONL audit trail (#1127). Nil-safe: a nil
+	// sink no-ops, so tests and events-disabled configs need no special casing.
+	events *eventSink
+
 	// store implements persist-before-send (#992): each handler serializes its CR
 	// under cfg.CRPersistPath before Create and deletes the file on success.
 	store *CRStore
@@ -164,6 +168,23 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 		return nil
 	}
 
+	// First tick that will actually create this operation's CR — record the
+	// marker detection once (both channels). Emitting here rather than at the top
+	// of deliverCR keeps it single-shot: re-detected markers whose CR already
+	// exists return above and never reach this line.
+	marker := stepToMarker[step]
+	if marker == "" {
+		// Defensive: an unmapped/empty step must never produce an empty marker in
+		// the audit line. Fall back to the step (or a sentinel) so the record stays
+		// diagnosable.
+		if marker = step; marker == "" {
+			marker = unknownLabel
+		}
+	}
+	logx.As().Info().Str("reason", ReasonMarkerDetected.String()).Str("operation_id", operationID).
+		Str("marker", marker).Str("step", step).Msg("upgrade marker detected")
+	f.events.info(operationID, ReasonMarkerDetected.String(), "Detected "+marker)
+
 	if _, err := f.store.Persist(operationID, step, cr); err != nil {
 		// Already an errx-decorated persist (disk) error.
 		return err
@@ -203,6 +224,8 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 	}
 	logx.As().Info().Str("reason", ReasonCRDelivered.String()).Str("operation_id", operationID).
 		Str("cr_name", cr.GetName()).Str("cr_kind", kind).Msg("created CR")
+	f.events.info(operationID, ReasonCRDelivered.String(),
+		"Created "+kind+"/"+cr.GetName())
 	return nil
 }
 
