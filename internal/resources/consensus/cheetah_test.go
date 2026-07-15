@@ -15,6 +15,7 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
+	"github.com/hashgraph/solo-operator/internal/uc"
 )
 
 func TestCheetahConfigMapSubReconciler_Reconcile(t *testing.T) {
@@ -627,7 +628,7 @@ func TestAddSidecarContainers_Cheetah(t *testing.T) {
 		},
 	}
 
-	if err := reconciler.addSidecarContainers(deploy, capsule, nil); err != nil {
+	if err := reconciler.addSidecarContainers(deploy, capsule, nil, uc.ModeClusterOnly); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 

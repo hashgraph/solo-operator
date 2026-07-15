@@ -57,16 +57,42 @@ func (r *RoleSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1al
 }
 
 func (r *RoleSubReconciler) buildRole(capsule *operatorv1alpha1.ConsensusCapsule) *rbacv1.Role {
+	rules := []rbacv1.PolicyRule{
+		{APIGroups: []string{""}, Resources: []string{"configmaps"}, Verbs: []string{"get", "list", "watch"}},
+		{APIGroups: []string{""}, Resources: []string{"secrets"}, Verbs: []string{"get", "list", "watch"}},
+	}
+
+	uc := capsule.Spec.PodProperties.Containers.UC
+	if uc != nil && uc.Enabled {
+		// The UC sidecar creates NetworkUpgrade* CRs and watches them by spec.operationId via
+		// the field indexer. The provisioner-proxy also patches NetworkUpgradeExecute status.
+		networkUpgradeResources := []string{
+			"networkupgradeprepares",
+			"networkupgradefreezes",
+			"networkupgradeexecutes",
+			"networkupgradefreezeaborts",
+		}
+		rules = append(rules,
+			rbacv1.PolicyRule{
+				APIGroups: []string{"operator.solo.hiero.org"},
+				Resources: networkUpgradeResources,
+				Verbs:     []string{"create", "get", "list", "watch"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"operator.solo.hiero.org"},
+				Resources: []string{"networkupgradeexecutes/status"},
+				Verbs:     []string{"get", "patch", "update"},
+			},
+		)
+	}
+
 	return &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      RoleName(capsule),
 			Namespace: capsule.Namespace,
 			Labels:    CommonLabels(capsule),
 		},
-		Rules: []rbacv1.PolicyRule{
-			{APIGroups: []string{""}, Resources: []string{"configmaps"}, Verbs: []string{"get", "list", "watch"}},
-			{APIGroups: []string{""}, Resources: []string{"secrets"}, Verbs: []string{"get", "list", "watch"}},
-		},
+		Rules: rules,
 	}
 }
 

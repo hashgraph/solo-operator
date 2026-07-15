@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/uc"
 )
 
 func TestBuildAlloyContainer_Defaults(t *testing.T) {
@@ -252,7 +253,9 @@ func TestAddSidecarContainers_Alloy(t *testing.T) {
 		},
 	}
 
-	reconciler.addSidecarContainers(deploy, capsule, capsule.Spec.PodProperties.Containers.Alloy)
+	if err := reconciler.addSidecarContainers(deploy, capsule, capsule.Spec.PodProperties.Containers.Alloy, uc.ModeClusterOnly); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	// Should have 2 containers: consensus-node + alloy
 	if len(deploy.Spec.Template.Spec.Containers) != 2 {
@@ -320,7 +323,9 @@ func TestAddSidecarContainers_AlloyDisabled(t *testing.T) {
 		},
 	}
 
-	reconciler.addSidecarContainers(deploy, capsule, capsule.Spec.PodProperties.Containers.Alloy)
+	if err := reconciler.addSidecarContainers(deploy, capsule, capsule.Spec.PodProperties.Containers.Alloy, uc.ModeClusterOnly); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	// Should have only 1 container when alloy is disabled
 	if len(deploy.Spec.Template.Spec.Containers) != 1 {
@@ -363,7 +368,9 @@ func TestAddSidecarContainers_AlloyNil(t *testing.T) {
 		},
 	}
 
-	reconciler.addSidecarContainers(deploy, capsule, nil)
+	if err := reconciler.addSidecarContainers(deploy, capsule, nil, uc.ModeClusterOnly); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	// Should have only 1 container when alloy is nil
 	if len(deploy.Spec.Template.Spec.Containers) != 1 {

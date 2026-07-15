@@ -517,6 +517,12 @@ type ConsensusPVCConfig struct {
 	// +optional
 	Upgrade *corev1.PersistentVolumeClaimSpec `json:"upgrade,omitempty"`
 
+	// → /opt/solo/weaver/uc (UC sidecar runtime root: crs/, events/, backup/, uc.sock).
+	// When nil an emptyDir is used — suitable for local dev and CI. Set this for
+	// cluster-only deployments where UC state must survive pod restarts.
+	// +optional
+	UCData *corev1.PersistentVolumeClaimSpec `json:"ucData,omitempty"`
+
 	// +optional
 	Streams *ConsensusPVCStreams `json:"streams,omitempty"`
 

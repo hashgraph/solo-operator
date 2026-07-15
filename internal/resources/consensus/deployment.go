@@ -31,6 +31,7 @@ import (
 	"github.com/hashgraph/solo-operator/internal/resources/simplefeesschedules"
 	"github.com/hashgraph/solo-operator/internal/resources/throttlesconfig"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
+	"github.com/hashgraph/solo-operator/internal/uc"
 )
 
 // StatefulSetSubReconciler manages the StatefulSet for a ConsensusCapsule.
@@ -151,7 +152,15 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 		return nil, err
 	}
 
-	if err := r.addSidecarContainers(sts, capsule, resolvedAlloy); err != nil {
+	ucMode := uc.ModeClusterOnly
+	if containers := capsule.Spec.PodProperties.Containers; containers.UC != nil && containers.UC.Enabled {
+		ucMode, err = ResolveUCMode(ctx, r.Client, capsule)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if err := r.addSidecarContainers(sts, capsule, resolvedAlloy, ucMode); err != nil {
 		return nil, err
 	}
 
@@ -657,7 +666,7 @@ func (r *StatefulSetSubReconciler) event(capsule *operatorv1alpha1.ConsensusCaps
 }
 
 // addSidecarContainers adds optional sidecar containers to the StatefulSet pod template.
-func (r *StatefulSetSubReconciler) addSidecarContainers(sts *appsv1.StatefulSet, capsule *operatorv1alpha1.ConsensusCapsule, resolvedAlloy *operatorv1alpha1.AlloyConfig) error {
+func (r *StatefulSetSubReconciler) addSidecarContainers(sts *appsv1.StatefulSet, capsule *operatorv1alpha1.ConsensusCapsule, resolvedAlloy *operatorv1alpha1.AlloyConfig, ucMode uc.Mode) error {
 	containers := capsule.Spec.PodProperties.Containers
 
 	accountId := capsule.Spec.AccountId
@@ -729,8 +738,15 @@ func (r *StatefulSetSubReconciler) addSidecarContainers(sts *appsv1.StatefulSet,
 		r.event(capsule, corev1.EventTypeNormal, operatorv1alpha1.EventSidecarDisabled,
 			"uc: enabled=false; container removed from StatefulSet")
 	default:
+		var ucDataSpec *corev1.PersistentVolumeClaimSpec
+		if capsule.Spec.PersistentVolumeClaims != nil {
+			ucDataSpec = capsule.Spec.PersistentVolumeClaims.UCData
+		}
+		sts.Spec.Template.Spec.Volumes = append(sts.Spec.Template.Spec.Volumes,
+			volumeOrEmptyDir(VolumeTypeUCData, PVCName(capsule, VolumeTypeUCData), ucDataSpec),
+		)
 		sts.Spec.Template.Spec.Containers = append(sts.Spec.Template.Spec.Containers,
-			r.buildUcContainer(containers.UC))
+			r.buildUcContainer(capsule, containers.UC, ucMode))
 	}
 
 	if resolvedAlloy == nil || !resolvedAlloy.Enabled {
@@ -877,7 +893,7 @@ func (r *StatefulSetSubReconciler) buildCheetahUploaderContainer(uploader *opera
 	return container, nil
 }
 
-func (r *StatefulSetSubReconciler) buildUcContainer(config *operatorv1alpha1.UcSidecar) corev1.Container {
+func (r *StatefulSetSubReconciler) buildUcContainer(capsule *operatorv1alpha1.ConsensusCapsule, config *operatorv1alpha1.UcSidecar, mode uc.Mode) corev1.Container {
 	image := common.BuildImageOrDefault(config.SoftwareVersion, UCDefaultImage())
 
 	name := config.Name
@@ -885,9 +901,31 @@ func (r *StatefulSetSubReconciler) buildUcContainer(config *operatorv1alpha1.UcS
 		name = "uc"
 	}
 
+	volumeMounts := []corev1.VolumeMount{
+		// shared upgrade tree — the UC polls current/ and reads previous/ as fallback
+		{Name: VolumeTypeUpgrade, MountPath: HapiBase + "/data/upgrade"},
+		// single root for all UC runtime state; UC creates crs/, events/, backup/, uc.sock under here
+		{Name: VolumeTypeUCData, MountPath: UCDataPath},
+	}
+	volumeMounts = append(volumeMounts, config.AdditionalVolumeMounts...)
+
+	env := []corev1.EnvVar{
+		{Name: "UC_NODE_ID", Value: fmt.Sprintf("%d", capsule.Spec.NodeId)},
+		{Name: "UC_ORBIT", Value: capsule.Spec.Orbit},
+		{Name: "UC_MODE", Value: string(mode)},
+		{
+			Name: "UC_NAMESPACE",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
+			},
+		},
+	}
+
 	container := corev1.Container{
 		Name:                     name,
 		Image:                    image,
+		Env:                      env,
+		VolumeMounts:             volumeMounts,
 		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		ImagePullPolicy:          common.PullPolicyOrDefault(config.SoftwareVersion, corev1.PullIfNotPresent),
@@ -895,10 +933,6 @@ func (r *StatefulSetSubReconciler) buildUcContainer(config *operatorv1alpha1.UcS
 
 	if config.Resources != nil {
 		container.Resources = *config.Resources
-	}
-
-	if len(config.AdditionalVolumeMounts) > 0 {
-		container.VolumeMounts = config.AdditionalVolumeMounts
 	}
 
 	return container
