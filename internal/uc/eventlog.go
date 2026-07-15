@@ -94,6 +94,26 @@ func (s *eventSink) writer(operationID string) *events.Writer {
 	return w
 }
 
+// closeOp flushes and closes the Writer for a single operation and drops it from
+// the cache, releasing the file handle once the operation is terminal. A later
+// write for the same operationId simply reopens in append mode (harmless), so
+// this only bounds the number of concurrently-open writers to the set of
+// in-flight operations rather than every operation seen for the UC's lifetime.
+// Nil-safe.
+func (s *eventSink) closeOp(operationID string) {
+	if s == nil || operationID == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if w, ok := s.writers[operationID]; ok {
+		if err := w.Close(); err != nil {
+			logx.As().Warn().Err(err).Str("operation_id", operationID).Msg("error closing UC event log")
+		}
+		delete(s.writers, operationID)
+	}
+}
+
 // Close flushes and closes every open per-operation Writer. Nil-safe; intended to
 // run once as the UC shuts down.
 func (s *eventSink) Close() {

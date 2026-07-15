@@ -37,7 +37,16 @@ func TestObservePhaseWritesOnTransitionOnly(t *testing.T) {
 	setPhase("ReadyForProvisionerDaemon")
 	m.observePhase(cr) // transition — logged
 	setPhase("Succeeded")
-	m.observePhase(cr) // transition — logged
+	m.observePhase(cr) // transition — logged; Execute Succeeded is operation-terminal
+
+	// Terminal phase on the Execute step must release the per-operation writer.
+	m.events.mu.Lock()
+	openWriters := len(m.events.writers)
+	m.events.mu.Unlock()
+	if openWriters != 0 {
+		t.Errorf("expected per-operation writer released after terminal phase, %d still open", openWriters)
+	}
+
 	m.events.Close()
 
 	data, err := os.ReadFile(filepath.Join(evDir, "upgrade-0.75.0-20260413T120000Z.jsonl"))

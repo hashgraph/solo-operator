@@ -517,6 +517,14 @@ func (m *UpgradeOutcomeMonitor) observePhase(cr *unstructured.Unstructured) {
 		return
 	}
 	step := cr.GetLabels()[operatorv1alpha1.LabelStep]
+	if step == "" {
+		// Defensive: a CR missing the step label (malformed/manual CR, or a future
+		// API change) must not collapse the dedup key to "<opId>/" or drop context
+		// from the audit line. Fall back to the CR kind, then a sentinel.
+		if step = cr.GetKind(); step == "" {
+			step = "<unknown>"
+		}
+	}
 	key := operationID + "/" + step
 	m.mu.Lock()
 	prev, seen := m.lastPhase[key]
@@ -535,6 +543,25 @@ func (m *UpgradeOutcomeMonitor) observePhase(cr *unstructured.Unstructured) {
 		Str("step", step).Str("phase", phase).Str("previous_phase", from).Msg("CR phase changed")
 	m.events.info(operationID, ReasonPhaseChanged.String(),
 		fmt.Sprintf("%s phase %s -> %s", step, from, phase))
+
+	// Release the per-operation event-log handle once the operation is terminal.
+	// The Execute and FreezeAbort CRs are the operation's final steps, so their
+	// terminal phase (Succeeded/Failed) means no further audit lines are expected
+	// — bounding open writers to in-flight operations. This line was just written,
+	// so the close is safe; a stray later write would reopen in append mode.
+	if operationTerminal(step, phase) {
+		m.events.closeOp(operationID)
+	}
+}
+
+// operationTerminal reports whether a phase on the given step ends the whole
+// upgrade operation. Prepare/Freeze reaching Succeeded are not operation-terminal
+// (later steps follow); only the Execute and Abort steps close out the operation.
+func operationTerminal(step, phase string) bool {
+	if phase != string(operatorv1alpha1.PhaseSucceeded) && phase != string(operatorv1alpha1.PhaseFailed) {
+		return false
+	}
+	return step == operatorv1alpha1.StepExecute || step == operatorv1alpha1.StepAbort
 }
 
 // emitDaemonTriggered records the DaemonTriggered event (#1002) on both UC

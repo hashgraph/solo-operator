@@ -173,6 +173,14 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 	// of deliverCR keeps it single-shot: re-detected markers whose CR already
 	// exists return above and never reach this line.
 	marker := stepToMarker[step]
+	if marker == "" {
+		// Defensive: an unmapped/empty step must never produce an empty marker in
+		// the audit line. Fall back to the step (or a sentinel) so the record stays
+		// diagnosable.
+		if marker = step; marker == "" {
+			marker = "<unknown>"
+		}
+	}
 	logx.As().Info().Str("reason", ReasonMarkerDetected.String()).Str("operation_id", operationID).
 		Str("marker", marker).Str("step", step).Msg("upgrade marker detected")
 	f.events.info(operationID, ReasonMarkerDetected.String(), "Detected "+marker)
