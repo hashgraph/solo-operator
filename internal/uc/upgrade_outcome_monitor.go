@@ -84,6 +84,10 @@ type UpgradeOutcomeMonitor struct {
 	// operationId — the Execute CR is re-observed on every watch tick while it
 	// sits at ReadyForProvisionerDaemon. Guarded by mu.
 	daemonTriggered map[string]struct{}
+	// lastPhase records the last-observed status.phase per operationId+step so the
+	// PhaseChanged audit line (#1003) is written only on an actual transition, not
+	// on every watch tick. Guarded by mu.
+	lastPhase map[string]string
 
 	connectivityErr atomic.Pointer[daemonkit.StatusError]
 }
@@ -101,7 +105,12 @@ func NewUpgradeOutcomeMonitor(cfg UpgradeOutcomeMonitorConfig, kubeconfigPath st
 // NewUpgradeOutcomeMonitorWithClient constructs the monitor with an injected
 // client (used in unit tests).
 func NewUpgradeOutcomeMonitorWithClient(cfg UpgradeOutcomeMonitorConfig, client dynamic.Interface) *UpgradeOutcomeMonitor {
-	return &UpgradeOutcomeMonitor{cfg: cfg, client: client, daemonTriggered: make(map[string]struct{})}
+	return &UpgradeOutcomeMonitor{
+		cfg:             cfg,
+		client:          client,
+		daemonTriggered: make(map[string]struct{}),
+		lastPhase:       make(map[string]string),
+	}
 }
 
 // Name implements daemonkit.MonitorRunner.
@@ -376,6 +385,7 @@ func (m *UpgradeOutcomeMonitor) runWatch(ctx context.Context, prepareRV, freezeR
 			if !ok {
 				continue
 			}
+			m.observePhase(cr)
 			if m.onPhaseUpdate != nil {
 				if opID := operationIDOf(cr); opID != "" {
 					phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
@@ -397,6 +407,7 @@ func (m *UpgradeOutcomeMonitor) runWatch(ctx context.Context, prepareRV, freezeR
 			if !ok {
 				continue
 			}
+			m.observePhase(cr)
 			if m.onPhaseUpdate != nil {
 				if opID := operationIDOf(cr); opID != "" {
 					phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
@@ -434,6 +445,7 @@ func (m *UpgradeOutcomeMonitor) runWatch(ctx context.Context, prepareRV, freezeR
 			if !ok {
 				continue
 			}
+			m.observePhase(cr)
 			phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
 			if m.onPhaseUpdate != nil {
 				if opID := operationIDOf(cr); opID != "" {
@@ -453,6 +465,7 @@ func (m *UpgradeOutcomeMonitor) runWatch(ctx context.Context, prepareRV, freezeR
 //   - ReadyForProvisionerDaemon: validates disk opId then delegates to
 //     ProvisionerProxy.Handle (nil-safe; no-op in mainnet mode).
 func (m *UpgradeOutcomeMonitor) handleExecuteEvent(ctx context.Context, cr *unstructured.Unstructured, proxy *ProvisionerProxy) {
+	m.observePhase(cr)
 	phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
 	if m.onPhaseUpdate != nil {
 		if opID := operationIDOf(cr); opID != "" {
@@ -486,6 +499,42 @@ func (m *UpgradeOutcomeMonitor) handleExecuteEvent(ctx context.Context, cr *unst
 		}
 		proxy.Handle(ctx, cr)
 	}
+}
+
+// observePhase writes a PhaseChanged audit line (#1003) to both UC channels when
+// a NetworkUpgrade* CR's status.phase differs from the last value observed for
+// the same operationId+step. It is the UC's background CR status monitor: called
+// for every watched CR of all four kinds, it dedups per-transition so a CR
+// re-delivered unchanged on each watch tick produces no line. No-op when the CR
+// has no operationId or no phase yet.
+func (m *UpgradeOutcomeMonitor) observePhase(cr *unstructured.Unstructured) {
+	operationID := operationIDOf(cr)
+	if operationID == "" {
+		return
+	}
+	phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
+	if phase == "" {
+		return
+	}
+	step := cr.GetLabels()[operatorv1alpha1.LabelStep]
+	key := operationID + "/" + step
+	m.mu.Lock()
+	prev, seen := m.lastPhase[key]
+	if seen && prev == phase {
+		m.mu.Unlock()
+		return
+	}
+	m.lastPhase[key] = phase
+	m.mu.Unlock()
+
+	from := prev
+	if from == "" {
+		from = "<none>"
+	}
+	logx.As().Info().Str("reason", ReasonPhaseChanged.String()).Str("operation_id", operationID).
+		Str("step", step).Str("phase", phase).Str("previous_phase", from).Msg("CR phase changed")
+	m.events.info(operationID, ReasonPhaseChanged.String(),
+		fmt.Sprintf("%s phase %s -> %s", step, from, phase))
 }
 
 // emitDaemonTriggered records the DaemonTriggered event (#1002) on both UC

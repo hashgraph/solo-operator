@@ -18,6 +18,43 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
+// TestObservePhaseWritesOnTransitionOnly verifies the #1003 phase monitor writes
+// one JSONL line per actual phase transition and suppresses repeats of the same
+// phase (re-delivered on every watch tick).
+func TestObservePhaseWritesOnTransitionOnly(t *testing.T) {
+	evDir := t.TempDir()
+	m := newOutcomeMonitor(t, t.TempDir())
+	m.events = newEventSink(evDir, "0")
+
+	cr := buildExecuteCR("upgrade-0.75.0-20260413T120000Z", crCreatedAt)
+	setPhase := func(p string) {
+		_ = unstructured.SetNestedField(cr.Object, p, "status", "phase")
+	}
+
+	setPhase("Running")
+	m.observePhase(cr)
+	m.observePhase(cr) // same phase — suppressed
+	setPhase("ReadyForProvisionerDaemon")
+	m.observePhase(cr) // transition — logged
+	setPhase("Succeeded")
+	m.observePhase(cr) // transition — logged
+	m.events.Close()
+
+	data, err := os.ReadFile(filepath.Join(evDir, "upgrade-0.75.0-20260413T120000Z.jsonl"))
+	if err != nil {
+		t.Fatalf("read jsonl: %v", err)
+	}
+	got := string(data)
+	if c := strings.Count(got, `"reason":"PhaseChanged"`); c != 3 {
+		t.Fatalf("PhaseChanged count = %d, want 3\n%s", c, got)
+	}
+	for _, want := range []string{"Running", "ReadyForProvisionerDaemon", "Succeeded"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing phase %q in log:\n%s", want, got)
+		}
+	}
+}
+
 // TestDaemonTriggeredEmittedOncePerOperation verifies DaemonTriggered is written
 // to JSONL exactly once even though the Execute CR is re-observed on every watch
 // tick while at ReadyForProvisionerDaemon, and that it fires with a nil proxy
