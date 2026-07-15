@@ -98,6 +98,12 @@ type UpgradeOutcomeMonitor struct {
 	// PhaseChanged audit line (#1003) is written only on an actual transition, not
 	// on every watch tick. Guarded by mu.
 	lastPhase map[string]string
+	// opFirstSeen records when each operation's state was first tracked, seeded
+	// from the operationId's embedded timestamp when parseable and otherwise from
+	// wall-clock time. It is the age basis for the stale-operation sweep, so state
+	// is bounded even for operationIds that carry no parseable timestamp (upstream/
+	// manual/malformed ids the UC must not reject). Guarded by mu.
+	opFirstSeen map[string]time.Time
 
 	connectivityErr atomic.Pointer[daemonkit.StatusError]
 }
@@ -120,6 +126,7 @@ func NewUpgradeOutcomeMonitorWithClient(cfg UpgradeOutcomeMonitorConfig, client 
 		client:          client,
 		daemonTriggered: make(map[string]struct{}),
 		lastPhase:       make(map[string]string),
+		opFirstSeen:     make(map[string]time.Time),
 	}
 }
 
@@ -548,6 +555,7 @@ func (m *UpgradeOutcomeMonitor) observePhase(cr *unstructured.Unstructured) {
 		return
 	}
 	m.lastPhase[key] = phase
+	m.recordFirstSeenLocked(operationID)
 	m.mu.Unlock()
 
 	from := prev
@@ -589,37 +597,50 @@ func operationTerminal(step, phase string) bool {
 	return step == operatorv1alpha1.StepExecute || step == operatorv1alpha1.StepAbort
 }
 
+// recordFirstSeenLocked seeds opFirstSeen for operationID the first time its
+// state is tracked. Must be called with mu held. The age basis is the id's
+// embedded timestamp when parseable, otherwise wall-clock now — so an id with no
+// parseable timestamp (upstream/manual/malformed) is still bounded by when the UC
+// first saw it rather than escaping the sweep entirely.
+func (m *UpgradeOutcomeMonitor) recordFirstSeenLocked(operationID string) {
+	if _, ok := m.opFirstSeen[operationID]; ok {
+		return
+	}
+	if ts, ok := operationIDTimestamp(operationID); ok {
+		m.opFirstSeen[operationID] = ts
+	} else {
+		m.opFirstSeen[operationID] = time.Now().UTC()
+	}
+}
+
 // pruneStaleOperations evicts per-operation dedup state (and releases the
-// event-log handle) for operations whose embedded timestamp is older than
-// maxOperationAge. Terminal operations are already cleaned up in observePhase, so
-// this only reclaims state for operations that got stuck and never completed — a
-// safety net against unbounded growth in a UC that runs for months. Operations
-// whose operationId carries no parseable timestamp are left alone (they cannot be
-// aged and are rare, since the convention embeds one).
+// event-log handle) for operations first seen longer ago than maxOperationAge.
+// Terminal operations are cleaned up promptly in observePhase; this is the safety
+// net for operations that got stuck and never completed, so nothing grows without
+// bound in a UC that runs for months. Age is taken from opFirstSeen, which is
+// seeded from the operationId timestamp when available and wall-clock otherwise —
+// so even timestampless ids are eventually reclaimed.
 func (m *UpgradeOutcomeMonitor) pruneStaleOperations(now time.Time) {
 	cutoff := now.Add(-maxOperationAge)
-	stale := make(map[string]struct{})
+	var stale []string
 
 	m.mu.Lock()
-	for opID := range m.daemonTriggered {
-		if ts, ok := operationIDTimestamp(opID); ok && ts.Before(cutoff) {
-			delete(m.daemonTriggered, opID)
-			stale[opID] = struct{}{}
+	for opID, firstSeen := range m.opFirstSeen {
+		if !firstSeen.Before(cutoff) {
+			continue
 		}
-	}
-	for key := range m.lastPhase {
-		opID := key
-		if i := strings.IndexByte(key, '/'); i >= 0 {
-			opID = key[:i] // strip the "/<step>" suffix
-		}
-		if ts, ok := operationIDTimestamp(opID); ok && ts.Before(cutoff) {
-			delete(m.lastPhase, key)
-			stale[opID] = struct{}{}
+		stale = append(stale, opID)
+		delete(m.opFirstSeen, opID)
+		delete(m.daemonTriggered, opID)
+		for key := range m.lastPhase {
+			if key == opID || strings.HasPrefix(key, opID+"/") {
+				delete(m.lastPhase, key)
+			}
 		}
 	}
 	m.mu.Unlock()
 
-	for opID := range stale {
+	for _, opID := range stale {
 		m.events.closeOp(opID) // release the (still-open) event-log handle
 		logx.As().Warn().Str("reason", ReasonStaleOperationPruned.String()).
 			Str("operation_id", opID).
@@ -642,6 +663,7 @@ func (m *UpgradeOutcomeMonitor) emitDaemonTriggered(cr *unstructured.Unstructure
 		return
 	}
 	m.daemonTriggered[operationID] = struct{}{}
+	m.recordFirstSeenLocked(operationID)
 	m.mu.Unlock()
 
 	logx.As().Info().Str("reason", ReasonDaemonTriggered.String()).

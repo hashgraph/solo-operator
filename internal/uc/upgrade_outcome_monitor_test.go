@@ -72,16 +72,22 @@ func TestPruneStaleOperations(t *testing.T) {
 	oldOp := "upgrade-20260406T000000Z"   // 100 days before now → stale
 	freshOp := "upgrade-20260705T000000Z" // 10 days before now → kept
 
+	// timelessOp has no parseable timestamp; it must still age out via the
+	// wall-clock first-seen fallback.
+	timelessOp := "manual_recovery_op"
+
 	m := newOutcomeMonitor(t, t.TempDir())
 	m.events = newEventSink(t.TempDir(), "0")
 
-	// Seed dedup state and an open writer for each operation.
-	m.daemonTriggered[oldOp] = struct{}{}
-	m.daemonTriggered[freshOp] = struct{}{}
-	m.lastPhase[oldOp+"/execute"] = "Running"
-	m.lastPhase[freshOp+"/execute"] = "Running"
-	m.events.info(oldOp, "MarkerDetected", "x")
-	m.events.info(freshOp, "MarkerDetected", "x")
+	// Seed dedup state, first-seen times, and an open writer for each operation.
+	for _, op := range []string{oldOp, freshOp, timelessOp} {
+		m.daemonTriggered[op] = struct{}{}
+		m.lastPhase[op+"/execute"] = "Running"
+		m.events.info(op, "MarkerDetected", "x")
+	}
+	m.opFirstSeen[oldOp] = time.Date(2026, 4, 6, 0, 0, 0, 0, time.UTC)      // 100d → stale
+	m.opFirstSeen[freshOp] = time.Date(2026, 7, 5, 0, 0, 0, 0, time.UTC)    // 10d → kept
+	m.opFirstSeen[timelessOp] = time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC) // old → stale
 
 	m.pruneStaleOperations(now)
 
@@ -90,6 +96,12 @@ func TestPruneStaleOperations(t *testing.T) {
 	}
 	if _, ok := m.lastPhase[oldOp+"/execute"]; ok {
 		t.Error("stale lastPhase entry not pruned")
+	}
+	if _, ok := m.opFirstSeen[timelessOp]; ok {
+		t.Error("timestampless operation not pruned via wall-clock fallback")
+	}
+	if _, ok := m.lastPhase[timelessOp+"/execute"]; ok {
+		t.Error("timestampless operation's lastPhase entry not pruned")
 	}
 	if _, ok := m.daemonTriggered[freshOp]; !ok {
 		t.Error("fresh daemonTriggered entry wrongly pruned")
