@@ -34,6 +34,12 @@ const (
 	// closes the channel cleanly after this window; Run reconnects.
 	outcomeWatchTimeoutSeconds = int64(5 * 60)
 
+	// kindNetworkUpgradeExecute is the Kind of the Execute CR. Terminal detection
+	// keys off the CR Kind (intrinsic, always present) rather than the step label,
+	// which may be absent on a malformed/manual CR. kindNetworkUpgradeFreezeAbort
+	// is declared alongside the FreezeAbort handler.
+	kindNetworkUpgradeExecute = "NetworkUpgradeExecute"
+
 	// maxOperationAge bounds how long per-operation dedup state (lastPhase,
 	// daemonTriggered) and its event-log handle are retained for an operation that
 	// never reached a terminal phase. Terminal operations are cleaned up promptly
@@ -583,7 +589,7 @@ func (m *UpgradeOutcomeMonitor) observePhase(cr *unstructured.Unstructured) {
 	// lastPhase would orphan those entries (the sweep could never find them),
 	// reintroducing the unbounded-growth leak. Both are aged out together by
 	// pruneStaleOperations at maxOperationAge.
-	if operationTerminal(step, phase) {
+	if isOperationTerminal(cr, phase) {
 		m.mu.Lock()
 		delete(m.daemonTriggered, operationID)
 		m.mu.Unlock()
@@ -591,14 +597,24 @@ func (m *UpgradeOutcomeMonitor) observePhase(cr *unstructured.Unstructured) {
 	}
 }
 
-// operationTerminal reports whether a phase on the given step ends the whole
-// upgrade operation. Prepare/Freeze reaching Succeeded are not operation-terminal
-// (later steps follow); only the Execute and Abort steps close out the operation.
-func operationTerminal(step, phase string) bool {
+// isOperationTerminal reports whether the CR ends the whole upgrade operation.
+// Prepare/Freeze reaching Succeeded are not operation-terminal (later steps
+// follow); only the Execute and FreezeAbort CRs close out the operation.
+//
+// It keys off the CR's intrinsic Kind, not the step label: the label can be
+// absent on a malformed/manual CR (in which case observePhase substitutes the
+// Kind for the dedup key), so a label-based check would silently miss terminal
+// cleanup for such CRs and leak the FD + dedup entry until the stale sweep.
+func isOperationTerminal(cr *unstructured.Unstructured, phase string) bool {
 	if phase != string(operatorv1alpha1.PhaseSucceeded) && phase != string(operatorv1alpha1.PhaseFailed) {
 		return false
 	}
-	return step == operatorv1alpha1.StepExecute || step == operatorv1alpha1.StepAbort
+	switch cr.GetKind() {
+	case kindNetworkUpgradeExecute, kindNetworkUpgradeFreezeAbort:
+		return true
+	default:
+		return false
+	}
 }
 
 // recordFirstSeenLocked seeds opFirstSeen for operationID the first time its

@@ -131,6 +131,36 @@ func TestPruneStaleOperations(t *testing.T) {
 	}
 }
 
+// TestObservePhaseTerminalCleanupWithoutStepLabel verifies terminal cleanup keys
+// off the CR Kind, not the step label: a label-less Execute CR reaching a
+// terminal phase must still release the event-log handle and drop the
+// daemonTriggered entry (not leak them until the 90-day sweep).
+func TestObservePhaseTerminalCleanupWithoutStepLabel(t *testing.T) {
+	op := "upgrade-0.75.0-20260413T120000Z"
+	m := newOutcomeMonitor(t, t.TempDir())
+	m.events = newEventSink(t.TempDir(), "0")
+
+	cr := buildExecuteCR(op, crCreatedAt)
+	cr.SetLabels(nil) // strip the step (and op-id) labels — spec.operationId remains
+	_ = unstructured.SetNestedField(cr.Object, string(operatorv1alpha1.ExecutePhaseSucceeded), "status", "phase")
+
+	m.daemonTriggered[op] = struct{}{} // pretend DaemonTriggered already fired
+	m.observePhase(cr)
+
+	m.mu.Lock()
+	_, stillTracked := m.daemonTriggered[op]
+	m.mu.Unlock()
+	if stillTracked {
+		t.Error("daemonTriggered not cleaned for a label-less terminal Execute CR")
+	}
+	m.events.mu.Lock()
+	_, open := m.events.writers[op]
+	m.events.mu.Unlock()
+	if open {
+		t.Error("event-log handle not released for a label-less terminal Execute CR")
+	}
+}
+
 // TestDaemonTriggeredEmittedOncePerOperation verifies DaemonTriggered is written
 // to JSONL exactly once even though the Execute CR is re-observed on every watch
 // tick while at ReadyForProvisionerDaemon, and that it fires with a nil proxy
