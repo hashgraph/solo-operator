@@ -221,6 +221,7 @@ versioning and release processes. Version increments are determined by the
    - Determine the next version using semantic-release
    - Create a release tag and GitHub release
    - Build and publish container images to `ghcr.io/hashgraph/solo-operator` and `artifacts.hashgraph.io/solo-operator-docker-release/solo-operator`
+   - Build and publish the UC sidecar image to `ghcr.io/hashgraph/solo-operator-uc` (and the JFrog mirror) at the **same** version — the operator, Helm chart, and UC sidecar are released in lockstep
    - Publish Helm chart to `oci://ghcr.io/hashgraph/charts/solo-operator` and `oci://artifacts.hashgraph.io/solo-operator-helm-release/solo-operator`
 
 ## Support
