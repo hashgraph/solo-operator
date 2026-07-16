@@ -2,7 +2,20 @@
 ##### Global Protection Rule ######
 ###################################
 # NOTE: This rule is overriden by the more specific rules below. This is the catch-all rule for all files not covered by the more specific rules below.
-*                                               @hashgraph/solo-operator-codeowners @hashgraph/release-engineering
+*                                               @hashgraph/release-engineering
+
+############################
+#####  Solo Operator  ######
+############################
+
+# Solo operator source, tests & build files — owned by the @hashgraph/solo-operator-codeowners team.
+/api/**                                         @hashgraph/solo-operator-codeowners
+/cmd/**                                         @hashgraph/solo-operator-codeowners
+/internal/**                                    @hashgraph/solo-operator-codeowners
+/charts/**                                      @hashgraph/solo-operator-codeowners
+/config/**                                      @hashgraph/solo-operator-codeowners
+/docs/**                                        @hashgraph/solo-operator-codeowners
+/test/**                                        @hashgraph/solo-operator-codeowners
 
 #########################
 #####  Core Files  ######
@@ -11,25 +24,21 @@
 # NOTE: Must be placed last to ensure enforcement over all other rules
 
 # Protection Rules for Github Configuration Files and Actions Workflows
-/.github/                                       @hashgraph/platform-ci @hashgraph/platform-ci-committers @hashgraph/solo-operator-codeowners @hashgraph/release-engineering
-
-# Codacy Tool Configurations
-/config/                                        @hashgraph/solo-operator-codeowners @hashgraph/release-engineering
-.remarkrc                                       @hashgraph/solo-operator-codeowners @hashgraph/release-engineering
+/.github/                                       @hashgraph/platform-ci @hashgraph/platform-ci-committers @hashgraph/release-engineering
 
 # Semantic Release Configuration
-.releaserc                                      @hashgraph/solo-operator-codeowners @hashgraph/release-engineering
+.releaserc*                                     @hashgraph/release-engineering
 
 # Self-protection for root CODEOWNERS files (this file should not exist and should definitely require approval)
 /CODEOWNERS                                     @hashgraph/release-engineering
 
 # Protect the repository root files
 /README.md                                      @hashgraph/solo-operator-codeowners @hashgraph/release-engineering
-**/LICENSE                                      @hashgraph/solo-operator-codeowners
+**/LICENSE                                      @hashgraph/release-engineering
 
 # CodeCov configuration
-**/codecov.yml                                  @hashgraph/solo-operator-codeowners @hashgraph/release-engineering
+**/codecov.yml                                  @hashgraph/release-engineering
 
 # Git Ignore definitions
-**/.gitignore                                   @hashgraph/solo-operator-codeowners @hashgraph/release-engineering
-**/.gitignore.*                                 @hashgraph/solo-operator-codeowners @hashgraph/release-engineering
+**/.gitignore                                   @hashgraph/release-engineering
+**/.gitignore.*                                 @hashgraph/release-engineering
