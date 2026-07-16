@@ -4,8 +4,12 @@
 name: Nightly Test
 
 on:
-  schedule:
-    - cron: '0 6 * * *'
+  # Scheduled runs are temporarily disabled: the test/nightly fixtures use the
+  # old inline ConsensusCapsule schema and fail strict decoding against the
+  # current reference-based config CRs. Re-enable after updating the fixtures.
+  # Tracking: https://github.com/hashgraph/solo-operator/issues/1142
+  # schedule:
+  #   - cron: '0 6 * * *'
   workflow_dispatch:
 
 permissions:
