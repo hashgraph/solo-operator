@@ -42,9 +42,9 @@ spec:
             {{- if .Values.metrics.enabled }}
             - --metrics-bind-address=:{{ .Values.metrics.port }}
             {{- end }}
-            - --zap-log-level={{ .Values.logging.level }}
-            {{- if eq .Values.logging.format "json" }}
-            - --zap-encoder=json
+            - --log-level={{ .Values.logging.level }}
+            {{- if eq .Values.logging.format "console" }}
+            - --console-logging
             {{- end }}
             {{- with .Values.registry.order }}
             - --registry-order={{ . }}
