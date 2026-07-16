@@ -269,4 +269,11 @@ const (
 	EventInvalidGenesisJSON errx.Reason = "InvalidGenesisJSON"
 
 	EventOperationIDLabelInvalid errx.Reason = "OperationIDLabelInvalid"
+
+	// ConsensusCapsule phase-transition events (posted by the capsule controller).
+	EventConsensusNodeActive errx.Reason = "ConsensusNodeActive"
+	EventConsensusNodeFailed errx.Reason = "ConsensusNodeFailed"
+	// EventUCSidecarRequired is posted when a ConsensusCapsule is missing the
+	// mandatory UC sidecar (terminal configuration error).
+	EventUCSidecarRequired errx.Reason = "UCSidecarRequired"
 )

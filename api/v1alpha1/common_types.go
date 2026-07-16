@@ -18,12 +18,18 @@ const (
 )
 
 // Phase represents the current phase of a resource
-// +kubebuilder:validation:Enum=Pending;Running;Succeeded;Failed;Unknown
+// +kubebuilder:validation:Enum=Pending;Running;Active;Succeeded;Failed;Unknown
 type Phase string
 
 const (
-	PhasePending   Phase = "Pending"
-	PhaseRunning   Phase = "Running"
+	PhasePending Phase = "Pending"
+	PhaseRunning Phase = "Running"
+	// PhaseActive is reached only when the pod is Ready AND the consensus node has
+	// reported platform status ACTIVE for the current pod revision. It is a sticky
+	// milestone: transient non-ACTIVE dips (BEHIND, RECONNECT, …) keep the phase at
+	// Active — the live truth stays in status.platformStatus. Only a
+	// CATASTROPHIC_FAILURE or a pod restart leaves Active.
+	PhaseActive    Phase = "Active"
 	PhaseSucceeded Phase = "Succeeded"
 	PhaseFailed    Phase = "Failed"
 	PhaseUnknown   Phase = "Unknown"

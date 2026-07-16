@@ -4,6 +4,7 @@ package uc
 
 import (
 	"path/filepath"
+	"regexp"
 	"time"
 
 	"github.com/hashgraph/solo-operator/internal/errx"
@@ -41,6 +42,15 @@ const (
 	// minimise now_frozen.mf detection latency.
 	FreezePollInterval = 1 * time.Second
 
+	// DefaultMetricsURL is the consensus node's Prometheus metrics endpoint on the
+	// shared pod localhost. The platform-status sensor scrapes platform_PlatformStatus
+	// from here. Port 9999 matches consensus.PrometheusPort.
+	DefaultMetricsURL = "http://localhost:9999/metrics"
+	// DefaultPlatformPollInterval is the cadence at which the platform-status sensor
+	// scrapes the metrics endpoint. It is a lightweight local HTTP GET, so a short
+	// interval keeps status.platformStatus responsive without meaningful cost.
+	DefaultPlatformPollInterval = 5 * time.Second
+
 	// DefaultConfigCRPollInterval is how often the UC re-checks each config CR's
 	// status.conditions while waiting for Valid=True during the execute phase.
 	DefaultConfigCRPollInterval = 1 * time.Second
@@ -60,8 +70,19 @@ type Config struct {
 	Orbit string
 	// Namespace is the Kubernetes namespace the UC watches and creates CRs in.
 	Namespace string
+	// PodName is the UC pod's own name, injected via the downward API
+	// (metadata.name). The platform-status sensor derives the owning
+	// ConsensusCapsule name from it (pod "<capsule>-<ordinal>" → "<capsule>").
+	PodName string
 	// KubeconfigPath is optional; empty means in-cluster config.
 	KubeconfigPath string
+
+	// MetricsURL is the consensus node's Prometheus endpoint scraped by the
+	// platform-status sensor. Env: UC_METRICS_URL.
+	MetricsURL string
+	// PlatformPollInterval is the cadence of the platform-status metrics scrape.
+	// Env: UC_PLATFORM_POLL_INTERVAL.
+	PlatformPollInterval time.Duration
 
 	// UpgradePath is the directory polled for marker files.
 	//
@@ -110,11 +131,24 @@ func DefaultConfig() Config {
 		CRPersistPath:         DefaultCRPersistPath,
 		BackupPath:            DefaultBackupPath,
 		SocketPath:            DefaultSocketPath,
+		MetricsURL:            DefaultMetricsURL,
+		PlatformPollInterval:  DefaultPlatformPollInterval,
 		PollInterval:          DefaultPollInterval,
 		FreezePollInterval:    FreezePollInterval,
 		ConfigCRPollInterval:  DefaultConfigCRPollInterval,
 		ConfigCRDeployTimeout: DefaultConfigCRDeployTimeout,
 	}
+}
+
+// ordinalSuffix matches the trailing "-<ordinal>" a StatefulSet appends to its
+// pod names (e.g. "node0-0"). Stripping it yields the StatefulSet name, which
+// equals the ConsensusCapsule name (consensus.StatefulSetName).
+var ordinalSuffix = regexp.MustCompile(`-\d+$`)
+
+// CapsuleName returns the owning ConsensusCapsule name derived from PodName by
+// stripping the StatefulSet ordinal suffix. Empty when PodName is unset.
+func (c Config) CapsuleName() string {
+	return ordinalSuffix.ReplaceAllString(c.PodName, "")
 }
 
 // Validate checks that required fields are set and intervals are sane.
@@ -143,6 +177,24 @@ func (c Config) Validate() error {
 		return errx.WithHints(
 			errx.WithReason(errConfigInvalid.New("namespace is required"), ReasonConfigInvalid),
 			"Set --namespace to the node's Kubernetes namespace",
+		)
+	}
+	if c.CapsuleName() == "" {
+		return errx.WithHints(
+			errx.WithReason(errConfigInvalid.New("pod-name is required (used to derive the ConsensusCapsule name)"), ReasonConfigInvalid),
+			"Set --pod-name (UC_POD_NAME) via the downward API fieldRef metadata.name",
+		)
+	}
+	if c.MetricsURL == "" {
+		return errx.WithHints(
+			errx.WithReason(errConfigInvalid.New("metrics-url is required"), ReasonConfigInvalid),
+			"Set --metrics-url to the consensus node's Prometheus endpoint (e.g. http://localhost:9999/metrics)",
+		)
+	}
+	if c.PlatformPollInterval <= 0 {
+		return errx.WithHints(
+			errx.WithReason(errConfigInvalid.New("platform-poll-interval %s must be positive", c.PlatformPollInterval), ReasonConfigInvalid),
+			"Set --platform-poll-interval to a positive duration (e.g. 5s)",
 		)
 	}
 	if c.UpgradePath == "" {

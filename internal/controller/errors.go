@@ -15,6 +15,12 @@ var (
 	errK8sAPI = errNS.NewType("k8s_api_failed", errorx.Temporary())
 	// Terminal: a requeue cannot fix it (the reconciler records a Failed status).
 	errReconcile = errNS.NewType("reconcile_failed")
+
+	// errUCSidecarRequired: the ConsensusCapsule does not enable the mandatory UC
+	// sidecar. The UC is the sole producer of status.platformStatus, so without it
+	// the capsule phase can never advance past Running. Terminal — the operator
+	// must enable the sidecar in the spec.
+	errUCSidecarRequired = errNS.NewType("uc_sidecar_required")
 )
 
 const (
@@ -38,6 +44,8 @@ const (
 	ReasonSpecMutated       errx.Reason = "SpecMutationRejected"
 	ReasonConfigMapNotFound errx.Reason = "ConfigMapNotFound"
 	ReasonConfigMapFound    errx.Reason = "ConfigMapFound"
+
+	ReasonUCSidecarRequired errx.Reason = "UCSidecarRequired"
 )
 
 const statusRBACHint = "Confirm the operator has patch permission on the resource's /status"

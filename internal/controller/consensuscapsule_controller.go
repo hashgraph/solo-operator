@@ -19,10 +19,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/resources/apipermissionproperties"
 	"github.com/hashgraph/solo-operator/internal/resources/applicationoverrideproperties"
 	"github.com/hashgraph/solo-operator/internal/resources/applicationproperties"
@@ -100,6 +103,15 @@ func (r *ConsensusCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// The UC sidecar is mandatory: it is the sole producer of
+	// status.platformStatus, so a capsule without it can never advance past
+	// Running. A disabled sidecar is a terminal configuration error — surfaced via
+	// a condition + warning event, not a silent skip. No requeue: a spec edit
+	// triggers a fresh reconcile.
+	if err := validateUCMandatory(capsule); err != nil {
+		return r.failUCSidecarRequired(ctx, capsule, err)
 	}
 
 	ready, err := r.checkConfigRefs(ctx, capsule)
@@ -211,6 +223,53 @@ func (r *ConsensusCapsuleReconciler) handleDeletion(ctx context.Context, capsule
 	return ctrl.Result{}, nil
 }
 
+// ucSidecarEnabled reports whether the mandatory UC sidecar is enabled on the capsule.
+func ucSidecarEnabled(capsule *operatorv1alpha1.ConsensusCapsule) bool {
+	uc := capsule.Spec.PodProperties.Containers.UC
+	return uc != nil && uc.Enabled
+}
+
+// validateUCMandatory returns a terminal errorx error when the ConsensusCapsule
+// does not enable the mandatory UC sidecar, and nil otherwise. The error carries
+// the UCSidecarRequired reason and an operator remediation hint.
+func validateUCMandatory(capsule *operatorv1alpha1.ConsensusCapsule) error {
+	if ucSidecarEnabled(capsule) {
+		return nil
+	}
+	return errx.WithHints(
+		errx.WithReason(
+			errUCSidecarRequired.New("ConsensusCapsule %q does not enable the mandatory UC sidecar", capsule.Name),
+			ReasonUCSidecarRequired),
+		"Set spec.podProperties.containers.uc.enabled=true — the UC sidecar is the sole writer of status.platformStatus",
+	)
+}
+
+// failUCSidecarRequired records the terminal UC-mandatory configuration error as
+// a status condition and a warning event, then stops the reconcile without a
+// requeue (a spec edit triggers a fresh reconcile).
+func (r *ConsensusCapsuleReconciler) failUCSidecarRequired(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule, err error) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	logger.Error(err, "UC sidecar is mandatory", "reason", ReasonUCSidecarRequired.String())
+	if r.Recorder != nil {
+		r.Recorder.Eventf(capsule, nil, corev1.EventTypeWarning, operatorv1alpha1.EventUCSidecarRequired.String(),
+			"Reconcile", "%s", errx.Format(err))
+	}
+	apimeta.SetStatusCondition(&capsule.Status.Conditions, metav1.Condition{
+		Type:               "UCSidecarReady",
+		Status:             metav1.ConditionFalse,
+		ObservedGeneration: capsule.Generation,
+		Reason:             ReasonUCSidecarRequired.String(),
+		Message:            err.Error(),
+	})
+	if uerr := r.Status().Update(ctx, capsule); uerr != nil {
+		if apierrors.IsConflict(uerr) {
+			return ctrl.Result{Requeue: true}, nil
+		}
+		return ctrl.Result{}, uerr
+	}
+	return ctrl.Result{}, nil
+}
+
 // isPodReady returns true when the pod's PodReady condition is True.
 func isPodReady(pod corev1.Pod) bool {
 	for _, cond := range pod.Status.Conditions {
@@ -221,9 +280,30 @@ func isPodReady(pod corev1.Pod) bool {
 	return false
 }
 
-// updateStatus updates the ConsensusCapsule status based on pod state.
-// Phase transitions to Running only once the pod's Ready condition is True,
-// ensuring all containers have passed their readiness checks.
+// isReadyPhase reports whether phase implies the pod has passed its readiness
+// checks. Both Running and Active are ready phases; the genesis-initialized
+// checkpoint is marked once on the first transition into either.
+func isReadyPhase(phase operatorv1alpha1.Phase) bool {
+	return phase == operatorv1alpha1.PhaseRunning || phase == operatorv1alpha1.PhaseActive
+}
+
+// updateStatus updates the ConsensusCapsule status based on pod state and the
+// consensus node's live platform status (written by the UC sidecar into
+// status.platformStatus).
+//
+// Phase rollup:
+//   - pod not Ready → Pending
+//   - pod Ready → Running
+//   - pod Ready AND platformStatus==ACTIVE for the current pod revision → Active
+//   - platformStatus==CATASTROPHIC_FAILURE → Failed (+ event)
+//
+// Active is a sticky milestone: once reached, transient non-ACTIVE readings
+// (BEHIND, RECONNECT, …) keep phase=Active — the live truth stays in
+// platformStatus so the phase does not flap. Only CATASTROPHIC_FAILURE or a pod
+// restart (pod no longer Ready) leaves Active.
+//
+// The operator reads platformStatus via the API only; it NEVER dials the pod or
+// the metrics endpoint, so it works whether it runs inside or outside the cluster.
 func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
 	podList := &corev1.PodList{}
 	if err := r.List(ctx, podList,
@@ -232,22 +312,28 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 		return ctrl.Result{}, err
 	}
 
+	// updateRevision identifies the StatefulSet's latest pod template. The stale-
+	// reading guard promotes to Active only when the Ready pod is on this revision,
+	// so a pre-change ACTIVE reading from an old pod cannot promote during an image
+	// roll. A missing StatefulSet leaves updateRevision empty (no promotion).
+	updateRevision := ""
+	sts := &appsv1.StatefulSet{}
+	if err := r.Get(ctx, client.ObjectKey{Name: consensus.StatefulSetName(capsule), Namespace: capsule.Namespace}, sts); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
+	} else {
+		updateRevision = sts.Status.UpdateRevision
+	}
+
+	oldPhase := capsule.Status.Phase
 	phase := operatorv1alpha1.PhasePending
 	requeue := false
 	if len(podList.Items) > 0 {
 		pod := podList.Items[0]
 		switch pod.Status.Phase {
 		case corev1.PodRunning:
-			// Gate PhaseRunning on the pod's Ready condition so we only
-			// report Running once all containers have passed their readiness
-			// checks. This works whether the operator runs inside or outside
-			// the cluster (no TCP dial to cluster-internal DNS required).
-			if isPodReady(pod) {
-				phase = operatorv1alpha1.PhaseRunning
-			} else {
-				phase = operatorv1alpha1.PhasePending
-				requeue = true
-			}
+			phase = r.rollupRunningPhase(pod, capsule.Status.PlatformStatus, oldPhase, updateRevision, &requeue)
 		case corev1.PodSucceeded:
 			phase = operatorv1alpha1.PhaseSucceeded
 		case corev1.PodFailed:
@@ -266,13 +352,17 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 		return ctrl.Result{}, nil
 	}
 
-	// Only on non-Running→Running transitions; a gen-change reconcile while already Running
-	// must not overwrite a manually-reset checkpoint before the pod restarts.
-	if phase == operatorv1alpha1.PhaseRunning && capsule.Status.Phase != operatorv1alpha1.PhaseRunning {
+	// Only on non-ready→ready transitions; a gen-change reconcile while already
+	// ready (Running or Active) must not overwrite a manually-reset checkpoint
+	// before the pod restarts. Sticky-Active keeps phase from dipping out of the
+	// ready set, so this never re-fires on transient platform-status dips.
+	if isReadyPhase(phase) && !isReadyPhase(oldPhase) {
 		if err := r.markGenesisInitialized(ctx, capsule); err != nil {
 			common.Err(ctx, err, ReasonCheckpointUpdateFailed).Msg("failed to update checkpoint")
 		}
 	}
+
+	r.emitPhaseEvent(capsule, oldPhase, phase)
 
 	gossipPort := consensus.ResolveGossipPort(capsule)
 
@@ -300,6 +390,59 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 	return ctrl.Result{}, nil
 }
 
+// rollupRunningPhase determines the phase for a Running pod by layering the live
+// platform status (UC-written) on top of pod readiness. It sets *requeue when the
+// pod is not yet Ready so the controller re-checks readiness.
+func (r *ConsensusCapsuleReconciler) rollupRunningPhase(
+	pod corev1.Pod,
+	platformStatus string,
+	oldPhase operatorv1alpha1.Phase,
+	updateRevision string,
+	requeue *bool,
+) operatorv1alpha1.Phase {
+	// A running node reporting CATASTROPHIC_FAILURE is terminal regardless of its
+	// readiness probe — surface Failed immediately.
+	if platformStatus == operatorv1alpha1.PlatformStatusCatastrophicFailure {
+		return operatorv1alpha1.PhaseFailed
+	}
+
+	// Gate the ready phases on the pod's Ready condition so we only report
+	// Running/Active once all containers have passed their readiness checks. This
+	// requires no TCP dial, so it works out-of-cluster under `task dev`.
+	if !isPodReady(pod) {
+		*requeue = true
+		return operatorv1alpha1.PhasePending
+	}
+
+	onUpdateRevision := updateRevision != "" && pod.Labels[appsv1.StatefulSetRevisionLabel] == updateRevision
+	switch {
+	case platformStatus == operatorv1alpha1.PlatformStatusActive && onUpdateRevision:
+		return operatorv1alpha1.PhaseActive
+	case oldPhase == operatorv1alpha1.PhaseActive && onUpdateRevision:
+		// Sticky-Active: a transient non-ACTIVE dip (BEHIND, RECONNECT, …) keeps the
+		// phase at Active while the Ready pod stays on the current revision.
+		return operatorv1alpha1.PhaseActive
+	default:
+		return operatorv1alpha1.PhaseRunning
+	}
+}
+
+// emitPhaseEvent records a Kubernetes event when the capsule crosses into the
+// Active or Failed phase. No event is posted when the phase is unchanged.
+func (r *ConsensusCapsuleReconciler) emitPhaseEvent(capsule *operatorv1alpha1.ConsensusCapsule, oldPhase, newPhase operatorv1alpha1.Phase) {
+	if r.Recorder == nil || oldPhase == newPhase {
+		return
+	}
+	switch newPhase {
+	case operatorv1alpha1.PhaseActive:
+		r.Recorder.Eventf(capsule, nil, corev1.EventTypeNormal, operatorv1alpha1.EventConsensusNodeActive.String(),
+			"UpdateStatus", "consensus node reached platform status ACTIVE")
+	case operatorv1alpha1.PhaseFailed:
+		r.Recorder.Eventf(capsule, nil, corev1.EventTypeWarning, operatorv1alpha1.EventConsensusNodeFailed.String(),
+			"UpdateStatus", "consensus node reported platform status %s", capsule.Status.PlatformStatus)
+	}
+}
+
 // markGenesisInitialized is a no-op if the checkpoint is missing or already true.
 func (r *ConsensusCapsuleReconciler) markGenesisInitialized(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) error {
 	cm := &corev1.ConfigMap{}
@@ -325,8 +468,14 @@ func (r *ConsensusCapsuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 	// Skip status-only updates (LoadBalancer IP, PVC binding, STS readyReplicas, etc.)
 	genChanged := builder.WithPredicates(predicate.GenerationChangedPredicate{})
+	// The capsule's own watch must additionally wake on a status.platformStatus
+	// change: the UC sidecar's platform-status write is a status-only update that
+	// GenerationChangedPredicate would otherwise drop. The operator's own phase
+	// write is neither a generation nor a platformStatus change, so it does not
+	// self-loop. Only the For(...) predicate is widened; Owns(...) stay gen-only.
+	forPredicate := builder.WithPredicates(genOrPlatformStatusChangedPredicate())
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&operatorv1alpha1.ConsensusCapsule{}, genChanged).
+		For(&operatorv1alpha1.ConsensusCapsule{}, forPredicate).
 		Owns(&corev1.ServiceAccount{}, genChanged).
 		Owns(&corev1.ConfigMap{}, genChanged).
 		Owns(&corev1.Service{}, genChanged).
@@ -335,4 +484,25 @@ func (r *ConsensusCapsuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&rbacv1.RoleBinding{}, genChanged).
 		Named("consensuscapsule").
 		Complete(r)
+}
+
+// genOrPlatformStatusChangedPredicate fires on a generation change (spec change)
+// OR a status.platformStatus change. It mirrors GenerationChangedPredicate for
+// Create/Delete/Generic and adds the platformStatus comparison on Update so the
+// UC sidecar's status-only platform-status write wakes the controller.
+func genOrPlatformStatusChangedPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldC, ok1 := e.ObjectOld.(*operatorv1alpha1.ConsensusCapsule)
+			newC, ok2 := e.ObjectNew.(*operatorv1alpha1.ConsensusCapsule)
+			if !ok1 || !ok2 {
+				// Non-capsule object (shouldn't happen for For) — don't drop it.
+				return true
+			}
+			if oldC.GetGeneration() != newC.GetGeneration() {
+				return true
+			}
+			return oldC.Status.PlatformStatus != newC.Status.PlatformStatus
+		},
+	}
 }

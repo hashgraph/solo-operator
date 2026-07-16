@@ -542,10 +542,44 @@ type ConsensusPVCStreams struct {
 	Events *corev1.PersistentVolumeClaimSpec `json:"events,omitempty"`
 }
 
+// Platform status names are the raw platform_PlatformStatus states reported by
+// the consensus node's metrics endpoint (localhost:9999). They are written into
+// ConsensusCapsuleStatus.PlatformStatus by the UC sidecar (the sole writer) and
+// read by the operator to roll up the capsule phase. The names mirror the Hedera
+// platform PlatformStatus enum; the numeric codes are carried in PlatformStatusCode.
+const (
+	PlatformStatusNoValue             = "NO_VALUE"
+	PlatformStatusStartingUp          = "STARTING_UP"
+	PlatformStatusActive              = "ACTIVE"
+	PlatformStatusBehind              = "BEHIND"
+	PlatformStatusFreezing            = "FREEZING"
+	PlatformStatusFreezeComplete      = "FREEZE_COMPLETE"
+	PlatformStatusReplayingEvents     = "REPLAYING_EVENTS"
+	PlatformStatusObserving           = "OBSERVING"
+	PlatformStatusChecking            = "CHECKING"
+	PlatformStatusReconnectComplete   = "RECONNECT_COMPLETE"
+	PlatformStatusCatastrophicFailure = "CATASTROPHIC_FAILURE"
+	// PlatformStatusUnknown is written by the UC when the metrics endpoint is
+	// unreachable or the reported code is unrecognised (fail-soft).
+	PlatformStatusUnknown = "UNKNOWN"
+)
+
 // ConsensusCapsuleStatus defines the observed state of ConsensusCapsule
 type ConsensusCapsuleStatus struct {
 	// +optional
 	Phase Phase `json:"phase,omitempty"`
+
+	// PlatformStatus is the consensus node's live platform state (raw
+	// platform_PlatformStatus name, e.g. STARTING_UP / REPLAYING_EVENTS / ACTIVE /
+	// FREEZE_COMPLETE / CATASTROPHIC_FAILURE). Written exclusively by the UC
+	// sidecar on each state transition; the operator only reads it.
+	// +optional
+	PlatformStatus string `json:"platformStatus,omitempty"`
+
+	// PlatformStatusCode is the numeric platform_PlatformStatus code corresponding
+	// to PlatformStatus. Written exclusively by the UC sidecar.
+	// +optional
+	PlatformStatusCode int32 `json:"platformStatusCode,omitempty"`
 
 	// +optional
 	Conditions []Condition `json:"conditions,omitempty"`
@@ -563,6 +597,7 @@ type ConsensusCapsuleStatus struct {
 // +kubebuilder:printcolumn:name="Orbit",type="string",JSONPath=".spec.orbit"
 // +kubebuilder:printcolumn:name="NodeId",type="integer",JSONPath=".spec.nodeId"
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
+// +kubebuilder:printcolumn:name="Platform",type="string",JSONPath=".status.platformStatus"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // ConsensusCapsule is the Schema for the consensuscapsules API

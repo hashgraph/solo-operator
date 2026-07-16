@@ -6,14 +6,18 @@ import (
 	"context"
 	"testing"
 
+	"github.com/joomcode/errorx"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/resources/consensus"
 )
 
@@ -176,6 +180,195 @@ func TestUpdateStatus_PodFailed_PhaseFailed(t *testing.T) {
 	}
 	if capsule.Status.Phase != operatorv1alpha1.PhaseFailed {
 		t.Errorf("expected PhaseFailed, got %s", capsule.Status.Phase)
+	}
+}
+
+// ── platform-status phase rollup ──────────────────────────────────────────────
+
+const testRevision = "rev-abc123"
+
+// newReadyPodOnRevision returns a Ready Running pod stamped with the given
+// StatefulSet controller-revision-hash label.
+func newReadyPodOnRevision(capsule *operatorv1alpha1.ConsensusCapsule, revision string) *corev1.Pod {
+	pod := newReadyPodWithPhase(capsule, corev1.PodRunning)
+	if pod.Labels == nil {
+		pod.Labels = map[string]string{}
+	}
+	pod.Labels[appsv1.StatefulSetRevisionLabel] = revision
+	return pod
+}
+
+// newSTSWithUpdateRevision returns a StatefulSet whose status.updateRevision is
+// set, so the revision guard can compare the Ready pod's revision against it.
+func newSTSWithUpdateRevision(capsule *operatorv1alpha1.ConsensusCapsule, revision string) *appsv1.StatefulSet {
+	return &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      consensus.StatefulSetName(capsule),
+			Namespace: capsule.Namespace,
+		},
+		Status: appsv1.StatefulSetStatus{UpdateRevision: revision},
+	}
+}
+
+// buildActiveScenario wires a client with a Ready pod on updateRevision and a
+// capsule carrying the given platform status + prior phase, then returns the
+// re-fetched capsule so the caller can invoke updateStatus.
+func buildActiveScenario(t *testing.T, platformStatus string, priorPhase operatorv1alpha1.Phase, podRevision, updateRevision string) (*ConsensusCapsuleReconciler, *operatorv1alpha1.ConsensusCapsule, context.Context) {
+	t.Helper()
+	ctx := context.Background()
+	scheme := newControllerTestScheme()
+	capsule := newCapsuleForControllerTest()
+	capsule.Generation = 2 // != ObservedGeneration(0) so updateStatus never early-returns
+	pod := newReadyPodOnRevision(capsule, podRevision)
+	sts := newSTSWithUpdateRevision(capsule, updateRevision)
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(capsule, pod, sts).
+		WithStatusSubresource(capsule).
+		Build()
+	if err := c.Get(ctx, client.ObjectKey{Name: capsule.Name, Namespace: capsule.Namespace}, capsule); err != nil {
+		t.Fatalf("get capsule: %v", err)
+	}
+	// PlatformStatus/Phase are read from the passed object, so stamp them here.
+	capsule.Status.PlatformStatus = platformStatus
+	capsule.Status.Phase = priorPhase
+	return buildReconcilerForUpdateStatus(c), capsule, ctx
+}
+
+func TestUpdateStatus_ActiveWhenPlatformActiveOnCurrentRevision(t *testing.T) {
+	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusActive, operatorv1alpha1.PhaseRunning, testRevision, testRevision)
+	if _, err := r.updateStatus(ctx, capsule); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capsule.Status.Phase != operatorv1alpha1.PhaseActive {
+		t.Errorf("expected PhaseActive, got %s", capsule.Status.Phase)
+	}
+}
+
+func TestUpdateStatus_RevisionGuard_NoPromoteOnOldRevision(t *testing.T) {
+	// Pod ACTIVE but on an old revision (image roll in progress) → stays Running.
+	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusActive, operatorv1alpha1.PhaseRunning, "old-rev", testRevision)
+	if _, err := r.updateStatus(ctx, capsule); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capsule.Status.Phase != operatorv1alpha1.PhaseRunning {
+		t.Errorf("expected PhaseRunning (stale-reading guard), got %s", capsule.Status.Phase)
+	}
+}
+
+func TestUpdateStatus_StickyActive_TransientDipKeepsActive(t *testing.T) {
+	// Already Active; platform dips to BEHIND on the current revision → stays Active.
+	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusBehind, operatorv1alpha1.PhaseActive, testRevision, testRevision)
+	if _, err := r.updateStatus(ctx, capsule); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capsule.Status.Phase != operatorv1alpha1.PhaseActive {
+		t.Errorf("expected sticky PhaseActive on transient dip, got %s", capsule.Status.Phase)
+	}
+}
+
+func TestUpdateStatus_CatastrophicFailure_PhaseFailed(t *testing.T) {
+	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusCatastrophicFailure, operatorv1alpha1.PhaseActive, testRevision, testRevision)
+	if _, err := r.updateStatus(ctx, capsule); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capsule.Status.Phase != operatorv1alpha1.PhaseFailed {
+		t.Errorf("expected PhaseFailed on CATASTROPHIC_FAILURE, got %s", capsule.Status.Phase)
+	}
+}
+
+func TestUpdateStatus_PendingToActive_PatchesCheckpoint(t *testing.T) {
+	// A cold start that observes a ready ACTIVE pod jumps Pending→Active; the
+	// genesis-initialized checkpoint must still be marked (isReadyPhase covers Active).
+	ctx := context.Background()
+	scheme := newControllerTestScheme()
+	capsule := newCapsuleForControllerTest()
+	capsule.Generation = 2
+	pod := newReadyPodOnRevision(capsule, testRevision)
+	sts := newSTSWithUpdateRevision(capsule, testRevision)
+	cm := newCheckpointCM(capsule, consensus.CheckpointValueFalse)
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(capsule, pod, sts, cm).
+		WithStatusSubresource(capsule).
+		Build()
+	if err := c.Get(ctx, client.ObjectKey{Name: capsule.Name, Namespace: capsule.Namespace}, capsule); err != nil {
+		t.Fatalf("get capsule: %v", err)
+	}
+	capsule.Status.PlatformStatus = operatorv1alpha1.PlatformStatusActive
+
+	r := buildReconcilerForUpdateStatus(c)
+	if _, err := r.updateStatus(ctx, capsule); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capsule.Status.Phase != operatorv1alpha1.PhaseActive {
+		t.Fatalf("expected PhaseActive, got %s", capsule.Status.Phase)
+	}
+	got := &corev1.ConfigMap{}
+	if err := c.Get(ctx, client.ObjectKey{Name: cm.Name, Namespace: cm.Namespace}, got); err != nil {
+		t.Fatalf("get checkpoint: %v", err)
+	}
+	if got.Data[consensus.CheckpointKeyGenesisInitialized] != consensus.CheckpointValueTrue {
+		t.Errorf("expected checkpoint patched to true on Pending→Active, got %q", got.Data[consensus.CheckpointKeyGenesisInitialized])
+	}
+}
+
+// ── widened wake predicate ────────────────────────────────────────────────────
+
+func TestGenOrPlatformStatusChangedPredicate(t *testing.T) {
+	p := genOrPlatformStatusChangedPredicate()
+	base := &operatorv1alpha1.ConsensusCapsule{ObjectMeta: metav1.ObjectMeta{Generation: 1}}
+
+	if p.Update(event.UpdateEvent{ObjectOld: base, ObjectNew: base.DeepCopy()}) {
+		t.Error("a no-op update must be dropped")
+	}
+
+	genUp := base.DeepCopy()
+	genUp.Generation = 2
+	if !p.Update(event.UpdateEvent{ObjectOld: base, ObjectNew: genUp}) {
+		t.Error("a generation change must fire")
+	}
+
+	psUp := base.DeepCopy()
+	psUp.Status.PlatformStatus = operatorv1alpha1.PlatformStatusActive
+	if !p.Update(event.UpdateEvent{ObjectOld: base, ObjectNew: psUp}) {
+		t.Error("a status.platformStatus change must fire (UC wake)")
+	}
+
+	// The operator's own phase write must NOT wake the controller (no self-loop).
+	phaseUp := base.DeepCopy()
+	phaseUp.Status.Phase = operatorv1alpha1.PhaseActive
+	if p.Update(event.UpdateEvent{ObjectOld: base, ObjectNew: phaseUp}) {
+		t.Error("a phase-only change must not fire (operator self-write)")
+	}
+}
+
+// ── UC-mandatory terminal error ───────────────────────────────────────────────
+
+func TestValidateUCMandatory(t *testing.T) {
+	capsule := newCapsuleForControllerTest() // no UC configured
+
+	err := validateUCMandatory(capsule)
+	if err == nil {
+		t.Fatal("expected terminal error when the UC sidecar is disabled")
+	}
+	if !errorx.IsOfType(err, errUCSidecarRequired) {
+		t.Errorf("expected errUCSidecarRequired type, got %v", err)
+	}
+	if reason, ok := errx.ReasonOf(err); !ok || reason != ReasonUCSidecarRequired {
+		t.Errorf("expected reason %s, got %q (ok=%v)", ReasonUCSidecarRequired, reason, ok)
+	}
+	if hints, ok := errx.Hints(err); !ok || len(hints) == 0 {
+		t.Error("expected remediation hints on the UC-mandatory error")
+	}
+	// The terminal type carries no Temporary trait.
+	if errorx.IsOfType(err, errorx.InternalError) {
+		t.Error("unexpected type coercion")
+	}
+
+	capsule.Spec.PodProperties.Containers.UC = &operatorv1alpha1.UcSidecar{Enabled: true}
+	if err := validateUCMandatory(capsule); err != nil {
+		t.Errorf("expected nil when UC is enabled, got %v", err)
 	}
 }
 

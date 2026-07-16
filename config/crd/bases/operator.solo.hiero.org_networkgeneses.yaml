@@ -195,6 +195,7 @@ spec:
                 enum:
                 - Pending
                 - Running
+                - Active
                 - Succeeded
                 - Failed
                 - Unknown

@@ -138,6 +138,7 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 								ImageTag:   "0.74.0",
 							},
 						},
+						UC: &operatorv1alpha1.UcSidecar{Enabled: true},
 					},
 				},
 			},

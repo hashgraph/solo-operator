@@ -26,6 +26,9 @@ spec:
     - jsonPath: .status.phase
       name: Phase
       type: string
+    - jsonPath: .status.platformStatus
+      name: Platform
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -21512,10 +21515,24 @@ spec:
                 enum:
                 - Pending
                 - Running
+                - Active
                 - Succeeded
                 - Failed
                 - Unknown
                 type: string
+              platformStatus:
+                description: |-
+                  PlatformStatus is the consensus node's live platform state (raw
+                  platform_PlatformStatus name, e.g. STARTING_UP / REPLAYING_EVENTS / ACTIVE /
+                  FREEZE_COMPLETE / CATASTROPHIC_FAILURE). Written exclusively by the UC
+                  sidecar on each state transition; the operator only reads it.
+                type: string
+              platformStatusCode:
+                description: |-
+                  PlatformStatusCode is the numeric platform_PlatformStatus code corresponding
+                  to PlatformStatus. Written exclusively by the UC sidecar.
+                format: int32
+                type: integer
             type: object
         type: object
     served: true

@@ -81,6 +81,18 @@ func (r *RoleSubReconciler) buildRole(capsule *operatorv1alpha1.ConsensusCapsule
 				Resources: []string{"networkupgradeexecutes/status"},
 				Verbs:     []string{"get", "patch", "update"},
 			},
+			// The platform-status sensor reads its own ConsensusCapsule and patches
+			// status.platformStatus (sole writer).
+			rbacv1.PolicyRule{
+				APIGroups: []string{"operator.solo.hiero.org"},
+				Resources: []string{"consensuscapsules"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"operator.solo.hiero.org"},
+				Resources: []string{"consensuscapsules/status"},
+				Verbs:     []string{"get", "patch", "update"},
+			},
 		)
 	}
 

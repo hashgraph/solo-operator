@@ -109,6 +109,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 									ImageTag:   "0.65.1",
 								},
 							},
+							UC: &operatorv1alpha1.UcSidecar{Enabled: true},
 						},
 					},
 				},
@@ -263,6 +264,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 									ImageTag:   "0.65.1",
 								},
 							},
+							UC: &operatorv1alpha1.UcSidecar{Enabled: true},
 						},
 					},
 					PersistentVolumeClaims: &operatorv1alpha1.ConsensusPVCConfig{
