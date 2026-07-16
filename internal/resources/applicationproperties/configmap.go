@@ -36,7 +36,7 @@ func NewConfigMapSubReconciler(c client.Client, scheme *runtime.Scheme, recorder
 
 func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1alpha1.ApplicationProperties) (ctrl.Result, error) {
 	if err := ValidateContent(obj.Spec.Content); err != nil {
-		return r.reject(obj, "InvalidContent", err.Error())
+		return r.reject(ctx, obj, "InvalidContent", err.Error())
 	}
 
 	ledgerID, _ := ParseLedgerID(obj.Spec.Content)
@@ -53,7 +53,7 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 			return ctrl.Result{}, err
 		}
 		if orbitLedgerID := orbitLedgerID(orbit); orbitLedgerID != "" && ledgerID != orbitLedgerID {
-			return r.reject(obj, "LedgerIDMismatch", fmt.Sprintf("spec.content ledger.id %q does not match Orbit %q ledger.id %q", ledgerID, obj.Spec.Orbit, orbitLedgerID))
+			return r.reject(ctx, obj, "LedgerIDMismatch", fmt.Sprintf("spec.content ledger.id %q does not match Orbit %q ledger.id %q", ledgerID, obj.Spec.Orbit, orbitLedgerID))
 		}
 	}
 
@@ -94,7 +94,7 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 	return ctrl.Result{}, nil
 }
 
-func (r *ConfigMapSubReconciler) reject(obj *operatorv1alpha1.ApplicationProperties, reason, msg string) (ctrl.Result, error) {
+func (r *ConfigMapSubReconciler) reject(ctx context.Context, obj *operatorv1alpha1.ApplicationProperties, reason, msg string) (ctrl.Result, error) {
 	apimeta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 		Type:               operatorv1alpha1.ApplicationPropertiesConditionTypeValid,
 		Status:             metav1.ConditionFalse,
@@ -102,9 +102,7 @@ func (r *ConfigMapSubReconciler) reject(obj *operatorv1alpha1.ApplicationPropert
 		Reason:             reason,
 		Message:            msg,
 	})
-	if r.Recorder != nil {
-		r.Recorder.Eventf(obj, nil, corev1.EventTypeWarning, reason, "ConfigMap", "%s", msg)
-	}
+	common.Eventf(ctx, r.Recorder, obj, corev1.EventTypeWarning, errx.Reason(reason), "ConfigMap", "%s", msg)
 	return ctrl.Result{}, nil
 }
 

@@ -51,7 +51,7 @@ func (r *ApiPermissionPropertiesReconciler) Reconcile(ctx context.Context, req c
 
 	result, err := r.subreconciler.Reconcile(ctx, obj)
 	if err != nil {
-		r.event(obj, corev1.EventTypeWarning, operatorv1alpha1.EventConfigCRFailed, err.Error())
+		r.event(ctx, obj, corev1.EventTypeWarning, operatorv1alpha1.EventConfigCRFailed, err.Error())
 		return result, err
 	}
 	if result.Requeue || result.RequeueAfter > 0 {
@@ -62,7 +62,7 @@ func (r *ApiPermissionPropertiesReconciler) Reconcile(ctx context.Context, req c
 		return ctrl.Result{}, err
 	}
 
-	r.event(obj, corev1.EventTypeNormal, operatorv1alpha1.EventConfigCRReconciled, "ApiPermissionProperties reconciled")
+	r.event(ctx, obj, corev1.EventTypeNormal, operatorv1alpha1.EventConfigCRReconciled, "ApiPermissionProperties reconciled")
 	return ctrl.Result{}, nil
 }
 
@@ -72,10 +72,8 @@ func (r *ApiPermissionPropertiesReconciler) updateStatus(ctx context.Context, ob
 	return r.Status().Update(ctx, obj)
 }
 
-func (r *ApiPermissionPropertiesReconciler) event(obj *operatorv1alpha1.ApiPermissionProperties, eventtype string, reason errx.Reason, msg string) {
-	if r.Recorder != nil {
-		r.Recorder.Eventf(obj, nil, eventtype, reason.String(), "ApiPermissionProperties", "%s", msg)
-	}
+func (r *ApiPermissionPropertiesReconciler) event(ctx context.Context, obj *operatorv1alpha1.ApiPermissionProperties, eventtype string, reason errx.Reason, msg string) {
+	common.Eventf(ctx, r.Recorder, obj, eventtype, reason, "ApiPermissionProperties", "%s", msg)
 }
 
 func (r *ApiPermissionPropertiesReconciler) SetupWithManager(mgr ctrl.Manager) error {

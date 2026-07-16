@@ -83,7 +83,7 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 
 	if ok, msg := validateOperationIDLabel(execute.Labels, execute.Spec.OperationID); !ok {
 		return rejectInvalidOperationIDLabel(ctx, r.Client, &execute, &execute.Status.Conditions,
-			func(reason errx.Reason, m string) { r.eventf(&execute, corev1.EventTypeWarning, reason, "%s", m) },
+			func(reason errx.Reason, m string) { r.eventf(ctx, &execute, corev1.EventTypeWarning, reason, "%s", m) },
 			func() { execute.Status.Phase = operatorv1alpha1.ExecutePhaseFailed },
 			msg)
 	}
@@ -95,7 +95,7 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		}
 		if sibling {
 			msg := fmt.Sprintf("operationId %q already used by another NetworkUpgradeExecute", execute.Spec.OperationID)
-			r.eventf(&execute, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
+			r.eventf(ctx, &execute, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
 			execute.Status.Phase = operatorv1alpha1.ExecutePhaseFailed
 			execute.Status.ObservedGeneration = execute.Generation
 			setCondition(&execute.Status.Conditions, metav1.Condition{
@@ -149,7 +149,7 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		if err := r.Status().Update(ctx, &execute); err != nil {
 			return ctrl.Result{}, wrapStatusInit(err)
 		}
-		r.eventf(&execute, corev1.EventTypeNormal, operatorv1alpha1.EventReadyForDaemon,
+		r.eventf(ctx, &execute, corev1.EventTypeNormal, operatorv1alpha1.EventReadyForDaemon,
 			"waiting for provisioner daemon for operationId %q", execute.Spec.OperationID)
 		return ctrl.Result{Requeue: true}, nil
 	}
@@ -192,7 +192,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 		if err := r.Status().Update(ctx, execute); err != nil {
 			return ctrl.Result{}, wrapStatusUpdate(err, "updating status to failed")
 		}
-		r.eventf(execute, corev1.EventTypeWarning, operatorv1alpha1.EventUpgradeFailed,
+		r.eventf(ctx, execute, corev1.EventTypeWarning, operatorv1alpha1.EventUpgradeFailed,
 			"provisioner daemon reported failure: %s", daemonCond.Reason)
 		return ctrl.Result{}, nil
 	}
@@ -205,7 +205,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 		}
 		return ctrl.Result{}, wrapStatusUpdate(err, "advancing to PendingInfraUpgrade")
 	}
-	r.eventf(execute, corev1.EventTypeNormal, operatorv1alpha1.EventPendingInfraUpgrade,
+	r.eventf(ctx, execute, corev1.EventTypeNormal, operatorv1alpha1.EventPendingInfraUpgrade,
 		"provisioner daemon succeeded; advancing to PendingInfraUpgrade for operationId %q", execute.Spec.OperationID)
 	return ctrl.Result{Requeue: true}, nil
 }
@@ -227,7 +227,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingInfraUpgrade(ctx conte
 		}
 		return ctrl.Result{}, wrapStatusUpdate(err, "advancing to PendingNodeUpgrade")
 	}
-	r.eventf(execute, corev1.EventTypeNormal, operatorv1alpha1.EventPendingNodeUpgrade,
+	r.eventf(ctx, execute, corev1.EventTypeNormal, operatorv1alpha1.EventPendingNodeUpgrade,
 		"daemon applied config CRs; advancing to PendingNodeUpgrade for operationId %q", execute.Spec.OperationID)
 	return ctrl.Result{Requeue: true}, nil
 }
@@ -259,12 +259,12 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 			checkTimeout, rng, r.StrategyName,
 			skipUC,
 			func(name operatorv1alpha1.ComponentName, res registry.FailoverResult) {
-				r.eventf(execute, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryFailover,
+				r.eventf(ctx, execute, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryFailover,
 					"%s: registry %s unreachable, failed over to %s (digest: %s)",
 					name, res.FailedImage, res.Selected.Image, res.Selected.Digest)
 			},
 			func(name operatorv1alpha1.ComponentName, err error) {
-				r.eventf(execute, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
+				r.eventf(ctx, execute, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
 					"%s: %v", name, err)
 			},
 		)
@@ -282,7 +282,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 			if err := r.Status().Update(ctx, execute); err != nil {
 				return ctrl.Result{}, wrapStatusUpdate(err, "updating status to failed")
 			}
-			r.eventf(execute, corev1.EventTypeWarning, operatorv1alpha1.EventUpgradeFailed,
+			r.eventf(ctx, execute, corev1.EventTypeWarning, operatorv1alpha1.EventUpgradeFailed,
 				"registry validation failed for operationId %q", execute.Spec.OperationID)
 			return ctrl.Result{}, errx.WithHints(
 				errx.WithReason(errReconcile.New("no valid registry for one or more components"), ReasonNoValidRegistry),
@@ -316,7 +316,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 			}
 			return ctrl.Result{}, wrapStatusUpdate(err, "updating status after capsule patch")
 		}
-		r.eventf(execute, corev1.EventTypeNormal, operatorv1alpha1.EventCapsulePatched,
+		r.eventf(ctx, execute, corev1.EventTypeNormal, operatorv1alpha1.EventCapsulePatched,
 			"ConsensusCapsule %s patched with new images for operationId %q", capsule.Name, execute.Spec.OperationID)
 		return ctrl.Result{Requeue: true}, nil
 	}
@@ -353,7 +353,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 			}
 			return ctrl.Result{}, wrapStatusUpdate(err, "updating status after bringing capsule online")
 		}
-		r.eventf(execute, corev1.EventTypeNormal, operatorv1alpha1.EventCapsulesOnline,
+		r.eventf(ctx, execute, corev1.EventTypeNormal, operatorv1alpha1.EventCapsulesOnline,
 			"ConsensusCapsule %s brought online for operationId %q", capsule.Name, execute.Spec.OperationID)
 		return ctrl.Result{RequeueAfter: executeReadyRequeueAfter}, nil
 	}
@@ -377,7 +377,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 		if err := r.Status().Update(ctx, execute); err != nil {
 			return ctrl.Result{}, wrapStatusUpdate(err, "updating status to failed")
 		}
-		r.eventf(execute, corev1.EventTypeWarning, operatorv1alpha1.EventUpgradeFailed,
+		r.eventf(ctx, execute, corev1.EventTypeWarning, operatorv1alpha1.EventUpgradeFailed,
 			"timed out waiting for consensus pod after upgrade for operationId %q", execute.Spec.OperationID)
 		return ctrl.Result{}, nil
 	}
@@ -402,7 +402,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 		}
 		return ctrl.Result{}, wrapStatusUpdate(err, "updating status to succeeded")
 	}
-	r.eventf(execute, corev1.EventTypeNormal, operatorv1alpha1.EventUpgradeSucceeded,
+	r.eventf(ctx, execute, corev1.EventTypeNormal, operatorv1alpha1.EventUpgradeSucceeded,
 		"upgrade succeeded for operationId %q capsule %s", execute.Spec.OperationID, capsule.Name)
 	return ctrl.Result{}, nil
 }
@@ -491,7 +491,7 @@ func (r *NetworkUpgradeExecuteReconciler) ensureCapsuleOffline(
 			errx.WithReason(errK8sAPI.Wrap(err, "scaling down capsule %s", capsule.Name), ReasonScaleFailed),
 			"Confirm the operator has patch permission on consensuscapsules")
 	}
-	r.eventf(execute, corev1.EventTypeNormal, operatorv1alpha1.EventPodScaledDown,
+	r.eventf(ctx, execute, corev1.EventTypeNormal, operatorv1alpha1.EventPodScaledDown,
 		"scaled down ConsensusCapsule %s/%s for operationId %q", capsule.Namespace, capsule.Name, execute.Spec.OperationID)
 	return nil
 }
@@ -582,10 +582,8 @@ func (r *NetworkUpgradeExecuteReconciler) checkPodReady(
 	return sts.Status.ReadyReplicas >= 1, false, nil
 }
 
-func (r *NetworkUpgradeExecuteReconciler) eventf(obj *operatorv1alpha1.NetworkUpgradeExecute, eventtype string, reason errx.Reason, format string, args ...any) {
-	if r.Recorder != nil {
-		r.Recorder.Eventf(obj, nil, eventtype, reason.String(), "NetworkUpgradeExecute", format, args...)
-	}
+func (r *NetworkUpgradeExecuteReconciler) eventf(ctx context.Context, obj *operatorv1alpha1.NetworkUpgradeExecute, eventtype string, reason errx.Reason, format string, args ...any) {
+	common.Eventf(ctx, r.Recorder, obj, eventtype, reason, "NetworkUpgradeExecute", format, args...)
 }
 
 func RegisterFreezeIndex(mgr ctrl.Manager) error {

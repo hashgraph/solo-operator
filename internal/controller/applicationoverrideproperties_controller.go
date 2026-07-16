@@ -51,7 +51,7 @@ func (r *ApplicationOverridePropertiesReconciler) Reconcile(ctx context.Context,
 
 	result, err := r.subreconciler.Reconcile(ctx, obj)
 	if err != nil {
-		r.event(obj, corev1.EventTypeWarning, operatorv1alpha1.EventConfigCRFailed, err.Error())
+		r.event(ctx, obj, corev1.EventTypeWarning, operatorv1alpha1.EventConfigCRFailed, err.Error())
 		return result, err
 	}
 	if result.Requeue || result.RequeueAfter > 0 {
@@ -62,7 +62,7 @@ func (r *ApplicationOverridePropertiesReconciler) Reconcile(ctx context.Context,
 		return ctrl.Result{}, err
 	}
 
-	r.event(obj, corev1.EventTypeNormal, operatorv1alpha1.EventConfigCRReconciled, "ApplicationOverrideProperties reconciled")
+	r.event(ctx, obj, corev1.EventTypeNormal, operatorv1alpha1.EventConfigCRReconciled, "ApplicationOverrideProperties reconciled")
 	return ctrl.Result{}, nil
 }
 
@@ -72,10 +72,8 @@ func (r *ApplicationOverridePropertiesReconciler) updateStatus(ctx context.Conte
 	return r.Status().Update(ctx, obj)
 }
 
-func (r *ApplicationOverridePropertiesReconciler) event(obj *operatorv1alpha1.ApplicationOverrideProperties, eventtype string, reason errx.Reason, msg string) {
-	if r.Recorder != nil {
-		r.Recorder.Eventf(obj, nil, eventtype, reason.String(), "ApplicationOverrideProperties", "%s", msg)
-	}
+func (r *ApplicationOverridePropertiesReconciler) event(ctx context.Context, obj *operatorv1alpha1.ApplicationOverrideProperties, eventtype string, reason errx.Reason, msg string) {
+	common.Eventf(ctx, r.Recorder, obj, eventtype, reason, "ApplicationOverrideProperties", "%s", msg)
 }
 
 func (r *ApplicationOverridePropertiesReconciler) SetupWithManager(mgr ctrl.Manager) error {

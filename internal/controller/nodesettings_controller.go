@@ -51,7 +51,7 @@ func (r *NodeSettingsReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	result, err := r.subreconciler.Reconcile(ctx, obj)
 	if err != nil {
-		r.event(obj, corev1.EventTypeWarning, operatorv1alpha1.EventConfigCRFailed, err.Error())
+		r.event(ctx, obj, corev1.EventTypeWarning, operatorv1alpha1.EventConfigCRFailed, err.Error())
 		return result, err
 	}
 	if result.Requeue || result.RequeueAfter > 0 {
@@ -62,14 +62,12 @@ func (r *NodeSettingsReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, err
 	}
 
-	r.event(obj, corev1.EventTypeNormal, operatorv1alpha1.EventConfigCRReconciled, "NodeSettings reconciled")
+	r.event(ctx, obj, corev1.EventTypeNormal, operatorv1alpha1.EventConfigCRReconciled, "NodeSettings reconciled")
 	return ctrl.Result{}, nil
 }
 
-func (r *NodeSettingsReconciler) event(obj *operatorv1alpha1.NodeSettings, eventtype string, reason errx.Reason, msg string) {
-	if r.Recorder != nil {
-		r.Recorder.Eventf(obj, nil, eventtype, reason.String(), "NodeSettings", "%s", msg)
-	}
+func (r *NodeSettingsReconciler) event(ctx context.Context, obj *operatorv1alpha1.NodeSettings, eventtype string, reason errx.Reason, msg string) {
+	common.Eventf(ctx, r.Recorder, obj, eventtype, reason, "NodeSettings", "%s", msg)
 }
 
 func (r *NodeSettingsReconciler) updateStatus(ctx context.Context, obj *operatorv1alpha1.NodeSettings) error {

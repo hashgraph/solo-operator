@@ -51,7 +51,7 @@ func (r *Log4j2ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	result, err := r.subreconciler.Reconcile(ctx, obj)
 	if err != nil {
-		r.event(obj, corev1.EventTypeWarning, operatorv1alpha1.EventConfigCRFailed, err.Error())
+		r.event(ctx, obj, corev1.EventTypeWarning, operatorv1alpha1.EventConfigCRFailed, err.Error())
 		return result, err
 	}
 	if result.Requeue || result.RequeueAfter > 0 {
@@ -62,14 +62,12 @@ func (r *Log4j2ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, err
 	}
 
-	r.event(obj, corev1.EventTypeNormal, operatorv1alpha1.EventConfigCRReconciled, "Log4j2Config reconciled")
+	r.event(ctx, obj, corev1.EventTypeNormal, operatorv1alpha1.EventConfigCRReconciled, "Log4j2Config reconciled")
 	return ctrl.Result{}, nil
 }
 
-func (r *Log4j2ConfigReconciler) event(obj *operatorv1alpha1.Log4j2Config, eventtype string, reason errx.Reason, msg string) {
-	if r.Recorder != nil {
-		r.Recorder.Eventf(obj, nil, eventtype, reason.String(), "Log4j2Config", "%s", msg)
-	}
+func (r *Log4j2ConfigReconciler) event(ctx context.Context, obj *operatorv1alpha1.Log4j2Config, eventtype string, reason errx.Reason, msg string) {
+	common.Eventf(ctx, r.Recorder, obj, eventtype, reason, "Log4j2Config", "%s", msg)
 }
 
 func (r *Log4j2ConfigReconciler) updateStatus(ctx context.Context, obj *operatorv1alpha1.Log4j2Config) error {

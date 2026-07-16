@@ -69,7 +69,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 
 	if ok, msg := validateOperationIDLabel(prepare.Labels, prepare.Spec.OperationID); !ok {
 		return rejectInvalidOperationIDLabel(ctx, r.Client, &prepare, &prepare.Status.Conditions,
-			func(reason errx.Reason, m string) { r.eventf(&prepare, corev1.EventTypeWarning, reason, "%s", m) },
+			func(reason errx.Reason, m string) { r.eventf(ctx, &prepare, corev1.EventTypeWarning, reason, "%s", m) },
 			func() { prepare.Status.Phase = operatorv1alpha1.PhaseFailed },
 			msg)
 	}
@@ -90,7 +90,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 	}
 	if sibling {
 		msg := fmt.Sprintf("operationId %q already used by another NetworkUpgradePrepare", prepare.Spec.OperationID)
-		r.eventf(&prepare, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
+		r.eventf(ctx, &prepare, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
 		prepare.Status.Phase = operatorv1alpha1.PhaseFailed
 		prepare.Status.ObservedGeneration = prepare.Generation
 		setCondition(&prepare.Status.Conditions, metav1.Condition{
@@ -117,12 +117,12 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 	for _, name := range operatorv1alpha1.AllUpgradeComponents {
 		comp, present := prepare.Spec.Images.Component(name)
 		if !present {
-			r.eventf(&prepare, corev1.EventTypeNormal, operatorv1alpha1.EventComponentSkipped,
+			r.eventf(ctx, &prepare, corev1.EventTypeNormal, operatorv1alpha1.EventComponentSkipped,
 				"%s: omitted from manifest; current image left unchanged", name)
 			continue
 		}
 		if comp.Enabled != nil && !*comp.Enabled {
-			r.eventf(&prepare, corev1.EventTypeNormal, operatorv1alpha1.EventSidecarDisabled,
+			r.eventf(ctx, &prepare, corev1.EventTypeNormal, operatorv1alpha1.EventSidecarDisabled,
 				"%s: enabled=false; sidecar will be removed on execute", name)
 			continue
 		}
@@ -139,12 +139,12 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 			case registry.StateHashMismatch:
 				allHashesValid = false
 				common.Info(ctx, ReasonRegistryHashMismatch).Str("component", string(name)).Str("image", res.Image).AnErr("error", res.Err).Msg("registry failed layer hash verification")
-				r.eventf(&prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
+				r.eventf(ctx, &prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
 					"%s: registry %s failed layer hash verification: %v", name, res.Image, res.Err)
 			case registry.StateNoHashes:
 				allHashesValid = false
 				common.Info(ctx, ReasonRegistryNoHashes).Str("component", string(name)).Str("image", res.Image).AnErr("error", res.Err).Msg("image has no layer hashes configured")
-				r.eventf(&prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
+				r.eventf(ctx, &prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
 					"%s: image %s has no layer hashes configured: %v", name, res.Image, res.Err)
 			default:
 				common.Info(ctx, ReasonRegistryUnexpectedState).Str("component", string(name)).Str("image", res.Image).Str("state", string(res.State)).Msg("unexpected registry state")
@@ -152,16 +152,16 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 		}
 
 		reachable := len(results) - unreachable
-		r.eventf(&prepare, corev1.EventTypeNormal, operatorv1alpha1.EventRegistryAuditComplete,
+		r.eventf(ctx, &prepare, corev1.EventTypeNormal, operatorv1alpha1.EventRegistryAuditComplete,
 			"%s: %d/%d registries reachable", name, reachable, len(results))
 		if unreachable > 0 {
-			r.eventf(&prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryUnreachable,
+			r.eventf(ctx, &prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryUnreachable,
 				"%s: %d/%d registries unreachable", name, unreachable, len(results))
 		}
 
 		winner, ok := registry.SelectValid(results, rng)
 		if !ok {
-			r.eventf(&prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
+			r.eventf(ctx, &prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
 				"%s: no valid registry available", name)
 			succeeded = false
 			continue
@@ -173,7 +173,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 			LayerHashesVerified: winner.LayerHashesVerified,
 			LayerHashes:         winnerSpec.LayerHashes,
 		})
-		r.eventf(&prepare, corev1.EventTypeNormal, operatorv1alpha1.EventRegistrySelected,
+		r.eventf(ctx, &prepare, corev1.EventTypeNormal, operatorv1alpha1.EventRegistrySelected,
 			"%s: selected %s (digest: %s, layerHashesVerified: %v)", name, winner.Image, winner.Digest, winner.LayerHashesVerified)
 	}
 
@@ -236,10 +236,8 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 	return ctrl.Result{}, nil
 }
 
-func (r *NetworkUpgradePrepareReconciler) eventf(obj *operatorv1alpha1.NetworkUpgradePrepare, eventtype string, reason errx.Reason, format string, args ...any) {
-	if r.Recorder != nil {
-		r.Recorder.Eventf(obj, nil, eventtype, reason.String(), "RegistryAudit", format, args...)
-	}
+func (r *NetworkUpgradePrepareReconciler) eventf(ctx context.Context, obj *operatorv1alpha1.NetworkUpgradePrepare, eventtype string, reason errx.Reason, format string, args ...any) {
+	common.Eventf(ctx, r.Recorder, obj, eventtype, reason, "RegistryAudit", format, args...)
 }
 
 const fieldOperationID = "spec.operationId"

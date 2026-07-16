@@ -550,7 +550,7 @@ func TestAddSidecarContainers_NilSidecars_EmitsComponentSkipped(t *testing.T) {
 	// All sidecar fields left nil (default from capsuleWithImage).
 	sts := &appsv1.StatefulSet{}
 
-	if err := r.addSidecarContainers(sts, capsule, nil, uc.ModeClusterOnly); err != nil {
+	if err := r.addSidecarContainers(context.Background(), sts, capsule, nil, uc.ModeClusterOnly); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -578,7 +578,7 @@ func TestAddSidecarContainers_DisabledSidecars_EmitsSidecarDisabled(t *testing.T
 	capsule.Spec.PodProperties.Containers.UC = &operatorv1alpha1.UcSidecar{Enabled: disabled}
 	sts := &appsv1.StatefulSet{}
 
-	if err := r.addSidecarContainers(sts, capsule, nil, uc.ModeClusterOnly); err != nil {
+	if err := r.addSidecarContainers(context.Background(), sts, capsule, nil, uc.ModeClusterOnly); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -628,7 +628,7 @@ func TestAddSidecarContainers_EnabledSidecars_NoSkipOrDisableEvents(t *testing.T
 	}
 
 	sts := &appsv1.StatefulSet{Spec: appsv1.StatefulSetSpec{Template: corev1.PodTemplateSpec{}}}
-	if err := r.addSidecarContainers(sts, capsule, alloyEnabled, uc.ModeClusterOnly); err != nil {
+	if err := r.addSidecarContainers(context.Background(), sts, capsule, alloyEnabled, uc.ModeClusterOnly); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 

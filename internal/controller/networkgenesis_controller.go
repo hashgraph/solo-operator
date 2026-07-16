@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -110,10 +111,8 @@ func (r *NetworkGenesisReconciler) run(ctx context.Context, ng *operatorv1alpha1
 		// Passthrough path: pre-built genesis-network.json supplied by provisioner.
 		// Validate before writing; on failure emit an event and surface the error.
 		if err := genesis.ValidatePassthroughJSON(ng.Spec.GenesisNetworkJSON); err != nil {
-			if r.Recorder != nil {
-				r.Recorder.Eventf(ng, nil, "Warning", "InvalidGenesisJSON", "networkgenesis",
-					"pre-built genesis-network.json rejected: %v", err)
-			}
+			common.Eventf(ctx, r.Recorder, ng, corev1.EventTypeWarning, operatorv1alpha1.EventInvalidGenesisJSON, "NetworkGenesis",
+				"pre-built genesis-network.json rejected: %v", err)
 			return nil, fmt.Errorf("invalid genesisNetworkJSON: %w", err)
 		}
 		if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.GenesisConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,

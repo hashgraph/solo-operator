@@ -41,10 +41,7 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 			Reason:             "InvalidContent",
 			Message:            err.Error(),
 		})
-		if r.Recorder != nil {
-			r.Recorder.Eventf(obj, nil, corev1.EventTypeWarning, "InvalidContent", "ConfigMap", "invalid settings.txt: %s", err.Error())
-		}
-		common.Err(ctx, err, common.ReasonInvalidContent).Msg("invalid settings.txt — fix spec.content to recover")
+		common.Eventf(ctx, r.Recorder, obj, corev1.EventTypeWarning, common.ReasonInvalidContent, "ConfigMap", "invalid settings.txt: %s", err.Error())
 		return ctrl.Result{}, nil
 	}
 

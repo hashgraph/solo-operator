@@ -51,7 +51,7 @@ func (r *BootstrapPropertiesReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	result, err := r.subreconciler.Reconcile(ctx, obj)
 	if err != nil {
-		r.event(obj, corev1.EventTypeWarning, operatorv1alpha1.EventConfigCRFailed, err.Error())
+		r.event(ctx, obj, corev1.EventTypeWarning, operatorv1alpha1.EventConfigCRFailed, err.Error())
 		return result, err
 	}
 	if result.Requeue || result.RequeueAfter > 0 {
@@ -62,7 +62,7 @@ func (r *BootstrapPropertiesReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, err
 	}
 
-	r.event(obj, corev1.EventTypeNormal, operatorv1alpha1.EventConfigCRReconciled, "BootstrapProperties reconciled")
+	r.event(ctx, obj, corev1.EventTypeNormal, operatorv1alpha1.EventConfigCRReconciled, "BootstrapProperties reconciled")
 	return ctrl.Result{}, nil
 }
 
@@ -72,10 +72,8 @@ func (r *BootstrapPropertiesReconciler) updateStatus(ctx context.Context, obj *o
 	return r.Status().Update(ctx, obj)
 }
 
-func (r *BootstrapPropertiesReconciler) event(obj *operatorv1alpha1.BootstrapProperties, eventtype string, reason errx.Reason, msg string) {
-	if r.Recorder != nil {
-		r.Recorder.Eventf(obj, nil, eventtype, reason.String(), "BootstrapProperties", "%s", msg)
-	}
+func (r *BootstrapPropertiesReconciler) event(ctx context.Context, obj *operatorv1alpha1.BootstrapProperties, eventtype string, reason errx.Reason, msg string) {
+	common.Eventf(ctx, r.Recorder, obj, eventtype, reason, "BootstrapProperties", "%s", msg)
 }
 
 func (r *BootstrapPropertiesReconciler) SetupWithManager(mgr ctrl.Manager) error {

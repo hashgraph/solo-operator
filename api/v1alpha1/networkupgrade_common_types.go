@@ -266,5 +266,7 @@ const (
 	EventConfigCRReconciled errx.Reason = "ConfigCRReconciled"
 	EventConfigCRFailed     errx.Reason = "ConfigCRFailed"
 
+	EventInvalidGenesisJSON errx.Reason = "InvalidGenesisJSON"
+
 	EventOperationIDLabelInvalid errx.Reason = "OperationIDLabelInvalid"
 )

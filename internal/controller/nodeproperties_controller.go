@@ -51,7 +51,7 @@ func (r *NodePropertiesReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	result, err := r.subreconciler.Reconcile(ctx, obj)
 	if err != nil {
-		r.event(obj, corev1.EventTypeWarning, operatorv1alpha1.EventConfigCRFailed, err.Error())
+		r.event(ctx, obj, corev1.EventTypeWarning, operatorv1alpha1.EventConfigCRFailed, err.Error())
 		return result, err
 	}
 	if result.Requeue || result.RequeueAfter > 0 {
@@ -62,7 +62,7 @@ func (r *NodePropertiesReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 
-	r.event(obj, corev1.EventTypeNormal, operatorv1alpha1.EventConfigCRReconciled, "NodeProperties reconciled")
+	r.event(ctx, obj, corev1.EventTypeNormal, operatorv1alpha1.EventConfigCRReconciled, "NodeProperties reconciled")
 	return ctrl.Result{}, nil
 }
 
@@ -72,10 +72,8 @@ func (r *NodePropertiesReconciler) updateStatus(ctx context.Context, obj *operat
 	return r.Status().Update(ctx, obj)
 }
 
-func (r *NodePropertiesReconciler) event(obj *operatorv1alpha1.NodePropertiesConfig, eventtype string, reason errx.Reason, msg string) {
-	if r.Recorder != nil {
-		r.Recorder.Eventf(obj, nil, eventtype, reason.String(), "NodeProperties", "%s", msg)
-	}
+func (r *NodePropertiesReconciler) event(ctx context.Context, obj *operatorv1alpha1.NodePropertiesConfig, eventtype string, reason errx.Reason, msg string) {
+	common.Eventf(ctx, r.Recorder, obj, eventtype, reason, "NodeProperties", "%s", msg)
 }
 
 func (r *NodePropertiesReconciler) SetupWithManager(mgr ctrl.Manager) error {

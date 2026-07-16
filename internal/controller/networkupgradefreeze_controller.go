@@ -70,7 +70,7 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 
 	if ok, msg := validateOperationIDLabel(freeze.Labels, freeze.Spec.OperationID); !ok {
 		return rejectInvalidOperationIDLabel(ctx, r.Client, &freeze, &freeze.Status.Conditions,
-			func(reason errx.Reason, m string) { r.eventf(&freeze, corev1.EventTypeWarning, reason, "%s", m) },
+			func(reason errx.Reason, m string) { r.eventf(ctx, &freeze, corev1.EventTypeWarning, reason, "%s", m) },
 			func() { freeze.Status.Phase = operatorv1alpha1.PhaseFailed },
 			msg)
 	}
@@ -81,7 +81,7 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 	if sibling {
 		msg := fmt.Sprintf("operationId %q already used by another NetworkUpgradeFreeze", freeze.Spec.OperationID)
-		r.eventf(&freeze, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
+		r.eventf(ctx, &freeze, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
 		freeze.Status.Phase = operatorv1alpha1.PhaseFailed
 		freeze.Status.ObservedGeneration = freeze.Generation
 		setCondition(&freeze.Status.Conditions, metav1.Condition{
@@ -124,12 +124,12 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 		checkTimeout, rng, r.StrategyName,
 		nil,
 		func(name operatorv1alpha1.ComponentName, res registry.FailoverResult) {
-			r.eventf(&freeze, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryFailover,
+			r.eventf(ctx, &freeze, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryFailover,
 				"%s: registry %s unreachable, failed over to %s (digest: %s)",
 				name, res.FailedImage, res.Selected.Image, res.Selected.Digest)
 		},
 		func(name operatorv1alpha1.ComponentName, err error) {
-			r.eventf(&freeze, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
+			r.eventf(ctx, &freeze, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
 				"%s: %v", name, err)
 		},
 	)
@@ -185,10 +185,8 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 	return ctrl.Result{}, nil
 }
 
-func (r *NetworkUpgradeFreezeReconciler) eventf(obj *operatorv1alpha1.NetworkUpgradeFreeze, eventtype string, reason errx.Reason, format string, args ...any) {
-	if r.Recorder != nil {
-		r.Recorder.Eventf(obj, nil, eventtype, reason.String(), "RegistryHealthCheck", format, args...)
-	}
+func (r *NetworkUpgradeFreezeReconciler) eventf(ctx context.Context, obj *operatorv1alpha1.NetworkUpgradeFreeze, eventtype string, reason errx.Reason, format string, args ...any) {
+	common.Eventf(ctx, r.Recorder, obj, eventtype, reason, "RegistryHealthCheck", format, args...)
 }
 
 func (r *NetworkUpgradeFreezeReconciler) SetupWithManager(mgr ctrl.Manager) error {

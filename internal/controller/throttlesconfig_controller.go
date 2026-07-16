@@ -51,7 +51,7 @@ func (r *ThrottlesConfigReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	result, err := r.subreconciler.Reconcile(ctx, obj)
 	if err != nil {
-		r.event(obj, corev1.EventTypeWarning, operatorv1alpha1.EventConfigCRFailed, err.Error())
+		r.event(ctx, obj, corev1.EventTypeWarning, operatorv1alpha1.EventConfigCRFailed, err.Error())
 		return result, err
 	}
 	if result.Requeue || result.RequeueAfter > 0 {
@@ -62,7 +62,7 @@ func (r *ThrottlesConfigReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
-	r.event(obj, corev1.EventTypeNormal, operatorv1alpha1.EventConfigCRReconciled, "ThrottlesConfig reconciled")
+	r.event(ctx, obj, corev1.EventTypeNormal, operatorv1alpha1.EventConfigCRReconciled, "ThrottlesConfig reconciled")
 	return ctrl.Result{}, nil
 }
 
@@ -72,10 +72,8 @@ func (r *ThrottlesConfigReconciler) updateStatus(ctx context.Context, obj *opera
 	return r.Status().Update(ctx, obj)
 }
 
-func (r *ThrottlesConfigReconciler) event(obj *operatorv1alpha1.ThrottlesConfig, eventtype string, reason errx.Reason, msg string) {
-	if r.Recorder != nil {
-		r.Recorder.Eventf(obj, nil, eventtype, reason.String(), "ThrottlesConfig", "%s", msg)
-	}
+func (r *ThrottlesConfigReconciler) event(ctx context.Context, obj *operatorv1alpha1.ThrottlesConfig, eventtype string, reason errx.Reason, msg string) {
+	common.Eventf(ctx, r.Recorder, obj, eventtype, reason, "ThrottlesConfig", "%s", msg)
 }
 
 func (r *ThrottlesConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {

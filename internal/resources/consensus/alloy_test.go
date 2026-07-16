@@ -3,6 +3,7 @@
 package consensus
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -253,7 +254,7 @@ func TestAddSidecarContainers_Alloy(t *testing.T) {
 		},
 	}
 
-	if err := reconciler.addSidecarContainers(deploy, capsule, capsule.Spec.PodProperties.Containers.Alloy, uc.ModeClusterOnly); err != nil {
+	if err := reconciler.addSidecarContainers(context.Background(), deploy, capsule, capsule.Spec.PodProperties.Containers.Alloy, uc.ModeClusterOnly); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -323,7 +324,7 @@ func TestAddSidecarContainers_AlloyDisabled(t *testing.T) {
 		},
 	}
 
-	if err := reconciler.addSidecarContainers(deploy, capsule, capsule.Spec.PodProperties.Containers.Alloy, uc.ModeClusterOnly); err != nil {
+	if err := reconciler.addSidecarContainers(context.Background(), deploy, capsule, capsule.Spec.PodProperties.Containers.Alloy, uc.ModeClusterOnly); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -368,7 +369,7 @@ func TestAddSidecarContainers_AlloyNil(t *testing.T) {
 		},
 	}
 
-	if err := reconciler.addSidecarContainers(deploy, capsule, nil, uc.ModeClusterOnly); err != nil {
+	if err := reconciler.addSidecarContainers(context.Background(), deploy, capsule, nil, uc.ModeClusterOnly); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
