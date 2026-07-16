@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/automa-saga/logx"
 	"github.com/automa-saga/version"
+	"github.com/go-logr/logr"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -19,7 +21,6 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
@@ -47,9 +48,15 @@ func main() {
 	var enableHTTP2 bool
 	var registryOrder string
 	var showVersion bool
+	var logLevel string
+	var consoleLogging bool
 	var tlsOpts []func(*tls.Config)
 
 	flag.BoolVar(&showVersion, "version", false, "Print version information and exit.")
+	flag.StringVar(&logLevel, "log-level", "info",
+		"Log level: trace, debug, info, warn, error.")
+	flag.BoolVar(&consoleLogging, "console-logging", false,
+		"If set, logs use the human-readable console writer instead of structured JSON.")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -63,10 +70,6 @@ func main() {
 	flag.StringVar(&registryOrder, "registry-order", registry.StrategyRandom,
 		"Order in which registries are checked during the upgrade Prepare phase: Random or Sequential.")
 
-	opts := zap.Options{
-		Development: true,
-	}
-	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
 	if showVersion {
@@ -74,7 +77,18 @@ func main() {
 		os.Exit(0)
 	}
 
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	if err := logx.Initialize(logx.LoggingConfig{
+		Level:          logLevel,
+		ConsoleLogging: consoleLogging,
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialize logging: %v\n", err)
+		os.Exit(1)
+	}
+	// Route controller-runtime's own logs (reconciler errors, leader election,
+	// cache sync) and this binary's setupLog through logx, so the operator emits
+	// a single structured stream. logr -> slog -> logx reuses the slog bridge the
+	// uc daemon already relies on, adding no new dependency.
+	ctrl.SetLogger(logr.FromSlogHandler(logx.NewSlogHandler()))
 
 	// If the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will

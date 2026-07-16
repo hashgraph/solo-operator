@@ -12,9 +12,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -32,8 +32,6 @@ func NewRoleBindingSubReconciler(c client.Client, scheme *runtime.Scheme) *RoleB
 
 // Reconcile ensures the role binding exists
 func (r *RoleBindingSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	desired := r.buildRoleBinding(capsule)
 
 	// Set owner reference
@@ -46,7 +44,7 @@ func (r *RoleBindingSubReconciler) Reconcile(ctx context.Context, capsule *opera
 	err := r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("Creating role binding", "name", desired.Name, "namespace", desired.Namespace)
+			common.Info(ctx, common.ReasonRoleBindingCreated).Str("roleBinding", desired.Name).Msg("Creating role binding")
 			if err := r.Client.Create(ctx, desired); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -57,7 +55,7 @@ func (r *RoleBindingSubReconciler) Reconcile(ctx context.Context, capsule *opera
 
 	// Update subjects and role ref if needed
 	if r.needsUpdate(existing, desired) {
-		logger.V(1).Info("Updating role binding", "name", desired.Name, "namespace", desired.Namespace)
+		common.Debug(ctx, common.ReasonRoleBindingUpdated).Str("roleBinding", desired.Name).Msg("Updating role binding")
 		existing.Subjects = desired.Subjects
 		existing.RoleRef = desired.RoleRef
 		existing.Labels = desired.Labels

@@ -17,9 +17,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -36,8 +36,6 @@ func NewDeploymentSubReconciler(c client.Client, scheme *runtime.Scheme) *Deploy
 }
 
 func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, haproxy *operatorv1alpha1.HAProxyCapsule) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	desired, err := r.buildDeployment(haproxy)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -51,7 +49,7 @@ func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, haproxy *operat
 	err = r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("Creating HAProxy deployment", "name", desired.Name, "namespace", desired.Namespace)
+			common.Info(ctx, common.ReasonDeploymentCreated).Msg("Creating HAProxy deployment")
 			if err := r.Client.Create(ctx, desired); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -61,7 +59,7 @@ func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, haproxy *operat
 	}
 
 	if r.needsUpdate(existing, desired) {
-		logger.V(1).Info("Updating HAProxy deployment", "name", desired.Name, "namespace", desired.Namespace)
+		common.Debug(ctx, common.ReasonDeploymentUpdated).Msg("Updating HAProxy deployment")
 		existing.Spec = desired.Spec
 		existing.Labels = desired.Labels
 		if err := r.Client.Update(ctx, existing); err != nil {

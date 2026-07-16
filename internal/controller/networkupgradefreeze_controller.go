@@ -15,9 +15,9 @@ import (
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/registry"
 )
@@ -52,12 +52,12 @@ func (r *NetworkUpgradeFreezeReconciler) WithStrategy(name string) *NetworkUpgra
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeprepares,verbs=get;list;watch
 
 func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	var freeze operatorv1alpha1.NetworkUpgradeFreeze
 	if err := r.Get(ctx, req.NamespacedName, &freeze); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+
+	ctx = common.ReconcileContext(ctx, "networkupgradefreeze", "NetworkUpgradeFreeze", &freeze)
 
 	if res, err := ensureFinalizer(ctx, r.Client, &freeze, FinalizerNetworkUpgradeFreeze); res != nil {
 		return *res, err
@@ -102,7 +102,7 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, err
 	}
 	if prepare == nil || prepare.Status.Phase != operatorv1alpha1.PhaseSucceeded {
-		logger.Info("waiting for NetworkUpgradePrepare to succeed", "operationId", freeze.Spec.OperationID)
+		common.Info(ctx, ReasonWaitingForPrepare).Msg("waiting for NetworkUpgradePrepare to succeed")
 		return ctrl.Result{RequeueAfter: freezePrereqRequeueAfter}, nil
 	}
 

@@ -11,9 +11,9 @@ import (
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/resources/log4j2config"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
@@ -37,11 +37,6 @@ func NewLog4j2ConfigReconciler(c client.Client, scheme *runtime.Scheme) *Log4j2C
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=log4j2configs/status,verbs=get;update;patch
 
 func (r *Log4j2ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
-	logger.Info("Starting Log4j2Config reconciliation", "namespace", req.Namespace, "name", req.Name)
-	defer logger.Info("Finished Log4j2Config reconciliation", "namespace", req.Namespace, "name", req.Name)
-
 	obj := &operatorv1alpha1.Log4j2Config{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -49,6 +44,10 @@ func (r *Log4j2ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 		return ctrl.Result{}, err
 	}
+
+	ctx = common.ReconcileContext(ctx, "log4j2config", "Log4j2Config", obj)
+	common.Info(ctx, ReasonReconcileStart).Msg("Starting Log4j2Config reconciliation")
+	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished Log4j2Config reconciliation")
 
 	result, err := r.subreconciler.Reconcile(ctx, obj)
 	if err != nil {

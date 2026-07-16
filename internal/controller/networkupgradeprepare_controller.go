@@ -14,9 +14,9 @@ import (
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/registry"
 )
@@ -51,12 +51,12 @@ func (r *NetworkUpgradePrepareReconciler) WithStrategy(name string) *NetworkUpgr
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeprepares/finalizers,verbs=update
 
 func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	var prepare operatorv1alpha1.NetworkUpgradePrepare
 	if err := r.Get(ctx, req.NamespacedName, &prepare); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+
+	ctx = common.ReconcileContext(ctx, "networkupgradeprepare", "NetworkUpgradePrepare", &prepare)
 
 	if res, err := ensureFinalizer(ctx, r.Client, &prepare, FinalizerNetworkUpgradePrepare); res != nil {
 		return *res, err
@@ -108,7 +108,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 
 	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	strategy := registry.NewStrategy(r.StrategyName, rng)
-	logger.V(1).Info("registry iteration strategy", "strategy", strategy.Name())
+	common.Debug(ctx, ReasonRegistryStrategy).Str("strategy", strategy.Name()).Msg("registry iteration strategy")
 
 	selected := &operatorv1alpha1.SelectedSources{}
 	succeeded := true
@@ -135,19 +135,19 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 			case registry.StateValid:
 			case registry.StateUnreachable:
 				unreachable++
-				logger.Info("registry unreachable", "component", name, "image", res.Image, "error", res.Err)
+				common.Info(ctx, ReasonRegistryUnreachable).Str("component", string(name)).Str("image", res.Image).AnErr("error", res.Err).Msg("registry unreachable")
 			case registry.StateHashMismatch:
 				allHashesValid = false
-				logger.Info("registry failed layer hash verification", "component", name, "image", res.Image, "error", res.Err)
+				common.Info(ctx, ReasonRegistryHashMismatch).Str("component", string(name)).Str("image", res.Image).AnErr("error", res.Err).Msg("registry failed layer hash verification")
 				r.eventf(&prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
 					"%s: registry %s failed layer hash verification: %v", name, res.Image, res.Err)
 			case registry.StateNoHashes:
 				allHashesValid = false
-				logger.Info("image has no layer hashes configured", "component", name, "image", res.Image, "error", res.Err)
+				common.Info(ctx, ReasonRegistryNoHashes).Str("component", string(name)).Str("image", res.Image).AnErr("error", res.Err).Msg("image has no layer hashes configured")
 				r.eventf(&prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
 					"%s: image %s has no layer hashes configured: %v", name, res.Image, res.Err)
 			default:
-				logger.Info("unexpected registry state", "component", name, "image", res.Image, "state", res.State)
+				common.Info(ctx, ReasonRegistryUnexpectedState).Str("component", string(name)).Str("image", res.Image).Str("state", string(res.State)).Msg("unexpected registry state")
 			}
 		}
 

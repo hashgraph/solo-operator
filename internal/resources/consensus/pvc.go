@@ -12,9 +12,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -74,8 +74,6 @@ func (r *PVCSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alp
 
 // reconcilePVC ensures a specific PVC exists
 func (r *PVCSubReconciler) reconcilePVC(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule, volumeType string, spec *corev1.PersistentVolumeClaimSpec) error {
-	logger := log.FromContext(ctx)
-
 	desired := r.buildPVC(capsule, volumeType, spec)
 
 	// Set owner reference
@@ -88,7 +86,7 @@ func (r *PVCSubReconciler) reconcilePVC(ctx context.Context, capsule *operatorv1
 	err := r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("Creating PVC", "name", desired.Name, "namespace", desired.Namespace, "volumeType", volumeType)
+			common.Info(ctx, common.ReasonPVCCreated).Str("pvc", desired.Name).Str("volumeType", volumeType).Msg("Creating PVC")
 			return r.Client.Create(ctx, desired)
 		}
 		return err

@@ -13,9 +13,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/resources/envoy"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
@@ -49,25 +49,20 @@ func NewEnvoyProxyReconciler(c client.Client, scheme *runtime.Scheme) *EnvoyProx
 
 // Reconcile is the main reconciliation loop for EnvoyProxy resources
 func (r *EnvoyProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
-	logger.Info("Starting EnvoyProxy reconciliation",
-		"namespace", req.Namespace,
-		"name", req.Name)
-	defer logger.Info("Finished EnvoyProxy reconciliation",
-		"namespace", req.Namespace,
-		"name", req.Name)
-
 	// Fetch the EnvoyProxy instance
 	envoyObj := &operatorv1alpha1.EnvoyProxy{}
 	if err := r.Get(ctx, req.NamespacedName, envoyObj); err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("EnvoyProxy resource not found, ignoring since it must be deleted")
+			common.Info(ctx, ReasonResourceNotFound).Msg("EnvoyProxy resource not found, ignoring since it must be deleted")
 			return ctrl.Result{}, nil
 		}
-		logger.Error(err, "Failed to get EnvoyProxy")
+		common.Err(ctx, err, ReasonGetFailed).Msg("Failed to get EnvoyProxy")
 		return ctrl.Result{}, err
 	}
+
+	ctx = common.ReconcileContext(ctx, "envoyproxy", "EnvoyProxy", envoyObj)
+	common.Info(ctx, ReasonReconcileStart).Msg("Starting EnvoyProxy reconciliation")
+	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished EnvoyProxy reconciliation")
 
 	// Handle deletion
 	if !envoyObj.DeletionTimestamp.IsZero() {
@@ -102,12 +97,8 @@ func (r *EnvoyProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 // handleDeletion handles the deletion of an EnvoyProxy resource
 func (r *EnvoyProxyReconciler) handleDeletion(ctx context.Context, envoyObj *operatorv1alpha1.EnvoyProxy) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	if controllerutil.ContainsFinalizer(envoyObj, EnvoyProxyFinalizer) {
-		logger.Info("Deleting EnvoyProxy",
-			"namespace", envoyObj.Namespace,
-			"name", envoyObj.Name)
+		common.Info(ctx, ReasonDeleting).Msg("Deleting EnvoyProxy")
 
 		// Remove finalizer
 		controllerutil.RemoveFinalizer(envoyObj, EnvoyProxyFinalizer)

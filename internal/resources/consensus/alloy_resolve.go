@@ -7,9 +7,9 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 )
 
 // ResolveAlloyConfig returns the effective AlloyConfig for a capsule by merging
@@ -20,8 +20,6 @@ import (
 //  2. If the capsule has no alloy config, orbit defaults are used as-is.
 //  3. If neither orbit nor capsule define alloy config, nil is returned.
 func ResolveAlloyConfig(ctx context.Context, c client.Client, capsule *operatorv1alpha1.ConsensusCapsule) (*operatorv1alpha1.AlloyConfig, error) {
-	logger := log.FromContext(ctx)
-
 	capsuleAlloy := capsule.Spec.PodProperties.Containers.Alloy
 
 	// Fetch orbit defaults. Only swallow NotFound (orbit may not exist yet);
@@ -29,7 +27,7 @@ func ResolveAlloyConfig(ctx context.Context, c client.Client, capsule *operatorv
 	orbitDefaults, err := fetchOrbitAlloyDefaults(ctx, c, capsule.Spec.Orbit)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.V(1).Info("Orbit not found, using capsule alloy config only", "orbit", capsule.Spec.Orbit)
+			common.Debug(ctx, ReasonOrbitDefaultsResolved).Str("orbit", capsule.Spec.Orbit).Msg("Orbit not found, using capsule alloy config only")
 			return capsuleAlloy, nil
 		}
 		return nil, err

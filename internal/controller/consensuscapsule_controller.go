@@ -19,10 +19,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/resources/apipermissionproperties"
 	"github.com/hashgraph/solo-operator/internal/resources/applicationoverrideproperties"
 	"github.com/hashgraph/solo-operator/internal/resources/applicationproperties"
@@ -75,24 +75,19 @@ func NewConsensusCapsuleReconciler(c client.Client, scheme *runtime.Scheme) *Con
 
 // Reconcile is the main reconciliation loop for ConsensusCapsule resources
 func (r *ConsensusCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
-	logger.Info("Starting ConsensusCapsule reconciliation",
-		"namespace", req.Namespace,
-		"name", req.Name)
-	defer logger.Info("Finished ConsensusCapsule reconciliation",
-		"namespace", req.Namespace,
-		"name", req.Name)
-
 	capsule := &operatorv1alpha1.ConsensusCapsule{}
 	if err := r.Get(ctx, req.NamespacedName, capsule); err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("ConsensusCapsule resource not found, ignoring since it must be deleted")
+			common.Info(ctx, ReasonResourceNotFound).Msg("ConsensusCapsule resource not found, ignoring since it must be deleted")
 			return ctrl.Result{}, nil
 		}
-		logger.Error(err, "Failed to get ConsensusCapsule")
+		common.Err(ctx, err, ReasonGetFailed).Msg("Failed to get ConsensusCapsule")
 		return ctrl.Result{}, err
 	}
+
+	ctx = common.ReconcileContext(ctx, "consensuscapsule", "ConsensusCapsule", capsule)
+	common.Info(ctx, ReasonReconcileStart).Msg("Starting ConsensusCapsule reconciliation")
+	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished ConsensusCapsule reconciliation")
 
 	if !capsule.DeletionTimestamp.IsZero() {
 		return r.handleDeletion(ctx, capsule)
@@ -204,12 +199,8 @@ func (r *ConsensusCapsuleReconciler) checkConfigRefs(ctx context.Context, c *ope
 }
 
 func (r *ConsensusCapsuleReconciler) handleDeletion(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	if controllerutil.ContainsFinalizer(capsule, ConsensusCapsuleFinalizer) {
-		logger.Info("Deleting ConsensusCapsule",
-			"namespace", capsule.Namespace,
-			"name", capsule.Name)
+		common.Info(ctx, ReasonDeleting).Msg("Deleting ConsensusCapsule")
 		controllerutil.RemoveFinalizer(capsule, ConsensusCapsuleFinalizer)
 		if err := r.Update(ctx, capsule); err != nil {
 			return ctrl.Result{}, err
@@ -233,7 +224,6 @@ func isPodReady(pod corev1.Pod) bool {
 // Phase transitions to Running only once the pod's Ready condition is True,
 // ensuring all containers have passed their readiness checks.
 func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
 	podList := &corev1.PodList{}
 	if err := r.List(ctx, podList,
 		client.InNamespace(capsule.Namespace),
@@ -279,7 +269,7 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 	// must not overwrite a manually-reset checkpoint before the pod restarts.
 	if phase == operatorv1alpha1.PhaseRunning && capsule.Status.Phase != operatorv1alpha1.PhaseRunning {
 		if err := r.markGenesisInitialized(ctx, capsule); err != nil {
-			logger.Error(err, "failed to update checkpoint")
+			common.Err(ctx, err, ReasonCheckpointUpdateFailed).Msg("failed to update checkpoint")
 		}
 	}
 

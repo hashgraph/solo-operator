@@ -16,7 +16,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
@@ -51,8 +50,6 @@ func NewStatefulSetSubReconciler(c client.Client, scheme *runtime.Scheme, record
 
 // Reconcile ensures the StatefulSet exists and is up to date.
 func (r *StatefulSetSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	desired, err := r.buildStatefulSet(ctx, capsule)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -66,7 +63,7 @@ func (r *StatefulSetSubReconciler) Reconcile(ctx context.Context, capsule *opera
 	err = r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("Creating StatefulSet", "name", desired.Name, "namespace", desired.Namespace)
+			common.Info(ctx, common.ReasonStatefulSetCreated).Str("statefulSet", desired.Name).Msg("Creating StatefulSet")
 			if err := r.Client.Create(ctx, desired); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -76,7 +73,7 @@ func (r *StatefulSetSubReconciler) Reconcile(ctx context.Context, capsule *opera
 	}
 
 	if r.needsUpdate(existing, desired) {
-		logger.V(1).Info("Updating StatefulSet", "name", desired.Name, "namespace", desired.Namespace)
+		common.Debug(ctx, common.ReasonStatefulSetUpdated).Str("statefulSet", desired.Name).Msg("Updating StatefulSet")
 		existing.Spec = desired.Spec
 		existing.Labels = desired.Labels
 		if err := r.Client.Update(ctx, existing); err != nil {

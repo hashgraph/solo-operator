@@ -14,7 +14,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
@@ -34,8 +33,6 @@ func NewConfigMapSubReconciler(c client.Client, scheme *runtime.Scheme, recorder
 }
 
 func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1alpha1.NodeSettings) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	if err := ValidateContent(obj.Spec.Content); err != nil {
 		apimeta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 			Type:               operatorv1alpha1.NodeSettingsConditionTypeValid,
@@ -47,7 +44,7 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 		if r.Recorder != nil {
 			r.Recorder.Eventf(obj, nil, corev1.EventTypeWarning, "InvalidContent", "ConfigMap", "invalid settings.txt: %s", err.Error())
 		}
-		logger.Error(err, "invalid settings.txt — fix spec.content to recover", "name", obj.Name, "namespace", obj.Namespace)
+		common.Err(ctx, err, common.ReasonInvalidContent).Msg("invalid settings.txt — fix spec.content to recover")
 		return ctrl.Result{}, nil
 	}
 
@@ -69,14 +66,14 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 	err := r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("Creating NodeSettings ConfigMap", "name", desired.Name, "namespace", desired.Namespace)
+			common.Info(ctx, common.ReasonConfigMapCreated).Str("configMap", desired.Name).Msg("Creating NodeSettings ConfigMap")
 			return ctrl.Result{}, r.Client.Create(ctx, desired)
 		}
 		return ctrl.Result{}, err
 	}
 
 	if common.ConfigMapNeedsUpdate(existing, desired) {
-		logger.V(1).Info("Updating NodeSettings ConfigMap", "name", desired.Name, "namespace", desired.Namespace)
+		common.Debug(ctx, common.ReasonConfigMapUpdated).Str("configMap", desired.Name).Msg("Updating NodeSettings ConfigMap")
 		existing.Data = desired.Data
 		existing.Labels = desired.Labels
 		// Re-apply owner reference on update so a pre-existing CM without a controller

@@ -13,9 +13,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
@@ -51,8 +51,6 @@ func NewDataConfigMapSubReconciler(c client.Client, scheme *runtime.Scheme) *Dat
 }
 
 func (r *DataConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	orbit, err := fetchOrbit(ctx, r.Client, capsule.Spec.Orbit)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -68,7 +66,7 @@ func (r *DataConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *ope
 	err = r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("Creating genesis-properties ConfigMap", "name", desired.Name, "namespace", desired.Namespace)
+			common.Info(ctx, common.ReasonConfigMapCreated).Str("configMap", desired.Name).Msg("Creating genesis-properties ConfigMap")
 			if err := r.Client.Create(ctx, desired); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -78,7 +76,7 @@ func (r *DataConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *ope
 	}
 
 	if !maps.Equal(existing.Data, desired.Data) {
-		logger.V(1).Info("Updating genesis-properties ConfigMap", "name", desired.Name, "namespace", desired.Namespace)
+		common.Debug(ctx, common.ReasonConfigMapUpdated).Str("configMap", desired.Name).Msg("Updating genesis-properties ConfigMap")
 		existing.Data = desired.Data
 		existing.Labels = desired.Labels
 		if err := r.Client.Update(ctx, existing); err != nil {

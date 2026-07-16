@@ -12,9 +12,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -31,8 +31,6 @@ func NewCheckpointSubReconciler(c client.Client, scheme *runtime.Scheme) *Checkp
 }
 
 func (r *CheckpointSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	desired := r.buildCheckpoint(capsule)
 	if err := controllerutil.SetControllerReference(capsule, desired, r.Scheme); err != nil {
 		return ctrl.Result{}, err
@@ -42,7 +40,7 @@ func (r *CheckpointSubReconciler) Reconcile(ctx context.Context, capsule *operat
 	err := r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("Creating checkpoint ConfigMap", "name", desired.Name)
+			common.Info(ctx, common.ReasonConfigMapCreated).Str("configMap", desired.Name).Msg("Creating checkpoint ConfigMap")
 			return ctrl.Result{}, r.Client.Create(ctx, desired)
 		}
 		return ctrl.Result{}, err

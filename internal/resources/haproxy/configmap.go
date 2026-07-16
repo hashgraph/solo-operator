@@ -12,9 +12,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -32,8 +32,6 @@ func NewConfigMapSubReconciler(c client.Client, scheme *runtime.Scheme) *ConfigM
 
 // Reconcile ensures the config map exists and is up to date
 func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, haproxy *operatorv1alpha1.HAProxyCapsule) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	desired, err := r.buildConfigMap(haproxy)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -49,7 +47,7 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, haproxy *operato
 	err = r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("Creating HAProxy config map", "name", desired.Name, "namespace", desired.Namespace)
+			common.Info(ctx, common.ReasonConfigMapCreated).Str("configMap", desired.Name).Msg("Creating HAProxy config map")
 			if err := r.Client.Create(ctx, desired); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -60,7 +58,7 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, haproxy *operato
 
 	// Update data if needed
 	if r.needsUpdate(existing, desired) {
-		logger.V(1).Info("Updating HAProxy config map", "name", desired.Name, "namespace", desired.Namespace)
+		common.Debug(ctx, common.ReasonConfigMapUpdated).Str("configMap", desired.Name).Msg("Updating HAProxy config map")
 		existing.Data = desired.Data
 		existing.Labels = desired.Labels
 		if err := r.Client.Update(ctx, existing); err != nil {

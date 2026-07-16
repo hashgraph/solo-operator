@@ -17,7 +17,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
@@ -78,9 +77,6 @@ func NewHelmCapsuleReconciler(c client.Client, scheme *runtime.Scheme, helmClien
 // +kubebuilder:rbac:groups=helm.toolkit.fluxcd.io,resources=helmreleases,verbs=get;list;watch
 
 func (r *HelmCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-	logger.Info("Reconciling HelmCapsule", "namespace", req.Namespace, "name", req.Name)
-
 	hc := &operatorv1alpha1.HelmCapsule{}
 	if err := r.Get(ctx, req.NamespacedName, hc); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -88,6 +84,9 @@ func (r *HelmCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 		return ctrl.Result{}, err
 	}
+
+	ctx = common.ReconcileContext(ctx, "helmcapsule", "HelmCapsule", hc)
+	common.Info(ctx, ReasonReconcileStart).Msg("Reconciling HelmCapsule")
 
 	if !hc.DeletionTimestamp.IsZero() {
 		return r.handleDeletion(ctx, hc)
@@ -121,11 +120,10 @@ func (r *HelmCapsuleReconciler) handleDeletion(ctx context.Context, hc *operator
 		return ctrl.Result{}, nil
 	}
 
-	logger := log.FromContext(ctx)
-
 	if hc.Annotations[SkipUninstallAnnotation] == "true" {
-		logger.Info("Skipping Helm uninstall — escape-hatch annotation is set",
-			"annotation", SkipUninstallAnnotation)
+		common.Info(ctx, ReasonSkippingUninstall).
+			Str("annotation", SkipUninstallAnnotation).
+			Msg("Skipping Helm uninstall — escape-hatch annotation is set")
 	} else {
 		releaseName := hc.Spec.ReleaseName
 		if releaseName == "" {
@@ -234,7 +232,7 @@ func (r *HelmCapsuleReconciler) recordFailure(ctx context.Context, hc *operatorv
 		})
 		return r.Status().Update(ctx, latest)
 	}); err != nil {
-		log.FromContext(ctx).Error(err, "Failed to record failure condition")
+		common.Err(ctx, err, ReasonFailureConditionRecordFailed).Msg("Failed to record failure condition")
 	}
 }
 

@@ -16,10 +16,10 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/yaml"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
@@ -119,7 +119,6 @@ func injectComponentValues(ctx context.Context, c client.Client, namespace strin
 }
 
 func mirrorValues(ctx context.Context, c client.Client, namespace string, capsules []operatorv1alpha1.ConsensusCapsule, orbit *operatorv1alpha1.Orbit) (map[string]interface{}, error) {
-	logger := log.FromContext(ctx)
 	vals := map[string]interface{}{
 		"hedera": map[string]interface{}{
 			"mirror": map[string]interface{}{
@@ -140,7 +139,7 @@ func mirrorValues(ctx context.Context, c client.Client, namespace string, capsul
 			}
 		}
 	} else if !apierrors.IsNotFound(err) {
-		logger.Error(err, "failed to read addressbook-bin ConfigMap")
+		common.Err(ctx, err, ReasonAddressBookReadFailed).Msg("failed to read addressbook-bin ConfigMap")
 	}
 
 	return vals, nil
@@ -210,7 +209,6 @@ func consensusEndpoints(capsules []operatorv1alpha1.ConsensusCapsule) []string {
 // hederaNetworkJSON formats the {"host:port": "accountId"} map expected by the relay chart.
 // Capsules missing an address book entry or AccountId are skipped with a warning.
 func hederaNetworkJSON(ctx context.Context, capsules []operatorv1alpha1.ConsensusCapsule) (string, error) {
-	logger := log.FromContext(ctx)
 	network := map[string]string{}
 	for _, c := range capsules {
 		entry := c.Status.AddressBookEntry
@@ -222,8 +220,7 @@ func hederaNetworkJSON(ctx context.Context, capsules []operatorv1alpha1.Consensu
 			port = 50211
 		}
 		if c.Spec.AccountId == "" {
-			logger.Info("Skipping ConsensusCapsule from HEDERA_NETWORK: spec.accountId is empty",
-				"capsule", c.Name)
+			common.Info(ctx, ReasonCapsuleSkipped).Str("capsule", c.Name).Msg("Skipping ConsensusCapsule from HEDERA_NETWORK: spec.accountId is empty")
 			continue
 		}
 		network[fmt.Sprintf("%s:%d", entry.InternalHostname, port)] = c.Spec.AccountId

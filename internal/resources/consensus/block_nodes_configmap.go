@@ -14,9 +14,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -41,8 +41,6 @@ func (r *BlockNodesConfigMapSubReconciler) ShouldReconcile(_ context.Context, ca
 
 // Reconcile ensures the block-nodes ConfigMap exists and is up to date.
 func (r *BlockNodesConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	desired, err := r.buildConfigMap(capsule)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -56,7 +54,7 @@ func (r *BlockNodesConfigMapSubReconciler) Reconcile(ctx context.Context, capsul
 	err = r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("Creating block-nodes ConfigMap", "name", desired.Name, "namespace", desired.Namespace)
+			common.Info(ctx, common.ReasonConfigMapCreated).Str("configMap", desired.Name).Msg("Creating block-nodes ConfigMap")
 			if err := r.Client.Create(ctx, desired); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -66,7 +64,7 @@ func (r *BlockNodesConfigMapSubReconciler) Reconcile(ctx context.Context, capsul
 	}
 
 	if !maps.Equal(existing.Data, desired.Data) {
-		logger.V(1).Info("Updating block-nodes ConfigMap", "name", desired.Name, "namespace", desired.Namespace)
+		common.Debug(ctx, common.ReasonConfigMapUpdated).Str("configMap", desired.Name).Msg("Updating block-nodes ConfigMap")
 		existing.Data = desired.Data
 		existing.Labels = desired.Labels
 		if err := r.Client.Update(ctx, existing); err != nil {

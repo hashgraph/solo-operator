@@ -17,7 +17,6 @@ import (
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
@@ -66,12 +65,12 @@ func (r *NetworkUpgradeExecuteReconciler) WithStrategy(name string) *NetworkUpgr
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch
 
 func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	var execute operatorv1alpha1.NetworkUpgradeExecute
 	if err := r.Get(ctx, req.NamespacedName, &execute); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+
+	ctx = common.ReconcileContext(ctx, "networkupgradeexecute", "NetworkUpgradeExecute", &execute)
 
 	if res, err := ensureFinalizer(ctx, r.Client, &execute, FinalizerNetworkUpgradeExecute); res != nil {
 		return *res, err
@@ -117,7 +116,7 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 			return ctrl.Result{}, err
 		}
 		if prepare == nil || prepare.Status.Phase != operatorv1alpha1.PhaseSucceeded {
-			logger.Info("waiting for NetworkUpgradePrepare to succeed", "operationId", execute.Spec.OperationID)
+			common.Info(ctx, ReasonWaitingForPrepare).Msg("waiting for NetworkUpgradePrepare to succeed")
 			return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
 		}
 
@@ -126,7 +125,7 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 			return ctrl.Result{}, err
 		}
 		if freeze == nil || freeze.Status.Phase != operatorv1alpha1.PhaseSucceeded {
-			logger.Info("waiting for NetworkUpgradeFreeze to succeed", "operationId", execute.Spec.OperationID)
+			common.Info(ctx, ReasonWaitingForFreeze).Msg("waiting for NetworkUpgradeFreeze to succeed")
 			return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
 		}
 
@@ -135,7 +134,7 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 			return ctrl.Result{}, err
 		}
 		if capsule == nil {
-			logger.Info("ConsensusCapsule not found", "capsule", execute.Spec.ConsensusNode)
+			common.Info(ctx, ReasonCapsuleNotFound).Str("capsule", execute.Spec.ConsensusNode).Msg("ConsensusCapsule not found")
 			return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
 		}
 
@@ -166,7 +165,7 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		return r.reconcilePendingNodeUpgrade(ctx, &execute)
 
 	default:
-		logger.Info("unhandled execute phase", "phase", execute.Status.Phase)
+		common.Info(ctx, ReasonUnhandledPhase).Str("phase", string(execute.Status.Phase)).Msg("unhandled execute phase")
 		return ctrl.Result{}, nil
 	}
 }
@@ -214,7 +213,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 func (r *NetworkUpgradeExecuteReconciler) reconcilePendingInfraUpgrade(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (ctrl.Result, error) {
 	cond := findCondition(execute.Status.Conditions, operatorv1alpha1.CondConfigCRsApplied)
 	if cond == nil || cond.Status != metav1.ConditionTrue {
-		log.FromContext(ctx).Info("waiting for daemon to set CondConfigCRsApplied=True", "operationId", execute.Spec.OperationID)
+		common.Info(ctx, ReasonWaitingForConfigCRsApplied).Msg("waiting for daemon to set CondConfigCRsApplied=True")
 		return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
 	}
 

@@ -11,9 +11,9 @@ import (
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/resources/throttlesconfig"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
@@ -37,11 +37,6 @@ func NewThrottlesConfigReconciler(c client.Client, scheme *runtime.Scheme) *Thro
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=throttlesconfigs/status,verbs=get;update;patch
 
 func (r *ThrottlesConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
-	logger.Info("Starting ThrottlesConfig reconciliation", "namespace", req.Namespace, "name", req.Name)
-	defer logger.Info("Finished ThrottlesConfig reconciliation", "namespace", req.Namespace, "name", req.Name)
-
 	obj := &operatorv1alpha1.ThrottlesConfig{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -49,6 +44,10 @@ func (r *ThrottlesConfigReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 		return ctrl.Result{}, err
 	}
+
+	ctx = common.ReconcileContext(ctx, "throttlesconfig", "ThrottlesConfig", obj)
+	common.Info(ctx, ReasonReconcileStart).Msg("Starting ThrottlesConfig reconciliation")
+	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished ThrottlesConfig reconciliation")
 
 	result, err := r.subreconciler.Reconcile(ctx, obj)
 	if err != nil {

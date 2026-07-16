@@ -15,9 +15,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -73,8 +73,6 @@ func NewServiceSubReconciler(c client.Client, scheme *runtime.Scheme) *ServiceSu
 
 // Reconcile ensures the service exists and is up to date
 func (r *ServiceSubReconciler) Reconcile(ctx context.Context, haproxy *operatorv1alpha1.HAProxyCapsule) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	desired := r.buildService(haproxy)
 
 	// Set owner reference
@@ -87,7 +85,7 @@ func (r *ServiceSubReconciler) Reconcile(ctx context.Context, haproxy *operatorv
 	err := r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("Creating HAProxy service", "name", desired.Name, "namespace", desired.Namespace)
+			common.Info(ctx, common.ReasonServiceCreated).Msg("Creating HAProxy service")
 			if err := r.Client.Create(ctx, desired); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -98,7 +96,7 @@ func (r *ServiceSubReconciler) Reconcile(ctx context.Context, haproxy *operatorv
 
 	// Update spec if needed
 	if r.needsUpdate(existing, desired) {
-		logger.V(1).Info("Updating HAProxy service", "name", desired.Name, "namespace", desired.Namespace)
+		common.Debug(ctx, common.ReasonServiceUpdated).Msg("Updating HAProxy service")
 		existing.Labels = desired.Labels
 		setManagedAnnotations(existing, haproxy.Spec.ServiceAnnotations)
 

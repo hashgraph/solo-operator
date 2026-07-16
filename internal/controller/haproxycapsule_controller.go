@@ -13,9 +13,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/resources/haproxy"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
@@ -49,25 +49,20 @@ func NewHAProxyCapsuleReconciler(c client.Client, scheme *runtime.Scheme) *HAPro
 
 // Reconcile is the main reconciliation loop for HAProxyCapsule resources
 func (r *HAProxyCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
-	logger.Info("Starting HAProxyCapsule reconciliation",
-		"namespace", req.Namespace,
-		"name", req.Name)
-	defer logger.Info("Finished HAProxyCapsule reconciliation",
-		"namespace", req.Namespace,
-		"name", req.Name)
-
 	// Fetch the HAProxyCapsule instance
 	haproxyObj := &operatorv1alpha1.HAProxyCapsule{}
 	if err := r.Get(ctx, req.NamespacedName, haproxyObj); err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("HAProxyCapsule resource not found, ignoring since it must be deleted")
+			common.Info(ctx, ReasonResourceNotFound).Msg("HAProxyCapsule resource not found, ignoring since it must be deleted")
 			return ctrl.Result{}, nil
 		}
-		logger.Error(err, "Failed to get HAProxyCapsule")
+		common.Err(ctx, err, ReasonGetFailed).Msg("Failed to get HAProxyCapsule")
 		return ctrl.Result{}, err
 	}
+
+	ctx = common.ReconcileContext(ctx, "haproxycapsule", "HAProxyCapsule", haproxyObj)
+	common.Info(ctx, ReasonReconcileStart).Msg("Starting HAProxyCapsule reconciliation")
+	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished HAProxyCapsule reconciliation")
 
 	// Handle deletion
 	if !haproxyObj.DeletionTimestamp.IsZero() {
@@ -102,12 +97,8 @@ func (r *HAProxyCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 // handleDeletion handles the deletion of a HAProxyCapsule resource
 func (r *HAProxyCapsuleReconciler) handleDeletion(ctx context.Context, haproxyObj *operatorv1alpha1.HAProxyCapsule) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	if controllerutil.ContainsFinalizer(haproxyObj, HAProxyCapsuleFinalizer) {
-		logger.Info("Deleting HAProxyCapsule",
-			"namespace", haproxyObj.Namespace,
-			"name", haproxyObj.Name)
+		common.Info(ctx, ReasonDeleting).Msg("Deleting HAProxyCapsule")
 
 		// Remove finalizer
 		controllerutil.RemoveFinalizer(haproxyObj, HAProxyCapsuleFinalizer)

@@ -7,9 +7,8 @@ import (
 	"math/rand/v2"
 	"time"
 
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 )
 
 type FailoverEvent func(name operatorv1alpha1.ComponentName, result FailoverResult)
@@ -27,7 +26,6 @@ func RevalidateComponents(
 	onFailover FailoverEvent,
 	onInvalid InvalidEvent,
 ) (updated *operatorv1alpha1.SelectedSources, allSucceeded bool) {
-	logger := log.FromContext(ctx)
 	updated = &operatorv1alpha1.SelectedSources{}
 	allSucceeded = true
 
@@ -41,13 +39,13 @@ func RevalidateComponents(
 		}
 		current := selected.Get(name)
 		if current == nil {
-			logger.Info("no selectedSource in spec for component, skipping", "component", name)
+			common.Info(ctx, ReasonNoSelectedSource).Str("component", string(name)).Msg("no selectedSource in spec for component, skipping")
 			continue
 		}
 
 		result, err := RevalidateAndFailover(ctx, checker, comp, *current, timeout, rng, strategyName)
 		if err != nil {
-			logger.Info("no valid registry for component", "component", name, "error", err)
+			common.Warn(ctx, ReasonComponentInvalid).Str("component", string(name)).Err(err).Msg("no valid registry for component")
 			if onInvalid != nil {
 				onInvalid(name, err)
 			}

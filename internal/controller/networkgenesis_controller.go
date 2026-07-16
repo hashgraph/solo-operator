@@ -13,9 +13,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/operations/genesis"
 )
@@ -49,10 +49,6 @@ func NewNetworkGenesisReconciler(c client.Client, scheme *runtime.Scheme) *Netwo
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch
 
 func (r *NetworkGenesisReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-	logger.Info("Starting NetworkGenesis reconciliation", "namespace", req.Namespace, "name", req.Name)
-	defer logger.Info("Finished NetworkGenesis reconciliation", "namespace", req.Namespace, "name", req.Name)
-
 	ng := &operatorv1alpha1.NetworkGenesis{}
 	if err := r.Get(ctx, req.NamespacedName, ng); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -60,6 +56,10 @@ func (r *NetworkGenesisReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 		return ctrl.Result{}, err
 	}
+
+	ctx = common.ReconcileContext(ctx, "networkgenesis", "NetworkGenesis", ng)
+	common.Info(ctx, ReasonReconcileStart).Msg("Starting NetworkGenesis reconciliation")
+	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished NetworkGenesis reconciliation")
 
 	if !ng.DeletionTimestamp.IsZero() {
 		return r.handleDeletion(ctx, ng)
@@ -89,7 +89,7 @@ func (r *NetworkGenesisReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	orbit, err := r.run(ctx, ng)
 	if err != nil {
 		if _, ferr := r.fail(ctx, ng, err.Error()); ferr != nil {
-			log.FromContext(ctx).Error(ferr, "failed to update status after error")
+			common.Err(ctx, ferr, ReasonStatusUpdateAfterErrorFailed).Msg("failed to update status after error")
 		}
 		return ctrl.Result{}, err
 	}

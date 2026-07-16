@@ -12,9 +12,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -32,8 +32,6 @@ func NewServiceAccountSubReconciler(c client.Client, scheme *runtime.Scheme) *Se
 
 // Reconcile ensures the ServiceAccount exists and is up to date.
 func (r *ServiceAccountSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	if saCfg := capsule.Spec.PodProperties.ServiceAccount; saCfg != nil && saCfg.Name != "" {
 		return ctrl.Result{}, nil
 	}
@@ -48,7 +46,7 @@ func (r *ServiceAccountSubReconciler) Reconcile(ctx context.Context, capsule *op
 	err := r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("Creating service account", "name", desired.Name, "namespace", desired.Namespace)
+			common.Info(ctx, common.ReasonServiceAccountCreated).Str("serviceAccount", desired.Name).Msg("Creating service account")
 			if err := r.Client.Create(ctx, desired); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -58,7 +56,7 @@ func (r *ServiceAccountSubReconciler) Reconcile(ctx context.Context, capsule *op
 	}
 
 	if r.needsUpdate(existing, desired) {
-		logger.V(1).Info("Updating service account", "name", desired.Name)
+		common.Debug(ctx, common.ReasonServiceAccountUpdated).Str("serviceAccount", desired.Name).Msg("Updating service account")
 		existing.Labels = desired.Labels
 		existing.Annotations = desired.Annotations
 		if err := r.Client.Update(ctx, existing); err != nil {
