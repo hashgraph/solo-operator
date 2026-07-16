@@ -84,10 +84,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "failed to initialize logging: %v\n", err)
 		os.Exit(1)
 	}
-	// Route controller-runtime's own logs (reconciler errors, leader election,
-	// cache sync) and this binary's setupLog through logx, so the operator emits
-	// a single structured stream. logr -> slog -> logx reuses the slog bridge the
-	// uc daemon already relies on, adding no new dependency.
+	// Route controller-runtime's own logs through logx.
 	ctrl.SetLogger(logr.FromSlogHandler(logx.NewSlogHandler()))
 
 	// If the enable-http2 flag is false (the default), http/2 should be disabled

@@ -12,13 +12,9 @@ import (
 
 type logFieldsKey struct{}
 
-// LogFields are the reconcile-scoped fields stamped onto every log event
-// produced via LoggerFrom(ctx) within a single Reconcile. OperationID is
-// optional — only the NetworkUpgrade/NetworkGenesis CRs carry a spec.operationId.
-//
-// The "name"/"namespace" keys are reserved for the primary CR. When logging an
-// owned/related object, use a distinct key (e.g. "resource", "configMap") so it
-// does not clobber the inherited primary "name".
+// LogFields are the reconcile-scoped fields stamped onto every log line within a
+// single Reconcile. The "name"/"namespace" keys are reserved for the primary CR;
+// log owned objects under a distinct key (e.g. "resource", "configMap").
 type LogFields struct {
 	Controller  string
 	Kind        string
@@ -38,17 +34,15 @@ func logFieldsFrom(ctx context.Context) (LogFields, bool) {
 	return f, ok
 }
 
-// OperationIDer is implemented by CRs that carry a spec.operationId (the
-// NetworkUpgrade/NetworkGenesis family). ReconcileContext stamps operation_id
-// automatically when obj implements it, so callers need not know which CRs have one.
+// OperationIDer lets ReconcileContext stamp operation_id automatically for CRs
+// that carry a spec.operationId, without callers knowing which ones do.
 type OperationIDer interface {
 	GetOperationID() string
 }
 
-// ReconcileContext stamps the reconcile-scoped log fields onto ctx in one call,
-// to be invoked at the top of each top-level Reconcile. reconcileID is read from
-// the context controller-runtime populated, via the public ReconcileIDFromContext.
-// operation_id is populated only when obj implements OperationIDer.
+// ReconcileContext stamps the reconcile-scoped log fields onto ctx, to be called
+// at the top of each top-level Reconcile. reconcileID comes from the context
+// controller-runtime populated; operation_id only when obj is an OperationIDer.
 func ReconcileContext(ctx context.Context, controller, kind string, obj metav1.Object) context.Context {
 	f := LogFields{
 		Controller:  controller,
