@@ -179,7 +179,7 @@ tasks:
   generate:deepcopy:
     desc: Generate DeepCopy methods
     cmds:
-      - controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./..."
+      - controller-gen object:headerFile=".github/boilerplate.go.txt" paths="./..."
 
   generate:rbac:
     desc: Generate RBAC manifests
