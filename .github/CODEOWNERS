@@ -8,14 +8,17 @@
 #####  Solo Operator  ######
 ############################
 
-# Solo operator source, tests & build files — owned by the @hashgraph/solo-operator-codeowners team.
-/api/**                                         @hashgraph/solo-operator-codeowners
-/cmd/**                                         @hashgraph/solo-operator-codeowners
-/internal/**                                    @hashgraph/solo-operator-codeowners
-/charts/**                                      @hashgraph/solo-operator-codeowners
-/config/**                                      @hashgraph/solo-operator-codeowners
-/docs/**                                        @hashgraph/solo-operator-codeowners
-/test/**                                        @hashgraph/solo-operator-codeowners
+# Solo operator source, tests & build files.
+# Co-owned by @hashgraph/solo-operator-codeowners and @hashgraph/release-engineering — EITHER team's
+# review satisfies the code-owner check. release-engineering is intentionally kept as a co-owner so PRs
+# are not blocked when the solo team cannot self-approve (e.g. its only member authored the PR).
+/api/**                                         @hashgraph/solo-operator-codeowners @hashgraph/release-engineering
+/cmd/**                                         @hashgraph/solo-operator-codeowners @hashgraph/release-engineering
+/internal/**                                    @hashgraph/solo-operator-codeowners @hashgraph/release-engineering
+/charts/**                                      @hashgraph/solo-operator-codeowners @hashgraph/release-engineering
+/config/**                                      @hashgraph/solo-operator-codeowners @hashgraph/release-engineering
+/docs/**                                        @hashgraph/solo-operator-codeowners @hashgraph/release-engineering
+/test/**                                        @hashgraph/solo-operator-codeowners @hashgraph/release-engineering
 
 #########################
 #####  Core Files  ######
