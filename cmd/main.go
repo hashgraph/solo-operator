@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/automa-saga/logx"
 	"github.com/automa-saga/version"
@@ -47,6 +48,7 @@ func main() {
 	var secureMetrics bool
 	var enableHTTP2 bool
 	var registryOrder string
+	var nodeActiveTimeout time.Duration
 	var showVersion bool
 	var logLevel string
 	var consoleLogging bool
@@ -69,6 +71,10 @@ func main() {
 		"If set, HTTP/2 will be enabled for the metrics server")
 	flag.StringVar(&registryOrder, "registry-order", registry.StrategyRandom,
 		"Order in which registries are checked during the upgrade Prepare phase: Random or Sequential.")
+	flag.DurationVar(&nodeActiveTimeout, "node-active-timeout", 30*time.Minute,
+		"Backstop deadline for a consensus node to reach platform status ACTIVE after an upgrade "+
+			"(anchored to nodeUpgradeStartTime) before the NetworkUpgradeExecute is marked Failed. "+
+			"Increase for large states where event replay/reconnect is slow.")
 
 	flag.Parse()
 
@@ -299,7 +305,7 @@ func main() {
 	executeReconciler := controller.NewNetworkUpgradeExecuteReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
-	).WithStrategy(registryOrder)
+	).WithStrategy(registryOrder).WithNodeActiveTimeout(nodeActiveTimeout)
 	if err = executeReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkUpgradeExecute")
 		os.Exit(1)

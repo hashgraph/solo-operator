@@ -193,7 +193,6 @@ const (
 	CondConsensusCapsulePatched = "ConsensusCapsulePatched"
 	CondCapsulesOnline          = "CapsulesOnline"
 	CondNodesUpgraded           = "NodesUpgraded"
-	CondNodeStarting            = "NodeStarting"
 
 	// Abort
 	CondAbortProcessed = "AbortProcessed"

@@ -103,3 +103,7 @@ controller:
   maxConcurrentReconciles: 1
   # Reconcile period for periodic reconciliation
   syncPeriod: 10m
+  # Backstop deadline for a consensus node to reach platform status ACTIVE after an
+  # upgrade before the NetworkUpgradeExecute is marked Failed. Increase for large
+  # states where event replay/reconnect is slow. Empty uses the operator default (30m).
+  nodeActiveTimeout: 30m

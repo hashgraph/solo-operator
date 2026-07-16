@@ -26,10 +26,16 @@ import (
 )
 
 const (
-	executePrereqRequeueAfter     = 30 * time.Second
-	executeDaemonRequeueAfter     = 10 * time.Second
-	executeReadyRequeueAfter      = 10 * time.Second
-	executeDefaultPodReadyTimeout = 10 * time.Minute
+	executePrereqRequeueAfter = 30 * time.Second
+	executeDaemonRequeueAfter = 10 * time.Second
+	executeReadyRequeueAfter  = 10 * time.Second
+	// executeDefaultNodeActiveTimeout is the backstop for a node to reach platform
+	// status ACTIVE after an upgrade, anchored to nodeUpgradeStartTime. It covers a
+	// dead/missing UC that never advances the capsule phase. Reaching ACTIVE can
+	// legitimately take much longer than pod-readiness (event replay, reconnect,
+	// state loading), so it defaults generously and is operator-tunable via
+	// --node-active-timeout.
+	executeDefaultNodeActiveTimeout = 30 * time.Minute
 )
 
 type NetworkUpgradeExecuteReconciler struct {
@@ -38,21 +44,32 @@ type NetworkUpgradeExecuteReconciler struct {
 	Recorder events.EventRecorder
 	Checker  registry.ImageChecker
 
-	StrategyName    string
-	PodReadyTimeout time.Duration
+	StrategyName string
+	// NodeActiveTimeout bounds how long to wait for the consensus node to reach
+	// platform status ACTIVE after an upgrade before failing (the backstop).
+	NodeActiveTimeout time.Duration
 }
 
 func NewNetworkUpgradeExecuteReconciler(c client.Client, scheme *runtime.Scheme) *NetworkUpgradeExecuteReconciler {
 	return &NetworkUpgradeExecuteReconciler{
-		Client:          c,
-		Scheme:          scheme,
-		Checker:         registry.OCIChecker{},
-		PodReadyTimeout: executeDefaultPodReadyTimeout,
+		Client:            c,
+		Scheme:            scheme,
+		Checker:           registry.OCIChecker{},
+		NodeActiveTimeout: executeDefaultNodeActiveTimeout,
 	}
 }
 
 func (r *NetworkUpgradeExecuteReconciler) WithStrategy(name string) *NetworkUpgradeExecuteReconciler {
 	r.StrategyName = name
+	return r
+}
+
+// WithNodeActiveTimeout overrides the backstop deadline for a node to reach
+// platform status ACTIVE after an upgrade. A non-positive value keeps the default.
+func (r *NetworkUpgradeExecuteReconciler) WithNodeActiveTimeout(d time.Duration) *NetworkUpgradeExecuteReconciler {
+	if d > 0 {
+		r.NodeActiveTimeout = d
+	}
 	return r
 }
 
@@ -358,52 +375,70 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 		return ctrl.Result{RequeueAfter: executeReadyRequeueAfter}, nil
 	}
 
-	ready, timedOut, err := r.checkPodReady(ctx, execute, capsule)
+	outcome, err := r.checkUpgradeGate(ctx, execute, capsule)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	if timedOut {
+	switch outcome {
+	case upgradeTimedOut:
+		return r.failUpgrade(ctx, execute,
+			"timed out waiting for consensus node to reach platform status ACTIVE",
+			fmt.Sprintf("timed out waiting for consensus node ACTIVE after upgrade for operationId %q", execute.Spec.OperationID))
+
+	case upgradeCatastrophic:
+		return r.failUpgrade(ctx, execute,
+			fmt.Sprintf("consensus node reported platform status %s after upgrade", operatorv1alpha1.PlatformStatusCatastrophicFailure),
+			fmt.Sprintf("consensus node %s reported CATASTROPHIC_FAILURE after upgrade for operationId %q", capsule.Name, execute.Spec.OperationID))
+
+	case upgradeSucceeded:
 		now := metav1.Now()
-		execute.Status.Phase = operatorv1alpha1.ExecutePhaseFailed
+		execute.Status.Phase = operatorv1alpha1.ExecutePhaseSucceeded
 		execute.Status.CompletionTime = &now
 		execute.Status.ObservedGeneration = execute.Generation
 		setCondition(&execute.Status.Conditions, metav1.Condition{
 			Type:    operatorv1alpha1.CondNodesUpgraded,
-			Status:  metav1.ConditionFalse,
-			Reason:  operatorv1alpha1.ReasonUpgradeFailed.String(),
-			Message: "timed out waiting for consensus pod to become ready",
+			Status:  metav1.ConditionTrue,
+			Reason:  operatorv1alpha1.ReasonUpgradeSucceeded.String(),
+			Message: "consensus node reached platform status ACTIVE on the post-upgrade revision",
 		})
 		if err := r.Status().Update(ctx, execute); err != nil {
-			return ctrl.Result{}, wrapStatusUpdate(err, "updating status to failed")
+			if apierrors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
+			return ctrl.Result{}, wrapStatusUpdate(err, "updating status to succeeded")
 		}
-		r.eventf(ctx, execute, corev1.EventTypeWarning, operatorv1alpha1.EventUpgradeFailed,
-			"timed out waiting for consensus pod after upgrade for operationId %q", execute.Spec.OperationID)
+		r.eventf(ctx, execute, corev1.EventTypeNormal, operatorv1alpha1.EventUpgradeSucceeded,
+			"upgrade succeeded for operationId %q capsule %s", execute.Spec.OperationID, capsule.Name)
 		return ctrl.Result{}, nil
-	}
 
-	if !ready {
+	default: // upgradeWaiting — the consensus node has not yet reached ACTIVE.
 		return ctrl.Result{RequeueAfter: executeReadyRequeueAfter}, nil
 	}
+}
 
+// failUpgrade drives the Execute CR to a terminal Failed phase with a
+// NodesUpgraded=False condition and a UpgradeFailed warning event. The reconciler
+// is the sole writer of Execute.status.phase.
+func (r *NetworkUpgradeExecuteReconciler) failUpgrade(
+	ctx context.Context,
+	execute *operatorv1alpha1.NetworkUpgradeExecute,
+	condMsg, eventMsg string,
+) (ctrl.Result, error) {
 	now := metav1.Now()
-	execute.Status.Phase = operatorv1alpha1.ExecutePhaseSucceeded
+	execute.Status.Phase = operatorv1alpha1.ExecutePhaseFailed
 	execute.Status.CompletionTime = &now
 	execute.Status.ObservedGeneration = execute.Generation
 	setCondition(&execute.Status.Conditions, metav1.Condition{
 		Type:    operatorv1alpha1.CondNodesUpgraded,
-		Status:  metav1.ConditionTrue,
-		Reason:  operatorv1alpha1.ReasonUpgradeSucceeded.String(),
-		Message: "consensus pod ready with upgraded images",
+		Status:  metav1.ConditionFalse,
+		Reason:  operatorv1alpha1.ReasonUpgradeFailed.String(),
+		Message: condMsg,
 	})
 	if err := r.Status().Update(ctx, execute); err != nil {
-		if apierrors.IsConflict(err) {
-			return ctrl.Result{Requeue: true}, nil
-		}
-		return ctrl.Result{}, wrapStatusUpdate(err, "updating status to succeeded")
+		return ctrl.Result{}, wrapStatusUpdate(err, "updating status to failed")
 	}
-	r.eventf(ctx, execute, corev1.EventTypeNormal, operatorv1alpha1.EventUpgradeSucceeded,
-		"upgrade succeeded for operationId %q capsule %s", execute.Spec.OperationID, capsule.Name)
+	r.eventf(ctx, execute, corev1.EventTypeWarning, operatorv1alpha1.EventUpgradeFailed, "%s", eventMsg)
 	return ctrl.Result{}, nil
 }
 
@@ -554,32 +589,88 @@ func (r *NetworkUpgradeExecuteReconciler) applyImagePatch(
 
 }
 
-func (r *NetworkUpgradeExecuteReconciler) checkPodReady(
+// upgradeOutcome is the terminal-state evaluation of the post-upgrade consensus
+// node produced by checkUpgradeGate.
+type upgradeOutcome int
+
+const (
+	// upgradeWaiting means the node has not yet reached a terminal state.
+	upgradeWaiting upgradeOutcome = iota
+	// upgradeSucceeded means the node reached ACTIVE on the post-upgrade revision.
+	upgradeSucceeded
+	// upgradeCatastrophic means the node reported CATASTROPHIC_FAILURE on the
+	// post-upgrade revision (fast fail).
+	upgradeCatastrophic
+	// upgradeTimedOut means the backstop deadline elapsed (covers a dead/missing UC).
+	upgradeTimedOut
+)
+
+// checkUpgradeGate evaluates whether the post-upgrade consensus node has reached a
+// terminal state. Success is gated on the ConsensusCapsule reaching phase==Active
+// (written by the operator only when the node's live platform status is ACTIVE),
+// not on mere pod readiness.
+//
+// The stale-reading guard is StatefulSet-revision-based: the capsule phase and
+// platformStatus are trusted only once the StatefulSet has rolled to its
+// post-upgrade template. The ConsensusCapsule generation alone cannot distinguish
+// an old-pod ACTIVE reading observed mid-roll, so the guard reads the STS revision
+// directly.
+//
+//   - Active on the post-upgrade revision      → upgradeSucceeded
+//   - CATASTROPHIC_FAILURE on the new revision → upgradeCatastrophic (fast fail)
+//   - 10m from nodeUpgradeStartTime elapsed    → upgradeTimedOut (dead/missing UC)
+//   - otherwise                                → upgradeWaiting
+func (r *NetworkUpgradeExecuteReconciler) checkUpgradeGate(
 	ctx context.Context,
 	execute *operatorv1alpha1.NetworkUpgradeExecute,
 	capsule *operatorv1alpha1.ConsensusCapsule,
-) (ready, timedOut bool, err error) {
-	timeout := r.PodReadyTimeout
-	if timeout == 0 {
-		timeout = executeDefaultPodReadyTimeout
-	}
-	if execute.Status.NodeUpgradeStartTime != nil && time.Since(execute.Status.NodeUpgradeStartTime.Time) > timeout {
-		return false, true, nil
-	}
-
+) (upgradeOutcome, error) {
 	var sts appsv1.StatefulSet
 	if err := r.Get(ctx, client.ObjectKey{
 		Name:      consensusresources.StatefulSetName(capsule),
 		Namespace: capsule.Namespace,
 	}, &sts); err != nil {
-		if apierrors.IsNotFound(err) {
-			return false, false, nil
+		if !apierrors.IsNotFound(err) {
+			return upgradeWaiting, errx.WithHints(
+				errx.WithReason(errK8sAPI.Wrap(err, "getting StatefulSet for capsule %s", capsule.Name), ReasonGetFailed),
+				"Confirm the operator has get permission on statefulsets.apps")
 		}
-		return false, false, errx.WithHints(
-			errx.WithReason(errK8sAPI.Wrap(err, "getting StatefulSet for capsule %s", capsule.Name), ReasonGetFailed),
-			"Confirm the operator has get permission on statefulsets.apps")
 	}
-	return sts.Status.ReadyReplicas >= 1, false, nil
+
+	// A new-revision pod has been created (regardless of readiness); enough to trust
+	// a CATASTROPHIC_FAILURE reading as belonging to the post-upgrade node — a
+	// crash-looping node never becomes Ready, so this must not require readiness.
+	newRevisionPodCreated := sts.Status.UpdateRevision != "" && sts.Status.UpdatedReplicas >= 1
+	// The roll to the post-upgrade template is complete and serving: current
+	// revision has caught up to the update revision with a Ready replica. This is
+	// the revision guard for the success path.
+	rolledAndReady := sts.Status.UpdateRevision != "" &&
+		sts.Status.CurrentRevision == sts.Status.UpdateRevision &&
+		sts.Status.ReadyReplicas >= 1
+
+	// CATASTROPHIC_FAILURE on the post-upgrade node is terminal — fail fast, before
+	// the backstop, without waiting for readiness that will never come.
+	if newRevisionPodCreated && capsule.Status.PlatformStatus == operatorv1alpha1.PlatformStatusCatastrophicFailure {
+		return upgradeCatastrophic, nil
+	}
+
+	// Success: the node reached ACTIVE on the fully-rolled post-upgrade revision.
+	if rolledAndReady && capsule.Status.Phase == operatorv1alpha1.PhaseActive {
+		return upgradeSucceeded, nil
+	}
+
+	// Backstop: covers a dead/missing UC that never advances the capsule phase.
+	// Anchored to nodeUpgradeStartTime. Checked after the fast paths so a node that
+	// reached ACTIVE or CATASTROPHIC_FAILURE right at the deadline is not misreported.
+	timeout := r.NodeActiveTimeout
+	if timeout == 0 {
+		timeout = executeDefaultNodeActiveTimeout
+	}
+	if execute.Status.NodeUpgradeStartTime != nil && time.Since(execute.Status.NodeUpgradeStartTime.Time) > timeout {
+		return upgradeTimedOut, nil
+	}
+
+	return upgradeWaiting, nil
 }
 
 func (r *NetworkUpgradeExecuteReconciler) eventf(ctx context.Context, obj *operatorv1alpha1.NetworkUpgradeExecute, eventtype string, reason errx.Reason, format string, args ...any) {

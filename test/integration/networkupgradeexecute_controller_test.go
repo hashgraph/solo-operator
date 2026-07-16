@@ -170,6 +170,60 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 		return capsule
 	}
 
+	// driveCapsuleActive simulates the consensus node reaching ACTIVE on the
+	// post-upgrade StatefulSet revision: it rolls the STS status to a completed
+	// revision with a Ready replica, creates a Ready pod on that revision, and
+	// writes the UC-produced ACTIVE platform status plus the operator-produced
+	// phase=Active. It is idempotent and safe to reassert inside an Eventually loop
+	// so the gate observes Active even if the ConsensusCapsule controller re-rolls
+	// status between polls. Conflicts are tolerated (another writer won the race).
+	driveCapsuleActive := func(capsName string) {
+		const rev = "rev-active"
+
+		capsule := &operatorv1alpha1.ConsensusCapsule{}
+		if err := k8sClient.Get(ctx, types.NamespacedName{Name: capsName, Namespace: ns}, capsule); err != nil {
+			return
+		}
+		// Only meaningful once the node has been brought back online.
+		if capsule.Spec.Offline {
+			return
+		}
+
+		sts := &appsv1.StatefulSet{}
+		if err := k8sClient.Get(ctx, types.NamespacedName{Name: consensusresources.StatefulSetName(capsule), Namespace: ns}, sts); err == nil {
+			sts.Status.Replicas = 1
+			sts.Status.ReadyReplicas = 1
+			sts.Status.UpdatedReplicas = 1
+			sts.Status.CurrentRevision = rev
+			sts.Status.UpdateRevision = rev
+			sts.Status.ObservedGeneration = sts.Generation
+			_ = k8sClient.Status().Update(ctx, sts)
+		}
+
+		podLabels := consensusresources.SelectorLabels(capsule)
+		podLabels[appsv1.StatefulSetRevisionLabel] = rev
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: capsName + "-0", Namespace: ns, Labels: podLabels},
+			Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "root", Image: "busybox"}}},
+		}
+		if err := k8sClient.Create(ctx, pod); err != nil {
+			_ = k8sClient.Get(ctx, types.NamespacedName{Name: pod.Name, Namespace: ns}, pod)
+		}
+		pod.Status.Phase = corev1.PodRunning
+		pod.Status.Conditions = []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}
+		_ = k8sClient.Status().Update(ctx, pod)
+
+		// Simulate the UC (sole writer of platformStatus) and the operator's phase
+		// rollup (sole writer of phase) so the gate observes Active on this revision.
+		fresh := &operatorv1alpha1.ConsensusCapsule{}
+		if err := k8sClient.Get(ctx, types.NamespacedName{Name: capsName, Namespace: ns}, fresh); err == nil {
+			fresh.Status.PlatformStatus = operatorv1alpha1.PlatformStatusActive
+			fresh.Status.PlatformStatusCode = 2
+			fresh.Status.Phase = operatorv1alpha1.PhaseActive
+			_ = k8sClient.Status().Update(ctx, fresh)
+		}
+	}
+
 	Context("prereqs succeeded, all registries reachable, daemon reports success", func() {
 		const (
 			nupName = "execute-prepare-happy"
@@ -222,6 +276,7 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradeExecute{ObjectMeta: metav1.ObjectMeta{Name: nuxName, Namespace: ns}})
 			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradeFreeze{ObjectMeta: metav1.ObjectMeta{Name: nufName, Namespace: ns}})
 			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradePrepare{ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns}})
+			_ = k8sClient.Delete(ctx, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "node0-happy-0", Namespace: ns}})
 			_ = k8sClient.Delete(ctx, &operatorv1alpha1.ConsensusCapsule{ObjectMeta: metav1.ObjectMeta{Name: "node0-happy", Namespace: ns}})
 			_ = k8sClient.Delete(ctx, &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "node0-happy", Namespace: ns}})
 		})
@@ -303,8 +358,9 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 			)
 			Expect(k8sClient.Status().Update(ctx, got)).To(Succeed())
 
-			By("expecting Succeeded phase")
+			By("driving the consensus node to ACTIVE on the post-upgrade revision")
 			Eventually(func() operatorv1alpha1.ExecutePhase {
+				driveCapsuleActive("node0-happy")
 				got := &operatorv1alpha1.NetworkUpgradeExecute{}
 				_ = k8sClient.Get(ctx, nuxKey, got)
 				return got.Status.Phase
@@ -735,7 +791,9 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 			)
 			Expect(k8sClient.Status().Update(ctx, got)).To(Succeed())
 
+			By("driving the consensus node to ACTIVE on the post-upgrade revision")
 			Eventually(func() operatorv1alpha1.ExecutePhase {
+				driveCapsuleActive(capsName)
 				got := &operatorv1alpha1.NetworkUpgradeExecute{}
 				_ = k8sClient.Get(ctx, nuxKey, got)
 				return got.Status.Phase
@@ -746,6 +804,7 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradeExecute{ObjectMeta: metav1.ObjectMeta{Name: nuxName, Namespace: ns}})
 			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradeFreeze{ObjectMeta: metav1.ObjectMeta{Name: nufName, Namespace: ns}})
 			deleteAndPurge(ctx, &operatorv1alpha1.NetworkUpgradePrepare{ObjectMeta: metav1.ObjectMeta{Name: nupName, Namespace: ns}})
+			_ = k8sClient.Delete(ctx, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: capsName + "-0", Namespace: ns}})
 			_ = k8sClient.Delete(ctx, &operatorv1alpha1.ConsensusCapsule{ObjectMeta: metav1.ObjectMeta{Name: capsName, Namespace: ns}})
 			_ = k8sClient.Delete(ctx, &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: capsName, Namespace: ns}})
 		})
