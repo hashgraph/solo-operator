@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -56,7 +57,7 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 
 	values, err := MergeValues(ctx, r.Client, hc.Namespace, &hc.Spec)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("%w: %w", ErrValuesBuild, err)
+		return ctrl.Result{}, errx.WithReason(errValuesBuild.Wrap(err, "building release values"), ReasonValuesBuild)
 	}
 
 	hash, err := ComputeHash(hc.Spec.Chart, values)
@@ -85,7 +86,10 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 	if hc.Spec.Chart.CredentialsRef != nil {
 		creds, err := r.loadChartCredentials(ctx, hc.Namespace, hc.Spec.Chart.CredentialsRef.Name)
 		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("%w: loading chart credentials from %s: %w", ErrChartFetch, hc.Spec.Chart.CredentialsRef.Name, err)
+			return ctrl.Result{}, errx.WithHints(
+				errx.WithReason(errChartFetch.Wrap(err, "loading chart credentials from %s", hc.Spec.Chart.CredentialsRef.Name), ReasonChartFetch),
+				"Confirm the Secret named in spec.chart.credentialsRef exists and has username/password keys",
+			)
 		}
 		opts.Credentials = creds
 	}
@@ -146,7 +150,10 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 func (r *ReleaseSubReconciler) checkReleaseNameConflict(ctx context.Context, hc *operatorv1alpha1.HelmCapsule, releaseName string) error {
 	list := &operatorv1alpha1.HelmCapsuleList{}
 	if err := r.Client.List(ctx, list, client.InNamespace(hc.Namespace)); err != nil {
-		return fmt.Errorf("listing HelmCapsules: %w", err)
+		return errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "listing HelmCapsules"), ReasonListFailed),
+			"Confirm the ServiceAccount has list permission on helmcapsules.operator.solo.hedera.com",
+		)
 	}
 	for _, other := range list.Items {
 		if other.UID == hc.UID || other.DeletionTimestamp != nil {
@@ -157,8 +164,14 @@ func (r *ReleaseSubReconciler) checkReleaseNameConflict(ctx context.Context, hc 
 			otherRelease = other.Name
 		}
 		if otherRelease == releaseName {
-			return fmt.Errorf("%w: release %q is already owned by HelmCapsule %s (in namespace %s)",
-				ErrReleaseNameConflict, releaseName, other.Name, hc.Namespace)
+			return errx.WithHints(
+				errx.WithReason(
+					errReleaseNameConflict.New("release %q is already owned by HelmCapsule %s (in namespace %s)",
+						releaseName, other.Name, hc.Namespace),
+					ReasonReleaseNameConflict,
+				),
+				"Set a unique spec.releaseName, or delete the conflicting HelmCapsule",
+			)
 		}
 	}
 	return nil
@@ -172,7 +185,10 @@ func (r *ReleaseSubReconciler) loadChartCredentials(ctx context.Context, namespa
 	username := string(secret.Data["username"])
 	password := string(secret.Data["password"])
 	if username == "" || password == "" {
-		return nil, fmt.Errorf("secret %s must have non-empty \"username\" and \"password\" keys", secretName)
+		return nil, errx.WithHints(
+			errx.WithReason(errChartFetch.New("secret %s must have non-empty \"username\" and \"password\" keys", secretName), ReasonCredentials),
+			"Populate both the username and password keys in the credentials Secret",
+		)
 	}
 	return &ChartCredentials{Username: username, Password: password}, nil
 }

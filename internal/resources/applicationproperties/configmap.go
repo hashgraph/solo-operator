@@ -18,6 +18,7 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -44,7 +45,10 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 		orbit := &operatorv1alpha1.Orbit{}
 		if err := r.Client.Get(ctx, client.ObjectKey{Name: obj.Spec.Orbit}, orbit); err != nil {
 			if apierrors.IsNotFound(err) {
-				return ctrl.Result{}, fmt.Errorf("orbit %q not found: will retry once Orbit is created", obj.Spec.Orbit)
+				return ctrl.Result{}, errx.WithHints(
+					errx.WithReason(errOrbitNotFound.New("orbit %q not found: will retry once Orbit is created", obj.Spec.Orbit), ReasonOrbitNotFound),
+					"Create the Orbit named in spec.orbit",
+				)
 			}
 			return ctrl.Result{}, err
 		}

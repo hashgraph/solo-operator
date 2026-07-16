@@ -6,8 +6,9 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
+
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // BuildGenesisNetworkJSON renders the proto3-JSON projection of
@@ -22,7 +23,11 @@ func BuildGenesisNetworkJSON(materials []RosterMaterial) ([]byte, error) {
 		}
 		out.NodeMetadata = append(out.NodeMetadata, meta)
 	}
-	return json.MarshalIndent(out, "", "  ")
+	data, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return nil, errx.WithReason(errMaterial.Wrap(err, "marshal genesis-network.json"), ReasonGenesisJSONMarshal)
+	}
+	return data, nil
 }
 
 func nodeMetadataFromMaterial(m RosterMaterial) (genesisNodeMetadata, error) {
@@ -35,7 +40,7 @@ func nodeMetadataFromMaterial(m RosterMaterial) (genesisNodeMetadata, error) {
 	if m.GrpcCertHashHex != "" {
 		raw, err := hex.DecodeString(m.GrpcCertHashHex)
 		if err != nil {
-			return genesisNodeMetadata{}, fmt.Errorf("decode grpcCertHash hex: %w", err)
+			return genesisNodeMetadata{}, errx.WithReason(errMaterial.Wrap(err, "decode grpcCertHash hex"), ReasonCertHexInvalid)
 		}
 		grpcHash = base64.StdEncoding.EncodeToString(raw)
 	}
@@ -53,7 +58,7 @@ func nodeMetadataFromMaterial(m RosterMaterial) (genesisNodeMetadata, error) {
 	if m.AdminKeyHex != "" {
 		raw, err := hex.DecodeString(m.AdminKeyHex)
 		if err != nil {
-			return genesisNodeMetadata{}, fmt.Errorf("decode adminKey hex: %w", err)
+			return genesisNodeMetadata{}, errx.WithReason(errMaterial.Wrap(err, "decode adminKey hex"), ReasonCertHexInvalid)
 		}
 		adminKey = &genesisKey{Ed25519: base64.StdEncoding.EncodeToString(raw)}
 	}
@@ -136,14 +141,23 @@ type genesisNetworkFile struct {
 // "nodeMetadata" array — the minimum shape of the Network proto projection.
 func ValidatePassthroughJSON(raw string) error {
 	if !json.Valid([]byte(raw)) {
-		return errors.New("not valid JSON")
+		return errx.WithHints(
+			errx.WithReason(errValidation.New("not valid JSON"), ReasonGenesisJSONInvalid),
+			"Provide a valid proto3-JSON Network document",
+		)
 	}
 	var probe genesisNetworkFile
 	if err := json.Unmarshal([]byte(raw), &probe); err != nil {
-		return fmt.Errorf("parse failed: %w", err)
+		return errx.WithHints(
+			errx.WithReason(errValidation.Wrap(err, "parse failed"), ReasonGenesisJSONInvalid),
+			"Provide a valid proto3-JSON Network document",
+		)
 	}
 	if len(probe.NodeMetadata) == 0 {
-		return errors.New("nodeMetadata array is missing or empty")
+		return errx.WithHints(
+			errx.WithReason(errValidation.New("nodeMetadata array is missing or empty"), ReasonGenesisJSONInvalid),
+			"Include a non-empty nodeMetadata array in the genesis JSON",
+		)
 	}
 	return nil
 }

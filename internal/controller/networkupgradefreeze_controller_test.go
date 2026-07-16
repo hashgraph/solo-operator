@@ -144,15 +144,15 @@ func TestFreezeReconcile_OperationIDLabelMissing(t *testing.T) {
 	if res.freeze.Status.Phase != operatorv1alpha1.PhaseFailed {
 		t.Errorf("expected phase Failed, got %s", res.freeze.Status.Phase)
 	}
-	if got := countContaining(res.events, operatorv1alpha1.EventOperationIDLabelInvalid); got != 1 {
+	if got := countContaining(res.events, operatorv1alpha1.EventOperationIDLabelInvalid.String()); got != 1 {
 		t.Errorf("expected one OperationIDLabelInvalid event, got %d in %v", got, res.events)
 	}
 	cond := findCondition(res.freeze.Status.Conditions, operatorv1alpha1.CondOperationIDLabelValid)
 	if cond == nil || cond.Status != metav1.ConditionFalse {
 		t.Errorf("expected CondOperationIDLabelValid=False, got %v", cond)
 	}
-	if cond != nil && cond.Reason != operatorv1alpha1.ReasonOperationIDLabelInvalid {
-		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonOperationIDLabelInvalid, cond.Reason)
+	if cond != nil && cond.Reason != operatorv1alpha1.ReasonOperationIDLabelInvalid.String() {
+		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonOperationIDLabelInvalid.String(), cond.Reason)
 	}
 }
 
@@ -169,8 +169,8 @@ func TestFreezeReconcile_OperationIDLabelMismatch(t *testing.T) {
 		t.Errorf("expected phase Failed, got %s", res.freeze.Status.Phase)
 	}
 	cond := findCondition(res.freeze.Status.Conditions, operatorv1alpha1.CondOperationIDLabelValid)
-	if cond == nil || cond.Reason != operatorv1alpha1.ReasonOperationIDLabelInvalid {
-		t.Errorf("expected reason %s, got %v", operatorv1alpha1.ReasonOperationIDLabelInvalid, cond)
+	if cond == nil || cond.Reason != operatorv1alpha1.ReasonOperationIDLabelInvalid.String() {
+		t.Errorf("expected reason %s, got %v", operatorv1alpha1.ReasonOperationIDLabelInvalid.String(), cond)
 	}
 }
 
@@ -340,8 +340,8 @@ func TestFreezeReconcile_DuplicateOperationID_SetsPhaseFailed(t *testing.T) {
 	if cond.Status != metav1.ConditionFalse {
 		t.Errorf("expected ManifestValidated=False, got %s", cond.Status)
 	}
-	if cond.Reason != operatorv1alpha1.ReasonDuplicateOpID {
-		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonDuplicateOpID, cond.Reason)
+	if cond.Reason != operatorv1alpha1.ReasonDuplicateOpID.String() {
+		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonDuplicateOpID.String(), cond.Reason)
 	}
 	close(rec.Events)
 	var recorded []string

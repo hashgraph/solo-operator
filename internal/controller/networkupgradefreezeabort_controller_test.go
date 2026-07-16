@@ -116,15 +116,15 @@ func TestFreezeAbortReconcile_NoExecuteCR(t *testing.T) {
 	if res.abort.Status.CompletionTime == nil {
 		t.Error("expected CompletionTime to be set")
 	}
-	if got := countContaining(res.events, operatorv1alpha1.EventAbortProcessed); got != 1 {
+	if got := countContaining(res.events, operatorv1alpha1.EventAbortProcessed.String()); got != 1 {
 		t.Errorf("expected one AbortProcessed event, got %d in %v", got, res.events)
 	}
 	cond := findCondition(res.abort.Status.Conditions, operatorv1alpha1.CondAbortProcessed)
 	if cond == nil || cond.Status != metav1.ConditionTrue {
 		t.Errorf("expected CondAbortProcessed=True, got %v", cond)
 	}
-	if cond != nil && cond.Reason != operatorv1alpha1.ReasonAbortSuccess {
-		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonAbortSuccess, cond.Reason)
+	if cond != nil && cond.Reason != operatorv1alpha1.ReasonAbortSuccess.String() {
+		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonAbortSuccess.String(), cond.Reason)
 	}
 }
 
@@ -140,15 +140,15 @@ func TestFreezeAbortReconcile_ExecuteCRExists(t *testing.T) {
 	if res.abort.Status.CompletionTime == nil {
 		t.Error("expected CompletionTime to be set")
 	}
-	if got := countContaining(res.events, operatorv1alpha1.EventAbortAfterFreeze); got != 1 {
+	if got := countContaining(res.events, operatorv1alpha1.EventAbortAfterFreeze.String()); got != 1 {
 		t.Errorf("expected one AbortAfterFreeze warning event, got %d in %v", got, res.events)
 	}
 	cond := findCondition(res.abort.Status.Conditions, operatorv1alpha1.CondAbortProcessed)
 	if cond == nil || cond.Status != metav1.ConditionFalse {
 		t.Errorf("expected CondAbortProcessed=False, got %v", cond)
 	}
-	if cond != nil && cond.Reason != operatorv1alpha1.ReasonAbortAfterFreeze {
-		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonAbortAfterFreeze, cond.Reason)
+	if cond != nil && cond.Reason != operatorv1alpha1.ReasonAbortAfterFreeze.String() {
+		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonAbortAfterFreeze.String(), cond.Reason)
 	}
 }
 
@@ -164,18 +164,18 @@ func TestFreezeAbortReconcile_OperationIDLabelMissing(t *testing.T) {
 	if res.abort.Status.Phase != operatorv1alpha1.PhaseFailed {
 		t.Errorf("expected phase Failed, got %s", res.abort.Status.Phase)
 	}
-	if got := countContaining(res.events, operatorv1alpha1.EventOperationIDLabelInvalid); got != 1 {
+	if got := countContaining(res.events, operatorv1alpha1.EventOperationIDLabelInvalid.String()); got != 1 {
 		t.Errorf("expected one OperationIDLabelInvalid event, got %d in %v", got, res.events)
 	}
 	cond := findCondition(res.abort.Status.Conditions, operatorv1alpha1.CondOperationIDLabelValid)
 	if cond == nil || cond.Status != metav1.ConditionFalse {
 		t.Errorf("expected CondOperationIDLabelValid=False, got %v", cond)
 	}
-	if cond != nil && cond.Reason != operatorv1alpha1.ReasonOperationIDLabelInvalid {
-		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonOperationIDLabelInvalid, cond.Reason)
+	if cond != nil && cond.Reason != operatorv1alpha1.ReasonOperationIDLabelInvalid.String() {
+		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonOperationIDLabelInvalid.String(), cond.Reason)
 	}
 	// Invalid identity must not advance: no abort-processed side effects.
-	if got := countContaining(res.events, operatorv1alpha1.EventAbortProcessed); got != 0 {
+	if got := countContaining(res.events, operatorv1alpha1.EventAbortProcessed.String()); got != 0 {
 		t.Errorf("invalid CR must not process abort, got %d AbortProcessed events", got)
 	}
 }
@@ -193,8 +193,8 @@ func TestFreezeAbortReconcile_OperationIDLabelMismatch(t *testing.T) {
 		t.Errorf("expected phase Failed, got %s", res.abort.Status.Phase)
 	}
 	cond := findCondition(res.abort.Status.Conditions, operatorv1alpha1.CondOperationIDLabelValid)
-	if cond == nil || cond.Reason != operatorv1alpha1.ReasonOperationIDLabelInvalid {
-		t.Errorf("expected reason %s, got %v", operatorv1alpha1.ReasonOperationIDLabelInvalid, cond)
+	if cond == nil || cond.Reason != operatorv1alpha1.ReasonOperationIDLabelInvalid.String() {
+		t.Errorf("expected reason %s, got %v", operatorv1alpha1.ReasonOperationIDLabelInvalid.String(), cond)
 	}
 }
 
@@ -258,8 +258,8 @@ func TestFreezeAbortReconcile_DuplicateOperationID_SetsPhaseFailed(t *testing.T)
 	if cond.Status != metav1.ConditionFalse {
 		t.Errorf("expected CondManifestValidated=False, got %s", cond.Status)
 	}
-	if cond.Reason != operatorv1alpha1.ReasonDuplicateOpID {
-		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonDuplicateOpID, cond.Reason)
+	if cond.Reason != operatorv1alpha1.ReasonDuplicateOpID.String() {
+		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonDuplicateOpID.String(), cond.Reason)
 	}
 	close(rec.Events)
 	var recorded []string

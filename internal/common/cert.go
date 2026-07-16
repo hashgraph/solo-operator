@@ -7,7 +7,8 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/pem"
-	"fmt"
+
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // PemToDER decodes a PEM-encoded certificate to its raw DER bytes.
@@ -15,10 +16,16 @@ import (
 func PemToDER(pemBytes []byte) ([]byte, error) {
 	block, _ := pem.Decode(pemBytes)
 	if block == nil {
-		return nil, fmt.Errorf("no PEM block found")
+		return nil, errx.WithHints(
+			errx.WithReason(errCertInvalid.New("no PEM block found"), ReasonNoPEMBlock),
+			"Confirm the secret holds a PEM-encoded certificate (-----BEGIN CERTIFICATE-----)",
+		)
 	}
 	if _, err := x509.ParseCertificate(block.Bytes); err != nil {
-		return nil, fmt.Errorf("invalid X.509 certificate: %w", err)
+		return nil, errx.WithHints(
+			errx.WithReason(errCertInvalid.Wrap(err, "invalid X.509 certificate"), ReasonInvalidCert),
+			"Confirm the PEM block contains a valid X.509 certificate",
+		)
 	}
 	return block.Bytes, nil
 }
@@ -27,11 +34,17 @@ func PemToDER(pemBytes []byte) ([]byte, error) {
 func ExtractPubKeyHex(pemBytes []byte) (string, error) {
 	block, _ := pem.Decode(pemBytes)
 	if block == nil {
-		return "", fmt.Errorf("no PEM block found")
+		return "", errx.WithHints(
+			errx.WithReason(errCertInvalid.New("no PEM block found"), ReasonNoPEMBlock),
+			"Confirm the secret holds a PEM-encoded certificate (-----BEGIN CERTIFICATE-----)",
+		)
 	}
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		return "", fmt.Errorf("parse cert: %w", err)
+		return "", errx.WithHints(
+			errx.WithReason(errCertInvalid.Wrap(err, "parse cert"), ReasonInvalidCert),
+			"Confirm the PEM block contains a valid X.509 certificate",
+		)
 	}
 	return hex.EncodeToString(cert.RawSubjectPublicKeyInfo), nil
 }
@@ -40,7 +53,10 @@ func ExtractPubKeyHex(pemBytes []byte) (string, error) {
 func CertHashHex(pemBytes []byte) (string, error) {
 	block, _ := pem.Decode(pemBytes)
 	if block == nil {
-		return "", fmt.Errorf("no PEM block found")
+		return "", errx.WithHints(
+			errx.WithReason(errCertInvalid.New("no PEM block found"), ReasonNoPEMBlock),
+			"Confirm the secret holds a PEM-encoded certificate (-----BEGIN CERTIFICATE-----)",
+		)
 	}
 	sum := sha512.Sum384(block.Bytes)
 	return hex.EncodeToString(sum[:]), nil

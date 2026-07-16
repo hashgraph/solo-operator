@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/registry"
 )
 
@@ -68,7 +69,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 
 	if ok, msg := validateOperationIDLabel(prepare.Labels, prepare.Spec.OperationID); !ok {
 		return rejectInvalidOperationIDLabel(ctx, r.Client, &prepare, &prepare.Status.Conditions,
-			func(reason, m string) { r.eventf(&prepare, corev1.EventTypeWarning, reason, "%s", m) },
+			func(reason errx.Reason, m string) { r.eventf(&prepare, corev1.EventTypeWarning, reason, "%s", m) },
 			func() { prepare.Status.Phase = operatorv1alpha1.PhaseFailed },
 			msg)
 	}
@@ -78,7 +79,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 		prepare.Status.StartTime = &now
 		prepare.Status.Phase = operatorv1alpha1.PhaseRunning
 		if err := r.Status().Update(ctx, &prepare); err != nil {
-			return ctrl.Result{}, fmt.Errorf("initializing status: %w", err)
+			return ctrl.Result{}, wrapStatusInit(err)
 		}
 		return ctrl.Result{Requeue: true}, nil
 	}
@@ -95,14 +96,14 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 		setCondition(&prepare.Status.Conditions, metav1.Condition{
 			Type:               operatorv1alpha1.CondManifestValidated,
 			Status:             metav1.ConditionFalse,
-			Reason:             operatorv1alpha1.ReasonDuplicateOpID,
+			Reason:             operatorv1alpha1.ReasonDuplicateOpID.String(),
 			Message:            msg,
 			ObservedGeneration: prepare.Generation,
 		})
 		if err := r.Status().Update(ctx, &prepare); err != nil {
-			return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+			return ctrl.Result{}, wrapStatusUpdate(err, "updating status")
 		}
-		return ctrl.Result{}, fmt.Errorf("%s", msg)
+		return ctrl.Result{}, errx.WithReason(errReconcile.New("%s", msg), ReasonManifestInvalid)
 	}
 
 	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
@@ -186,27 +187,27 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 		setCondition(&prepare.Status.Conditions, metav1.Condition{
 			Type:               operatorv1alpha1.CondManifestValidated,
 			Status:             metav1.ConditionTrue,
-			Reason:             operatorv1alpha1.ReasonSchemaValid,
+			Reason:             operatorv1alpha1.ReasonSchemaValid.String(),
 			Message:            "manifest schema valid",
 			ObservedGeneration: prepare.Generation,
 		})
 		imageValidationCond := metav1.Condition{
 			Type:               operatorv1alpha1.CondImageValidation,
 			Status:             metav1.ConditionTrue,
-			Reason:             operatorv1alpha1.ReasonAllImagesValid,
+			Reason:             operatorv1alpha1.ReasonAllImagesValid.String(),
 			Message:            "all registries probed successfully",
 			ObservedGeneration: prepare.Generation,
 		}
 		if !allHashesValid {
 			imageValidationCond.Status = metav1.ConditionFalse
-			imageValidationCond.Reason = operatorv1alpha1.ReasonRegistryInvalid
+			imageValidationCond.Reason = operatorv1alpha1.ReasonRegistryInvalid.String()
 			imageValidationCond.Message = "one or more images failed layer hash verification"
 		}
 		setCondition(&prepare.Status.Conditions, imageValidationCond)
 		setCondition(&prepare.Status.Conditions, metav1.Condition{
 			Type:               operatorv1alpha1.CondRegistrySelected,
 			Status:             metav1.ConditionTrue,
-			Reason:             operatorv1alpha1.ReasonSelectionComplete,
+			Reason:             operatorv1alpha1.ReasonSelectionComplete.String(),
 			Message:            "registry selected for all components",
 			ObservedGeneration: prepare.Generation,
 		})
@@ -217,25 +218,27 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 		setCondition(&prepare.Status.Conditions, metav1.Condition{
 			Type:               operatorv1alpha1.CondRegistrySelected,
 			Status:             metav1.ConditionFalse,
-			Reason:             operatorv1alpha1.ReasonRegistryInvalid,
+			Reason:             operatorv1alpha1.ReasonRegistryInvalid.String(),
 			Message:            "no valid registry available for one or more components",
 			ObservedGeneration: prepare.Generation,
 		})
 	}
 
 	if err := r.Status().Update(ctx, &prepare); err != nil {
-		return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+		return ctrl.Result{}, wrapStatusUpdate(err, "updating status")
 	}
 
 	if !succeeded {
-		return ctrl.Result{}, fmt.Errorf("no valid registry for one or more components")
+		return ctrl.Result{}, errx.WithHints(
+			errx.WithReason(errReconcile.New("no valid registry for one or more components"), ReasonNoValidRegistry),
+			"Confirm at least one configured registry serves a valid image for each component")
 	}
 	return ctrl.Result{}, nil
 }
 
-func (r *NetworkUpgradePrepareReconciler) eventf(obj *operatorv1alpha1.NetworkUpgradePrepare, eventtype, reason, format string, args ...any) {
+func (r *NetworkUpgradePrepareReconciler) eventf(obj *operatorv1alpha1.NetworkUpgradePrepare, eventtype string, reason errx.Reason, format string, args ...any) {
 	if r.Recorder != nil {
-		r.Recorder.Eventf(obj, nil, eventtype, reason, "RegistryAudit", format, args...)
+		r.Recorder.Eventf(obj, nil, eventtype, reason.String(), "RegistryAudit", format, args...)
 	}
 }
 

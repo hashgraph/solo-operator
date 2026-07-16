@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/resources/log4j2config"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
@@ -66,9 +67,9 @@ func (r *Log4j2ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	return ctrl.Result{}, nil
 }
 
-func (r *Log4j2ConfigReconciler) event(obj *operatorv1alpha1.Log4j2Config, eventtype, reason, msg string) {
+func (r *Log4j2ConfigReconciler) event(obj *operatorv1alpha1.Log4j2Config, eventtype string, reason errx.Reason, msg string) {
 	if r.Recorder != nil {
-		r.Recorder.Eventf(obj, nil, eventtype, reason, "Log4j2Config", "%s", msg)
+		r.Recorder.Eventf(obj, nil, eventtype, reason.String(), "Log4j2Config", "%s", msg)
 	}
 }
 

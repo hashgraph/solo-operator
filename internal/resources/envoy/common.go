@@ -15,6 +15,7 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -25,7 +26,10 @@ var envoyYamlTmpl string
 // Single quotes in the value are doubled; newlines are rejected to prevent YAML injection.
 func yamlEscapeString(s string) (string, error) {
 	if strings.ContainsAny(s, "\n\r") {
-		return "", fmt.Errorf("CORS value contains newline, which is not allowed: %q", s)
+		return "", errx.WithHints(
+			errx.WithReason(errConfigInvalid.New("CORS value contains newline, which is not allowed: %q", s), ReasonCORSValueInvalid),
+			"Remove newline characters from the CORS value in spec.corsConfig",
+		)
 	}
 	return strings.ReplaceAll(s, "'", "''"), nil
 }
@@ -213,7 +217,7 @@ func DefaultEnvoyConfig(envoy *operatorv1alpha1.EnvoyProxy) (map[string]string, 
 
 	var buf bytes.Buffer
 	if err := envoyTemplate.Execute(&buf, data); err != nil {
-		return nil, fmt.Errorf("envoy config template execution failed: %w", err)
+		return nil, errx.WithReason(errTemplate.Wrap(err, "envoy config template execution failed"), ReasonTemplateFailed)
 	}
 
 	return map[string]string{

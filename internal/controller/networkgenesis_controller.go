@@ -16,15 +16,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/operations/genesis"
 )
 
 const (
 	NetworkGenesisFinalizer = "operator.solo.hiero.org/networkgenesis-finalizer"
 
-	networkGenesisConditionReady    = "Ready"
-	networkGenesisConditionFailed   = "Failed"
-	networkGenesisReasonSpecMutated = "SpecMutationRejected"
+	networkGenesisConditionReady  = "Ready"
+	networkGenesisConditionFailed = "Failed"
 )
 
 // NetworkGenesisReconciler produces the genesis ConfigMaps. The CR is
@@ -99,7 +99,9 @@ func (r *NetworkGenesisReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 func (r *NetworkGenesisReconciler) run(ctx context.Context, ng *operatorv1alpha1.NetworkGenesis) (*operatorv1alpha1.Orbit, error) {
 	orbit := &operatorv1alpha1.Orbit{}
 	if err := r.Get(ctx, client.ObjectKey{Name: ng.Spec.Orbit}, orbit); err != nil {
-		return nil, fmt.Errorf("orbit %q not found: %w", ng.Spec.Orbit, err)
+		return nil, errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "orbit %q not found", ng.Spec.Orbit), ReasonOrbitNotFound),
+			"Confirm the referenced Orbit exists")
 	}
 
 	var materials []genesis.RosterMaterial
@@ -116,7 +118,9 @@ func (r *NetworkGenesisReconciler) run(ctx context.Context, ng *operatorv1alpha1
 		}
 		if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.GenesisConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,
 			map[string]string{genesis.GenesisNetworkFileName: ng.Spec.GenesisNetworkJSON}, nil); err != nil {
-			return nil, fmt.Errorf("upsert %s: %w", genesis.GenesisConfigMapName, err)
+			return nil, errx.WithHints(
+				errx.WithReason(errK8sAPI.Wrap(err, "upsert %s", genesis.GenesisConfigMapName), ReasonConfigMapUpsert),
+				"Confirm the operator has create and update permission on configmaps")
 		}
 	} else {
 		// Generated path: build from inline Roster or by discovering from cluster.
@@ -136,7 +140,9 @@ func (r *NetworkGenesisReconciler) run(ctx context.Context, ng *operatorv1alpha1
 		}
 		if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.GenesisConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,
 			map[string]string{genesis.GenesisNetworkFileName: string(genesisJSON)}, nil); err != nil {
-			return nil, fmt.Errorf("upsert %s: %w", genesis.GenesisConfigMapName, err)
+			return nil, errx.WithHints(
+				errx.WithReason(errK8sAPI.Wrap(err, "upsert %s", genesis.GenesisConfigMapName), ReasonConfigMapUpsert),
+				"Confirm the operator has create and update permission on configmaps")
 		}
 
 		abBin, err := genesis.BuildAddressBookBin(materials)
@@ -145,23 +151,31 @@ func (r *NetworkGenesisReconciler) run(ctx context.Context, ng *operatorv1alpha1
 		}
 		if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.AddressBookBinConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,
 			nil, map[string][]byte{genesis.AddressBookBinKey: abBin}); err != nil {
-			return nil, fmt.Errorf("upsert %s: %w", genesis.AddressBookBinConfigMapName, err)
+			return nil, errx.WithHints(
+				errx.WithReason(errK8sAPI.Wrap(err, "upsert %s", genesis.AddressBookBinConfigMapName), ReasonConfigMapUpsert),
+				"Confirm the operator has create and update permission on configmaps")
 		}
 
 		if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.PublicKeysConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,
 			genesis.BuildPublicKeys(materials), nil); err != nil {
-			return nil, fmt.Errorf("upsert %s: %w", genesis.PublicKeysConfigMapName, err)
+			return nil, errx.WithHints(
+				errx.WithReason(errK8sAPI.Wrap(err, "upsert %s", genesis.PublicKeysConfigMapName), ReasonConfigMapUpsert),
+				"Confirm the operator has create and update permission on configmaps")
 		}
 	}
 
 	podIPs, err := genesis.CollectPodIPs(ctx, r.Client, ng.Namespace)
 	if err != nil {
-		return nil, fmt.Errorf("collect pod IPs: %w", err)
+		return nil, errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "collect pod IPs"), ReasonListFailed),
+			"Confirm the operator has list permission on pods")
 	}
 	clusterData := genesis.BuildClusterConfig(orbit, materials, podIPs)
 	if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.ClusterConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,
 		clusterData, nil); err != nil {
-		return nil, fmt.Errorf("upsert %s: %w", genesis.ClusterConfigMapName, err)
+		return nil, errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "upsert %s", genesis.ClusterConfigMapName), ReasonConfigMapUpsert),
+			"Confirm the operator has create and update permission on configmaps")
 	}
 
 	return orbit, nil
@@ -193,7 +207,7 @@ func (r *NetworkGenesisReconciler) succeed(ctx context.Context, ng *operatorv1al
 		Type:               networkGenesisConditionReady,
 		Status:             metav1.ConditionTrue,
 		LastTransitionTime: now,
-		Reason:             "GenesisCompleted",
+		Reason:             ReasonGenesisCompleted.String(),
 		Message:            "All genesis ConfigMaps generated",
 		ObservedGeneration: ng.Generation,
 	})
@@ -209,7 +223,7 @@ func (r *NetworkGenesisReconciler) fail(ctx context.Context, ng *operatorv1alpha
 		Type:               networkGenesisConditionFailed,
 		Status:             metav1.ConditionTrue,
 		LastTransitionTime: now,
-		Reason:             "GenesisFailed",
+		Reason:             ReasonGenesisFailed.String(),
 		Message:            message,
 		ObservedGeneration: ng.Generation,
 	})
@@ -224,7 +238,7 @@ func (r *NetworkGenesisReconciler) rejectMutation(ctx context.Context, ng *opera
 		Type:               networkGenesisConditionFailed,
 		Status:             metav1.ConditionTrue,
 		LastTransitionTime: now,
-		Reason:             networkGenesisReasonSpecMutated,
+		Reason:             ReasonSpecMutated.String(),
 		Message:            "spec is immutable post-creation; delete and re-create the CR to change inputs",
 		ObservedGeneration: ng.Generation,
 	})
@@ -233,7 +247,7 @@ func (r *NetworkGenesisReconciler) rejectMutation(ctx context.Context, ng *opera
 
 func hasSpecMutationRejection(conditions []operatorv1alpha1.Condition) bool {
 	for _, c := range conditions {
-		if c.Reason == networkGenesisReasonSpecMutated && c.Status == metav1.ConditionTrue {
+		if c.Reason == ReasonSpecMutated.String() && c.Status == metav1.ConditionTrue {
 			return true
 		}
 	}

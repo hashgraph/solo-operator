@@ -24,6 +24,7 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 const (
@@ -33,12 +34,6 @@ const (
 	// helmTmpDir is the writable base for all Helm SDK cache/config directories.
 	// The operator runs with readOnlyRootFilesystem=true, so only /tmp is writable.
 	helmTmpDir = "/tmp/helm"
-)
-
-var (
-	ErrChartFetch          = errors.New("chart fetch failed")
-	ErrValuesBuild         = errors.New("values build failed")
-	ErrReleaseNameConflict = errors.New("release name conflict")
 )
 
 type ReleaseInfo struct {
@@ -107,14 +102,14 @@ func (h *helmSDKClient) actionConfig(namespace string) (*action.Configuration, e
 		registry.ClientOptCredentialsFile(helmTmpDir + "/registry/config.json"),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("creating helm registry client: %w", err)
+		return nil, errx.WithReason(errHelm.Wrap(err, "creating helm registry client"), ReasonHelm)
 	}
 
 	cfg := &action.Configuration{RegistryClient: registryClient}
 	getter := &restConfigGetter{restConfig: h.restConfig, namespace: namespace}
 
 	if err := cfg.Init(getter, namespace, helmStorageDriver, func(string, ...interface{}) {}); err != nil {
-		return nil, fmt.Errorf("initialising helm action config: %w", err)
+		return nil, errx.WithReason(errHelm.Wrap(err, "initialising helm action config"), ReasonHelm)
 	}
 	return cfg, nil
 }
@@ -170,7 +165,10 @@ func (h *helmSDKClient) install(ctx context.Context, releaseName, namespace stri
 	install.DisableHooks = opts.DisableHooks
 	install.Version = chart.Version
 	if err := applyCredentials(cfg.RegistryClient, &install.ChartPathOptions, chart, opts.Credentials); err != nil {
-		return nil, fmt.Errorf("authenticating to chart repository: %w", err)
+		return nil, errx.WithHints(
+			errx.WithReason(errChartFetch.Wrap(err, "authenticating to chart repository"), ReasonChartFetch),
+			"Confirm the credentials Secret holds valid username/password for the chart repository",
+		)
 	}
 
 	ref, err := chartRef(chart)
@@ -179,15 +177,18 @@ func (h *helmSDKClient) install(ctx context.Context, releaseName, namespace stri
 	}
 	chartPath, err := install.LocateChart(ref, writableHelmEnv())
 	if err != nil {
-		return nil, fmt.Errorf("%w: locating chart %s: %v", ErrChartFetch, ref, err)
+		return nil, errx.WithHints(
+			errx.WithReason(errChartFetch.Wrap(err, "locating chart %s", ref), ReasonChartFetch),
+			"Confirm spec.chart.repo, chart, and version reference an existing chart",
+		)
 	}
 	c, err := loader.Load(chartPath)
 	if err != nil {
-		return nil, fmt.Errorf("%w: loading chart %s: %v", ErrChartFetch, chartPath, err)
+		return nil, errx.WithReason(errChartFetch.Wrap(err, "loading chart %s", chartPath), ReasonChartFetch)
 	}
 	rel, err := install.RunWithContext(ctx, c, values)
 	if err != nil {
-		return nil, fmt.Errorf("helm install %s: %w", releaseName, err)
+		return nil, errx.WithReason(errHelm.Wrap(err, "helm install %s", releaseName), ReasonHelm)
 	}
 	return releaseInfoFrom(rel), nil
 }
@@ -208,7 +209,10 @@ func (h *helmSDKClient) upgrade(ctx context.Context, releaseName, namespace stri
 	upgrade.ReuseValues = false
 	upgrade.Version = chart.Version
 	if err := applyCredentials(cfg.RegistryClient, &upgrade.ChartPathOptions, chart, opts.Credentials); err != nil {
-		return nil, fmt.Errorf("authenticating to chart repository: %w", err)
+		return nil, errx.WithHints(
+			errx.WithReason(errChartFetch.Wrap(err, "authenticating to chart repository"), ReasonChartFetch),
+			"Confirm the credentials Secret holds valid username/password for the chart repository",
+		)
 	}
 
 	ref, err := chartRef(chart)
@@ -217,15 +221,18 @@ func (h *helmSDKClient) upgrade(ctx context.Context, releaseName, namespace stri
 	}
 	chartPath, err := upgrade.LocateChart(ref, writableHelmEnv())
 	if err != nil {
-		return nil, fmt.Errorf("%w: locating chart %s: %v", ErrChartFetch, ref, err)
+		return nil, errx.WithHints(
+			errx.WithReason(errChartFetch.Wrap(err, "locating chart %s", ref), ReasonChartFetch),
+			"Confirm spec.chart.repo, chart, and version reference an existing chart",
+		)
 	}
 	c, err := loader.Load(chartPath)
 	if err != nil {
-		return nil, fmt.Errorf("%w: loading chart %s: %v", ErrChartFetch, chartPath, err)
+		return nil, errx.WithReason(errChartFetch.Wrap(err, "loading chart %s", chartPath), ReasonChartFetch)
 	}
 	rel, err := upgrade.RunWithContext(ctx, releaseName, c, values)
 	if err != nil {
-		return nil, fmt.Errorf("helm upgrade %s: %w", releaseName, err)
+		return nil, errx.WithReason(errHelm.Wrap(err, "helm upgrade %s", releaseName), ReasonHelm)
 	}
 	return releaseInfoFrom(rel), nil
 }
@@ -249,7 +256,7 @@ func (h *helmSDKClient) Uninstall(_ context.Context, releaseName, namespace stri
 		if isNotFound(err) {
 			return nil
 		}
-		return fmt.Errorf("helm uninstall %s: %w", releaseName, err)
+		return errx.WithReason(errHelm.Wrap(err, "helm uninstall %s", releaseName), ReasonHelm)
 	}
 	return nil
 }
@@ -264,7 +271,7 @@ func (h *helmSDKClient) GetRelease(releaseName, namespace string) (*ReleaseInfo,
 		if isNotFound(err) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("helm get %s: %w", releaseName, err)
+		return nil, errx.WithReason(errHelm.Wrap(err, "helm get %s", releaseName), ReasonHelm)
 	}
 	return releaseInfoFrom(rel), nil
 }
@@ -298,7 +305,10 @@ func chartRef(chart operatorv1alpha1.HelmChartSpec) (string, error) {
 		return fmt.Sprintf("%s/%s", strings.TrimRight(chart.Repo, "/"), chart.Chart), nil
 	}
 	if chart.Version == "" {
-		return "", fmt.Errorf("%w: chart version is required for HTTP repos", ErrChartFetch)
+		return "", errx.WithHints(
+			errx.WithReason(errChartFetch.New("chart version is required for HTTP repos"), ReasonChartFetch),
+			"Set spec.chart.version — HTTP chart repositories require an explicit version",
+		)
 	}
 	return fmt.Sprintf("%s/%s-%s.tgz", strings.TrimRight(chart.Repo, "/"), chart.Chart, chart.Version), nil
 }

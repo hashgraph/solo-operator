@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/resources/helm"
 	"github.com/hashgraph/solo-operator/internal/resources/helmtest"
 )
@@ -110,7 +111,7 @@ func TestRecordFailure_setsChartFetchReason(t *testing.T) {
 		Build()
 
 	r := &HelmCapsuleReconciler{Client: c, Scheme: scheme}
-	r.recordFailure(context.Background(), hc, fmt.Errorf("%w: repo down", helm.ErrChartFetch))
+	r.recordFailure(context.Background(), hc, errx.WithReason(fmt.Errorf("repo down"), helm.ReasonChartFetch))
 
 	got := &operatorv1alpha1.HelmCapsule{}
 	_ = c.Get(context.Background(), types.NamespacedName{Name: hc.Name, Namespace: hc.Namespace}, got)
@@ -122,7 +123,7 @@ func TestRecordFailure_setsChartFetchReason(t *testing.T) {
 	if cond == nil {
 		t.Fatal("expected Ready condition")
 	}
-	if cond.Reason != operatorv1alpha1.HelmCapsuleReasonChartFetchFailed {
+	if cond.Reason != operatorv1alpha1.HelmCapsuleReasonChartFetchFailed.String() {
 		t.Errorf("expected ChartFetchFailed, got %s", cond.Reason)
 	}
 	if cond.Status != metav1.ConditionFalse {
@@ -140,7 +141,7 @@ func TestRecordFailure_setsValuesBuildReason(t *testing.T) {
 		Build()
 
 	r := &HelmCapsuleReconciler{Client: c, Scheme: scheme}
-	r.recordFailure(context.Background(), hc, fmt.Errorf("%w: missing configmap", helm.ErrValuesBuild))
+	r.recordFailure(context.Background(), hc, errx.WithReason(fmt.Errorf("missing configmap"), helm.ReasonValuesBuild))
 
 	got := &operatorv1alpha1.HelmCapsule{}
 	_ = c.Get(context.Background(), types.NamespacedName{Name: hc.Name, Namespace: hc.Namespace}, got)
@@ -149,7 +150,7 @@ func TestRecordFailure_setsValuesBuildReason(t *testing.T) {
 	if cond == nil {
 		t.Fatal("expected Ready condition")
 	}
-	if cond.Reason != operatorv1alpha1.HelmCapsuleReasonValuesBuildFailed {
+	if cond.Reason != operatorv1alpha1.HelmCapsuleReasonValuesBuildFailed.String() {
 		t.Errorf("expected ValuesBuildFailed, got %s", cond.Reason)
 	}
 }
@@ -173,7 +174,7 @@ func TestRecordFailure_setsGenericHelmReason(t *testing.T) {
 	if cond == nil {
 		t.Fatal("expected Ready condition")
 	}
-	if cond.Reason != operatorv1alpha1.HelmCapsuleReasonHelmFailed {
+	if cond.Reason != operatorv1alpha1.HelmCapsuleReasonHelmFailed.String() {
 		t.Errorf("expected HelmFailed, got %s", cond.Reason)
 	}
 }
@@ -221,7 +222,7 @@ func TestReconcile_setsReadyTrueOnSuccess(t *testing.T) {
 	if cond.Status != metav1.ConditionTrue {
 		t.Errorf("expected Ready=True, got %s", cond.Status)
 	}
-	if cond.Reason != operatorv1alpha1.HelmCapsuleReasonDeployed {
+	if cond.Reason != operatorv1alpha1.HelmCapsuleReasonDeployed.String() {
 		t.Errorf("expected reason Deployed, got %s", cond.Reason)
 	}
 }
@@ -237,7 +238,7 @@ func TestReconcile_setsReadyFalseOnHelmError(t *testing.T) {
 
 	mock := helmtest.NewMockClient()
 	mock.InstallOrUpgradeFunc = func(_ context.Context, _, _ string, _ operatorv1alpha1.HelmChartSpec, _ map[string]interface{}, _ helm.ReleaseOptions) (*helm.ReleaseInfo, error) {
-		return nil, fmt.Errorf("%w: registry.ghcr.io: connection refused", helm.ErrChartFetch)
+		return nil, errx.WithReason(fmt.Errorf("registry.ghcr.io: connection refused"), helm.ReasonChartFetch)
 	}
 
 	r := NewHelmCapsuleReconciler(c, scheme, mock)
@@ -264,7 +265,7 @@ func TestReconcile_setsReadyFalseOnHelmError(t *testing.T) {
 	if cond.Status != metav1.ConditionFalse {
 		t.Errorf("expected Ready=False, got %s", cond.Status)
 	}
-	if cond.Reason != operatorv1alpha1.HelmCapsuleReasonChartFetchFailed {
+	if cond.Reason != operatorv1alpha1.HelmCapsuleReasonChartFetchFailed.String() {
 		t.Errorf("expected ChartFetchFailed, got %s", cond.Reason)
 	}
 }

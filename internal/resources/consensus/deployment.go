@@ -20,6 +20,7 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/resources/apipermissionproperties"
 	"github.com/hashgraph/solo-operator/internal/resources/applicationoverrideproperties"
 	"github.com/hashgraph/solo-operator/internal/resources/applicationproperties"
@@ -252,7 +253,10 @@ func (r *StatefulSetSubReconciler) buildConsensusNodeContainer(capsule *operator
 
 	image := common.BuildImageOrDefault(cn.SoftwareVersion, "")
 	if image == "" {
-		return corev1.Container{}, fmt.Errorf("consensus node image is required: set spec.podProperties.containers.consensusNode.softwareVersion")
+		return corev1.Container{}, errx.WithHints(
+			errx.WithReason(errConfigInvalid.New("consensus node image is required"), ReasonImageRequired),
+			"Set spec.podProperties.containers.consensusNode.softwareVersion",
+		)
 	}
 
 	env := []corev1.EnvVar{
@@ -659,9 +663,9 @@ func volumeOrEmptyDir(name, pvcName string, spec *corev1.PersistentVolumeClaimSp
 }
 
 // event emits a Kubernetes event against the capsule if a recorder is wired in.
-func (r *StatefulSetSubReconciler) event(capsule *operatorv1alpha1.ConsensusCapsule, eventtype, reason, msg string) {
+func (r *StatefulSetSubReconciler) event(capsule *operatorv1alpha1.ConsensusCapsule, eventtype string, reason errx.Reason, msg string) {
 	if r.Recorder != nil {
-		r.Recorder.Eventf(capsule, nil, eventtype, reason, "StatefulSet", "%s", msg)
+		r.Recorder.Eventf(capsule, nil, eventtype, reason.String(), "StatefulSet", "%s", msg)
 	}
 }
 
@@ -773,7 +777,10 @@ func (r *StatefulSetSubReconciler) addSidecarContainers(sts *appsv1.StatefulSet,
 // buildCheetahUploaderContainer builds a cheetah uploader sidecar container.
 func (r *StatefulSetSubReconciler) buildCheetahUploaderContainer(uploader *operatorv1alpha1.CheetahUploader, containerName, configFile, mountPath, envPrefix, streamBucketPath string) (corev1.Container, error) {
 	if uploader.Blob != nil && uploader.Blob.Enabled && uploader.Blob.URL == "" {
-		return corev1.Container{}, fmt.Errorf("blob storage is enabled (blob.enabled=true) but blob.url is not set")
+		return corev1.Container{}, errx.WithHints(
+			errx.WithReason(errConfigInvalid.New("blob storage is enabled (blob.enabled=true) but blob.url is not set"), ReasonBlobURLRequired),
+			"Set blob.url on the uploader, or disable blob storage (blob.enabled=false)",
+		)
 	}
 
 	image := common.BuildImageOrDefault(uploader.SoftwareVersion, CheetahDefaultImage)

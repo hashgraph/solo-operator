@@ -123,15 +123,15 @@ var _ = Describe("NetworkUpgradePrepare Controller", func() {
 			Expect(conditionTrue(got.Status.Conditions, operatorv1alpha1.CondRegistrySelected)).To(BeTrue())
 
 			By("emitting RegistryAuditComplete for consensusNode (2/2 reachable)")
-			Expect(hasEvent(ctx, ns, nupName, operatorv1alpha1.EventRegistryAuditComplete,
+			Expect(hasEvent(ctx, ns, nupName, operatorv1alpha1.EventRegistryAuditComplete.String(),
 				"consensusNode: 2/2 registries reachable")).To(BeTrue())
 
 			By("not emitting any event for the disabled recordStreamUploader")
-			Expect(hasEvent(ctx, ns, nupName, operatorv1alpha1.EventRegistryAuditComplete,
+			Expect(hasEvent(ctx, ns, nupName, operatorv1alpha1.EventRegistryAuditComplete.String(),
 				"recordStreamUploader")).To(BeFalse())
 
 			By("emitting RegistrySelected for consensusNode")
-			Expect(hasEvent(ctx, ns, nupName, operatorv1alpha1.EventRegistrySelected, "consensusNode")).To(BeTrue())
+			Expect(hasEvent(ctx, ns, nupName, operatorv1alpha1.EventRegistrySelected.String(), "consensusNode")).To(BeTrue())
 		})
 
 		It("stays Succeeded on re-reconcile (idempotent)", func() {
@@ -195,11 +195,11 @@ var _ = Describe("NetworkUpgradePrepare Controller", func() {
 			}, timeout, interval).Should(Equal(operatorv1alpha1.PhaseSucceeded))
 
 			By("emitting RegistryUnreachable warning (1/2 unreachable)")
-			Expect(hasEvent(ctx, ns, nupName, operatorv1alpha1.EventRegistryUnreachable,
+			Expect(hasEvent(ctx, ns, nupName, operatorv1alpha1.EventRegistryUnreachable.String(),
 				"consensusNode: 1/2 registries unreachable")).To(BeTrue())
 
 			By("emitting RegistryAuditComplete showing 1/2 reachable")
-			Expect(hasEvent(ctx, ns, nupName, operatorv1alpha1.EventRegistryAuditComplete,
+			Expect(hasEvent(ctx, ns, nupName, operatorv1alpha1.EventRegistryAuditComplete.String(),
 				"consensusNode: 1/2 registries reachable")).To(BeTrue())
 
 			By("selecting the valid registry in selectedSources")
@@ -262,7 +262,7 @@ var _ = Describe("NetworkUpgradePrepare Controller", func() {
 			Expect(conditionFalse(got.Status.Conditions, operatorv1alpha1.CondRegistrySelected)).To(BeTrue())
 
 			By("emitting RegistryInvalid warning")
-			Expect(hasEvent(ctx, ns, nupName, operatorv1alpha1.EventRegistryInvalid, "consensusNode")).To(BeTrue())
+			Expect(hasEvent(ctx, ns, nupName, operatorv1alpha1.EventRegistryInvalid.String(), "consensusNode")).To(BeTrue())
 
 			By("not populating selectedSources")
 			Expect(got.Status.SelectedSources).To(BeNil())

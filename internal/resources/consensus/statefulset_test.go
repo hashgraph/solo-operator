@@ -560,7 +560,7 @@ func TestAddSidecarContainers_NilSidecars_EmitsComponentSkipped(t *testing.T) {
 			t.Errorf("expected one ComponentSkipped event for %s, got %d in %v", component, got, evts)
 		}
 	}
-	if got := countEventsContaining(evts, operatorv1alpha1.EventSidecarDisabled); got != 0 {
+	if got := countEventsContaining(evts, operatorv1alpha1.EventSidecarDisabled.String()); got != 0 {
 		t.Errorf("expected no SidecarDisabled events, got %d in %v", got, evts)
 	}
 }
@@ -588,7 +588,7 @@ func TestAddSidecarContainers_DisabledSidecars_EmitsSidecarDisabled(t *testing.T
 			t.Errorf("expected one SidecarDisabled event for %s, got %d in %v", component, got, evts)
 		}
 	}
-	if got := countEventsContaining(evts, operatorv1alpha1.EventSidecarDisabled); got != 5 {
+	if got := countEventsContaining(evts, operatorv1alpha1.EventSidecarDisabled.String()); got != 5 {
 		t.Errorf("expected 5 SidecarDisabled events, got %d in %v", got, evts)
 	}
 	if got := countEventsContaining(evts, "alloy"); got != 1 {
@@ -633,10 +633,10 @@ func TestAddSidecarContainers_EnabledSidecars_NoSkipOrDisableEvents(t *testing.T
 	}
 
 	evts := collectEvents(rec)
-	if got := countEventsContaining(evts, operatorv1alpha1.EventComponentSkipped); got != 0 {
+	if got := countEventsContaining(evts, operatorv1alpha1.EventComponentSkipped.String()); got != 0 {
 		t.Errorf("expected no ComponentSkipped events, got %d in %v", got, evts)
 	}
-	if got := countEventsContaining(evts, operatorv1alpha1.EventSidecarDisabled); got != 0 {
+	if got := countEventsContaining(evts, operatorv1alpha1.EventSidecarDisabled.String()); got != 0 {
 		t.Errorf("expected no SidecarDisabled events, got %d in %v", got, evts)
 	}
 }

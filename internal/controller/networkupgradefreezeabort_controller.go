@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 type NetworkUpgradeFreezeAbortReconciler struct {
@@ -49,7 +50,7 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 
 	if ok, msg := validateOperationIDLabel(abort.Labels, abort.Spec.OperationID); !ok {
 		return rejectInvalidOperationIDLabel(ctx, r.Client, &abort, &abort.Status.Conditions,
-			func(reason, m string) { r.eventf(&abort, corev1.EventTypeWarning, reason, "%s", m) },
+			func(reason errx.Reason, m string) { r.eventf(&abort, corev1.EventTypeWarning, reason, "%s", m) },
 			func() { abort.Status.Phase = operatorv1alpha1.PhaseFailed },
 			msg)
 	}
@@ -66,14 +67,14 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 		setCondition(&abort.Status.Conditions, metav1.Condition{
 			Type:               operatorv1alpha1.CondManifestValidated,
 			Status:             metav1.ConditionFalse,
-			Reason:             operatorv1alpha1.ReasonDuplicateOpID,
+			Reason:             operatorv1alpha1.ReasonDuplicateOpID.String(),
 			Message:            msg,
 			ObservedGeneration: abort.Generation,
 		})
 		if err := r.Status().Update(ctx, &abort); err != nil {
-			return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+			return ctrl.Result{}, wrapStatusUpdate(err, "updating status")
 		}
-		return ctrl.Result{}, fmt.Errorf("%s", msg)
+		return ctrl.Result{}, errx.WithReason(errReconcile.New("%s", msg), ReasonManifestInvalid)
 	}
 
 	if abort.Status.Phase == "" || abort.Status.Phase == operatorv1alpha1.PhasePending {
@@ -81,7 +82,7 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 		abort.Status.StartTime = &now
 		abort.Status.Phase = operatorv1alpha1.PhaseRunning
 		if err := r.Status().Update(ctx, &abort); err != nil {
-			return ctrl.Result{}, fmt.Errorf("initializing status: %w", err)
+			return ctrl.Result{}, wrapStatusInit(err)
 		}
 		return ctrl.Result{Requeue: true}, nil
 	}
@@ -103,7 +104,7 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 		setCondition(&abort.Status.Conditions, metav1.Condition{
 			Type:    operatorv1alpha1.CondAbortProcessed,
 			Status:  metav1.ConditionFalse,
-			Reason:  operatorv1alpha1.ReasonAbortAfterFreeze,
+			Reason:  operatorv1alpha1.ReasonAbortAfterFreeze.String(),
 			Message: "abort received after NetworkUpgradeExecute was created; freeze window already closed",
 		})
 	} else {
@@ -113,13 +114,13 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 		setCondition(&abort.Status.Conditions, metav1.Condition{
 			Type:    operatorv1alpha1.CondAbortProcessed,
 			Status:  metav1.ConditionTrue,
-			Reason:  operatorv1alpha1.ReasonAbortSuccess,
+			Reason:  operatorv1alpha1.ReasonAbortSuccess.String(),
 			Message: "upgrade abort processed; no Execute CR found, freeze window was still open",
 		})
 	}
 
 	if err := r.Status().Update(ctx, &abort); err != nil {
-		return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+		return ctrl.Result{}, wrapStatusUpdate(err, "updating status")
 	}
 	return ctrl.Result{}, nil
 }
@@ -130,14 +131,16 @@ func (r *NetworkUpgradeFreezeAbortReconciler) anyExecuteExists(ctx context.Conte
 		client.InNamespace(namespace),
 		client.MatchingFields{fieldOperationID: operationID},
 	); err != nil {
-		return false, fmt.Errorf("listing NetworkUpgradeExecute: %w", err)
+		return false, errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "listing NetworkUpgradeExecute"), ReasonListFailed),
+			"Confirm the operator has list permission on networkupgradeexecutes.operator.solo.hiero.org")
 	}
 	return len(list.Items) > 0, nil
 }
 
-func (r *NetworkUpgradeFreezeAbortReconciler) eventf(obj *operatorv1alpha1.NetworkUpgradeFreezeAbort, eventtype, reason, format string, args ...any) {
+func (r *NetworkUpgradeFreezeAbortReconciler) eventf(obj *operatorv1alpha1.NetworkUpgradeFreezeAbort, eventtype string, reason errx.Reason, format string, args ...any) {
 	if r.Recorder != nil {
-		r.Recorder.Eventf(obj, nil, eventtype, reason, "FreezeAbort", format, args...)
+		r.Recorder.Eventf(obj, nil, eventtype, reason.String(), "FreezeAbort", format, args...)
 	}
 }
 

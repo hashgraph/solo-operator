@@ -13,6 +13,7 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/resources/consensus"
 )
 
@@ -73,7 +74,10 @@ func materialFromSpecEntry(e operatorv1alpha1.NetworkGenesisRosterEntry) (Roster
 func MaterialsFromCluster(ctx context.Context, c client.Client, namespace string, orbit *operatorv1alpha1.Orbit) ([]RosterMaterial, error) {
 	capsules := &operatorv1alpha1.ConsensusCapsuleList{}
 	if err := c.List(ctx, capsules, client.InNamespace(namespace)); err != nil {
-		return nil, fmt.Errorf("list capsules in %s: %w", namespace, err)
+		return nil, errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "list capsules in %s", namespace), ReasonCapsuleListFailed),
+			"Confirm the ServiceAccount has list permission on consensuscapsules.hedera.hashgraph.com",
+		)
 	}
 
 	out := make([]RosterMaterial, 0, len(capsules.Items))
@@ -94,7 +98,10 @@ func MaterialsFromCluster(ctx context.Context, c client.Client, namespace string
 	}
 
 	if len(out) == 0 {
-		return nil, fmt.Errorf("no consensus capsules in namespace %s and no external addresses on orbit %q", namespace, orbit.Name)
+		return nil, errx.WithHints(
+			errx.WithReason(errValidation.New("no consensus capsules in namespace %s and no external addresses on orbit %q", namespace, orbit.Name), ReasonRosterEmpty),
+			"Create at least one ConsensusCapsule in the namespace, or configure externalAddresses on the orbit",
+		)
 	}
 
 	sort.Slice(out, func(i, j int) bool { return out[i].NodeID < out[j].NodeID })
@@ -103,7 +110,10 @@ func MaterialsFromCluster(ctx context.Context, c client.Client, namespace string
 
 func materialFromCapsule(ctx context.Context, c client.Client, namespace string, capsule *operatorv1alpha1.ConsensusCapsule) (RosterMaterial, error) {
 	if capsule.Spec.Secrets == nil || capsule.Spec.Secrets.SecretResources == nil {
-		return RosterMaterial{}, fmt.Errorf("no secrets configured")
+		return RosterMaterial{}, errx.WithHints(
+			errx.WithReason(errValidation.New("no secrets configured"), ReasonSecretsMissing),
+			"Set spec.secrets.secretResources on the ConsensusCapsule",
+		)
 	}
 	secrets := capsule.Spec.Secrets.SecretResources
 
@@ -177,7 +187,10 @@ func materialFromCapsule(ctx context.Context, c client.Client, namespace string,
 
 func materialFromExternal(ext operatorv1alpha1.AddressBookEntry) (RosterMaterial, error) {
 	if ext.ExternalHostname == "" || ext.NodeAccount == "" {
-		return RosterMaterial{}, fmt.Errorf("ExternalHostname and NodeAccount are required")
+		return RosterMaterial{}, errx.WithHints(
+			errx.WithReason(errValidation.New("ExternalHostname and NodeAccount are required"), ReasonExternalAddrInvalid),
+			"Set externalHostname and nodeAccount on the orbit external address entry",
+		)
 	}
 	weight := ext.Weight
 	if weight == 0 {
@@ -214,11 +227,17 @@ func materialFromExternal(ext operatorv1alpha1.AddressBookEntry) (RosterMaterial
 
 func readSecretKey(ctx context.Context, c client.Client, namespace string, ref operatorv1alpha1.KeyReference) ([]byte, error) {
 	if ref.SecretName == "" {
-		return nil, fmt.Errorf("empty secretName")
+		return nil, errx.WithHints(
+			errx.WithReason(errValidation.New("empty secretName"), ReasonSecretNameEmpty),
+			"Set secretName on the key reference",
+		)
 	}
 	secret := &corev1.Secret{}
 	if err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: ref.SecretName}, secret); err != nil {
-		return nil, fmt.Errorf("secret %s: %w", ref.SecretName, err)
+		return nil, errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "secret %s", ref.SecretName), ReasonSecretGetFailed),
+			"Confirm the secret exists in the namespace and the ServiceAccount can get it",
+		)
 	}
 	key := ref.KeyName
 	if key == "" {
@@ -226,7 +245,10 @@ func readSecretKey(ctx context.Context, c client.Client, namespace string, ref o
 	}
 	data, ok := secret.Data[key]
 	if !ok {
-		return nil, fmt.Errorf("key %q not found in secret %s", key, ref.SecretName)
+		return nil, errx.WithHints(
+			errx.WithReason(errValidation.New("key %q not found in secret %s", key, ref.SecretName), ReasonSecretKeyMissing),
+			"Confirm the secret contains the referenced key",
+		)
 	}
 	return data, nil
 }

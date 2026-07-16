@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/registry"
 )
 
@@ -69,7 +70,7 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 
 	if ok, msg := validateOperationIDLabel(freeze.Labels, freeze.Spec.OperationID); !ok {
 		return rejectInvalidOperationIDLabel(ctx, r.Client, &freeze, &freeze.Status.Conditions,
-			func(reason, m string) { r.eventf(&freeze, corev1.EventTypeWarning, reason, "%s", m) },
+			func(reason errx.Reason, m string) { r.eventf(&freeze, corev1.EventTypeWarning, reason, "%s", m) },
 			func() { freeze.Status.Phase = operatorv1alpha1.PhaseFailed },
 			msg)
 	}
@@ -86,14 +87,14 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 		setCondition(&freeze.Status.Conditions, metav1.Condition{
 			Type:               operatorv1alpha1.CondManifestValidated,
 			Status:             metav1.ConditionFalse,
-			Reason:             operatorv1alpha1.ReasonDuplicateOpID,
+			Reason:             operatorv1alpha1.ReasonDuplicateOpID.String(),
 			Message:            msg,
 			ObservedGeneration: freeze.Generation,
 		})
 		if err := r.Status().Update(ctx, &freeze); err != nil {
-			return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+			return ctrl.Result{}, wrapStatusUpdate(err, "updating status")
 		}
-		return ctrl.Result{}, fmt.Errorf("%s", msg)
+		return ctrl.Result{}, errx.WithReason(errReconcile.New("%s", msg), ReasonManifestInvalid)
 	}
 
 	prepare, err := findPrepare(ctx, r.Client, freeze.Namespace, freeze.Spec.OperationID)
@@ -110,7 +111,7 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 		freeze.Status.StartTime = &now
 		freeze.Status.Phase = operatorv1alpha1.PhaseRunning
 		if err := r.Status().Update(ctx, &freeze); err != nil {
-			return ctrl.Result{}, fmt.Errorf("initializing status: %w", err)
+			return ctrl.Result{}, wrapStatusInit(err)
 		}
 		return ctrl.Result{Requeue: true}, nil
 	}
@@ -143,13 +144,13 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 		setCondition(&freeze.Status.Conditions, metav1.Condition{
 			Type:    operatorv1alpha1.CondRegistryHealthCheck,
 			Status:  metav1.ConditionTrue,
-			Reason:  operatorv1alpha1.ReasonHealthCheckPassed,
+			Reason:  operatorv1alpha1.ReasonHealthCheckPassed.String(),
 			Message: "all selected registries healthy",
 		})
 		setCondition(&freeze.Status.Conditions, metav1.Condition{
 			Type:    operatorv1alpha1.CondReadyForFreeze,
 			Status:  metav1.ConditionTrue,
-			Reason:  operatorv1alpha1.ReasonPreFreezePassed,
+			Reason:  operatorv1alpha1.ReasonPreFreezePassed.String(),
 			Message: "registry health check passed; ready for freeze",
 		})
 	} else {
@@ -158,13 +159,13 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 		setCondition(&freeze.Status.Conditions, metav1.Condition{
 			Type:    operatorv1alpha1.CondRegistryHealthCheck,
 			Status:  metav1.ConditionFalse,
-			Reason:  operatorv1alpha1.ReasonRegistryInvalid,
+			Reason:  operatorv1alpha1.ReasonRegistryInvalid.String(),
 			Message: "no valid registry available for one or more components",
 		})
 		setCondition(&freeze.Status.Conditions, metav1.Condition{
 			Type:    operatorv1alpha1.CondReadyForFreeze,
 			Status:  metav1.ConditionFalse,
-			Reason:  operatorv1alpha1.ReasonRegistryInvalid,
+			Reason:  operatorv1alpha1.ReasonRegistryInvalid.String(),
 			Message: "no valid registry available for one or more components",
 		})
 	}
@@ -173,18 +174,20 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 		if apierrors.IsConflict(err) {
 			return ctrl.Result{Requeue: true}, nil
 		}
-		return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+		return ctrl.Result{}, wrapStatusUpdate(err, "updating status")
 	}
 
 	if !succeeded {
-		return ctrl.Result{}, fmt.Errorf("no valid registry for one or more components")
+		return ctrl.Result{}, errx.WithHints(
+			errx.WithReason(errReconcile.New("no valid registry for one or more components"), ReasonNoValidRegistry),
+			"Confirm at least one configured registry serves a valid image for each component")
 	}
 	return ctrl.Result{}, nil
 }
 
-func (r *NetworkUpgradeFreezeReconciler) eventf(obj *operatorv1alpha1.NetworkUpgradeFreeze, eventtype, reason, format string, args ...any) {
+func (r *NetworkUpgradeFreezeReconciler) eventf(obj *operatorv1alpha1.NetworkUpgradeFreeze, eventtype string, reason errx.Reason, format string, args ...any) {
 	if r.Recorder != nil {
-		r.Recorder.Eventf(obj, nil, eventtype, reason, "RegistryHealthCheck", format, args...)
+		r.Recorder.Eventf(obj, nil, eventtype, reason.String(), "RegistryHealthCheck", format, args...)
 	}
 }
 

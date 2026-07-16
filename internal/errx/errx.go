@@ -33,6 +33,7 @@
 package errx
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/joomcode/errorx"
@@ -77,6 +78,13 @@ func WithHints(err error, hints ...string) error {
 		return err
 	}
 	return ensure(err).WithProperty(PropertyResolution, hints)
+}
+
+// Decorate attaches a reason code and optional hints in one call — the common
+// case, equivalent to WithHints(WithReason(err, reason), hints...). Returns nil
+// when err is nil.
+func Decorate(err error, reason Reason, hints ...string) error {
+	return WithHints(WithReason(err, reason), hints...)
 }
 
 // ReasonOf returns the Reason code attached anywhere in err's cause chain.
@@ -133,19 +141,19 @@ func ensure(err error) *errorx.Error {
 	return errorx.InternalError.Wrap(err, "unexpected non-errorx error")
 }
 
-// extract walks the cause chain for key. errorx.ExtractProperty inspects only
-// the outermost error, so a property set on an inner error would be lost when
-// outer layers re-wrap without carrying it.
+// extract walks the cause chain for key (errorx.ExtractProperty inspects only the
+// outermost error). It follows both the errorx cause chain and errors.Unwrap, so
+// a reason/hint survives an intervening plain fmt.Errorf("...: %w") wrapper.
 func extract(err error, key errorx.Property) (interface{}, bool) {
 	for e := err; e != nil; {
 		if v, ok := errorx.ExtractProperty(e, key); ok {
 			return v, true
 		}
-		ex := errorx.Cast(e)
-		if ex == nil {
-			break
+		if ex := errorx.Cast(e); ex != nil {
+			e = ex.Cause()
+			continue
 		}
-		e = ex.Cause()
+		e = errors.Unwrap(e)
 	}
 	return nil, false
 }

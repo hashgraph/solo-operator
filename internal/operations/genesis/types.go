@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/resources/consensus"
 )
 
@@ -52,7 +53,10 @@ func splitAccountIDParts(accountID string, nodeID int64) (shard, realm, account 
 	}
 	parts := strings.Split(id, ".")
 	if len(parts) != 3 {
-		return "", "", "", fmt.Errorf("expected shard.realm.account, got %q", accountID)
+		return "", "", "", errx.WithHints(
+			errx.WithReason(errValidation.New("expected shard.realm.account, got %q", accountID), ReasonAccountIDInvalid),
+			"Set accountID in shard.realm.account form (e.g. 0.0.3)",
+		)
 	}
 	return parts[0], parts[1], parts[2], nil
 }

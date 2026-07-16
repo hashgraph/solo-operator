@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/resources/nodeproperties"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
@@ -72,9 +73,9 @@ func (r *NodePropertiesReconciler) updateStatus(ctx context.Context, obj *operat
 	return r.Status().Update(ctx, obj)
 }
 
-func (r *NodePropertiesReconciler) event(obj *operatorv1alpha1.NodePropertiesConfig, eventtype, reason, msg string) {
+func (r *NodePropertiesReconciler) event(obj *operatorv1alpha1.NodePropertiesConfig, eventtype string, reason errx.Reason, msg string) {
 	if r.Recorder != nil {
-		r.Recorder.Eventf(obj, nil, eventtype, reason, "NodeProperties", "%s", msg)
+		r.Recorder.Eventf(obj, nil, eventtype, reason.String(), "NodeProperties", "%s", msg)
 	}
 }
 
