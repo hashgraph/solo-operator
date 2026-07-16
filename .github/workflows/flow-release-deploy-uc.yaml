@@ -5,8 +5,22 @@ name: "Release: Deploy Artifact (UC Sidecar)"
 on:
   workflow_dispatch:
     inputs:
+      version:
+        description: "Exact version, e.g. 0.32.0 — must be the next patch/minor/major of the latest uc-v* tag (from 0.31.1 that means 0.31.2, 0.32.0, or 1.0.0). Leave empty to use 'bump'."
+        type: string
+        required: false
+        default: ""
+      bump:
+        description: "Version bump — used only when 'version' is empty"
+        type: choice
+        required: false
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
       dry-run-enabled:
-        description: "Perform Dry Run"
+        description: "Perform Dry Run (compute version + notes only; no tag, build, or push)"
         type: boolean
         required: false
         default: false
@@ -25,6 +39,10 @@ env:
 permissions:
   contents: write
   packages: write
+
+concurrency:
+  group: release-uc
+  cancel-in-progress: false
 
 jobs:
   release-uc:
@@ -54,95 +72,119 @@ jobs:
           version: 3.39.2
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version: 20
-
-      - name: Install Semantic Release & plugins
-        run: |
-          set -euo pipefail
-          # NOTE: The "release" key below makes cosmiconfig resolve THIS
-          # package.json first (before the repo-root .releaserc.json used by
-          # the operator release), so the UC release runs only the UC config.
-          # Do not pass --extends on the CLI; that would leave .releaserc.json
-          # as the discovered config and pull in its @semantic-release/git
-          # prepare step.
-          cat > package.json <<'JSON'
-          {
-            "name": "solo-operator-uc-release-tooling",
-            "private": true,
-            "release": {
-              "extends": "./.releaserc_uc.json"
-            },
-            "devDependencies": {
-              "semantic-release": "24.2.4",
-              "@semantic-release/commit-analyzer": "13.0.1",
-              "@semantic-release/release-notes-generator": "14.1.1",
-              "@semantic-release/github": "11.0.6",
-              "@semantic-release/exec": "7.1.0",
-              "conventional-changelog-conventionalcommits": "8.0.0"
-            }
-          }
-          JSON
-          npm install --no-audit --no-fund
-
-      - name: Publish Semantic Release (UC)
-        id: semantic-release
+      # UC is released by hand (rarely), so the version is chosen at dispatch time
+      # rather than derived from commit messages. Provide an exact `version`, or
+      # leave it empty to bump the latest `uc-v*` tag by `bump` (default: patch).
+      - name: Compute Version & Release Notes
+        id: plan
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
+          VERSION_INPUT: ${{ inputs.version }}
+          BUMP: ${{ inputs.bump }}
         run: |
           set -euo pipefail
 
-          FLAGS=""
-          if [[ "${{ inputs.dry-run-enabled }}" == "true" ]]; then
-            FLAGS="--dry-run"
-          fi
+          git fetch --tags --force --quiet
 
-          npx semantic-release ${FLAGS} 2>&1 | tee semantic-release-output.txt
-
-          if [[ "${{ inputs.dry-run-enabled }}" == "true" ]]; then
-            NEXT_VERSION=$(sed -n 's/.*The next release version is \([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\(-[0-9A-Za-z.-]\{1,\}\)\{0,1\}\).*/\1/p' semantic-release-output.txt || echo "")
-            echo "version=${NEXT_VERSION}" >> "${GITHUB_OUTPUT}"
-            echo "released=false" >> "${GITHUB_OUTPUT}"
-            if [[ -n "$NEXT_VERSION" ]]; then
-              echo "::notice::Dry-run: next UC release would be uc-v${NEXT_VERSION}"
-            else
-              echo "::notice::Dry-run: no new UC release would be created"
-            fi
+          LATEST_TAG="$(git tag -l 'uc-v*' --sort=-v:refname | head -n1)"
+          if [[ -n "${LATEST_TAG}" ]]; then
+            PREV="${LATEST_TAG#uc-v}"
           else
-            if [[ -s ".release-version-uc" ]]; then
-              VERSION="$(tr -d '[:space:]' < .release-version-uc)"
-              echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
-              echo "released=true" >> "${GITHUB_OUTPUT}"
-              echo "::notice::Released UC uc-v${VERSION}"
-            else
-              echo "released=false" >> "${GITHUB_OUTPUT}"
-              echo "::notice::No new UC release was created"
-            fi
+            PREV="0.0.0"
           fi
 
-      - name: Build UC Binaries
-        if: ${{ steps.semantic-release.outputs.released == 'true' }}
-        run: task build:uc:all
+          if [[ -n "${VERSION_INPUT}" ]]; then
+            NEXT="${VERSION_INPUT#uc-v}"   # tolerate a leading "uc-v" in the input
+          else
+            IFS='.' read -r MAJ MIN PAT <<< "${PREV}"
+            case "${BUMP}" in
+              major) MAJ=$((MAJ + 1)); MIN=0; PAT=0 ;;
+              minor) MIN=$((MIN + 1)); PAT=0 ;;
+              patch) PAT=$((PAT + 1)) ;;
+              *) echo "::error::unknown bump '${BUMP}'"; exit 1 ;;
+            esac
+            NEXT="${MAJ}.${MIN}.${PAT}"
+          fi
 
-      - name: Generate Checksums
-        if: ${{ steps.semantic-release.outputs.released == 'true' }}
-        run: task hash:uc
+          # Reject malformed versions (proper semver core, no leading zeros).
+          if [[ ! "${NEXT}" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'${NEXT}' is not a valid semantic version (expected MAJOR.MINOR.PATCH, e.g. 0.32.0)"; exit 1
+          fi
+
+          # Reject nonsensical jumps: the version must be a single-step patch/minor/major
+          # increment of the latest uc-v* tag (e.g. 0.31.1 -> 3.1.1 is rejected).
+          PREV_CORE="${PREV%%-*}"
+          IFS='.' read -r pa pb pc <<< "${PREV_CORE}"
+          NEXT_CORE="${NEXT%%-*}"
+          CAND_PATCH="${pa}.${pb}.$((10#${pc} + 1))"
+          CAND_MINOR="${pa}.$((10#${pb} + 1)).0"
+          CAND_MAJOR="$((10#${pa} + 1)).0.0"
+          case "${NEXT_CORE}" in
+            "${CAND_PATCH}" | "${CAND_MINOR}" | "${CAND_MAJOR}") : ;;
+            *)
+              echo "::error::Version '${NEXT}' is not a valid increment from the latest UC release '${LATEST_TAG:-none}' (baseline ${PREV_CORE})."
+              echo "::error::Valid next versions are ${CAND_PATCH} (patch), ${CAND_MINOR} (minor), or ${CAND_MAJOR} (major)."
+              exit 1
+              ;;
+          esac
+
+          TAG="uc-v${NEXT}"
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "::error::tag ${TAG} already exists — pick a different version"; exit 1
+          fi
+
+          echo "version=${NEXT}"        >> "${GITHUB_OUTPUT}"
+          echo "tag=${TAG}"             >> "${GITHUB_OUTPUT}"
+          echo "prev_tag=${LATEST_TAG}" >> "${GITHUB_OUTPUT}"
+
+          # Release notes: (uc)-scoped commit subjects since the previous UC release.
+          if [[ -n "${LATEST_TAG}" ]]; then RANGE="${LATEST_TAG}..HEAD"; else RANGE="HEAD"; fi
+          UC_LOG="$(git log ${RANGE} --no-merges --pretty=format:'- %s (%h)' | grep -E '^- [a-z]+\(uc\)!?:' || true)"
+
+          {
+            echo "## solo-operator-uc ${TAG}"
+            echo
+            echo "Manually cut UC sidecar release."
+            echo
+            if [[ -n "${UC_LOG}" ]]; then
+              echo "### \`(uc)\`-scoped changes since ${LATEST_TAG:-repository start}"
+              echo
+              echo "${UC_LOG}"
+            else
+              echo "_No \`(uc)\`-scoped commits since ${LATEST_TAG:-repository start}._"
+            fi
+          } > uc-release-notes.md
+
+          {
+            echo "### UC release plan"
+            echo "- Version: \`${TAG}\` (previous: \`${LATEST_TAG:-none}\`)"
+            echo "- Dry run: \`${{ inputs.dry-run-enabled }}\`"
+            echo
+            echo "#### Notes preview"
+            echo '```markdown'
+            cat uc-release-notes.md
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      # Stamp the chosen version into the binaries via the shared VERSION var
+      # (overrides the default `git describe`). hash:uc depends on build:uc:all,
+      # so this builds both arch binaries and their checksums in one invocation.
+      - name: Build UC Binaries & Checksums
+        if: ${{ !inputs.dry-run-enabled }}
+        run: task hash:uc VERSION="${{ steps.plan.outputs.tag }}"
 
       - name: Setup QEMU
-        if: ${{ steps.semantic-release.outputs.released == 'true' }}
+        if: ${{ !inputs.dry-run-enabled }}
         uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0
 
       - name: Setup Docker Buildx
-        if: ${{ steps.semantic-release.outputs.released == 'true' }}
+        if: ${{ !inputs.dry-run-enabled }}
         uses: step-security/setup-buildx-action@6997872a55d77391e51b87609556578131f44402 # v4.1.0
         with:
           version: v0.32.1
           driver-opts: network=host,image=ghcr.io/hashgraph/runner-images/buildkit:buildx-stable-1
 
       - name: Docker Login (GitHub)
-        if: ${{ steps.semantic-release.outputs.released == 'true' }}
+        if: ${{ !inputs.dry-run-enabled }}
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
           registry: ${{ env.GH_OCI_REGISTRY }}
@@ -150,7 +192,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Docker Login (JFrog)
-        if: ${{ steps.semantic-release.outputs.released == 'true' }}
+        if: ${{ !inputs.dry-run-enabled }}
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
           registry: ${{ env.JF_OCI_REGISTRY }}
@@ -158,7 +200,7 @@ jobs:
           password: ${{ secrets.JF_ACCESS_TOKEN }}
 
       - name: Build and Push UC Image (GitHub)
-        if: ${{ steps.semantic-release.outputs.released == 'true' }}
+        if: ${{ !inputs.dry-run-enabled }}
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: .
@@ -167,11 +209,11 @@ jobs:
           push: true
           provenance: false
           tags: |
-            ${{ env.GH_OCI_REGISTRY }}/${{ env.GH_OCI_GROUP }}/${{ env.GH_OCI_IMAGE }}:${{ steps.semantic-release.outputs.version }}
+            ${{ env.GH_OCI_REGISTRY }}/${{ env.GH_OCI_GROUP }}/${{ env.GH_OCI_IMAGE }}:${{ steps.plan.outputs.version }}
             ${{ env.GH_OCI_REGISTRY }}/${{ env.GH_OCI_GROUP }}/${{ env.GH_OCI_IMAGE }}:latest
 
       - name: Build and Push UC Image (JFrog)
-        if: ${{ steps.semantic-release.outputs.released == 'true' }}
+        if: ${{ !inputs.dry-run-enabled }}
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: .
@@ -180,5 +222,28 @@ jobs:
           push: true
           provenance: false
           tags: |
-            ${{ env.JF_OCI_REGISTRY }}/${{ env.JF_OCI_GROUP }}/${{ env.GH_OCI_IMAGE }}:${{ steps.semantic-release.outputs.version }}
+            ${{ env.JF_OCI_REGISTRY }}/${{ env.JF_OCI_GROUP }}/${{ env.GH_OCI_IMAGE }}:${{ steps.plan.outputs.version }}
             ${{ env.JF_OCI_REGISTRY }}/${{ env.JF_OCI_GROUP }}/${{ env.GH_OCI_IMAGE }}:latest
+
+      # Tag + release last, so they only exist once the images are published.
+      - name: Create Tag & GitHub Release
+        if: ${{ !inputs.dry-run-enabled }}
+        env:
+          GH_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
+          TAG: ${{ steps.plan.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${TAG}" -m "Release solo-operator-uc ${TAG}"
+          git push origin "${TAG}"
+          gh release create "${TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "solo-operator-uc ${TAG}" \
+            --notes-file uc-release-notes.md \
+            --latest=false \
+            bin/uc-linux-amd64 \
+            bin/uc-linux-arm64 \
+            bin/uc-linux-amd64.sha256 \
+            bin/uc-linux-arm64.sha256
+          echo "::notice::Released ${TAG}"

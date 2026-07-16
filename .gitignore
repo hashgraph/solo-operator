@@ -83,7 +83,5 @@ debug
 # match the internal/version Go package on case-insensitive filesystems)
 /VERSION
 
-# semantic-release UC version marker
-.release-version-uc
 CLAUDE.local.md
 .rtk/

@@ -223,6 +223,15 @@ versioning and release processes. Version increments are determined by the
    - Build and publish container images to `ghcr.io/hashgraph/solo-operator` and `artifacts.hashgraph.io/solo-operator-docker-release/solo-operator`
    - Publish Helm chart to `oci://ghcr.io/hashgraph/charts/solo-operator` and `oci://artifacts.hashgraph.io/solo-operator-helm-release/solo-operator`
 
+### Releasing the UC Sidecar
+
+The Upgrade Controller (UC) sidecar is versioned and released **independently** of the
+operator, using `uc-v*` tags and the
+[Release: Deploy Artifact (UC Sidecar)](https://github.com/hashgraph/solo-operator/actions/workflows/flow-release-deploy-uc.yaml)
+workflow. Unlike the operator, UC releases are **hand-cut** — you choose the version at
+dispatch time rather than deriving it from commits. See the
+[UC Sidecar — Release Guide](docs/uc/release-guide.md) for the full process.
+
 ## Support
 
 If you have a question on how to use the product, please see our [support guide](https://github.com/hashgraph/.github/blob/main/SUPPORT.md).
