@@ -75,7 +75,21 @@ func (m *PlatformStatusMonitor) ConnectivityError() *daemonkit.StatusError {
 }
 
 // Run scrapes the metrics endpoint on PlatformPollInterval until ctx is cancelled.
-func (m *PlatformStatusMonitor) Run(ctx context.Context) error {
+func (m *PlatformStatusMonitor) Run(ctx context.Context) (retErr error) {
+	// Convert an unexpected panic in the poll loop into a returned error so the
+	// daemonkit supervisor restarts this monitor with back-off, instead of the
+	// panic unwinding to the top of its goroutine and crashing the whole UC
+	// process (daemonkit does not recover; a panic in any monitor kills the
+	// daemon). Mirrors UpgradeOutcomeMonitor.runWatch.
+	defer func() {
+		if r := recover(); r != nil {
+			logx.As().Error().Str("reason", ReasonPlatformStatusMonitorPanic.String()).
+				Str("capsule", m.cfg.CapsuleName()).Interface("panic", r).
+				Msg("panic in platform-status monitor — recovering")
+			retErr = errx.WithReason(errPanic.New("recovered panic in platform-status monitor: %v", r), ReasonPlatformStatusMonitorPanic)
+		}
+	}()
+
 	logx.As().Info().
 		Str("reason", ReasonPlatformStatusMonitorStarted.String()).
 		Str("capsule", m.cfg.CapsuleName()).

@@ -17,6 +17,7 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 
 	"k8s.io/client-go/dynamic/fake"
 )
@@ -186,5 +187,42 @@ func TestPlatformStatusMonitor_TransitionOnlyWrites(t *testing.T) {
 	}
 	if m.ConnectivityError() != nil {
 		t.Error("expected ConnectivityError cleared after a successful scrape")
+	}
+}
+
+// panicRoundTripper panics on every request, simulating an unexpected panic in
+// the scrape path.
+type panicRoundTripper struct{}
+
+func (panicRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	panic("boom in scrape")
+}
+
+// TestPlatformStatusMonitor_RunRecoversPanic verifies a panic in the poll loop is
+// recovered by Run's top-level defer and surfaced as a returned error — which the
+// daemonkit supervisor turns into a back-off restart — rather than unwinding to
+// the top of the goroutine and crashing the whole UC process.
+func TestPlatformStatusMonitor_RunRecoversPanic(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := operatorv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add to scheme: %v", err)
+	}
+	fakeClient := fake.NewSimpleDynamicClient(scheme, newCapsuleObj("node0", "solo"))
+
+	cfg := DefaultConfig()
+	cfg.Namespace = "solo"
+	cfg.PodName = "node0-0"
+	cfg.MetricsURL = "http://127.0.0.1:0/metrics"
+	m := NewPlatformStatusMonitor(cfg, fakeClient, nil)
+	m.http = &http.Client{Transport: panicRoundTripper{}}
+
+	// Run does an immediate scrape before entering its ticker loop; the panicking
+	// transport makes that scrape panic. Run must recover and return an error.
+	err := m.Run(context.Background())
+	if err == nil {
+		t.Fatal("expected Run to return a recovered-panic error, got nil")
+	}
+	if reason, _ := errx.ReasonOf(err); reason != ReasonPlatformStatusMonitorPanic {
+		t.Errorf("reason = %q, want %q", reason, ReasonPlatformStatusMonitorPanic)
 	}
 }

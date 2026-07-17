@@ -18,6 +18,7 @@ const (
 	ReasonUpgradeOutcomeMonitorStopped errx.Reason = "UpgradeOutcomeMonitorStopped"
 	ReasonPlatformStatusMonitorStarted errx.Reason = "PlatformStatusMonitorStarted"
 	ReasonPlatformStatusMonitorStopped errx.Reason = "PlatformStatusMonitorStopped"
+	ReasonPlatformStatusMonitorPanic   errx.Reason = "PlatformStatusMonitorPanic"
 	ReasonPlatformStatusChanged        errx.Reason = "PlatformStatusChanged"
 	ReasonPollIntervalChanged          errx.Reason = "PollIntervalChanged"
 	ReasonMarkerHandlerPending         errx.Reason = "MarkerHandlerPending"
