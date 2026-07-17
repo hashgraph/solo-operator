@@ -191,6 +191,12 @@ func (c Config) Validate() error {
 			"Set --pod-name (UC_POD_NAME) via the downward API fieldRef metadata.name",
 		)
 	}
+	if c.PodRevision == "" {
+		return errx.WithHints(
+			errx.WithReason(errConfigInvalid.New("pod-revision is required (stamps platformStatusRevision for the freshness guard)"), ReasonConfigInvalid),
+			"Set --pod-revision (UC_POD_REVISION) via the downward API fieldRef metadata.labels['controller-revision-hash']",
+		)
+	}
 	if c.MetricsURL == "" {
 		return errx.WithHints(
 			errx.WithReason(errConfigInvalid.New("metrics-url is required"), ReasonConfigInvalid),

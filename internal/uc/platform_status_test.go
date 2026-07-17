@@ -34,6 +34,8 @@ func TestParsePlatformStatus(t *testing.T) {
 		{"catastrophic among others", "some_other_metric 5\nplatform_PlatformStatus{node=\"0\"} 11\nanother 3\n", 11, true},
 		{"absent", "# HELP other\nother_metric 1\n", 0, false},
 		{"prefix-collision only", "platform_PlatformStatusExtra{n=\"0\"} 9\n", 0, false},
+		{"with trailing timestamp", "platform_PlatformStatus{node=\"0\"} 2 1700000000000\n", 2, true},
+		{"bare with timestamp", "platform_PlatformStatus 1 1700000000000\n", 1, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

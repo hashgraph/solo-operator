@@ -43,14 +43,12 @@ func nameForCode(code int32) string {
 }
 
 // parsePlatformStatus scans a Prometheus exposition body for the
-// platform_PlatformStatus sample and returns its numeric code. The metric line
-// looks like `platform_PlatformStatus{labels...} 2` (or without labels); the
-// value is the last whitespace-separated token, parsed as a float and truncated
-// to an int. Comment lines (# HELP / # TYPE) are skipped. found is false when no
-// sample line is present.
+// platform_PlatformStatus sample and returns its numeric code. The sample format
+// is `metric{labels} value [timestamp]`; the value is always the second
+// whitespace-separated field (fields[1]) — using the last field would
+// accidentally grab an optional trailing timestamp.
 func parsePlatformStatus(r io.Reader) (code int32, found bool) {
 	scanner := bufio.NewScanner(r)
-	// Metrics bodies can carry long lines; grow the buffer beyond bufio's 64K default.
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -60,8 +58,6 @@ func parsePlatformStatus(r io.Reader) (code int32, found bool) {
 		if !strings.HasPrefix(line, platformStatusMetric) {
 			continue
 		}
-		// The char after the metric name must be a separator (space, '{', or ':')
-		// so we don't match a longer metric name that shares the prefix.
 		rest := line[len(platformStatusMetric):]
 		if rest != "" && rest[0] != ' ' && rest[0] != '\t' && rest[0] != '{' {
 			continue
@@ -70,7 +66,7 @@ func parsePlatformStatus(r io.Reader) (code int32, found bool) {
 		if len(fields) < 2 {
 			continue
 		}
-		val, err := strconv.ParseFloat(fields[len(fields)-1], 64)
+		val, err := strconv.ParseFloat(fields[1], 64)
 		if err != nil {
 			continue
 		}
