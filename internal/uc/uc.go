@@ -79,6 +79,9 @@ func New(cfg Config) (*UC, error) {
 	monitors := []daemonkit.MonitorRunner{
 		NewMarkerMonitorWithFactory(cfg, factory),
 		outcomeMonitor,
+		// The platform-status sensor is the sole writer of
+		// ConsensusCapsule.status.platformStatus. It runs in every deployment mode.
+		NewPlatformStatusMonitor(cfg, client, sink),
 	}
 
 	return &UC{cfg: cfg, client: client, events: sink, monitors: monitors}, nil

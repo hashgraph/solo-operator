@@ -192,6 +192,7 @@ type HelmValuesReference struct {
 type HelmCapsuleStatus struct {
 	// Phase is the current lifecycle phase of the Helm release.
 	// +optional
+	// +kubebuilder:validation:Enum=Pending;Running;Succeeded;Failed;Unknown
 	Phase Phase `json:"phase,omitempty"`
 
 	// ObservedGeneration is the .metadata.generation last processed by the controller.

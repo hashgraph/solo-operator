@@ -189,6 +189,79 @@ func newOfflineCapsule(name string) *operatorv1alpha1.ConsensusCapsule {
 	}
 }
 
+// newExecuteInBringOnline builds an Execute CR in PendingNodeUpgrade with the
+// capsule already patched and brought online, so gate tests exercise only the
+// final phase==Active gate. NodeUpgradeStartTime is recent so the backstop does
+// not trip.
+func newExecuteInBringOnline() *operatorv1alpha1.NetworkUpgradeExecute {
+	now := metav1.Now()
+	e := newExecuteForTest()
+	e.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	e.Status.NodeUpgradeStartTime = &now
+	e.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
+		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
+	}
+	setCondition(&e.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.CondConsensusCapsulePatched,
+		Status:             metav1.ConditionTrue,
+		Reason:             operatorv1alpha1.ReasonPatchApplied.String(),
+		LastTransitionTime: now,
+	})
+	setCondition(&e.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.CondCapsulesOnline,
+		Status:             metav1.ConditionTrue,
+		Reason:             operatorv1alpha1.ReasonCapsulesOnline.String(),
+		LastTransitionTime: now,
+	})
+	return e
+}
+
+// newOnlineCapsule returns a minimal online (Offline=false) ConsensusCapsule with
+// the upgraded consensus-node image.
+func newOnlineCapsule(name string) *operatorv1alpha1.ConsensusCapsule {
+	return &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1,
+			Log4j2ConfigRef: "network-log4j2",
+			PodProperties: operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
+				SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "reg-a", ImageName: "cn", ImageTag: "0.75.0"},
+			}}},
+		},
+	}
+}
+
+// newActiveCapsule returns an online capsule reporting phase==Active with an ACTIVE
+// platform status (the operator-written rollup produced by #1136).
+func newActiveCapsule(name string) *operatorv1alpha1.ConsensusCapsule {
+	c := newOnlineCapsule(name)
+	c.Status.Phase = operatorv1alpha1.PhaseActive
+	c.Status.PlatformStatus = operatorv1alpha1.PlatformStatusActive
+	return c
+}
+
+// newRunningCapsule returns an online capsule that is Ready but not yet ACTIVE.
+func newRunningCapsule(name string) *operatorv1alpha1.ConsensusCapsule {
+	c := newOnlineCapsule(name)
+	c.Status.Phase = operatorv1alpha1.PhaseRunning
+	c.Status.PlatformStatus = operatorv1alpha1.PlatformStatusStartingUp
+	return c
+}
+
+// newExecuteSTS builds a StatefulSet whose status carries the given current/update
+// revisions and ready/updated replica counts, for exercising the revision guard.
+func newExecuteSTS(name, currentRevision, updateRevision string, ready, updated int32) *appsv1.StatefulSet {
+	return &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+		Status: appsv1.StatefulSetStatus{
+			CurrentRevision: currentRevision,
+			UpdateRevision:  updateRevision,
+			ReadyReplicas:   ready,
+			UpdatedReplicas: updated,
+		},
+	}
+}
+
 func TestExecuteReconcile_InitializesStatus(t *testing.T) {
 	execute := &operatorv1alpha1.NetworkUpgradeExecute{
 		ObjectMeta: metav1.ObjectMeta{
@@ -739,45 +812,24 @@ func TestExecuteReconcile_PendingNodeUpgrade_BringsCapsuleOnline(t *testing.T) {
 	}
 }
 
-func TestExecuteReconcile_PendingNodeUpgrade_WaitsForPodReady(t *testing.T) {
-	execute := newExecuteForTest()
-	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
-	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
-		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
-	}
-	setCondition(&execute.Status.Conditions, metav1.Condition{
-		Type:               operatorv1alpha1.CondConsensusCapsulePatched,
-		Status:             metav1.ConditionTrue,
-		Reason:             operatorv1alpha1.ReasonPatchApplied.String(),
-		LastTransitionTime: metav1.Now(),
-	})
-	setCondition(&execute.Status.Conditions, metav1.Condition{
-		Type:               operatorv1alpha1.CondCapsulesOnline,
-		Status:             metav1.ConditionTrue,
-		Reason:             operatorv1alpha1.ReasonCapsulesOnline.String(),
-		LastTransitionTime: metav1.Now(),
-	})
+func TestExecuteReconcile_PendingNodeUpgrade_WaitsForActive(t *testing.T) {
+	execute := newExecuteInBringOnline()
 
-	capsule := &operatorv1alpha1.ConsensusCapsule{
-		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
-		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1,
-			Log4j2ConfigRef: "network-log4j2",
-			PodProperties:   operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "reg-a", ImageName: "cn", ImageTag: "0.75.0"}}}},
-		},
-	}
-	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default"},
-		Status:     appsv1.StatefulSetStatus{ReadyReplicas: 0},
-	}
+	// Pod is Ready but the node has not yet reached ACTIVE (phase=Running): the
+	// upgrade must not be reported Succeeded on mere pod readiness.
+	capsule := newRunningCapsule("node0")
+	sts := newExecuteSTS("node0", "rev-new", "rev-new", 1, 1)
 
 	scheme := newControllerTestScheme()
 	c := withExecuteIndexes(fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(execute, capsule, sts).
-		WithStatusSubresource(execute, sts)).Build()
+		WithStatusSubresource(execute, capsule, sts)).Build()
 	if err := c.Status().Update(context.Background(), execute); err != nil {
 		t.Fatalf("pre-set execute status: %v", err)
+	}
+	if err := c.Status().Update(context.Background(), capsule); err != nil {
+		t.Fatalf("pre-set capsule status: %v", err)
 	}
 	if err := c.Status().Update(context.Background(), sts); err != nil {
 		t.Fatalf("pre-set sts status: %v", err)
@@ -798,49 +850,136 @@ func TestExecuteReconcile_PendingNodeUpgrade_WaitsForPodReady(t *testing.T) {
 	var updated operatorv1alpha1.NetworkUpgradeExecute
 	_ = c.Get(context.Background(), client.ObjectKeyFromObject(execute), &updated)
 	if updated.Status.Phase == operatorv1alpha1.ExecutePhaseSucceeded {
-		t.Error("should not succeed while pods are not ready")
+		t.Error("should not succeed while the node is Ready but not yet ACTIVE")
 	}
 }
 
-func TestExecuteReconcile_PendingNodeUpgrade_SucceedsWhenPodsReady(t *testing.T) {
-	execute := newExecuteForTest()
-	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
-	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
-		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
-	}
-	setCondition(&execute.Status.Conditions, metav1.Condition{
-		Type:               operatorv1alpha1.CondConsensusCapsulePatched,
-		Status:             metav1.ConditionTrue,
-		Reason:             operatorv1alpha1.ReasonPatchApplied.String(),
-		LastTransitionTime: metav1.Now(),
-	})
-	setCondition(&execute.Status.Conditions, metav1.Condition{
-		Type:               operatorv1alpha1.CondCapsulesOnline,
-		Status:             metav1.ConditionTrue,
-		Reason:             operatorv1alpha1.ReasonCapsulesOnline.String(),
-		LastTransitionTime: metav1.Now(),
-	})
+// TestExecuteReconcile_PendingNodeUpgrade_NotFooledByPreUpgradeActive verifies the
+// revision guard: a capsule reporting phase==Active while the StatefulSet is still
+// mid-roll (currentRevision != updateRevision) is a stale pre-upgrade reading and
+// must not report Succeeded.
+func TestExecuteReconcile_PendingNodeUpgrade_NotFooledByPreUpgradeActive(t *testing.T) {
+	execute := newExecuteInBringOnline()
 
-	capsule := &operatorv1alpha1.ConsensusCapsule{
-		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
-		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1,
-			Log4j2ConfigRef: "network-log4j2",
-			PodProperties:   operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "reg-a", ImageName: "cn", ImageTag: "0.75.0"}}}},
-		},
-	}
-	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default"},
-		Status:     appsv1.StatefulSetStatus{ReadyReplicas: 1},
-	}
+	capsule := newActiveCapsule("node0")
+	// Mid-roll: the update revision differs from the current revision, so any ACTIVE
+	// reading belongs to the pre-upgrade pod.
+	sts := newExecuteSTS("node0", "rev-old", "rev-new", 1, 1)
 
 	scheme := newControllerTestScheme()
 	c := withExecuteIndexes(fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(execute, capsule, sts).
-		WithStatusSubresource(execute, sts)).Build()
+		WithStatusSubresource(execute, capsule, sts)).Build()
 	if err := c.Status().Update(context.Background(), execute); err != nil {
 		t.Fatalf("pre-set execute status: %v", err)
+	}
+	if err := c.Status().Update(context.Background(), capsule); err != nil {
+		t.Fatalf("pre-set capsule status: %v", err)
+	}
+	if err := c.Status().Update(context.Background(), sts); err != nil {
+		t.Fatalf("pre-set sts status: %v", err)
+	}
+
+	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
+	r.Recorder = events.NewFakeRecorder(8)
+	r.Checker = newExecuteChecker(nil, nil)
+
+	result, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(execute)})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.RequeueAfter != executeReadyRequeueAfter {
+		t.Errorf("expected RequeueAfter=%v, got %v", executeReadyRequeueAfter, result.RequeueAfter)
+	}
+
+	var updated operatorv1alpha1.NetworkUpgradeExecute
+	_ = c.Get(context.Background(), client.ObjectKeyFromObject(execute), &updated)
+	if updated.Status.Phase == operatorv1alpha1.ExecutePhaseSucceeded {
+		t.Error("must not succeed on a pre-upgrade ACTIVE while the StatefulSet is mid-roll")
+	}
+}
+
+// TestExecuteReconcile_PendingNodeUpgrade_CatastrophicFastFail verifies that a
+// CATASTROPHIC_FAILURE on the post-upgrade node fails the upgrade fast, before the
+// backstop and without waiting for a readiness that will never come.
+func TestExecuteReconcile_PendingNodeUpgrade_CatastrophicFastFail(t *testing.T) {
+	execute := newExecuteInBringOnline()
+
+	capsule := newActiveCapsule("node0")
+	capsule.Status.Phase = operatorv1alpha1.PhaseFailed
+	capsule.Status.PlatformStatus = operatorv1alpha1.PlatformStatusCatastrophicFailure
+	capsule.Status.PlatformStatusRevision = "rev-new"
+	// The new-revision pod was created but is crash-looping: not Ready, roll not
+	// complete (updatedReplicas=1, readyReplicas=0).
+	sts := newExecuteSTS("node0", "rev-old", "rev-new", 0, 1)
+
+	scheme := newControllerTestScheme()
+	c := withExecuteIndexes(fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(execute, capsule, sts).
+		WithStatusSubresource(execute, capsule, sts)).Build()
+	if err := c.Status().Update(context.Background(), execute); err != nil {
+		t.Fatalf("pre-set execute status: %v", err)
+	}
+	if err := c.Status().Update(context.Background(), capsule); err != nil {
+		t.Fatalf("pre-set capsule status: %v", err)
+	}
+	if err := c.Status().Update(context.Background(), sts); err != nil {
+		t.Fatalf("pre-set sts status: %v", err)
+	}
+
+	rec := events.NewFakeRecorder(8)
+	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
+	r.Recorder = rec
+	r.Checker = newExecuteChecker(nil, nil)
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(execute)})
+	close(rec.Events)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var updated operatorv1alpha1.NetworkUpgradeExecute
+	_ = c.Get(context.Background(), client.ObjectKeyFromObject(execute), &updated)
+	if updated.Status.Phase != operatorv1alpha1.ExecutePhaseFailed {
+		t.Errorf("expected Failed on CATASTROPHIC_FAILURE, got %s", updated.Status.Phase)
+	}
+	if updated.Status.CompletionTime == nil {
+		t.Error("expected CompletionTime set on catastrophic failure")
+	}
+	if cond := findCondition(updated.Status.Conditions, operatorv1alpha1.CondNodesUpgraded); cond == nil || cond.Status != metav1.ConditionFalse {
+		t.Errorf("expected NodesUpgraded=False, got %v", cond)
+	}
+	var evts []string
+	for e := range rec.Events {
+		evts = append(evts, e)
+	}
+	if got := countContaining(evts, "UpgradeFailed"); got == 0 {
+		t.Errorf("expected UpgradeFailed event, got none in %v", evts)
+	}
+}
+
+func TestExecuteReconcile_PendingNodeUpgrade_SucceedsWhenActiveOnNewRevision(t *testing.T) {
+	execute := newExecuteInBringOnline()
+
+	// The node reached ACTIVE (operator-written phase) on the fully-rolled
+	// post-upgrade revision: currentRevision has caught up to updateRevision with a
+	// Ready replica and the UC stamped a fresh platformStatusRevision.
+	capsule := newActiveCapsule("node0")
+	capsule.Status.PlatformStatusRevision = "rev-new"
+	sts := newExecuteSTS("node0", "rev-new", "rev-new", 1, 1)
+
+	scheme := newControllerTestScheme()
+	c := withExecuteIndexes(fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(execute, capsule, sts).
+		WithStatusSubresource(execute, capsule, sts)).Build()
+	if err := c.Status().Update(context.Background(), execute); err != nil {
+		t.Fatalf("pre-set execute status: %v", err)
+	}
+	if err := c.Status().Update(context.Background(), capsule); err != nil {
+		t.Fatalf("pre-set capsule status: %v", err)
 	}
 	if err := c.Status().Update(context.Background(), sts); err != nil {
 		t.Fatalf("pre-set sts status: %v", err)
@@ -862,6 +1001,9 @@ func TestExecuteReconcile_PendingNodeUpgrade_SucceedsWhenPodsReady(t *testing.T)
 	if updated.Status.Phase != operatorv1alpha1.ExecutePhaseSucceeded {
 		t.Errorf("expected Succeeded, got %s", updated.Status.Phase)
 	}
+	if cond := findCondition(updated.Status.Conditions, operatorv1alpha1.CondNodesUpgraded); cond == nil || cond.Status != metav1.ConditionTrue {
+		t.Errorf("expected NodesUpgraded=True, got %v", cond)
+	}
 	if updated.Status.CompletionTime == nil {
 		t.Error("expected CompletionTime set")
 	}
@@ -875,7 +1017,7 @@ func TestExecuteReconcile_PendingNodeUpgrade_SucceedsWhenPodsReady(t *testing.T)
 	}
 }
 
-func TestExecuteReconcile_PodReadyTimeout(t *testing.T) {
+func TestExecuteReconcile_NodeActiveDeadlineExceeded(t *testing.T) {
 	execute := newExecuteForTest()
 	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
 	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
@@ -921,11 +1063,238 @@ func TestExecuteReconcile_PodReadyTimeout(t *testing.T) {
 		t.Fatalf("pre-set sts status: %v", err)
 	}
 
+	alertInterval := 2 * time.Minute
 	rec := events.NewFakeRecorder(8)
 	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
 	r.Recorder = rec
 	r.Checker = newExecuteChecker(nil, nil)
-	r.PodReadyTimeout = 5 * time.Minute // shorter than the 30m elapsed
+	r.NodeActiveTimeout = 5 * time.Minute // shorter than the 30m elapsed
+	r.NodeActiveAlertInterval = alertInterval
+
+	res, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(execute)})
+	close(rec.Events)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.RequeueAfter != alertInterval {
+		t.Errorf("expected RequeueAfter=%v, got %v", alertInterval, res.RequeueAfter)
+	}
+
+	var updated operatorv1alpha1.NetworkUpgradeExecute
+	_ = c.Get(context.Background(), client.ObjectKeyFromObject(execute), &updated)
+	if updated.Status.Phase != operatorv1alpha1.ExecutePhasePendingNodeUpgrade {
+		t.Errorf("expected PendingNodeUpgrade (non-terminal timeout), got %s", updated.Status.Phase)
+	}
+	if updated.Status.CompletionTime != nil {
+		t.Error("expected no CompletionTime (upgrade still in progress)")
+	}
+	if cond := findCondition(updated.Status.Conditions, operatorv1alpha1.CondNodeActiveDeadlineExceeded); cond == nil || cond.Status != metav1.ConditionTrue {
+		t.Errorf("expected NodeActiveDeadlineExceeded=True, got %v", cond)
+	}
+
+	var evts []string
+	for e := range rec.Events {
+		evts = append(evts, e)
+	}
+	if got := countContaining(evts, "NodeActiveDeadlineExceeded"); got == 0 {
+		t.Errorf("expected NodeActiveDeadlineExceeded event, got none in %v", evts)
+	}
+}
+
+func TestExecuteReconcile_NodeActiveDeadlineExceeded_PeriodicAlert(t *testing.T) {
+	execute := newExecuteForTest()
+	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
+		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
+	}
+	setCondition(&execute.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.CondConsensusCapsulePatched,
+		Status:             metav1.ConditionTrue,
+		Reason:             operatorv1alpha1.ReasonPatchApplied.String(),
+		LastTransitionTime: metav1.Now(),
+	})
+	setCondition(&execute.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.CondCapsulesOnline,
+		Status:             metav1.ConditionTrue,
+		Reason:             operatorv1alpha1.ReasonCapsulesOnline.String(),
+		LastTransitionTime: metav1.Now(),
+	})
+	// LastTransitionTime far in the past so the alert interval has elapsed and the
+	// time guard lets the alert through.
+	oldAlertTime := metav1.NewTime(time.Now().Add(-10 * time.Minute))
+	execute.Status.Conditions = append(execute.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.CondNodeActiveDeadlineExceeded,
+		Status:             metav1.ConditionTrue,
+		Reason:             operatorv1alpha1.ReasonNodeActiveDeadlineExceeded.String(),
+		Message:            "already warned",
+		LastTransitionTime: oldAlertTime,
+	})
+	pastTime := metav1.NewTime(time.Now().Add(-60 * time.Minute))
+	execute.Status.NodeUpgradeStartTime = &pastTime
+
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1,
+			Log4j2ConfigRef: "network-log4j2",
+			PodProperties:   operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "reg-a", ImageName: "cn", ImageTag: "0.75.0"}}}},
+		},
+	}
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default"},
+		Status:     appsv1.StatefulSetStatus{ReadyReplicas: 0},
+	}
+
+	scheme := newControllerTestScheme()
+	c := withExecuteIndexes(fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(execute, capsule, sts).
+		WithStatusSubresource(execute, sts)).Build()
+	if err := c.Status().Update(context.Background(), execute); err != nil {
+		t.Fatalf("pre-set execute status: %v", err)
+	}
+	if err := c.Status().Update(context.Background(), sts); err != nil {
+		t.Fatalf("pre-set sts status: %v", err)
+	}
+
+	alertInterval := 2 * time.Minute
+	rec := events.NewFakeRecorder(8)
+	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
+	r.Recorder = rec
+	r.Checker = newExecuteChecker(nil, nil)
+	r.NodeActiveTimeout = 5 * time.Minute
+	r.NodeActiveAlertInterval = alertInterval
+
+	res, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(execute)})
+	close(rec.Events)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.RequeueAfter != alertInterval {
+		t.Errorf("expected RequeueAfter=%v, got %v", alertInterval, res.RequeueAfter)
+	}
+
+	var evts []string
+	for e := range rec.Events {
+		evts = append(evts, e)
+	}
+	if got := countContaining(evts, "NodeActiveDeadlineExceeded"); got != 1 {
+		t.Errorf("expected 1 periodic NodeActiveDeadlineExceeded event, got %d in %v", got, evts)
+	}
+}
+
+func TestExecuteReconcile_NodeActiveDeadlineExceeded_ShortCircuitWithinInterval(t *testing.T) {
+	execute := newExecuteForTest()
+	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
+		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
+	}
+	setCondition(&execute.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.CondConsensusCapsulePatched,
+		Status:             metav1.ConditionTrue,
+		Reason:             operatorv1alpha1.ReasonPatchApplied.String(),
+		LastTransitionTime: metav1.Now(),
+	})
+	setCondition(&execute.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.CondCapsulesOnline,
+		Status:             metav1.ConditionTrue,
+		Reason:             operatorv1alpha1.ReasonCapsulesOnline.String(),
+		LastTransitionTime: metav1.Now(),
+	})
+	// Condition was set very recently (now) — within the alert interval.
+	execute.Status.Conditions = append(execute.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.CondNodeActiveDeadlineExceeded,
+		Status:             metav1.ConditionTrue,
+		Reason:             operatorv1alpha1.ReasonNodeActiveDeadlineExceeded.String(),
+		Message:            "already warned",
+		LastTransitionTime: metav1.Now(),
+	})
+	pastTime := metav1.NewTime(time.Now().Add(-60 * time.Minute))
+	execute.Status.NodeUpgradeStartTime = &pastTime
+
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1,
+			Log4j2ConfigRef: "network-log4j2",
+			PodProperties:   operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "reg-a", ImageName: "cn", ImageTag: "0.75.0"}}}},
+		},
+	}
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default"},
+		Status:     appsv1.StatefulSetStatus{ReadyReplicas: 0},
+	}
+
+	scheme := newControllerTestScheme()
+	c := withExecuteIndexes(fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(execute, capsule, sts).
+		WithStatusSubresource(execute, sts)).Build()
+	if err := c.Status().Update(context.Background(), execute); err != nil {
+		t.Fatalf("pre-set execute status: %v", err)
+	}
+	if err := c.Status().Update(context.Background(), sts); err != nil {
+		t.Fatalf("pre-set sts status: %v", err)
+	}
+
+	alertInterval := 2 * time.Minute
+	rec := events.NewFakeRecorder(8)
+	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
+	r.Recorder = rec
+	r.Checker = newExecuteChecker(nil, nil)
+	r.NodeActiveTimeout = 5 * time.Minute
+	r.NodeActiveAlertInterval = alertInterval
+
+	res, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(execute)})
+	close(rec.Events)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.RequeueAfter <= 0 || res.RequeueAfter > alertInterval {
+		t.Errorf("expected RequeueAfter in (0, %v], got %v", alertInterval, res.RequeueAfter)
+	}
+
+	var evts []string
+	for e := range rec.Events {
+		evts = append(evts, e)
+	}
+	if got := countContaining(evts, "NodeActiveDeadlineExceeded"); got != 0 {
+		t.Errorf("expected no event (short-circuited within interval), got %d in %v", got, evts)
+	}
+}
+
+// TestExecuteReconcile_StaleCatastrophic_NoFastFail verifies that a
+// CATASTROPHIC_FAILURE reading from the pre-upgrade pod (stale
+// platformStatusRevision) does not fast-fail the upgrade. The backstop timeout
+// must handle it instead.
+func TestExecuteReconcile_StaleCatastrophic_NoFastFail(t *testing.T) {
+	execute := newExecuteInBringOnline()
+
+	capsule := newActiveCapsule("node0")
+	capsule.Status.Phase = operatorv1alpha1.PhaseFailed
+	capsule.Status.PlatformStatus = operatorv1alpha1.PlatformStatusCatastrophicFailure
+	capsule.Status.PlatformStatusRevision = "rev-old"
+	sts := newExecuteSTS("node0", "rev-old", "rev-new", 0, 1)
+
+	scheme := newControllerTestScheme()
+	c := withExecuteIndexes(fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(execute, capsule, sts).
+		WithStatusSubresource(execute, capsule, sts)).Build()
+	if err := c.Status().Update(context.Background(), execute); err != nil {
+		t.Fatalf("pre-set execute status: %v", err)
+	}
+	if err := c.Status().Update(context.Background(), capsule); err != nil {
+		t.Fatalf("pre-set capsule status: %v", err)
+	}
+	if err := c.Status().Update(context.Background(), sts); err != nil {
+		t.Fatalf("pre-set sts status: %v", err)
+	}
+
+	rec := events.NewFakeRecorder(8)
+	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
+	r.Recorder = rec
+	r.Checker = newExecuteChecker(nil, nil)
 
 	_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(execute)})
 	close(rec.Events)
@@ -935,19 +1304,8 @@ func TestExecuteReconcile_PodReadyTimeout(t *testing.T) {
 
 	var updated operatorv1alpha1.NetworkUpgradeExecute
 	_ = c.Get(context.Background(), client.ObjectKeyFromObject(execute), &updated)
-	if updated.Status.Phase != operatorv1alpha1.ExecutePhaseFailed {
-		t.Errorf("expected Failed on timeout, got %s", updated.Status.Phase)
-	}
-	if updated.Status.CompletionTime == nil {
-		t.Error("expected CompletionTime set on timeout")
-	}
-
-	var evts []string
-	for e := range rec.Events {
-		evts = append(evts, e)
-	}
-	if got := countContaining(evts, "UpgradeFailed"); got == 0 {
-		t.Errorf("expected UpgradeFailed event, got none in %v", evts)
+	if updated.Status.Phase == operatorv1alpha1.ExecutePhaseFailed {
+		t.Error("stale CATASTROPHIC_FAILURE must not fast-fail the upgrade")
 	}
 }
 

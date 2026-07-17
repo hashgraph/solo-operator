@@ -17,13 +17,22 @@ const (
 	ProxyServiceTypeLoadBalancer ProxyServiceType = "LoadBalancer"
 )
 
-// Phase represents the current phase of a resource
-// +kubebuilder:validation:Enum=Pending;Running;Succeeded;Failed;Unknown
+// Phase represents the lifecycle phase of a resource.
 type Phase string
 
+// Phase carries no type-level enum on purpose: each CRD's status field declares its
+// own +kubebuilder:validation:Enum marker, so Active (a consensus-only phase) is
+// permitted on ConsensusCapsule and excluded everywhere else. Keep those field
+// markers in sync when adding or removing a phase value.
 const (
-	PhasePending   Phase = "Pending"
-	PhaseRunning   Phase = "Running"
+	PhasePending Phase = "Pending"
+	PhaseRunning Phase = "Running"
+	// PhaseActive is reached only when the pod is Ready AND the consensus node has
+	// reported platform status ACTIVE for the current pod revision. It is a sticky
+	// milestone: transient non-ACTIVE dips (BEHIND, RECONNECT, …) keep the phase at
+	// Active — the live truth stays in status.platformStatus. Only a
+	// CATASTROPHIC_FAILURE or a pod restart leaves Active.
+	PhaseActive    Phase = "Active"
 	PhaseSucceeded Phase = "Succeeded"
 	PhaseFailed    Phase = "Failed"
 	PhaseUnknown   Phase = "Unknown"

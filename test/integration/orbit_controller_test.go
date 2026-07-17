@@ -122,6 +122,7 @@ var _ = Describe("Orbit Controller", func() {
 									ImageTag:   "0.65.1",
 								},
 							},
+							UC: &operatorv1alpha1.UcSidecar{Enabled: true},
 						},
 					},
 				},

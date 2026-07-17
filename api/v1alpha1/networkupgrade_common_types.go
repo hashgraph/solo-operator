@@ -188,12 +188,12 @@ const (
 	CondReadyForFreeze      = "ReadyForFreeze"
 
 	// Execute
-	CondConfigCRsApplied        = "ConfigCRsApplied"
-	CondDaemonResult            = "DaemonResult"
-	CondConsensusCapsulePatched = "ConsensusCapsulePatched"
-	CondCapsulesOnline          = "CapsulesOnline"
-	CondNodesUpgraded           = "NodesUpgraded"
-	CondNodeStarting            = "NodeStarting"
+	CondConfigCRsApplied           = "ConfigCRsApplied"
+	CondDaemonResult               = "DaemonResult"
+	CondConsensusCapsulePatched    = "ConsensusCapsulePatched"
+	CondCapsulesOnline             = "CapsulesOnline"
+	CondNodesUpgraded              = "NodesUpgraded"
+	CondNodeActiveDeadlineExceeded = "NodeActiveDeadlineExceeded"
 
 	// Abort
 	CondAbortProcessed = "AbortProcessed"
@@ -217,13 +217,14 @@ const (
 	ReasonHealthCheckPassed errx.Reason = "HealthCheckPassed"
 	ReasonPreFreezePassed   errx.Reason = "PreFreezePassed"
 
-	ReasonScaledDown       errx.Reason = "ScaledDown"
-	ReasonReadyForDaemon   errx.Reason = "ReadyForProvisionerDaemon"
-	ReasonPatchApplied     errx.Reason = "PatchApplied"
-	ReasonCapsulesOnline   errx.Reason = "CapsulesOnline"
-	ReasonPodReady         errx.Reason = "PodReady"
-	ReasonUpgradeSucceeded errx.Reason = "UpgradeSucceeded"
-	ReasonUpgradeFailed    errx.Reason = "UpgradeFailed"
+	ReasonScaledDown                 errx.Reason = "ScaledDown"
+	ReasonReadyForDaemon             errx.Reason = "ReadyForProvisionerDaemon"
+	ReasonPatchApplied               errx.Reason = "PatchApplied"
+	ReasonCapsulesOnline             errx.Reason = "CapsulesOnline"
+	ReasonPodReady                   errx.Reason = "PodReady"
+	ReasonUpgradeSucceeded           errx.Reason = "UpgradeSucceeded"
+	ReasonUpgradeFailed              errx.Reason = "UpgradeFailed"
+	ReasonNodeActiveDeadlineExceeded errx.Reason = "NodeActiveDeadlineExceeded"
 
 	ReasonAbortSuccess     errx.Reason = "Success"
 	ReasonAbortAfterFreeze errx.Reason = "AbortAfterFreeze"
@@ -251,14 +252,15 @@ const (
 	EventComponentSkipped      errx.Reason = "ComponentSkipped"
 	EventSidecarDisabled       errx.Reason = "SidecarDisabled"
 
-	EventPodScaledDown       errx.Reason = "PodScaledDown"
-	EventReadyForDaemon      errx.Reason = "ReadyForProvisionerDaemon"
-	EventPendingInfraUpgrade errx.Reason = "PendingInfraUpgrade"
-	EventPendingNodeUpgrade  errx.Reason = "PendingNodeUpgrade"
-	EventCapsulePatched      errx.Reason = "CapsulePatched"
-	EventCapsulesOnline      errx.Reason = "CapsulesOnline"
-	EventUpgradeSucceeded    errx.Reason = "UpgradeSucceeded"
-	EventUpgradeFailed       errx.Reason = "UpgradeFailed"
+	EventPodScaledDown              errx.Reason = "PodScaledDown"
+	EventReadyForDaemon             errx.Reason = "ReadyForProvisionerDaemon"
+	EventPendingInfraUpgrade        errx.Reason = "PendingInfraUpgrade"
+	EventPendingNodeUpgrade         errx.Reason = "PendingNodeUpgrade"
+	EventCapsulePatched             errx.Reason = "CapsulePatched"
+	EventCapsulesOnline             errx.Reason = "CapsulesOnline"
+	EventUpgradeSucceeded           errx.Reason = "UpgradeSucceeded"
+	EventUpgradeFailed              errx.Reason = "UpgradeFailed"
+	EventNodeActiveDeadlineExceeded errx.Reason = "NodeActiveDeadlineExceeded"
 
 	EventAbortProcessed   errx.Reason = "AbortProcessed"
 	EventAbortAfterFreeze errx.Reason = "AbortAfterFreeze"
@@ -269,4 +271,11 @@ const (
 	EventInvalidGenesisJSON errx.Reason = "InvalidGenesisJSON"
 
 	EventOperationIDLabelInvalid errx.Reason = "OperationIDLabelInvalid"
+
+	// ConsensusCapsule phase-transition events (posted by the capsule controller).
+	EventConsensusNodeActive errx.Reason = "ConsensusNodeActive"
+	EventConsensusNodeFailed errx.Reason = "ConsensusNodeFailed"
+	// EventUCSidecarRequired is posted when a ConsensusCapsule is missing the
+	// mandatory UC sidecar (terminal configuration error).
+	EventUCSidecarRequired errx.Reason = "UCSidecarRequired"
 )

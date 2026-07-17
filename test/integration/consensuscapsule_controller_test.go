@@ -109,6 +109,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 									ImageTag:   "0.65.1",
 								},
 							},
+							UC: &operatorv1alpha1.UcSidecar{Enabled: true},
 						},
 					},
 				},
@@ -263,6 +264,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 									ImageTag:   "0.65.1",
 								},
 							},
+							UC: &operatorv1alpha1.UcSidecar{Enabled: true},
 						},
 					},
 					PersistentVolumeClaims: &operatorv1alpha1.ConsensusPVCConfig{
@@ -485,7 +487,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}
 		})
 
-		It("Should not include the uc container in the StatefulSet", func() {
+		It("Should set UCSidecarReady=False when UC is disabled", func() {
 			capsule := &operatorv1alpha1.ConsensusCapsule{
 				ObjectMeta: metav1.ObjectMeta{Name: capsuleName, Namespace: capsuleNamespace},
 				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
@@ -519,15 +521,19 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, capsule)).Should(Succeed())
 
-			stsKey := types.NamespacedName{Name: capsuleName, Namespace: capsuleNamespace}
-			sts := &appsv1.StatefulSet{}
+			capsuleKey := types.NamespacedName{Name: capsuleName, Namespace: capsuleNamespace}
 			Eventually(func() bool {
-				return k8sClient.Get(ctx, stsKey, sts) == nil
+				got := &operatorv1alpha1.ConsensusCapsule{}
+				if err := k8sClient.Get(ctx, capsuleKey, got); err != nil {
+					return false
+				}
+				for _, c := range got.Status.Conditions {
+					if c.Type == operatorv1alpha1.CondUCSidecarReady && c.Status == metav1.ConditionFalse {
+						return true
+					}
+				}
+				return false
 			}, timeout, interval).Should(BeTrue())
-
-			for _, c := range sts.Spec.Template.Spec.Containers {
-				Expect(c.Name).NotTo(Equal("uc"))
-			}
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, capsule)).Should(Succeed())

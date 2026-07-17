@@ -163,6 +163,7 @@ type HAProxyCapsuleSpec struct {
 type HAProxyCapsuleStatus struct {
 	// Phase is the current reconciliation phase.
 	// +optional
+	// +kubebuilder:validation:Enum=Pending;Running;Succeeded;Failed;Unknown
 	Phase Phase `json:"phase,omitempty"`
 
 	// ObservedGeneration is the last generation the controller acted on.

@@ -113,6 +113,7 @@ type OrbitAddressBook struct {
 type OrbitStatus struct {
 	// Phase is the current phase of the Orbit
 	// +optional
+	// +kubebuilder:validation:Enum=Pending;Running;Succeeded;Failed;Unknown
 	Phase Phase `json:"phase,omitempty"`
 
 	// Conditions represent the latest available observations

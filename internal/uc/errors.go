@@ -41,4 +41,10 @@ var (
 	// errClient: building the Kubernetes client / loading kubeconfig failed at
 	// startup. Terminal until the cluster credentials/connectivity are fixed.
 	errClient = errNS.NewType("k8s_client_failed")
+
+	// errPanic: a monitor's Run loop panicked and was recovered by its top-level
+	// defer, then returned to the daemonkit supervisor so the panic becomes a
+	// supervised restart (back-off) instead of crashing the whole UC process.
+	// Signals a bug to fix in code, not an operator-fixable condition.
+	errPanic = errNS.NewType("panic_recovered")
 )

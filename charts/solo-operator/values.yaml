@@ -103,3 +103,13 @@ controller:
   maxConcurrentReconciles: 1
   # Reconcile period for periodic reconciliation
   syncPeriod: 10m
+  # Backstop deadline for a consensus node to reach platform status ACTIVE after an
+  # upgrade. When exceeded a NodeActiveDeadlineExceeded warning condition is set on
+  # the NetworkUpgradeExecute CR; the upgrade keeps waiting for the node to recover.
+  # Increase for large states where event replay/reconnect is slow. Empty uses the
+  # operator default (10m).
+  nodeActiveTimeout: 10m
+  # Interval between repeated NodeActiveDeadlineExceeded warning events after the
+  # initial deadline fires. Shorter values give the node operator more frequent
+  # visibility. Empty uses the operator default (5m).
+  nodeActiveAlertInterval: 5m

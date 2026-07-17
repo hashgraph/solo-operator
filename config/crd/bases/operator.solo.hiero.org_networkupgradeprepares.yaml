@@ -473,7 +473,7 @@ spec:
                 format: int64
                 type: integer
               phase:
-                description: Phase represents the current phase of a resource
+                description: Phase represents the lifecycle phase of a resource.
                 enum:
                 - Pending
                 - Running

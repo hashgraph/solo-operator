@@ -26,6 +26,9 @@ spec:
     - jsonPath: .status.phase
       name: Phase
       type: string
+    - jsonPath: .status.platformStatus
+      name: Platform
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -21508,13 +21511,38 @@ spec:
                 format: int64
                 type: integer
               phase:
-                description: Phase represents the current phase of a resource
+                description: |-
+                  Phase is the ConsensusCapsule lifecycle phase. Active (see PhaseActive) is a
+                  consensus-only value: it is permitted here but excluded from every other CRD's
+                  phase enum.
                 enum:
                 - Pending
                 - Running
+                - Active
                 - Succeeded
                 - Failed
                 - Unknown
+                type: string
+              platformStatus:
+                description: |-
+                  PlatformStatus is the consensus node's live platform state (raw
+                  platform_PlatformStatus name, e.g. STARTING_UP / REPLAYING_EVENTS / ACTIVE /
+                  FREEZE_COMPLETE / CATASTROPHIC_FAILURE). Written exclusively by the UC
+                  sidecar on each state transition; the operator only reads it.
+                type: string
+              platformStatusCode:
+                description: |-
+                  PlatformStatusCode is the numeric platform_PlatformStatus code corresponding
+                  to PlatformStatus. Written exclusively by the UC sidecar.
+                format: int32
+                type: integer
+              platformStatusRevision:
+                description: |-
+                  PlatformStatusRevision is the controller-revision-hash of the pod whose UC
+                  sidecar wrote the current PlatformStatus value. The operator compares it to
+                  the StatefulSet's UpdateRevision to detect stale readings that survived a pod
+                  roll — a pre-upgrade ACTIVE must not promote the capsule phase when the new
+                  pod's UC has not yet confirmed the state. Written exclusively by the UC sidecar.
                 type: string
             type: object
         type: object

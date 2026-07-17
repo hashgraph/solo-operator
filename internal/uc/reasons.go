@@ -16,6 +16,10 @@ const (
 	ReasonMarkerMonitorStopped         errx.Reason = "MarkerMonitorStopped"
 	ReasonUpgradeOutcomeMonitorStarted errx.Reason = "UpgradeOutcomeMonitorStarted"
 	ReasonUpgradeOutcomeMonitorStopped errx.Reason = "UpgradeOutcomeMonitorStopped"
+	ReasonPlatformStatusMonitorStarted errx.Reason = "PlatformStatusMonitorStarted"
+	ReasonPlatformStatusMonitorStopped errx.Reason = "PlatformStatusMonitorStopped"
+	ReasonPlatformStatusMonitorPanic   errx.Reason = "PlatformStatusMonitorPanic"
+	ReasonPlatformStatusChanged        errx.Reason = "PlatformStatusChanged"
 	ReasonPollIntervalChanged          errx.Reason = "PollIntervalChanged"
 	ReasonMarkerHandlerPending         errx.Reason = "MarkerHandlerPending"
 	ReasonCRDelivered                  errx.Reason = "CRDelivered"
@@ -69,6 +73,10 @@ const (
 	ReasonExecutePatchFailed    errx.Reason = "ExecutePatchFailed"
 	ReasonWatchFailed           errx.Reason = "WatchFailed"
 	ReasonWatchErrorEvent       errx.Reason = "WatchErrorEvent"
+
+	// Platform-status sensor.
+	ReasonPlatformMetricsUnreachable errx.Reason = "PlatformMetricsUnreachable"
+	ReasonPlatformStatusPatchFailed  errx.Reason = "PlatformStatusPatchFailed"
 
 	// Marker handling.
 	ReasonMarkerHandlerFailed  errx.Reason = "MarkerHandlerFailed"

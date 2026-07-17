@@ -25,6 +25,10 @@ var (
 	networkUpgradeExecuteGVR     = gvr("networkupgradeexecutes")
 	networkUpgradeFreezeAbortGVR = gvr("networkupgradefreezeaborts")
 
+	// consensusCapsuleGVR is the capsule the platform-status sensor patches
+	// (status.platformStatus / status.platformStatusCode).
+	consensusCapsuleGVR = gvr("consensuscapsules")
+
 	// GVRs for the ten ConsensusConfig CRs the provisioner-proxy creates during
 	// the execute phase (cluster-only mode). The resource names are the lowercase
 	// plural of each Kind, matching the CRD spec (HIP-1496 §§ filename-to-CR mapping).
