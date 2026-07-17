@@ -13,18 +13,15 @@ import (
 	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
-// Eventf records a K8s event and a paired logx line with the same reason=
-// (HIP-1496). Warning events log at Warn, others at Info; recorder may be nil.
+// Eventf records a K8s event and a paired log line; Warning events log at Warn, others at Info.
 func Eventf(ctx context.Context, recorder events.EventRecorder, obj runtime.Object, eventtype string, reason errx.Reason, action, format string, args ...any) {
-	msg := fmt.Sprintf(format, args...)
-
 	open := Info
 	if eventtype == corev1.EventTypeWarning {
 		open = Warn
 	}
-	open(ctx, reason).Msg(msg)
+	open(ctx, reason).Msg(fmt.Sprintf(format, args...))
 
 	if recorder != nil {
-		recorder.Eventf(obj, nil, eventtype, reason.String(), action, "%s", msg)
+		recorder.Eventf(obj, nil, eventtype, reason.String(), action, format, args...)
 	}
 }

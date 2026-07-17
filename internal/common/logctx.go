@@ -5,16 +5,25 @@ package common
 import (
 	"context"
 
+	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlcontroller "sigs.k8s.io/controller-runtime/pkg/controller"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// RequestContext stamps name/namespace/reconcileID before the primary object is fetched;
+// early-exit log lines get object identity without manual .Str chains.
+func RequestContext(ctx context.Context, req ctrl.Request) context.Context {
+	f := LogFields{
+		Namespace:   req.Namespace,
+		Name:        req.Name,
+		ReconcileID: string(ctrlcontroller.ReconcileIDFromContext(ctx)),
+	}
+	return WithLogFields(ctx, f)
+}
+
 type logFieldsKey struct{}
 
-// LogFields are the reconcile-scoped fields stamped onto every log line within a
-// single Reconcile. The "name"/"namespace" keys are reserved for the primary CR;
-// log owned objects under a distinct key (e.g. "resource", "configMap").
 type LogFields struct {
 	Controller  string
 	Kind        string
@@ -24,7 +33,6 @@ type LogFields struct {
 	OperationID string
 }
 
-// WithLogFields returns a context carrying f, to be read back by LoggerFrom.
 func WithLogFields(ctx context.Context, f LogFields) context.Context {
 	return context.WithValue(ctx, logFieldsKey{}, f)
 }
@@ -34,15 +42,11 @@ func logFieldsFrom(ctx context.Context) (LogFields, bool) {
 	return f, ok
 }
 
-// OperationIDer lets ReconcileContext stamp operation_id automatically for CRs
-// that carry a spec.operationId, without callers knowing which ones do.
+// OperationIDer is implemented by CRs that carry a spec.operationId.
 type OperationIDer interface {
 	GetOperationID() string
 }
 
-// ReconcileContext stamps the reconcile-scoped log fields onto ctx, to be called
-// at the top of each top-level Reconcile. reconcileID comes from the context
-// controller-runtime populated; operation_id only when obj is an OperationIDer.
 func ReconcileContext(ctx context.Context, controller, kind string, obj metav1.Object) context.Context {
 	f := LogFields{
 		Controller:  controller,

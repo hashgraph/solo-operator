@@ -49,14 +49,14 @@ func NewHAProxyCapsuleReconciler(c client.Client, scheme *runtime.Scheme) *HAPro
 
 // Reconcile is the main reconciliation loop for HAProxyCapsule resources
 func (r *HAProxyCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// Fetch the HAProxyCapsule instance
+	ctx = common.RequestContext(ctx, req)
 	haproxyObj := &operatorv1alpha1.HAProxyCapsule{}
 	if err := r.Get(ctx, req.NamespacedName, haproxyObj); err != nil {
 		if apierrors.IsNotFound(err) {
-			common.Info(ctx, ReasonResourceNotFound).Str("name", req.Name).Str("namespace", req.Namespace).Msg("HAProxyCapsule resource not found, ignoring since it must be deleted")
+			common.Info(ctx, ReasonResourceNotFound).Msg("HAProxyCapsule resource not found, ignoring since it must be deleted")
 			return ctrl.Result{}, nil
 		}
-		common.Err(ctx, err, ReasonGetFailed).Str("name", req.Name).Str("namespace", req.Namespace).Msg("Failed to get HAProxyCapsule")
+		common.Err(ctx, err, ReasonGetFailed).Msg("Failed to get HAProxyCapsule")
 		return ctrl.Result{}, err
 	}
 

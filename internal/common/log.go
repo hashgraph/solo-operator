@@ -11,9 +11,6 @@ import (
 	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
-// stampFields appends the reconcile-scoped fields from ctx onto ev. Stamping on
-// the event (not via Logger.With) keeps disabled lines free: Event.Str no-ops on
-// a nil, level-filtered event, so no sub-logger is allocated.
 func stampFields(ctx context.Context, ev *zerolog.Event) *zerolog.Event {
 	f, ok := logFieldsFrom(ctx)
 	if !ok {
@@ -30,9 +27,8 @@ func stampFields(ctx context.Context, ev *zerolog.Event) *zerolog.Event {
 	return ev
 }
 
-// LoggerFrom returns a logx sub-logger with the reconcile-scoped fields baked
-// in, for the build-once-reuse pattern via the *L helpers. For one-off lines
-// prefer Debug/Info/Warn/Err.
+// LoggerFrom returns a sub-logger with reconcile fields baked in; use *L helpers
+// to avoid re-extracting context on every line. For one-offs prefer Debug/Info/Warn/Err.
 func LoggerFrom(ctx context.Context) *zerolog.Logger {
 	base := logx.As()
 	f, ok := logFieldsFrom(ctx)
@@ -52,28 +48,26 @@ func LoggerFrom(ctx context.Context) *zerolog.Logger {
 	return &l
 }
 
-// Debug opens a debug event stamped with reason= and the ctx reconcile fields;
-// chain fields and end with .Msg. Info and Warn are the same at their levels.
+func openEvent(ctx context.Context, ev *zerolog.Event, reason errx.Reason) *zerolog.Event {
+	return stampFields(ctx, ev).Str("reason", reason.String())
+}
+
 func Debug(ctx context.Context, reason errx.Reason) *zerolog.Event {
-	return stampFields(ctx, logx.As().Debug()).Str("reason", reason.String())
+	return openEvent(ctx, logx.As().Debug(), reason)
 }
 
 func Info(ctx context.Context, reason errx.Reason) *zerolog.Event {
-	return stampFields(ctx, logx.As().Info()).Str("reason", reason.String())
+	return openEvent(ctx, logx.As().Info(), reason)
 }
 
 func Warn(ctx context.Context, reason errx.Reason) *zerolog.Event {
-	return stampFields(ctx, logx.As().Warn()).Str("reason", reason.String())
+	return openEvent(ctx, logx.As().Warn(), reason)
 }
 
-// Err opens an error event stamped with the ctx reconcile fields and err's errx
-// reason and hints (falling back to fallback when err carries no reason).
 func Err(ctx context.Context, err error, fallback errx.Reason) *zerolog.Event {
 	return decorateErr(stampFields(ctx, logx.As().Error()), err, fallback)
 }
 
-// DebugL stamps reason= on a caller-provided sub-logger (see LoggerFrom).
-// InfoL, WarnL, and ErrL are the same at their levels.
 func DebugL(l *zerolog.Logger, reason errx.Reason) *zerolog.Event {
 	return l.Debug().Str("reason", reason.String())
 }
@@ -90,8 +84,7 @@ func ErrL(l *zerolog.Logger, err error, fallback errx.Reason) *zerolog.Event {
 	return decorateErr(l.Error(), err, fallback)
 }
 
-// LogErr enriches a pre-built event with err's errx reason and hints. Used by
-// the uc daemon (no reconcile context); prefer Err/ErrL elsewhere.
+// LogErr enriches a pre-built event with errx reason and hints; used where no reconcile context exists.
 func LogErr(ev *zerolog.Event, err error, fallback errx.Reason) *zerolog.Event {
 	return decorateErr(ev, err, fallback)
 }

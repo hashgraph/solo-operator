@@ -75,13 +75,14 @@ func NewConsensusCapsuleReconciler(c client.Client, scheme *runtime.Scheme) *Con
 
 // Reconcile is the main reconciliation loop for ConsensusCapsule resources
 func (r *ConsensusCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	ctx = common.RequestContext(ctx, req)
 	capsule := &operatorv1alpha1.ConsensusCapsule{}
 	if err := r.Get(ctx, req.NamespacedName, capsule); err != nil {
 		if apierrors.IsNotFound(err) {
-			common.Info(ctx, ReasonResourceNotFound).Str("name", req.Name).Str("namespace", req.Namespace).Msg("ConsensusCapsule resource not found, ignoring since it must be deleted")
+			common.Info(ctx, ReasonResourceNotFound).Msg("ConsensusCapsule resource not found, ignoring since it must be deleted")
 			return ctrl.Result{}, nil
 		}
-		common.Err(ctx, err, ReasonGetFailed).Str("name", req.Name).Str("namespace", req.Namespace).Msg("Failed to get ConsensusCapsule")
+		common.Err(ctx, err, ReasonGetFailed).Msg("Failed to get ConsensusCapsule")
 		return ctrl.Result{}, err
 	}
 
