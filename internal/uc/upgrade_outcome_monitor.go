@@ -94,6 +94,10 @@ type UpgradeOutcomeMonitor struct {
 	// CR types to keep the Factory dedup cache current. Nil is safe.
 	onPhaseUpdate func(operationID, step, phase string)
 
+	// onDelete is called when a NetworkUpgrade* CR is deleted, to evict the
+	// operationId from the Factory dedup cache. Nil is safe.
+	onDelete func(operationID string)
+
 	// events writes the per-operation JSONL audit trail (#1127). Nil-safe.
 	events *eventSink
 	// daemonTriggered dedups the DaemonTriggered event (#1002) to once per
@@ -406,11 +410,15 @@ func (m *UpgradeOutcomeMonitor) runWatch(ctx context.Context, prepareRV, freezeR
 				return errx.WithReason(
 					errK8sAPI.Wrap(k8serrors.FromObject(event.Object), "prepare watch error event"), ReasonWatchErrorEvent)
 			}
-			if event.Type != watch.Added && event.Type != watch.Modified {
-				continue
-			}
 			cr, ok := event.Object.(*unstructured.Unstructured)
 			if !ok {
+				continue
+			}
+			if event.Type == watch.Deleted {
+				m.handleDeleteEvent(cr)
+				continue
+			}
+			if event.Type != watch.Added && event.Type != watch.Modified {
 				continue
 			}
 			m.observePhase(cr)
@@ -428,11 +436,15 @@ func (m *UpgradeOutcomeMonitor) runWatch(ctx context.Context, prepareRV, freezeR
 				return errx.WithReason(
 					errK8sAPI.Wrap(k8serrors.FromObject(event.Object), "freeze watch error event"), ReasonWatchErrorEvent)
 			}
-			if event.Type != watch.Added && event.Type != watch.Modified {
-				continue
-			}
 			cr, ok := event.Object.(*unstructured.Unstructured)
 			if !ok {
+				continue
+			}
+			if event.Type == watch.Deleted {
+				m.handleDeleteEvent(cr)
+				continue
+			}
+			if event.Type != watch.Added && event.Type != watch.Modified {
 				continue
 			}
 			m.observePhase(cr)
@@ -450,11 +462,15 @@ func (m *UpgradeOutcomeMonitor) runWatch(ctx context.Context, prepareRV, freezeR
 				return errx.WithReason(
 					errK8sAPI.Wrap(k8serrors.FromObject(event.Object), "watch error event"), ReasonWatchErrorEvent)
 			}
-			if event.Type != watch.Added && event.Type != watch.Modified {
-				continue
-			}
 			cr, ok := event.Object.(*unstructured.Unstructured)
 			if !ok {
+				continue
+			}
+			if event.Type == watch.Deleted {
+				m.handleDeleteEvent(cr)
+				continue
+			}
+			if event.Type != watch.Added && event.Type != watch.Modified {
 				continue
 			}
 			m.handleExecuteEvent(ctx, cr, proxy)
@@ -466,11 +482,15 @@ func (m *UpgradeOutcomeMonitor) runWatch(ctx context.Context, prepareRV, freezeR
 				return errx.WithReason(
 					errK8sAPI.Wrap(k8serrors.FromObject(event.Object), "abort watch error event"), ReasonWatchErrorEvent)
 			}
-			if event.Type != watch.Added && event.Type != watch.Modified {
-				continue
-			}
 			cr, ok := event.Object.(*unstructured.Unstructured)
 			if !ok {
+				continue
+			}
+			if event.Type == watch.Deleted {
+				m.handleDeleteEvent(cr)
+				continue
+			}
+			if event.Type != watch.Added && event.Type != watch.Modified {
 				continue
 			}
 			m.observePhase(cr)
@@ -595,6 +615,50 @@ func (m *UpgradeOutcomeMonitor) observePhase(cr *unstructured.Unstructured) {
 		m.mu.Unlock()
 		m.events.closeOp(operationID)
 	}
+}
+
+// evictOperation removes all per-operation dedup state for operationID from the
+// monitor's own maps, the ProvisionerProxy, and the Factory (via onDelete).
+// Called when a watch.Deleted event is observed, enabling a recreated CR with
+// the same operationId to be processed without a pod restart.
+func (m *UpgradeOutcomeMonitor) evictOperation(operationID string) {
+	m.mu.Lock()
+	delete(m.daemonTriggered, operationID)
+	delete(m.opFirstSeen, operationID)
+	for key := range m.lastPhase {
+		if key == operationID || strings.HasPrefix(key, operationID+"/") {
+			delete(m.lastPhase, key)
+		}
+	}
+	proxy := m.proxy
+	m.mu.Unlock()
+
+	m.events.closeOp(operationID)
+
+	if proxy != nil {
+		proxy.EvictOperation(operationID)
+	}
+	if m.onDelete != nil {
+		m.onDelete(operationID)
+	}
+}
+
+// handleDeleteEvent processes a watch.Deleted event by evicting all cached
+// state for the CR's operationId. This enables the delete/recreate recovery
+// path: once evicted, a new CR with the same operationId is processed normally
+// without requiring a UC pod restart.
+func (m *UpgradeOutcomeMonitor) handleDeleteEvent(cr *unstructured.Unstructured) {
+	operationID := operationIDOf(cr)
+	if operationID == "" {
+		return
+	}
+	logx.As().Info().Str("reason", ReasonCRDeleted.String()).
+		Str("operation_id", operationID).Str("cr_name", cr.GetName()).
+		Str("kind", cr.GetKind()).
+		Msg("CR deleted — evicting cached state for operation")
+	m.events.info(operationID, ReasonCRDeleted.String(),
+		fmt.Sprintf("%s %s deleted", cr.GetKind(), cr.GetName()))
+	m.evictOperation(operationID)
 }
 
 // isOperationTerminal reports whether the CR ends the whole upgrade operation.

@@ -115,6 +115,15 @@ func (p *ProvisionerProxy) Seed(items []unstructured.Unstructured) {
 	}
 }
 
+// EvictOperation removes an operationId from completedOpIDs so a recreated CR
+// with the same operationId is not silently skipped. Called by the watch loop
+// when a Deleted event is observed.
+func (p *ProvisionerProxy) EvictOperation(operationID string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	delete(p.completedOpIDs, operationID)
+}
+
 // Handle is called by UpgradeOutcomeMonitor when an Execute CR reaches
 // ReadyForProvisionerDaemon. The monitor has already validated operationID and
 // the disk opId — Handle only needs to acquire the slot and dispatch.
