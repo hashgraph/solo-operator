@@ -10,7 +10,7 @@ require (
 	github.com/automa-saga/version v1.0.1
 	github.com/go-logr/logr v1.4.3
 	github.com/google/go-containerregistry v0.21.6
-	github.com/hiero-ledger/hiero-sdk-go/v2 v2.78.1
+	github.com/hiero-ledger/hiero-sdk-go/v2 v2.81.0
 	github.com/joomcode/errorx v1.2.0
 	github.com/onsi/ginkgo/v2 v2.28.1
 	github.com/onsi/gomega v1.39.1
@@ -146,7 +146,7 @@ require (
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260401024825-9d38bb4040a9 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260406210006-6f92a3bedf2d // indirect
-	google.golang.org/grpc v1.80.0 // indirect
+	google.golang.org/grpc v1.81.1 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
