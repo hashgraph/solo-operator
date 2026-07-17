@@ -429,6 +429,29 @@ func TestValidateUCMandatory(t *testing.T) {
 	}
 }
 
+func TestFailUCSidecarRequired_SetsPhaseFailed(t *testing.T) {
+	ctx := context.Background()
+	scheme := newControllerTestScheme()
+	capsule := newCapsuleForControllerTest()
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(capsule).WithStatusSubresource(capsule).Build()
+	r := buildReconcilerForUpdateStatus(c)
+	termErr := validateUCMandatory(capsule)
+	if termErr == nil {
+		t.Fatal("expected error")
+	}
+	if _, err := r.failUCSidecarRequired(ctx, capsule, termErr); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var got operatorv1alpha1.ConsensusCapsule
+	_ = c.Get(ctx, client.ObjectKeyFromObject(capsule), &got)
+	if got.Status.Phase != operatorv1alpha1.PhaseFailed {
+		t.Errorf("expected PhaseFailed, got %s", got.Status.Phase)
+	}
+	if got.Status.ObservedGeneration != capsule.Generation {
+		t.Errorf("expected ObservedGeneration=%d, got %d", capsule.Generation, got.Status.ObservedGeneration)
+	}
+}
+
 // ── markGenesisInitialized ────────────────────────────────────────────────────
 
 func newCheckpointCM(capsule *operatorv1alpha1.ConsensusCapsule, value string) *corev1.ConfigMap {

@@ -254,6 +254,8 @@ func (r *ConsensusCapsuleReconciler) failUCSidecarRequired(ctx context.Context, 
 		r.Recorder.Eventf(capsule, nil, corev1.EventTypeWarning, operatorv1alpha1.EventUCSidecarRequired.String(),
 			"Reconcile", "%s", errx.Format(err))
 	}
+	capsule.Status.Phase = operatorv1alpha1.PhaseFailed
+	capsule.Status.ObservedGeneration = capsule.Generation
 	apimeta.SetStatusCondition(&capsule.Status.Conditions, metav1.Condition{
 		Type:               "UCSidecarReady",
 		Status:             metav1.ConditionFalse,
@@ -448,8 +450,12 @@ func (r *ConsensusCapsuleReconciler) emitPhaseEvent(capsule *operatorv1alpha1.Co
 		r.Recorder.Eventf(capsule, nil, corev1.EventTypeNormal, operatorv1alpha1.EventConsensusNodeActive.String(),
 			"UpdateStatus", "consensus node reached platform status ACTIVE")
 	case operatorv1alpha1.PhaseFailed:
+		msg := "consensus node pod entered Failed phase"
+		if capsule.Status.PlatformStatus == operatorv1alpha1.PlatformStatusCatastrophicFailure {
+			msg = fmt.Sprintf("consensus node reported platform status %s", capsule.Status.PlatformStatus)
+		}
 		r.Recorder.Eventf(capsule, nil, corev1.EventTypeWarning, operatorv1alpha1.EventConsensusNodeFailed.String(),
-			"UpdateStatus", "consensus node reported platform status %s", capsule.Status.PlatformStatus)
+			"UpdateStatus", "%s", msg)
 	}
 }
 
