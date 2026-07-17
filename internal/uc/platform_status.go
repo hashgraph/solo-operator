@@ -11,9 +11,15 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
-// platformStatusMetric is the Prometheus metric the consensus node exports for
-// its live platform state. Its value is a numeric code (see platformStatusName).
-const platformStatusMetric = "platform_PlatformStatus"
+const (
+	// platformStatusMetric is the Prometheus metric the consensus node exports for
+	// its live platform state. Its value is a numeric code (see platformStatusName).
+	platformStatusMetric = "platform_PlatformStatus"
+	// platformStatusCodeUnknown is the sentinel written to platformStatusCode when
+	// the metric endpoint is unreachable or the sample is absent. -1 avoids
+	// collision with the real enum (code 0 = NO_VALUE).
+	platformStatusCodeUnknown int32 = -1
+)
 
 // platformStatusName maps the numeric platform_PlatformStatus code to its raw
 // state name. The mapping mirrors the Hedera platform PlatformStatus enum and

@@ -126,19 +126,19 @@ func (m *PlatformStatusMonitor) scrape(ctx context.Context) (code int32, name st
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.cfg.MetricsURL, http.NoBody)
 	if err != nil {
 		m.setConnErr(ReasonPlatformMetricsUnreachable, err.Error())
-		return 0, operatorv1alpha1.PlatformStatusUnknown
+		return platformStatusCodeUnknown, operatorv1alpha1.PlatformStatusUnknown
 	}
 	resp, err := m.http.Do(req)
 	if err != nil {
 		m.setConnErr(ReasonPlatformMetricsUnreachable, err.Error())
-		return 0, operatorv1alpha1.PlatformStatusUnknown
+		return platformStatusCodeUnknown, operatorv1alpha1.PlatformStatusUnknown
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		// Drain a little so the connection can be reused, then treat as unreachable.
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 		m.setConnErr(ReasonPlatformMetricsUnreachable, fmt.Sprintf("metrics endpoint returned HTTP %d", resp.StatusCode))
-		return 0, operatorv1alpha1.PlatformStatusUnknown
+		return platformStatusCodeUnknown, operatorv1alpha1.PlatformStatusUnknown
 	}
 
 	code, found := parsePlatformStatus(resp.Body)
@@ -146,7 +146,7 @@ func (m *PlatformStatusMonitor) scrape(ctx context.Context) (code int32, name st
 	// sample is not yet present (the node may still be initialising its metrics).
 	m.clearConnErr()
 	if !found {
-		return 0, operatorv1alpha1.PlatformStatusUnknown
+		return platformStatusCodeUnknown, operatorv1alpha1.PlatformStatusUnknown
 	}
 	return code, nameForCode(code)
 }
@@ -163,7 +163,7 @@ func (m *PlatformStatusMonitor) patch(ctx context.Context, name string, code int
 	if err != nil {
 		return errx.WithHints(
 			errx.WithReason(errK8sAPI.Wrap(err, "patch %s status.platformStatus", m.cfg.CapsuleName()), ReasonPlatformStatusPatchFailed),
-			"Confirm the UC ServiceAccount has patch permission on consensuscapsules/status."+operatorv1alpha1.GroupVersion.Group,
+			"Confirm the UC ServiceAccount has patch permission on consensuscapsules."+operatorv1alpha1.GroupVersion.Group+"/status",
 		)
 	}
 	return nil

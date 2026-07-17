@@ -171,8 +171,8 @@ func TestPlatformStatusMonitor_TransitionOnlyWrites(t *testing.T) {
 	if got := atomic.LoadInt32(&patchCount); got != 3 {
 		t.Fatalf("expected 3 patches after UNKNOWN transition, got %d", got)
 	}
-	if name, _, _ := readStatus(); name != operatorv1alpha1.PlatformStatusUnknown {
-		t.Fatalf("status = %q, want UNKNOWN when endpoint unreachable", name)
+	if name, code, _ := readStatus(); name != operatorv1alpha1.PlatformStatusUnknown || code != int64(platformStatusCodeUnknown) {
+		t.Fatalf("status = (%q,%d), want (UNKNOWN,%d) when endpoint unreachable", name, code, platformStatusCodeUnknown)
 	}
 	if m.ConnectivityError() == nil {
 		t.Error("expected a ConnectivityError after an unreachable scrape")
