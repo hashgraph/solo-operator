@@ -213,12 +213,15 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 		pod.Status.Conditions = []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}
 		_ = k8sClient.Status().Update(ctx, pod)
 
-		// Simulate the UC (sole writer of platformStatus) and the operator's phase
-		// rollup (sole writer of phase) so the gate observes Active on this revision.
+		// Simulate the UC (sole writer of platformStatus + platformStatusRevision) and
+		// the operator's phase rollup (sole writer of phase) so the gate observes Active
+		// on this revision. PlatformStatusRevision MUST match the STS UpdateRevision
+		// above, or the gate's revisionFresh check fails and the upgrade never succeeds.
 		fresh := &operatorv1alpha1.ConsensusCapsule{}
 		if err := k8sClient.Get(ctx, types.NamespacedName{Name: capsName, Namespace: ns}, fresh); err == nil {
 			fresh.Status.PlatformStatus = operatorv1alpha1.PlatformStatusActive
 			fresh.Status.PlatformStatusCode = 2
+			fresh.Status.PlatformStatusRevision = rev
 			fresh.Status.Phase = operatorv1alpha1.PhaseActive
 			_ = k8sClient.Status().Update(ctx, fresh)
 		}
