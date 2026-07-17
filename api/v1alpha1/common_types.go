@@ -17,10 +17,13 @@ const (
 	ProxyServiceTypeLoadBalancer ProxyServiceType = "LoadBalancer"
 )
 
-// Phase represents the current phase of a resource
-// +kubebuilder:validation:Enum=Pending;Running;Active;Succeeded;Failed;Unknown
+// Phase represents the lifecycle phase of a resource.
 type Phase string
 
+// Phase carries no type-level enum on purpose: each CRD's status field declares its
+// own +kubebuilder:validation:Enum marker, so Active (a consensus-only phase) is
+// permitted on ConsensusCapsule and excluded everywhere else. Keep those field
+// markers in sync when adding or removing a phase value.
 const (
 	PhasePending Phase = "Pending"
 	PhaseRunning Phase = "Running"

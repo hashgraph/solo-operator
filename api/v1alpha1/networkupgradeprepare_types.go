@@ -20,6 +20,7 @@ type NetworkUpgradePrepareSpec struct {
 
 type NetworkUpgradePrepareStatus struct {
 	// +optional
+	// +kubebuilder:validation:Enum=Pending;Running;Succeeded;Failed;Unknown
 	Phase Phase `json:"phase,omitempty"`
 	// +optional
 	StartTime *metav1.Time `json:"startTime,omitempty"`

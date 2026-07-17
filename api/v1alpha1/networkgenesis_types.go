@@ -72,6 +72,7 @@ type NetworkGenesisRosterEntry struct {
 
 type NetworkGenesisStatus struct {
 	// +optional
+	// +kubebuilder:validation:Enum=Pending;Running;Succeeded;Failed;Unknown
 	Phase Phase `json:"phase,omitempty"`
 
 	// +optional

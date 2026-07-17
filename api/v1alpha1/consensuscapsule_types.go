@@ -569,7 +569,11 @@ const CondUCSidecarReady = "UCSidecarReady"
 
 // ConsensusCapsuleStatus defines the observed state of ConsensusCapsule
 type ConsensusCapsuleStatus struct {
+	// Phase is the ConsensusCapsule lifecycle phase. Active (see PhaseActive) is a
+	// consensus-only value: it is permitted here but excluded from every other CRD's
+	// phase enum.
 	// +optional
+	// +kubebuilder:validation:Enum=Pending;Running;Active;Succeeded;Failed;Unknown
 	Phase Phase `json:"phase,omitempty"`
 
 	// PlatformStatus is the consensus node's live platform state (raw

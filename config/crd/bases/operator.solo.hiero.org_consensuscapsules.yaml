@@ -21511,7 +21511,10 @@ spec:
                 format: int64
                 type: integer
               phase:
-                description: Phase represents the current phase of a resource
+                description: |-
+                  Phase is the ConsensusCapsule lifecycle phase. Active (see PhaseActive) is a
+                  consensus-only value: it is permitted here but excluded from every other CRD's
+                  phase enum.
                 enum:
                 - Pending
                 - Running
