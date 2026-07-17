@@ -13,9 +13,9 @@ import (
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
@@ -45,11 +45,11 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 		releaseName = hc.Name
 	}
 
-	logger := log.FromContext(ctx).WithValues(
-		"release", releaseName,
-		"chart", hc.Spec.Chart.Chart,
-		"version", hc.Spec.Chart.Version,
-	)
+	rl := common.LoggerFrom(ctx).With().
+		Str("release", releaseName).
+		Str("chart", hc.Spec.Chart.Chart).
+		Str("version", hc.Spec.Chart.Version).
+		Logger()
 
 	if err := r.checkReleaseNameConflict(ctx, hc, releaseName); err != nil {
 		return ctrl.Result{}, err
@@ -70,11 +70,11 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 			return ctrl.Result{}, fmt.Errorf("checking existing release: %w", err)
 		}
 		if existing != nil && existing.Status == "deployed" {
-			logger.V(1).Info("Release up-to-date, skipping upgrade")
+			common.DebugL(&rl, ReasonReleaseUpToDate).Msg("Release up-to-date, skipping upgrade")
 			return ctrl.Result{RequeueAfter: releaseCheckInterval}, nil
 		}
 		if existing != nil {
-			logger.Info("Release not in deployed state, retrying upgrade", "helmStatus", existing.Status)
+			common.InfoL(&rl, ReasonReleaseRetry).Str("helmStatus", existing.Status).Msg("Release not in deployed state, retrying upgrade")
 		}
 	}
 
@@ -111,14 +111,14 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 		}
 	}
 
-	logger.Info("Reconciling Helm release", "timeout", opts.Timeout)
+	common.InfoL(&rl, ReasonReleaseReconciling).Dur("timeout", opts.Timeout).Msg("Reconciling Helm release")
 
 	info, err := r.helmClient.InstallOrUpgrade(ctx, releaseName, hc.Namespace, hc.Spec.Chart, values, opts)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("helm install/upgrade %s: %w", releaseName, err)
 	}
 
-	logger.Info("Helm release reconciled", "revision", info.Version, "status", info.Status)
+	common.InfoL(&rl, ReasonReleaseReconciled).Int("revision", info.Version).Str("status", info.Status).Msg("Helm release reconciled")
 
 	// Persist the Helm status atomically with retry so that ValuesHash is
 	// always saved even when a concurrent spec update races with us.
@@ -140,7 +140,7 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 	}
 
 	if info.Status != "deployed" {
-		logger.Info("Helm release not yet deployed, requeueing", "helmStatus", info.Status)
+		common.InfoL(&rl, ReasonReleasePending).Str("helmStatus", info.Status).Msg("Helm release not yet deployed, requeueing")
 	}
 	return ctrl.Result{RequeueAfter: releaseCheckInterval}, nil
 }

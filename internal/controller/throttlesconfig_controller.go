@@ -11,9 +11,9 @@ import (
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/resources/throttlesconfig"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
@@ -37,11 +37,6 @@ func NewThrottlesConfigReconciler(c client.Client, scheme *runtime.Scheme) *Thro
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=throttlesconfigs/status,verbs=get;update;patch
 
 func (r *ThrottlesConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
-	logger.Info("Starting ThrottlesConfig reconciliation", "namespace", req.Namespace, "name", req.Name)
-	defer logger.Info("Finished ThrottlesConfig reconciliation", "namespace", req.Namespace, "name", req.Name)
-
 	obj := &operatorv1alpha1.ThrottlesConfig{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -50,9 +45,13 @@ func (r *ThrottlesConfigReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
+	ctx = common.ReconcileContext(ctx, "throttlesconfig", "ThrottlesConfig", obj)
+	common.Info(ctx, ReasonReconcileStart).Msg("Starting ThrottlesConfig reconciliation")
+	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished ThrottlesConfig reconciliation")
+
 	result, err := r.subreconciler.Reconcile(ctx, obj)
 	if err != nil {
-		r.event(obj, corev1.EventTypeWarning, operatorv1alpha1.EventConfigCRFailed, err.Error())
+		r.event(ctx, obj, corev1.EventTypeWarning, operatorv1alpha1.EventConfigCRFailed, err.Error())
 		return result, err
 	}
 	if result.Requeue || result.RequeueAfter > 0 {
@@ -63,7 +62,7 @@ func (r *ThrottlesConfigReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
-	r.event(obj, corev1.EventTypeNormal, operatorv1alpha1.EventConfigCRReconciled, "ThrottlesConfig reconciled")
+	r.event(ctx, obj, corev1.EventTypeNormal, operatorv1alpha1.EventConfigCRReconciled, "ThrottlesConfig reconciled")
 	return ctrl.Result{}, nil
 }
 
@@ -73,10 +72,8 @@ func (r *ThrottlesConfigReconciler) updateStatus(ctx context.Context, obj *opera
 	return r.Status().Update(ctx, obj)
 }
 
-func (r *ThrottlesConfigReconciler) event(obj *operatorv1alpha1.ThrottlesConfig, eventtype string, reason errx.Reason, msg string) {
-	if r.Recorder != nil {
-		r.Recorder.Eventf(obj, nil, eventtype, reason.String(), "ThrottlesConfig", "%s", msg)
-	}
+func (r *ThrottlesConfigReconciler) event(ctx context.Context, obj *operatorv1alpha1.ThrottlesConfig, eventtype string, reason errx.Reason, msg string) {
+	common.Eventf(ctx, r.Recorder, obj, eventtype, reason, "ThrottlesConfig", "%s", msg)
 }
 
 func (r *ThrottlesConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {

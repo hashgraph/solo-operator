@@ -12,9 +12,9 @@ import (
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
@@ -39,6 +39,8 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	ctx = common.ReconcileContext(ctx, "networkupgradefreezeabort", "NetworkUpgradeFreezeAbort", &abort)
+
 	if res, err := ensureFinalizer(ctx, r.Client, &abort, FinalizerNetworkUpgradeFreezeAbort); res != nil {
 		return *res, err
 	}
@@ -50,7 +52,7 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 
 	if ok, msg := validateOperationIDLabel(abort.Labels, abort.Spec.OperationID); !ok {
 		return rejectInvalidOperationIDLabel(ctx, r.Client, &abort, &abort.Status.Conditions,
-			func(reason errx.Reason, m string) { r.eventf(&abort, corev1.EventTypeWarning, reason, "%s", m) },
+			func(reason errx.Reason, m string) { r.eventf(ctx, &abort, corev1.EventTypeWarning, reason, "%s", m) },
 			func() { abort.Status.Phase = operatorv1alpha1.PhaseFailed },
 			msg)
 	}
@@ -61,7 +63,7 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 	}
 	if sibling {
 		msg := fmt.Sprintf("operationId %q already used by another NetworkUpgradeFreezeAbort", abort.Spec.OperationID)
-		r.eventf(&abort, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
+		r.eventf(ctx, &abort, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
 		abort.Status.Phase = operatorv1alpha1.PhaseFailed
 		abort.Status.ObservedGeneration = abort.Generation
 		setCondition(&abort.Status.Conditions, metav1.Condition{
@@ -97,8 +99,7 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 	abort.Status.ObservedGeneration = abort.Generation
 
 	if executeExists {
-		log.FromContext(ctx).Info("NetworkUpgradeExecute CR exists; abort arrived after freeze", "operationId", abort.Spec.OperationID)
-		r.eventf(&abort, corev1.EventTypeWarning, operatorv1alpha1.EventAbortAfterFreeze,
+		r.eventf(ctx, &abort, corev1.EventTypeWarning, operatorv1alpha1.EventAbortAfterFreeze,
 			"NetworkUpgradeExecute CR already exists for operationId %q; abort has no effect after freeze", abort.Spec.OperationID)
 		abort.Status.Phase = operatorv1alpha1.PhaseFailed
 		setCondition(&abort.Status.Conditions, metav1.Condition{
@@ -108,7 +109,7 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 			Message: "abort received after NetworkUpgradeExecute was created; freeze window already closed",
 		})
 	} else {
-		r.eventf(&abort, corev1.EventTypeNormal, operatorv1alpha1.EventAbortProcessed,
+		r.eventf(ctx, &abort, corev1.EventTypeNormal, operatorv1alpha1.EventAbortProcessed,
 			"abort processed for operationId %q; upgrade cancelled before freeze", abort.Spec.OperationID)
 		abort.Status.Phase = operatorv1alpha1.PhaseSucceeded
 		setCondition(&abort.Status.Conditions, metav1.Condition{
@@ -138,10 +139,8 @@ func (r *NetworkUpgradeFreezeAbortReconciler) anyExecuteExists(ctx context.Conte
 	return len(list.Items) > 0, nil
 }
 
-func (r *NetworkUpgradeFreezeAbortReconciler) eventf(obj *operatorv1alpha1.NetworkUpgradeFreezeAbort, eventtype string, reason errx.Reason, format string, args ...any) {
-	if r.Recorder != nil {
-		r.Recorder.Eventf(obj, nil, eventtype, reason.String(), "FreezeAbort", format, args...)
-	}
+func (r *NetworkUpgradeFreezeAbortReconciler) eventf(ctx context.Context, obj *operatorv1alpha1.NetworkUpgradeFreezeAbort, eventtype string, reason errx.Reason, format string, args ...any) {
+	common.Eventf(ctx, r.Recorder, obj, eventtype, reason, "FreezeAbort", format, args...)
 }
 
 func RegisterFreezeAbortIndex(mgr ctrl.Manager) error {

@@ -8,6 +8,7 @@ require (
 	github.com/automa-saga/daemonkit v0.1.1
 	github.com/automa-saga/logx v0.5.1
 	github.com/automa-saga/version v1.0.1
+	github.com/go-logr/logr v1.4.3
 	github.com/google/go-containerregistry v0.21.6
 	github.com/hiero-ledger/hiero-sdk-go/v2 v2.78.1
 	github.com/joomcode/errorx v1.2.0
@@ -62,7 +63,6 @@ require (
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/go-errors/errors v1.4.2 // indirect
 	github.com/go-gorp/gorp/v3 v3.1.0 // indirect
-	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-logr/zapr v1.3.0 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect

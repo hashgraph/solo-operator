@@ -10,7 +10,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/hashgraph/solo-operator/internal/common"
 )
 
 // SubReconciler defines the interface for dependent resource reconcilers.
@@ -82,22 +83,20 @@ func NewChain[T client.Object](subreconcilers ...SubReconciler[T]) *Chain[T] {
 // Reconcile executes all subreconcilers in order.
 // Stops on the first error or requeue request.
 func (c *Chain[T]) Reconcile(ctx context.Context, primary T) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	for _, sr := range c.subreconcilers {
 		if !sr.ShouldReconcile(ctx, primary) {
-			logger.V(1).Info("Skipping subreconciler", "name", sr.Name())
+			common.Debug(ctx, ReasonSubreconcilerSkipped).Str("subreconciler", sr.Name()).Msg("Skipping subreconciler")
 			continue
 		}
 
-		logger.V(1).Info("Running subreconciler", "name", sr.Name())
+		common.Debug(ctx, ReasonSubreconcilerRunning).Str("subreconciler", sr.Name()).Msg("Running subreconciler")
 		result, err := sr.Reconcile(ctx, primary)
 		if err != nil {
-			logger.Error(err, "Subreconciler failed", "name", sr.Name())
+			common.Err(ctx, err, ReasonSubreconcilerFailed).Str("subreconciler", sr.Name()).Msg("Subreconciler failed")
 			return result, err
 		}
 		if result.Requeue || result.RequeueAfter > 0 {
-			logger.V(1).Info("Subreconciler requested requeue", "name", sr.Name())
+			common.Debug(ctx, ReasonSubreconcilerRequeue).Str("subreconciler", sr.Name()).Msg("Subreconciler requested requeue")
 			return result, nil
 		}
 	}
@@ -154,8 +153,6 @@ func (r *ResourceReconciler[T, R]) ShouldReconcile(ctx context.Context, primary 
 
 // Reconcile creates or updates the resource
 func (r *ResourceReconciler[T, R]) Reconcile(ctx context.Context, primary T) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	// Build the desired resource
 	desired, err := r.Builder(ctx, primary)
 	if err != nil {
@@ -178,7 +175,7 @@ func (r *ResourceReconciler[T, R]) Reconcile(ctx context.Context, primary T) (ct
 		}
 
 		// Resource doesn't exist, create it
-		logger.Info("Creating resource", "kind", desired.GetObjectKind().GroupVersionKind().Kind, "name", desired.GetName())
+		common.Info(ctx, ReasonResourceCreating).Str("kind", desired.GetObjectKind().GroupVersionKind().Kind).Str("resource", desired.GetName()).Msg("Creating resource")
 		if err := r.Client.Create(ctx, desired); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -191,7 +188,7 @@ func (r *ResourceReconciler[T, R]) Reconcile(ctx context.Context, primary T) (ct
 			return ctrl.Result{}, err
 		}
 
-		logger.V(1).Info("Updating resource", "kind", existing.GetObjectKind().GroupVersionKind().Kind, "name", existing.GetName())
+		common.Debug(ctx, ReasonResourceUpdating).Str("kind", existing.GetObjectKind().GroupVersionKind().Kind).Str("resource", existing.GetName()).Msg("Updating resource")
 		if err := r.Client.Update(ctx, existing); err != nil {
 			return ctrl.Result{}, err
 		}

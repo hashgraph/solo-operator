@@ -16,7 +16,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
@@ -51,8 +50,6 @@ func NewStatefulSetSubReconciler(c client.Client, scheme *runtime.Scheme, record
 
 // Reconcile ensures the StatefulSet exists and is up to date.
 func (r *StatefulSetSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	desired, err := r.buildStatefulSet(ctx, capsule)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -66,7 +63,7 @@ func (r *StatefulSetSubReconciler) Reconcile(ctx context.Context, capsule *opera
 	err = r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("Creating StatefulSet", "name", desired.Name, "namespace", desired.Namespace)
+			common.Info(ctx, common.ReasonStatefulSetCreated).Str("statefulSet", desired.Name).Msg("Creating StatefulSet")
 			if err := r.Client.Create(ctx, desired); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -76,7 +73,7 @@ func (r *StatefulSetSubReconciler) Reconcile(ctx context.Context, capsule *opera
 	}
 
 	if r.needsUpdate(existing, desired) {
-		logger.V(1).Info("Updating StatefulSet", "name", desired.Name, "namespace", desired.Namespace)
+		common.Debug(ctx, common.ReasonStatefulSetUpdated).Str("statefulSet", desired.Name).Msg("Updating StatefulSet")
 		existing.Spec = desired.Spec
 		existing.Labels = desired.Labels
 		if err := r.Client.Update(ctx, existing); err != nil {
@@ -161,7 +158,7 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 		}
 	}
 
-	if err := r.addSidecarContainers(sts, capsule, resolvedAlloy, ucMode); err != nil {
+	if err := r.addSidecarContainers(ctx, sts, capsule, resolvedAlloy, ucMode); err != nil {
 		return nil, err
 	}
 
@@ -662,15 +659,12 @@ func volumeOrEmptyDir(name, pvcName string, spec *corev1.PersistentVolumeClaimSp
 	}
 }
 
-// event emits a Kubernetes event against the capsule if a recorder is wired in.
-func (r *StatefulSetSubReconciler) event(capsule *operatorv1alpha1.ConsensusCapsule, eventtype string, reason errx.Reason, msg string) {
-	if r.Recorder != nil {
-		r.Recorder.Eventf(capsule, nil, eventtype, reason.String(), "StatefulSet", "%s", msg)
-	}
+func (r *StatefulSetSubReconciler) event(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule, eventtype string, reason errx.Reason, msg string) {
+	common.Eventf(ctx, r.Recorder, capsule, eventtype, reason, "StatefulSet", "%s", msg)
 }
 
 // addSidecarContainers adds optional sidecar containers to the StatefulSet pod template.
-func (r *StatefulSetSubReconciler) addSidecarContainers(sts *appsv1.StatefulSet, capsule *operatorv1alpha1.ConsensusCapsule, resolvedAlloy *operatorv1alpha1.AlloyConfig, ucMode uc.Mode) error {
+func (r *StatefulSetSubReconciler) addSidecarContainers(ctx context.Context, sts *appsv1.StatefulSet, capsule *operatorv1alpha1.ConsensusCapsule, resolvedAlloy *operatorv1alpha1.AlloyConfig, ucMode uc.Mode) error {
 	containers := capsule.Spec.PodProperties.Containers
 
 	accountId := capsule.Spec.AccountId
@@ -708,10 +702,10 @@ func (r *StatefulSetSubReconciler) addSidecarContainers(sts *appsv1.StatefulSet,
 	for _, u := range uploaders {
 		switch {
 		case u.uploader == nil:
-			r.event(capsule, corev1.EventTypeNormal, operatorv1alpha1.EventComponentSkipped,
+			r.event(ctx, capsule, corev1.EventTypeNormal, operatorv1alpha1.EventComponentSkipped,
 				u.eventLabel+": omitted from spec; not present in desired StatefulSet")
 		case !u.uploader.Enabled:
-			r.event(capsule, corev1.EventTypeNormal, operatorv1alpha1.EventSidecarDisabled,
+			r.event(ctx, capsule, corev1.EventTypeNormal, operatorv1alpha1.EventSidecarDisabled,
 				u.eventLabel+": enabled=false; container removed from StatefulSet")
 		default:
 			c, err := r.buildCheetahUploaderContainer(u.uploader, u.containerName, u.configFile, u.mountPath, u.envPrefix, u.bucketPath)
@@ -724,10 +718,10 @@ func (r *StatefulSetSubReconciler) addSidecarContainers(sts *appsv1.StatefulSet,
 
 	switch {
 	case containers.BackupUploader == nil:
-		r.event(capsule, corev1.EventTypeNormal, operatorv1alpha1.EventComponentSkipped,
+		r.event(ctx, capsule, corev1.EventTypeNormal, operatorv1alpha1.EventComponentSkipped,
 			"backupUploader: omitted from spec; not present in desired StatefulSet")
 	case !containers.BackupUploader.Enabled:
-		r.event(capsule, corev1.EventTypeNormal, operatorv1alpha1.EventSidecarDisabled,
+		r.event(ctx, capsule, corev1.EventTypeNormal, operatorv1alpha1.EventSidecarDisabled,
 			"backupUploader: enabled=false; container removed from StatefulSet")
 	default:
 		sts.Spec.Template.Spec.Containers = append(sts.Spec.Template.Spec.Containers,
@@ -736,10 +730,10 @@ func (r *StatefulSetSubReconciler) addSidecarContainers(sts *appsv1.StatefulSet,
 
 	switch {
 	case containers.UC == nil:
-		r.event(capsule, corev1.EventTypeNormal, operatorv1alpha1.EventComponentSkipped,
+		r.event(ctx, capsule, corev1.EventTypeNormal, operatorv1alpha1.EventComponentSkipped,
 			"uc: omitted from spec; not present in desired StatefulSet")
 	case !containers.UC.Enabled:
-		r.event(capsule, corev1.EventTypeNormal, operatorv1alpha1.EventSidecarDisabled,
+		r.event(ctx, capsule, corev1.EventTypeNormal, operatorv1alpha1.EventSidecarDisabled,
 			"uc: enabled=false; container removed from StatefulSet")
 	default:
 		var ucDataSpec *corev1.PersistentVolumeClaimSpec
@@ -754,7 +748,7 @@ func (r *StatefulSetSubReconciler) addSidecarContainers(sts *appsv1.StatefulSet,
 	}
 
 	if resolvedAlloy == nil || !resolvedAlloy.Enabled {
-		r.event(capsule, corev1.EventTypeNormal, operatorv1alpha1.EventComponentSkipped,
+		r.event(ctx, capsule, corev1.EventTypeNormal, operatorv1alpha1.EventComponentSkipped,
 			"alloy: omitted from spec; not present in desired StatefulSet")
 	} else {
 		dm := int32(420)

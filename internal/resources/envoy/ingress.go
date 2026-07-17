@@ -13,9 +13,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -32,8 +32,6 @@ func NewIngressSubReconciler(c client.Client, scheme *runtime.Scheme) *IngressSu
 }
 
 func (r *IngressSubReconciler) Reconcile(ctx context.Context, envoy *operatorv1alpha1.EnvoyProxy) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	desired := r.buildIngress(envoy)
 
 	existing := &networkingv1.Ingress{}
@@ -48,7 +46,7 @@ func (r *IngressSubReconciler) Reconcile(ctx context.Context, envoy *operatorv1a
 			if !metav1.IsControlledBy(existing, envoy) {
 				return ctrl.Result{}, nil
 			}
-			logger.Info("Deleting Envoy ingress", "name", existing.Name, "namespace", existing.Namespace)
+			common.Info(ctx, common.ReasonIngressDeleted).Msg("Deleting Envoy ingress")
 			if err := r.Client.Delete(ctx, existing); err != nil && !apierrors.IsNotFound(err) {
 				return ctrl.Result{}, err
 			}
@@ -61,7 +59,7 @@ func (r *IngressSubReconciler) Reconcile(ctx context.Context, envoy *operatorv1a
 	}
 
 	if notFound {
-		logger.Info("Creating Envoy ingress", "name", desired.Name, "namespace", desired.Namespace)
+		common.Info(ctx, common.ReasonIngressCreated).Msg("Creating Envoy ingress")
 		if err := r.Client.Create(ctx, desired); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -71,7 +69,7 @@ func (r *IngressSubReconciler) Reconcile(ctx context.Context, envoy *operatorv1a
 	if r.needsUpdate(existing, desired) {
 		existing.Spec = desired.Spec
 		existing.Labels = desired.Labels
-		logger.V(1).Info("Updating Envoy ingress", "name", desired.Name, "namespace", desired.Namespace)
+		common.Debug(ctx, common.ReasonIngressUpdated).Msg("Updating Envoy ingress")
 		if err := r.Client.Update(ctx, existing); err != nil {
 			return ctrl.Result{}, err
 		}

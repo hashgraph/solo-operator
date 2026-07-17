@@ -14,10 +14,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 )
 
 const OrbitFinalizer = "operator.solo.hiero.org/orbit-finalizer"
@@ -50,10 +50,6 @@ func NewOrbitReconciler(c client.Client, scheme *runtime.Scheme) *OrbitReconcile
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=bootstrapproperties,verbs=get;list;watch;delete
 
 func (r *OrbitReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-	logger.Info("Starting Orbit reconciliation", "name", req.Name)
-	defer logger.Info("Finished Orbit reconciliation", "name", req.Name)
-
 	orbitObj := &operatorv1alpha1.Orbit{}
 	if err := r.Get(ctx, req.NamespacedName, orbitObj); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -61,6 +57,10 @@ func (r *OrbitReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		}
 		return ctrl.Result{}, err
 	}
+
+	ctx = common.ReconcileContext(ctx, "orbit", "Orbit", orbitObj)
+	common.Info(ctx, ReasonReconcileStart).Msg("Starting Orbit reconciliation")
+	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished Orbit reconciliation")
 
 	if !orbitObj.DeletionTimestamp.IsZero() {
 		return r.handleDeletion(ctx, orbitObj)
@@ -78,18 +78,17 @@ func (r *OrbitReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 }
 
 func (r *OrbitReconciler) handleDeletion(ctx context.Context, orbitObj *operatorv1alpha1.Orbit) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
 	if !controllerutil.ContainsFinalizer(orbitObj, OrbitFinalizer) {
 		return ctrl.Result{}, nil
 	}
-	logger.Info("Deleting Orbit", "name", orbitObj.Name)
+	common.Info(ctx, ReasonDeleting).Msg("Deleting Orbit")
 
 	remaining, err := r.deleteOwnedCapsules(ctx, orbitObj)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 	if remaining > 0 {
-		logger.Info("Waiting for owned capsules to be deleted", "remaining", remaining)
+		common.Info(ctx, ReasonWaitingForCapsuleDeletion).Int("remaining", remaining).Msg("Waiting for owned capsules to be deleted")
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 

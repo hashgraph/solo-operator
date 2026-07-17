@@ -14,9 +14,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -34,8 +34,6 @@ func NewServiceSubReconciler(c client.Client, scheme *runtime.Scheme) *ServiceSu
 
 // Reconcile ensures the service exists
 func (r *ServiceSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	desired := r.buildService(capsule)
 
 	// Set owner reference
@@ -48,7 +46,7 @@ func (r *ServiceSubReconciler) Reconcile(ctx context.Context, capsule *operatorv
 	err := r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("Creating service", "name", desired.Name, "namespace", desired.Namespace)
+			common.Info(ctx, common.ReasonServiceCreated).Str("service", desired.Name).Msg("Creating service")
 			if err := r.Client.Create(ctx, desired); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -59,7 +57,7 @@ func (r *ServiceSubReconciler) Reconcile(ctx context.Context, capsule *operatorv
 
 	// Update spec (preserve ClusterIP and NodePort)
 	if r.needsUpdate(existing, desired) {
-		logger.V(1).Info("Updating service", "name", desired.Name, "namespace", desired.Namespace)
+		common.Debug(ctx, common.ReasonServiceUpdated).Str("service", desired.Name).Msg("Updating service")
 		existing.Spec.Selector = desired.Spec.Selector
 		existing.Spec.Type = desired.Spec.Type
 		existing.Labels = desired.Labels

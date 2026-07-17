@@ -11,9 +11,9 @@ import (
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/resources/applicationproperties"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
@@ -37,11 +37,6 @@ func NewApplicationPropertiesReconciler(c client.Client, scheme *runtime.Scheme)
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=applicationproperties/status,verbs=get;update;patch
 
 func (r *ApplicationPropertiesReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
-	logger.Info("Starting ApplicationProperties reconciliation", "namespace", req.Namespace, "name", req.Name)
-	defer logger.Info("Finished ApplicationProperties reconciliation", "namespace", req.Namespace, "name", req.Name)
-
 	obj := &operatorv1alpha1.ApplicationProperties{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -50,9 +45,13 @@ func (r *ApplicationPropertiesReconciler) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, err
 	}
 
+	ctx = common.ReconcileContext(ctx, "applicationproperties", "ApplicationProperties", obj)
+	common.Info(ctx, ReasonReconcileStart).Msg("Starting ApplicationProperties reconciliation")
+	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished ApplicationProperties reconciliation")
+
 	result, err := r.subreconciler.Reconcile(ctx, obj)
 	if err != nil {
-		r.event(obj, corev1.EventTypeWarning, operatorv1alpha1.EventConfigCRFailed, err.Error())
+		r.event(ctx, obj, corev1.EventTypeWarning, operatorv1alpha1.EventConfigCRFailed, err.Error())
 		return result, err
 	}
 	if result.Requeue || result.RequeueAfter > 0 {
@@ -63,7 +62,7 @@ func (r *ApplicationPropertiesReconciler) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, err
 	}
 
-	r.event(obj, corev1.EventTypeNormal, operatorv1alpha1.EventConfigCRReconciled, "ApplicationProperties reconciled")
+	r.event(ctx, obj, corev1.EventTypeNormal, operatorv1alpha1.EventConfigCRReconciled, "ApplicationProperties reconciled")
 	return ctrl.Result{}, nil
 }
 
@@ -73,10 +72,8 @@ func (r *ApplicationPropertiesReconciler) updateStatus(ctx context.Context, obj 
 	return r.Status().Update(ctx, obj)
 }
 
-func (r *ApplicationPropertiesReconciler) event(obj *operatorv1alpha1.ApplicationProperties, eventtype string, reason errx.Reason, msg string) {
-	if r.Recorder != nil {
-		r.Recorder.Eventf(obj, nil, eventtype, reason.String(), "ApplicationProperties", "%s", msg)
-	}
+func (r *ApplicationPropertiesReconciler) event(ctx context.Context, obj *operatorv1alpha1.ApplicationProperties, eventtype string, reason errx.Reason, msg string) {
+	common.Eventf(ctx, r.Recorder, obj, eventtype, reason, "ApplicationProperties", "%s", msg)
 }
 
 func (r *ApplicationPropertiesReconciler) SetupWithManager(mgr ctrl.Manager) error {

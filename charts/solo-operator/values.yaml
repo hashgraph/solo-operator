@@ -57,9 +57,9 @@ leaderElection:
 
 # Logging configuration
 logging:
-  # Log level: debug, info, error
+  # Log level: trace, debug, info, warn, error
   level: info
-  # Log format: json, console
+  # Log format: json (structured) or console (human-readable)
   format: json
 
 # Registry validation configuration (upgrade Prepare phase)

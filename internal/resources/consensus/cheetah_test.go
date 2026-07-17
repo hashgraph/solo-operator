@@ -628,7 +628,7 @@ func TestAddSidecarContainers_Cheetah(t *testing.T) {
 		},
 	}
 
-	if err := reconciler.addSidecarContainers(deploy, capsule, nil, uc.ModeClusterOnly); err != nil {
+	if err := reconciler.addSidecarContainers(context.Background(), deploy, capsule, nil, uc.ModeClusterOnly); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 

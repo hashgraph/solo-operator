@@ -12,9 +12,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -29,8 +29,6 @@ func NewRoleSubReconciler(c client.Client, scheme *runtime.Scheme) *RoleSubRecon
 }
 
 func (r *RoleSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	desired := r.buildRole(capsule)
 	if err := controllerutil.SetControllerReference(capsule, desired, r.Scheme); err != nil {
 		return ctrl.Result{}, err
@@ -39,7 +37,7 @@ func (r *RoleSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1al
 	existing := &rbacv1.Role{}
 	err := r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if apierrors.IsNotFound(err) {
-		logger.Info("Creating role", "name", desired.Name, "namespace", desired.Namespace)
+		common.Info(ctx, common.ReasonRoleCreated).Str("role", desired.Name).Msg("Creating role")
 		return ctrl.Result{}, r.Client.Create(ctx, desired)
 	}
 	if err != nil {

@@ -15,9 +15,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -40,8 +40,6 @@ func AlloyConfigMapName(capsule *operatorv1alpha1.ConsensusCapsule) string {
 
 // Reconcile ensures the Alloy ConfigMap exists
 func (r *AlloyConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	alloy, err := ResolveAlloyConfig(ctx, r.Client, capsule)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -59,7 +57,7 @@ func (r *AlloyConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *op
 	err = r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("Creating Alloy ConfigMap", "name", desired.Name)
+			common.Info(ctx, common.ReasonConfigMapCreated).Str("configMap", desired.Name).Msg("Creating Alloy ConfigMap")
 			if err := r.Client.Create(ctx, desired); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -69,7 +67,7 @@ func (r *AlloyConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *op
 	}
 
 	if r.needsUpdate(existing.Data, desired.Data) {
-		logger.V(1).Info("Updating Alloy ConfigMap", "name", desired.Name)
+		common.Debug(ctx, common.ReasonConfigMapUpdated).Str("configMap", desired.Name).Msg("Updating Alloy ConfigMap")
 		existing.Data = desired.Data
 		if err := r.Client.Update(ctx, existing); err != nil {
 			return ctrl.Result{}, err

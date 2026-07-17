@@ -17,6 +17,7 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -34,7 +35,7 @@ func NewConfigMapSubReconciler(c client.Client, scheme *runtime.Scheme, recorder
 
 func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1alpha1.BootstrapProperties) (ctrl.Result, error) {
 	if err := common.ValidateJavaProperties(obj.Spec.Content, "bootstrap.properties"); err != nil {
-		return r.reject(obj, "InvalidContent", err.Error())
+		return r.reject(ctx, obj, "InvalidContent", err.Error())
 	}
 
 	apimeta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
@@ -73,7 +74,7 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 	return ctrl.Result{}, nil
 }
 
-func (r *ConfigMapSubReconciler) reject(obj *operatorv1alpha1.BootstrapProperties, reason, msg string) (ctrl.Result, error) {
+func (r *ConfigMapSubReconciler) reject(ctx context.Context, obj *operatorv1alpha1.BootstrapProperties, reason, msg string) (ctrl.Result, error) {
 	apimeta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 		Type:               operatorv1alpha1.BootstrapPropertiesConditionTypeValid,
 		Status:             metav1.ConditionFalse,
@@ -81,9 +82,7 @@ func (r *ConfigMapSubReconciler) reject(obj *operatorv1alpha1.BootstrapPropertie
 		Reason:             reason,
 		Message:            msg,
 	})
-	if r.Recorder != nil {
-		r.Recorder.Eventf(obj, nil, corev1.EventTypeWarning, reason, "ConfigMap", "%s", msg)
-	}
+	common.Eventf(ctx, r.Recorder, obj, corev1.EventTypeWarning, errx.Reason(reason), "ConfigMap", "%s", msg)
 	return ctrl.Result{}, nil
 }
 
