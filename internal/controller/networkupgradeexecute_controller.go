@@ -35,7 +35,8 @@ const (
 	// legitimately take much longer than pod-readiness (event replay, reconnect,
 	// state loading), so it defaults generously and is operator-tunable via
 	// --node-active-timeout.
-	executeDefaultNodeActiveTimeout = 30 * time.Minute
+	executeDefaultNodeActiveTimeout    = 10 * time.Minute
+	executeDefaultNodeActiveAlertEvery = 5 * time.Minute
 )
 
 type NetworkUpgradeExecuteReconciler struct {
@@ -46,16 +47,20 @@ type NetworkUpgradeExecuteReconciler struct {
 
 	StrategyName string
 	// NodeActiveTimeout bounds how long to wait for the consensus node to reach
-	// platform status ACTIVE after an upgrade before failing (the backstop).
+	// platform status ACTIVE after an upgrade before emitting the first warning.
 	NodeActiveTimeout time.Duration
+	// NodeActiveAlertInterval is the interval between repeated warning events
+	// after the initial NodeActiveDeadlineExceeded condition is set.
+	NodeActiveAlertInterval time.Duration
 }
 
 func NewNetworkUpgradeExecuteReconciler(c client.Client, scheme *runtime.Scheme) *NetworkUpgradeExecuteReconciler {
 	return &NetworkUpgradeExecuteReconciler{
-		Client:            c,
-		Scheme:            scheme,
-		Checker:           registry.OCIChecker{},
-		NodeActiveTimeout: executeDefaultNodeActiveTimeout,
+		Client:                  c,
+		Scheme:                  scheme,
+		Checker:                 registry.OCIChecker{},
+		NodeActiveTimeout:       executeDefaultNodeActiveTimeout,
+		NodeActiveAlertInterval: executeDefaultNodeActiveAlertEvery,
 	}
 }
 
@@ -69,6 +74,15 @@ func (r *NetworkUpgradeExecuteReconciler) WithStrategy(name string) *NetworkUpgr
 func (r *NetworkUpgradeExecuteReconciler) WithNodeActiveTimeout(d time.Duration) *NetworkUpgradeExecuteReconciler {
 	if d > 0 {
 		r.NodeActiveTimeout = d
+	}
+	return r
+}
+
+// WithNodeActiveAlertInterval overrides the interval between repeated warning
+// events after the initial NodeActiveDeadlineExceeded condition is set.
+func (r *NetworkUpgradeExecuteReconciler) WithNodeActiveAlertInterval(d time.Duration) *NetworkUpgradeExecuteReconciler {
+	if d > 0 {
+		r.NodeActiveAlertInterval = d
 	}
 	return r
 }
@@ -446,37 +460,60 @@ func (r *NetworkUpgradeExecuteReconciler) failUpgrade(
 // warnDeadlineExceeded sets a NodeActiveDeadlineExceeded=True condition and
 // emits a warning event when the backstop timeout fires, but does NOT move the
 // Execute CR to Failed. The reconciler keeps requeueing so the node can still
-// recover (e.g. slow event replay). The condition is idempotent — set once and
-// the event is emitted only on the first occurrence.
+// recover (e.g. slow event replay).
+//
+// Alerts are rate-limited to one per NodeActiveAlertInterval. The condition's
+// LastTransitionTime is repurposed as the "last alert" timestamp: on each alert
+// it is force-set to now (bypassing setCondition, which only updates it on a
+// status flip). A status-update–triggered re-enqueue short-circuits via the
+// time guard before writing again, so the loop self-quenches.
 func (r *NetworkUpgradeExecuteReconciler) warnDeadlineExceeded(
 	ctx context.Context,
 	execute *operatorv1alpha1.NetworkUpgradeExecute,
 ) (ctrl.Result, error) {
-	alreadyWarned := false
-	for _, c := range execute.Status.Conditions {
-		if c.Type == operatorv1alpha1.CondNodeActiveDeadlineExceeded && c.Status == metav1.ConditionTrue {
-			alreadyWarned = true
+	now := metav1.Now()
+	alertEvery := r.nodeActiveAlertInterval()
+
+	if cond := findCondition(execute.Status.Conditions, operatorv1alpha1.CondNodeActiveDeadlineExceeded); cond != nil {
+		since := now.Sub(cond.LastTransitionTime.Time)
+		if since >= 0 && since < alertEvery {
+			return ctrl.Result{RequeueAfter: alertEvery - since}, nil
+		}
+	}
+
+	elapsed := time.Since(execute.Status.NodeUpgradeStartTime.Time).Truncate(time.Second)
+	newCond := metav1.Condition{
+		Type:               operatorv1alpha1.CondNodeActiveDeadlineExceeded,
+		Status:             metav1.ConditionTrue,
+		Reason:             operatorv1alpha1.ReasonNodeActiveDeadlineExceeded.String(),
+		Message:            fmt.Sprintf("consensus node has not reached platform status ACTIVE after %s; still waiting", elapsed),
+		ObservedGeneration: execute.Generation,
+		LastTransitionTime: now,
+	}
+	replaced := false
+	for i := range execute.Status.Conditions {
+		if execute.Status.Conditions[i].Type == newCond.Type {
+			execute.Status.Conditions[i] = newCond
+			replaced = true
 			break
 		}
 	}
-	if !alreadyWarned {
-		setCondition(&execute.Status.Conditions, metav1.Condition{
-			Type:    operatorv1alpha1.CondNodeActiveDeadlineExceeded,
-			Status:  metav1.ConditionTrue,
-			Reason:  operatorv1alpha1.ReasonNodeActiveDeadlineExceeded.String(),
-			Message: fmt.Sprintf("consensus node has not reached platform status ACTIVE after %s; still waiting", r.nodeActiveTimeout()),
-		})
-		if err := r.Status().Update(ctx, execute); err != nil {
-			if apierrors.IsConflict(err) {
-				return ctrl.Result{Requeue: true}, nil
-			}
-			return ctrl.Result{}, wrapStatusUpdate(err, "setting NodeActiveDeadlineExceeded condition")
-		}
-		r.eventf(ctx, execute, corev1.EventTypeWarning, operatorv1alpha1.EventNodeActiveDeadlineExceeded,
-			"consensus node has not reached ACTIVE after %s for operationId %q; upgrade is still in progress",
-			r.nodeActiveTimeout(), execute.Spec.OperationID)
+	if !replaced {
+		execute.Status.Conditions = append(execute.Status.Conditions, newCond)
 	}
-	return ctrl.Result{RequeueAfter: executeReadyRequeueAfter}, nil
+
+	if err := r.Status().Update(ctx, execute); err != nil {
+		if apierrors.IsConflict(err) {
+			return ctrl.Result{Requeue: true}, nil
+		}
+		return ctrl.Result{}, wrapStatusUpdate(err, "setting NodeActiveDeadlineExceeded condition")
+	}
+
+	r.eventf(ctx, execute, corev1.EventTypeWarning, operatorv1alpha1.EventNodeActiveDeadlineExceeded,
+		"consensus node has not reached ACTIVE after %s for operationId %q; upgrade is still in progress",
+		elapsed, execute.Spec.OperationID)
+
+	return ctrl.Result{RequeueAfter: alertEvery}, nil
 }
 
 // nodeActiveTimeout returns the effective timeout duration.
@@ -485,6 +522,14 @@ func (r *NetworkUpgradeExecuteReconciler) nodeActiveTimeout() time.Duration {
 		return r.NodeActiveTimeout
 	}
 	return executeDefaultNodeActiveTimeout
+}
+
+// nodeActiveAlertInterval returns the effective alert repeat interval.
+func (r *NetworkUpgradeExecuteReconciler) nodeActiveAlertInterval() time.Duration {
+	if r.NodeActiveAlertInterval > 0 {
+		return r.NodeActiveAlertInterval
+	}
+	return executeDefaultNodeActiveAlertEvery
 }
 
 func (r *NetworkUpgradeExecuteReconciler) allPeersOffline(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (bool, error) {
@@ -663,7 +708,7 @@ const (
 //
 //   - Active on the post-upgrade revision                → upgradeSucceeded
 //   - CATASTROPHIC_FAILURE on the new revision           → upgradeCatastrophic (fast fail)
-//   - NodeActiveTimeout (default 30m) from start elapsed → upgradeTimedOut (warning, non-terminal)
+//   - NodeActiveTimeout (default 10m) from start elapsed → upgradeTimedOut (warning, non-terminal)
 //   - otherwise                                          → upgradeWaiting
 func (r *NetworkUpgradeExecuteReconciler) checkUpgradeGate(
 	ctx context.Context,
@@ -707,7 +752,9 @@ func (r *NetworkUpgradeExecuteReconciler) checkUpgradeGate(
 	}
 
 	// Success: the node reached ACTIVE on the fully-rolled post-upgrade revision.
-	if rolledAndReady && capsule.Status.Phase == operatorv1alpha1.PhaseActive {
+	// Require revisionFresh so a stale or manually-set phase cannot mark an upgrade
+	// Succeeded without a current-revision UC reading.
+	if rolledAndReady && revisionFresh && capsule.Status.Phase == operatorv1alpha1.PhaseActive {
 		return upgradeSucceeded, nil
 	}
 

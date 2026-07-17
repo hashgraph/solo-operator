@@ -426,9 +426,11 @@ func (r *ConsensusCapsuleReconciler) rollupRunningPhase(
 	switch {
 	case revisionFresh && platformStatus == operatorv1alpha1.PlatformStatusActive && onUpdateRevision:
 		return operatorv1alpha1.PhaseActive
-	case oldPhase == operatorv1alpha1.PhaseActive && onUpdateRevision:
+	case oldPhase == operatorv1alpha1.PhaseActive && onUpdateRevision && revisionFresh:
 		// Sticky-Active: a transient non-ACTIVE dip (BEHIND, RECONNECT, …) keeps the
-		// phase at Active while the Ready pod stays on the current revision.
+		// phase at Active while the Ready pod stays on the current revision and the UC
+		// has stamped a fresh platformStatusRevision. Requiring revisionFresh is fail-
+		// closed: if the UC hasn't written since a roll, Active is not sticky until it does.
 		return operatorv1alpha1.PhaseActive
 	default:
 		return operatorv1alpha1.PhaseRunning
@@ -476,11 +478,12 @@ func (r *ConsensusCapsuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 	// Skip status-only updates (LoadBalancer IP, PVC binding, STS readyReplicas, etc.)
 	genChanged := builder.WithPredicates(predicate.GenerationChangedPredicate{})
-	// The capsule's own watch must additionally wake on a status.platformStatus
-	// change: the UC sidecar's platform-status write is a status-only update that
-	// GenerationChangedPredicate would otherwise drop. The operator's own phase
-	// write is neither a generation nor a platformStatus change, so it does not
-	// self-loop. Only the For(...) predicate is widened; Owns(...) stay gen-only.
+	// The capsule's own watch must additionally wake on status.platformStatus or
+	// status.platformStatusRevision changes: the UC sidecar's platform-status
+	// write is a status-only update that GenerationChangedPredicate would
+	// otherwise drop. The operator's own phase write is neither a generation nor
+	// a platformStatus change, so it does not self-loop. Only the For(...)
+	// predicate is widened; Owns(...) stay gen-only.
 	forPredicate := builder.WithPredicates(genOrPlatformStatusChangedPredicate())
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.ConsensusCapsule{}, forPredicate).
@@ -495,22 +498,25 @@ func (r *ConsensusCapsuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // genOrPlatformStatusChangedPredicate fires on a generation change (spec change)
-// OR a status.platformStatus change. It mirrors GenerationChangedPredicate for
-// Create/Delete/Generic and adds the platformStatus comparison on Update so the
-// UC sidecar's status-only platform-status write wakes the controller.
+// OR a status.platformStatus/platformStatusRevision change. It mirrors
+// GenerationChangedPredicate for Create/Delete/Generic and adds the platform-
+// status comparison on Update so the UC sidecar's status-only write wakes the
+// controller. Both platformStatus AND platformStatusRevision are compared: the
+// UC may write the same platformStatus value with a new revision after a pod
+// restart, and the controller must see the refreshed revision to promote to Active.
 func genOrPlatformStatusChangedPredicate() predicate.Predicate {
 	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			oldC, ok1 := e.ObjectOld.(*operatorv1alpha1.ConsensusCapsule)
 			newC, ok2 := e.ObjectNew.(*operatorv1alpha1.ConsensusCapsule)
 			if !ok1 || !ok2 {
-				// Non-capsule object (shouldn't happen for For) — don't drop it.
 				return true
 			}
 			if oldC.GetGeneration() != newC.GetGeneration() {
 				return true
 			}
-			return oldC.Status.PlatformStatus != newC.Status.PlatformStatus
+			return oldC.Status.PlatformStatus != newC.Status.PlatformStatus ||
+				oldC.Status.PlatformStatusRevision != newC.Status.PlatformStatusRevision
 		},
 	}
 }

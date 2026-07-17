@@ -49,6 +49,7 @@ func main() {
 	var enableHTTP2 bool
 	var registryOrder string
 	var nodeActiveTimeout time.Duration
+	var nodeActiveAlertInterval time.Duration
 	var showVersion bool
 	var logLevel string
 	var consoleLogging bool
@@ -71,10 +72,13 @@ func main() {
 		"If set, HTTP/2 will be enabled for the metrics server")
 	flag.StringVar(&registryOrder, "registry-order", registry.StrategyRandom,
 		"Order in which registries are checked during the upgrade Prepare phase: Random or Sequential.")
-	flag.DurationVar(&nodeActiveTimeout, "node-active-timeout", 30*time.Minute,
+	flag.DurationVar(&nodeActiveTimeout, "node-active-timeout", 10*time.Minute,
 		"Backstop deadline for a consensus node to reach platform status ACTIVE after an upgrade "+
-			"(anchored to nodeUpgradeStartTime) before the NetworkUpgradeExecute is marked Failed. "+
+			"(anchored to nodeUpgradeStartTime) before a NodeActiveDeadlineExceeded warning is emitted. "+
 			"Increase for large states where event replay/reconnect is slow.")
+	flag.DurationVar(&nodeActiveAlertInterval, "node-active-alert-interval", 5*time.Minute,
+		"Interval between repeated NodeActiveDeadlineExceeded warning events after the initial "+
+			"deadline fires. Shorter values give the node operator more frequent visibility.")
 
 	flag.Parse()
 
@@ -305,7 +309,7 @@ func main() {
 	executeReconciler := controller.NewNetworkUpgradeExecuteReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
-	).WithStrategy(registryOrder).WithNodeActiveTimeout(nodeActiveTimeout)
+	).WithStrategy(registryOrder).WithNodeActiveTimeout(nodeActiveTimeout).WithNodeActiveAlertInterval(nodeActiveAlertInterval)
 	if err = executeReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkUpgradeExecute")
 		os.Exit(1)

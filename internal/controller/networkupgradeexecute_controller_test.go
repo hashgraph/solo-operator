@@ -965,8 +965,9 @@ func TestExecuteReconcile_PendingNodeUpgrade_SucceedsWhenActiveOnNewRevision(t *
 
 	// The node reached ACTIVE (operator-written phase) on the fully-rolled
 	// post-upgrade revision: currentRevision has caught up to updateRevision with a
-	// Ready replica.
+	// Ready replica and the UC stamped a fresh platformStatusRevision.
 	capsule := newActiveCapsule("node0")
+	capsule.Status.PlatformStatusRevision = "rev-new"
 	sts := newExecuteSTS("node0", "rev-new", "rev-new", 1, 1)
 
 	scheme := newControllerTestScheme()
@@ -1062,19 +1063,21 @@ func TestExecuteReconcile_NodeActiveDeadlineExceeded(t *testing.T) {
 		t.Fatalf("pre-set sts status: %v", err)
 	}
 
+	alertInterval := 2 * time.Minute
 	rec := events.NewFakeRecorder(8)
 	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
 	r.Recorder = rec
 	r.Checker = newExecuteChecker(nil, nil)
 	r.NodeActiveTimeout = 5 * time.Minute // shorter than the 30m elapsed
+	r.NodeActiveAlertInterval = alertInterval
 
 	res, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(execute)})
 	close(rec.Events)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if res.RequeueAfter == 0 {
-		t.Error("expected RequeueAfter > 0 (non-terminal, keep waiting)")
+	if res.RequeueAfter != alertInterval {
+		t.Errorf("expected RequeueAfter=%v, got %v", alertInterval, res.RequeueAfter)
 	}
 
 	var updated operatorv1alpha1.NetworkUpgradeExecute
@@ -1098,7 +1101,7 @@ func TestExecuteReconcile_NodeActiveDeadlineExceeded(t *testing.T) {
 	}
 }
 
-func TestExecuteReconcile_NodeActiveDeadlineExceeded_IdempotentOnRequeue(t *testing.T) {
+func TestExecuteReconcile_NodeActiveDeadlineExceeded_PeriodicAlert(t *testing.T) {
 	execute := newExecuteForTest()
 	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
 	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
@@ -1116,11 +1119,15 @@ func TestExecuteReconcile_NodeActiveDeadlineExceeded_IdempotentOnRequeue(t *test
 		Reason:             operatorv1alpha1.ReasonCapsulesOnline.String(),
 		LastTransitionTime: metav1.Now(),
 	})
-	setCondition(&execute.Status.Conditions, metav1.Condition{
-		Type:    operatorv1alpha1.CondNodeActiveDeadlineExceeded,
-		Status:  metav1.ConditionTrue,
-		Reason:  operatorv1alpha1.ReasonNodeActiveDeadlineExceeded.String(),
-		Message: "already warned",
+	// LastTransitionTime far in the past so the alert interval has elapsed and the
+	// time guard lets the alert through.
+	oldAlertTime := metav1.NewTime(time.Now().Add(-10 * time.Minute))
+	execute.Status.Conditions = append(execute.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.CondNodeActiveDeadlineExceeded,
+		Status:             metav1.ConditionTrue,
+		Reason:             operatorv1alpha1.ReasonNodeActiveDeadlineExceeded.String(),
+		Message:            "already warned",
+		LastTransitionTime: oldAlertTime,
 	})
 	pastTime := metav1.NewTime(time.Now().Add(-60 * time.Minute))
 	execute.Status.NodeUpgradeStartTime = &pastTime
@@ -1150,28 +1157,109 @@ func TestExecuteReconcile_NodeActiveDeadlineExceeded_IdempotentOnRequeue(t *test
 		t.Fatalf("pre-set sts status: %v", err)
 	}
 
+	alertInterval := 2 * time.Minute
 	rec := events.NewFakeRecorder(8)
 	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
 	r.Recorder = rec
 	r.Checker = newExecuteChecker(nil, nil)
 	r.NodeActiveTimeout = 5 * time.Minute
+	r.NodeActiveAlertInterval = alertInterval
 
 	res, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(execute)})
 	close(rec.Events)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if res.RequeueAfter == 0 {
-		t.Error("expected RequeueAfter > 0")
+	if res.RequeueAfter != alertInterval {
+		t.Errorf("expected RequeueAfter=%v, got %v", alertInterval, res.RequeueAfter)
 	}
 
-	// No new events should be emitted — the condition was already set.
+	var evts []string
+	for e := range rec.Events {
+		evts = append(evts, e)
+	}
+	if got := countContaining(evts, "NodeActiveDeadlineExceeded"); got != 1 {
+		t.Errorf("expected 1 periodic NodeActiveDeadlineExceeded event, got %d in %v", got, evts)
+	}
+}
+
+func TestExecuteReconcile_NodeActiveDeadlineExceeded_ShortCircuitWithinInterval(t *testing.T) {
+	execute := newExecuteForTest()
+	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
+		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
+	}
+	setCondition(&execute.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.CondConsensusCapsulePatched,
+		Status:             metav1.ConditionTrue,
+		Reason:             operatorv1alpha1.ReasonPatchApplied.String(),
+		LastTransitionTime: metav1.Now(),
+	})
+	setCondition(&execute.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.CondCapsulesOnline,
+		Status:             metav1.ConditionTrue,
+		Reason:             operatorv1alpha1.ReasonCapsulesOnline.String(),
+		LastTransitionTime: metav1.Now(),
+	})
+	// Condition was set very recently (now) — within the alert interval.
+	execute.Status.Conditions = append(execute.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.CondNodeActiveDeadlineExceeded,
+		Status:             metav1.ConditionTrue,
+		Reason:             operatorv1alpha1.ReasonNodeActiveDeadlineExceeded.String(),
+		Message:            "already warned",
+		LastTransitionTime: metav1.Now(),
+	})
+	pastTime := metav1.NewTime(time.Now().Add(-60 * time.Minute))
+	execute.Status.NodeUpgradeStartTime = &pastTime
+
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1,
+			Log4j2ConfigRef: "network-log4j2",
+			PodProperties:   operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "reg-a", ImageName: "cn", ImageTag: "0.75.0"}}}},
+		},
+	}
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default"},
+		Status:     appsv1.StatefulSetStatus{ReadyReplicas: 0},
+	}
+
+	scheme := newControllerTestScheme()
+	c := withExecuteIndexes(fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(execute, capsule, sts).
+		WithStatusSubresource(execute, sts)).Build()
+	if err := c.Status().Update(context.Background(), execute); err != nil {
+		t.Fatalf("pre-set execute status: %v", err)
+	}
+	if err := c.Status().Update(context.Background(), sts); err != nil {
+		t.Fatalf("pre-set sts status: %v", err)
+	}
+
+	alertInterval := 2 * time.Minute
+	rec := events.NewFakeRecorder(8)
+	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
+	r.Recorder = rec
+	r.Checker = newExecuteChecker(nil, nil)
+	r.NodeActiveTimeout = 5 * time.Minute
+	r.NodeActiveAlertInterval = alertInterval
+
+	res, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(execute)})
+	close(rec.Events)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.RequeueAfter <= 0 || res.RequeueAfter > alertInterval {
+		t.Errorf("expected RequeueAfter in (0, %v], got %v", alertInterval, res.RequeueAfter)
+	}
+
 	var evts []string
 	for e := range rec.Events {
 		evts = append(evts, e)
 	}
 	if got := countContaining(evts, "NodeActiveDeadlineExceeded"); got != 0 {
-		t.Errorf("expected no duplicate NodeActiveDeadlineExceeded event on requeue, got %d in %v", got, evts)
+		t.Errorf("expected no event (short-circuited within interval), got %d in %v", got, evts)
 	}
 }
 

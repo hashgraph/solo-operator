@@ -52,6 +52,9 @@ spec:
             {{- with .Values.controller.nodeActiveTimeout }}
             - --node-active-timeout={{ . }}
             {{- end }}
+            {{- with .Values.controller.nodeActiveAlertInterval }}
+            - --node-active-alert-interval={{ . }}
+            {{- end }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           volumeMounts:

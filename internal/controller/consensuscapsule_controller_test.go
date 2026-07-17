@@ -268,6 +268,19 @@ func TestUpdateStatus_StickyActive_TransientDipKeepsActive(t *testing.T) {
 	}
 }
 
+func TestUpdateStatus_StickyActive_StaleRevision_DropsToRunning(t *testing.T) {
+	// Already Active but the UC hasn't stamped the current revision yet (e.g. pod
+	// restarted for a new STS template, UC hasn't re-written). Sticky must not hold
+	// Active without a fresh revision — fail-closed.
+	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusBehind, "old-rev", operatorv1alpha1.PhaseActive, testRevision, testRevision)
+	if _, err := r.updateStatus(ctx, capsule); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capsule.Status.Phase != operatorv1alpha1.PhaseRunning {
+		t.Errorf("expected PhaseRunning (sticky not honored with stale revision), got %s", capsule.Status.Phase)
+	}
+}
+
 func TestUpdateStatus_CatastrophicFailure_PhaseFailed(t *testing.T) {
 	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusCatastrophicFailure, testRevision, operatorv1alpha1.PhaseActive, testRevision, testRevision)
 	if _, err := r.updateStatus(ctx, capsule); err != nil {
@@ -371,6 +384,12 @@ func TestGenOrPlatformStatusChangedPredicate(t *testing.T) {
 	psUp.Status.PlatformStatus = operatorv1alpha1.PlatformStatusActive
 	if !p.Update(event.UpdateEvent{ObjectOld: base, ObjectNew: psUp}) {
 		t.Error("a status.platformStatus change must fire (UC wake)")
+	}
+
+	revUp := base.DeepCopy()
+	revUp.Status.PlatformStatusRevision = "rev-new"
+	if !p.Update(event.UpdateEvent{ObjectOld: base, ObjectNew: revUp}) {
+		t.Error("a status.platformStatusRevision change must fire (UC revision stamp)")
 	}
 
 	// The operator's own phase write must NOT wake the controller (no self-loop).
