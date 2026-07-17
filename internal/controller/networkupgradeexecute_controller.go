@@ -382,9 +382,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 
 	switch outcome {
 	case upgradeTimedOut:
-		return r.failUpgrade(ctx, execute,
-			"timed out waiting for consensus node to reach platform status ACTIVE",
-			fmt.Sprintf("timed out waiting for consensus node ACTIVE after upgrade for operationId %q", execute.Spec.OperationID))
+		return r.warnDeadlineExceeded(ctx, execute)
 
 	case upgradeCatastrophic:
 		return r.failUpgrade(ctx, execute,
@@ -443,6 +441,50 @@ func (r *NetworkUpgradeExecuteReconciler) failUpgrade(
 	}
 	r.eventf(ctx, execute, corev1.EventTypeWarning, operatorv1alpha1.EventUpgradeFailed, "%s", eventMsg)
 	return ctrl.Result{}, nil
+}
+
+// warnDeadlineExceeded sets a NodeActiveDeadlineExceeded=True condition and
+// emits a warning event when the backstop timeout fires, but does NOT move the
+// Execute CR to Failed. The reconciler keeps requeueing so the node can still
+// recover (e.g. slow event replay). The condition is idempotent — set once and
+// the event is emitted only on the first occurrence.
+func (r *NetworkUpgradeExecuteReconciler) warnDeadlineExceeded(
+	ctx context.Context,
+	execute *operatorv1alpha1.NetworkUpgradeExecute,
+) (ctrl.Result, error) {
+	alreadyWarned := false
+	for _, c := range execute.Status.Conditions {
+		if c.Type == operatorv1alpha1.CondNodeActiveDeadlineExceeded && c.Status == metav1.ConditionTrue {
+			alreadyWarned = true
+			break
+		}
+	}
+	if !alreadyWarned {
+		setCondition(&execute.Status.Conditions, metav1.Condition{
+			Type:    operatorv1alpha1.CondNodeActiveDeadlineExceeded,
+			Status:  metav1.ConditionTrue,
+			Reason:  operatorv1alpha1.ReasonNodeActiveDeadlineExceeded.String(),
+			Message: fmt.Sprintf("consensus node has not reached platform status ACTIVE after %s; still waiting", r.nodeActiveTimeout()),
+		})
+		if err := r.Status().Update(ctx, execute); err != nil {
+			if apierrors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
+			return ctrl.Result{}, wrapStatusUpdate(err, "setting NodeActiveDeadlineExceeded condition")
+		}
+		r.eventf(ctx, execute, corev1.EventTypeWarning, operatorv1alpha1.EventNodeActiveDeadlineExceeded,
+			"consensus node has not reached ACTIVE after %s for operationId %q; upgrade is still in progress",
+			r.nodeActiveTimeout(), execute.Spec.OperationID)
+	}
+	return ctrl.Result{RequeueAfter: executeReadyRequeueAfter}, nil
+}
+
+// nodeActiveTimeout returns the effective timeout duration.
+func (r *NetworkUpgradeExecuteReconciler) nodeActiveTimeout() time.Duration {
+	if r.NodeActiveTimeout > 0 {
+		return r.NodeActiveTimeout
+	}
+	return executeDefaultNodeActiveTimeout
 }
 
 func (r *NetworkUpgradeExecuteReconciler) allPeersOffline(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (bool, error) {
@@ -621,7 +663,7 @@ const (
 //
 //   - Active on the post-upgrade revision                → upgradeSucceeded
 //   - CATASTROPHIC_FAILURE on the new revision           → upgradeCatastrophic (fast fail)
-//   - NodeActiveTimeout (default 30m) from start elapsed → upgradeTimedOut (dead/missing UC)
+//   - NodeActiveTimeout (default 30m) from start elapsed → upgradeTimedOut (warning, non-terminal)
 //   - otherwise                                          → upgradeWaiting
 func (r *NetworkUpgradeExecuteReconciler) checkUpgradeGate(
 	ctx context.Context,
@@ -672,11 +714,9 @@ func (r *NetworkUpgradeExecuteReconciler) checkUpgradeGate(
 	// Backstop: covers a dead/missing UC that never advances the capsule phase.
 	// Anchored to nodeUpgradeStartTime. Checked after the fast paths so a node that
 	// reached ACTIVE or CATASTROPHIC_FAILURE right at the deadline is not misreported.
-	timeout := r.NodeActiveTimeout
-	if timeout == 0 {
-		timeout = executeDefaultNodeActiveTimeout
-	}
-	if execute.Status.NodeUpgradeStartTime != nil && time.Since(execute.Status.NodeUpgradeStartTime.Time) > timeout {
+	// Exceeding the deadline emits a warning but does not fail the upgrade — the
+	// node may still recover (e.g. slow event replay).
+	if execute.Status.NodeUpgradeStartTime != nil && time.Since(execute.Status.NodeUpgradeStartTime.Time) > r.nodeActiveTimeout() {
 		return upgradeTimedOut, nil
 	}
 
