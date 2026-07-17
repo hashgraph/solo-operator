@@ -53,10 +53,10 @@ func (r *EnvoyProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	envoyObj := &operatorv1alpha1.EnvoyProxy{}
 	if err := r.Get(ctx, req.NamespacedName, envoyObj); err != nil {
 		if apierrors.IsNotFound(err) {
-			common.Info(ctx, ReasonResourceNotFound).Msg("EnvoyProxy resource not found, ignoring since it must be deleted")
+			common.Info(ctx, ReasonResourceNotFound).Str("name", req.Name).Str("namespace", req.Namespace).Msg("EnvoyProxy resource not found, ignoring since it must be deleted")
 			return ctrl.Result{}, nil
 		}
-		common.Err(ctx, err, ReasonGetFailed).Msg("Failed to get EnvoyProxy")
+		common.Err(ctx, err, ReasonGetFailed).Str("name", req.Name).Str("namespace", req.Namespace).Msg("Failed to get EnvoyProxy")
 		return ctrl.Result{}, err
 	}
 

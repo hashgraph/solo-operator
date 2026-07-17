@@ -34,7 +34,6 @@ func NewConfigMapSubReconciler(c client.Client, scheme *runtime.Scheme, recorder
 
 func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1alpha1.Log4j2Config) (ctrl.Result, error) {
 	if err := ValidateContent(obj.Spec.Content); err != nil {
-		common.Err(ctx, err, common.ReasonInvalidContent).Msg("invalid log4j2 XML — fix spec.content to recover")
 		apimeta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 			Type:               operatorv1alpha1.ConditionTypeValid,
 			Status:             metav1.ConditionFalse,

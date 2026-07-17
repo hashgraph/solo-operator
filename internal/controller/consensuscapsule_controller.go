@@ -78,10 +78,10 @@ func (r *ConsensusCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	capsule := &operatorv1alpha1.ConsensusCapsule{}
 	if err := r.Get(ctx, req.NamespacedName, capsule); err != nil {
 		if apierrors.IsNotFound(err) {
-			common.Info(ctx, ReasonResourceNotFound).Msg("ConsensusCapsule resource not found, ignoring since it must be deleted")
+			common.Info(ctx, ReasonResourceNotFound).Str("name", req.Name).Str("namespace", req.Namespace).Msg("ConsensusCapsule resource not found, ignoring since it must be deleted")
 			return ctrl.Result{}, nil
 		}
-		common.Err(ctx, err, ReasonGetFailed).Msg("Failed to get ConsensusCapsule")
+		common.Err(ctx, err, ReasonGetFailed).Str("name", req.Name).Str("namespace", req.Namespace).Msg("Failed to get ConsensusCapsule")
 		return ctrl.Result{}, err
 	}
 
