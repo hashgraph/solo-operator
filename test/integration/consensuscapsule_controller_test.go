@@ -528,7 +528,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 					return false
 				}
 				for _, c := range got.Status.Conditions {
-					if c.Type == "UCSidecarReady" && c.Status == metav1.ConditionFalse {
+					if c.Type == operatorv1alpha1.CondUCSidecarReady && c.Status == metav1.ConditionFalse {
 						return true
 					}
 				}

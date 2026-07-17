@@ -113,6 +113,7 @@ func (r *ConsensusCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	if err := validateUCMandatory(capsule); err != nil {
 		return r.failUCSidecarRequired(ctx, capsule, err)
 	}
+	apimeta.RemoveStatusCondition(&capsule.Status.Conditions, operatorv1alpha1.CondUCSidecarReady)
 
 	ready, err := r.checkConfigRefs(ctx, capsule)
 	if err != nil {
@@ -257,7 +258,7 @@ func (r *ConsensusCapsuleReconciler) failUCSidecarRequired(ctx context.Context, 
 	capsule.Status.Phase = operatorv1alpha1.PhaseFailed
 	capsule.Status.ObservedGeneration = capsule.Generation
 	apimeta.SetStatusCondition(&capsule.Status.Conditions, metav1.Condition{
-		Type:               "UCSidecarReady",
+		Type:               operatorv1alpha1.CondUCSidecarReady,
 		Status:             metav1.ConditionFalse,
 		ObservedGeneration: capsule.Generation,
 		Reason:             ReasonUCSidecarRequired.String(),

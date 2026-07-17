@@ -564,6 +564,9 @@ const (
 	PlatformStatusUnknown = "UNKNOWN"
 )
 
+// CondUCSidecarReady is the condition type for the UC sidecar health gate on ConsensusCapsule.
+const CondUCSidecarReady = "UCSidecarReady"
+
 // ConsensusCapsuleStatus defines the observed state of ConsensusCapsule
 type ConsensusCapsuleStatus struct {
 	// +optional
