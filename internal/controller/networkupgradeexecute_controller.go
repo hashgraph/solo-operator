@@ -436,6 +436,9 @@ func (r *NetworkUpgradeExecuteReconciler) failUpgrade(
 		Message: condMsg,
 	})
 	if err := r.Status().Update(ctx, execute); err != nil {
+		if apierrors.IsConflict(err) {
+			return ctrl.Result{Requeue: true}, nil
+		}
 		return ctrl.Result{}, wrapStatusUpdate(err, "updating status to failed")
 	}
 	r.eventf(ctx, execute, corev1.EventTypeWarning, operatorv1alpha1.EventUpgradeFailed, "%s", eventMsg)
@@ -616,10 +619,10 @@ const (
 // an old-pod ACTIVE reading observed mid-roll, so the guard reads the STS revision
 // directly.
 //
-//   - Active on the post-upgrade revision      → upgradeSucceeded
-//   - CATASTROPHIC_FAILURE on the new revision → upgradeCatastrophic (fast fail)
-//   - 10m from nodeUpgradeStartTime elapsed    → upgradeTimedOut (dead/missing UC)
-//   - otherwise                                → upgradeWaiting
+//   - Active on the post-upgrade revision                → upgradeSucceeded
+//   - CATASTROPHIC_FAILURE on the new revision           → upgradeCatastrophic (fast fail)
+//   - NodeActiveTimeout (default 30m) from start elapsed → upgradeTimedOut (dead/missing UC)
+//   - otherwise                                          → upgradeWaiting
 func (r *NetworkUpgradeExecuteReconciler) checkUpgradeGate(
 	ctx context.Context,
 	execute *operatorv1alpha1.NetworkUpgradeExecute,
@@ -648,9 +651,16 @@ func (r *NetworkUpgradeExecuteReconciler) checkUpgradeGate(
 		sts.Status.CurrentRevision == sts.Status.UpdateRevision &&
 		sts.Status.ReadyReplicas >= 1
 
+	// Trust the platform-status reading only when the UC that wrote it runs on the
+	// post-upgrade revision. Fail-closed: an unstamped or mismatched reading is
+	// never trusted, so the upgrade hits the backstop rather than succeeding on a
+	// stale ACTIVE.
+	revisionFresh := sts.Status.UpdateRevision != "" &&
+		capsule.Status.PlatformStatusRevision == sts.Status.UpdateRevision
+
 	// CATASTROPHIC_FAILURE on the post-upgrade node is terminal — fail fast, before
 	// the backstop, without waiting for readiness that will never come.
-	if newRevisionPodCreated && capsule.Status.PlatformStatus == operatorv1alpha1.PlatformStatusCatastrophicFailure {
+	if newRevisionPodCreated && revisionFresh && capsule.Status.PlatformStatus == operatorv1alpha1.PlatformStatusCatastrophicFailure {
 		return upgradeCatastrophic, nil
 	}
 

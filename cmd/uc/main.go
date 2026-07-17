@@ -59,6 +59,7 @@ func main() {
 	f.StringVar(&cfg.Orbit, "orbit", cfg.Orbit, "Deployment orbit the upgrade CRs target")
 	f.StringVar(&cfg.Namespace, "namespace", cfg.Namespace, "Kubernetes namespace to watch and create CRs in")
 	f.StringVar(&cfg.PodName, "pod-name", cfg.PodName, "UC pod name (downward API metadata.name); the ConsensusCapsule name is derived from it")
+	f.StringVar(&cfg.PodRevision, "pod-revision", cfg.PodRevision, "StatefulSet controller-revision-hash (downward API metadata.labels); stamped onto platformStatusRevision")
 	f.StringVar(&cfg.KubeconfigPath, "kubeconfig", cfg.KubeconfigPath, "Path to kubeconfig (empty = in-cluster)")
 	f.StringVar(&cfg.MetricsURL, "metrics-url", cfg.MetricsURL, "Consensus node Prometheus endpoint scraped for platform_PlatformStatus")
 	f.DurationVar(&cfg.PlatformPollInterval, "platform-poll-interval", cfg.PlatformPollInterval, "Platform-status metrics scrape cadence")

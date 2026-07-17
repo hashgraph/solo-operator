@@ -74,6 +74,12 @@ type Config struct {
 	// (metadata.name). The platform-status sensor derives the owning
 	// ConsensusCapsule name from it (pod "<capsule>-<ordinal>" → "<capsule>").
 	PodName string
+	// PodRevision is the StatefulSet controller-revision-hash label value of the
+	// pod this UC sidecar runs in, injected via the downward API
+	// (metadata.labels['controller-revision-hash']). The platform-status sensor
+	// stamps it onto status.platformStatusRevision so the operator can detect
+	// stale readings that survived a pod roll.
+	PodRevision string
 	// KubeconfigPath is optional; empty means in-cluster config.
 	KubeconfigPath string
 

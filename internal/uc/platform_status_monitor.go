@@ -154,7 +154,7 @@ func (m *PlatformStatusMonitor) scrape(ctx context.Context) (code int32, name st
 // patch writes the new platform status onto the capsule's status subresource. It
 // is the only place status.platformStatus is written.
 func (m *PlatformStatusMonitor) patch(ctx context.Context, name string, code int32) error {
-	patch := []byte(fmt.Sprintf(`{"status":{"platformStatus":%q,"platformStatusCode":%d}}`, name, code))
+	patch := []byte(fmt.Sprintf(`{"status":{"platformStatus":%q,"platformStatusCode":%d,"platformStatusRevision":%q}}`, name, code, m.cfg.PodRevision))
 	ctx, cancel := context.WithTimeout(ctx, createTimeout)
 	defer cancel()
 	resource := m.client.Resource(consensusCapsuleGVR).Namespace(m.cfg.Namespace)

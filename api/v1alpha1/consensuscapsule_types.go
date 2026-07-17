@@ -581,6 +581,14 @@ type ConsensusCapsuleStatus struct {
 	// +optional
 	PlatformStatusCode int32 `json:"platformStatusCode,omitempty"`
 
+	// PlatformStatusRevision is the controller-revision-hash of the pod whose UC
+	// sidecar wrote the current PlatformStatus value. The operator compares it to
+	// the StatefulSet's UpdateRevision to detect stale readings that survived a pod
+	// roll — a pre-upgrade ACTIVE must not promote the capsule phase when the new
+	// pod's UC has not yet confirmed the state. Written exclusively by the UC sidecar.
+	// +optional
+	PlatformStatusRevision string `json:"platformStatusRevision,omitempty"`
+
 	// +optional
 	Conditions []Condition `json:"conditions,omitempty"`
 

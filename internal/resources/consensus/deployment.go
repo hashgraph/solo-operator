@@ -928,6 +928,12 @@ func (r *StatefulSetSubReconciler) buildUcContainer(capsule *operatorv1alpha1.Co
 				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"},
 			},
 		},
+		{
+			Name: "UC_POD_REVISION",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.labels['controller-revision-hash']"},
+			},
+		},
 	}
 
 	container := corev1.Container{

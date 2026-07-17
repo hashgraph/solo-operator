@@ -122,18 +122,20 @@ func TestPlatformStatusMonitor_TransitionOnlyWrites(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Namespace = "solo"
 	cfg.PodName = "node0-0"
+	cfg.PodRevision = "rev-abc123"
 	cfg.MetricsURL = srv.URL
 	m := NewPlatformStatusMonitor(cfg, fakeClient, nil)
 	ctx := context.Background()
 
-	readStatus := func() (string, int64) {
+	readStatus := func() (string, int64, string) {
 		got, err := fakeClient.Resource(consensusCapsuleGVR).Namespace("solo").Get(ctx, "node0", metav1.GetOptions{})
 		if err != nil {
 			t.Fatalf("get capsule: %v", err)
 		}
 		name, _, _ := unstructured.NestedString(got.Object, "status", "platformStatus")
 		code, _, _ := unstructured.NestedInt64(got.Object, "status", "platformStatusCode")
-		return name, code
+		rev, _, _ := unstructured.NestedString(got.Object, "status", "platformStatusRevision")
+		return name, code, rev
 	}
 
 	// First scrape → STARTING_UP written.
@@ -141,8 +143,8 @@ func TestPlatformStatusMonitor_TransitionOnlyWrites(t *testing.T) {
 	if got := atomic.LoadInt32(&patchCount); got != 1 {
 		t.Fatalf("expected 1 patch after first poll, got %d", got)
 	}
-	if name, code := readStatus(); name != operatorv1alpha1.PlatformStatusStartingUp || code != 1 {
-		t.Fatalf("status = (%q,%d), want (STARTING_UP,1)", name, code)
+	if name, code, rev := readStatus(); name != operatorv1alpha1.PlatformStatusStartingUp || code != 1 || rev != "rev-abc123" {
+		t.Fatalf("status = (%q,%d,%q), want (STARTING_UP,1,rev-abc123)", name, code, rev)
 	}
 
 	// Same code → no transition, no patch.
@@ -157,8 +159,8 @@ func TestPlatformStatusMonitor_TransitionOnlyWrites(t *testing.T) {
 	if got := atomic.LoadInt32(&patchCount); got != 2 {
 		t.Fatalf("expected 2 patches after ACTIVE transition, got %d", got)
 	}
-	if name, code := readStatus(); name != operatorv1alpha1.PlatformStatusActive || code != 2 {
-		t.Fatalf("status = (%q,%d), want (ACTIVE,2)", name, code)
+	if name, code, rev := readStatus(); name != operatorv1alpha1.PlatformStatusActive || code != 2 || rev != "rev-abc123" {
+		t.Fatalf("status = (%q,%d,%q), want (ACTIVE,2,rev-abc123)", name, code, rev)
 	}
 
 	// Endpoint unhealthy → fail-soft transition to UNKNOWN → patch, connectivity error set.
@@ -167,7 +169,7 @@ func TestPlatformStatusMonitor_TransitionOnlyWrites(t *testing.T) {
 	if got := atomic.LoadInt32(&patchCount); got != 3 {
 		t.Fatalf("expected 3 patches after UNKNOWN transition, got %d", got)
 	}
-	if name, _ := readStatus(); name != operatorv1alpha1.PlatformStatusUnknown {
+	if name, _, _ := readStatus(); name != operatorv1alpha1.PlatformStatusUnknown {
 		t.Fatalf("status = %q, want UNKNOWN when endpoint unreachable", name)
 	}
 	if m.ConnectivityError() == nil {

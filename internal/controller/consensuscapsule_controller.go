@@ -299,8 +299,11 @@ func isReadyPhase(phase operatorv1alpha1.Phase) bool {
 //
 // Active is a sticky milestone: once reached, transient non-ACTIVE readings
 // (BEHIND, RECONNECT, …) keep phase=Active — the live truth stays in
-// platformStatus so the phase does not flap. Only CATASTROPHIC_FAILURE or a pod
-// restart (pod no longer Ready) leaves Active.
+// platformStatus so the phase does not flap. Active is exited when:
+//   - platformStatus==CATASTROPHIC_FAILURE (fresh reading) → Failed
+//   - pod is no longer Ready → Pending
+//   - the pod's revision no longer matches the StatefulSet updateRevision
+//     (image roll advanced the template before the pod restarted) → Running
 //
 // The operator reads platformStatus via the API only; it NEVER dials the pod or
 // the metrics endpoint, so it works whether it runs inside or outside the cluster.
@@ -333,7 +336,7 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 		pod := podList.Items[0]
 		switch pod.Status.Phase {
 		case corev1.PodRunning:
-			phase = r.rollupRunningPhase(pod, capsule.Status.PlatformStatus, oldPhase, updateRevision, &requeue)
+			phase = r.rollupRunningPhase(pod, capsule.Status.PlatformStatus, capsule.Status.PlatformStatusRevision, oldPhase, updateRevision, &requeue)
 		case corev1.PodSucceeded:
 			phase = operatorv1alpha1.PhaseSucceeded
 		case corev1.PodFailed:
@@ -396,13 +399,18 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 func (r *ConsensusCapsuleReconciler) rollupRunningPhase(
 	pod corev1.Pod,
 	platformStatus string,
+	platformStatusRevision string,
 	oldPhase operatorv1alpha1.Phase,
 	updateRevision string,
 	requeue *bool,
 ) operatorv1alpha1.Phase {
-	// A running node reporting CATASTROPHIC_FAILURE is terminal regardless of its
-	// readiness probe — surface Failed immediately.
-	if platformStatus == operatorv1alpha1.PlatformStatusCatastrophicFailure {
+	// Trust the platform-status reading only when the UC that wrote it runs on the
+	// current StatefulSet revision. Fail-closed: an unstamped or mismatched reading
+	// is never trusted, so the node stays Running until the current-revision UC
+	// writes a fresh status.
+	revisionFresh := updateRevision != "" && platformStatusRevision == updateRevision
+
+	if revisionFresh && platformStatus == operatorv1alpha1.PlatformStatusCatastrophicFailure {
 		return operatorv1alpha1.PhaseFailed
 	}
 
@@ -416,7 +424,7 @@ func (r *ConsensusCapsuleReconciler) rollupRunningPhase(
 
 	onUpdateRevision := updateRevision != "" && pod.Labels[appsv1.StatefulSetRevisionLabel] == updateRevision
 	switch {
-	case platformStatus == operatorv1alpha1.PlatformStatusActive && onUpdateRevision:
+	case revisionFresh && platformStatus == operatorv1alpha1.PlatformStatusActive && onUpdateRevision:
 		return operatorv1alpha1.PhaseActive
 	case oldPhase == operatorv1alpha1.PhaseActive && onUpdateRevision:
 		// Sticky-Active: a transient non-ACTIVE dip (BEHIND, RECONNECT, …) keeps the

@@ -909,6 +909,7 @@ func TestExecuteReconcile_PendingNodeUpgrade_CatastrophicFastFail(t *testing.T) 
 	capsule := newActiveCapsule("node0")
 	capsule.Status.Phase = operatorv1alpha1.PhaseFailed
 	capsule.Status.PlatformStatus = operatorv1alpha1.PlatformStatusCatastrophicFailure
+	capsule.Status.PlatformStatusRevision = "rev-new"
 	// The new-revision pod was created but is crash-looping: not Ready, roll not
 	// complete (updatedReplicas=1, readyReplicas=0).
 	sts := newExecuteSTS("node0", "rev-old", "rev-new", 0, 1)
@@ -1088,6 +1089,52 @@ func TestExecuteReconcile_NodeActiveTimeout(t *testing.T) {
 	}
 	if got := countContaining(evts, "UpgradeFailed"); got == 0 {
 		t.Errorf("expected UpgradeFailed event, got none in %v", evts)
+	}
+}
+
+// TestExecuteReconcile_StaleCatastrophic_NoFastFail verifies that a
+// CATASTROPHIC_FAILURE reading from the pre-upgrade pod (stale
+// platformStatusRevision) does not fast-fail the upgrade. The backstop timeout
+// must handle it instead.
+func TestExecuteReconcile_StaleCatastrophic_NoFastFail(t *testing.T) {
+	execute := newExecuteInBringOnline()
+
+	capsule := newActiveCapsule("node0")
+	capsule.Status.Phase = operatorv1alpha1.PhaseFailed
+	capsule.Status.PlatformStatus = operatorv1alpha1.PlatformStatusCatastrophicFailure
+	capsule.Status.PlatformStatusRevision = "rev-old"
+	sts := newExecuteSTS("node0", "rev-old", "rev-new", 0, 1)
+
+	scheme := newControllerTestScheme()
+	c := withExecuteIndexes(fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(execute, capsule, sts).
+		WithStatusSubresource(execute, capsule, sts)).Build()
+	if err := c.Status().Update(context.Background(), execute); err != nil {
+		t.Fatalf("pre-set execute status: %v", err)
+	}
+	if err := c.Status().Update(context.Background(), capsule); err != nil {
+		t.Fatalf("pre-set capsule status: %v", err)
+	}
+	if err := c.Status().Update(context.Background(), sts); err != nil {
+		t.Fatalf("pre-set sts status: %v", err)
+	}
+
+	rec := events.NewFakeRecorder(8)
+	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
+	r.Recorder = rec
+	r.Checker = newExecuteChecker(nil, nil)
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(execute)})
+	close(rec.Events)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var updated operatorv1alpha1.NetworkUpgradeExecute
+	_ = c.Get(context.Background(), client.ObjectKeyFromObject(execute), &updated)
+	if updated.Status.Phase == operatorv1alpha1.ExecutePhaseFailed {
+		t.Error("stale CATASTROPHIC_FAILURE must not fast-fail the upgrade")
 	}
 }
 

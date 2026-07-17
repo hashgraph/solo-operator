@@ -213,7 +213,7 @@ func newSTSWithUpdateRevision(capsule *operatorv1alpha1.ConsensusCapsule, revisi
 // buildActiveScenario wires a client with a Ready pod on updateRevision and a
 // capsule carrying the given platform status + prior phase, then returns the
 // re-fetched capsule so the caller can invoke updateStatus.
-func buildActiveScenario(t *testing.T, platformStatus string, priorPhase operatorv1alpha1.Phase, podRevision, updateRevision string) (*ConsensusCapsuleReconciler, *operatorv1alpha1.ConsensusCapsule, context.Context) {
+func buildActiveScenario(t *testing.T, platformStatus, platformStatusRevision string, priorPhase operatorv1alpha1.Phase, podRevision, updateRevision string) (*ConsensusCapsuleReconciler, *operatorv1alpha1.ConsensusCapsule, context.Context) {
 	t.Helper()
 	ctx := context.Background()
 	scheme := newControllerTestScheme()
@@ -229,14 +229,15 @@ func buildActiveScenario(t *testing.T, platformStatus string, priorPhase operato
 	if err := c.Get(ctx, client.ObjectKey{Name: capsule.Name, Namespace: capsule.Namespace}, capsule); err != nil {
 		t.Fatalf("get capsule: %v", err)
 	}
-	// PlatformStatus/Phase are read from the passed object, so stamp them here.
+	// PlatformStatus/Phase/PlatformStatusRevision are read from the passed object.
 	capsule.Status.PlatformStatus = platformStatus
+	capsule.Status.PlatformStatusRevision = platformStatusRevision
 	capsule.Status.Phase = priorPhase
 	return buildReconcilerForUpdateStatus(c), capsule, ctx
 }
 
 func TestUpdateStatus_ActiveWhenPlatformActiveOnCurrentRevision(t *testing.T) {
-	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusActive, operatorv1alpha1.PhaseRunning, testRevision, testRevision)
+	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusActive, testRevision, operatorv1alpha1.PhaseRunning, testRevision, testRevision)
 	if _, err := r.updateStatus(ctx, capsule); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -247,7 +248,7 @@ func TestUpdateStatus_ActiveWhenPlatformActiveOnCurrentRevision(t *testing.T) {
 
 func TestUpdateStatus_RevisionGuard_NoPromoteOnOldRevision(t *testing.T) {
 	// Pod ACTIVE but on an old revision (image roll in progress) → stays Running.
-	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusActive, operatorv1alpha1.PhaseRunning, "old-rev", testRevision)
+	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusActive, "old-rev", operatorv1alpha1.PhaseRunning, "old-rev", testRevision)
 	if _, err := r.updateStatus(ctx, capsule); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -258,7 +259,7 @@ func TestUpdateStatus_RevisionGuard_NoPromoteOnOldRevision(t *testing.T) {
 
 func TestUpdateStatus_StickyActive_TransientDipKeepsActive(t *testing.T) {
 	// Already Active; platform dips to BEHIND on the current revision → stays Active.
-	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusBehind, operatorv1alpha1.PhaseActive, testRevision, testRevision)
+	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusBehind, testRevision, operatorv1alpha1.PhaseActive, testRevision, testRevision)
 	if _, err := r.updateStatus(ctx, capsule); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -268,12 +269,48 @@ func TestUpdateStatus_StickyActive_TransientDipKeepsActive(t *testing.T) {
 }
 
 func TestUpdateStatus_CatastrophicFailure_PhaseFailed(t *testing.T) {
-	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusCatastrophicFailure, operatorv1alpha1.PhaseActive, testRevision, testRevision)
+	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusCatastrophicFailure, testRevision, operatorv1alpha1.PhaseActive, testRevision, testRevision)
 	if _, err := r.updateStatus(ctx, capsule); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if capsule.Status.Phase != operatorv1alpha1.PhaseFailed {
 		t.Errorf("expected PhaseFailed on CATASTROPHIC_FAILURE, got %s", capsule.Status.Phase)
+	}
+}
+
+func TestUpdateStatus_StalePlatformActive_NoPromote(t *testing.T) {
+	// Pod on current revision, but platformStatusRevision is from the old pod →
+	// stale ACTIVE must not promote; phase stays Running.
+	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusActive, "old-rev", operatorv1alpha1.PhaseRunning, testRevision, testRevision)
+	if _, err := r.updateStatus(ctx, capsule); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capsule.Status.Phase != operatorv1alpha1.PhaseRunning {
+		t.Errorf("expected PhaseRunning (stale platform-status reading), got %s", capsule.Status.Phase)
+	}
+}
+
+func TestUpdateStatus_StaleCatastrophic_NoFail(t *testing.T) {
+	// Pod on current revision, but CATASTROPHIC_FAILURE reading is from the old
+	// pod → stale reading must not fast-fail; phase stays Running (pod is Ready).
+	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusCatastrophicFailure, "old-rev", operatorv1alpha1.PhaseRunning, testRevision, testRevision)
+	if _, err := r.updateStatus(ctx, capsule); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capsule.Status.Phase != operatorv1alpha1.PhaseRunning {
+		t.Errorf("expected PhaseRunning (stale CATASTROPHIC reading), got %s", capsule.Status.Phase)
+	}
+}
+
+func TestUpdateStatus_EmptyPlatformRevision_FailClosed(t *testing.T) {
+	// Empty platformStatusRevision (unstamped UC) → fail-closed: the reading is
+	// not trusted, so the node stays Running rather than promoting to Active.
+	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusActive, "", operatorv1alpha1.PhaseRunning, testRevision, testRevision)
+	if _, err := r.updateStatus(ctx, capsule); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capsule.Status.Phase != operatorv1alpha1.PhaseRunning {
+		t.Errorf("expected PhaseRunning (fail-closed: empty revision not trusted), got %s", capsule.Status.Phase)
 	}
 }
 
@@ -296,6 +333,7 @@ func TestUpdateStatus_PendingToActive_PatchesCheckpoint(t *testing.T) {
 		t.Fatalf("get capsule: %v", err)
 	}
 	capsule.Status.PlatformStatus = operatorv1alpha1.PlatformStatusActive
+	capsule.Status.PlatformStatusRevision = testRevision
 
 	r := buildReconcilerForUpdateStatus(c)
 	if _, err := r.updateStatus(ctx, capsule); err != nil {
