@@ -79,7 +79,7 @@ jobs:
         run: task hash:uc VERSION="${{ needs.release.outputs.version }}"
 
       - name: Setup QEMU
-        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+        uses: step-security/setup-qemu-action@fe44c529aab16157fc475f4991a7f926aa9a02a2 # v4.1.0
 
       - name: Setup Docker Buildx
         uses: step-security/setup-buildx-action@6997872a55d77391e51b87609556578131f44402 # v4.1.0
@@ -88,21 +88,21 @@ jobs:
           driver-opts: network=host,image=ghcr.io/hashgraph/runner-images/buildkit:buildx-stable-1
 
       - name: Docker Login (GitHub)
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        uses: step-security/docker-login-action@164e21d7e52229904128e2f946001cb88278c33d # v4.2.0
         with:
           registry: ${{ env.GH_OCI_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Docker Login (JFrog)
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        uses: step-security/docker-login-action@164e21d7e52229904128e2f946001cb88278c33d # v4.2.0
         with:
           registry: ${{ env.JF_OCI_REGISTRY }}
           username: ${{ vars.JF_USERNAME }}
           password: ${{ secrets.JF_ACCESS_TOKEN }}
 
       - name: Build and Push Docker Image (GitHub)
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: step-security/docker-build-push-action@9af9b5acc1751dcec2aa5375a068979fa526bc9a # v7.2.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -113,7 +113,7 @@ jobs:
             ${{ env.GH_OCI_REGISTRY }}/${{ env.GH_OCI_GROUP }}:latest
 
       - name: Build and Push Docker Image (JFrog)
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: step-security/docker-build-push-action@9af9b5acc1751dcec2aa5375a068979fa526bc9a # v7.2.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -124,7 +124,7 @@ jobs:
             ${{ env.JF_OCI_REGISTRY }}/${{ env.JF_OCI_GROUP }}/solo-operator:latest
 
       - name: Build and Push UC Image (GitHub)
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: step-security/docker-build-push-action@9af9b5acc1751dcec2aa5375a068979fa526bc9a # v7.2.0
         with:
           context: .
           file: Dockerfile.uc
@@ -136,7 +136,7 @@ jobs:
             ${{ env.GH_OCI_REGISTRY }}/hashgraph/solo-operator-uc:latest
 
       - name: Build and Push UC Image (JFrog)
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: step-security/docker-build-push-action@9af9b5acc1751dcec2aa5375a068979fa526bc9a # v7.2.0
         with:
           context: .
           file: Dockerfile.uc
