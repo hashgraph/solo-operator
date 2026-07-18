@@ -13,9 +13,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic/fake"
+	k8stesting "k8s.io/client-go/testing"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // TestObservePhaseWritesOnTransitionOnly verifies the #1003 phase monitor writes
@@ -585,5 +588,58 @@ func TestHandleDeleteEventNoOpWithoutOperationID(t *testing.T) {
 	}
 	if onDeleteCalled {
 		t.Error("no-opId delete invoked onDelete (Factory cache) — should be a no-op")
+	}
+}
+
+// TestUpgradeOutcomeMonitor_RunRecoversListPanic verifies a panic on the
+// non-watch path (listAndSeed) is recovered by Run's top-level defer and returned
+// as an error — which the daemonkit supervisor turns into a back-off restart —
+// rather than crashing the UC process. A prepended "list" reactor panics on the
+// first List the monitor issues.
+func TestUpgradeOutcomeMonitor_RunRecoversListPanic(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := operatorv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add to scheme: %v", err)
+	}
+	client := fake.NewSimpleDynamicClient(scheme)
+	client.PrependReactor("list", "*", func(k8stesting.Action) (bool, runtime.Object, error) {
+		panic("boom in list")
+	})
+	m := NewUpgradeOutcomeMonitorWithClient(
+		UpgradeOutcomeMonitorConfig{Namespace: "solo", UpgradePath: t.TempDir()}, client)
+	m.events = newEventSink(t.TempDir(), "0")
+
+	err := m.Run(context.Background())
+	if err == nil {
+		t.Fatal("expected Run to return a recovered-panic error, got nil")
+	}
+	if reason, _ := errx.ReasonOf(err); reason != ReasonUpgradeOutcomeMonitorPanic {
+		t.Errorf("reason = %q, want %q", reason, ReasonUpgradeOutcomeMonitorPanic)
+	}
+}
+
+// TestUpgradeOutcomeMonitor_RunWatchRecoversPanic verifies a panic in the watch
+// loop is caught by runWatch's own recover and surfaced with the watch-specific
+// reason (ProvisionerProxyWatchPanic) — keeping the two recover scopes distinct
+// from Run's. A prepended watch reactor panics on the first Watch.
+func TestUpgradeOutcomeMonitor_RunWatchRecoversPanic(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := operatorv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add to scheme: %v", err)
+	}
+	client := fake.NewSimpleDynamicClient(scheme)
+	client.PrependWatchReactor("*", func(k8stesting.Action) (bool, watch.Interface, error) {
+		panic("boom in watch")
+	})
+	m := NewUpgradeOutcomeMonitorWithClient(
+		UpgradeOutcomeMonitorConfig{Namespace: "solo", UpgradePath: t.TempDir()}, client)
+	m.events = newEventSink(t.TempDir(), "0")
+
+	err := m.runWatch(context.Background(), "", "", "", "")
+	if err == nil {
+		t.Fatal("expected runWatch to return a recovered-panic error, got nil")
+	}
+	if reason, _ := errx.ReasonOf(err); reason != ReasonProvisionerProxyWatchPanic {
+		t.Errorf("reason = %q, want %q", reason, ReasonProvisionerProxyWatchPanic)
 	}
 }

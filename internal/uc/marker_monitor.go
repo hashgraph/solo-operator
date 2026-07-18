@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/dynamic"
 
 	"github.com/hashgraph/solo-operator/internal/common"
+	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/uc/events"
 )
 
@@ -100,7 +101,22 @@ func (m *MarkerMonitor) RequiredProbe() daemonkit.Probe {
 //
 // Story 8.8 — on startup the factory reconciles cluster + persisted CRs + markers
 // to resume in-flight upgrades idempotently.
-func (m *MarkerMonitor) Run(ctx context.Context) error {
+func (m *MarkerMonitor) Run(ctx context.Context) (retErr error) {
+	// Convert an unexpected panic anywhere on the poll goroutine (startup
+	// recovery, the poll scan, or a marker handler) into a returned error so the
+	// daemonkit supervisor restarts this monitor with back-off, instead of the
+	// panic unwinding to the top of its goroutine and crashing the whole UC
+	// process (daemonkit does not recover; a panic in any monitor kills the
+	// daemon). Mirrors PlatformStatusMonitor.Run.
+	defer func() {
+		if r := recover(); r != nil {
+			logx.As().Error().Str("reason", ReasonMarkerMonitorPanic.String()).
+				Str("upgrade_path", m.cfg.UpgradePath).Interface("panic", r).
+				Msg("panic in marker monitor — recovering")
+			retErr = errx.WithReason(errPanic.New("recovered panic in marker monitor: %v", r), ReasonMarkerMonitorPanic)
+		}
+	}()
+
 	logx.As().Info().
 		Str("reason", ReasonMarkerMonitorStarted.String()).
 		Str("upgrade_path", m.cfg.UpgradePath).

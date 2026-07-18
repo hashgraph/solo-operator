@@ -162,6 +162,11 @@ func (p *ProvisionerProxy) Handle(ctx context.Context, cr *unstructured.Unstruct
 				logx.As().Error().Str("reason", ReasonProvisionerProxyTransitionPanic.String()).
 					Str("operation_id", operationID).Interface("panic", r).
 					Msg("transition panicked — UC continues")
+				// Treat the panic as a failed transition so the cleanup below does
+				// NOT mark the op completed: leave transErr non-nil so the Execute
+				// CR stays eligible for retry instead of being stranded at
+				// ReadyForProvisionerDaemon until the UC restarts.
+				transErr = errx.WithReason(errPanic.New("recovered panic in provisioner-proxy transition: %v", r), ReasonProvisionerProxyTransitionPanic)
 			}
 			p.mu.Lock()
 			if p.activeOpID == operationID {

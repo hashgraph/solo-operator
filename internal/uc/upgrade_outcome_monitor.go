@@ -167,7 +167,22 @@ func (m *UpgradeOutcomeMonitor) clearConnectivityError() {
 
 // Run implements daemonkit.MonitorRunner. It loops: List → Watch → backoff on
 // error, reconnect on clean channel close.
-func (m *UpgradeOutcomeMonitor) Run(ctx context.Context) error {
+func (m *UpgradeOutcomeMonitor) Run(ctx context.Context) (retErr error) {
+	// Convert an unexpected panic on the non-watch paths (listAndSeed and the
+	// backoff/reconnect bookkeeping in the loop below) into a returned error so
+	// the daemonkit supervisor restarts this monitor with back-off instead of the
+	// panic crashing the whole UC process. The watch loop keeps its own
+	// finer-grained recover in runWatch; this covers everything else that runs on
+	// Run's goroutine. Mirrors PlatformStatusMonitor.Run.
+	defer func() {
+		if r := recover(); r != nil {
+			logx.As().Error().Str("reason", ReasonUpgradeOutcomeMonitorPanic.String()).
+				Str("namespace", m.cfg.Namespace).Interface("panic", r).
+				Msg("panic in upgrade-outcome monitor — recovering")
+			retErr = errx.WithReason(errPanic.New("recovered panic in upgrade-outcome monitor: %v", r), ReasonUpgradeOutcomeMonitorPanic)
+		}
+	}()
+
 	logx.As().Info().Str("reason", ReasonUpgradeOutcomeMonitorStarted.String()).
 		Str("namespace", m.cfg.Namespace).Msg("upgrade-outcome monitor started")
 
