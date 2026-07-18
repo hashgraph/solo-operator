@@ -188,6 +188,15 @@ func StatefulSetName(capsule *operatorv1alpha1.ConsensusCapsule) string {
 	return capsule.Name
 }
 
+// PodName returns the name of the capsule's single StatefulSet pod (ordinal 0).
+// The consensus StatefulSet always runs one replica, so the pod name is
+// deterministic ("<statefulset>-0") — it matches the UC_POD_NAME the sidecar
+// reads from the downward API and is used to scope the UC's pods/status RBAC to
+// its own pod.
+func PodName(capsule *operatorv1alpha1.ConsensusCapsule) string {
+	return StatefulSetName(capsule) + "-0"
+}
+
 // RenderSettingsTxt renders a settings map in the padded-comma format expected by the Hedera platform:
 //
 //	"checkSignedStateFromDisk,              1"

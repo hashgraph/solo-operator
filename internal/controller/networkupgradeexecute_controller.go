@@ -697,19 +697,20 @@ const (
 
 // checkUpgradeGate evaluates whether the post-upgrade consensus node has reached a
 // terminal state. Success is gated on the ConsensusCapsule reaching phase==Active
-// (written by the operator only when the node's live platform status is ACTIVE),
-// not on mere pod readiness.
+// (written by the operator only when the live pod's platform status is ACTIVE on the
+// current revision), not on mere pod readiness.
 //
 // The stale-reading guard is StatefulSet-revision-based: the capsule phase and
-// platformStatus are trusted only once the StatefulSet has rolled to its
-// post-upgrade template. The ConsensusCapsule generation alone cannot distinguish
-// an old-pod ACTIVE reading observed mid-roll, so the guard reads the STS revision
-// directly.
+// platformStatus are trusted only once the StatefulSet has produced / rolled to its
+// post-upgrade template. Because the operator now reflects only the live pod's
+// condition (an old pod's reading cannot persist in the capsule status), the guard
+// here only needs to confirm the post-upgrade pod exists / has rolled — no per-reading
+// revision stamp is required.
 //
-//   - Active on the post-upgrade revision                → upgradeSucceeded
-//   - CATASTROPHIC_FAILURE on the new revision           → upgradeCatastrophic (fast fail)
-//   - NodeActiveTimeout (default 10m) from start elapsed → upgradeTimedOut (warning, non-terminal)
-//   - otherwise                                          → upgradeWaiting
+//   - Active on the fully-rolled post-upgrade revision      → upgradeSucceeded
+//   - CATASTROPHIC_FAILURE once the new-revision pod exists  → upgradeCatastrophic (fast fail)
+//   - NodeActiveTimeout (default 10m) from start elapsed     → upgradeTimedOut (warning, non-terminal)
+//   - otherwise                                              → upgradeWaiting
 func (r *NetworkUpgradeExecuteReconciler) checkUpgradeGate(
 	ctx context.Context,
 	execute *operatorv1alpha1.NetworkUpgradeExecute,
@@ -730,6 +731,8 @@ func (r *NetworkUpgradeExecuteReconciler) checkUpgradeGate(
 	// A new-revision pod has been created (regardless of readiness); enough to trust
 	// a CATASTROPHIC_FAILURE reading as belonging to the post-upgrade node — a
 	// crash-looping node never becomes Ready, so this must not require readiness.
+	// The operator only reflects the live pod's condition into capsule.Status, so a
+	// CATASTROPHIC here (with a new-revision pod created) is the post-upgrade node.
 	newRevisionPodCreated := sts.Status.UpdateRevision != "" && sts.Status.UpdatedReplicas >= 1
 	// The roll to the post-upgrade template is complete and serving: current
 	// revision has caught up to the update revision with a Ready replica. This is
@@ -738,23 +741,17 @@ func (r *NetworkUpgradeExecuteReconciler) checkUpgradeGate(
 		sts.Status.CurrentRevision == sts.Status.UpdateRevision &&
 		sts.Status.ReadyReplicas >= 1
 
-	// Trust the platform-status reading only when the UC that wrote it runs on the
-	// post-upgrade revision. Fail-closed: an unstamped or mismatched reading is
-	// never trusted, so the upgrade hits the backstop rather than succeeding on a
-	// stale ACTIVE.
-	revisionFresh := sts.Status.UpdateRevision != "" &&
-		capsule.Status.PlatformStatusRevision == sts.Status.UpdateRevision
-
 	// CATASTROPHIC_FAILURE on the post-upgrade node is terminal — fail fast, before
 	// the backstop, without waiting for readiness that will never come.
-	if newRevisionPodCreated && revisionFresh && capsule.Status.PlatformStatus == operatorv1alpha1.PlatformStatusCatastrophicFailure {
+	if newRevisionPodCreated && capsule.Status.PlatformStatus == operatorv1alpha1.PlatformStatusCatastrophicFailure {
 		return upgradeCatastrophic, nil
 	}
 
 	// Success: the node reached ACTIVE on the fully-rolled post-upgrade revision.
-	// Require revisionFresh so a stale or manually-set phase cannot mark an upgrade
-	// Succeeded without a current-revision UC reading.
-	if rolledAndReady && revisionFresh && capsule.Status.Phase == operatorv1alpha1.PhaseActive {
+	// phase==Active already implies the operator saw ACTIVE from a Ready pod on the
+	// current revision, so combined with rolledAndReady a stale reading cannot mark
+	// the upgrade Succeeded.
+	if rolledAndReady && capsule.Status.Phase == operatorv1alpha1.PhaseActive {
 		return upgradeSucceeded, nil
 	}
 

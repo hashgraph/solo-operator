@@ -12,6 +12,7 @@ import (
 
 	"github.com/automa-saga/daemonkit"
 	"github.com/automa-saga/logx"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
@@ -33,9 +34,14 @@ const metricsScrapeTimeout = 10 * time.Second
 
 // PlatformStatusMonitor is the UC's platform-status sensor. It continuously
 // scrapes the consensus node's metrics endpoint (localhost:9999) for
-// platform_PlatformStatus and, on each state TRANSITION, patches its owning
-// ConsensusCapsule's status.platformStatus (+ platformStatusCode). It is the
-// SOLE writer of status.platformStatus.
+// platform_PlatformStatus and, on each state TRANSITION, patches the
+// operator.solo.hiero.org/platform-status condition onto its OWN pod (the pod named
+// by UC_POD_NAME, via pods/status). The operator proxies that condition into the
+// ConsensusCapsule status, so the operator stays the sole writer of the capsule
+// status while the UC owns only a surface on its own pod.
+//
+// The condition is informational only — it is deliberately NOT a readiness gate,
+// so it never affects pod readiness ("detection is active polling, not a probe").
 //
 // It is fail-soft: when the endpoint is unreachable it records UNKNOWN and keeps
 // polling (the failure is surfaced via /status ConnectivityError). It emits NO
@@ -47,11 +53,15 @@ type PlatformStatusMonitor struct {
 	http   *http.Client
 	events *eventSink
 
-	// last is the last platform-status name written to the capsule. A patch is
-	// issued only when a freshly-scraped name differs from it — transition-only
-	// writes. Empty before the first successful write, so the first reading always
+	// last is the last platform-status name written to the pod condition, and lastCode
+	// the numeric code that accompanied it. A patch is issued when a freshly-scraped
+	// reading differs in EITHER field, so a code change that maps to the same name (only
+	// possible for UNKNOWN: an unreachable endpoint vs. an unmapped code, or two different
+	// unmapped codes) still refreshes the condition's message instead of leaving a stale
+	// code. last is empty before the first successful write, so the first reading always
 	// writes.
-	last string
+	last     string
+	lastCode int32
 
 	connectivityErr atomic.Pointer[daemonkit.StatusError]
 }
@@ -115,22 +125,30 @@ func (m *PlatformStatusMonitor) Run(ctx context.Context) (retErr error) {
 	}
 }
 
-// poll scrapes the current platform status and, if it differs from the last
-// written value, patches the capsule and records the transition.
+// poll scrapes the current platform status and, if the reading differs from the
+// last written one (in name OR numeric code), patches the pod condition and — on a
+// genuine name change — records the transition.
 func (m *PlatformStatusMonitor) poll(ctx context.Context) {
 	code, name := m.scrape(ctx)
-	if name == m.last {
-		return // no transition — nothing to write
+	if name == m.last && code == m.lastCode {
+		return // nothing observable changed — no write
 	}
 	if err := m.patch(ctx, name, code); err != nil {
 		common.LogErr(logx.As().Error(), err, ReasonPlatformStatusPatchFailed).
-			Str("capsule", m.cfg.CapsuleName()).
+			Str("pod", m.cfg.PodName).
 			Str("platform_status", name).
-			Msg("failed to patch ConsensusCapsule platform status")
-		return // leave m.last unchanged so the next tick retries
+			Msg("failed to patch pod platform-status condition")
+		return // leave m.last/m.lastCode unchanged so the next tick retries
 	}
-	m.recordTransition(m.last, name, code)
+	// Only a name change is a real platform-status transition worth recording. A
+	// code-only refresh under the same name (an UNKNOWN sub-state change) still repatches
+	// to keep the message current, but is not logged as a transition to avoid from==to
+	// audit-trail noise.
+	if name != m.last {
+		m.recordTransition(m.last, name, code)
+	}
 	m.last = name
+	m.lastCode = code
 }
 
 // scrape fetches the metrics endpoint and extracts the platform-status code and
@@ -165,22 +183,47 @@ func (m *PlatformStatusMonitor) scrape(ctx context.Context) (code int32, name st
 	return code, nameForCode(code)
 }
 
-// patch writes the new platform status onto the capsule's status subresource. It
-// is the only place status.platformStatus is written.
+// patch writes the current platform status as the operator.solo.hiero.org/platform-status
+// condition on the UC's OWN pod (pods/status). It is the only place that condition
+// is written; the operator proxies it into the ConsensusCapsule status.
+//
+// The reason carries the raw state name (machine-readable — the operator reads it);
+// the message carries a human detail line including the numeric code; status is True
+// for a concrete reading and Unknown when the state is UNKNOWN (metrics unreachable /
+// sample absent). The condition is not a readiness gate, so its status never affects
+// pod readiness.
 func (m *PlatformStatusMonitor) patch(ctx context.Context, name string, code int32) error {
-	patch := []byte(fmt.Sprintf(`{"status":{"platformStatus":%q,"platformStatusCode":%d,"platformStatusRevision":%q}}`, name, code, m.cfg.PodRevision))
+	patch := platformStatusConditionPatch(name, code, time.Now().UTC().Format(time.RFC3339))
 	ctx, cancel := context.WithTimeout(ctx, createTimeout)
 	defer cancel()
-	resource := m.client.Resource(consensusCapsuleGVR).Namespace(m.cfg.Namespace)
-	_, err := resource.Patch(ctx, m.cfg.CapsuleName(), types.MergePatchType, patch,
+	resource := m.client.Resource(podGVR).Namespace(m.cfg.Namespace)
+	_, err := resource.Patch(ctx, m.cfg.PodName, types.StrategicMergePatchType, patch,
 		metav1.PatchOptions{}, "status")
 	if err != nil {
 		return errx.WithHints(
-			errx.WithReason(errK8sAPI.Wrap(err, "patch %s status.platformStatus", m.cfg.CapsuleName()), ReasonPlatformStatusPatchFailed),
-			"Confirm the UC ServiceAccount has patch permission on consensuscapsules."+operatorv1alpha1.GroupVersion.Group+"/status",
+			errx.WithReason(errK8sAPI.Wrap(err, "patch pod %s status condition %s", m.cfg.PodName, operatorv1alpha1.PodConditionPlatformStatus), ReasonPlatformStatusPatchFailed),
+			"Confirm the UC ServiceAccount has patch permission on pods/status in its namespace",
 		)
 	}
 	return nil
+}
+
+// platformStatusConditionPatch builds the STRATEGIC merge patch body that sets the
+// operator.solo.hiero.org/platform-status condition on the UC's pod. Pod conditions
+// merge by their `type` key, so this updates only that condition and leaves the
+// kubelet-owned Ready / ContainersReady / PodScheduled conditions intact — a plain
+// JSON merge patch would replace the whole conditions array and break the pod. The
+// reason carries the raw state name (machine-readable), the message a human detail
+// line including the numeric code, and status is Unknown for UNKNOWN, True otherwise.
+func platformStatusConditionPatch(name string, code int32, lastTransition string) []byte {
+	condStatus := corev1.ConditionTrue
+	if name == operatorv1alpha1.PlatformStatusUnknown {
+		condStatus = corev1.ConditionUnknown
+	}
+	message := fmt.Sprintf("platform status %s (code %d)", name, code)
+	return []byte(fmt.Sprintf(
+		`{"status":{"conditions":[{"type":%q,"status":%q,"reason":%q,"message":%q,"lastTransitionTime":%q}]}}`,
+		operatorv1alpha1.PodConditionPlatformStatus, condStatus, name, message, lastTransition))
 }
 
 // recordTransition writes the transition to the structured logs and the JSONL

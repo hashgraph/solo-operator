@@ -921,17 +921,12 @@ func (r *StatefulSetSubReconciler) buildUcContainer(capsule *operatorv1alpha1.Co
 			},
 		},
 		{
-			// The platform-status sensor derives the owning ConsensusCapsule name
-			// from the pod name (StatefulSet pod "<capsule>-<ordinal>").
+			// The platform-status sensor patches this pod's platform-status condition
+			// (pods/status) and derives the owning ConsensusCapsule name from the pod
+			// name (StatefulSet pod "<capsule>-<ordinal>").
 			Name: "UC_POD_NAME",
 			ValueFrom: &corev1.EnvVarSource{
 				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"},
-			},
-		},
-		{
-			Name: "UC_POD_REVISION",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.labels['controller-revision-hash']"},
 			},
 		},
 	}
