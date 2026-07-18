@@ -109,7 +109,6 @@ const (
 	ReasonProvisionerProxyListError          errx.Reason = "ProvisionerProxyListError"
 	ReasonProvisionerProxyMissingOperationID errx.Reason = "ProvisionerProxyMissingOperationID"
 	ReasonProvisionerProxyTransitionFailed   errx.Reason = "ProvisionerProxyTransitionFailed"
-	ReasonProvisionerProxyTransitionPanic    errx.Reason = "ProvisionerProxyTransitionPanic"
 	ReasonProvisionerProxyWatchError         errx.Reason = "ProvisionerProxyWatchError"
 	ReasonProvisionerProxyWatchPanic         errx.Reason = "ProvisionerProxyWatchPanic"
 	ReasonUpgradePackageRotated              errx.Reason = "UpgradePackageRotated"
