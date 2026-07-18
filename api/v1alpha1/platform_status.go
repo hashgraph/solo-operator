@@ -43,6 +43,17 @@ var platformStatusCodeToName = map[int32]string{
 	11: PlatformStatusCatastrophicFailure,
 }
 
+// platformStatusNameToCode is the reverse of platformStatusCodeToName, built once
+// so PlatformStatusCodeForName is an O(1) lookup rather than a linear scan on every
+// reconcile. Names in platformStatusCodeToName are unique, so the inversion is total.
+var platformStatusNameToCode = func() map[string]int32 {
+	m := make(map[string]int32, len(platformStatusCodeToName))
+	for code, name := range platformStatusCodeToName {
+		m[name] = code
+	}
+	return m
+}()
+
 // PlatformStatusNameForCode returns the raw platform-status name for a numeric
 // platform_PlatformStatus code, or UNKNOWN for an unrecognised code.
 func PlatformStatusNameForCode(code int32) string {
@@ -58,10 +69,8 @@ func PlatformStatusNameForCode(code int32) string {
 // the code from the name it reads off the pod condition — the condition carries
 // the name in its reason, and the code is observability-only.
 func PlatformStatusCodeForName(name string) int32 {
-	for code, n := range platformStatusCodeToName {
-		if n == name {
-			return code
-		}
+	if code, ok := platformStatusNameToCode[name]; ok {
+		return code
 	}
 	return PlatformStatusCodeUnknown
 }

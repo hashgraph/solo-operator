@@ -322,6 +322,23 @@ func TestUpdateStatus_StickyActive_OldRevision_DropsToRunning(t *testing.T) {
 	}
 }
 
+// TestUpdateStatus_StickyActive_NoReading_DropsToRunning verifies sticky-Active does
+// not hold Active on stale state: a Ready pod on the current revision that has not (yet)
+// reported a platform status reflects UNKNOWN, so a previously-Active capsule falls back
+// to Running rather than staying Active with no live confirmation. This covers a fresh
+// pod after a roll / operator restart, where trusting sticky-Active would let upgrade
+// gates succeed on stale state.
+func TestUpdateStatus_StickyActive_NoReading_DropsToRunning(t *testing.T) {
+	// Empty platformStatus omits the pod condition; prior phase is Active.
+	r, capsule, ctx := buildActiveScenario(t, "", operatorv1alpha1.PhaseActive, testRevision, testRevision)
+	if _, err := r.updateStatus(ctx, capsule); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capsule.Status.Phase != operatorv1alpha1.PhaseRunning {
+		t.Errorf("expected PhaseRunning (sticky not held on UNKNOWN reading), got %s", capsule.Status.Phase)
+	}
+}
+
 func TestUpdateStatus_CatastrophicFailure_PhaseFailed(t *testing.T) {
 	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusCatastrophicFailure, operatorv1alpha1.PhaseActive, testRevision, testRevision)
 	if _, err := r.updateStatus(ctx, capsule); err != nil {

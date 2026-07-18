@@ -334,9 +334,12 @@ func isReadyPhase(phase operatorv1alpha1.Phase) bool {
 //
 // Active is a sticky milestone: once reached, transient non-ACTIVE readings
 // (BEHIND, RECONNECT, …) keep phase=Active — the live truth stays in
-// platformStatus so the phase does not flap. Active is exited when:
+// platformStatus so the phase does not flap. Stickiness requires a live reading,
+// so it never holds Active on stale state. Active is exited when:
 //   - platformStatus==CATASTROPHIC_FAILURE (fresh reading) → Failed
 //   - pod is no longer Ready → Pending
+//   - the current pod reports no platform status (UNKNOWN): a fresh pod whose UC
+//     has not reported yet, or a Terminating pod whose UC has stopped → Running
 //   - the pod's revision no longer matches the StatefulSet updateRevision
 //     (image roll advanced the template before the pod restarted) → Running
 //
@@ -500,10 +503,15 @@ func (r *ConsensusCapsuleReconciler) rollupRunningPhase(
 	switch {
 	case onUpdateRevision && platformStatus == operatorv1alpha1.PlatformStatusActive:
 		return operatorv1alpha1.PhaseActive
-	case onUpdateRevision && oldPhase == operatorv1alpha1.PhaseActive:
+	case onUpdateRevision && oldPhase == operatorv1alpha1.PhaseActive &&
+		platformStatus != operatorv1alpha1.PlatformStatusUnknown:
 		// Sticky-Active: a transient non-ACTIVE dip (BEHIND, RECONNECT, …) keeps the
-		// phase at Active while the Ready pod stays on the current revision. Once the
-		// pod rolls to a new template (onUpdateRevision false) Active is not sticky.
+		// phase at Active while the Ready pod stays on the current revision. Stickiness
+		// requires a live reading (platformStatus != UNKNOWN): a fresh pod that has not
+		// yet reported, or a Terminating pod whose UC has stopped, both blank the reading
+		// to UNKNOWN, so Active is not held on stale state — it falls back to Running
+		// until the current pod actually reports ACTIVE again. Once the pod rolls to a
+		// new template (onUpdateRevision false) Active is likewise not sticky.
 		return operatorv1alpha1.PhaseActive
 	default:
 		return operatorv1alpha1.PhaseRunning
