@@ -261,43 +261,61 @@ func TestHandleExecuteImmediateLeavesPersistedOnCreateError(t *testing.T) {
 }
 
 func TestHandleExecuteImmediateAdmissionRejectionIsTerminal(t *testing.T) {
-	// A ValidatingAdmissionPolicy Deny surfaces as an Invalid (422) or Forbidden
-	// (403) Create error (#1133). Unlike a transient failure it must be treated as
-	// terminal: the handler returns nil (no retry), creates no CR, and cleans up
-	// the persisted copy so the restart-recovery flow won't re-send it.
+	// A ValidatingAdmissionPolicy Deny surfaces as an Invalid (422) Create error
+	// (#1133). Unlike a transient failure it must be treated as terminal: the
+	// handler returns nil (no retry), creates no CR, and cleans up the persisted
+	// copy so the restart-recovery flow won't re-send it.
 	gk := schema.GroupKind{Group: operatorv1alpha1.GroupVersion.Group, Kind: kindNetworkUpgradePrepare}
-	gr := networkUpgradePrepareGVR.GroupResource()
-	cases := map[string]error{
-		"invalid": k8serrors.NewInvalid(gk, "x", field.ErrorList{
-			field.Invalid(field.NewPath("metadata", "labels"), "", "step label missing or inconsistent"),
-		}),
-		"forbidden": k8serrors.NewForbidden(gr, "x", errors.New("denied by validating admission policy")),
+	injErr := k8serrors.NewInvalid(gk, "x", field.ErrorList{
+		field.Invalid(field.NewPath("metadata", "labels"), "", "step label missing or inconsistent"),
+	})
+
+	root := writePackage(t, validComponentsYAML)
+	f := newFakeFactory(t, testConfig(root, t.TempDir()))
+
+	fakeClient := f.client.(*dynamicfake.FakeDynamicClient)
+	fakeClient.PrependReactor("create", "networkupgradeprepares", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, injErr
+	})
+
+	if err := f.HandleExecuteImmediate(context.Background()); err != nil {
+		t.Fatalf("admission rejection must be terminal (nil error), got %v", err)
 	}
+	if rest, _ := f.store.List(); len(rest) != 0 {
+		t.Fatalf("persisted CR must be cleaned up after admission rejection, got %d", len(rest))
+	}
+	list, err := f.client.Resource(networkUpgradePrepareGVR).Namespace("solo").List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list.Items) != 0 {
+		t.Fatalf("no CR should be created on admission rejection, got %d", len(list.Items))
+	}
+}
 
-	for name, injErr := range cases {
-		t.Run(name, func(t *testing.T) {
-			root := writePackage(t, validComponentsYAML)
-			f := newFakeFactory(t, testConfig(root, t.TempDir()))
+func TestHandleExecuteImmediateForbiddenIsRetryable(t *testing.T) {
+	// A Forbidden (403) Create error must NOT be treated as terminal: it is also
+	// how the API server reports an RBAC/authorization gap, which is transient
+	// (fixable by granting the UC ServiceAccount create permission). The handler
+	// must surface a retryable error and LEAVE the persisted CR on disk so
+	// restart-recovery can re-send it once permissions are fixed — never silently
+	// drop it (#1133 review).
+	gr := networkUpgradePrepareGVR.GroupResource()
+	injErr := k8serrors.NewForbidden(gr, "x", errors.New("forbidden: UC ServiceAccount cannot create resource"))
 
-			fakeClient := f.client.(*dynamicfake.FakeDynamicClient)
-			fakeClient.PrependReactor("create", "networkupgradeprepares", func(k8stesting.Action) (bool, runtime.Object, error) {
-				return true, nil, injErr
-			})
+	root := writePackage(t, validComponentsYAML)
+	f := newFakeFactory(t, testConfig(root, t.TempDir()))
 
-			if err := f.HandleExecuteImmediate(context.Background()); err != nil {
-				t.Fatalf("admission rejection must be terminal (nil error), got %v", err)
-			}
-			if rest, _ := f.store.List(); len(rest) != 0 {
-				t.Fatalf("persisted CR must be cleaned up after admission rejection, got %d", len(rest))
-			}
-			list, err := f.client.Resource(networkUpgradePrepareGVR).Namespace("solo").List(context.Background(), metav1.ListOptions{})
-			if err != nil {
-				t.Fatalf("list: %v", err)
-			}
-			if len(list.Items) != 0 {
-				t.Fatalf("no CR should be created on admission rejection, got %d", len(list.Items))
-			}
-		})
+	fakeClient := f.client.(*dynamicfake.FakeDynamicClient)
+	fakeClient.PrependReactor("create", "networkupgradeprepares", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, injErr
+	})
+
+	if err := f.HandleExecuteImmediate(context.Background()); err == nil {
+		t.Fatal("Forbidden must be retryable (non-nil error), got nil")
+	}
+	if rest, _ := f.store.List(); len(rest) != 1 {
+		t.Fatalf("persisted CR must be retained after Forbidden for recovery, got %d", len(rest))
 	}
 }
 

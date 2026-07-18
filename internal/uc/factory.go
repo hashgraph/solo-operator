@@ -149,9 +149,10 @@ func (f *Factory) HandleExecuteImmediate(ctx context.Context) error {
 // failure worth retrying on the next tick. On a transient create failure the
 // persisted file is intentionally left on disk for the restart-recovery flow
 // (#998) and the cache entry is invalidated so a stale hint cannot mask a
-// missing CR. An admission-validation rejection (Invalid/Forbidden) is the
-// exception: it is terminal (#1133), so it logs a loud ERROR, deletes the
-// persisted file, and returns nil rather than retrying forever.
+// missing CR. An admission-validation rejection (Invalid) is the exception: it
+// is terminal (#1133), so it logs a loud ERROR, deletes the persisted file, and
+// returns nil rather than retrying forever. Forbidden is treated as transient,
+// not terminal, since it also covers RBAC gaps.
 func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource, operationID, step, kind string, cr *unstructured.Unstructured) error {
 	exists, phase, err := f.alreadyCreated(ctx, gvr, operationID, step)
 	if err != nil {
@@ -210,16 +211,23 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 				Str("step", step).Str("cr_name", cr.GetName()).Msg("CR already exists — skipping create")
 			return nil
 		}
-		if k8serrors.IsInvalid(err) || k8serrors.IsForbidden(err) {
-			// A ValidatingAdmissionPolicy (or webhook) rejected the write
-			// deterministically (#1133): the CR violates an enforced label invariant.
-			// This is not transient — re-sending the identical CR every tick would
-			// spin forever with the same result. Because the UC always stamps the
-			// operation-id and step labels correctly, this can only mean a UC bug, so
-			// a loud, non-looping ERROR is exactly the desired signal. Drop the
-			// persisted copy too, so the restart-recovery flow (#998) does not
+		if k8serrors.IsInvalid(err) {
+			// A ValidatingAdmissionPolicy rejected the write deterministically
+			// (#1133): the CR violates an enforced label invariant. The shipped
+			// policy denies with reason=Invalid, so the rejection surfaces here as
+			// IsInvalid. This is not transient — re-sending the identical CR every
+			// tick would spin forever with the same result. Because the UC always
+			// stamps the operation-id and step labels correctly, this can only mean a
+			// UC bug, so a loud, non-looping ERROR is exactly the desired signal. Drop
+			// the persisted copy too, so the restart-recovery flow (#998) does not
 			// re-send a CR that will always be rejected. Return nil (terminal): do
 			// not retry.
+			//
+			// Forbidden (403) is deliberately NOT treated as terminal here: it is also
+			// returned for RBAC/authorization gaps, which ARE transient (fixable by
+			// granting the UC ServiceAccount create permission). Those fall through to
+			// the retryable CRCreateFailed path below, which keeps the persisted CR so
+			// restart-recovery can re-send it once permissions are fixed.
 			logx.As().Error().Err(err).Str("reason", ReasonCRRejected.String()).
 				Str("operation_id", operationID).Str("step", step).
 				Str("cr_name", cr.GetName()).Str("cr_kind", kind).

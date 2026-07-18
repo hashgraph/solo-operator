@@ -49,18 +49,23 @@ spec:
           'NetworkUpgradeFreezeAbort': 'abort'
         }[request.kind.kind]
   validations:
-    # operation-id label: present ...
-    - expression: "variables.opIdKey in variables.labels"
+    # spec.operationId is the source of truth and must be set (non-empty) — an
+    # empty value would make the label equality checks below vacuously pass.
+    - expression: "variables.specOperationId != ''"
       reason: Invalid
-      messageExpression: "'NetworkUpgrade CR is missing required label ' + variables.opIdKey"
+      messageExpression: "'spec.operationId must be set on a NetworkUpgrade CR'"
+    # operation-id label: present and non-empty ...
+    - expression: "variables.opIdKey in variables.labels && variables.labels[variables.opIdKey] != ''"
+      reason: Invalid
+      messageExpression: "'NetworkUpgrade CR is missing the required non-empty label ' + variables.opIdKey"
     # ... and equal to spec.operationId (the source of truth).
     - expression: "!(variables.opIdKey in variables.labels) || variables.labels[variables.opIdKey] == variables.specOperationId"
       reason: Invalid
       messageExpression: "'label ' + variables.opIdKey + '=' + variables.labels[variables.opIdKey] + ' must equal spec.operationId=' + variables.specOperationId"
-    # step label: present ...
-    - expression: "variables.stepKey in variables.labels"
+    # step label: present and non-empty ...
+    - expression: "variables.stepKey in variables.labels && variables.labels[variables.stepKey] != ''"
       reason: Invalid
-      messageExpression: "'NetworkUpgrade CR is missing required label ' + variables.stepKey"
+      messageExpression: "'NetworkUpgrade CR is missing the required non-empty label ' + variables.stepKey"
     # ... and equal to the canonical step for this Kind.
     - expression: "!(variables.stepKey in variables.labels) || variables.labels[variables.stepKey] == variables.expectedStep"
       reason: Invalid
