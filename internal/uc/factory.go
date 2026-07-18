@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/automa-saga/logx"
 	"github.com/joomcode/errorx"
@@ -41,20 +42,40 @@ type Factory struct {
 	// under cfg.CRPersistPath before Create and deletes the file on success.
 	store *CRStore
 
-	// mu guards the operation-id cache (#997). The cache is a performance hint
-	// only; correctness rests on the K8s API existence check before each create,
-	// backstopped by AlreadyExists on Create (first-detection-wins).
+	// mu guards the operation-id cache (#997) and the rejected map. The cache is a
+	// performance hint only; correctness rests on the K8s API existence check
+	// before each create, backstopped by AlreadyExists on Create (first-detection-wins).
 	mu    sync.Mutex
 	cache map[string]map[string]string // operationId -> step -> phase (empty = unknown)
+	// rejected records the last admission-rejection time per operationId+step so a
+	// CR the VAP rejects (#1133) is retried only once per admissionRejectRetryCooldown
+	// instead of on every poll tick. Retrying (rather than stopping) lets the UC
+	// self-heal without a restart once a mis-configured VAP is fixed.
+	rejected map[rejectKey]time.Time
 }
+
+// rejectKey identifies one operation's one step in the rejected backoff map.
+type rejectKey struct {
+	operationID string
+	step        string
+}
+
+// admissionRejectRetryCooldown bounds how often a NetworkUpgrade CR rejected at
+// admission (#1133) is re-attempted. A VAP is a cluster-scoped resource fixed
+// independently of the UC (kubectl / helm upgrade of the operator), so the UC
+// keeps retrying — on this cooldown — so a fixed VAP self-heals without a
+// consensus-node restart, while a persistent marker cannot re-send (and
+// re-reject) on every tick.
+const admissionRejectRetryCooldown = 5 * time.Minute
 
 // NewFactory constructs the CR factory.
 func NewFactory(cfg Config, client dynamic.Interface) *Factory {
 	return &Factory{
-		cfg:    cfg,
-		client: client,
-		store:  NewCRStore(cfg.CRPersistPath),
-		cache:  make(map[string]map[string]string),
+		cfg:      cfg,
+		client:   client,
+		store:    NewCRStore(cfg.CRPersistPath),
+		cache:    make(map[string]map[string]string),
+		rejected: make(map[rejectKey]time.Time),
 	}
 }
 
@@ -149,11 +170,20 @@ func (f *Factory) HandleExecuteImmediate(ctx context.Context) error {
 // failure worth retrying on the next tick. On a transient create failure the
 // persisted file is intentionally left on disk for the restart-recovery flow
 // (#998) and the cache entry is invalidated so a stale hint cannot mask a
-// missing CR. An admission-validation rejection (Invalid) is the exception: it
-// is terminal (#1133), so it logs a loud ERROR, deletes the persisted file, and
-// returns nil rather than retrying forever. Forbidden is treated as transient,
-// not terminal, since it also covers RBAC gaps.
+// missing CR. An admission-validation rejection (Invalid) is handled specially
+// (#1133): it logs a loud ERROR, deletes the persisted file, and backs off for
+// admissionRejectRetryCooldown before retrying — so the create does not repeat
+// every tick, yet a fixed VAP still self-heals without a UC restart. Forbidden is
+// treated as transient, not terminal, since it also covers RBAC gaps.
 func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource, operationID, step, kind string, cr *unstructured.Unstructured) error {
+	if f.inRejectCooldown(operationID, step) {
+		// A prior admission rejection (#1133) is still within its cooldown window.
+		// Skip the whole persist/create cycle silently: the marker persists on disk,
+		// so re-sending here would just re-reject every tick. The cooldown lapses on
+		// its own, at which point we retry (so a fixed VAP recovers without a restart).
+		return nil
+	}
+
 	exists, phase, err := f.alreadyCreated(ctx, gvr, operationID, step)
 	if err != nil {
 		// Already an errx-decorated K8s API error from the dedup query.
@@ -203,6 +233,7 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 			// so future ticks hit the cache, drop the now-redundant persisted file,
 			// and treat as success.
 			f.markCreated(operationID, step, "")
+			f.clearRejected(operationID, step)
 			if delErr := f.store.Delete(operationID, step); delErr != nil {
 				logx.As().Warn().Err(delErr).Str("reason", ReasonCRPersistCleanupFailed.String()).
 					Str("operation_id", operationID).Msg("failed to delete persisted CR after AlreadyExists")
@@ -213,30 +244,32 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 		}
 		if k8serrors.IsInvalid(err) {
 			// A ValidatingAdmissionPolicy rejected the write deterministically
-			// (#1133): the CR violates an enforced label invariant. The shipped
-			// policy denies with reason=Invalid, so the rejection surfaces here as
-			// IsInvalid. This is not transient — re-sending the identical CR every
-			// tick would spin forever with the same result. Because the UC always
-			// stamps the operation-id and step labels correctly, this can only mean a
-			// UC bug, so a loud, non-looping ERROR is exactly the desired signal. Drop
-			// the persisted copy too, so the restart-recovery flow (#998) does not
-			// re-send a CR that will always be rejected. Return nil (terminal): do
-			// not retry.
+			// (#1133): the CR violates an enforced label invariant. The shipped policy
+			// denies with reason=Invalid, so the rejection surfaces here as IsInvalid.
+			// Because the UC always stamps the operation-id and step labels correctly,
+			// this normally means a UC bug — hence the loud ERROR. Re-sending the
+			// identical CR is pointless until something changes, but stopping outright
+			// would strand the UC if the VAP itself were the thing misconfigured: a VAP
+			// is fixed independently of the UC (kubectl / helm) and without restarting
+			// it. So drop the persisted copy and back off (recordRejected) — subsequent
+			// ticks short-circuit until admissionRejectRetryCooldown lapses, then retry,
+			// so a fixed VAP self-heals without a consensus-node restart.
 			//
-			// Forbidden (403) is deliberately NOT treated as terminal here: it is also
-			// returned for RBAC/authorization gaps, which ARE transient (fixable by
-			// granting the UC ServiceAccount create permission). Those fall through to
-			// the retryable CRCreateFailed path below, which keeps the persisted CR so
-			// restart-recovery can re-send it once permissions are fixed.
+			// Forbidden (403) is deliberately NOT handled here: it is also returned for
+			// RBAC/authorization gaps, which ARE transient (fixable by granting the UC
+			// ServiceAccount create permission). Those fall through to the retryable
+			// CRCreateFailed path below, which keeps the persisted CR so restart-recovery
+			// can re-send it once permissions are fixed.
 			logx.As().Error().Err(err).Str("reason", ReasonCRRejected.String()).
 				Str("operation_id", operationID).Str("step", step).
 				Str("cr_name", cr.GetName()).Str("cr_kind", kind).
-				Msg("admission rejected CR (label invariant violation) — not retrying; the UC always sets the required labels, so this indicates a UC bug")
+				Msg("admission rejected CR (label invariant violation) — backing off; the UC always sets the required labels, so this usually indicates a UC bug or a mis-configured VAP")
 			f.events.error(operationID, ReasonCRRejected.String(), "Admission rejected "+kind+"/"+cr.GetName())
 			if delErr := f.store.Delete(operationID, step); delErr != nil {
 				logx.As().Warn().Err(delErr).Str("reason", ReasonCRPersistCleanupFailed.String()).
 					Str("operation_id", operationID).Msg("failed to delete persisted CR after admission rejection")
 			}
+			f.recordRejected(operationID, step)
 			return nil
 		}
 		f.invalidate(operationID)
@@ -250,6 +283,7 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 	// Success — record in the cache so steady-state ticks skip the API query, and
 	// drop the persisted copy now that the cluster owns the CR.
 	f.markCreated(operationID, step, "")
+	f.clearRejected(operationID, step)
 	if err := f.store.Delete(operationID, step); err != nil {
 		logx.As().Warn().Err(err).Str("reason", ReasonCRPersistCleanupFailed.String()).
 			Str("operation_id", operationID).Msg("failed to delete persisted CR after create")

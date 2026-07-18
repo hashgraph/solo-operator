@@ -260,11 +260,12 @@ func TestHandleExecuteImmediateLeavesPersistedOnCreateError(t *testing.T) {
 	}
 }
 
-func TestHandleExecuteImmediateAdmissionRejectionIsTerminal(t *testing.T) {
+func TestHandleExecuteImmediateAdmissionRejectionBacksOffThenRetries(t *testing.T) {
 	// A ValidatingAdmissionPolicy Deny surfaces as an Invalid (422) Create error
-	// (#1133). Unlike a transient failure it must be treated as terminal: the
-	// handler returns nil (no retry), creates no CR, and cleans up the persisted
-	// copy so the restart-recovery flow won't re-send it.
+	// (#1133). The handler returns nil (no retryable error), creates no CR, and
+	// cleans up the persisted copy — then backs off: ticks within the cooldown must
+	// NOT re-attempt the create (no per-tick API/log spam), but once the cooldown
+	// lapses it retries, so a fixed VAP self-heals without a restart.
 	gk := schema.GroupKind{Group: operatorv1alpha1.GroupVersion.Group, Kind: kindNetworkUpgradePrepare}
 	injErr := k8serrors.NewInvalid(gk, "x", field.ErrorList{
 		field.Invalid(field.NewPath("metadata", "labels"), "", "step label missing or inconsistent"),
@@ -273,13 +274,16 @@ func TestHandleExecuteImmediateAdmissionRejectionIsTerminal(t *testing.T) {
 	root := writePackage(t, validComponentsYAML)
 	f := newFakeFactory(t, testConfig(root, t.TempDir()))
 
+	var creates int
 	fakeClient := f.client.(*dynamicfake.FakeDynamicClient)
 	fakeClient.PrependReactor("create", "networkupgradeprepares", func(k8stesting.Action) (bool, runtime.Object, error) {
+		creates++
 		return true, nil, injErr
 	})
 
+	// First tick: rejection handled — nil error, nothing persisted, no CR created.
 	if err := f.HandleExecuteImmediate(context.Background()); err != nil {
-		t.Fatalf("admission rejection must be terminal (nil error), got %v", err)
+		t.Fatalf("admission rejection must return nil, got %v", err)
 	}
 	if rest, _ := f.store.List(); len(rest) != 0 {
 		t.Fatalf("persisted CR must be cleaned up after admission rejection, got %d", len(rest))
@@ -290,6 +294,29 @@ func TestHandleExecuteImmediateAdmissionRejectionIsTerminal(t *testing.T) {
 	}
 	if len(list.Items) != 0 {
 		t.Fatalf("no CR should be created on admission rejection, got %d", len(list.Items))
+	}
+
+	// Ticks within the cooldown window must short-circuit: no further Create calls.
+	for i := 0; i < 3; i++ {
+		if err := f.HandleExecuteImmediate(context.Background()); err != nil {
+			t.Fatalf("cooldown tick %d must return nil, got %v", i, err)
+		}
+	}
+	if creates != 1 {
+		t.Fatalf("Create must be attempted exactly once during the cooldown, got %d", creates)
+	}
+
+	// Simulate the cooldown lapsing (e.g. after a mis-configured VAP is fixed): the
+	// UC must retry rather than stay stuck until a restart.
+	f.mu.Lock()
+	f.rejected[rejectKey{wantOperationID, operatorv1alpha1.StepPrepare}] = time.Now().Add(-2 * admissionRejectRetryCooldown)
+	f.mu.Unlock()
+
+	if err := f.HandleExecuteImmediate(context.Background()); err != nil {
+		t.Fatalf("post-cooldown retry must return nil, got %v", err)
+	}
+	if creates != 2 {
+		t.Fatalf("Create must be retried after the cooldown lapses, got %d attempts", creates)
 	}
 }
 

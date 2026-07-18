@@ -4,6 +4,7 @@ package uc
 
 import (
 	"context"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -92,6 +93,33 @@ func (f *Factory) alreadyCreated(ctx context.Context, gvr schema.GroupVersionRes
 		}
 	}
 	return found, foundPhase, nil
+}
+
+// inRejectCooldown reports whether operationID+step was rejected at admission
+// (#1133) within the last admissionRejectRetryCooldown, so deliverCR should skip
+// the persist/create cycle on this tick rather than re-send a CR the API will
+// reject again.
+func (f *Factory) inRejectCooldown(operationID, step string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	last, ok := f.rejected[rejectKey{operationID, step}]
+	return ok && time.Since(last) < admissionRejectRetryCooldown
+}
+
+// recordRejected timestamps an admission rejection for operationID+step so the
+// next admissionRejectRetryCooldown of ticks back off before retrying (#1133).
+func (f *Factory) recordRejected(operationID, step string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.rejected[rejectKey{operationID, step}] = time.Now()
+}
+
+// clearRejected drops any admission-rejection backoff for operationID+step once
+// the CR is created (e.g. after a mis-configured VAP is fixed).
+func (f *Factory) clearRejected(operationID, step string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.rejected, rejectKey{operationID, step})
 }
 
 // markCreated records that operationID+step now exists in the cluster and caches
