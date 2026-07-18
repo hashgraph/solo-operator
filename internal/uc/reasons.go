@@ -26,6 +26,7 @@ const (
 	ReasonMarkerDetected               errx.Reason = "MarkerDetected"
 	ReasonDaemonTriggered              errx.Reason = "DaemonTriggered"
 	ReasonPhaseChanged                 errx.Reason = "PhaseChanged"
+	ReasonCRDeleted                    errx.Reason = "CRDeleted"
 	ReasonCRExists                     errx.Reason = "CRExists"
 	ReasonCRFailed                     errx.Reason = "CRFailed"
 	ReasonUCCacheSeeded                errx.Reason = "UCCacheSeeded"
