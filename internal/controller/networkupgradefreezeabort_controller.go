@@ -57,6 +57,13 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 			msg)
 	}
 
+	if ok, msg := validateStepLabel(abort.Labels, operatorv1alpha1.StepAbort); !ok {
+		return rejectInvalidStepLabel(ctx, r.Client, &abort, &abort.Status.Conditions,
+			func(reason errx.Reason, m string) { r.eventf(ctx, &abort, corev1.EventTypeWarning, reason, "%s", m) },
+			func() { abort.Status.Phase = operatorv1alpha1.PhaseFailed },
+			msg)
+	}
+
 	sibling, err := abortSiblingExists(ctx, r.Client, abort.Namespace, string(abort.UID), abort.Spec.OperationID)
 	if err != nil {
 		return ctrl.Result{}, err

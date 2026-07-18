@@ -74,6 +74,13 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 			msg)
 	}
 
+	if ok, msg := validateStepLabel(prepare.Labels, operatorv1alpha1.StepPrepare); !ok {
+		return rejectInvalidStepLabel(ctx, r.Client, &prepare, &prepare.Status.Conditions,
+			func(reason errx.Reason, m string) { r.eventf(ctx, &prepare, corev1.EventTypeWarning, reason, "%s", m) },
+			func() { prepare.Status.Phase = operatorv1alpha1.PhaseFailed },
+			msg)
+	}
+
 	if prepare.Status.Phase == "" || prepare.Status.Phase == operatorv1alpha1.PhasePending {
 		now := metav1.Now()
 		prepare.Status.StartTime = &now

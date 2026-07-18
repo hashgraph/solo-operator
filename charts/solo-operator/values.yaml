@@ -97,6 +97,17 @@ rbac:
   # Create RBAC resources
   create: true
 
+# ValidatingAdmissionPolicy enforcing the NetworkUpgrade* CR label invariants
+# (operation-id and step labels). Rejects malformed NetworkUpgrade* writes at
+# admission. Requires Kubernetes >= 1.32 (VAP is GA), which the chart already
+# floors via kubeVersion.
+admissionPolicy:
+  # Install the ValidatingAdmissionPolicy + Binding.
+  enabled: true
+  # failurePolicy for the policy: Fail (deny on CEL evaluation error, fail closed)
+  # or Ignore (admit on evaluation error, fail open).
+  failurePolicy: Fail
+
 # Controller configuration
 controller:
   # Maximum concurrent reconciles per controller

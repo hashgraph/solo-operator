@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Binds the NetworkUpgrade* label-invariant policy in Deny mode. No paramRef is
+# needed (the policy is self-contained); matchResources is omitted so the
+# binding applies to everything the policy's matchConstraints select.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: networkupgrade-label-invariants-binding
+spec:
+  policyName: networkupgrade-label-invariants
+  validationActions: ["Deny"]

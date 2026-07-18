@@ -103,6 +103,7 @@ var _ = Describe("NetworkUpgradeFreezeAbort Controller", func() {
 					Namespace: ns,
 					Labels: map[string]string{
 						operatorv1alpha1.LabelOperationID: opID,
+						operatorv1alpha1.LabelStep:        operatorv1alpha1.StepExecute,
 					},
 				},
 				Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{

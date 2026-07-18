@@ -36,7 +36,7 @@ func newExecuteForTest() *operatorv1alpha1.NetworkUpgradeExecute {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "test-execute",
 			Namespace:  "default",
-			Labels:     map[string]string{operatorv1alpha1.LabelOperationID: "op-001"},
+			Labels:     map[string]string{operatorv1alpha1.LabelOperationID: "op-001", operatorv1alpha1.LabelStep: operatorv1alpha1.StepExecute},
 			Finalizers: []string{FinalizerNetworkUpgradeExecute},
 		},
 		Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
@@ -267,7 +267,7 @@ func TestExecuteReconcile_InitializesStatus(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "test-execute",
 			Namespace:  "default",
-			Labels:     map[string]string{operatorv1alpha1.LabelOperationID: "op-001"},
+			Labels:     map[string]string{operatorv1alpha1.LabelOperationID: "op-001", operatorv1alpha1.LabelStep: operatorv1alpha1.StepExecute},
 			Finalizers: []string{FinalizerNetworkUpgradeExecute},
 		},
 		Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{

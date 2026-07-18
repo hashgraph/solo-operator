@@ -32,7 +32,7 @@ func newPrepareForTest() *operatorv1alpha1.NetworkUpgradePrepare {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "demo",
 			Namespace: "test",
-			Labels:    map[string]string{operatorv1alpha1.LabelOperationID: "op-001"},
+			Labels:    map[string]string{operatorv1alpha1.LabelOperationID: "op-001", operatorv1alpha1.LabelStep: operatorv1alpha1.StepPrepare},
 		},
 		Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
 			Orbit:       "test-orbit",
@@ -434,6 +434,29 @@ func TestPrepareReconcile_OperationIDLabelMismatch(t *testing.T) {
 	cond := findCondition(res.prepare.Status.Conditions, operatorv1alpha1.CondOperationIDLabelValid)
 	if cond == nil || cond.Reason != operatorv1alpha1.ReasonOperationIDLabelInvalid.String() {
 		t.Errorf("expected reason %s, got %v", operatorv1alpha1.ReasonOperationIDLabelInvalid.String(), cond)
+	}
+}
+
+func TestPrepareReconcile_StepLabelInvalid(t *testing.T) {
+	prepare := newPrepareForTest()
+	// Wrong step value for a Prepare CR — must be rejected terminally (#1133).
+	prepare.Labels[operatorv1alpha1.LabelStep] = operatorv1alpha1.StepFreeze
+
+	res := reconcilePrepare(t, prepare, newPrepareChecker(nil, nil))
+
+	if res.prepare.Status.Phase != operatorv1alpha1.PhaseFailed {
+		t.Errorf("expected phase Failed, got %s", res.prepare.Status.Phase)
+	}
+	cond := findCondition(res.prepare.Status.Conditions, operatorv1alpha1.CondStepLabelValid)
+	if cond == nil || cond.Reason != operatorv1alpha1.ReasonStepLabelInvalid.String() {
+		t.Errorf("expected reason %s, got %v", operatorv1alpha1.ReasonStepLabelInvalid.String(), cond)
+	}
+	if got := countContaining(res.events, operatorv1alpha1.EventStepLabelInvalid.String()); got != 1 {
+		t.Errorf("expected one StepLabelInvalid event, got %d", got)
+	}
+	// Invalid identity must not advance to registry auditing.
+	if got := countContaining(res.events, operatorv1alpha1.EventRegistryAuditComplete.String()); got != 0 {
+		t.Errorf("invalid CR must not audit registries, got %d audit events", got)
 	}
 }
 

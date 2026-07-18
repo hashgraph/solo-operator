@@ -119,6 +119,13 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 			msg)
 	}
 
+	if ok, msg := validateStepLabel(execute.Labels, operatorv1alpha1.StepExecute); !ok {
+		return rejectInvalidStepLabel(ctx, r.Client, &execute, &execute.Status.Conditions,
+			func(reason errx.Reason, m string) { r.eventf(ctx, &execute, corev1.EventTypeWarning, reason, "%s", m) },
+			func() { execute.Status.Phase = operatorv1alpha1.ExecutePhaseFailed },
+			msg)
+	}
+
 	if execute.Status.Phase == "" || execute.Status.Phase == operatorv1alpha1.ExecutePhasePending {
 		sibling, err := executeSiblingExists(ctx, r.Client, execute.Namespace, string(execute.UID), execute.Spec.OperationID)
 		if err != nil {

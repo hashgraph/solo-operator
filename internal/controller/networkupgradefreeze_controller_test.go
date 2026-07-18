@@ -30,7 +30,7 @@ func newFreezeForTest() *operatorv1alpha1.NetworkUpgradeFreeze {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-freeze",
 			Namespace: "default",
-			Labels:    map[string]string{operatorv1alpha1.LabelOperationID: "op-001"},
+			Labels:    map[string]string{operatorv1alpha1.LabelOperationID: "op-001", operatorv1alpha1.LabelStep: operatorv1alpha1.StepFreeze},
 		},
 		Spec: operatorv1alpha1.NetworkUpgradeFreezeSpec{
 			Orbit:         "test-orbit",
@@ -58,7 +58,7 @@ func newSucceededPrepareForFreeze() *operatorv1alpha1.NetworkUpgradePrepare {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-prepare",
 			Namespace: "default",
-			Labels:    map[string]string{operatorv1alpha1.LabelOperationID: "op-001"},
+			Labels:    map[string]string{operatorv1alpha1.LabelOperationID: "op-001", operatorv1alpha1.LabelStep: operatorv1alpha1.StepPrepare},
 		},
 		Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
 			Orbit:       "test-orbit",

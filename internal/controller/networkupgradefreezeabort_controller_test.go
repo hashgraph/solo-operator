@@ -20,7 +20,7 @@ func newFreezeAbortForTest() *operatorv1alpha1.NetworkUpgradeFreezeAbort {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-abort",
 			Namespace: "default",
-			Labels:    map[string]string{operatorv1alpha1.LabelOperationID: "op-001"},
+			Labels:    map[string]string{operatorv1alpha1.LabelOperationID: "op-001", operatorv1alpha1.LabelStep: operatorv1alpha1.StepAbort},
 		},
 		Spec: operatorv1alpha1.NetworkUpgradeFreezeAbortSpec{
 			Orbit:       "test-orbit",
@@ -34,7 +34,7 @@ func newExecuteForSameOp() *operatorv1alpha1.NetworkUpgradeExecute {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-execute",
 			Namespace: "default",
-			Labels:    map[string]string{operatorv1alpha1.LabelOperationID: "op-001"},
+			Labels:    map[string]string{operatorv1alpha1.LabelOperationID: "op-001", operatorv1alpha1.LabelStep: operatorv1alpha1.StepExecute},
 		},
 		Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
 			Orbit:       "test-orbit",

@@ -32,8 +32,7 @@ func validateOperationIDLabel(labels map[string]string, specOperationID string) 
 }
 
 // rejectInvalidOperationIDLabel terminally rejects a NetworkUpgrade* CR whose
-// operation-id label is invalid. setPhase is a closure because the terminal
-// phase differs per CR (Phase vs ExecutePhase).
+// operation-id label is invalid.
 func rejectInvalidOperationIDLabel(
 	ctx context.Context,
 	c client.Client,
@@ -43,12 +42,36 @@ func rejectInvalidOperationIDLabel(
 	setPhase func(),
 	msg string,
 ) (ctrl.Result, error) {
-	emit(operatorv1alpha1.EventOperationIDLabelInvalid, msg)
+	return rejectInvalidLabel(ctx, c, obj, conds, emit, setPhase,
+		operatorv1alpha1.EventOperationIDLabelInvalid,
+		operatorv1alpha1.CondOperationIDLabelValid,
+		operatorv1alpha1.ReasonOperationIDLabelInvalid,
+		msg)
+}
+
+// rejectInvalidLabel is the shared terminal-rejection tail for the
+// NetworkUpgrade* label invariants (operation-id #1066, step #1133): it emits a
+// Warning event, sets the terminal phase, records a False condition, and
+// persists status. setPhase is a closure because the terminal phase differs per
+// CR (Phase vs ExecutePhase).
+func rejectInvalidLabel(
+	ctx context.Context,
+	c client.Client,
+	obj client.Object,
+	conds *[]operatorv1alpha1.Condition,
+	emit func(reason errx.Reason, msg string),
+	setPhase func(),
+	eventReason errx.Reason,
+	condType string,
+	condReason errx.Reason,
+	msg string,
+) (ctrl.Result, error) {
+	emit(eventReason, msg)
 	setPhase()
 	setCondition(conds, metav1.Condition{
-		Type:               operatorv1alpha1.CondOperationIDLabelValid,
+		Type:               condType,
 		Status:             metav1.ConditionFalse,
-		Reason:             operatorv1alpha1.ReasonOperationIDLabelInvalid.String(),
+		Reason:             condReason.String(),
 		Message:            msg,
 		ObservedGeneration: obj.GetGeneration(),
 	})

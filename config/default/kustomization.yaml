@@ -11,5 +11,8 @@ resources:
 - ../rbac
 - ../manager
 
+components:
+- ../admission
+
 patches:
 - path: manager_namespace_patch.yaml

@@ -67,6 +67,7 @@ const (
 	ReasonKubeconfigLoadFailed  errx.Reason = "KubeconfigLoadFailed"
 	ReasonDynamicClientFailed   errx.Reason = "DynamicClientFailed"
 	ReasonCRCreateFailed        errx.Reason = "CRCreateFailed"
+	ReasonCRRejected            errx.Reason = "CRRejected"
 	ReasonDedupQueryFailed      errx.Reason = "DedupQueryFailed"
 	ReasonCacheSeedFailed       errx.Reason = "CacheSeedFailed"
 	ReasonPrepareListFailed     errx.Reason = "PrepareListFailed"

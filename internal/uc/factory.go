@@ -146,9 +146,12 @@ func (f *Factory) HandleExecuteImmediate(ctx context.Context) error {
 // ultimate dedup guard); and (4) maintains the op-id cache and persisted file.
 //
 // It returns nil on success or a benign no-op, and an error only on a transient
-// failure worth retrying on the next tick. On a create failure the persisted
-// file is intentionally left on disk for the restart-recovery flow (#998) and
-// the cache entry is invalidated so a stale hint cannot mask a missing CR.
+// failure worth retrying on the next tick. On a transient create failure the
+// persisted file is intentionally left on disk for the restart-recovery flow
+// (#998) and the cache entry is invalidated so a stale hint cannot mask a
+// missing CR. An admission-validation rejection (Invalid/Forbidden) is the
+// exception: it is terminal (#1133), so it logs a loud ERROR, deletes the
+// persisted file, and returns nil rather than retrying forever.
 func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource, operationID, step, kind string, cr *unstructured.Unstructured) error {
 	exists, phase, err := f.alreadyCreated(ctx, gvr, operationID, step)
 	if err != nil {
@@ -205,6 +208,27 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 			}
 			logx.As().Debug().Str("reason", ReasonCRExists.String()).Str("operation_id", operationID).
 				Str("step", step).Str("cr_name", cr.GetName()).Msg("CR already exists — skipping create")
+			return nil
+		}
+		if k8serrors.IsInvalid(err) || k8serrors.IsForbidden(err) {
+			// A ValidatingAdmissionPolicy (or webhook) rejected the write
+			// deterministically (#1133): the CR violates an enforced label invariant.
+			// This is not transient — re-sending the identical CR every tick would
+			// spin forever with the same result. Because the UC always stamps the
+			// operation-id and step labels correctly, this can only mean a UC bug, so
+			// a loud, non-looping ERROR is exactly the desired signal. Drop the
+			// persisted copy too, so the restart-recovery flow (#998) does not
+			// re-send a CR that will always be rejected. Return nil (terminal): do
+			// not retry.
+			logx.As().Error().Err(err).Str("reason", ReasonCRRejected.String()).
+				Str("operation_id", operationID).Str("step", step).
+				Str("cr_name", cr.GetName()).Str("cr_kind", kind).
+				Msg("admission rejected CR (label invariant violation) — not retrying; the UC always sets the required labels, so this indicates a UC bug")
+			f.events.error(operationID, ReasonCRRejected.String(), "Admission rejected "+kind+"/"+cr.GetName())
+			if delErr := f.store.Delete(operationID, step); delErr != nil {
+				logx.As().Warn().Err(delErr).Str("reason", ReasonCRPersistCleanupFailed.String()).
+					Str("operation_id", operationID).Msg("failed to delete persisted CR after admission rejection")
+			}
 			return nil
 		}
 		f.invalidate(operationID)
