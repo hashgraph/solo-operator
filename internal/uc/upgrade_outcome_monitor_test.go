@@ -486,7 +486,7 @@ func TestHandleDeleteEventEvictsAllCaches(t *testing.T) {
 		t.Error("other operation's proxy entry wrongly evicted")
 	}
 
-	// --- Assert: JSONL records the deletion ---
+	// --- Assert: JSONL records the deletion as the operation's final audit line ---
 	data, err := os.ReadFile(filepath.Join(evDir, op+".jsonl"))
 	if err != nil {
 		t.Fatalf("read deleted op jsonl: %v", err)
@@ -496,11 +496,64 @@ func TestHandleDeleteEventEvictsAllCaches(t *testing.T) {
 	}
 }
 
+// TestHandleDeleteEventRecordsDeletionForUntrackedOp verifies deletion is always
+// recorded on the JSONL channel — even for an operation the UC never previously
+// tracked (no prior writer open). Deletion is a first-class terminal audit event,
+// so the op's <operationId>.jsonl is opened, gets the CRDeleted line, and is then
+// released by eviction; a same-operationId recreate reopens it in append mode to
+// continue the recovery trail.
+func TestHandleDeleteEventRecordsDeletionForUntrackedOp(t *testing.T) {
+	op := "upgrade-0.75.0-20260413T120000Z"
+	evDir := t.TempDir()
+
+	m := newOutcomeMonitor(t, t.TempDir())
+	m.events = newEventSink(evDir, "0")
+
+	// No prior events for op → no writer open. The delete records the event anyway.
+	cr := buildExecuteCR(op, crCreatedAt)
+	m.handleDeleteEvent(cr)
+
+	data, err := os.ReadFile(filepath.Join(evDir, op+".jsonl"))
+	if err != nil {
+		t.Fatalf("read deleted op jsonl: %v", err)
+	}
+	if !strings.Contains(string(data), `"reason":"CRDeleted"`) {
+		t.Errorf("delete did not record a CRDeleted line for an untracked op:\n%s", data)
+	}
+
+	// Eviction must release the writer it just opened to record the deletion.
+	m.events.mu.Lock()
+	_, open := m.events.writers[op]
+	m.events.mu.Unlock()
+	if open {
+		t.Error("event-log handle not released after recording deletion")
+	}
+}
+
 // TestHandleDeleteEventNoOpWithoutOperationID verifies that a Deleted event for
-// a CR with no operationId is silently ignored (no panic, no eviction).
+// a CR with no operationId is silently ignored: it must neither panic nor evict
+// any existing cache entry. An unrelated operation is seeded across every cache
+// layer first, so a bug that wipes state regardless of operationId would be
+// caught — rather than passing vacuously against empty caches.
 func TestHandleDeleteEventNoOpWithoutOperationID(t *testing.T) {
+	other := "upgrade-0.76.0-20260501T000000Z"
+
 	m := newOutcomeMonitor(t, t.TempDir())
 	m.events = newEventSink(t.TempDir(), "0")
+
+	// Wire a proxy and seed the unrelated operation into every cache layer.
+	proxy := NewProvisionerProxyWithClient(ProvisionerProxyConfig{Namespace: "solo"}, m.client)
+	proxy.completedOpIDs[other] = struct{}{}
+	m.mu.Lock()
+	m.proxy = proxy
+	m.mu.Unlock()
+
+	var onDeleteCalled bool
+	m.onDelete = func(string) { onDeleteCalled = true }
+
+	m.daemonTriggered[other] = struct{}{}
+	m.lastPhase[other+"/"+operatorv1alpha1.StepExecute] = "Running"
+	m.opFirstSeen[other] = crCreatedAt
 
 	cr := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -513,6 +566,24 @@ func TestHandleDeleteEventNoOpWithoutOperationID(t *testing.T) {
 			"spec": map[string]interface{}{},
 		},
 	}
-	// Must not panic or modify any state.
+	// Must not panic and must not touch any existing state.
 	m.handleDeleteEvent(cr)
+
+	m.mu.Lock()
+	_, dt := m.daemonTriggered[other]
+	_, lp := m.lastPhase[other+"/"+operatorv1alpha1.StepExecute]
+	_, fs := m.opFirstSeen[other]
+	m.mu.Unlock()
+	if !dt || !lp || !fs {
+		t.Error("no-opId delete evicted unrelated monitor state (daemonTriggered/lastPhase/opFirstSeen)")
+	}
+	proxy.mu.Lock()
+	_, pp := proxy.completedOpIDs[other]
+	proxy.mu.Unlock()
+	if !pp {
+		t.Error("no-opId delete evicted unrelated ProvisionerProxy state")
+	}
+	if onDeleteCalled {
+		t.Error("no-opId delete invoked onDelete (Factory cache) — should be a no-op")
+	}
 }

@@ -643,10 +643,28 @@ func (m *UpgradeOutcomeMonitor) evictOperation(operationID string) {
 	}
 }
 
-// handleDeleteEvent processes a watch.Deleted event by evicting all cached
-// state for the CR's operationId. This enables the delete/recreate recovery
-// path: once evicted, a new CR with the same operationId is processed normally
-// without requiring a UC pod restart.
+// handleDeleteEvent processes a watch.Deleted event: it records the deletion on
+// both UC observability channels (log + JSONL) and evicts all cached state for
+// the CR's operationId. Eviction enables the delete/recreate recovery path
+// (#1146) — once evicted, a new CR with the same operationId is processed
+// without a UC pod restart.
+//
+// The deletion is recorded, not evicted silently, because it is a distinct
+// terminal outcome for the operation (the operator pulled the CR, versus a
+// Succeeded/Failed phase) and is the audit entry that explains why a later
+// same-operationId CR is reprocessed from scratch. It is written before the
+// evictOperation call, whose closeOp releases the writer, so the line lands as
+// the operation's final record. On a delete→recreate with the same operationId
+// the recreated CR reopens <operationId>.jsonl in append mode, so that single
+// file narrates the whole recovery (…deleted → recreated → phase changes).
+// Recording a deletion for an operation the UC never otherwise tracked does
+// create its JSONL file, but that one-line file is a truthful record and the
+// recovery trail is the payoff.
+//
+// #1146's "pure cache eviction — no side effects" governs the reconcile path: no
+// status patches, no Kubernetes events (the UC emits none by design), no
+// filesystem mutations (rotate/discard). The UC's baseline JSONL+log
+// observability is not a reconcile side effect and stays on.
 func (m *UpgradeOutcomeMonitor) handleDeleteEvent(cr *unstructured.Unstructured) {
 	operationID := operationIDOf(cr)
 	if operationID == "" {
