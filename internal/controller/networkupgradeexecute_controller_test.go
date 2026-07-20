@@ -909,9 +909,9 @@ func TestExecuteReconcile_PendingNodeUpgrade_CatastrophicFastFail(t *testing.T) 
 	capsule := newActiveCapsule("node0")
 	capsule.Status.Phase = operatorv1alpha1.PhaseFailed
 	capsule.Status.PlatformStatus = operatorv1alpha1.PlatformStatusCatastrophicFailure
-	capsule.Status.PlatformStatusRevision = "rev-new"
 	// The new-revision pod was created but is crash-looping: not Ready, roll not
-	// complete (updatedReplicas=1, readyReplicas=0).
+	// complete (updatedReplicas=1, readyReplicas=0). The operator only reflects the
+	// live pod's condition, so CATASTROPHIC here belongs to the post-upgrade node.
 	sts := newExecuteSTS("node0", "rev-old", "rev-new", 0, 1)
 
 	scheme := newControllerTestScheme()
@@ -965,9 +965,8 @@ func TestExecuteReconcile_PendingNodeUpgrade_SucceedsWhenActiveOnNewRevision(t *
 
 	// The node reached ACTIVE (operator-written phase) on the fully-rolled
 	// post-upgrade revision: currentRevision has caught up to updateRevision with a
-	// Ready replica and the UC stamped a fresh platformStatusRevision.
+	// Ready replica (phase==Active already implies a current-revision ACTIVE reading).
 	capsule := newActiveCapsule("node0")
-	capsule.Status.PlatformStatusRevision = "rev-new"
 	sts := newExecuteSTS("node0", "rev-new", "rev-new", 1, 1)
 
 	scheme := newControllerTestScheme()
@@ -1263,18 +1262,18 @@ func TestExecuteReconcile_NodeActiveDeadlineExceeded_ShortCircuitWithinInterval(
 	}
 }
 
-// TestExecuteReconcile_StaleCatastrophic_NoFastFail verifies that a
-// CATASTROPHIC_FAILURE reading from the pre-upgrade pod (stale
-// platformStatusRevision) does not fast-fail the upgrade. The backstop timeout
-// must handle it instead.
-func TestExecuteReconcile_StaleCatastrophic_NoFastFail(t *testing.T) {
+// TestExecuteReconcile_CatastrophicBeforeNewPod_NoFastFail verifies the surviving
+// newRevisionPodCreated guard: a CATASTROPHIC_FAILURE while the StatefulSet has not
+// yet produced a post-upgrade pod (updatedReplicas=0) must not fast-fail the upgrade
+// — the reading cannot be attributed to the post-upgrade node. The backstop handles it.
+func TestExecuteReconcile_CatastrophicBeforeNewPod_NoFastFail(t *testing.T) {
 	execute := newExecuteInBringOnline()
 
 	capsule := newActiveCapsule("node0")
 	capsule.Status.Phase = operatorv1alpha1.PhaseFailed
 	capsule.Status.PlatformStatus = operatorv1alpha1.PlatformStatusCatastrophicFailure
-	capsule.Status.PlatformStatusRevision = "rev-old"
-	sts := newExecuteSTS("node0", "rev-old", "rev-new", 0, 1)
+	// No new-revision pod created yet (updatedReplicas=0): newRevisionPodCreated is false.
+	sts := newExecuteSTS("node0", "rev-old", "rev-new", 0, 0)
 
 	scheme := newControllerTestScheme()
 	c := withExecuteIndexes(fake.NewClientBuilder().

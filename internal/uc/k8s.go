@@ -25,9 +25,11 @@ var (
 	networkUpgradeExecuteGVR     = gvr("networkupgradeexecutes")
 	networkUpgradeFreezeAbortGVR = gvr("networkupgradefreezeaborts")
 
-	// consensusCapsuleGVR is the capsule the platform-status sensor patches
-	// (status.platformStatus / status.platformStatusCode).
-	consensusCapsuleGVR = gvr("consensuscapsules")
+	// podGVR is the core/v1 pods resource. The platform-status sensor patches the
+	// operator.solo.hiero.org/platform-status condition onto its OWN pod's status
+	// subresource (pods/status); the operator proxies that into the ConsensusCapsule status.
+	// It is not built via gvr() because that helper uses the operator API group.
+	podGVR = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
 
 	// GVRs for the ten ConsensusConfig CRs the provisioner-proxy creates during
 	// the execute phase (cluster-only mode). The resource names are the lowercase

@@ -81,12 +81,17 @@ func (r *RoleSubReconciler) buildRole(capsule *operatorv1alpha1.ConsensusCapsule
 				Resources: []string{"networkupgradeexecutes/status"},
 				Verbs:     []string{"get", "patch", "update"},
 			},
-			// The platform-status sensor patches its own ConsensusCapsule
-			// status.platformStatus (sole writer, server-side merge-patch only).
+			// The platform-status sensor patches the operator.solo.hiero.org/platform-status
+			// condition onto its OWN pod (pods/status, strategic merge). It never touches the
+			// ConsensusCapsule status — the operator is the sole writer of that. resourceNames
+			// scopes the grant to the capsule's single StatefulSet pod ("<capsule>-0"), so the
+			// UC cannot patch any other pod's status in the namespace (patch supports
+			// resourceNames; the pod name is deterministic for a one-replica StatefulSet).
 			rbacv1.PolicyRule{
-				APIGroups: []string{"operator.solo.hiero.org"},
-				Resources: []string{"consensuscapsules/status"},
-				Verbs:     []string{"patch"},
+				APIGroups:     []string{""},
+				Resources:     []string{"pods/status"},
+				Verbs:         []string{"patch"},
+				ResourceNames: []string{PodName(capsule)},
 			},
 		)
 	}
@@ -108,7 +113,8 @@ func rulesEqual(a, b []rbacv1.PolicyRule) bool {
 	for i := range a {
 		if !stringSliceEq(a[i].APIGroups, b[i].APIGroups) ||
 			!stringSliceEq(a[i].Resources, b[i].Resources) ||
-			!stringSliceEq(a[i].Verbs, b[i].Verbs) {
+			!stringSliceEq(a[i].Verbs, b[i].Verbs) ||
+			!stringSliceEq(a[i].ResourceNames, b[i].ResourceNames) {
 			return false
 		}
 	}

@@ -11,41 +11,20 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
-const (
-	// platformStatusMetric is the Prometheus metric the consensus node exports for
-	// its live platform state. Its value is a numeric code (see platformStatusName).
-	platformStatusMetric = "platform_PlatformStatus"
-	// platformStatusCodeUnknown is the sentinel written to platformStatusCode when
-	// the metric endpoint is unreachable or the sample is absent. -1 avoids
-	// collision with the real enum (code 0 = NO_VALUE).
-	platformStatusCodeUnknown int32 = -1
-)
+// platformStatusMetric is the Prometheus metric the consensus node exports for
+// its live platform state. Its value is a numeric code (see nameForCode).
+const platformStatusMetric = "platform_PlatformStatus"
 
-// platformStatusName maps the numeric platform_PlatformStatus code to its raw
-// state name. The mapping mirrors the Hedera platform PlatformStatus enum and
-// the solo reference (src/core/enumerations.ts, NodeStatusCodes). Codes with no
-// mapping (e.g. 3) resolve to UNKNOWN.
-var platformStatusName = map[int32]string{
-	0:  operatorv1alpha1.PlatformStatusNoValue,
-	1:  operatorv1alpha1.PlatformStatusStartingUp,
-	2:  operatorv1alpha1.PlatformStatusActive,
-	4:  operatorv1alpha1.PlatformStatusBehind,
-	5:  operatorv1alpha1.PlatformStatusFreezing,
-	6:  operatorv1alpha1.PlatformStatusFreezeComplete,
-	7:  operatorv1alpha1.PlatformStatusReplayingEvents,
-	8:  operatorv1alpha1.PlatformStatusObserving,
-	9:  operatorv1alpha1.PlatformStatusChecking,
-	10: operatorv1alpha1.PlatformStatusReconnectComplete,
-	11: operatorv1alpha1.PlatformStatusCatastrophicFailure,
-}
+// platformStatusCodeUnknown is the sentinel used for the numeric code when the
+// metric endpoint is unreachable or the sample is absent. It aliases the shared
+// api constant so the UC's condition and the operator's proxy agree on the value.
+const platformStatusCodeUnknown = operatorv1alpha1.PlatformStatusCodeUnknown
 
-// nameForCode returns the raw platform-status name for a numeric code, or
-// UNKNOWN for an unrecognised code.
+// nameForCode returns the raw platform-status name for a numeric code, or UNKNOWN
+// for an unrecognised code. It delegates to the canonical api mapping — the single
+// source of truth shared with the operator, which derives the code back from the name.
 func nameForCode(code int32) string {
-	if name, ok := platformStatusName[code]; ok {
-		return name
-	}
-	return operatorv1alpha1.PlatformStatusUnknown
+	return operatorv1alpha1.PlatformStatusNameForCode(code)
 }
 
 // parsePlatformStatus scans a Prometheus exposition body for the

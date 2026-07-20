@@ -71,15 +71,11 @@ type Config struct {
 	// Namespace is the Kubernetes namespace the UC watches and creates CRs in.
 	Namespace string
 	// PodName is the UC pod's own name, injected via the downward API
-	// (metadata.name). The platform-status sensor derives the owning
-	// ConsensusCapsule name from it (pod "<capsule>-<ordinal>" → "<capsule>").
+	// (metadata.name). The platform-status sensor patches this pod's
+	// operator.solo.hiero.org/platform-status condition (pods/status) by this name,
+	// and derives the owning ConsensusCapsule name from it (pod
+	// "<capsule>-<ordinal>" → "<capsule>") for its audit/log labels.
 	PodName string
-	// PodRevision is the StatefulSet controller-revision-hash label value of the
-	// pod this UC sidecar runs in, injected via the downward API
-	// (metadata.labels['controller-revision-hash']). The platform-status sensor
-	// stamps it onto status.platformStatusRevision so the operator can detect
-	// stale readings that survived a pod roll.
-	PodRevision string
 	// KubeconfigPath is optional; empty means in-cluster config.
 	KubeconfigPath string
 
@@ -189,12 +185,6 @@ func (c Config) Validate() error {
 		return errx.WithHints(
 			errx.WithReason(errConfigInvalid.New("pod-name is required (used to derive the ConsensusCapsule name)"), ReasonConfigInvalid),
 			"Set --pod-name (UC_POD_NAME) via the downward API fieldRef metadata.name",
-		)
-	}
-	if c.PodRevision == "" {
-		return errx.WithHints(
-			errx.WithReason(errConfigInvalid.New("pod-revision is required (stamps platformStatusRevision for the freshness guard)"), ReasonConfigInvalid),
-			"Set --pod-revision (UC_POD_REVISION) via the downward API fieldRef metadata.labels['controller-revision-hash']",
 		)
 	}
 	if c.MetricsURL == "" {

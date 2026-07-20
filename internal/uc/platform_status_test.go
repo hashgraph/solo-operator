@@ -4,16 +4,20 @@ package uc
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	k8stesting "k8s.io/client-go/testing"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
@@ -81,23 +85,23 @@ func TestConfigCapsuleName(t *testing.T) {
 	}
 }
 
-// newCapsuleObj returns an unstructured ConsensusCapsule the fake dynamic client
-// can serve to the platform-status sensor's status patch.
-func newCapsuleObj(name, namespace string) *unstructured.Unstructured {
-	return &unstructured.Unstructured{Object: map[string]interface{}{
-		"apiVersion": operatorv1alpha1.GroupVersion.String(),
-		"kind":       "ConsensusCapsule",
-		"metadata": map[string]interface{}{
-			"name":      name,
-			"namespace": namespace,
-		},
-	}}
+// patchBody decodes the strategic-merge patch the sensor sends so the test can
+// assert on the platform-status condition it carries.
+type patchBody struct {
+	Status struct {
+		Conditions []corev1.PodCondition `json:"conditions"`
+	} `json:"status"`
 }
 
-// TestPlatformStatusMonitor_TransitionOnlyWrites verifies the sensor patches the
-// capsule only when the scraped platform status changes, and writes the correct
-// raw name + numeric code (including UNKNOWN when the endpoint is unhealthy).
-func TestPlatformStatusMonitor_TransitionOnlyWrites(t *testing.T) {
+// TestPlatformStatusMonitor_TransitionOnlyPatchesOwnPod verifies the sensor patches
+// its OWN pod's status (pods/status, strategic merge) only when the scraped platform
+// status changes, and that each patch carries the correct condition — type,
+// reason = raw name, status, and a message including the numeric code — including
+// UNKNOWN when the endpoint is unhealthy. The patch is intercepted rather than
+// applied: the fake dynamic client cannot faithfully strategic-merge an unstructured
+// pod, so the merge-by-type semantics are covered separately by
+// TestPlatformStatusConditionPatch_PreservesKubeletConditions.
+func TestPlatformStatusMonitor_TransitionOnlyPatchesOwnPod(t *testing.T) {
 	var metricCode atomic.Int64
 	metricCode.Store(1) // STARTING_UP
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -114,66 +118,108 @@ func TestPlatformStatusMonitor_TransitionOnlyWrites(t *testing.T) {
 	if err := operatorv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("add to scheme: %v", err)
 	}
-	fakeClient := fake.NewSimpleDynamicClient(scheme, newCapsuleObj("node0", "solo"))
+	fakeClient := fake.NewSimpleDynamicClient(scheme)
 
-	var patchCount int32
-	fakeClient.PrependReactor("patch", "consensuscapsules", func(k8stesting.Action) (bool, runtime.Object, error) {
-		atomic.AddInt32(&patchCount, 1)
-		return false, nil, nil // fall through to the default tracker
+	var (
+		mu      sync.Mutex
+		patches []k8stesting.PatchAction
+	)
+	fakeClient.PrependReactor("patch", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		mu.Lock()
+		patches = append(patches, action.(k8stesting.PatchAction))
+		mu.Unlock()
+		// Short-circuit: return an empty pod so the sensor's patch call succeeds
+		// without depending on the fake's (unfaithful) unstructured strategic merge.
+		return true, &unstructured.Unstructured{Object: map[string]interface{}{}}, nil
 	})
 
 	cfg := DefaultConfig()
 	cfg.Namespace = "solo"
 	cfg.PodName = "node0-0"
-	cfg.PodRevision = "rev-abc123"
 	cfg.MetricsURL = srv.URL
 	m := NewPlatformStatusMonitor(cfg, fakeClient, nil)
 	ctx := context.Background()
 
-	readStatus := func() (string, int64, string) {
-		got, err := fakeClient.Resource(consensusCapsuleGVR).Namespace("solo").Get(ctx, "node0", metav1.GetOptions{})
-		if err != nil {
-			t.Fatalf("get capsule: %v", err)
+	count := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(patches)
+	}
+	last := func() (corev1.PodCondition, k8stesting.PatchAction) {
+		t.Helper()
+		mu.Lock()
+		defer mu.Unlock()
+		if len(patches) == 0 {
+			t.Fatal("expected at least one patch")
 		}
-		name, _, _ := unstructured.NestedString(got.Object, "status", "platformStatus")
-		code, _, _ := unstructured.NestedInt64(got.Object, "status", "platformStatusCode")
-		rev, _, _ := unstructured.NestedString(got.Object, "status", "platformStatusRevision")
-		return name, code, rev
+		pa := patches[len(patches)-1]
+		var body patchBody
+		if err := json.Unmarshal(pa.GetPatch(), &body); err != nil {
+			t.Fatalf("unmarshal patch: %v", err)
+		}
+		if len(body.Status.Conditions) != 1 {
+			t.Fatalf("expected exactly one condition in patch, got %d", len(body.Status.Conditions))
+		}
+		return body.Status.Conditions[0], pa
 	}
 
-	// First scrape → STARTING_UP written.
+	// First scrape → STARTING_UP written to the pod's platform-status condition.
 	m.poll(ctx)
-	if got := atomic.LoadInt32(&patchCount); got != 1 {
-		t.Fatalf("expected 1 patch after first poll, got %d", got)
+	if count() != 1 {
+		t.Fatalf("expected 1 patch after first poll, got %d", count())
 	}
-	if name, code, rev := readStatus(); name != operatorv1alpha1.PlatformStatusStartingUp || code != 1 || rev != "rev-abc123" {
-		t.Fatalf("status = (%q,%d,%q), want (STARTING_UP,1,rev-abc123)", name, code, rev)
+	cond, pa := last()
+	if pa.GetPatchType() != types.StrategicMergePatchType {
+		t.Errorf("patch type = %q, want StrategicMergePatchType (conditions merge by type)", pa.GetPatchType())
+	}
+	if pa.GetSubresource() != "status" {
+		t.Errorf("subresource = %q, want status", pa.GetSubresource())
+	}
+	if pa.GetName() != "node0-0" {
+		t.Errorf("patched pod = %q, want node0-0 (its own pod, from UC_POD_NAME)", pa.GetName())
+	}
+	if cond.Type != operatorv1alpha1.PodConditionPlatformStatus {
+		t.Errorf("condition type = %q, want %q", cond.Type, operatorv1alpha1.PodConditionPlatformStatus)
+	}
+	if cond.Reason != operatorv1alpha1.PlatformStatusStartingUp {
+		t.Errorf("reason = %q, want STARTING_UP", cond.Reason)
+	}
+	if cond.Status != corev1.ConditionTrue {
+		t.Errorf("status = %q, want True for a concrete reading", cond.Status)
+	}
+	if !strings.Contains(cond.Message, "code 1") {
+		t.Errorf("message %q should carry the numeric code", cond.Message)
 	}
 
 	// Same code → no transition, no patch.
 	m.poll(ctx)
-	if got := atomic.LoadInt32(&patchCount); got != 1 {
-		t.Fatalf("expected no additional patch on unchanged status, got %d", got)
+	if count() != 1 {
+		t.Fatalf("expected no additional patch on unchanged status, got %d", count())
 	}
 
 	// Transition to ACTIVE → patch.
 	metricCode.Store(2)
 	m.poll(ctx)
-	if got := atomic.LoadInt32(&patchCount); got != 2 {
-		t.Fatalf("expected 2 patches after ACTIVE transition, got %d", got)
+	if count() != 2 {
+		t.Fatalf("expected 2 patches after ACTIVE transition, got %d", count())
 	}
-	if name, code, rev := readStatus(); name != operatorv1alpha1.PlatformStatusActive || code != 2 || rev != "rev-abc123" {
-		t.Fatalf("status = (%q,%d,%q), want (ACTIVE,2,rev-abc123)", name, code, rev)
+	if cond, _ := last(); cond.Reason != operatorv1alpha1.PlatformStatusActive {
+		t.Errorf("reason = %q, want ACTIVE", cond.Reason)
 	}
 
-	// Endpoint unhealthy → fail-soft transition to UNKNOWN → patch, connectivity error set.
+	// Endpoint unhealthy → fail-soft transition to UNKNOWN → patch (status Unknown),
+	// connectivity error set.
 	metricCode.Store(-1)
 	m.poll(ctx)
-	if got := atomic.LoadInt32(&patchCount); got != 3 {
-		t.Fatalf("expected 3 patches after UNKNOWN transition, got %d", got)
+	if count() != 3 {
+		t.Fatalf("expected 3 patches after UNKNOWN transition, got %d", count())
 	}
-	if name, code, _ := readStatus(); name != operatorv1alpha1.PlatformStatusUnknown || code != int64(platformStatusCodeUnknown) {
-		t.Fatalf("status = (%q,%d), want (UNKNOWN,%d) when endpoint unreachable", name, code, platformStatusCodeUnknown)
+	cond, _ = last()
+	if cond.Reason != operatorv1alpha1.PlatformStatusUnknown {
+		t.Errorf("reason = %q, want UNKNOWN when endpoint unreachable", cond.Reason)
+	}
+	if cond.Status != corev1.ConditionUnknown {
+		t.Errorf("status = %q, want Unknown for an UNKNOWN reading", cond.Status)
 	}
 	if m.ConnectivityError() == nil {
 		t.Error("expected a ConnectivityError after an unreachable scrape")
@@ -182,11 +228,151 @@ func TestPlatformStatusMonitor_TransitionOnlyWrites(t *testing.T) {
 	// Recover to ACTIVE → patch again and connectivity error cleared.
 	metricCode.Store(2)
 	m.poll(ctx)
-	if got := atomic.LoadInt32(&patchCount); got != 4 {
-		t.Fatalf("expected 4 patches after recovery, got %d", got)
+	if count() != 4 {
+		t.Fatalf("expected 4 patches after recovery, got %d", count())
 	}
 	if m.ConnectivityError() != nil {
 		t.Error("expected ConnectivityError cleared after a successful scrape")
+	}
+}
+
+// TestPlatformStatusMonitor_RepatchesOnCodeChangeSameName verifies that when two
+// distinct numeric codes map to the same name — only possible for UNKNOWN (e.g. two
+// different unmapped codes) — the sensor re-patches so the condition's message reflects
+// the new code, rather than leaving it stale by keying transition detection on the name
+// alone. An identical re-scrape (same name AND code) is still a no-op.
+func TestPlatformStatusMonitor_RepatchesOnCodeChangeSameName(t *testing.T) {
+	var metricCode atomic.Int64
+	metricCode.Store(3) // unmapped → UNKNOWN, code 3
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, "platform_PlatformStatus{node=\"0\"} %d\n", metricCode.Load())
+	}))
+	defer srv.Close()
+
+	scheme := runtime.NewScheme()
+	if err := operatorv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add to scheme: %v", err)
+	}
+	fakeClient := fake.NewSimpleDynamicClient(scheme)
+
+	var (
+		mu      sync.Mutex
+		patches []k8stesting.PatchAction
+	)
+	fakeClient.PrependReactor("patch", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		mu.Lock()
+		patches = append(patches, action.(k8stesting.PatchAction))
+		mu.Unlock()
+		return true, &unstructured.Unstructured{Object: map[string]interface{}{}}, nil
+	})
+
+	cfg := DefaultConfig()
+	cfg.Namespace = "solo"
+	cfg.PodName = "node0-0"
+	cfg.MetricsURL = srv.URL
+	m := NewPlatformStatusMonitor(cfg, fakeClient, nil)
+	ctx := context.Background()
+
+	count := func() int { mu.Lock(); defer mu.Unlock(); return len(patches) }
+	condAt := func(i int) corev1.PodCondition {
+		t.Helper()
+		mu.Lock()
+		defer mu.Unlock()
+		var body patchBody
+		if err := json.Unmarshal(patches[i].GetPatch(), &body); err != nil {
+			t.Fatalf("unmarshal patch %d: %v", i, err)
+		}
+		if len(body.Status.Conditions) != 1 {
+			t.Fatalf("patch %d: expected one condition, got %d", i, len(body.Status.Conditions))
+		}
+		return body.Status.Conditions[0]
+	}
+
+	// First UNKNOWN reading (code 3).
+	m.poll(ctx)
+	if count() != 1 {
+		t.Fatalf("expected 1 patch after first poll, got %d", count())
+	}
+	if c := condAt(0); c.Reason != operatorv1alpha1.PlatformStatusUnknown || !strings.Contains(c.Message, "code 3") {
+		t.Fatalf("first patch = reason %q message %q, want UNKNOWN with code 3", c.Reason, c.Message)
+	}
+
+	// Same name (UNKNOWN) but a different code → must re-patch with the new code in the
+	// message (the staleness the review flagged).
+	metricCode.Store(999)
+	m.poll(ctx)
+	if count() != 2 {
+		t.Fatalf("expected a re-patch on a code change under the same name, got %d patches", count())
+	}
+	if c := condAt(1); c.Reason != operatorv1alpha1.PlatformStatusUnknown || !strings.Contains(c.Message, "code 999") {
+		t.Errorf("second patch = reason %q message %q, want UNKNOWN with code 999", c.Reason, c.Message)
+	}
+
+	// Identical re-scrape (same name AND code) → no new patch.
+	m.poll(ctx)
+	if count() != 2 {
+		t.Errorf("expected no patch on an identical re-scrape, got %d", count())
+	}
+}
+
+// TestPlatformStatusConditionPatch_PreservesKubeletConditions verifies the sensor's
+// strategic-merge patch updates ONLY the platform-status condition and leaves the
+// kubelet-owned conditions (PodScheduled, Initialized, ContainersReady, Ready)
+// intact — the "must not replace .status.conditions" invariant. It applies the real
+// patch bytes with the real strategic-merge library against the typed Pod schema,
+// which reproduces the API server's merge-by-`type` behaviour (unlike the fake
+// dynamic client on an unstructured pod).
+func TestPlatformStatusConditionPatch_PreservesKubeletConditions(t *testing.T) {
+	original := &corev1.Pod{
+		Status: corev1.PodStatus{
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.PodScheduled, Status: corev1.ConditionTrue},
+				{Type: corev1.PodInitialized, Status: corev1.ConditionTrue},
+				{Type: corev1.ContainersReady, Status: corev1.ConditionTrue},
+				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+			},
+		},
+	}
+	origBytes, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("marshal pod: %v", err)
+	}
+
+	patch := platformStatusConditionPatch(operatorv1alpha1.PlatformStatusActive, 2, "2026-07-18T00:00:00Z")
+	mergedBytes, err := strategicpatch.StrategicMergePatch(origBytes, patch, corev1.Pod{})
+	if err != nil {
+		t.Fatalf("strategic merge: %v", err)
+	}
+	var merged corev1.Pod
+	if err := json.Unmarshal(mergedBytes, &merged); err != nil {
+		t.Fatalf("unmarshal merged: %v", err)
+	}
+
+	byType := map[corev1.PodConditionType]corev1.PodCondition{}
+	for _, c := range merged.Status.Conditions {
+		byType[c.Type] = c
+	}
+	// All four kubelet conditions must survive the patch, still True.
+	for _, kubelet := range []corev1.PodConditionType{corev1.PodScheduled, corev1.PodInitialized, corev1.ContainersReady, corev1.PodReady} {
+		c, ok := byType[kubelet]
+		if !ok {
+			t.Errorf("kubelet condition %s was clobbered by the platform-status patch", kubelet)
+			continue
+		}
+		if c.Status != corev1.ConditionTrue {
+			t.Errorf("kubelet condition %s status = %q, want True (unchanged)", kubelet, c.Status)
+		}
+	}
+	// The platform-status condition must be merged in by type (5 total, not a replace).
+	ps, ok := byType[operatorv1alpha1.PodConditionPlatformStatus]
+	if !ok {
+		t.Fatal("platform-status condition not present after merge")
+	}
+	if ps.Reason != operatorv1alpha1.PlatformStatusActive {
+		t.Errorf("platform-status reason = %q, want ACTIVE", ps.Reason)
+	}
+	if len(merged.Status.Conditions) != 5 {
+		t.Errorf("expected 5 conditions after merge (4 kubelet + platform-status), got %d", len(merged.Status.Conditions))
 	}
 }
 
@@ -207,7 +393,7 @@ func TestPlatformStatusMonitor_RunRecoversPanic(t *testing.T) {
 	if err := operatorv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("add to scheme: %v", err)
 	}
-	fakeClient := fake.NewSimpleDynamicClient(scheme, newCapsuleObj("node0", "solo"))
+	fakeClient := fake.NewSimpleDynamicClient(scheme)
 
 	cfg := DefaultConfig()
 	cfg.Namespace = "solo"

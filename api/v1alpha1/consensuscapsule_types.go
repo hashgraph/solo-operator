@@ -543,10 +543,13 @@ type ConsensusPVCStreams struct {
 }
 
 // Platform status names are the raw platform_PlatformStatus states reported by
-// the consensus node's metrics endpoint (localhost:9999). They are written into
-// ConsensusCapsuleStatus.PlatformStatus by the UC sidecar (the sole writer) and
-// read by the operator to roll up the capsule phase. The names mirror the Hedera
-// platform PlatformStatus enum; the numeric codes are carried in PlatformStatusCode.
+// the consensus node's metrics endpoint (localhost:9999). The UC sidecar scrapes
+// them and publishes the current one as the reason of the
+// operator.solo.hiero.org/platform-status condition on its own pod (see
+// PodConditionPlatformStatus); the operator proxies
+// that into ConsensusCapsuleStatus.PlatformStatus (the operator is the sole writer
+// of the capsule status) and rolls up the capsule phase. The names mirror the
+// Hedera platform PlatformStatus enum; the numeric codes are carried in PlatformStatusCode.
 const (
 	PlatformStatusNoValue             = "NO_VALUE"
 	PlatformStatusStartingUp          = "STARTING_UP"
@@ -578,23 +581,19 @@ type ConsensusCapsuleStatus struct {
 
 	// PlatformStatus is the consensus node's live platform state (raw
 	// platform_PlatformStatus name, e.g. STARTING_UP / REPLAYING_EVENTS / ACTIVE /
-	// FREEZE_COMPLETE / CATASTROPHIC_FAILURE). Written exclusively by the UC
-	// sidecar on each state transition; the operator only reads it.
+	// FREEZE_COMPLETE / CATASTROPHIC_FAILURE), or UNKNOWN when the current pod has
+	// not reported yet. Written exclusively by the operator, which proxies it from
+	// the operator.solo.hiero.org/platform-status condition the UC sidecar maintains
+	// on its own pod (see PodConditionPlatformStatus). The operator is the sole writer of the
+	// ConsensusCapsule status; the UC never patches this resource.
 	// +optional
 	PlatformStatus string `json:"platformStatus,omitempty"`
 
 	// PlatformStatusCode is the numeric platform_PlatformStatus code corresponding
-	// to PlatformStatus. Written exclusively by the UC sidecar.
+	// to PlatformStatus (PlatformStatusCodeUnknown when UNKNOWN). Written
+	// exclusively by the operator, which derives it from the proxied name.
 	// +optional
 	PlatformStatusCode int32 `json:"platformStatusCode,omitempty"`
-
-	// PlatformStatusRevision is the controller-revision-hash of the pod whose UC
-	// sidecar wrote the current PlatformStatus value. The operator compares it to
-	// the StatefulSet's UpdateRevision to detect stale readings that survived a pod
-	// roll — a pre-upgrade ACTIVE must not promote the capsule phase when the new
-	// pod's UC has not yet confirmed the state. Written exclusively by the UC sidecar.
-	// +optional
-	PlatformStatusRevision string `json:"platformStatusRevision,omitempty"`
 
 	// +optional
 	Conditions []Condition `json:"conditions,omitempty"`
