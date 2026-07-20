@@ -5,9 +5,11 @@ package uc
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
+	"github.com/automa-saga/daemonkit"
 	"github.com/automa-saga/logx"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -155,29 +157,35 @@ func (p *ProvisionerProxy) Handle(ctx context.Context, cr *unstructured.Unstruct
 		Str("operation_id", operationID).Str("cr_name", cr.GetName()).
 		Msg("Execute entered ReadyForProvisionerDaemon — advancing to PendingNodeUpgrade")
 
-	go func() {
-		var transErr error
+	// Run the transition on daemonkit.Go so a panic is recovered on this
+	// goroutine's own barrier — recover is per-goroutine, and the monitor
+	// supervisor only guards a monitor's Run goroutine, not one it spawns itself —
+	// and logged via logx (slog.Default() is the logx handler) instead of crashing
+	// the UC. operationId rides on the logger as a structured field via slog's
+	// With, so it lands on the recovery log line without baking it into the name.
+	daemonkit.Go(ctx, slog.Default().With("operation_id", operationID), "provisioner-transition", func(ctx context.Context) {
+		// completedOpIDs is set ONLY on a positive success, so a transition that
+		// returns an error OR panics stays out of the set and the Execute CR
+		// remains eligible for retry: a panic unwinds through this defer with
+		// succeeded still false, then daemonkit.Go recovers it.
+		succeeded := false
 		defer func() {
-			if r := recover(); r != nil {
-				logx.As().Error().Str("reason", ReasonProvisionerProxyTransitionPanic.String()).
-					Str("operation_id", operationID).Interface("panic", r).
-					Msg("transition panicked — UC continues")
-			}
 			p.mu.Lock()
 			if p.activeOpID == operationID {
 				p.activeOpID = ""
 			}
-			if transErr == nil {
+			if succeeded {
 				p.completedOpIDs[operationID] = struct{}{}
 			}
 			p.mu.Unlock()
 		}()
-		transErr = p.handleExecute(ctx, cr)
-		if transErr != nil {
-			logx.As().Error().Err(transErr).Str("reason", ReasonProvisionerProxyTransitionFailed.String()).
+		if err := p.handleExecute(ctx, cr); err != nil {
+			logx.As().Error().Err(err).Str("reason", ReasonProvisionerProxyTransitionFailed.String()).
 				Str("operation_id", operationID).Msg("transition to PendingNodeUpgrade failed")
+			return
 		}
-	}()
+		succeeded = true
+	})
 }
 
 // handleExecute runs the execute-phase workflow for the cluster-only profile.

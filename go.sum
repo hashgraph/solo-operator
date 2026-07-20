@@ -26,8 +26,8 @@ github.com/antlr4-go/antlr/v4 v4.13.0 h1:lxCg3LAv+EUK6t1i0y1V6/SLeUi0eKEKdhQAlS8
 github.com/antlr4-go/antlr/v4 v4.13.0/go.mod h1:pfChB/xh/Unjila75QW7+VU4TSnWnnk9UTnmpPaOR2g=
 github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 h1:DklsrG3dyBCFEj5IhUbnKptjxatkF07cF2ak3yi77so=
 github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2/go.mod h1:WaHUgvxTVq04UNunO+XhnAqY/wQc+bxr74GqbsZ/Jqw=
-github.com/automa-saga/daemonkit v0.2.0 h1:XVGayQ8yj1Ps0zLHrvFDes9wcTIkzA+hn9wCv1fMUjQ=
-github.com/automa-saga/daemonkit v0.2.0/go.mod h1:qVU+rZyBQdx2IGEghC7K5z/wsVWtm+bCVwjSL4FJveU=
+github.com/automa-saga/daemonkit v0.3.0 h1:VFka3HJInoMkTnoASUWAt7mNg7ycbMLik4JdZMUv4QA=
+github.com/automa-saga/daemonkit v0.3.0/go.mod h1:qVU+rZyBQdx2IGEghC7K5z/wsVWtm+bCVwjSL4FJveU=
 github.com/automa-saga/logx v0.5.1 h1:U8Sn0SIvqIFau2T4+Oe9gSVSZnYt16oDYAOD7vmuHEw=
 github.com/automa-saga/logx v0.5.1/go.mod h1:wajii4J5s2jK4pe42FU0+jUKUZ41x/gbYTG4dusbln4=
 github.com/automa-saga/version v1.0.1 h1:mD/mJaDN3a/DtZP1SR5YWJIu/xLyIiffzi85VZDkfn0=

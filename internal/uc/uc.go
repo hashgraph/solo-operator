@@ -11,7 +11,6 @@ import (
 
 	"github.com/automa-saga/daemonkit"
 	"github.com/automa-saga/logx"
-	"golang.org/x/sync/errgroup"
 	"k8s.io/client-go/dynamic"
 
 	"github.com/hashgraph/solo-operator/internal/errx"
@@ -101,16 +100,24 @@ func (u *UC) Run(ctx context.Context) error {
 		Logger:   slog.Default(),
 	}, daemonkit.ServerConfig{})
 
-	g, ctx := errgroup.WithContext(ctx)
+	// daemonkit.Group (panic-recovering errgroup): a panic in the control-plane
+	// server or a supervisor goroutine becomes the Wait error instead of crashing
+	// the UC, and the first failure cancels the group so the rest shut down.
+	//
+	// The derived context is discarded (g, _): Group.Go injects it into each child
+	// callback, so every goroutine below runs against its own ctx argument and
+	// nothing outside the group needs it. Capture it (g, ctx := ...) only if you
+	// later add out-of-group work that must cancel on the first failure.
+	g, _ := daemonkit.WithContext(ctx)
 
-	g.Go(func() error {
+	g.Go("control-plane-server", func(ctx context.Context) error {
 		return server.Start(ctx)
 	})
 
 	// a permanently-failed monitor stays up in a degraded state — surfaced via /status, not a pod crash, so the
 	// operator gets an actionable signal instead of restart churn
 	for _, mon := range u.monitors {
-		g.Go(func() error {
+		g.Go(mon.Name(), func(ctx context.Context) error {
 			daemonkit.SupervisedMonitor(ctx, mon, daemonkit.SupervisorOptions{
 				Tracker: tracker,
 				Logger:  slog.Default(),

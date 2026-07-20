@@ -9,14 +9,17 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // fakeDispatcher records which handlers the poll loop invokes and, optionally,
 // fails a chosen marker so the scan's error tolerance can be exercised.
 type fakeDispatcher struct {
-	calls   map[string]int
-	failOn  string
-	failErr error
+	calls          map[string]int
+	failOn         string
+	failErr        error
+	panicOnStartup bool
 }
 
 func newFakeDispatcher() *fakeDispatcher {
@@ -31,7 +34,12 @@ func (f *fakeDispatcher) record(marker string) error {
 	return nil
 }
 
-func (f *fakeDispatcher) RecoverOnStartup(context.Context) error { return nil }
+func (f *fakeDispatcher) RecoverOnStartup(context.Context) error {
+	if f.panicOnStartup {
+		panic("boom in RecoverOnStartup")
+	}
+	return nil
+}
 func (f *fakeDispatcher) HandleExecuteImmediate(context.Context) error {
 	return f.record(MarkerExecuteImmediate)
 }
@@ -225,5 +233,25 @@ func TestRunStopsOnContextCancel(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("Run did not return after context cancel")
+	}
+}
+
+// TestMarkerMonitor_RunRecoversPanic verifies a panic on the poll goroutine is
+// recovered by Run's top-level defer and surfaced as a returned error — which the
+// daemonkit supervisor turns into a back-off restart — rather than unwinding to
+// the top of the goroutine and crashing the whole UC process. Run calls
+// factory.RecoverOnStartup synchronously before entering the timer loop, so a
+// dispatcher that panics there drives the panic path deterministically.
+func TestMarkerMonitor_RunRecoversPanic(t *testing.T) {
+	m, disp, _ := newTestMonitor(t)
+	m.cfg.EventsPath = t.TempDir()
+	disp.panicOnStartup = true
+
+	err := m.Run(context.Background())
+	if err == nil {
+		t.Fatal("expected Run to return a recovered-panic error, got nil")
+	}
+	if reason, _ := errx.ReasonOf(err); reason != ReasonMarkerMonitorPanic {
+		t.Errorf("reason = %q, want %q", reason, ReasonMarkerMonitorPanic)
 	}
 }
