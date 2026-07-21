@@ -12,11 +12,11 @@ spec:
   accountId: "0.0.6"
   weight: 500
   serviceType: LoadBalancer
+  autostart: true  # start the consensus service on pod boot (default false)
   podProperties:
     containers:
       consensusNode:
         name: "consensus-node"
-        autostart: true  # start the consensus service on pod boot (default false)
         softwareVersion:
           repository: "gcr.io/hedera-registry"
           imageName: "consensus-node"

@@ -76,6 +76,12 @@ spec:
                   is subPath-mounted at data/config/application.properties.
                 minLength: 1
                 type: string
+              autostart:
+                default: false
+                description: |-
+                  Autostart starts the s6-managed consensus service on pod boot when true,
+                  via CONSENSUS_AUTOSTART. When false the pod comes up with the service held down.
+                type: boolean
               blockNodes:
                 description: when set, creates a block-nodes ConfigMap and mounts
                   block-nodes.json
@@ -4259,14 +4265,6 @@ spec:
                               - name
                               type: object
                             type: array
-                          autostart:
-                            default: false
-                            description: |-
-                              Autostart controls whether the s6-managed consensus service starts
-                              automatically when the pod boots. Sets CONSENSUS_AUTOSTART. When false
-                              (the default), the pod comes up with the service held down. Read once at
-                              pod start; changing it triggers a StatefulSet rollout.
-                            type: boolean
                           javaHeapMax:
                             description: sets JAVA_HEAP_MAX (e.g. "8g" → -Xmx8g)
                             type: string

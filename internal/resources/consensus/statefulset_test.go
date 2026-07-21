@@ -135,7 +135,7 @@ func TestBuildStatefulSet_AutostartEnvVar(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			r := newStsReconciler()
 			capsule := capsuleWithImage("v0.50.0")
-			capsule.Spec.PodProperties.Containers.ConsensusNode.Autostart = tc.autostart
+			capsule.Spec.Autostart = tc.autostart
 
 			sts, err := r.buildStatefulSet(context.Background(), capsule)
 			if err != nil {
