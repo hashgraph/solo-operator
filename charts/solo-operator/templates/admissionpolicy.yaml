@@ -1,0 +1,85 @@
+{{- if .Values.admissionPolicy.enabled -}}
+# ValidatingAdmissionPolicy enforcing the NetworkUpgrade* CR label invariants (#1133).
+# The UC stamps every NetworkUpgrade* CR with an operation-id and a step label; this
+# policy rejects any CREATE/UPDATE whose labels are missing or inconsistent, so a
+# malformed CR never lands in etcd. CRD x-kubernetes-validations cannot see
+# metadata.labels, so a ValidatingAdmissionPolicy is required (GA on the >=1.32
+# Kubernetes floor). The operator.solo.hiero.org/created-by annotation is provenance
+# only and is deliberately NOT enforced.
+#
+# The policy spec below (matchConstraints/variables/validations) and the binding's
+# validationActions are synced from config/admission/ by `task helm:sync-admission`
+# — edit those there, not here. The Helm boilerplate (names, labels, policyName,
+# failurePolicy) is maintained in this template.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ include "solo-operator.fullname" . }}-networkupgrade-label-invariants
+  labels:
+    {{- include "solo-operator.labels" . | nindent 4 }}
+spec:
+  # Fail closed: a CEL evaluation error denies the write rather than admitting an
+  # unvalidated CR.
+  failurePolicy: {{ .Values.admissionPolicy.failurePolicy }}
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["operator.solo.hiero.org"]
+        apiVersions: ["v1alpha1"]
+        operations: ["CREATE", "UPDATE"]
+        resources:
+          - networkupgradeprepares
+          - networkupgradefreezes
+          - networkupgradeexecutes
+          - networkupgradefreezeaborts
+  variables:
+    - name: labels
+      expression: "has(object.metadata.labels) ? object.metadata.labels : {}"
+    - name: opIdKey
+      expression: "'operator.solo.hiero.org/operation-id'"
+    - name: stepKey
+      expression: "'operator.solo.hiero.org/step'"
+    - name: specOperationId
+      expression: "has(object.spec) && has(object.spec.operationId) ? object.spec.operationId : ''"
+    # The canonical step for each Kind. request.kind.kind is always one of the
+    # four matched Kinds (matchConstraints pins them), so the map index is total.
+    - name: expectedStep
+      expression: >-
+        {
+          'NetworkUpgradePrepare': 'prepare',
+          'NetworkUpgradeFreeze': 'freeze',
+          'NetworkUpgradeExecute': 'execute',
+          'NetworkUpgradeFreezeAbort': 'abort'
+        }[request.kind.kind]
+  validations:
+    # spec.operationId is the source of truth and must be set (non-empty) — an
+    # empty value would make the label equality checks below vacuously pass.
+    - expression: "variables.specOperationId != ''"
+      reason: Invalid
+      messageExpression: "'spec.operationId must be set on a NetworkUpgrade CR'"
+    # operation-id label: present and non-empty ...
+    - expression: "variables.opIdKey in variables.labels && variables.labels[variables.opIdKey] != ''"
+      reason: Invalid
+      messageExpression: "'NetworkUpgrade CR is missing the required non-empty label ' + variables.opIdKey"
+    # ... and equal to spec.operationId (the source of truth).
+    - expression: "!(variables.opIdKey in variables.labels) || variables.labels[variables.opIdKey] == variables.specOperationId"
+      reason: Invalid
+      messageExpression: "'label ' + variables.opIdKey + '=' + variables.labels[variables.opIdKey] + ' must equal spec.operationId=' + variables.specOperationId"
+    # step label: present and non-empty ...
+    - expression: "variables.stepKey in variables.labels && variables.labels[variables.stepKey] != ''"
+      reason: Invalid
+      messageExpression: "'NetworkUpgrade CR is missing the required non-empty label ' + variables.stepKey"
+    # ... and equal to the canonical step for this Kind.
+    - expression: "!(variables.stepKey in variables.labels) || variables.labels[variables.stepKey] == variables.expectedStep"
+      reason: Invalid
+      messageExpression: "'label ' + variables.stepKey + '=' + variables.labels[variables.stepKey] + ' must equal ' + variables.expectedStep + ' for kind ' + request.kind.kind"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ include "solo-operator.fullname" . }}-networkupgrade-label-invariants-binding
+  labels:
+    {{- include "solo-operator.labels" . | nindent 4 }}
+spec:
+  policyName: {{ include "solo-operator.fullname" . }}-networkupgrade-label-invariants
+  validationActions: ["Deny"]
+{{- end }}

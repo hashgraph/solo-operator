@@ -303,10 +303,11 @@ tasks:
       - rm -f manager-*.sha256
 
   helm:build:
-    desc: Sync CRD templates, sync RBAC, and package the Helm chart
+    desc: Sync CRD templates, sync RBAC, sync admission policy, and package the Helm chart
     cmds:
       - task: helm:sync-crds
       - task: helm:sync-rbac
+      - task: helm:sync-admission
       - helm package charts/solo-operator
 
   helm:sync-crds:
@@ -356,6 +357,51 @@ tasks:
           cat /tmp/rbac_tail.txt
         } > "${DEST}"
         echo "  synced RBAC rules from ${SRC} → ${DEST}"
+
+  helm:sync-admission:
+    desc: Sync the ValidatingAdmissionPolicy spec + binding from config/admission into charts/solo-operator/templates/admissionpolicy.yaml
+    cmds:
+      - |
+        set -eu
+        SRC="config/admission/policy.yaml"
+        BSRC="config/admission/binding.yaml"
+        DEST="charts/solo-operator/templates/admissionpolicy.yaml"
+        for f in "${SRC}" "${BSRC}" "${DEST}"; do
+          [ -f "${f}" ] || { echo "missing ${f}" >&2; exit 1; }
+        done
+
+        # config/admission is the source of truth. The chart template owns only the
+        # Helm boilerplate — enable gate, templated name/labels/policyName, templated
+        # failurePolicy — so we sync the drift-prone content: the policy spec body
+        # (matchConstraints..validations) and the binding's validationActions.
+        # Mirrors helm:sync-rbac.
+
+        # 1) Policy spec body: chart header (up to matchConstraints) + SRC body +
+        #    chart tail (the "---" binding footer, which stays Helm-templated).
+        src_body="$(grep -n '^  matchConstraints:' "${SRC}" | head -1 | cut -d: -f1)"
+        [ -n "${src_body}" ] || { echo "'matchConstraints:' not found in ${SRC}" >&2; exit 1; }
+        dest_head="$(grep -n '^  matchConstraints:' "${DEST}" | head -1 | cut -d: -f1)"
+        [ -n "${dest_head}" ] || { echo "'matchConstraints:' marker not found in ${DEST}" >&2; exit 1; }
+        dest_tail="$(grep -n '^---' "${DEST}" | head -1 | cut -d: -f1)"
+        [ -n "${dest_tail}" ] || { echo "binding '---' separator not found in ${DEST}" >&2; exit 1; }
+        tmp="$(mktemp)"
+        {
+          head -n "$((dest_head - 1))" "${DEST}"
+          tail -n +"${src_body}" "${SRC}"
+          tail -n +"${dest_tail}" "${DEST}"
+        } > "${tmp}"
+        mv "${tmp}" "${DEST}"
+
+        # 2) Binding: sync validationActions (its only non-templated field; the
+        #    name/policyName must stay Helm-templated so cannot be copied verbatim).
+        va_line="$(grep '^  validationActions:' "${BSRC}" | head -1)"
+        [ -n "${va_line}" ] || { echo "'validationActions:' not found in ${BSRC}" >&2; exit 1; }
+        grep -q '^  validationActions:' "${DEST}" || { echo "'validationActions:' marker not found in ${DEST}" >&2; exit 1; }
+        tmp2="$(mktemp)"
+        awk -v repl="${va_line}" '/^  validationActions:/ {print repl; next} {print}' "${DEST}" > "${tmp2}"
+        mv "${tmp2}" "${DEST}"
+
+        echo "  synced admission policy spec + binding validationActions from config/admission → ${DEST}"
 
   test:nightly:
     desc: Run the nightly E2E test on a local kind cluster

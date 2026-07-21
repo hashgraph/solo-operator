@@ -15,6 +15,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	k8stesting "k8s.io/client-go/testing"
 
 	dynamicfake "k8s.io/client-go/dynamic/fake"
@@ -255,6 +257,92 @@ func TestHandleExecuteImmediateLeavesPersistedOnCreateError(t *testing.T) {
 	}
 	if rest[0].OperationID != wantOperationID || rest[0].Step != operatorv1alpha1.StepPrepare {
 		t.Fatalf("persisted CR = %+v", rest[0])
+	}
+}
+
+func TestHandleExecuteImmediateAdmissionRejectionBacksOffThenRetries(t *testing.T) {
+	// A ValidatingAdmissionPolicy Deny surfaces as an Invalid (422) Create error
+	// (#1133). The handler returns nil (no retryable error), creates no CR, and
+	// cleans up the persisted copy — then backs off: ticks within the cooldown must
+	// NOT re-attempt the create (no per-tick API/log spam), but once the cooldown
+	// lapses it retries, so a fixed VAP self-heals without a restart.
+	gk := schema.GroupKind{Group: operatorv1alpha1.GroupVersion.Group, Kind: kindNetworkUpgradePrepare}
+	injErr := k8serrors.NewInvalid(gk, "x", field.ErrorList{
+		field.Invalid(field.NewPath("metadata", "labels"), "", "step label missing or inconsistent"),
+	})
+
+	root := writePackage(t, validComponentsYAML)
+	f := newFakeFactory(t, testConfig(root, t.TempDir()))
+
+	var creates int
+	fakeClient := f.client.(*dynamicfake.FakeDynamicClient)
+	fakeClient.PrependReactor("create", "networkupgradeprepares", func(k8stesting.Action) (bool, runtime.Object, error) {
+		creates++
+		return true, nil, injErr
+	})
+
+	// First tick: rejection handled — nil error, nothing persisted, no CR created.
+	if err := f.HandleExecuteImmediate(context.Background()); err != nil {
+		t.Fatalf("admission rejection must return nil, got %v", err)
+	}
+	if rest, _ := f.store.List(); len(rest) != 0 {
+		t.Fatalf("persisted CR must be cleaned up after admission rejection, got %d", len(rest))
+	}
+	list, err := f.client.Resource(networkUpgradePrepareGVR).Namespace("solo").List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list.Items) != 0 {
+		t.Fatalf("no CR should be created on admission rejection, got %d", len(list.Items))
+	}
+
+	// Ticks within the cooldown window must short-circuit: no further Create calls.
+	for i := 0; i < 3; i++ {
+		if err := f.HandleExecuteImmediate(context.Background()); err != nil {
+			t.Fatalf("cooldown tick %d must return nil, got %v", i, err)
+		}
+	}
+	if creates != 1 {
+		t.Fatalf("Create must be attempted exactly once during the cooldown, got %d", creates)
+	}
+
+	// Simulate the cooldown lapsing (e.g. after a mis-configured VAP is fixed): the
+	// UC must retry rather than stay stuck until a restart.
+	f.mu.Lock()
+	f.rejected[rejectKey{wantOperationID, operatorv1alpha1.StepPrepare}] = time.Now().Add(-2 * admissionRejectRetryCooldown)
+	f.mu.Unlock()
+
+	if err := f.HandleExecuteImmediate(context.Background()); err != nil {
+		t.Fatalf("post-cooldown retry must return nil, got %v", err)
+	}
+	if creates != 2 {
+		t.Fatalf("Create must be retried after the cooldown lapses, got %d attempts", creates)
+	}
+}
+
+func TestHandleExecuteImmediateForbiddenIsRetryable(t *testing.T) {
+	// A Forbidden (403) Create error must NOT be treated as terminal: it is also
+	// how the API server reports an RBAC/authorization gap, which is transient
+	// (fixable by granting the UC ServiceAccount create permission). The handler
+	// must surface a retryable error and LEAVE the persisted CR on disk so
+	// restart-recovery can re-send it once permissions are fixed — never silently
+	// drop it (#1133 review).
+	gr := networkUpgradePrepareGVR.GroupResource()
+	injErr := k8serrors.NewForbidden(gr, "x", errors.New("forbidden: UC ServiceAccount cannot create resource"))
+
+	root := writePackage(t, validComponentsYAML)
+	f := newFakeFactory(t, testConfig(root, t.TempDir()))
+
+	fakeClient := f.client.(*dynamicfake.FakeDynamicClient)
+	fakeClient.PrependReactor("create", "networkupgradeprepares", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, injErr
+	})
+
+	if err := f.HandleExecuteImmediate(context.Background()); err == nil {
+		t.Fatal("Forbidden must be retryable (non-nil error), got nil")
+	}
+	if rest, _ := f.store.List(); len(rest) != 1 {
+		t.Fatalf("persisted CR must be retained after Forbidden for recovery, got %d", len(rest))
 	}
 }
 

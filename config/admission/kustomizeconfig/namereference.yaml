@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Teach kustomize that ValidatingAdmissionPolicyBinding.spec.policyName references
+# a ValidatingAdmissionPolicy by name, so namePrefix/nameSuffix rewrite the
+# reference in lockstep with the policy's metadata.name. Kustomize bundled with
+# kubectl >=1.32 knows this natively; declaring it here keeps older toolchains
+# correct too (the config is merged, so the redundancy is harmless).
+nameReference:
+- kind: ValidatingAdmissionPolicy
+  group: admissionregistration.k8s.io
+  fieldSpecs:
+  - kind: ValidatingAdmissionPolicyBinding
+    group: admissionregistration.k8s.io
+    path: spec/policyName

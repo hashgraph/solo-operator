@@ -30,7 +30,7 @@ func newFreezeForTest() *operatorv1alpha1.NetworkUpgradeFreeze {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-freeze",
 			Namespace: "default",
-			Labels:    map[string]string{operatorv1alpha1.LabelOperationID: "op-001"},
+			Labels:    map[string]string{operatorv1alpha1.LabelOperationID: "op-001", operatorv1alpha1.LabelStep: operatorv1alpha1.StepFreeze},
 		},
 		Spec: operatorv1alpha1.NetworkUpgradeFreezeSpec{
 			Orbit:         "test-orbit",
@@ -58,7 +58,7 @@ func newSucceededPrepareForFreeze() *operatorv1alpha1.NetworkUpgradePrepare {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-prepare",
 			Namespace: "default",
-			Labels:    map[string]string{operatorv1alpha1.LabelOperationID: "op-001"},
+			Labels:    map[string]string{operatorv1alpha1.LabelOperationID: "op-001", operatorv1alpha1.LabelStep: operatorv1alpha1.StepPrepare},
 		},
 		Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
 			Orbit:       "test-orbit",
@@ -171,6 +171,28 @@ func TestFreezeReconcile_OperationIDLabelMismatch(t *testing.T) {
 	cond := findCondition(res.freeze.Status.Conditions, operatorv1alpha1.CondOperationIDLabelValid)
 	if cond == nil || cond.Reason != operatorv1alpha1.ReasonOperationIDLabelInvalid.String() {
 		t.Errorf("expected reason %s, got %v", operatorv1alpha1.ReasonOperationIDLabelInvalid.String(), cond)
+	}
+}
+
+func TestFreezeReconcile_StepLabelInvalid(t *testing.T) {
+	freeze := newFreezeForTest()
+	// Wrong step value for a Freeze CR — must be rejected terminally (#1133).
+	freeze.Labels[operatorv1alpha1.LabelStep] = operatorv1alpha1.StepPrepare
+
+	res := reconcileFreeze(t, freeze, nil, nil)
+
+	if res.err != nil {
+		t.Fatalf("unexpected error: %v", res.err)
+	}
+	if res.freeze.Status.Phase != operatorv1alpha1.PhaseFailed {
+		t.Errorf("expected phase Failed, got %s", res.freeze.Status.Phase)
+	}
+	cond := findCondition(res.freeze.Status.Conditions, operatorv1alpha1.CondStepLabelValid)
+	if cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != operatorv1alpha1.ReasonStepLabelInvalid.String() {
+		t.Errorf("expected CondStepLabelValid=False reason %s, got %v", operatorv1alpha1.ReasonStepLabelInvalid.String(), cond)
+	}
+	if got := countContaining(res.events, operatorv1alpha1.EventStepLabelInvalid.String()); got != 1 {
+		t.Errorf("expected one StepLabelInvalid event, got %d", got)
 	}
 }
 

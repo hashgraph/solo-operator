@@ -200,6 +200,7 @@ const (
 
 	// Shared across all NetworkUpgrade* CRs.
 	CondOperationIDLabelValid = "OperationIDLabelValid"
+	CondStepLabelValid        = "StepLabelValid"
 )
 
 // Reason constants used in conditions and events. Typed as errx.Reason so one
@@ -230,6 +231,7 @@ const (
 	ReasonAbortAfterFreeze errx.Reason = "AbortAfterFreeze"
 
 	ReasonOperationIDLabelInvalid errx.Reason = "OperationIDLabelInvalid"
+	ReasonStepLabelInvalid        errx.Reason = "StepLabelInvalid"
 )
 
 // DaemonResult condition reasons, written by the provisioner daemon.
@@ -271,6 +273,7 @@ const (
 	EventInvalidGenesisJSON errx.Reason = "InvalidGenesisJSON"
 
 	EventOperationIDLabelInvalid errx.Reason = "OperationIDLabelInvalid"
+	EventStepLabelInvalid        errx.Reason = "StepLabelInvalid"
 
 	// ConsensusCapsule phase-transition events (posted by the capsule controller).
 	EventConsensusNodeActive errx.Reason = "ConsensusNodeActive"
