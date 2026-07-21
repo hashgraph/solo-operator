@@ -278,7 +278,7 @@ func (r *StatefulSetSubReconciler) buildConsensusNodeContainer(capsule *operator
 		env = append(env, corev1.EnvVar{Name: "JAVA_OPTS", Value: cn.JavaOpts})
 	}
 
-	env = append(env, corev1.EnvVar{Name: "CONSENSUS_AUTOSTART", Value: fmt.Sprintf("%t", capsule.Spec.Autostart)})
+	env = append(env, corev1.EnvVar{Name: "AUTO_START_CONSENSUS_SERVICE", Value: fmt.Sprintf("%t", capsule.Spec.Autostart)})
 
 	container := corev1.Container{
 		Name:  containerName,

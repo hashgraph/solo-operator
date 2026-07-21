@@ -150,7 +150,8 @@ type ConsensusCapsuleSpec struct {
 	Offline bool `json:"offline,omitempty"`
 
 	// Autostart starts the s6-managed consensus service on pod boot when true,
-	// via CONSENSUS_AUTOSTART. When false the pod comes up with the service held down.
+	// via AUTO_START_CONSENSUS_SERVICE. When false the pod comes up with the
+	// service held down.
 	// +optional
 	// +kubebuilder:default=false
 	Autostart bool `json:"autostart,omitempty"`

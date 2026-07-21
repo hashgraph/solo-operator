@@ -80,7 +80,8 @@ spec:
                 default: false
                 description: |-
                   Autostart starts the s6-managed consensus service on pod boot when true,
-                  via CONSENSUS_AUTOSTART. When false the pod comes up with the service held down.
+                  via AUTO_START_CONSENSUS_SERVICE. When false the pod comes up with the
+                  service held down.
                 type: boolean
               blockNodes:
                 description: when set, creates a block-nodes ConfigMap and mounts

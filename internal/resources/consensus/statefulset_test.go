@@ -145,15 +145,15 @@ func TestBuildStatefulSet_AutostartEnvVar(t *testing.T) {
 			var got string
 			found := false
 			for _, e := range sts.Spec.Template.Spec.Containers[0].Env {
-				if e.Name == "CONSENSUS_AUTOSTART" {
+				if e.Name == "AUTO_START_CONSENSUS_SERVICE" {
 					got, found = e.Value, true
 				}
 			}
 			if !found {
-				t.Fatal("CONSENSUS_AUTOSTART env var not set")
+				t.Fatal("AUTO_START_CONSENSUS_SERVICE env var not set")
 			}
 			if got != tc.want {
-				t.Errorf("CONSENSUS_AUTOSTART: want %q, got %q", tc.want, got)
+				t.Errorf("AUTO_START_CONSENSUS_SERVICE: want %q, got %q", tc.want, got)
 			}
 		})
 	}
