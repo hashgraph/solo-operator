@@ -16,6 +16,7 @@ spec:
     containers:
       consensusNode:
         name: "consensus-node"
+        autostart: true  # start the consensus service on pod boot (default false)
         softwareVersion:
           repository: "gcr.io/hedera-registry"
           imageName: "consensus-node"

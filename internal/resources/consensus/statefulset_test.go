@@ -123,6 +123,42 @@ func TestBuildStatefulSet_JavaEnvVars_NotSetWhenEmpty(t *testing.T) {
 	}
 }
 
+func TestBuildStatefulSet_AutostartEnvVar(t *testing.T) {
+	cases := map[string]struct {
+		autostart bool
+		want      string
+	}{
+		"default_false": {autostart: false, want: "false"},
+		"enabled":       {autostart: true, want: "true"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			r := newStsReconciler()
+			capsule := capsuleWithImage("v0.50.0")
+			capsule.Spec.PodProperties.Containers.ConsensusNode.Autostart = tc.autostart
+
+			sts, err := r.buildStatefulSet(context.Background(), capsule)
+			if err != nil {
+				t.Fatalf("buildStatefulSet: %v", err)
+			}
+
+			var got string
+			found := false
+			for _, e := range sts.Spec.Template.Spec.Containers[0].Env {
+				if e.Name == "CONSENSUS_AUTOSTART" {
+					got, found = e.Value, true
+				}
+			}
+			if !found {
+				t.Fatal("CONSENSUS_AUTOSTART env var not set")
+			}
+			if got != tc.want {
+				t.Errorf("CONSENSUS_AUTOSTART: want %q, got %q", tc.want, got)
+			}
+		})
+	}
+}
+
 func TestBuildStatefulSet_HapiAppSecretsMount(t *testing.T) {
 	r := newStsReconciler()
 	capsule := capsuleWithImage("v0.50.0")

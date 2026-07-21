@@ -316,6 +316,14 @@ type ConsensusNodeContainer struct {
 	// +optional
 	JavaOpts string `json:"javaOpts,omitempty"`
 
+	// Autostart controls whether the s6-managed consensus service starts
+	// automatically when the pod boots. Sets CONSENSUS_AUTOSTART. When false
+	// (the default), the pod comes up with the service held down. Read once at
+	// pod start; changing it triggers a StatefulSet rollout.
+	// +kubebuilder:default=false
+	// +optional
+	Autostart bool `json:"autostart,omitempty"`
+
 	// +optional
 	SecurityContext *corev1.SecurityContext `json:"securityContext,omitempty"`
 
