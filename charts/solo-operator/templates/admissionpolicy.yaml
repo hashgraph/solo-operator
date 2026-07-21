@@ -6,6 +6,11 @@
 # metadata.labels, so a ValidatingAdmissionPolicy is required (GA on the >=1.32
 # Kubernetes floor). The operator.solo.hiero.org/created-by annotation is provenance
 # only and is deliberately NOT enforced.
+#
+# The policy spec below (matchConstraints/variables/validations) and the binding's
+# validationActions are synced from config/admission/ by `task helm:sync-admission`
+# — edit those there, not here. The Helm boilerplate (names, labels, policyName,
+# failurePolicy) is maintained in this template.
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
@@ -35,8 +40,8 @@ spec:
       expression: "'operator.solo.hiero.org/step'"
     - name: specOperationId
       expression: "has(object.spec) && has(object.spec.operationId) ? object.spec.operationId : ''"
-    # The canonical step for each Kind. request.kind.kind is always one of the four
-    # matched Kinds (matchConstraints pins them), so the map index is total.
+    # The canonical step for each Kind. request.kind.kind is always one of the
+    # four matched Kinds (matchConstraints pins them), so the map index is total.
     - name: expectedStep
       expression: >-
         {
