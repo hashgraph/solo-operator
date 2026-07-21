@@ -29,7 +29,7 @@ func TestObservePhaseWritesOnTransitionOnly(t *testing.T) {
 	m := newOutcomeMonitor(t, t.TempDir())
 	m.events = newEventSink(evDir, "0")
 
-	cr := buildExecuteCR("upgrade-0.75.0-20260413T120000Z", crCreatedAt)
+	cr := newTestExecuteCR("upgrade-0.75.0-20260413T120000Z", crCreatedAt)
 	setPhase := func(p string) {
 		_ = unstructured.SetNestedField(cr.Object, p, "status", "phase")
 	}
@@ -143,7 +143,7 @@ func TestObservePhaseTerminalCleanupWithoutStepLabel(t *testing.T) {
 	m := newOutcomeMonitor(t, t.TempDir())
 	m.events = newEventSink(t.TempDir(), "0")
 
-	cr := buildExecuteCR(op, crCreatedAt)
+	cr := newTestExecuteCR(op, crCreatedAt)
 	cr.SetLabels(nil) // strip the step (and op-id) labels — spec.operationId remains
 	_ = unstructured.SetNestedField(cr.Object, string(operatorv1alpha1.ExecutePhaseSucceeded), "status", "phase")
 
@@ -173,7 +173,7 @@ func TestDaemonTriggeredEmittedOncePerOperation(t *testing.T) {
 	m := newOutcomeMonitor(t, t.TempDir())
 	m.events = newEventSink(evDir, "0")
 
-	cr := buildExecuteCR("upgrade-0.75.0-20260413T120000Z", crCreatedAt)
+	cr := newTestExecuteCR("upgrade-0.75.0-20260413T120000Z", crCreatedAt)
 	_ = unstructured.SetNestedField(cr.Object, string(operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon), "status", "phase")
 
 	for i := 0; i < 3; i++ {
@@ -210,10 +210,10 @@ func TestDaemonTriggeredEmittedOncePerOperation(t *testing.T) {
 	}
 }
 
-// buildExecuteCR builds a minimal NetworkUpgradeExecute Unstructured object with
+// newTestExecuteCR builds a minimal NetworkUpgradeExecute Unstructured object with
 // the given operationId and creationTimestamp. It mirrors the structure used
 // throughout the UC (spec.operationId + label).
-func buildExecuteCR(operationID string, createdAt time.Time) *unstructured.Unstructured {
+func newTestExecuteCR(operationID string, createdAt time.Time) *unstructured.Unstructured {
 	cr := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": operatorv1alpha1.GroupVersion.String(),
@@ -265,7 +265,7 @@ func TestMatchesDiskOperationIDMarkerPresent_OpIDMatches(t *testing.T) {
 	m := newOutcomeMonitor(t, root)
 
 	// The CR must carry the same opId that writePackage's marker mtime would mint.
-	cr := buildExecuteCR(wantOperationID, crCreatedAt)
+	cr := newTestExecuteCR(wantOperationID, crCreatedAt)
 	if !m.matchesDiskOperationID(cr, nil) {
 		t.Fatal("expected matchesDiskOperationID=true when marker present and opId matches")
 	}
@@ -276,7 +276,7 @@ func TestMatchesDiskOperationIDMarkerPresent_OpIDMismatches(t *testing.T) {
 	root := writePackage(t, validComponentsYAML)
 	m := newOutcomeMonitor(t, root)
 
-	cr := buildExecuteCR("upgrade-0.99.0-20260101T000000Z", crCreatedAt)
+	cr := newTestExecuteCR("upgrade-0.99.0-20260101T000000Z", crCreatedAt)
 	if m.matchesDiskOperationID(cr, nil) {
 		t.Fatal("expected matchesDiskOperationID=false when opId does not match disk")
 	}
@@ -287,7 +287,7 @@ func TestMatchesDiskOperationIDNoMarkerEmptyDir(t *testing.T) {
 	root := t.TempDir()
 	m := newOutcomeMonitor(t, root)
 
-	cr := buildExecuteCR(wantOperationID, crCreatedAt)
+	cr := newTestExecuteCR(wantOperationID, crCreatedAt)
 	if m.matchesDiskOperationID(cr, nil) {
 		t.Fatal("expected matchesDiskOperationID=false for empty upgrade dir")
 	}
@@ -309,7 +309,7 @@ func TestMatchesDiskOperationIDNoMarkerFilesOlderThanCR_NoVersion(t *testing.T) 
 	}
 
 	m := newOutcomeMonitor(t, root)
-	cr := buildExecuteCR(wantOperationID, crCreatedAt)
+	cr := newTestExecuteCR(wantOperationID, crCreatedAt)
 
 	if !m.matchesDiskOperationID(cr, nil) {
 		t.Fatal("expected matchesDiskOperationID=true when files predate CR and no VERSION file")
@@ -338,7 +338,7 @@ func TestMatchesDiskOperationIDNoMarkerFilesOlderThanCR_VersionMatches(t *testin
 	}
 
 	m := newOutcomeMonitor(t, root)
-	cr := buildExecuteCR(wantOperationID, crCreatedAt) // wantOperationID encodes version 0.75.0
+	cr := newTestExecuteCR(wantOperationID, crCreatedAt) // wantOperationID encodes version 0.75.0
 
 	if !m.matchesDiskOperationID(cr, nil) {
 		t.Fatal("expected matchesDiskOperationID=true when files predate CR and VERSION matches")
@@ -359,7 +359,7 @@ func TestMatchesDiskOperationIDNoMarkerFileNewerThanCR(t *testing.T) {
 	}
 
 	m := newOutcomeMonitor(t, root)
-	cr := buildExecuteCR(wantOperationID, crCreatedAt)
+	cr := newTestExecuteCR(wantOperationID, crCreatedAt)
 
 	if m.matchesDiskOperationID(cr, nil) {
 		t.Fatal("expected matchesDiskOperationID=false when file is newer than CR (CN writing)")
@@ -389,7 +389,7 @@ func TestMatchesDiskOperationIDNoMarkerVersionMismatches(t *testing.T) {
 
 	m := newOutcomeMonitor(t, root)
 	// wantOperationID encodes version 0.75.0, but VERSION says 0.99.0 → mismatch.
-	cr := buildExecuteCR(wantOperationID, crCreatedAt)
+	cr := newTestExecuteCR(wantOperationID, crCreatedAt)
 
 	if m.matchesDiskOperationID(cr, nil) {
 		t.Fatal("expected matchesDiskOperationID=false when VERSION mismatches CR operationId")
@@ -431,7 +431,7 @@ func TestHandleDeleteEventEvictsAllCaches(t *testing.T) {
 	m.opFirstSeen[otherOp] = crCreatedAt
 
 	// Simulate a Deleted event for the target operation.
-	cr := buildExecuteCR(op, crCreatedAt)
+	cr := newTestExecuteCR(op, crCreatedAt)
 	m.handleDeleteEvent(cr)
 
 	// --- Assert: target operation evicted from monitor maps ---
@@ -513,7 +513,7 @@ func TestHandleDeleteEventRecordsDeletionForUntrackedOp(t *testing.T) {
 	m.events = newEventSink(evDir, "0")
 
 	// No prior events for op → no writer open. The delete records the event anyway.
-	cr := buildExecuteCR(op, crCreatedAt)
+	cr := newTestExecuteCR(op, crCreatedAt)
 	m.handleDeleteEvent(cr)
 
 	data, err := os.ReadFile(filepath.Join(evDir, op+".jsonl"))

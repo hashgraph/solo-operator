@@ -477,25 +477,190 @@ func (f *Factory) fetchPreparePayload(ctx context.Context, operationID string) (
 	return images, selectedSources, prepare, true, nil
 }
 
-// HandleNowFrozen creates a NetworkUpgradeExecute CR. The operator (not the UC)
-// owns the status.phase transitions; the UC creates the CR and watches its status.
-// In cluster-only mode the ProvisionerProxyMonitor advances the phase to
-// PendingNodeUpgrade once the operator sets ReadyForProvisionerDaemon.
+// HandleNowFrozen creates a NetworkUpgradeExecute CR. The consensus node writes
+// now_frozen.mf once the network reaches the scheduled freeze — the signal to
+// begin the execute phase.
 //
-// TODO(#995): implement CR construction + persist-before-send + status watch for
-// the DaemonResult / NodeStarting conditions.
+// The handler re-derives the operationId deterministically from the co-present
+// execute_immediate.mf (same inputs as HandleExecuteImmediate — identical value
+// every tick), then looks up the NetworkUpgradeFreeze CR by exact operationId to
+// copy spec.images and spec.selectedSources. The Freeze CR carried both verbatim
+// from the Prepare CR, so the Execute CR stays self-contained and pins the
+// registry selection made once at prepare.
 //
-// IMPORTANT: when implementing, add a Freeze.Failed gate before calling deliverCR
-// (mirroring the Prepare.Failed gate in HandleFreezeScheduled). If the
-// NetworkUpgradeFreeze CR has Failed, log at ERROR with reason=CRFailed and
-// instruct the operator to delete now_frozen.mf to clear — do NOT attempt to
-// create the Execute CR. Without this gate, a Failed Freeze would cause
-// deliverCR to log DEBUG ("CR already exists") instead of the expected ERROR,
-// hiding the failure from the operator.
-func (f *Factory) HandleNowFrozen(_ context.Context) error {
-	logx.As().Info().Str("reason", ReasonMarkerHandlerPending.String()).Str("marker", MarkerNowFrozen).
-		Msg("now_frozen.mf handler not yet implemented (#995)")
-	return nil
+// Single-writer rule: the UC creates the Execute CR and never writes its
+// status.phase. The operator sets ReadyForProvisionerDaemon; in cluster-only mode
+// the ProvisionerProxy advances it to PendingNodeUpgrade (the solo-provisioner
+// daemon does so in mainnet mode), and the UpgradeOutcomeMonitor watches the CR
+// to its terminal Succeeded/Failed outcome.
+//
+// Staleness guard 1: if now_frozen.mf is older than execute_immediate.mf, the
+// marker is stale (leftover from a prior upgrade cycle) and is skipped until
+// refreshed.
+// Staleness guard 2: after the Freeze CR is resolved, if the marker predates the
+// Freeze CR creationTimestamp, it is also stale and skipped.
+//
+// Gate: the Freeze CR MUST be Succeeded. If Failed, the handler halts at ERROR
+// (reason=CRFailed) telling the operator to delete now_frozen.mf to clear — a
+// failed freeze must not produce an Execute CR, and gating here surfaces the
+// failure instead of the misleading DEBUG deliverCR would log on a later cycle.
+// If the Freeze is still in-progress, the handler retries on the next tick.
+//
+// Fallback: if execute_immediate.mf is absent, the handler resolves the
+// operationId via manifest version (cluster + disk Prepare lookup).
+func (f *Factory) HandleNowFrozen(ctx context.Context) error {
+	// Stat now_frozen.mf for mtime — needed for the staleness guards.
+	frozenPath := filepath.Join(f.cfg.UpgradePath, MarkerNowFrozen)
+	frozenInfo, err := os.Stat(frozenPath)
+	if err != nil {
+		return errx.WithReason(errPersist.Wrap(err, "stat marker %s", MarkerNowFrozen), ReasonMarkerStatFailed)
+	}
+	frozenMarkerMtime := frozenInfo.ModTime()
+
+	// Primary: re-derive operationId from co-present execute_immediate.mf.
+	operationID, executeMtime, _, found, err := deriveOperationIDPrimary(f.cfg.UpgradePath)
+	if err != nil {
+		if errorx.IsOfType(err, errManifestInvalid) {
+			logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).
+				Str("marker", MarkerNowFrozen).
+				Msg("invalid consensus-node-components.yaml — halting execute; delete now_frozen.mf to stop retrying")
+			return nil
+		}
+		return err
+	}
+
+	if found {
+		// Staleness guard 1: marker must be newer than execute_immediate.mf.
+		if !frozenMarkerMtime.After(executeMtime) {
+			logx.As().Warn().Str("reason", ReasonStaleMarker.String()).
+				Str("marker", MarkerNowFrozen).
+				Time("frozen_mtime", frozenMarkerMtime).Time("execute_mtime", executeMtime).
+				Msg("stale now_frozen.mf — marker predates current execute_immediate.mf; skipping until refreshed")
+			return nil
+		}
+	} else {
+		// execute_immediate.mf absent — attempt fallback via manifest version.
+		logx.As().Warn().Str("reason", ReasonExecuteWithoutPrepare.String()).
+			Str("marker", MarkerNowFrozen).
+			Msg("execute_immediate.mf missing — attempting fallback resolution via manifest version")
+
+		manifestPath := filepath.Join(f.cfg.UpgradePath, manifestsSubdir, componentsManifestFile)
+		manifest, mErr := parseComponentsManifest(manifestPath)
+		if mErr != nil {
+			logx.As().Error().Err(mErr).Str("reason", ReasonOperationIDExhausted.String()).
+				Str("marker", MarkerNowFrozen).
+				Msg("execute_immediate.mf and manifest both absent — cannot resolve operationId; delete now_frozen.mf to stop retrying")
+			return nil
+		}
+
+		skipFailed := map[string]struct{}{string(operatorv1alpha1.PhaseFailed): {}}
+		operationID, err = f.resolveByVersion(ctx, manifest.Images.ConsensusNode.Version, skipFailed)
+		if err != nil {
+			return err
+		}
+		if operationID == "" {
+			logx.As().Error().Str("reason", ReasonOperationIDExhausted.String()).
+				Str("marker", MarkerNowFrozen).
+				Msg("all operationId fallbacks exhausted — no matching Prepare found; delete now_frozen.mf to stop retrying")
+			return nil
+		}
+		logx.As().Warn().Str("reason", ReasonExecuteWithoutPrepare.String()).
+			Str("operation_id", operationID).Str("marker", MarkerNowFrozen).
+			Msg("resolved operationId via fallback (execute_immediate.mf was absent)")
+	}
+
+	images, selectedSources, freeze, ready, err := f.fetchExecutePayload(ctx, operationID)
+	if err != nil {
+		return err
+	}
+	if !ready {
+		return nil
+	}
+
+	// Staleness guard 2: marker must be newer than the Freeze CR.
+	if freezeCreationTime := freeze.GetCreationTimestamp().Time; !frozenMarkerMtime.After(freezeCreationTime) {
+		logx.As().Warn().Str("reason", ReasonStaleMarker.String()).
+			Str("marker", MarkerNowFrozen).Str("operation_id", operationID).
+			Time("frozen_mtime", frozenMarkerMtime).Time("freeze_created", freezeCreationTime).
+			Msg("stale now_frozen.mf — marker predates Freeze CR; skipping until refreshed")
+		return nil
+	}
+
+	cr, err := buildExecuteCR(f.cfg, operationID, images, selectedSources)
+	if err != nil {
+		return err
+	}
+	return f.deliverCR(ctx, networkUpgradeExecuteGVR, operationID, operatorv1alpha1.StepExecute, kindNetworkUpgradeExecute, cr)
+}
+
+// fetchExecutePayload looks up the NetworkUpgradeFreeze CR for operationID and
+// returns its spec.images, spec.selectedSources, and the CR itself (for the
+// staleness guard in the caller). The Freeze CR carried both fields verbatim from
+// the Prepare CR, so they represent the registry selection pinned at prepare;
+// copying them keeps the Execute CR self-contained.
+//
+// ready is true only when the Freeze CR exists and is in Succeeded phase. It is
+// false (and err is nil) in two cases, both worth a retry on the next tick:
+//   - the Freeze CR is not yet in the cluster (early tick),
+//   - the Freeze is still in-progress (FreezeReconciler not done).
+//
+// ready is false and err is nil with a Halted ERROR log when the Freeze has
+// Failed — a Failed Freeze cannot recover, so there is no retry value and the
+// Execute CR must not be created (mirrors the Prepare.Failed gate in
+// fetchPreparePayload; see HandleNowFrozen's gate note).
+func (f *Factory) fetchExecutePayload(ctx context.Context, operationID string) (operatorv1alpha1.UpgradeImagesSpec, operatorv1alpha1.SelectedSources, *unstructured.Unstructured, bool, error) {
+	listCtx, cancel := context.WithTimeout(ctx, listTimeout)
+	defer cancel()
+
+	list, err := f.client.Resource(networkUpgradeFreezeGVR).Namespace(f.cfg.Namespace).
+		List(listCtx, metav1.ListOptions{
+			FieldSelector: "spec.operationId=" + operationID,
+		})
+	if err != nil {
+		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil, false, errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradeFreeze for operationId %s", operationID), ReasonFreezeListFailed),
+			"Confirm the UC ServiceAccount has list permission on networkupgradefreezes."+operatorv1alpha1.GroupVersion.Group,
+		)
+	}
+	if len(list.Items) == 0 {
+		logx.As().Warn().Str("reason", ReasonExecuteWithoutFreeze.String()).
+			Str("operation_id", operationID).Str("marker", MarkerNowFrozen).
+			Msg("no NetworkUpgradeFreeze CR found for operationId — will retry next tick")
+		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil, false, nil
+	}
+
+	freeze := &list.Items[0]
+	phase, _, _ := unstructured.NestedString(freeze.Object, "status", "phase")
+	switch operatorv1alpha1.Phase(phase) {
+	case operatorv1alpha1.PhaseFailed:
+		logx.As().Error().Str("reason", ReasonCRFailed.String()).
+			Str("operation_id", operationID).Str("marker", MarkerNowFrozen).
+			Msg("NetworkUpgradeFreeze has Failed — halting execute; delete now_frozen.mf to clear")
+		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil, false, nil
+	case operatorv1alpha1.PhaseSucceeded:
+		// fall through to copy payload
+	default:
+		// Still in-progress; retry next tick.
+		logx.As().Debug().Str("reason", ReasonExecuteWithoutFreeze.String()).
+			Str("operation_id", operationID).Str("phase", phase).Str("marker", MarkerNowFrozen).
+			Msg("NetworkUpgradeFreeze not yet Succeeded — will retry next tick")
+		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil, false, nil
+	}
+
+	var images operatorv1alpha1.UpgradeImagesSpec
+	if raw, ok, _ := unstructured.NestedMap(freeze.Object, "spec", "images"); ok {
+		if err2 := runtime.DefaultUnstructuredConverter.FromUnstructured(raw, &images); err2 != nil {
+			return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil, false,
+				errx.WithReason(errCRBuild.Wrap(err2, "decode NetworkUpgradeFreeze spec.images for %s", operationID), ReasonCRBuildFailed)
+		}
+	}
+
+	var selectedSources operatorv1alpha1.SelectedSources
+	if raw, ok, _ := unstructured.NestedMap(freeze.Object, "spec", "selectedSources"); ok && raw != nil {
+		_ = runtime.DefaultUnstructuredConverter.FromUnstructured(raw, &selectedSources)
+	}
+
+	return images, selectedSources, freeze, true, nil
 }
 
 // HandleFreezeAborted creates a NetworkUpgradeFreezeAbort CR. The UC re-derives
