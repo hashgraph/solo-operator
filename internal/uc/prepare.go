@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/errx"
@@ -42,6 +43,20 @@ func mintOperationID(version string, markerCreatedAt time.Time) (string, error) 
 		return "", errx.WithHints(
 			errx.WithReason(errManifestInvalid.Wrap(err, "derived operationId %q is invalid", id), ReasonManifestInvalid),
 			"Confirm images.consensusNode.version is a clean version string (no spaces or shell metacharacters)",
+		)
+	}
+	// The operationId is embedded (lowercased) in every NetworkUpgrade* CR
+	// metadata.name, which must be a DNS-1123 subdomain. ValidateOperationID permits
+	// characters legal in an operationId but not in a k8s name (notably '_'), so
+	// reject any version that would yield an unusable CR name here — at the single
+	// mint point, shared by all name builders — rather than failing opaquely at
+	// Create time.
+	if errs := k8svalidation.IsDNS1123Subdomain(strings.ToLower(id)); len(errs) > 0 {
+		return "", errx.WithHints(
+			errx.WithReason(
+				errManifestInvalid.New("derived operationId %q yields an invalid CR name: %s", id, strings.Join(errs, "; ")),
+				ReasonManifestInvalid),
+			"Use a consensusNode version containing only [A-Za-z0-9.-] (no underscores); it is embedded in the CR name",
 		)
 	}
 	return id, nil

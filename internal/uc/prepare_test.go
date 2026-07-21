@@ -145,6 +145,24 @@ func TestParseComponentsManifestInvalid(t *testing.T) {
 	}
 }
 
+// TestMintOperationIDRejectsNonDNSName verifies that a version producing an
+// operationId that is not a valid Kubernetes name (lowercased) is rejected at the
+// mint point. '_' is legal per sanity.ValidateOperationID but invalid in a
+// metadata.name, so it must fail here rather than opaquely at CR Create time.
+func TestMintOperationIDRejectsNonDNSName(t *testing.T) {
+	if _, err := mintOperationID("0.75.0_rc1", markerCreatedAt); !errorx.IsOfType(err, errManifestInvalid) {
+		t.Fatalf("underscore version: want errManifestInvalid, got %v", err)
+	}
+	// A clean semver version still mints the expected id.
+	id, err := mintOperationID("0.75.0", markerCreatedAt)
+	if err != nil {
+		t.Fatalf("clean version: unexpected error %v", err)
+	}
+	if id != wantOperationID {
+		t.Fatalf("minted id = %q, want %q", id, wantOperationID)
+	}
+}
+
 func TestHandleExecuteImmediateCreatesPrepareCR(t *testing.T) {
 	root := writePackage(t, validComponentsYAML)
 	crDir := t.TempDir()

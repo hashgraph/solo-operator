@@ -313,3 +313,55 @@ func TestHandleNowFrozenIsIdempotent(t *testing.T) {
 		t.Fatalf("re-dispatch created %d execute CRs, want exactly 1", len(list.Items))
 	}
 }
+
+// TestHandleNowFrozenEqualMtimeProceeds verifies a now_frozen.mf sharing
+// execute_immediate.mf's mtime (possible at 1s filesystem resolution) is NOT
+// treated as stale — the handler proceeds and creates the Execute CR.
+func TestHandleNowFrozenEqualMtimeProceeds(t *testing.T) {
+	root := writePackage(t, validComponentsYAML)   // execute_immediate.mf mtime = markerCreatedAt
+	writeNowFrozenMarker(t, root, markerCreatedAt) // equal mtime
+	f := newFakeFactory(t, executeTestConfig(root, t.TempDir()))
+	seedFreezeCR(t, f, wantOperationID, operatorv1alpha1.PhaseSucceeded, operatorv1alpha1.SelectedSources{})
+
+	if err := f.HandleNowFrozen(context.Background()); err != nil {
+		t.Fatalf("HandleNowFrozen: %v", err)
+	}
+	getExecute(t, f, wantOperationID) // must exist — equal mtime is not stale
+}
+
+// TestHandleNowFrozenFallbackInvalidManifestHalts verifies that when
+// execute_immediate.mf is absent and the manifest is invalid, the handler halts
+// terminally (nil, no CR) — not retried and not mislabeled as "both absent".
+func TestHandleNowFrozenFallbackInvalidManifestHalts(t *testing.T) {
+	root := t.TempDir()
+	manifestDir := filepath.Join(root, manifestsSubdir)
+	if err := os.MkdirAll(manifestDir, 0o755); err != nil {
+		t.Fatalf("mkdir manifest: %v", err)
+	}
+	// Invalid: unknown schemaVersion.
+	if err := os.WriteFile(filepath.Join(manifestDir, componentsManifestFile),
+		[]byte("schemaVersion: 99\nimages:\n  consensusNode:\n    version: \"0.75.0\"\n"), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	writeNowFrozenMarker(t, root, nowFrozenMtime)
+	f := newFakeFactory(t, executeTestConfig(root, t.TempDir()))
+
+	if err := f.HandleNowFrozen(context.Background()); err != nil {
+		t.Fatalf("want nil (terminal halt on invalid manifest), got %v", err)
+	}
+	assertNoExecute(t, f)
+}
+
+// TestHandleNowFrozenFallbackManifestAbsentRetries verifies that a transient
+// manifest read failure (manifest absent) surfaces as an error so the tick is
+// retried/reportable, rather than being silently swallowed.
+func TestHandleNowFrozenFallbackManifestAbsentRetries(t *testing.T) {
+	root := t.TempDir() // no execute_immediate.mf, no manifest
+	writeNowFrozenMarker(t, root, nowFrozenMtime)
+	f := newFakeFactory(t, executeTestConfig(root, t.TempDir()))
+
+	if err := f.HandleNowFrozen(context.Background()); err == nil {
+		t.Fatal("want transient error (retry) when manifest is absent, got nil")
+	}
+	assertNoExecute(t, f)
+}

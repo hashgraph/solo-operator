@@ -13,11 +13,13 @@ import (
 	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
-// executeCRName builds the RFC 1123-safe metadata.name for the Execute CR:
+// executeCRName builds the metadata.name for the Execute CR:
 // "<operationId-lowercased>-execute" — e.g. upgrade-0.75.0-20260413t120000z-execute.
-// As with the sibling NetworkUpgrade* CRs, identity lives in spec.operationId; the
-// name embeds the operationId only so sequential upgrades never collide, since the
-// CRs are never deleted.
+// mintOperationID guarantees the operationId is a DNS-1123 subdomain once
+// lowercased, so this yields a valid RFC 1123 name. As with the sibling
+// NetworkUpgrade* CRs, identity lives in spec.operationId; the name embeds the
+// operationId only so sequential upgrades never collide, since the CRs are never
+// deleted.
 func executeCRName(operationID string) string {
 	return strings.ToLower(operationID) + "-" + operatorv1alpha1.StepExecute
 }

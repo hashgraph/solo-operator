@@ -530,8 +530,10 @@ func (f *Factory) HandleNowFrozen(ctx context.Context) error {
 	}
 
 	if found {
-		// Staleness guard 1: marker must be newer than execute_immediate.mf.
-		if !frozenMarkerMtime.After(executeMtime) {
+		// Staleness guard 1: skip only when the marker STRICTLY predates
+		// execute_immediate.mf. Equal mtimes (possible at 1s filesystem resolution)
+		// are not stale — treating them as stale would skip the marker forever.
+		if frozenMarkerMtime.Before(executeMtime) {
 			logx.As().Warn().Str("reason", ReasonStaleMarker.String()).
 				Str("marker", MarkerNowFrozen).
 				Time("frozen_mtime", frozenMarkerMtime).Time("execute_mtime", executeMtime).
@@ -547,10 +549,17 @@ func (f *Factory) HandleNowFrozen(ctx context.Context) error {
 		manifestPath := filepath.Join(f.cfg.UpgradePath, manifestsSubdir, componentsManifestFile)
 		manifest, mErr := parseComponentsManifest(manifestPath)
 		if mErr != nil {
-			logx.As().Error().Err(mErr).Str("reason", ReasonOperationIDExhausted.String()).
-				Str("marker", MarkerNowFrozen).
-				Msg("execute_immediate.mf and manifest both absent — cannot resolve operationId; delete now_frozen.mf to stop retrying")
-			return nil
+			if errorx.IsOfType(mErr, errManifestInvalid) {
+				// Manifest present but unusable (bad YAML/schema/version) — terminal;
+				// re-reading the same bytes will not help. Halt with the accurate reason.
+				logx.As().Error().Err(mErr).Str("reason", ReasonManifestInvalid.String()).
+					Str("marker", MarkerNowFrozen).
+					Msg("execute_immediate.mf absent and consensus-node-components.yaml is invalid — cannot resolve operationId; delete now_frozen.mf to stop retrying")
+				return nil
+			}
+			// Transient read error (manifest absent or volume briefly unavailable) —
+			// surface it so it is retried/reportable rather than silently swallowed.
+			return mErr
 		}
 
 		skipFailed := map[string]struct{}{string(operatorv1alpha1.PhaseFailed): {}}
@@ -577,8 +586,9 @@ func (f *Factory) HandleNowFrozen(ctx context.Context) error {
 		return nil
 	}
 
-	// Staleness guard 2: marker must be newer than the Freeze CR.
-	if freezeCreationTime := freeze.GetCreationTimestamp().Time; !frozenMarkerMtime.After(freezeCreationTime) {
+	// Staleness guard 2: skip only when the marker STRICTLY predates the Freeze CR.
+	// Equal timestamps (1s resolution) are not stale — see guard 1.
+	if freezeCreationTime := freeze.GetCreationTimestamp().Time; frozenMarkerMtime.Before(freezeCreationTime) {
 		logx.As().Warn().Str("reason", ReasonStaleMarker.String()).
 			Str("marker", MarkerNowFrozen).Str("operation_id", operationID).
 			Time("frozen_mtime", frozenMarkerMtime).Time("freeze_created", freezeCreationTime).
@@ -657,7 +667,12 @@ func (f *Factory) fetchExecutePayload(ctx context.Context, operationID string) (
 
 	var selectedSources operatorv1alpha1.SelectedSources
 	if raw, ok, _ := unstructured.NestedMap(freeze.Object, "spec", "selectedSources"); ok && raw != nil {
-		_ = runtime.DefaultUnstructuredConverter.FromUnstructured(raw, &selectedSources)
+		if err2 := runtime.DefaultUnstructuredConverter.FromUnstructured(raw, &selectedSources); err2 != nil {
+			// selectedSources pins the registry selection made at prepare; a decode
+			// failure must surface, not silently yield an empty/partial pin.
+			return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil, false,
+				errx.WithReason(errCRBuild.Wrap(err2, "decode NetworkUpgradeFreeze spec.selectedSources for %s", operationID), ReasonCRBuildFailed)
+		}
 	}
 
 	return images, selectedSources, freeze, true, nil
