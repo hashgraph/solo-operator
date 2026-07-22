@@ -15,11 +15,17 @@ import (
 
 // executeCRName builds the metadata.name for the Execute CR:
 // "<operationId-lowercased>-execute" — e.g. upgrade-0.75.0-20260413t120000z-execute.
-// mintOperationID guarantees the operationId is a DNS-1123 subdomain once
-// lowercased, so this yields a valid RFC 1123 name. As with the sibling
-// NetworkUpgrade* CRs, identity lives in spec.operationId; the name embeds the
-// operationId only so sequential upgrades never collide, since the CRs are never
-// deleted.
+// mintOperationID validates that this name — operationId lowercased plus the
+// longest step suffix — is a valid DNS-1123 subdomain, so the result is always a
+// valid RFC 1123 name.
+//
+// Identity lives in spec.operationId (+ the operation-id label), not the name. The
+// name is a deterministic function of the operationId: distinct upgrades get
+// distinct names (never colliding) and the same upgrade always maps to the same
+// name — so a re-detected marker is a no-op (Create returns AlreadyExists), and a
+// CR deleted then recreated (e.g. during DR, even mid-upgrade) comes back under the
+// same identity rather than as a second, parallel CR. NetworkUpgrade* CRs are
+// retained after completion, but the naming does not depend on them being immortal.
 func executeCRName(operationID string) string {
 	return strings.ToLower(operationID) + "-" + operatorv1alpha1.StepExecute
 }

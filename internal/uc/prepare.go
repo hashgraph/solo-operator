@@ -45,18 +45,35 @@ func mintOperationID(version string, markerCreatedAt time.Time) (string, error) 
 			"Confirm images.consensusNode.version is a clean version string (no spaces or shell metacharacters)",
 		)
 	}
-	// The operationId is embedded (lowercased) in every NetworkUpgrade* CR
-	// metadata.name, which must be a DNS-1123 subdomain. ValidateOperationID permits
-	// characters legal in an operationId but not in a k8s name (notably '_'), so
-	// reject any version that would yield an unusable CR name here — at the single
-	// mint point, shared by all name builders — rather than failing opaquely at
-	// Create time.
-	if errs := k8svalidation.IsDNS1123Subdomain(strings.ToLower(id)); len(errs) > 0 {
+	// The operationId flows into two Kubernetes fields with different rules, so
+	// validate both here — the single mint point shared by every name builder —
+	// rather than failing opaquely at Create time:
+	//
+	//  1. It is used verbatim as the hedera.com/operation-id label value, which
+	//     Kubernetes caps at 63 chars. That cap is why spec.operationId carries
+	//     +kubebuilder:validation:MaxLength=63 (the CRD limit must not exceed the
+	//     label-value limit); IsValidLabelValue enforces the same bound here.
+	//  2. Its lowercased form is embedded in every CR metadata.name as
+	//     "<operationId>-<step>". The longest step suffix ("-prepare"/"-execute")
+	//     yields the longest name; if that is a valid DNS-1123 subdomain, every name
+	//     builder's output is too. This also catches characters legal in an
+	//     operationId but not a k8s name (notably '_'), plus the per-label and
+	//     253-char length rules once the suffix is appended.
+	if errs := k8svalidation.IsValidLabelValue(id); len(errs) > 0 {
 		return "", errx.WithHints(
 			errx.WithReason(
-				errManifestInvalid.New("derived operationId %q yields an invalid CR name: %s", id, strings.Join(errs, "; ")),
+				errManifestInvalid.New("derived operationId %q is not a valid label value: %s", id, strings.Join(errs, "; ")),
 				ReasonManifestInvalid),
-			"Use a consensusNode version containing only [A-Za-z0-9.-] (no underscores); it is embedded in the CR name",
+			"Shorten images.consensusNode.version; the operationId (upgrade-<version>-<timestamp>) must be ≤63 characters",
+		)
+	}
+	longestCRName := strings.ToLower(id) + "-" + operatorv1alpha1.StepPrepare
+	if errs := k8svalidation.IsDNS1123Subdomain(longestCRName); len(errs) > 0 {
+		return "", errx.WithHints(
+			errx.WithReason(
+				errManifestInvalid.New("derived CR name %q is not a valid Kubernetes name: %s", longestCRName, strings.Join(errs, "; ")),
+				ReasonManifestInvalid),
+			"Use a consensusNode version of only [A-Za-z0-9.-] (no underscores) that keeps the CR name within Kubernetes limits",
 		)
 	}
 	return id, nil
@@ -65,8 +82,12 @@ func mintOperationID(version string, markerCreatedAt time.Time) (string, error) 
 // prepareCRName builds the RFC 1123-safe metadata.name for the Prepare CR:
 // "<operationId-lowercased>-prepare". metadata.name carries no semantic meaning
 // (operationId in the spec/label is the authoritative identity); it embeds the
-// operationId only to stay unique across sequential upgrades, since
-// NetworkUpgrade* CRs are never deleted.
+// operationId so the name is a deterministic function of the upgrade: distinct
+// upgrades never collide, and the same upgrade always maps to the same name — so a
+// re-detected marker is a no-op (Create returns AlreadyExists) and a CR deleted
+// then recreated (e.g. during DR) comes back under the same identity rather than as
+// a second, parallel CR. CRs are retained after completion, but the naming does not
+// depend on them being immortal.
 func prepareCRName(operationID string) string {
 	return strings.ToLower(operationID) + "-" + operatorv1alpha1.StepPrepare
 }
