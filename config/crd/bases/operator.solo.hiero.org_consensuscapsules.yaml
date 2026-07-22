@@ -76,13 +76,6 @@ spec:
                   is subPath-mounted at data/config/application.properties.
                 minLength: 1
                 type: string
-              autostart:
-                default: false
-                description: |-
-                  Autostart starts the s6-managed consensus service on pod boot when true,
-                  via AUTO_START_CONSENSUS_SERVICE. When false the pod comes up with the
-                  service held down.
-                type: boolean
               blockNodes:
                 description: when set, creates a block-nodes ConfigMap and mounts
                   block-nodes.json
@@ -126,6 +119,20 @@ spec:
                 required:
                 - path
                 type: object
+              desiredRunState:
+                allOf:
+                - enum:
+                  - Running
+                  - Stopped
+                - enum:
+                  - Running
+                  - Stopped
+                description: |-
+                  DesiredRunState is the persisted desired run-state of the consensus process.
+                  Meaningful only when StartPolicy is Manual; ignored in Auto. Unset is treated
+                  as Stopped. Distinct from Offline (scale-to-zero) — this governs the s6
+                  process while the pod stays up.
+                type: string
               externalAddress:
                 description: external FQDN or IP
                 type: string
@@ -21378,6 +21385,18 @@ spec:
                   references a SimpleFeesSchedules CR whose managed ConfigMap is subPath-mounted
                   at data/config/simpleFeesSchedules.json. Optional — CN falls back to defaults.
                 type: string
+              startPolicy:
+                allOf:
+                - enum:
+                  - Auto
+                  - Manual
+                - enum:
+                  - Auto
+                  - Manual
+                default: Auto
+                description: StartPolicy selects who starts the consensus process.
+                  See HIP-1494/1495.
+                type: string
               throttlesConfigRef:
                 description: |-
                   references a ThrottlesConfig CR whose managed ConfigMap is subPath-mounted
@@ -21529,6 +21548,7 @@ spec:
                 - Succeeded
                 - Failed
                 - Unknown
+                - Stopped
                 type: string
               platformStatus:
                 description: |-

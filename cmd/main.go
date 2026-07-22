@@ -150,10 +150,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = controller.NewConsensusCapsuleReconciler(
+	consensusCapsuleReconciler, err := controller.NewConsensusCapsuleReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
-	).SetupWithManager(mgr); err != nil {
+		mgr.GetConfig(),
+	)
+	if err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ConsensusCapsule")
+		os.Exit(1)
+	}
+	if err = consensusCapsuleReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ConsensusCapsule")
 		os.Exit(1)
 	}

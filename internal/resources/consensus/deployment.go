@@ -243,10 +243,7 @@ echo "genesis-init: done"`
 func (r *StatefulSetSubReconciler) buildConsensusNodeContainer(capsule *operatorv1alpha1.ConsensusCapsule, volumeMounts []corev1.VolumeMount) (corev1.Container, error) {
 	cn := capsule.Spec.PodProperties.Containers.ConsensusNode
 
-	containerName := cn.Name
-	if containerName == "" {
-		containerName = "consensus-node"
-	}
+	containerName := ConsensusContainerName(capsule)
 
 	image := common.BuildImageOrDefault(cn.SoftwareVersion, "")
 	if image == "" {
@@ -278,7 +275,14 @@ func (r *StatefulSetSubReconciler) buildConsensusNodeContainer(capsule *operator
 		env = append(env, corev1.EnvVar{Name: "JAVA_OPTS", Value: cn.JavaOpts})
 	}
 
-	env = append(env, corev1.EnvVar{Name: "AUTO_START_CONSENSUS_SERVICE", Value: fmt.Sprintf("%t", capsule.Spec.Autostart)})
+	// Wire AUTO_START_CONSENSUS_SERVICE from the start policy, always explicit so
+	// intent is unambiguous in the pod spec rather than relying on the image default.
+	// The image's consensus/run reads this env at boot (HIP-1494).
+	autoStart := "true"
+	if capsule.Spec.StartPolicy == operatorv1alpha1.StartPolicyManual {
+		autoStart = "false"
+	}
+	env = append(env, corev1.EnvVar{Name: "AUTO_START_CONSENSUS_SERVICE", Value: autoStart})
 
 	container := corev1.Container{
 		Name:  containerName,

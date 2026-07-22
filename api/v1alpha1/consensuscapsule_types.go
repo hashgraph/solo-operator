@@ -149,12 +149,19 @@ type ConsensusCapsuleSpec struct {
 	// +kubebuilder:default=false
 	Offline bool `json:"offline,omitempty"`
 
-	// Autostart starts the s6-managed consensus service on pod boot when true,
-	// via AUTO_START_CONSENSUS_SERVICE. When false the pod comes up with the
-	// service held down.
+	// StartPolicy selects who starts the consensus process. See HIP-1494/1495.
 	// +optional
-	// +kubebuilder:default=false
-	Autostart bool `json:"autostart,omitempty"`
+	// +kubebuilder:default=Auto
+	// +kubebuilder:validation:Enum=Auto;Manual
+	StartPolicy StartPolicy `json:"startPolicy,omitempty"`
+
+	// DesiredRunState is the persisted desired run-state of the consensus process.
+	// Meaningful only when StartPolicy is Manual; ignored in Auto. Unset is treated
+	// as Stopped. Distinct from Offline (scale-to-zero) — this governs the s6
+	// process while the pod stays up.
+	// +optional
+	// +kubebuilder:validation:Enum=Running;Stopped
+	DesiredRunState RunState `json:"desiredRunState,omitempty"`
 }
 
 // BlockNodesConfig defines block-node connection settings.
@@ -583,7 +590,7 @@ type ConsensusCapsuleStatus struct {
 	// consensus-only value: it is permitted here but excluded from every other CRD's
 	// phase enum.
 	// +optional
-	// +kubebuilder:validation:Enum=Pending;Running;Active;Succeeded;Failed;Unknown
+	// +kubebuilder:validation:Enum=Pending;Running;Active;Succeeded;Failed;Unknown;Stopped
 	Phase Phase `json:"phase,omitempty"`
 
 	// PlatformStatus is the consensus node's live platform state (raw

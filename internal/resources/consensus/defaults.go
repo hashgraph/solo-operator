@@ -19,6 +19,10 @@ func UCDefaultImage() string {
 }
 
 const (
+	// DefaultConsensusContainerName is the consensus-node container name used when
+	// spec.podProperties.containers.consensusNode.name is unset.
+	DefaultConsensusContainerName = "consensus-node"
+
 	// HapiBase is the working directory inside the consensus-node container.
 	HapiBase = "/opt/hgcapp/services-hedera/HapiApp2.0"
 

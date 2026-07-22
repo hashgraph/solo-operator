@@ -197,6 +197,16 @@ func PodName(capsule *operatorv1alpha1.ConsensusCapsule) string {
 	return StatefulSetName(capsule) + "-0"
 }
 
+// ConsensusContainerName returns the consensus-node container name, honoring the
+// spec override and falling back to DefaultConsensusContainerName. Shared by the
+// container builder and the s6 exec target so they never diverge.
+func ConsensusContainerName(capsule *operatorv1alpha1.ConsensusCapsule) string {
+	if name := capsule.Spec.PodProperties.Containers.ConsensusNode.Name; name != "" {
+		return name
+	}
+	return DefaultConsensusContainerName
+}
+
 // RenderSettingsTxt renders a settings map in the padded-comma format expected by the Hedera platform:
 //
 //	"checkSignedStateFromDisk,              1"

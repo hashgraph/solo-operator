@@ -12,7 +12,7 @@ spec:
   accountId: "0.0.6"
   weight: 500
   serviceType: LoadBalancer
-  autostart: true  # start the consensus service on pod boot (default false)
+  startPolicy: Auto  # Auto (default): CN process starts on pod boot; Manual: started out-of-band
   podProperties:
     containers:
       consensusNode:

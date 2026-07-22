@@ -123,19 +123,20 @@ func TestBuildStatefulSet_JavaEnvVars_NotSetWhenEmpty(t *testing.T) {
 	}
 }
 
-func TestBuildStatefulSet_AutostartEnvVar(t *testing.T) {
+func TestBuildStatefulSet_AutoStartEnvVar(t *testing.T) {
 	cases := map[string]struct {
-		autostart bool
-		want      string
+		startPolicy operatorv1alpha1.StartPolicy
+		want        string
 	}{
-		"default_false": {autostart: false, want: "false"},
-		"enabled":       {autostart: true, want: "true"},
+		"unset_defaults_true": {startPolicy: "", want: "true"},
+		"auto":                {startPolicy: operatorv1alpha1.StartPolicyAuto, want: "true"},
+		"manual":              {startPolicy: operatorv1alpha1.StartPolicyManual, want: "false"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			r := newStsReconciler()
 			capsule := capsuleWithImage("v0.50.0")
-			capsule.Spec.Autostart = tc.autostart
+			capsule.Spec.StartPolicy = tc.startPolicy
 
 			sts, err := r.buildStatefulSet(context.Background(), capsule)
 			if err != nil {

@@ -36,6 +36,33 @@ const (
 	PhaseSucceeded Phase = "Succeeded"
 	PhaseFailed    Phase = "Failed"
 	PhaseUnknown   Phase = "Unknown"
+	// PhaseStopped is a non-failure resting state for a Manual-start capsule whose
+	// consensus process is observed not running (not-yet-started, stopped by a
+	// Start/Stop CR, or crashed). It is distinct from Failed (never a failure) and
+	// from Offline (which scales the pod to zero); the pod stays up. A fresh
+	// ConsensusNodeStart is required to leave Stopped.
+	PhaseStopped Phase = "Stopped"
+)
+
+// StartPolicy selects who starts the consensus process: Auto on pod boot, or
+// Manual (held down, started out-of-band via the Start/Stop control interface).
+// +kubebuilder:validation:Enum=Auto;Manual
+type StartPolicy string
+
+const (
+	StartPolicyAuto   StartPolicy = "Auto"
+	StartPolicyManual StartPolicy = "Manual"
+)
+
+// RunState is the desired run-state of the consensus process. Meaningful only when
+// StartPolicy is Manual; governs the s6 process while the pod stays up (distinct
+// from Offline, which scales the pod to zero).
+// +kubebuilder:validation:Enum=Running;Stopped
+type RunState string
+
+const (
+	RunStateRunning RunState = "Running"
+	RunStateStopped RunState = "Stopped" // unset is treated as Stopped
 )
 
 // ImagePullPolicy represents the image pull policy
