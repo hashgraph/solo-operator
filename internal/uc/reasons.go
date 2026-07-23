@@ -126,6 +126,10 @@ const (
 	ReasonConfigCRsDeployed      errx.Reason = "ConfigCRsDeployed"
 	ReasonConfigCRWaitTimeout    errx.Reason = "ConfigCRWaitTimeout"
 
+	// Metrics server.
+	ReasonMetricsServerStarted errx.Reason = "MetricsServerStarted"
+	ReasonMetricsServerFailed  errx.Reason = "MetricsServerFailed"
+
 	// systemd notify.
 	ReasonSdNotifyReadyFailed    errx.Reason = "SdNotifyReadyFailed"
 	ReasonSdNotifyStoppingFailed errx.Reason = "SdNotifyStoppingFailed"

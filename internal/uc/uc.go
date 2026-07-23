@@ -11,6 +11,7 @@ import (
 
 	"github.com/automa-saga/daemonkit"
 	"github.com/automa-saga/logx"
+	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/client-go/dynamic"
 
 	"github.com/hashgraph/solo-operator/internal/errx"
@@ -31,6 +32,7 @@ type UC struct {
 	client   dynamic.Interface
 	events   *eventSink
 	monitors []daemonkit.MonitorRunner
+	registry *prometheus.Registry
 }
 
 // New builds the UC from cfg, constructing the K8s client and the enabled monitors.
@@ -100,6 +102,9 @@ func (u *UC) Run(ctx context.Context) error {
 		Logger:   slog.Default(),
 	}, daemonkit.ServerConfig{})
 
+	u.registry = NewMetricsRegistry(u.cfg, tracker, u.monitors)
+	platformScrapeTimestampGauge(u.registry, u.cfg.NodeID)
+
 	// daemonkit.Group (panic-recovering errgroup): a panic in the control-plane
 	// server or a supervisor goroutine becomes the Wait error instead of crashing
 	// the UC, and the first failure cancels the group so the rest shut down.
@@ -112,6 +117,10 @@ func (u *UC) Run(ctx context.Context) error {
 
 	g.Go("control-plane-server", func(ctx context.Context) error {
 		return server.Start(ctx)
+	})
+
+	g.Go("metrics-server", func(ctx context.Context) error {
+		return runMetricsServer(ctx, u.cfg.MetricsAddr, u.registry)
 	})
 
 	// a permanently-failed monitor stays up in a degraded state — surfaced via /status, not a pod crash, so the

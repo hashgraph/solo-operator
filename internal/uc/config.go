@@ -79,6 +79,9 @@ type Config struct {
 	// KubeconfigPath is optional; empty means in-cluster config.
 	KubeconfigPath string
 
+	// MetricsAddr is the listen address for the UC's own /metrics endpoint.
+	// Env: UC_METRICS_ADDR.
+	MetricsAddr string
 	// MetricsURL is the consensus node's Prometheus endpoint scraped by the
 	// platform-status sensor. Env: UC_METRICS_URL.
 	MetricsURL string
@@ -127,6 +130,7 @@ func DefaultConfig() Config {
 	return Config{
 		Mode:                  ModeMainnet,
 		NodeID:                -1,
+		MetricsAddr:           DefaultMetricsAddr,
 		UpgradePath:           DefaultUpgradePath,
 		PreviousUpgradePath:   DefaultPreviousUpgradePath,
 		EventsPath:            DefaultEventsPath,
@@ -185,6 +189,12 @@ func (c Config) Validate() error {
 		return errx.WithHints(
 			errx.WithReason(errConfigInvalid.New("pod-name is required (used to derive the ConsensusCapsule name)"), ReasonConfigInvalid),
 			"Set --pod-name (UC_POD_NAME) via the downward API fieldRef metadata.name",
+		)
+	}
+	if c.MetricsAddr == "" {
+		return errx.WithHints(
+			errx.WithReason(errConfigInvalid.New("metrics-addr is required"), ReasonConfigInvalid),
+			"Set --metrics-addr to the UC metrics listen address (e.g. :9990)",
 		)
 	}
 	if c.MetricsURL == "" {
