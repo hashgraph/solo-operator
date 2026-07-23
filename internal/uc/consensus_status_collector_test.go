@@ -43,7 +43,7 @@ func TestConsensusStatusCollector_MetricsSource_NoSnapshot(t *testing.T) {
 	mon := NewPlatformStatusMonitor(cfg, nil, nil)
 
 	reg := prometheus.NewRegistry()
-	reg.MustRegister(NewConsensusStatusCollector(0, mon))
+	reg.MustRegister(NewConsensusStatusCollector(0, mon, nil))
 
 	f := gatherFamily(t, reg, "uc_consensus_status")
 	if f == nil {
@@ -80,7 +80,7 @@ func TestConsensusStatusCollector_MetricsSource_WithSnapshot(t *testing.T) {
 	mon.scrapeSnapshot.Store(&PlatformScrapeSnapshot{Code: 2, Status: "ACTIVE", ScrapedAt: now})
 
 	reg := prometheus.NewRegistry()
-	reg.MustRegister(NewConsensusStatusCollector(0, mon))
+	reg.MustRegister(NewConsensusStatusCollector(0, mon, nil))
 
 	f := gatherFamily(t, reg, "uc_consensus_status")
 	if f == nil {
@@ -119,7 +119,7 @@ func TestConsensusStatusCollector_MetricsSource_AllCodes(t *testing.T) {
 		})
 
 		reg := prometheus.NewRegistry()
-		reg.MustRegister(NewConsensusStatusCollector(0, mon))
+		reg.MustRegister(NewConsensusStatusCollector(0, mon, nil))
 		f := gatherFamily(t, reg, "uc_consensus_status")
 		m := metricByLabels(t, f, map[string]string{"source": "metrics"})
 		if m == nil {

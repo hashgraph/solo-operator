@@ -89,6 +89,10 @@ type Config struct {
 	// Env: UC_PLATFORM_POLL_INTERVAL.
 	PlatformPollInterval time.Duration
 
+	// ConsensusLogFile is the path to the consensus node's log file tailed by the
+	// log monitor for PLATFORM_STATUS transitions. Env: UC_CONSENSUS_LOG_FILE.
+	ConsensusLogFile string
+
 	// UpgradePath is the directory polled for marker files.
 	//
 	// SAME-FILESYSTEM CONSTRAINT: UpgradePath and PreviousUpgradePath must reside
@@ -131,6 +135,7 @@ func DefaultConfig() Config {
 		Mode:                  ModeMainnet,
 		NodeID:                -1,
 		MetricsAddr:           DefaultMetricsAddr,
+		ConsensusLogFile:      DefaultConsensusLogFile,
 		UpgradePath:           DefaultUpgradePath,
 		PreviousUpgradePath:   DefaultPreviousUpgradePath,
 		EventsPath:            DefaultEventsPath,
