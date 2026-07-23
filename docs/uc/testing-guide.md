@@ -640,17 +640,19 @@ To exercise the writer, retention, and sweep logic directly, run the unit tests
 
 ---
 
-## 7. Query the control socket (status & health)
+## 7. Query the control socket (status, health & consensus status)
 
-The UC exposes a daemonkit control server on `--socket-path` with two endpoints,
-`GET /status` and `GET /health`. The `uc` binary dials them for you:
+The UC exposes a daemonkit control server on `--socket-path` with three
+endpoints: `GET /status`, `GET /health`, and `GET /consensus/status`. The `uc`
+binary dials them for you:
 
 ```bash
 ./bin/uc status --socket-path "$UCDIR/uc.sock"   # pretty-printed per-monitor status JSON
 ./bin/uc health --socket-path "$UCDIR/uc.sock"   # prints "ok" + exit 0 while live, errors otherwise
 ```
 
-`status` returns one entry per monitor (`marker-monitor`, and
+`status` returns one entry per monitor (`marker-monitor`,
+`platform-status-monitor`, `log-monitor`, `upgrade-outcome-monitor`, and
 `provisioner-proxy-monitor` in cluster-only mode), showing each monitor's
 liveness and any connectivity error. `health` is a scriptable liveness probe.
 
@@ -659,6 +661,53 @@ Prefer raw `curl`? The same endpoints are available directly:
 ```bash
 curl --unix-socket "$UCDIR/uc.sock" http://uc/status | jq .
 curl --unix-socket "$UCDIR/uc.sock" -i http://uc/health   # 200 when the process is live
+```
+
+### 7a. Consensus status (`GET /consensus/status`)
+
+Returns a compact JSON snapshot of the consensus node's platform status from all
+observation sources (metrics scrape, log file) plus the reconciled effective
+view:
+
+```bash
+curl --unix-socket "$UCDIR/uc.sock" http://uc/consensus/status | jq .
+```
+
+Example response:
+
+```json
+{
+  "nodeId": 0,
+  "now": "2026-07-23T10:00:07Z",
+  "snapshotAt": "2026-07-23T10:00:07Z",
+  "effective": {"code": 2, "status": "ACTIVE", "source": "metrics"},
+  "metrics":   {"code": 2, "status": "ACTIVE", "scrapedAt": "2026-07-23T10:00:05Z", "fresh": true},
+  "log":       {"code": 2, "status": "ACTIVE", "fileModifiedAt": "2026-07-23T10:00:06Z"},
+  "staleness": "15s"
+}
+```
+
+**This endpoint reads last-known monitor state — it does not trigger a fresh
+scrape.** Data freshness depends on each monitor's poll interval
+(PlatformStatusMonitor ≈ 5 s, LogMonitor ≈ 1 s). Key fields:
+
+- `now` — server wall clock at request time.
+- `snapshotAt` — when the view was assembled (same as `now`; included for
+  symmetry with `metrics.scrapedAt` and `log.fileModifiedAt`).
+- `metrics.scrapedAt` — last successful `:9999` scrape timestamp. Compare
+  `now - scrapedAt` against `staleness` to judge freshness.
+- `metrics.fresh` — whether the metrics scrape is within the staleness window.
+  Drives the effective-source decision: `true` → effective uses metrics;
+  `false` → falls back to log.
+- `log.fileModifiedAt` — mtime of the consensus log file. A stale mtime means
+  the consensus node has stopped writing to the log.
+- `effective.source` — which source was selected: `"metrics"` (fresh scrape),
+  `"log"` (stale metrics, log available), or `"none"` (both unavailable).
+
+In a running pod, use `kubectl exec`:
+
+```bash
+kubectl exec <pod> -c uc -- curl --unix-socket /run/uc/uc.sock http://localhost/consensus/status | jq .
 ```
 
 ---
@@ -895,9 +944,34 @@ go test ./internal/uc/ -run TestControlClient -v
 | `TestControlClientNon200` | A non-200 response on either endpoint surfaces as an error. |
 | `TestControlClientNoSocket` | An absent socket surfaces as a dial error on either endpoint. |
 
-The `ControlClient` covers the full daemonkit control surface (`/status` and
-`/health`); add a method (and `uc` subcommand) here for any new endpoint the
-server registers.
+The `ControlClient` covers the daemonkit control surface (`/status` and
+`/health`). The `GET /consensus/status` endpoint (§7a) is registered via
+`daemonkit.ComponentHandler` and returns a JSON snapshot of the reconciled
+consensus status — see the metrics automated tests below for its coverage.
+
+**Prometheus metrics & consensus status** (`internal/uc/metrics_server_test.go`,
+`internal/uc/consensus_status_collector_test.go`):
+
+```bash
+go test ./internal/uc/ -run 'TestMetrics|TestConsensus' -v
+```
+
+| Test | Asserts |
+|------|---------|
+| `TestMetricsRegistryProducesExpectedFamilies` | The registry contains `uc_build_info`, `uc_up`, `uc_monitor_up`, and standard `go_*`/`process_*` collectors. |
+| `TestMetricsHTTPEndpoint` | `GET /metrics` on the HTTP server returns valid Prometheus exposition text with the expected metric families. |
+| `TestConsensusStatusCollectorNoSnapshot` | With no scrape or log snapshot, all sources emit `-1` (UNKNOWN). |
+| `TestConsensusStatusCollectorWithSnapshot` | A published `PlatformScrapeSnapshot` emits the correct code for `source="metrics"` and `source="effective"`. |
+| `TestConsensusStatusCollectorAllCodes` | Every platform status code (STARTING_UP through CATASTROPHIC_FAILURE) round-trips correctly. |
+| `TestConsensusStatusCollectorEffectiveFresh` | A fresh metrics scrape (within staleness) selects `source="metrics"` for effective. |
+| `TestConsensusStatusCollectorEffectiveStale` | A stale metrics scrape falls back to `source="log"` for effective. |
+| `TestConsensusStatusCollectorEffectiveNeitherAvailable` | Neither source available → effective is `-1`. |
+| `TestConsensusStatusCollectorEffectiveStalenessEdge` | Scrape age exactly at the staleness boundary → stale (strict `<`, not `<=`). |
+
+The reconciliation logic (`reconcileConsensusStatus`) is shared between the
+Prometheus collector and the `GET /consensus/status` control-plane handler, so
+these tests cover both paths. The handler itself adds `now`, `snapshotAt`, and
+`staleness` fields but delegates all status computation to the shared function.
 
 **Integration tests — real API server** (`test/integration/uc/`):
 

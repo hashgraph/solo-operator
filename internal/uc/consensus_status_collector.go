@@ -11,12 +11,110 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
+// ConsensusStatusView is a point-in-time snapshot of consensus status from all
+// sources, including the reconciled effective view. It is shared by the
+// Prometheus collector and the control-plane /consensus/status handler.
+type ConsensusStatusView struct {
+	NodeID    int             `json:"nodeId"`
+	Effective EffectiveStatus `json:"effective"`
+	Metrics   MetricsStatus   `json:"metrics"`
+	Log       LogStatus       `json:"log"`
+	Staleness time.Duration   `json:"-"`
+}
+
+// EffectiveStatus is the reconciled consensus status.
+type EffectiveStatus struct {
+	Code   int32  `json:"code"`
+	Status string `json:"status"`
+	Source string `json:"source"`
+}
+
+// MetricsStatus is the platform status from the metrics scrape.
+type MetricsStatus struct {
+	Code      int32      `json:"code"`
+	Status    string     `json:"status"`
+	ScrapedAt *time.Time `json:"scrapedAt,omitempty"`
+	Fresh     bool       `json:"fresh"`
+}
+
+// LogStatus is the platform status from the consensus log.
+type LogStatus struct {
+	Code           int32      `json:"code"`
+	Status         string     `json:"status"`
+	FileModifiedAt *time.Time `json:"fileModifiedAt,omitempty"`
+}
+
+// reconcileConsensusStatus reads the current monitor state and produces a
+// unified view. Both the Prometheus collector and the control-plane handler
+// call this so the effective-source logic lives in one place.
+func reconcileConsensusStatus(nodeID int, staleness time.Duration, now time.Time, platform *PlatformStatusMonitor, logMon *LogMonitor) ConsensusStatusView {
+	unknown := operatorv1alpha1.PlatformStatusCodeUnknown
+
+	metricsCode := unknown
+	metricsStatus := operatorv1alpha1.PlatformStatusNameForCode(unknown)
+	var scrapedAt *time.Time
+	metricsFresh := false
+	if snap := platform.ScrapeSnapshot(); snap != nil {
+		metricsCode = snap.Code
+		metricsStatus = snap.Status
+		t := snap.ScrapedAt
+		scrapedAt = &t
+		metricsFresh = now.Sub(snap.ScrapedAt) < staleness
+	}
+
+	logCode := unknown
+	logStatus := operatorv1alpha1.PlatformStatusNameForCode(unknown)
+	var logModifiedAt *time.Time
+	if logMon != nil {
+		if ls := logMon.Snapshot(); ls != nil {
+			logCode = ls.Code
+			logStatus = ls.Status
+		}
+		if mtime := logMon.LogFileMtime(); mtime > 0 {
+			t := time.Unix(int64(mtime), 0).UTC()
+			logModifiedAt = &t
+		}
+	}
+
+	effectiveCode := unknown
+	source := "none"
+	if metricsFresh && metricsCode != unknown {
+		effectiveCode = metricsCode
+		source = "metrics"
+	} else if logCode != unknown {
+		effectiveCode = logCode
+		source = "log"
+	}
+
+	return ConsensusStatusView{
+		NodeID: nodeID,
+		Effective: EffectiveStatus{
+			Code:   effectiveCode,
+			Status: operatorv1alpha1.PlatformStatusNameForCode(effectiveCode),
+			Source: source,
+		},
+		Metrics: MetricsStatus{
+			Code:      metricsCode,
+			Status:    metricsStatus,
+			ScrapedAt: scrapedAt,
+			Fresh:     metricsFresh,
+		},
+		Log: LogStatus{
+			Code:           logCode,
+			Status:         logStatus,
+			FileModifiedAt: logModifiedAt,
+		},
+		Staleness: staleness,
+	}
+}
+
 // ConsensusStatusCollector is a custom prometheus.Collector that emits
 // uc_consensus_status{source,node_id} at scrape time by reading the current
 // monitor state atomically. This avoids races between the monitor goroutine
 // (which writes) and the HTTP scrape goroutine (which reads).
 type ConsensusStatusCollector struct {
 	nodeID     string
+	nodeIDInt  int
 	staleness  time.Duration
 	monitor    *PlatformStatusMonitor
 	logMonitor *LogMonitor
@@ -32,6 +130,7 @@ type ConsensusStatusCollector struct {
 func NewConsensusStatusCollector(nodeID int, staleness time.Duration, monitor *PlatformStatusMonitor, logMon *LogMonitor) *ConsensusStatusCollector {
 	return &ConsensusStatusCollector{
 		nodeID:     strconv.Itoa(nodeID),
+		nodeIDInt:  nodeID,
 		staleness:  staleness,
 		monitor:    monitor,
 		logMonitor: logMon,
@@ -61,37 +160,21 @@ func (c *ConsensusStatusCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (c *ConsensusStatusCollector) Collect(ch chan<- prometheus.Metric) {
-	now := c.now()
-	unknown := float64(operatorv1alpha1.PlatformStatusCodeUnknown)
+	v := reconcileConsensusStatus(c.nodeIDInt, c.staleness, c.now(), c.monitor, c.logMonitor)
 
-	snap := c.monitor.ScrapeSnapshot()
-	metricsCode := unknown
+	ch <- prometheus.MustNewConstMetric(c.statusDesc, prometheus.GaugeValue, float64(v.Metrics.Code), "metrics", c.nodeID)
 	scrapeTS := 0.0
-	metricsFresh := false
-	if snap != nil {
-		metricsCode = float64(snap.Code)
-		scrapeTS = float64(snap.ScrapedAt.Unix())
-		metricsFresh = now.Sub(snap.ScrapedAt) < c.staleness
+	if v.Metrics.ScrapedAt != nil {
+		scrapeTS = float64(v.Metrics.ScrapedAt.Unix())
 	}
-	ch <- prometheus.MustNewConstMetric(c.statusDesc, prometheus.GaugeValue, metricsCode, "metrics", c.nodeID)
 	ch <- prometheus.MustNewConstMetric(c.scrapeDesc, prometheus.GaugeValue, scrapeTS, c.nodeID)
 
-	logCode := unknown
+	ch <- prometheus.MustNewConstMetric(c.statusDesc, prometheus.GaugeValue, float64(v.Log.Code), "log", c.nodeID)
 	logTS := 0.0
-	if c.logMonitor != nil {
-		if ls := c.logMonitor.Snapshot(); ls != nil {
-			logCode = float64(ls.Code)
-		}
-		logTS = c.logMonitor.LogFileMtime()
+	if v.Log.FileModifiedAt != nil {
+		logTS = float64(v.Log.FileModifiedAt.Unix())
 	}
-	ch <- prometheus.MustNewConstMetric(c.statusDesc, prometheus.GaugeValue, logCode, "log", c.nodeID)
 	ch <- prometheus.MustNewConstMetric(c.logTSDesc, prometheus.GaugeValue, logTS, c.nodeID)
 
-	effective := unknown
-	if metricsFresh && metricsCode != unknown {
-		effective = metricsCode
-	} else if logCode != unknown {
-		effective = logCode
-	}
-	ch <- prometheus.MustNewConstMetric(c.statusDesc, prometheus.GaugeValue, effective, "effective", c.nodeID)
+	ch <- prometheus.MustNewConstMetric(c.statusDesc, prometheus.GaugeValue, float64(v.Effective.Code), "effective", c.nodeID)
 }

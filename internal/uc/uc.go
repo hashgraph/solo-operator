@@ -17,7 +17,7 @@ import (
 	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
-// UC is the upgrade-controller sidecar. It runs two supervised monitors:
+// UC is the upgrade-controller sidecar. It runs four supervised monitors:
 //
 //  1. MarkerMonitor — polls marker files and creates NetworkUpgrade* CRs (the
 //     core UC behaviour, all deployment modes).
@@ -25,8 +25,14 @@ import (
 //     phases; rotates/discards the upgrade package accordingly (all modes). In
 //     cluster-only mode it also drives ProvisionerProxy, which advances Execute
 //     CRs from ReadyForProvisionerDaemon -> PendingNodeUpgrade.
+//  3. PlatformStatusMonitor — scrapes the consensus node's metrics endpoint for
+//     platform status and patches the pod condition (all modes).
+//  4. LogMonitor — tails the consensus log for PLATFORM_STATUS transitions and
+//     publishes a sticky status code persisted across restarts (all modes).
 //
 // A daemonkit.Server exposes a Unix-socket control plane (/health, /status).
+// A Prometheus HTTP server on :9990 exposes self-health and consensus status
+// metrics via /metrics.
 type UC struct {
 	cfg             Config
 	client          dynamic.Interface
@@ -104,7 +110,10 @@ func (u *UC) Run(ctx context.Context) error {
 	tracker := daemonkit.NewStatusTracker()
 	server := daemonkit.NewServer(u.cfg.SocketPath, daemonkit.ServerOptions{
 		StatusFn: func() any { return u.status(tracker) },
-		Logger:   slog.Default(),
+		ComponentHandlers: []daemonkit.ComponentHandler{
+			NewConsensusStatusHandler(u.cfg.NodeID, u.cfg.MetricsStaleness, u.platformMonitor, u.logMonitor),
+		},
+		Logger: slog.Default(),
 	}, daemonkit.ServerConfig{})
 
 	u.registry = NewMetricsRegistry(u.cfg, tracker, u.monitors)

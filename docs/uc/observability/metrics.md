@@ -88,6 +88,35 @@ configuration this is `swirlds.log`. If a custom `Log4j2Config` routes
 the marker elsewhere, `source="log"` degrades to `-1` and `effective`
 falls back to the metrics source — no hard failure.
 
+## Control-Plane Endpoint
+
+The UC's Unix-socket control plane exposes `GET /consensus/status`, which
+returns a compact JSON snapshot of the same data the Prometheus metrics
+export:
+
+```json
+{
+  "nodeId": 0,
+  "now": "2026-07-23T10:00:07Z",
+  "snapshotAt": "2026-07-23T10:00:07Z",
+  "effective": {"code": 2, "status": "ACTIVE", "source": "metrics"},
+  "metrics":   {"code": 2, "status": "ACTIVE", "scrapedAt": "2026-07-23T10:00:05Z", "fresh": true},
+  "log":       {"code": 2, "status": "ACTIVE", "fileModifiedAt": "2026-07-23T10:00:06Z"},
+  "staleness": "15s"
+}
+```
+
+**This endpoint reads the last-known monitor state — it does not trigger a
+fresh scrape.** Data freshness depends on each monitor's poll interval
+(PlatformStatusMonitor ≈ 5 s, LogMonitor ≈ 1 s). The `fresh` field
+indicates whether the metrics scrape is within the staleness window.
+
+Example usage via `kubectl exec`:
+
+```bash
+kubectl exec <pod> -c uc -- curl --unix-socket /run/uc/uc.sock http://localhost/consensus/status
+```
+
 ## Kubernetes Exposure
 
 The operator adds:

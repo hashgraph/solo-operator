@@ -27,7 +27,7 @@ const (
 
 // NewMetricsRegistry creates a Prometheus registry with Go/process collectors
 // and the UC self-health metrics. The returned registry is ready to be served
-// via promhttp. Additional collectors (domain metrics from 12.2+) are
+// via promhttp. Domain collectors (e.g. ConsensusStatusCollector) are
 // registered by the caller before the server starts.
 func NewMetricsRegistry(cfg Config, tracker *daemonkit.StatusTracker, monitors []daemonkit.MonitorRunner) *prometheus.Registry {
 	reg := prometheus.NewRegistry()
