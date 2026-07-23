@@ -1,0 +1,20 @@
+{{- if and .Values.uc.metrics.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "solo-operator.fullname" . }}-uc
+  labels:
+    {{- include "solo-operator.labels" . | nindent 4 }}
+spec:
+  endpoints:
+    - port: uc-metrics
+      interval: {{ .Values.uc.metrics.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.uc.metrics.serviceMonitor.scrapeTimeout }}
+      path: /metrics
+  namespaceSelector:
+    any: true
+  selector:
+    matchLabels:
+      app.kubernetes.io/managed-by: solo-operator
+      app.kubernetes.io/part-of: consensus-node
+{{- end }}

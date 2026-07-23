@@ -76,6 +76,7 @@ const (
 	GrpcPort       = common.GrpcPort
 	GrpcsPort      = common.GrpcsPort
 	PrometheusPort = 9999
+	UCMetricsPort  = 9990
 	AlloyHTTPPort  = 12345
 )
 

@@ -457,10 +457,11 @@ func TestServiceSubReconciler(t *testing.T) {
 	}
 
 	expectedPorts := map[string]int32{
-		"gossip":  GossipPort,
-		"grpc":    GrpcPort,
-		"grpcs":   GrpcsPort,
-		"metrics": PrometheusPort,
+		"gossip":     GossipPort,
+		"grpc":       GrpcPort,
+		"grpcs":      GrpcsPort,
+		"metrics":    PrometheusPort,
+		"uc-metrics": UCMetricsPort,
 	}
 	for _, port := range svc.Spec.Ports {
 		if expected, ok := expectedPorts[port.Name]; ok {

@@ -77,6 +77,14 @@ metrics:
     interval: 30s
     scrapeTimeout: 10s
 
+# UC sidecar metrics (scraped from consensus pods)
+uc:
+  metrics:
+    serviceMonitor:
+      enabled: false
+      interval: 15s
+      scrapeTimeout: 10s
+
 # Health probes configuration
 health:
   port: 8081

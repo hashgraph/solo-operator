@@ -911,6 +911,8 @@ func (r *StatefulSetSubReconciler) buildUcContainer(capsule *operatorv1alpha1.Co
 		{Name: VolumeTypeUpgrade, MountPath: HapiBase + "/data/upgrade"},
 		// single root for all UC runtime state; UC creates crs/, events/, backup/, uc.sock under here
 		{Name: VolumeTypeUCData, MountPath: UCDataPath},
+		// consensus node logs — the log monitor tails swirlds.log for PLATFORM_STATUS transitions
+		{Name: VolumeTypeLogs, MountPath: HapiBase + "/output", ReadOnly: true},
 	}
 	volumeMounts = append(volumeMounts, config.AdditionalVolumeMounts...)
 
@@ -936,8 +938,11 @@ func (r *StatefulSetSubReconciler) buildUcContainer(capsule *operatorv1alpha1.Co
 	}
 
 	container := corev1.Container{
-		Name:                     name,
-		Image:                    image,
+		Name:  name,
+		Image: image,
+		Ports: []corev1.ContainerPort{
+			{Name: "uc-metrics", ContainerPort: UCMetricsPort, Protocol: corev1.ProtocolTCP},
+		},
 		Env:                      env,
 		VolumeMounts:             volumeMounts,
 		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
