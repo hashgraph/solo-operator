@@ -7,7 +7,6 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/automa-saga/daemonkit"
@@ -127,17 +126,4 @@ func runMetricsServer(ctx context.Context, addr string, reg *prometheus.Registry
 	case serveErr := <-errCh:
 		return serveErr
 	}
-}
-
-// platformScrapeTimestampGauge creates and registers the placeholder gauge for
-// uc_platform_last_scrape_timestamp. Its value is wired in story 12.2; here it
-// starts at 0.
-func platformScrapeTimestampGauge(reg *prometheus.Registry, nodeID int) *prometheus.GaugeVec {
-	g := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "uc_platform_last_scrape_timestamp",
-		Help: "Unix timestamp of the last successful consensus node metrics scrape.",
-	}, []string{"node_id"})
-	reg.MustRegister(g)
-	g.WithLabelValues(strconv.Itoa(nodeID)).Set(0)
-	return g
 }

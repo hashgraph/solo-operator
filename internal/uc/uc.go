@@ -28,11 +28,12 @@ import (
 //
 // A daemonkit.Server exposes a Unix-socket control plane (/health, /status).
 type UC struct {
-	cfg      Config
-	client   dynamic.Interface
-	events   *eventSink
-	monitors []daemonkit.MonitorRunner
-	registry *prometheus.Registry
+	cfg             Config
+	client          dynamic.Interface
+	events          *eventSink
+	monitors        []daemonkit.MonitorRunner
+	registry        *prometheus.Registry
+	platformMonitor *PlatformStatusMonitor
 }
 
 // New builds the UC from cfg, constructing the K8s client and the enabled monitors.
@@ -78,15 +79,16 @@ func New(cfg Config) (*UC, error) {
 		outcomeMonitor.mu.Unlock()
 	}
 
+	platformMon := NewPlatformStatusMonitor(cfg, client, sink)
 	monitors := []daemonkit.MonitorRunner{
 		NewMarkerMonitorWithFactory(cfg, factory),
 		outcomeMonitor,
 		// The platform-status sensor is the sole writer of
 		// ConsensusCapsule.status.platformStatus. It runs in every deployment mode.
-		NewPlatformStatusMonitor(cfg, client, sink),
+		platformMon,
 	}
 
-	return &UC{cfg: cfg, client: client, events: sink, monitors: monitors}, nil
+	return &UC{cfg: cfg, client: client, events: sink, monitors: monitors, platformMonitor: platformMon}, nil
 }
 
 // Run starts the control server and all supervised monitors, blocking until ctx
@@ -103,7 +105,7 @@ func (u *UC) Run(ctx context.Context) error {
 	}, daemonkit.ServerConfig{})
 
 	u.registry = NewMetricsRegistry(u.cfg, tracker, u.monitors)
-	platformScrapeTimestampGauge(u.registry, u.cfg.NodeID)
+	u.registry.MustRegister(NewConsensusStatusCollector(u.cfg.NodeID, u.platformMonitor))
 
 	// daemonkit.Group (panic-recovering errgroup): a panic in the control-plane
 	// server or a supervisor goroutine becomes the Wait error instead of crashing

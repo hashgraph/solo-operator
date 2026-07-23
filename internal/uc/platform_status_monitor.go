@@ -32,6 +32,15 @@ const platformStatusOperationID = "platform-status"
 // stall the poll loop. It is generous relative to a localhost GET.
 const metricsScrapeTimeout = 10 * time.Second
 
+// PlatformScrapeSnapshot is an atomically-published view of the last successful
+// platform-status scrape. The metrics collector reads it at scrape time; the
+// monitor goroutine writes it — the atomic.Pointer handoff avoids races.
+type PlatformScrapeSnapshot struct {
+	Code      int32
+	Status    string
+	ScrapedAt time.Time
+}
+
 // PlatformStatusMonitor is the UC's platform-status sensor. It continuously
 // scrapes the consensus node's metrics endpoint (localhost:9999) for
 // platform_PlatformStatus and, on each state TRANSITION, patches the
@@ -64,6 +73,7 @@ type PlatformStatusMonitor struct {
 	lastCode int32
 
 	connectivityErr atomic.Pointer[daemonkit.StatusError]
+	scrapeSnapshot  atomic.Pointer[PlatformScrapeSnapshot]
 }
 
 // NewPlatformStatusMonitor constructs the platform-status sensor.
@@ -82,6 +92,12 @@ func (m *PlatformStatusMonitor) Name() string { return "platform-status-monitor"
 // ConnectivityError implements daemonkit.ConnectivityMonitor.
 func (m *PlatformStatusMonitor) ConnectivityError() *daemonkit.StatusError {
 	return m.connectivityErr.Load()
+}
+
+// ScrapeSnapshot returns the last successful scrape snapshot, or nil if no
+// successful scrape has occurred yet.
+func (m *PlatformStatusMonitor) ScrapeSnapshot() *PlatformScrapeSnapshot {
+	return m.scrapeSnapshot.Load()
 }
 
 // Run scrapes the metrics endpoint on PlatformPollInterval until ctx is cancelled.
@@ -180,6 +196,7 @@ func (m *PlatformStatusMonitor) scrape(ctx context.Context) (code int32, name st
 	if !found {
 		return platformStatusCodeUnknown, operatorv1alpha1.PlatformStatusUnknown
 	}
+	m.scrapeSnapshot.Store(&PlatformScrapeSnapshot{Code: code, Status: nameForCode(code), ScrapedAt: time.Now()})
 	return code, nameForCode(code)
 }
 

@@ -38,9 +38,8 @@ func TestNewMetricsRegistry_SelfHealthMetrics(t *testing.T) {
 	}
 
 	reg := NewMetricsRegistry(cfg, tracker, monitors)
-	platformScrapeTimestampGauge(reg, cfg.NodeID)
 
-	for _, name := range []string{"uc_build_info", "uc_up", "uc_monitor_up", "uc_platform_last_scrape_timestamp"} {
+	for _, name := range []string{"uc_build_info", "uc_up", "uc_monitor_up"} {
 		if f := gatherFamily(t, reg, name); f == nil {
 			t.Errorf("expected metric family %q to be registered", name)
 		}
