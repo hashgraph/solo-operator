@@ -152,9 +152,11 @@ func (m *LogMonitor) seedFromTail() {
 
 	lastCode := operatorv1alpha1.PlatformStatusCodeUnknown
 	var lastName string
+	var bytesRead int64
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
+		bytesRead += int64(len(scanner.Bytes())) + 1
 		code, name, ok := parsePlatformStatusLog(scanner.Text())
 		if ok {
 			lastCode = code
@@ -166,7 +168,7 @@ func (m *LogMonitor) seedFromTail() {
 		m.updateStatus(lastCode, lastName)
 	}
 
-	m.offset = info.Size()
+	m.offset = start + bytesRead
 	m.clearConnErr()
 }
 
@@ -199,16 +201,18 @@ func (m *LogMonitor) poll() {
 		return
 	}
 
+	var bytesRead int64
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
+		bytesRead += int64(len(scanner.Bytes())) + 1
 		code, name, ok := parsePlatformStatusLog(scanner.Text())
 		if ok {
 			m.updateStatus(code, name)
 		}
 	}
 
-	m.offset = info.Size()
+	m.offset += bytesRead
 }
 
 // updateStatus publishes the new status and persists it.

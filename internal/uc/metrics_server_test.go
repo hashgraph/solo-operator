@@ -160,5 +160,8 @@ type stubMonitor struct {
 	name string
 }
 
-func (m *stubMonitor) Name() string                { return m.name }
-func (m *stubMonitor) Run(_ context.Context) error { select {} } //nolint:staticcheck // intentional block
+func (m *stubMonitor) Name() string { return m.name }
+func (m *stubMonitor) Run(ctx context.Context) error {
+	<-ctx.Done()
+	return nil
+}

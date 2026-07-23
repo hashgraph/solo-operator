@@ -31,6 +31,7 @@ The `source` label selects which observation channel produced the value:
 
 | Code | Name | Description |
 |------|------|-------------|
+| 0 | NO_VALUE | No status value set (pre-initialization) |
 | 1 | STARTING_UP | Node is starting |
 | 2 | ACTIVE | Node is active and participating |
 | 4 | BEHIND | Node is behind the network |
@@ -41,9 +42,9 @@ The `source` label selects which observation channel produced the value:
 | 9 | CHECKING | Node is checking state |
 | 10 | RECONNECT_COMPLETE | Reconnect completed |
 | 11 | CATASTROPHIC_FAILURE | Fatal failure |
-| -1 | UNKNOWN | No data available |
+| -1 | UNKNOWN | No data available (UC sentinel, not a platform code) |
 
-Codes 0 and 3 are never emitted (not in the platform enum).
+Code 3 is not in the platform enum.
 
 ### uc_consensus_log_timestamp
 

@@ -124,6 +124,9 @@ func runMetricsServer(ctx context.Context, addr string, reg *prometheus.Registry
 		}
 		return nil
 	case serveErr := <-errCh:
-		return serveErr
+		return errx.WithHints(
+			errx.WithReason(errMetricsServer.Wrap(serveErr, "metrics server exited unexpectedly"), ReasonMetricsServerFailed),
+			"Check the metrics server logs for the root cause",
+		)
 	}
 }
