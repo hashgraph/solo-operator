@@ -1,0 +1,122 @@
+{
+  "__inputs": [],
+  "annotations": { "list": [] },
+  "description": "UC sidecar consensus node status from uc_consensus_status{source} metrics",
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "tags": ["uc", "consensus", "hedera"],
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus"
+      },
+      {
+        "name": "node_id",
+        "type": "query",
+        "datasource": { "uid": "${datasource}" },
+        "query": "label_values(uc_consensus_status, node_id)",
+        "includeAll": true,
+        "multi": true
+      }
+    ]
+  },
+  "title": "UC Consensus Node Status",
+  "panels": [
+    {
+      "title": "Effective Platform Status",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "uc_consensus_status{source=\"effective\", node_id=~\"$node_id\"}",
+          "legendFormat": "Node {{node_id}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "-1": { "text": "UNKNOWN", "color": "dark-gray" } } },
+            { "type": "value", "options": { "1": { "text": "STARTING_UP", "color": "yellow" } } },
+            { "type": "value", "options": { "2": { "text": "ACTIVE", "color": "green" } } },
+            { "type": "value", "options": { "4": { "text": "BEHIND", "color": "orange" } } },
+            { "type": "value", "options": { "5": { "text": "FREEZING", "color": "blue" } } },
+            { "type": "value", "options": { "6": { "text": "FREEZE_COMPLETE", "color": "super-light-blue" } } },
+            { "type": "value", "options": { "7": { "text": "REPLAYING_EVENTS", "color": "light-yellow" } } },
+            { "type": "value", "options": { "8": { "text": "OBSERVING", "color": "light-purple" } } },
+            { "type": "value", "options": { "9": { "text": "CHECKING", "color": "light-orange" } } },
+            { "type": "value", "options": { "10": { "text": "RECONNECT_COMPLETE", "color": "light-green" } } },
+            { "type": "value", "options": { "11": { "text": "CATASTROPHIC_FAILURE", "color": "dark-red" } } }
+          ]
+        }
+      }
+    },
+    {
+      "title": "Platform Status by Source",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 0 },
+      "targets": [
+        {
+          "expr": "uc_consensus_status{node_id=~\"$node_id\"}",
+          "legendFormat": "Node {{node_id}} ({{source}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineWidth": 2, "pointSize": 5 },
+          "min": -1,
+          "max": 12
+        }
+      }
+    },
+    {
+      "title": "Log File Freshness",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "time() - uc_consensus_log_timestamp{node_id=~\"$node_id\"}",
+          "legendFormat": "Node {{node_id}} age (s)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "fillOpacity": 10 }
+        }
+      }
+    },
+    {
+      "title": "Metrics Scrape Freshness",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "time() - uc_platform_last_scrape_timestamp{node_id=~\"$node_id\"}",
+          "legendFormat": "Node {{node_id}} age (s)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "fillOpacity": 10 }
+        }
+      }
+    },
+    {
+      "title": "UC Self-Health",
+      "type": "table",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "uc_monitor_up",
+          "legendFormat": "{{monitor}}",
+          "format": "table",
+          "instant": true
+        }
+      ]
+    }
+  ]
+}
