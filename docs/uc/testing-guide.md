@@ -1130,3 +1130,399 @@ operator.solo.hiero.org: networkupgradeexecutes/status → get, patch, update
 These rules are added to the existing capsule `Role` and take effect on the next
 reconcile. No separate `ClusterRole` or `ClusterRoleBinding` is needed — the UC
 only interacts with CRs in its own namespace.
+
+---
+
+## 11. Platform status monitoring and pod condition patching
+
+The UC continuously monitors the consensus node's platform status through two
+independent channels and patches a custom pod condition that the operator reads
+to drive the ConsensusCapsule phase. The full signal flow:
+
+```
+CN metrics :9999 ──► PlatformStatusMonitor ──► pod condition
+                                                    │
+CN log (swirlds.log) ──► LogMonitor                 │
+                                                    ▼
+                                        operator reconciler
+                                                    │
+                                                    ▼
+                                    ConsensusCapsule.status.platformStatus
+                                    ConsensusCapsule.status.phase
+                                                    │
+                                                    ▼
+                                    NetworkUpgradeExecute gates on
+                                    capsule.status.phase == Active
+```
+
+### 11.1 Local testing with a fake metrics endpoint
+
+The PlatformStatusMonitor scrapes `UC_METRICS_URL` (default
+`http://localhost:9999/metrics`) for the `platform_PlatformStatus` metric.
+For local testing, serve a fake endpoint that returns a controllable status:
+
+```bash
+# Terminal 1 — serve a fake CN metrics endpoint
+mkdir -p /tmp/fake-metrics
+cat > /tmp/fake-metrics/metrics <<'EOF'
+# HELP platform_PlatformStatus Current platform status
+# TYPE platform_PlatformStatus gauge
+platform_PlatformStatus 2.0
+EOF
+cd /tmp/fake-metrics && python3 -m http.server 9999
+```
+
+Status codes to use in the fake endpoint:
+
+| Code | Name | Effect on capsule phase |
+|------|------|------------------------|
+| 1.0 | STARTING_UP | Running |
+| 2.0 | ACTIVE | Active (sticky once reached) |
+| 4.0 | BEHIND | Active (sticky) or Running |
+| 11.0 | CATASTROPHIC_FAILURE | Failed |
+
+Now run the UC (from §3) with `--pod-name` set to a real pod in the cluster
+(the UC patches this pod's conditions via `pods/status`):
+
+```bash
+./bin/uc \
+  --mode cluster-only \
+  --node-id 0 \
+  --orbit my-orbit \
+  --namespace solo \
+  --pod-name <actual-pod-name> \
+  --kubeconfig "$HOME/.kube/config" \
+  --upgrade-path  "$UCDIR/current" \
+  --previous-upgrade-path "$UCDIR/previous" \
+  --events-path  "$UCDIR/events" \
+  --cr-persist-path "$UCDIR/crs" \
+  --backup-path  "$UCDIR/backup" \
+  --socket-path  "$UCDIR/uc.sock" \
+  --metrics-url  "http://localhost:9999/metrics" \
+  --platform-poll-interval 5s \
+  --log-level debug
+```
+
+### 11.2 Observe the pod condition
+
+After the first successful scrape (within `--platform-poll-interval`), the UC
+patches the `operator.solo.hiero.org/platform-status` condition onto the pod:
+
+```bash
+kubectl get pod <pod-name> -n solo -o jsonpath='{.status.conditions}' | jq .
+```
+
+Expected condition:
+
+```json
+{
+  "type": "operator.solo.hiero.org/platform-status",
+  "status": "True",
+  "reason": "ACTIVE",
+  "message": "platform status ACTIVE (code 2)",
+  "lastTransitionTime": "2026-07-23T10:00:05Z"
+}
+```
+
+- `reason` carries the raw platform-status name (machine-readable — the
+  operator reads this field).
+- `status` is `True` for a concrete reading, `Unknown` when the state is
+  UNKNOWN (metrics unreachable or sample absent).
+- The condition is **not** a readiness gate — it never affects pod readiness.
+
+### 11.3 Trigger a status transition
+
+Change the fake endpoint to simulate a transition:
+
+```bash
+# Switch to FREEZE_COMPLETE
+cat > /tmp/fake-metrics/metrics <<'EOF'
+# HELP platform_PlatformStatus Current platform status
+# TYPE platform_PlatformStatus gauge
+platform_PlatformStatus 6.0
+EOF
+```
+
+Watch the UC logs for a `PlatformStatusChanged` line:
+
+```
+INF platform status ACTIVE -> FREEZE_COMPLETE (code 6) reason=PlatformStatusChanged
+```
+
+Re-check the pod condition — the `reason` should now be `FREEZE_COMPLETE`.
+
+To simulate an unreachable endpoint, kill the Python server. The UC logs
+`PlatformMetricsUnreachable` and sets the condition to `status: Unknown` with
+`reason: UNKNOWN`. It keeps polling and recovers when the endpoint returns.
+
+### 11.4 Log monitor — consensus log tailing
+
+The LogMonitor tails `--consensus-log-file` (default
+`.../HapiApp2.0/output/swirlds.log`) for `PLATFORM_STATUS` transitions.
+For local testing, write fake log lines:
+
+```bash
+mkdir -p "$UCDIR/logs"
+# Run UC with --consensus-log-file pointed at the fake log:
+# Add to the UC command: --consensus-log-file "$UCDIR/logs/swirlds.log"
+
+# Write a PLATFORM_STATUS transition line:
+echo '2026-07-23T10:00:00.000Z PLATFORM_STATUS {"oldStatus":"STARTING_UP","newStatus":"ACTIVE"}' \
+  >> "$UCDIR/logs/swirlds.log"
+```
+
+Watch for a `LogStatusChanged` log line:
+
+```
+INF log monitor detected platform status transition from=STARTING_UP to=ACTIVE code=2 reason=LogStatusChanged
+```
+
+The log-derived status is **sticky**: it holds between transitions and persists
+to `--cr-persist-path/log-monitor-status.json` for restart survival:
+
+```bash
+cat "$UCDIR/crs/log-monitor-status.json"
+# {"code":2,"status":"ACTIVE"}
+```
+
+To test rotation detection, truncate the log file (simulating log rotation):
+
+```bash
+> "$UCDIR/logs/swirlds.log"
+```
+
+The monitor resets its read offset to 0 and continues tailing from the start.
+
+### 11.5 Verify the control-plane consensus status
+
+Query the `/consensus/status` endpoint (§7a) to see both sources reconciled:
+
+```bash
+curl --unix-socket "$UCDIR/uc.sock" http://uc/consensus/status | jq .
+```
+
+Expected output shows the metrics source, log source, and effective
+reconciliation. When both are available and metrics are fresh, effective uses
+metrics. Kill the fake endpoint and wait past the staleness window (15 s) to
+see effective fall back to log:
+
+```json
+{
+  "effective": {"code": 2, "status": "ACTIVE", "source": "log"},
+  "metrics":   {"code": -1, "status": "UNKNOWN", "fresh": false},
+  "log":       {"code": 2, "status": "ACTIVE", "fileModifiedAt": "..."}
+}
+```
+
+### 11.6 Prometheus metrics
+
+Scrape the UC's own metrics endpoint (port 9990) to see the same data in
+Prometheus format:
+
+```bash
+curl http://localhost:9990/metrics | grep uc_consensus_status
+```
+
+Expected output includes three `source` label values:
+
+```
+uc_consensus_status{source="metrics",node_id="0"} 2
+uc_consensus_status{source="log",node_id="0"} 2
+uc_consensus_status{source="effective",node_id="0"} 2
+```
+
+---
+
+## 12. Operator phase rollup from platform status
+
+The operator is the **sole writer** of `ConsensusCapsule.status`. It reads the
+`operator.solo.hiero.org/platform-status` condition from the pod (patched by
+the UC, §11.2) and proxies it into `status.platformStatus` +
+`status.platformStatusCode`, then rolls up `status.phase`.
+
+### 12.1 Phase transitions
+
+| Pod state | Platform status | Capsule phase |
+|-----------|----------------|---------------|
+| Not Ready | any | Pending |
+| Ready, current revision | UNKNOWN (UC not yet reported) | Running |
+| Ready, current revision | ACTIVE | **Active** |
+| Ready, current revision | BEHIND / RECONNECT / etc. | Active (sticky) or Running |
+| Ready, current revision | CATASTROPHIC_FAILURE | **Failed** |
+| Terminating (DeletionTimestamp set) | any (stale) | reflects UNKNOWN → Running |
+| Ready, old revision (mid-roll) | any (stale) | reflects UNKNOWN → Running |
+
+**Active is sticky**: once reached, transient non-ACTIVE readings (BEHIND,
+RECONNECT_COMPLETE, etc.) keep `phase=Active` while the Ready pod stays on the
+current StatefulSet revision. Active exits on:
+- `CATASTROPHIC_FAILURE` → Failed
+- pod no longer Ready → Pending
+- platform status becomes `UNKNOWN` (fresh pod, Terminating pod) → Running
+- pod revision no longer matches `StatefulSet.status.updateRevision` → Running
+
+### 12.2 Manual test: simulate the phase flow
+
+With the operator running locally (`task dev`) and the UC writing pod
+conditions (§11):
+
+```bash
+# 1. Watch capsule status in a loop:
+watch -n1 "kubectl get consensuscapsule -n solo -o custom-columns=\
+NAME:.metadata.name,PHASE:.status.phase,PLATFORM:.status.platformStatus"
+
+# 2. Set fake CN metrics to STARTING_UP (code 1):
+cat > /tmp/fake-metrics/metrics <<'EOF'
+# TYPE platform_PlatformStatus gauge
+platform_PlatformStatus 1.0
+EOF
+# → Capsule phase: Running, platformStatus: STARTING_UP
+
+# 3. Switch to ACTIVE (code 2):
+cat > /tmp/fake-metrics/metrics <<'EOF'
+# TYPE platform_PlatformStatus gauge
+platform_PlatformStatus 2.0
+EOF
+# → Capsule phase: Active, platformStatus: ACTIVE
+
+# 4. Dip to BEHIND (code 4) — phase stays Active (sticky):
+cat > /tmp/fake-metrics/metrics <<'EOF'
+# TYPE platform_PlatformStatus gauge
+platform_PlatformStatus 4.0
+EOF
+# → Capsule phase: Active (sticky), platformStatus: BEHIND
+
+# 5. CATASTROPHIC_FAILURE (code 11) — fast fail:
+cat > /tmp/fake-metrics/metrics <<'EOF'
+# TYPE platform_PlatformStatus gauge
+platform_PlatformStatus 11.0
+EOF
+# → Capsule phase: Failed, platformStatus: CATASTROPHIC_FAILURE
+```
+
+### 12.3 Verify platformStatus in the capsule status
+
+```bash
+kubectl get consensuscapsule <name> -n solo -o yaml | grep -A3 'platformStatus'
+```
+
+Expected fields:
+
+```yaml
+status:
+  phase: Active
+  platformStatus: ACTIVE
+  platformStatusCode: 2
+```
+
+---
+
+## 13. NetworkUpgradeExecute — ACTIVE gate
+
+The Execute reconciler gates upgrade success on the ConsensusCapsule reaching
+`phase==Active` (written only when the live pod's platform status is ACTIVE on
+the current StatefulSet revision). This ensures the post-upgrade consensus node
+is fully operational before the upgrade is marked Succeeded.
+
+### 13.1 Gate logic
+
+After the Execute CR reaches the post-upgrade phase (capsule brought online,
+images applied), the reconciler polls `checkUpgradeGate`:
+
+| Capsule state | StatefulSet state | Outcome |
+|--------------|-------------------|---------|
+| `phase==Active` | rolled and ready (`currentRevision == updateRevision`, `readyReplicas >= 1`) | **upgradeSucceeded** |
+| `platformStatus==CATASTROPHIC_FAILURE` | new-revision pod created (`updatedReplicas >= 1`) | **upgradeCatastrophic** (fast fail) |
+| `NodeActiveTimeout` elapsed (default 10 min) | any | **upgradeTimedOut** (warning, non-terminal) |
+| otherwise | any | **upgradeWaiting** (requeue) |
+
+### 13.2 Manual test: full upgrade lifecycle with ACTIVE gate
+
+This combines the marker flow (§4), platform status monitoring (§11), operator
+phase rollup (§12), and Execute gate into one end-to-end scenario.
+
+**Prerequisites:**
+- Operator running (`task dev`)
+- UC sidecar running with fake CN metrics (§11.1)
+- CRDs installed (§2)
+
+```bash
+# 1. Start with CN in STARTING_UP state:
+cat > /tmp/fake-metrics/metrics <<'EOF'
+# TYPE platform_PlatformStatus gauge
+platform_PlatformStatus 1.0
+EOF
+
+# 2. Create the Prepare CR (§4a):
+touch "$UCDIR/current/execute_immediate.mf"
+# Watch for CRDelivered in UC logs
+
+# 3. Wait for operator to drive Prepare to Succeeded, then create Freeze:
+echo -n "$(date +%s)" > "$UCDIR/current/freeze_scheduled.mf"
+# Watch for Freeze CRDelivered
+
+# 4. Once Execute CR is in the post-upgrade waiting phase,
+#    the reconciler polls capsule.status.phase for Active.
+#    Phase is currently Running (CN is STARTING_UP):
+kubectl get consensuscapsule -n solo -o jsonpath='{.items[0].status.phase}'
+# → Running
+
+# 5. Simulate the CN coming up — switch to ACTIVE:
+cat > /tmp/fake-metrics/metrics <<'EOF'
+# TYPE platform_PlatformStatus gauge
+platform_PlatformStatus 2.0
+EOF
+
+# 6. Within a few seconds:
+#    - UC patches pod condition → reason: ACTIVE
+#    - Operator reconciles → capsule phase: Active
+#    - Execute reconciler sees phase==Active + rolled → upgradeSucceeded
+kubectl get networkupgradeexecutes -n solo -o jsonpath='{.items[0].status.phase}'
+# → Succeeded
+```
+
+### 13.3 Test CATASTROPHIC_FAILURE fast fail
+
+```bash
+# After Execute CR enters the post-upgrade waiting phase:
+cat > /tmp/fake-metrics/metrics <<'EOF'
+# TYPE platform_PlatformStatus gauge
+platform_PlatformStatus 11.0
+EOF
+
+# The Execute reconciler detects CATASTROPHIC_FAILURE and immediately fails
+# the upgrade without waiting for the NodeActiveTimeout:
+kubectl get networkupgradeexecutes -n solo -o jsonpath='{.items[0].status.phase}'
+# → Failed
+```
+
+### 13.4 Test NodeActiveTimeout warning
+
+If the CN never reaches ACTIVE within `NodeActiveTimeout` (default 10 min),
+the reconciler sets a `NodeActiveDeadlineExceeded=True` condition and emits a
+warning event every `NodeActiveAlertInterval` (default 5 min). The upgrade is
+**not** failed — it keeps waiting:
+
+```bash
+# Keep CN in STARTING_UP for > 10 minutes, then check:
+kubectl get networkupgradeexecutes -n solo -o yaml | \
+  grep -A5 NodeActiveDeadlineExceeded
+```
+
+Expected condition:
+
+```yaml
+- type: NodeActiveDeadlineExceeded
+  status: "True"
+  reason: NodeActiveDeadlineExceeded
+  message: "consensus node has not reached platform status ACTIVE after 10m0s; still waiting"
+```
+
+The upgrade still Succeeds if the CN eventually reaches ACTIVE:
+
+```bash
+cat > /tmp/fake-metrics/metrics <<'EOF'
+# TYPE platform_PlatformStatus gauge
+platform_PlatformStatus 2.0
+EOF
+# → Execute phase transitions to Succeeded
+```
