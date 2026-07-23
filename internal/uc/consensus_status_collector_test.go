@@ -43,7 +43,7 @@ func TestConsensusStatusCollector_MetricsSource_NoSnapshot(t *testing.T) {
 	mon := NewPlatformStatusMonitor(cfg, nil, nil)
 
 	reg := prometheus.NewRegistry()
-	reg.MustRegister(NewConsensusStatusCollector(0, mon, nil))
+	reg.MustRegister(NewConsensusStatusCollector(0, DefaultMetricsStaleness, mon, nil))
 
 	f := gatherFamily(t, reg, "uc_consensus_status")
 	if f == nil {
@@ -80,7 +80,7 @@ func TestConsensusStatusCollector_MetricsSource_WithSnapshot(t *testing.T) {
 	mon.scrapeSnapshot.Store(&PlatformScrapeSnapshot{Code: 2, Status: "ACTIVE", ScrapedAt: now})
 
 	reg := prometheus.NewRegistry()
-	reg.MustRegister(NewConsensusStatusCollector(0, mon, nil))
+	reg.MustRegister(NewConsensusStatusCollector(0, DefaultMetricsStaleness, mon, nil))
 
 	f := gatherFamily(t, reg, "uc_consensus_status")
 	if f == nil {
@@ -119,7 +119,7 @@ func TestConsensusStatusCollector_MetricsSource_AllCodes(t *testing.T) {
 		})
 
 		reg := prometheus.NewRegistry()
-		reg.MustRegister(NewConsensusStatusCollector(0, mon, nil))
+		reg.MustRegister(NewConsensusStatusCollector(0, DefaultMetricsStaleness, mon, nil))
 		f := gatherFamily(t, reg, "uc_consensus_status")
 		m := metricByLabels(t, f, map[string]string{"source": "metrics"})
 		if m == nil {
@@ -128,5 +128,109 @@ func TestConsensusStatusCollector_MetricsSource_AllCodes(t *testing.T) {
 		if got := m.GetGauge().GetValue(); got != float64(code) {
 			t.Errorf("code %d: value = %v, want %v", code, got, float64(code))
 		}
+	}
+}
+
+func TestConsensusStatusCollector_Effective_FreshMetrics(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Namespace = "solo"
+	cfg.PodName = "node0-0"
+	mon := NewPlatformStatusMonitor(cfg, nil, nil)
+	mon.scrapeSnapshot.Store(&PlatformScrapeSnapshot{Code: 2, Status: "ACTIVE", ScrapedAt: time.Now()})
+
+	logMon := NewLogMonitor(cfg)
+	logMon.snapshot.Store(&LogStatusSnapshot{Code: 5, Status: "FREEZING"})
+
+	coll := NewConsensusStatusCollector(0, DefaultMetricsStaleness, mon, logMon)
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(coll)
+
+	f := gatherFamily(t, reg, "uc_consensus_status")
+	m := metricByLabels(t, f, map[string]string{"source": "effective"})
+	if m == nil {
+		t.Fatal("source=effective not found")
+	}
+	if got := m.GetGauge().GetValue(); got != 2 {
+		t.Errorf("effective = %v, want 2 (ACTIVE, metrics is fresh)", got)
+	}
+}
+
+func TestConsensusStatusCollector_Effective_StaleMetricsFallsBackToLog(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Namespace = "solo"
+	cfg.PodName = "node0-0"
+	mon := NewPlatformStatusMonitor(cfg, nil, nil)
+	mon.scrapeSnapshot.Store(&PlatformScrapeSnapshot{Code: 2, Status: "ACTIVE", ScrapedAt: time.Now().Add(-30 * time.Second)})
+
+	logMon := NewLogMonitor(cfg)
+	logMon.snapshot.Store(&LogStatusSnapshot{Code: 6, Status: "FREEZE_COMPLETE"})
+
+	coll := NewConsensusStatusCollector(0, DefaultMetricsStaleness, mon, logMon)
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(coll)
+
+	f := gatherFamily(t, reg, "uc_consensus_status")
+	m := metricByLabels(t, f, map[string]string{"source": "effective"})
+	if m == nil {
+		t.Fatal("source=effective not found")
+	}
+	if got := m.GetGauge().GetValue(); got != 6 {
+		t.Errorf("effective = %v, want 6 (FREEZE_COMPLETE, metrics stale → log)", got)
+	}
+}
+
+func TestConsensusStatusCollector_Effective_NeitherKnown(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Namespace = "solo"
+	cfg.PodName = "node0-0"
+	mon := NewPlatformStatusMonitor(cfg, nil, nil)
+
+	coll := NewConsensusStatusCollector(0, DefaultMetricsStaleness, mon, nil)
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(coll)
+
+	f := gatherFamily(t, reg, "uc_consensus_status")
+	m := metricByLabels(t, f, map[string]string{"source": "effective"})
+	if m == nil {
+		t.Fatal("source=effective not found")
+	}
+	if got := m.GetGauge().GetValue(); got != float64(operatorv1alpha1.PlatformStatusCodeUnknown) {
+		t.Errorf("effective = %v, want -1 (UNKNOWN, nothing available)", got)
+	}
+}
+
+func TestConsensusStatusCollector_Effective_StalenessEdge(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Namespace = "solo"
+	cfg.PodName = "node0-0"
+	mon := NewPlatformStatusMonitor(cfg, nil, nil)
+
+	staleness := 15 * time.Second
+	fixedNow := time.Date(2026, 7, 1, 0, 0, 30, 0, time.UTC)
+
+	// Just within staleness: scrape at T-14s is fresh.
+	mon.scrapeSnapshot.Store(&PlatformScrapeSnapshot{Code: 2, Status: "ACTIVE", ScrapedAt: fixedNow.Add(-14 * time.Second)})
+	coll := NewConsensusStatusCollector(0, staleness, mon, nil)
+	coll.now = func() time.Time { return fixedNow }
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(coll)
+
+	f := gatherFamily(t, reg, "uc_consensus_status")
+	m := metricByLabels(t, f, map[string]string{"source": "effective"})
+	if got := m.GetGauge().GetValue(); got != 2 {
+		t.Errorf("at -14s (within): effective = %v, want 2", got)
+	}
+
+	// Exactly at threshold: scrape at T-15s is stale (>= is not <).
+	mon.scrapeSnapshot.Store(&PlatformScrapeSnapshot{Code: 2, Status: "ACTIVE", ScrapedAt: fixedNow.Add(-15 * time.Second)})
+	coll2 := NewConsensusStatusCollector(0, staleness, mon, nil)
+	coll2.now = func() time.Time { return fixedNow }
+	reg2 := prometheus.NewRegistry()
+	reg2.MustRegister(coll2)
+
+	f2 := gatherFamily(t, reg2, "uc_consensus_status")
+	m2 := metricByLabels(t, f2, map[string]string{"source": "effective"})
+	if got := m2.GetGauge().GetValue(); got != float64(operatorv1alpha1.PlatformStatusCodeUnknown) {
+		t.Errorf("at -15s (boundary): effective = %v, want -1 (stale)", got)
 	}
 }

@@ -214,7 +214,7 @@ func TestConsensusStatusCollector_LogSource(t *testing.T) {
 
 	platMon := NewPlatformStatusMonitor(cfg, nil, nil)
 	reg := prometheus.NewRegistry()
-	reg.MustRegister(NewConsensusStatusCollector(0, platMon, logMon))
+	reg.MustRegister(NewConsensusStatusCollector(0, DefaultMetricsStaleness, platMon, logMon))
 
 	f := gatherFamily(t, reg, "uc_consensus_status")
 	if f == nil {
@@ -248,7 +248,7 @@ func TestConsensusStatusCollector_LogSource_NoMonitor(t *testing.T) {
 	platMon := NewPlatformStatusMonitor(cfg, nil, nil)
 
 	reg := prometheus.NewRegistry()
-	reg.MustRegister(NewConsensusStatusCollector(0, platMon, nil))
+	reg.MustRegister(NewConsensusStatusCollector(0, DefaultMetricsStaleness, platMon, nil))
 
 	f := gatherFamily(t, reg, "uc_consensus_status")
 	m := metricByLabels(t, f, map[string]string{"source": "log"})

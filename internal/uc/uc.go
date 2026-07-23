@@ -108,7 +108,7 @@ func (u *UC) Run(ctx context.Context) error {
 	}, daemonkit.ServerConfig{})
 
 	u.registry = NewMetricsRegistry(u.cfg, tracker, u.monitors)
-	u.registry.MustRegister(NewConsensusStatusCollector(u.cfg.NodeID, u.platformMonitor, u.logMonitor))
+	u.registry.MustRegister(NewConsensusStatusCollector(u.cfg.NodeID, u.cfg.MetricsStaleness, u.platformMonitor, u.logMonitor))
 
 	// daemonkit.Group (panic-recovering errgroup): a panic in the control-plane
 	// server or a supervisor goroutine becomes the Wait error instead of crashing

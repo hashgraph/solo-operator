@@ -51,6 +51,11 @@ const (
 	// interval keeps status.platformStatus responsive without meaningful cost.
 	DefaultPlatformPollInterval = 5 * time.Second
 
+	// DefaultMetricsStaleness is the threshold after which the metrics-derived
+	// platform status is considered stale and the effective source falls back to
+	// the log-derived value. ~3× the default 5s scrape interval.
+	DefaultMetricsStaleness = 15 * time.Second
+
 	// DefaultConfigCRPollInterval is how often the UC re-checks each config CR's
 	// status.conditions while waiting for Valid=True during the execute phase.
 	DefaultConfigCRPollInterval = 1 * time.Second
@@ -92,6 +97,9 @@ type Config struct {
 	// ConsensusLogFile is the path to the consensus node's log file tailed by the
 	// log monitor for PLATFORM_STATUS transitions. Env: UC_CONSENSUS_LOG_FILE.
 	ConsensusLogFile string
+	// MetricsStaleness is the threshold after which the metrics-derived status is
+	// considered stale for the effective source. Env: UC_METRICS_STALENESS.
+	MetricsStaleness time.Duration
 
 	// UpgradePath is the directory polled for marker files.
 	//
@@ -136,6 +144,7 @@ func DefaultConfig() Config {
 		NodeID:                -1,
 		MetricsAddr:           DefaultMetricsAddr,
 		ConsensusLogFile:      DefaultConsensusLogFile,
+		MetricsStaleness:      DefaultMetricsStaleness,
 		UpgradePath:           DefaultUpgradePath,
 		PreviousUpgradePath:   DefaultPreviousUpgradePath,
 		EventsPath:            DefaultEventsPath,

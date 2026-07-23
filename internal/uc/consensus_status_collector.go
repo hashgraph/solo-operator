@@ -4,6 +4,7 @@ package uc
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -16,8 +17,10 @@ import (
 // (which writes) and the HTTP scrape goroutine (which reads).
 type ConsensusStatusCollector struct {
 	nodeID     string
+	staleness  time.Duration
 	monitor    *PlatformStatusMonitor
 	logMonitor *LogMonitor
+	now        func() time.Time
 
 	statusDesc *prometheus.Desc
 	scrapeDesc *prometheus.Desc
@@ -26,11 +29,13 @@ type ConsensusStatusCollector struct {
 
 // NewConsensusStatusCollector creates a collector for uc_consensus_status,
 // uc_platform_last_scrape_timestamp, and uc_consensus_log_timestamp.
-func NewConsensusStatusCollector(nodeID int, monitor *PlatformStatusMonitor, logMon *LogMonitor) *ConsensusStatusCollector {
+func NewConsensusStatusCollector(nodeID int, staleness time.Duration, monitor *PlatformStatusMonitor, logMon *LogMonitor) *ConsensusStatusCollector {
 	return &ConsensusStatusCollector{
 		nodeID:     strconv.Itoa(nodeID),
+		staleness:  staleness,
 		monitor:    monitor,
 		logMonitor: logMon,
+		now:        time.Now,
 		statusDesc: prometheus.NewDesc(
 			"uc_consensus_status",
 			"Consensus node platform status code. -1 = UNKNOWN.",
@@ -56,17 +61,22 @@ func (c *ConsensusStatusCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (c *ConsensusStatusCollector) Collect(ch chan<- prometheus.Metric) {
+	now := c.now()
+	unknown := float64(operatorv1alpha1.PlatformStatusCodeUnknown)
+
 	snap := c.monitor.ScrapeSnapshot()
-	metricsCode := float64(operatorv1alpha1.PlatformStatusCodeUnknown)
+	metricsCode := unknown
 	scrapeTS := 0.0
+	metricsFresh := false
 	if snap != nil {
 		metricsCode = float64(snap.Code)
 		scrapeTS = float64(snap.ScrapedAt.Unix())
+		metricsFresh = now.Sub(snap.ScrapedAt) < c.staleness
 	}
 	ch <- prometheus.MustNewConstMetric(c.statusDesc, prometheus.GaugeValue, metricsCode, "metrics", c.nodeID)
 	ch <- prometheus.MustNewConstMetric(c.scrapeDesc, prometheus.GaugeValue, scrapeTS, c.nodeID)
 
-	logCode := float64(operatorv1alpha1.PlatformStatusCodeUnknown)
+	logCode := unknown
 	logTS := 0.0
 	if c.logMonitor != nil {
 		if ls := c.logMonitor.Snapshot(); ls != nil {
@@ -76,4 +86,12 @@ func (c *ConsensusStatusCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 	ch <- prometheus.MustNewConstMetric(c.statusDesc, prometheus.GaugeValue, logCode, "log", c.nodeID)
 	ch <- prometheus.MustNewConstMetric(c.logTSDesc, prometheus.GaugeValue, logTS, c.nodeID)
+
+	effective := unknown
+	if metricsFresh && metricsCode != unknown {
+		effective = metricsCode
+	} else if logCode != unknown {
+		effective = logCode
+	}
+	ch <- prometheus.MustNewConstMetric(c.statusDesc, prometheus.GaugeValue, effective, "effective", c.nodeID)
 }

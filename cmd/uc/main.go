@@ -62,6 +62,7 @@ func main() {
 	f.StringVar(&cfg.KubeconfigPath, "kubeconfig", cfg.KubeconfigPath, "Path to kubeconfig (empty = in-cluster)")
 	f.StringVar(&cfg.MetricsAddr, "metrics-addr", cfg.MetricsAddr, "Listen address for the UC /metrics endpoint (e.g. :9990)")
 	f.StringVar(&cfg.ConsensusLogFile, "consensus-log-file", cfg.ConsensusLogFile, "Path to the consensus node log file tailed for PLATFORM_STATUS transitions")
+	f.DurationVar(&cfg.MetricsStaleness, "metrics-staleness", cfg.MetricsStaleness, "Staleness threshold for the metrics-derived status in the effective source")
 	f.StringVar(&cfg.MetricsURL, "metrics-url", cfg.MetricsURL, "Consensus node Prometheus endpoint scraped for platform_PlatformStatus")
 	f.DurationVar(&cfg.PlatformPollInterval, "platform-poll-interval", cfg.PlatformPollInterval, "Platform-status metrics scrape cadence")
 	f.StringVar(&cfg.UpgradePath, "upgrade-path", cfg.UpgradePath, "Directory polled for marker files")
