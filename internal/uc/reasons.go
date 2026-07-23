@@ -23,7 +23,6 @@ const (
 	ReasonPlatformStatusMonitorPanic   errx.Reason = "PlatformStatusMonitorPanic"
 	ReasonPlatformStatusChanged        errx.Reason = "PlatformStatusChanged"
 	ReasonPollIntervalChanged          errx.Reason = "PollIntervalChanged"
-	ReasonMarkerHandlerPending         errx.Reason = "MarkerHandlerPending"
 	ReasonCRDelivered                  errx.Reason = "CRDelivered"
 	ReasonMarkerDetected               errx.Reason = "MarkerDetected"
 	ReasonDaemonTriggered              errx.Reason = "DaemonTriggered"
@@ -83,12 +82,14 @@ const (
 	ReasonPlatformStatusPatchFailed  errx.Reason = "PlatformStatusPatchFailed"
 
 	// Marker handling.
-	ReasonMarkerHandlerFailed  errx.Reason = "MarkerHandlerFailed"
-	ReasonAbortWithoutPrepare  errx.Reason = "AbortWithoutPrepare"
-	ReasonFreezeWithoutPrepare errx.Reason = "FreezeWithoutPrepare"
-	ReasonPrepareFailed        errx.Reason = "PrepareFailed"
-	ReasonStaleMarker          errx.Reason = "StaleMarker"
-	ReasonOperationIDExhausted errx.Reason = "OperationIDExhausted"
+	ReasonMarkerHandlerFailed   errx.Reason = "MarkerHandlerFailed"
+	ReasonAbortWithoutPrepare   errx.Reason = "AbortWithoutPrepare"
+	ReasonFreezeWithoutPrepare  errx.Reason = "FreezeWithoutPrepare"
+	ReasonExecuteWithoutFreeze  errx.Reason = "ExecuteWithoutFreeze"
+	ReasonExecuteWithoutPrepare errx.Reason = "ExecuteWithoutPrepare"
+	ReasonPrepareFailed         errx.Reason = "PrepareFailed"
+	ReasonStaleMarker           errx.Reason = "StaleMarker"
+	ReasonOperationIDExhausted  errx.Reason = "OperationIDExhausted"
 
 	// Startup recovery / cache.
 	ReasonUCCacheSeedFailed      errx.Reason = "UCCacheSeedFailed"

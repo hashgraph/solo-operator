@@ -33,7 +33,7 @@ func TestProvisionerProxy_TransitionPanicRecovered(t *testing.T) {
 	proxy.onTransition = func(string) { panic("boom in transition") }
 
 	opID := "upgrade-0.75.0-20260413T120000Z"
-	cr := buildExecuteCR(opID, crCreatedAt)
+	cr := newTestExecuteCR(opID, crCreatedAt)
 	proxy.Handle(context.Background(), cr)
 
 	// Handle dispatches the transition on a goroutine whose deferred recover must

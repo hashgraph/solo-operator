@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -142,6 +143,31 @@ func TestParseComponentsManifestInvalid(t *testing.T) {
 				t.Fatalf("want reason ManifestInvalid, got %q (ok=%v)", reason, ok)
 			}
 		})
+	}
+}
+
+// TestMintOperationIDRejectsInvalidName verifies mintOperationID rejects versions
+// whose derived operationId/CR name would be invalid in Kubernetes — the single
+// mint point enforces both the label-value length limit (matching the CRD's
+// MaxLength=63) and DNS-1123 name validity (accounting for the "-<step>" suffix) —
+// rather than failing opaquely at CR Create time.
+func TestMintOperationIDRejectsInvalidName(t *testing.T) {
+	// '_' is legal per sanity.ValidateOperationID but invalid in a metadata.name.
+	if _, err := mintOperationID("0.75.0_rc1", markerCreatedAt); !errorx.IsOfType(err, errManifestInvalid) {
+		t.Fatalf("underscore version: want errManifestInvalid, got %v", err)
+	}
+	// A version long enough to push the operationId past the 63-char label/CRD limit
+	// (id = "upgrade-" + version + "-" + 16-char timestamp).
+	if _, err := mintOperationID(strings.Repeat("9", 45), markerCreatedAt); !errorx.IsOfType(err, errManifestInvalid) {
+		t.Fatalf("over-long version: want errManifestInvalid, got %v", err)
+	}
+	// A clean semver version still mints the expected id.
+	id, err := mintOperationID("0.75.0", markerCreatedAt)
+	if err != nil {
+		t.Fatalf("clean version: unexpected error %v", err)
+	}
+	if id != wantOperationID {
+		t.Fatalf("minted id = %q, want %q", id, wantOperationID)
 	}
 }
 

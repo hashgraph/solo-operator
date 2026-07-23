@@ -344,7 +344,7 @@ func TestHandleExecute_configCRsThenPhaseAdvance(t *testing.T) {
 	}
 
 	// Pre-create the Execute CR in the fake client so Patch can find it.
-	executeCR := buildExecuteCR(testOperationID, time.Now())
+	executeCR := newTestExecuteCR(testOperationID, time.Now())
 	_ = unstructured.SetNestedField(executeCR.Object, string(operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon),
 		"status", "phase")
 	executeCR.SetName("test-execute")

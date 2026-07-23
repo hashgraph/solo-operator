@@ -20,9 +20,13 @@ const kindNetworkUpgradeFreezeAbort = "NetworkUpgradeFreezeAbort"
 // abortCRName builds the RFC 1123-safe metadata.name for the FreezeAbort CR:
 // "<operationId-lowercased>-abort" — e.g. upgrade-v0.75.0-20260413t120000z-abort.
 // The operationId is the prepare-anchored identity (it embeds the package
-// version + prepare-marker time, never the freeze time); the name embeds it only
-// so sequential upgrades never collide, since NetworkUpgrade* CRs are never
-// deleted. Identity lives in the operation-id label / spec, not the name.
+// version + prepare-marker time, never the freeze time). The name is a
+// deterministic function of it so distinct upgrades never collide and the same
+// upgrade always maps to the same name — so a re-detected marker is a no-op
+// (Create returns AlreadyExists) and a CR deleted then recreated (e.g. during DR)
+// comes back under the same identity rather than as a second, parallel CR. CRs are
+// retained after completion, but the naming does not depend on them being immortal.
+// Identity lives in the operation-id label / spec, not the name.
 func abortCRName(operationID string) string {
 	return strings.ToLower(operationID) + "-" + operatorv1alpha1.StepAbort
 }
