@@ -281,20 +281,6 @@ func TestUpdateStatus_ManualIdle_PhaseStopped(t *testing.T) {
 	}
 }
 
-// TestUpdateStatus_ManualDesiredRunning_StaysRunning: a Manual capsule asked to run is
-// not reported Stopped while coming up (idle reading) — it stays Running until ACTIVE.
-func TestUpdateStatus_ManualDesiredRunning_StaysRunning(t *testing.T) {
-	r, capsule, ctx := buildActiveScenario(t, "", operatorv1alpha1.PhaseRunning, testRevision, testRevision)
-	capsule.Spec.StartPolicy = operatorv1alpha1.StartPolicyManual
-	capsule.Spec.DesiredRunState = operatorv1alpha1.RunStateRunning
-	if _, err := r.updateStatus(ctx, capsule); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if capsule.Status.Phase != operatorv1alpha1.PhaseRunning {
-		t.Errorf("expected PhaseRunning for Manual+DesiredRunning+idle, got %s", capsule.Status.Phase)
-	}
-}
-
 // TestUpdateStatus_AutoIdle_StaysRunning verifies that an Auto-start capsule with the
 // same idle reading (Ready pod, UNKNOWN platform status) is unaffected by the Stopped
 // branch and stays Running while the CN comes up.

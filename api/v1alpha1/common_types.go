@@ -54,17 +54,6 @@ const (
 	StartPolicyManual StartPolicy = "Manual"
 )
 
-// RunState is the desired run-state of the consensus process. Meaningful only when
-// StartPolicy is Manual; governs the s6 process while the pod stays up (distinct
-// from Offline, which scales the pod to zero).
-// +kubebuilder:validation:Enum=Running;Stopped
-type RunState string
-
-const (
-	RunStateRunning RunState = "Running"
-	RunStateStopped RunState = "Stopped" // unset is treated as Stopped
-)
-
 // ImagePullPolicy represents the image pull policy
 // +kubebuilder:validation:Enum=Always;Never;IfNotPresent
 type ImagePullPolicy string

@@ -154,14 +154,6 @@ type ConsensusCapsuleSpec struct {
 	// +kubebuilder:default=Auto
 	// +kubebuilder:validation:Enum=Auto;Manual
 	StartPolicy StartPolicy `json:"startPolicy,omitempty"`
-
-	// DesiredRunState is the persisted desired run-state of the consensus process.
-	// Meaningful only when StartPolicy is Manual; ignored in Auto. Unset is treated
-	// as Stopped. Distinct from Offline (scale-to-zero) — this governs the s6
-	// process while the pod stays up.
-	// +optional
-	// +kubebuilder:validation:Enum=Running;Stopped
-	DesiredRunState RunState `json:"desiredRunState,omitempty"`
 }
 
 // BlockNodesConfig defines block-node connection settings.

@@ -520,11 +520,9 @@ func (r *ConsensusCapsuleReconciler) rollupRunningPhase(
 	case onUpdateRevision && platformStatus == operatorv1alpha1.PlatformStatusActive:
 		return operatorv1alpha1.PhaseActive
 	case capsule.Spec.StartPolicy == operatorv1alpha1.StartPolicyManual &&
-		capsule.Spec.DesiredRunState != operatorv1alpha1.RunStateRunning &&
 		platformStatus == operatorv1alpha1.PlatformStatusUnknown:
-		// Manual, not desired-Running, no live status = idle by design (an expected
-		// resting state, never Failed). A Manual capsule asked to run stays Running until
-		// it reports ACTIVE; Auto never reaches here.
+		// Manual + no live status = idle by design (pod boots stopped, awaiting a
+		// ConsensusNodeStart CR). Never report Failed for this expected resting state.
 		return operatorv1alpha1.PhaseStopped
 	case onUpdateRevision && oldPhase == operatorv1alpha1.PhaseActive &&
 		platformStatus != operatorv1alpha1.PlatformStatusUnknown:
