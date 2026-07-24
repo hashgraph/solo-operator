@@ -521,21 +521,27 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 		} else if capsule.Spec.Secrets.SecretResources != nil {
 			var projectedSources []corev1.VolumeProjection
 
-			if capsule.Spec.Secrets.SecretResources.SigningPrivateKey.SecretName != "" {
+			sr := capsule.Spec.Secrets.SecretResources
+			if sr.SigningPrivateKey.SecretName != "" {
+				// Mount under the CN-expected filename derived from nodeId: "s-private-node<nodeId+1>.pem".
+				// The secret key can be named anything; the operator normalizes it here so
+				// users don't need to know CN's internal formatNodeName convention.
+				privateKeyPath := fmt.Sprintf("s-private-node%d.pem", capsule.Spec.NodeId+1)
 				projectedSources = append(projectedSources, corev1.VolumeProjection{
 					Secret: &corev1.SecretProjection{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: capsule.Spec.Secrets.SecretResources.SigningPrivateKey.SecretName,
+							Name: sr.SigningPrivateKey.SecretName,
 						},
 						Items: []corev1.KeyToPath{{
-							Key:  capsule.Spec.Secrets.SecretResources.SigningPrivateKey.KeyName,
-							Path: fmt.Sprintf("s-private-%s.pem", capsule.Name),
+							Key:  sr.SigningPrivateKey.KeyName,
+							Path: privateKeyPath,
 						}},
 					},
 				})
 			}
 
-			// public signing certs for all nodes (optional: absent until NetworkGenesis runs)
+			// All nodes' public signing certs (optional: absent until NetworkGenesis runs).
+			// The CN migration matches each s-public-*.pem to its s-private-*.pem by stem.
 			publicKeysOptional := true
 			projectedSources = append(projectedSources, corev1.VolumeProjection{
 				ConfigMap: &corev1.ConfigMapProjection{
@@ -556,7 +562,6 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 				Name: "keys", MountPath: HapiBase + "/data/keys",
 			})
 
-			sr := capsule.Spec.Secrets.SecretResources
 			if sr.GrpcTlsPrivateKey.SecretName != "" {
 				volumes = append(volumes, corev1.Volume{
 					Name: "grpc-tls-key",

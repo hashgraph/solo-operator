@@ -194,10 +194,10 @@ spec:
         keyName: "hedera-node3.crt"
         secretName: "node3-grpc-tls-keys"
       signingPrivateKey:
-        keyName: "s-private-node3.pem"
+        keyName: "private.pem"
         secretName: "node3-gossip-keys"
       signingPublicCertificate:
-        keyName: "s-public-node3.pem"
+        keyName: "public.pem"
         secretName: "node3-gossip-keys"
 
   # Reference a shared Log4j2Config CR (defined in common/log4j2config.yaml). Takes effect on next pod restart.

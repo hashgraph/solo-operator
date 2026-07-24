@@ -200,10 +200,10 @@ spec:
         keyName: "hedera-node0.crt"
         secretName: "node0-grpc-tls-keys"
       signingPrivateKey:
-        keyName: "s-private-node0.pem"
+        keyName: "private.pem"
         secretName: "node0-gossip-keys"
       signingPublicCertificate:
-        keyName: "s-public-node0.pem"
+        keyName: "public.pem"
         secretName: "node0-gossip-keys"
 
   # Reference a shared Log4j2Config CR (defined in common/log4j2config.yaml).
