@@ -519,11 +519,6 @@ func (r *ConsensusCapsuleReconciler) rollupRunningPhase(
 	switch {
 	case onUpdateRevision && platformStatus == operatorv1alpha1.PlatformStatusActive:
 		return operatorv1alpha1.PhaseActive
-	case capsule.Spec.StartPolicy == operatorv1alpha1.StartPolicyManual &&
-		platformStatus == operatorv1alpha1.PlatformStatusUnknown:
-		// Manual + no live status = idle by design (pod boots stopped, awaiting a
-		// ConsensusNodeStart CR). Never report Failed for this expected resting state.
-		return operatorv1alpha1.PhaseStopped
 	case onUpdateRevision && oldPhase == operatorv1alpha1.PhaseActive &&
 		platformStatus != operatorv1alpha1.PlatformStatusUnknown:
 		// Sticky-Active: a transient non-ACTIVE dip (BEHIND, RECONNECT, …) keeps the

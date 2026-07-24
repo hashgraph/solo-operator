@@ -152,7 +152,6 @@ type ConsensusCapsuleSpec struct {
 	// StartPolicy selects who starts the consensus process. See HIP-1494/1495.
 	// +optional
 	// +kubebuilder:default=Auto
-	// +kubebuilder:validation:Enum=Auto;Manual
 	StartPolicy StartPolicy `json:"startPolicy,omitempty"`
 }
 

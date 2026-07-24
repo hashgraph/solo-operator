@@ -21372,16 +21372,12 @@ spec:
                   at data/config/simpleFeesSchedules.json. Optional — CN falls back to defaults.
                 type: string
               startPolicy:
-                allOf:
-                - enum:
-                  - Auto
-                  - Manual
-                - enum:
-                  - Auto
-                  - Manual
                 default: Auto
                 description: StartPolicy selects who starts the consensus process.
                   See HIP-1494/1495.
+                enum:
+                - Auto
+                - Manual
                 type: string
               throttlesConfigRef:
                 description: |-
