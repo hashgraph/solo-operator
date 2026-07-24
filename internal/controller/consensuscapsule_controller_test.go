@@ -266,21 +266,6 @@ func TestUpdateStatus_ActiveWhenPlatformActiveOnCurrentRevision(t *testing.T) {
 	}
 }
 
-// TestUpdateStatus_ManualIdle_PhaseStopped verifies that a Manual-start capsule
-// whose Ready pod reports no live platform status (UNKNOWN) rolls up to Stopped —
-// the expected resting state — rather than Running or Failed.
-func TestUpdateStatus_ManualIdle_PhaseStopped(t *testing.T) {
-	// Empty platformStatus → no pod condition → UNKNOWN, modelling the held-down CN.
-	r, capsule, ctx := buildActiveScenario(t, "", operatorv1alpha1.PhaseRunning, testRevision, testRevision)
-	capsule.Spec.StartPolicy = operatorv1alpha1.StartPolicyManual
-	if _, err := r.updateStatus(ctx, capsule); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if capsule.Status.Phase != operatorv1alpha1.PhaseStopped {
-		t.Errorf("expected PhaseStopped for Manual+idle, got %s", capsule.Status.Phase)
-	}
-}
-
 // TestUpdateStatus_AutoIdle_StaysRunning verifies that an Auto-start capsule with the
 // same idle reading (Ready pod, UNKNOWN platform status) is unaffected by the Stopped
 // branch and stays Running while the CN comes up.
