@@ -250,6 +250,11 @@ tasks:
     cmds:
       - kind load docker-image {{.IMG}} --name solo-operator
 
+  kind:load:uc:
+    desc: Load UC sidecar Docker image into kind cluster
+    cmds:
+      - kind load docker-image {{.UC_IMG}} --name solo-operator
+
   kind:metallb:
     desc: Install MetalLB operator via Helm and configure an IP pool so LoadBalancer services get IPs on kind
     cmds:
@@ -285,6 +290,41 @@ tasks:
     cmds:
       - task: kind:reset
       - task: run
+
+  dev:local:setup:
+    desc: Build operator + UC images, spin up kind cluster, and deploy the operator via Helm
+    vars:
+      LOCAL_CLUSTER: solo-operator
+    cmds:
+      - kind delete cluster --name {{.LOCAL_CLUSTER}} || true
+      - kind create cluster --name {{.LOCAL_CLUSTER}}
+      - task: kind:metallb
+      - task: generate:rbac
+      - task: helm:sync-rbac
+      - task: docker:build
+      - task: docker:build:uc
+      - docker tag {{.UC_IMG}} ghcr.io/hashgraph/solo-operator-uc:{{.VERSION}}
+      - kind load docker-image {{.IMG}} --name {{.LOCAL_CLUSTER}}
+      - kind load docker-image {{.UC_IMG}} --name {{.LOCAL_CLUSTER}}
+      - kind load docker-image ghcr.io/hashgraph/solo-operator-uc:{{.VERSION}} --name {{.LOCAL_CLUSTER}}
+      - helm upgrade --install solo-operator charts/solo-operator --namespace solo-operator --create-namespace --wait --timeout 120s --set image.tag=latest --set image.pullPolicy=Never
+      - kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=solo-operator -n solo-operator --timeout=120s
+      - echo ">> Operator ready"
+
+  dev:local:deploy:
+    desc: Deploy 4-node cluster using docs/example manifests (orbit + nodes + genesis)
+    cmds:
+      - task -d docs/example deploy
+
+  dev:local:teardown:
+    desc: Tear down the 4-node cluster (CRs + namespace)
+    cmds:
+      - task -d docs/example destroy
+
+  dev:local:status:
+    desc: Show status of all CRs in the local dev cluster
+    cmds:
+      - task -d docs/example status
 
   kind:reset:
     desc: Reset kind cluster with fresh CRDs (delete+generate run in parallel)

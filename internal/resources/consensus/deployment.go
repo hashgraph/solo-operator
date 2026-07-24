@@ -189,6 +189,7 @@ func (r *StatefulSetSubReconciler) buildGenesisInitContainer(capsule *operatorv1
 		stateDir     = "/data/saved/" + SavedStateDir
 		sentinelFile = "/data/saved/.genesis-init-done"
 		genesisFile  = "/tmp/genesis-config/" + GenesisNetworkFileName
+		genesisProps = "/tmp/genesis-config/" + GenesisPropertiesFileName
 		destDir      = HapiBase + "/data/config/"
 	)
 	// Three sentinels in priority order: checkpoint CM (survives pod restarts),
@@ -206,7 +207,9 @@ while [ ! -f ` + genesisFile + ` ]; do
   fi
   sleep 10
 done
-cp ` + genesisFile + ` ` + destDir + ` && touch ` + sentinelFile + `
+cp ` + genesisFile + ` ` + destDir + `
+[ -f ` + genesisProps + ` ] && cp ` + genesisProps + ` ` + destDir + ` && echo "genesis-init: copied genesis.properties"
+touch ` + sentinelFile + `
 echo "genesis-init: done"`
 
 	optional := true
@@ -356,15 +359,6 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 				},
 			},
 		},
-		{
-			Name: "genesis-properties-config",
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{Name: DataConfigMapName(capsule)},
-					DefaultMode:          &defaultMode,
-				},
-			},
-		},
 		// genesis-config is optional: absent until NetworkGenesis runs.
 		{
 			Name: "genesis-config",
@@ -392,7 +386,6 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 		// data-config-dir is the writable data/config directory; individual files overlaid via subPath.
 		{Name: "data-config-dir", MountPath: HapiBase + "/data/config"},
 		{Name: "app-config", MountPath: HapiBase + "/data/config/application.properties", SubPath: "application.properties"},
-		{Name: "genesis-properties-config", MountPath: HapiBase + "/data/config/" + GenesisPropertiesFileName, SubPath: GenesisPropertiesFileName},
 	}
 
 	// ── Optional config CR volumes (only mounted when the ref is set) ─────────

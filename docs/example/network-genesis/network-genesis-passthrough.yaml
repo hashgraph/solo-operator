@@ -12,6 +12,10 @@ spec:
   # cluster-only deployments. When set, the operator writes it verbatim to the
   # genesis-config ConfigMap, skipping roster assembly and discovery.
   # The mainnet-daemon provisioning path does not populate this field.
+  # genesisProperties is written alongside genesis-network.json in genesis-config
+  # and copied into data/config/ by the genesis-init container.
+  genesisProperties: |
+    bootstrap.genesisPublicKey=0aa8e21064c61eab86e2a9c164565b4e7a9a4146106e0a6cd03a8c395a110e92
   genesisNetworkJSON: |
     {
       "nodeMetadata": [

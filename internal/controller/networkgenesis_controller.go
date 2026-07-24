@@ -115,8 +115,12 @@ func (r *NetworkGenesisReconciler) run(ctx context.Context, ng *operatorv1alpha1
 				"pre-built genesis-network.json rejected: %v", err)
 			return nil, fmt.Errorf("invalid genesisNetworkJSON: %w", err)
 		}
+		genesisConfigData := map[string]string{genesis.GenesisNetworkFileName: ng.Spec.GenesisNetworkJSON}
+		if ng.Spec.GenesisProperties != "" {
+			genesisConfigData[genesis.GenesisPropertiesFileName] = ng.Spec.GenesisProperties
+		}
 		if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.GenesisConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,
-			map[string]string{genesis.GenesisNetworkFileName: ng.Spec.GenesisNetworkJSON}, nil); err != nil {
+			genesisConfigData, nil); err != nil {
 			return nil, errx.WithHints(
 				errx.WithReason(errK8sAPI.Wrap(err, "upsert %s", genesis.GenesisConfigMapName), ReasonConfigMapUpsert),
 				"Confirm the operator has create and update permission on configmaps")
@@ -137,8 +141,12 @@ func (r *NetworkGenesisReconciler) run(ctx context.Context, ng *operatorv1alpha1
 		if err != nil {
 			return nil, fmt.Errorf("build genesis-network.json: %w", err)
 		}
+		genesisConfigData := map[string]string{genesis.GenesisNetworkFileName: string(genesisJSON)}
+		if ng.Spec.GenesisProperties != "" {
+			genesisConfigData[genesis.GenesisPropertiesFileName] = ng.Spec.GenesisProperties
+		}
 		if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.GenesisConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,
-			map[string]string{genesis.GenesisNetworkFileName: string(genesisJSON)}, nil); err != nil {
+			genesisConfigData, nil); err != nil {
 			return nil, errx.WithHints(
 				errx.WithReason(errK8sAPI.Wrap(err, "upsert %s", genesis.GenesisConfigMapName), ReasonConfigMapUpsert),
 				"Confirm the operator has create and update permission on configmaps")

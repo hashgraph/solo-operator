@@ -56,7 +56,7 @@ const (
 	GenesisConfigMapName = "genesis-config"
 	// GenesisNetworkFileName is the key inside GenesisConfigMapName.
 	GenesisNetworkFileName = "genesis-network.json"
-	// GenesisPropertiesFileName is the key inside data-config-cm for genesis.properties.
+	// GenesisPropertiesFileName is the key inside GenesisConfigMapName for genesis.properties.
 	GenesisPropertiesFileName = "genesis.properties"
 	// PublicKeysConfigMapName holds all nodes' signing public certs — mounted into data/keys.
 	PublicKeysConfigMapName = "public-keys"
@@ -162,12 +162,6 @@ func RoleBindingName(capsule *operatorv1alpha1.ConsensusCapsule) string {
 	return capsule.Name + RoleBindingSuffix
 }
 
-// DataConfigMapName returns the genesis-properties ConfigMap name for a capsule.
-// This CM holds genesis.properties rendered from Orbit.Spec.Consensus.GenesisProperties.
-func DataConfigMapName(capsule *operatorv1alpha1.ConsensusCapsule) string {
-	return capsule.Name + "-genesis-properties-cm"
-}
-
 // BlockNodesConfigMapName returns the block-nodes ConfigMap name for a capsule.
 func BlockNodesConfigMapName(capsule *operatorv1alpha1.ConsensusCapsule) string {
 	return capsule.Name + "-block-nodes-cm"
@@ -249,6 +243,15 @@ func DefaultApplicationProperties() map[string]string {
 	}
 }
 
+// MergeApplicationProperties merges overrides into the default application.properties map.
+func MergeApplicationProperties(overrides map[string]string) string {
+	merged := DefaultApplicationProperties()
+	for k, v := range overrides {
+		merged[k] = v
+	}
+	return RenderProperties(merged)
+}
+
 // RenderProperties renders a map[string]string as a sorted Java-properties-style key=value file.
 func RenderProperties(m map[string]string) string {
 	keys := make([]string, 0, len(m))
@@ -274,7 +277,6 @@ func NewSubReconcilers(c client.Client, scheme *runtime.Scheme, recorder events.
 		NewServiceAccountSubReconciler(c, scheme),
 		NewRoleSubReconciler(c, scheme),
 		NewRoleBindingSubReconciler(c, scheme),
-		NewDataConfigMapSubReconciler(c, scheme),
 		NewBlockNodesConfigMapSubReconciler(c, scheme),
 		NewCheetahConfigMapSubReconciler(c, scheme),
 		NewAlloyConfigMapSubReconciler(c, scheme),

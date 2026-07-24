@@ -15,9 +15,6 @@ var (
 	// missing or invalid. Terminal — the operator must correct the spec.
 	errConfigInvalid = errNS.NewType("config_invalid")
 
-	// Transient: retried once the Orbit is created.
-	errOrbitNotFound = errNS.NewType("orbit_not_found", errorx.Temporary())
-
 	// errExecTransport: the pod is not found/ready or the exec stream failed to
 	// establish. Retryable — the pod may still be starting or rescheduling.
 	errExecTransport = errNS.NewType("exec_transport", errorx.Temporary())

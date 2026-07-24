@@ -90,10 +90,6 @@ func TestResourceNames(t *testing.T) {
 		t.Errorf("expected role binding name node0-rb, got %s", got)
 	}
 
-	if got := DataConfigMapName(capsule); got != "node0-genesis-properties-cm" {
-		t.Errorf("expected data config map name node0-genesis-properties-cm, got %s", got)
-	}
-
 	if got := BlockNodesConfigMapName(capsule); got != "node0-block-nodes-cm" {
 		t.Errorf("expected block-nodes config map name node0-block-nodes-cm, got %s", got)
 	}
@@ -353,54 +349,6 @@ func TestServiceAccountSubReconciler_UpdateAnnotations(t *testing.T) {
 	}
 }
 
-// ── DataConfigMap ─────────────────────────────────────────────────────────────
-
-func TestDataConfigMapSubReconciler(t *testing.T) {
-	ctx := context.Background()
-	scheme := newTestScheme()
-	capsule := newTestCapsule()
-	orbit := newTestOrbit()
-	c := newTestClient(scheme, capsule, orbit)
-
-	reconciler := NewDataConfigMapSubReconciler(c, scheme)
-
-	result, err := reconciler.Reconcile(ctx, capsule)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.Requeue {
-		t.Error("unexpected requeue")
-	}
-
-	cm := &corev1.ConfigMap{}
-	if err := c.Get(ctx, client.ObjectKey{Name: "node0-genesis-properties-cm", Namespace: "test-namespace"}, cm); err != nil {
-		t.Fatalf("failed to get genesis-properties ConfigMap: %v", err)
-	}
-
-	if _, ok := cm.Data["application.properties"]; ok {
-		t.Error("application.properties must not be in genesis-properties-cm (owned by ApplicationProperties CR)")
-	}
-
-	if _, ok := cm.Data["api-permission.properties"]; ok {
-		t.Error("api-permission.properties must not be in genesis-properties-cm (owned by ApiPermissionProperties CR)")
-	}
-}
-
-func TestDataConfigMapSubReconciler_OrbitNotFound(t *testing.T) {
-	ctx := context.Background()
-	scheme := newTestScheme()
-	capsule := newTestCapsule() // orbit "test-orbit" not in client
-	c := newTestClient(scheme, capsule)
-
-	reconciler := NewDataConfigMapSubReconciler(c, scheme)
-
-	// Orbit not found must be a hard failure so the reconciler requeues.
-	_, err := reconciler.Reconcile(ctx, capsule)
-	if err == nil {
-		t.Fatal("expected error when orbit is missing, got nil")
-	}
-}
-
 // ── BlockNodesConfigMap ───────────────────────────────────────────────────────
 
 func TestBlockNodesConfigMapSubReconciler(t *testing.T) {
@@ -654,7 +602,7 @@ func TestStatefulSetVolumes_DefaultEmptyDir(t *testing.T) {
 	}
 
 	// ConfigMap volumes must be present
-	for _, cmVol := range []string{"log4j2-config", "settings-config", "genesis-properties-config"} {
+	for _, cmVol := range []string{"log4j2-config", "settings-config"} {
 		v, ok := volByName[cmVol]
 		if !ok {
 			t.Errorf("expected volume %s", cmVol)

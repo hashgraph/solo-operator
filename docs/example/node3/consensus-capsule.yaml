@@ -128,6 +128,10 @@ spec:
             enabled: false
           envFromSecret: "backup-uploader-secrets"
 
+      # UC sidecar — patches platform-status condition on its own pod; required.
+      uc:
+        enabled: true
+
       # Alloy enabled — scrapes Prometheus metrics at :9999.
       # Loki log shipping is disabled by default; enable via exporters.loki in common/orbit.yaml.
       alloy:

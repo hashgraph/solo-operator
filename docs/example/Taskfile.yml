@@ -59,11 +59,10 @@ tasks:
       - kubectl apply -f common/orbit.yaml
 
   deploy:common:
-    desc: Deploy common configs and secrets
+    desc: Deploy all common config CRs, ConfigMaps, and secrets
     deps: [deploy:orbit]
     cmds:
-      - kubectl apply -f common/configs.yaml
-      - kubectl apply -f common/secrets.yaml
+      - kubectl apply -f common/
 
   deploy:nodes:
     desc: Deploy all node secrets and consensus capsules

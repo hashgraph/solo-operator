@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	GenesisConfigMapName   = consensus.GenesisConfigMapName
-	GenesisNetworkFileName = consensus.GenesisNetworkFileName
-	ClusterConfigMapName   = consensus.ClusterConfigMapName
+	GenesisConfigMapName      = consensus.GenesisConfigMapName
+	GenesisNetworkFileName    = consensus.GenesisNetworkFileName
+	GenesisPropertiesFileName = consensus.GenesisPropertiesFileName
+	ClusterConfigMapName      = consensus.ClusterConfigMapName
 
 	PublicKeysConfigMapName     = consensus.PublicKeysConfigMapName
 	AddressBookBinConfigMapName = "addressbook-bin"

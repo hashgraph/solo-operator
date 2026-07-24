@@ -25,6 +25,12 @@ type NetworkGenesisSpec struct {
 	// mainnet-daemon provisioning path does not populate this field.
 	// +optional
 	GenesisNetworkJSON string `json:"genesisNetworkJSON,omitempty"`
+
+	// GenesisProperties is the content of genesis.properties, written to the genesis-config
+	// ConfigMap and copied into data/config/ by the genesis-init container. When omitted,
+	// genesis.properties is not mounted.
+	// +optional
+	GenesisProperties string `json:"genesisProperties,omitempty"`
 }
 
 type NetworkGenesisRosterEntry struct {
