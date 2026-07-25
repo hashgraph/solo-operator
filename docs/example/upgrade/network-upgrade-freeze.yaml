@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# NetworkUpgradeFreeze — step 2 of the upgrade flow.
+#
+# Created by the UC sidecar when it detects freeze_scheduled.mf.
+# Applied manually here for local dev testing.
+#
+# IMPORTANT: selectedSources must be copied verbatim from
+#   kubectl get nup upgrade-0-73-0-prepare -n solo-orbit -o jsonpath='{.status.selectedSources}'
+# The task (upgrade:freeze) does this automatically.
+#
+# scheduledTime is set to the past so the freeze triggers immediately in dev.
+#
+# After creation the operator:
+#   1. Re-validates selected registry health (RegistryHealthCheck)
+#   2. Waits for Prepare → Succeeded (ReadyForFreeze)
+#   → phase: Succeeded
+apiVersion: operator.solo.hiero.org/v1alpha1
+kind: NetworkUpgradeFreeze
+metadata:
+  name: upgrade-0-73-0-freeze
+  namespace: solo-orbit
+  labels:
+    operator.solo.hiero.org/operation-id: upgrade-0-73-0
+    operator.solo.hiero.org/step: freeze
+spec:
+  orbit: solo-orbit
+  operationId: upgrade-0-73-0
+  # Set to a past time — freeze triggers immediately for local dev testing.
+  scheduledTime: "2026-01-01T00:00:00Z"
+  images:
+    consensusNode:
+      version: "0.73.0"
+      deterministic:
+        supported: false
+      registries:
+        - image: gcr.io/hedera-registry/consensus-node:0.73.0
+  # Populated at apply time by the upgrade:freeze task from Prepare status.
+  selectedSources: {}

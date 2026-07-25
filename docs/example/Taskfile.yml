@@ -209,6 +209,128 @@ tasks:
       - task: destroy:common
       - task: destroy:orbit
 
+  upgrade:prepare:
+    desc: "Apply NetworkUpgradePrepare and wait for Succeeded (step 1 of upgrade flow)"
+    cmds:
+      - kubectl apply -f upgrade/network-upgrade-prepare.yaml
+      - echo ">> Waiting for NetworkUpgradePrepare to succeed..."
+      - kubectl wait --for=jsonpath='{.status.phase}'=Succeeded networkupgradeprepare/upgrade-0-73-0-prepare -n solo-orbit --timeout=120s
+      - echo ">> Prepare succeeded"
+
+  upgrade:freeze:
+    desc: "Apply NetworkUpgradeFreeze with selectedSources from Prepare, wait for Succeeded (step 2)"
+    cmds:
+      - |
+        set -eu
+        SELECTED=$(kubectl get networkupgradeprepare upgrade-0-73-0-prepare -n solo-orbit \
+          -o jsonpath='{.status.selectedSources}')
+        if [ -z "$SELECTED" ] || [ "$SELECTED" = "null" ]; then
+          echo "ERROR: Prepare status.selectedSources is empty — run upgrade:prepare first" >&2
+          exit 1
+        fi
+        SCHEDULED_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        kubectl apply -f - <<EOF
+        apiVersion: operator.solo.hiero.org/v1alpha1
+        kind: NetworkUpgradeFreeze
+        metadata:
+          name: upgrade-0-73-0-freeze
+          namespace: solo-orbit
+          labels:
+            operator.solo.hiero.org/operation-id: upgrade-0-73-0
+            operator.solo.hiero.org/step: freeze
+        spec:
+          orbit: solo-orbit
+          operationId: upgrade-0-73-0
+          scheduledTime: "${SCHEDULED_TIME}"
+          images:
+            consensusNode:
+              version: "0.73.0"
+              deterministic:
+                supported: false
+              registries:
+                - image: gcr.io/hedera-registry/consensus-node:0.73.0
+          selectedSources: ${SELECTED}
+        EOF
+      - echo ">> Waiting for NetworkUpgradeFreeze to succeed..."
+      - kubectl wait --for=jsonpath='{.status.phase}'=Succeeded networkupgradefreeze/upgrade-0-73-0-freeze -n solo-orbit --timeout=120s
+      - echo ">> Freeze succeeded"
+
+  upgrade:execute:
+    desc: "Apply NetworkUpgradeExecute for all 4 nodes and wait for each to succeed (step 3)"
+    cmds:
+      - |
+        set -eu
+        SELECTED=$(kubectl get networkupgradeprepare upgrade-0-73-0-prepare -n solo-orbit \
+          -o jsonpath='{.status.selectedSources}')
+        if [ -z "$SELECTED" ] || [ "$SELECTED" = "null" ]; then
+          echo "ERROR: Prepare status.selectedSources is empty — run upgrade:prepare first" >&2
+          exit 1
+        fi
+        for NODE in node0 node1 node2 node3; do
+          echo ">> Applying NetworkUpgradeExecute for ${NODE}..."
+          kubectl apply -f - <<EOF
+        apiVersion: operator.solo.hiero.org/v1alpha1
+        kind: NetworkUpgradeExecute
+        metadata:
+          name: upgrade-0-73-0-execute-${NODE}
+          namespace: solo-orbit
+          labels:
+            operator.solo.hiero.org/operation-id: upgrade-0-73-0
+            operator.solo.hiero.org/step: execute
+        spec:
+          orbit: solo-orbit
+          operationId: upgrade-0-73-0
+          consensusNode: ${NODE}
+          images:
+            consensusNode:
+              version: "0.73.0"
+              deterministic:
+                supported: false
+              registries:
+                - image: gcr.io/hedera-registry/consensus-node:0.73.0
+          selectedSources: ${SELECTED}
+        EOF
+        done
+      - |
+        set -eu
+        for NODE in node0 node1 node2 node3; do
+          echo ">> Waiting for upgrade-0-73-0-execute-${NODE} to succeed..."
+          kubectl wait --for=jsonpath='{.status.phase}'=Succeeded \
+            networkupgradeexecute/upgrade-0-73-0-execute-${NODE} \
+            -n solo-orbit --timeout=300s
+          echo ">> ${NODE} upgrade succeeded"
+        done
+      - echo ">> All nodes upgraded successfully"
+
+  upgrade:status:
+    desc: Show status of all upgrade CRs for operation upgrade-0-73-0
+    cmds:
+      - echo ">> NetworkUpgradePrepare:"
+      - kubectl get networkupgradeprepare -n solo-orbit -l operator.solo.hiero.org/operation-id=upgrade-0-73-0 -o wide || true
+      - echo ""
+      - echo ">> NetworkUpgradeFreeze:"
+      - kubectl get networkupgradefreeze -n solo-orbit -l operator.solo.hiero.org/operation-id=upgrade-0-73-0 -o wide || true
+      - echo ""
+      - echo ">> NetworkUpgradeExecute:"
+      - kubectl get networkupgradeexecute -n solo-orbit -l operator.solo.hiero.org/operation-id=upgrade-0-73-0 -o wide || true
+      - echo ""
+      - echo ">> ConsensusCapsules:"
+      - kubectl get consensuscapsules -n solo-orbit -o wide || true
+
+  upgrade:
+    desc: "Run the full upgrade flow: prepare → freeze → execute (all 4 nodes)"
+    cmds:
+      - task: upgrade:prepare
+      - task: upgrade:freeze
+      - task: upgrade:execute
+
+  upgrade:destroy:
+    desc: Delete all upgrade CRs for operation upgrade-0-73-0
+    cmds:
+      - kubectl delete networkupgradeexecute -n solo-orbit -l operator.solo.hiero.org/operation-id=upgrade-0-73-0 --ignore-not-found
+      - kubectl delete networkupgradefreeze -n solo-orbit -l operator.solo.hiero.org/operation-id=upgrade-0-73-0 --ignore-not-found
+      - kubectl delete networkupgradeprepare -n solo-orbit -l operator.solo.hiero.org/operation-id=upgrade-0-73-0 --ignore-not-found
+
   cleanup:
     desc: Uninstall MetalLB, MinIO operator and tenant
     cmds:

@@ -326,6 +326,21 @@ tasks:
     cmds:
       - task -d docs/example status
 
+  dev:local:upgrade:
+    desc: Run the full upgrade flow against the local dev cluster (prepare → freeze → execute)
+    cmds:
+      - task -d docs/example upgrade
+
+  dev:local:upgrade:status:
+    desc: Show status of all upgrade CRs in the local dev cluster
+    cmds:
+      - task -d docs/example upgrade:status
+
+  dev:local:upgrade:destroy:
+    desc: Delete all upgrade CRs from the local dev cluster
+    cmds:
+      - task -d docs/example upgrade:destroy
+
   kind:reset:
     desc: Reset kind cluster with fresh CRDs (delete+generate run in parallel)
     deps:
