@@ -64,8 +64,12 @@ func newReadyPodWithPhase(capsule *operatorv1alpha1.ConsensusCapsule, phase core
 }
 
 func buildReconcilerForUpdateStatus(c client.Client) *ConsensusCapsuleReconciler {
-	scheme := newControllerTestScheme()
-	return NewConsensusCapsuleReconciler(c, scheme)
+	// updateStatus never execs, so the clientset/restConfig are left nil rather than
+	// going through NewConsensusCapsuleReconciler (which needs a real rest.Config).
+	return &ConsensusCapsuleReconciler{
+		Client: c,
+		Scheme: newControllerTestScheme(),
+	}
 }
 
 func TestUpdateStatus_NoPods_PhasePending(t *testing.T) {
@@ -259,6 +263,20 @@ func TestUpdateStatus_ActiveWhenPlatformActiveOnCurrentRevision(t *testing.T) {
 	}
 	if capsule.Status.Phase != operatorv1alpha1.PhaseActive {
 		t.Errorf("expected PhaseActive, got %s", capsule.Status.Phase)
+	}
+}
+
+// TestUpdateStatus_AutoIdle_StaysRunning verifies that an Auto-start capsule with the
+// same idle reading (Ready pod, UNKNOWN platform status) is unaffected by the Stopped
+// branch and stays Running while the CN comes up.
+func TestUpdateStatus_AutoIdle_StaysRunning(t *testing.T) {
+	r, capsule, ctx := buildActiveScenario(t, "", operatorv1alpha1.PhaseRunning, testRevision, testRevision)
+	capsule.Spec.StartPolicy = operatorv1alpha1.StartPolicyAuto
+	if _, err := r.updateStatus(ctx, capsule); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capsule.Status.Phase != operatorv1alpha1.PhaseRunning {
+		t.Errorf("expected PhaseRunning for Auto+idle, got %s", capsule.Status.Phase)
 	}
 }
 

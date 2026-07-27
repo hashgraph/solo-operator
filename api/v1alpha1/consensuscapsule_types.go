@@ -148,6 +148,11 @@ type ConsensusCapsuleSpec struct {
 	// +optional
 	// +kubebuilder:default=false
 	Offline bool `json:"offline,omitempty"`
+
+	// StartPolicy selects who starts the consensus process. See HIP-1494/1495.
+	// +optional
+	// +kubebuilder:default=Auto
+	StartPolicy StartPolicy `json:"startPolicy,omitempty"`
 }
 
 // BlockNodesConfig defines block-node connection settings.
@@ -576,7 +581,7 @@ type ConsensusCapsuleStatus struct {
 	// consensus-only value: it is permitted here but excluded from every other CRD's
 	// phase enum.
 	// +optional
-	// +kubebuilder:validation:Enum=Pending;Running;Active;Succeeded;Failed;Unknown
+	// +kubebuilder:validation:Enum=Pending;Running;Active;Succeeded;Failed;Unknown;Stopped
 	Phase Phase `json:"phase,omitempty"`
 
 	// PlatformStatus is the consensus node's live platform state (raw

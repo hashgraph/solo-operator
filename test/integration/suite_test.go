@@ -74,10 +74,13 @@ var _ = BeforeSuite(func() {
 	).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
-	err = controller.NewConsensusCapsuleReconciler(
+	consensusCapsuleReconciler, err := controller.NewConsensusCapsuleReconciler(
 		k8sManager.GetClient(),
 		k8sManager.GetScheme(),
-	).SetupWithManager(k8sManager)
+		k8sManager.GetConfig(),
+	)
+	Expect(err).ToNot(HaveOccurred())
+	err = consensusCapsuleReconciler.SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
 	err = controller.NewHAProxyCapsuleReconciler(

@@ -15,6 +15,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -56,14 +58,26 @@ type ConsensusCapsuleReconciler struct {
 	Scheme        *runtime.Scheme
 	Recorder      events.EventRecorder
 	subreconciler *subreconciler.Chain[*operatorv1alpha1.ConsensusCapsule]
+
+	// clientset + restConfig back the s6 control interface: controller-runtime's
+	// client cannot exec into a pod.
+	clientset  kubernetes.Interface
+	restConfig *rest.Config
 }
 
-// NewConsensusCapsuleReconciler creates a new ConsensusCapsuleReconciler
-func NewConsensusCapsuleReconciler(c client.Client, scheme *runtime.Scheme) *ConsensusCapsuleReconciler {
-	return &ConsensusCapsuleReconciler{
-		Client: c,
-		Scheme: scheme,
+// NewConsensusCapsuleReconciler creates a new ConsensusCapsuleReconciler. Pass
+// mgr.GetConfig() for restConfig; it backs the clientset used for pods/exec.
+func NewConsensusCapsuleReconciler(c client.Client, scheme *runtime.Scheme, restConfig *rest.Config) (*ConsensusCapsuleReconciler, error) {
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("build clientset for pods/exec: %w", err)
 	}
+	return &ConsensusCapsuleReconciler{
+		Client:     c,
+		Scheme:     scheme,
+		clientset:  clientset,
+		restConfig: restConfig,
+	}, nil
 }
 
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits,verbs=get;list;watch
@@ -75,6 +89,7 @@ func NewConsensusCapsuleReconciler(c client.Client, scheme *runtime.Scheme) *Con
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=pods/exec,verbs=create
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=get;list;watch;create;update;patch;delete
@@ -400,7 +415,7 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 		}
 		switch pod.Status.Phase {
 		case corev1.PodRunning:
-			phase = r.rollupRunningPhase(pod, platformStatus, oldPhase, onUpdateRevision, &requeue)
+			phase = r.rollupRunningPhase(capsule, pod, platformStatus, oldPhase, onUpdateRevision, &requeue)
 		case corev1.PodSucceeded:
 			phase = operatorv1alpha1.PhaseSucceeded
 		case corev1.PodFailed:
@@ -480,6 +495,7 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 // template cannot drive the phase — and, since the caller already blanks platformStatus
 // to UNKNOWN off the current revision, the guards below are belt-and-suspenders.
 func (r *ConsensusCapsuleReconciler) rollupRunningPhase(
+	capsule *operatorv1alpha1.ConsensusCapsule,
 	pod corev1.Pod,
 	platformStatus string,
 	oldPhase operatorv1alpha1.Phase,

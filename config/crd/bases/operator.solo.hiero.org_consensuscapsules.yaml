@@ -21371,6 +21371,14 @@ spec:
                   references a SimpleFeesSchedules CR whose managed ConfigMap is subPath-mounted
                   at data/config/simpleFeesSchedules.json. Optional — CN falls back to defaults.
                 type: string
+              startPolicy:
+                default: Auto
+                description: StartPolicy selects who starts the consensus process.
+                  See HIP-1494/1495.
+                enum:
+                - Auto
+                - Manual
+                type: string
               throttlesConfigRef:
                 description: |-
                   references a ThrottlesConfig CR whose managed ConfigMap is subPath-mounted
@@ -21522,6 +21530,7 @@ spec:
                 - Succeeded
                 - Failed
                 - Unknown
+                - Stopped
                 type: string
               platformStatus:
                 description: |-

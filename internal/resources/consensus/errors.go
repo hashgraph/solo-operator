@@ -17,6 +17,14 @@ var (
 
 	// Transient: retried once the Orbit is created.
 	errOrbitNotFound = errNS.NewType("orbit_not_found", errorx.Temporary())
+
+	// errExecTransport: the pod is not found/ready or the exec stream failed to
+	// establish. Retryable — the pod may still be starting or rescheduling.
+	errExecTransport = errNS.NewType("exec_transport", errorx.Temporary())
+
+	// errExecCommand: the s6 command ran but exited non-zero. Terminal — retrying
+	// the same command will not change the outcome.
+	errExecCommand = errNS.NewType("exec_command")
 )
 
 const (

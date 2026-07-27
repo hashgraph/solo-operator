@@ -12,6 +12,7 @@ spec:
   accountId: "0.0.3"
   weight: 500
   serviceType: ClusterIP
+  startPolicy: Auto  # Auto (default): CN process starts on pod boot; Manual: started out-of-band
   podProperties:
     containers:
       consensusNode:

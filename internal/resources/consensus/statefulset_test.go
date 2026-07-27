@@ -123,6 +123,43 @@ func TestBuildStatefulSet_JavaEnvVars_NotSetWhenEmpty(t *testing.T) {
 	}
 }
 
+func TestBuildStatefulSet_AutoStartEnvVar(t *testing.T) {
+	cases := map[string]struct {
+		startPolicy operatorv1alpha1.StartPolicy
+		want        string
+	}{
+		"unset_defaults_true": {startPolicy: "", want: "true"},
+		"auto":                {startPolicy: operatorv1alpha1.StartPolicyAuto, want: "true"},
+		"manual":              {startPolicy: operatorv1alpha1.StartPolicyManual, want: "false"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			r := newStsReconciler()
+			capsule := capsuleWithImage("v0.50.0")
+			capsule.Spec.StartPolicy = tc.startPolicy
+
+			sts, err := r.buildStatefulSet(context.Background(), capsule)
+			if err != nil {
+				t.Fatalf("buildStatefulSet: %v", err)
+			}
+
+			var got string
+			found := false
+			for _, e := range sts.Spec.Template.Spec.Containers[0].Env {
+				if e.Name == "AUTO_START_CONSENSUS_SERVICE" {
+					got, found = e.Value, true
+				}
+			}
+			if !found {
+				t.Fatal("AUTO_START_CONSENSUS_SERVICE env var not set")
+			}
+			if got != tc.want {
+				t.Errorf("AUTO_START_CONSENSUS_SERVICE: want %q, got %q", tc.want, got)
+			}
+		})
+	}
+}
+
 func TestBuildStatefulSet_HapiAppSecretsMount(t *testing.T) {
 	r := newStsReconciler()
 	capsule := capsuleWithImage("v0.50.0")
