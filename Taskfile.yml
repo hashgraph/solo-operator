@@ -298,18 +298,18 @@ tasks:
     cmds:
       - kind delete cluster --name {{.LOCAL_CLUSTER}} || true
       - kind create cluster --name {{.LOCAL_CLUSTER}}
-      - task: kind:metallb
-      - task: generate:rbac
-      - task: helm:sync-rbac
-      - task: docker:build
-      - task: docker:build:uc
+      - task kind:metallb
+      - task generate:rbac
+      - task helm:sync-rbac
+      - task docker:build
+      - task docker:build:uc
       - docker tag {{.UC_IMG}} ghcr.io/hashgraph/solo-operator-uc:{{.VERSION}}
       - kind load docker-image {{.IMG}} --name {{.LOCAL_CLUSTER}}
       - kind load docker-image {{.UC_IMG}} --name {{.LOCAL_CLUSTER}}
       - kind load docker-image ghcr.io/hashgraph/solo-operator-uc:{{.VERSION}} --name {{.LOCAL_CLUSTER}}
       - helm upgrade --install solo-operator charts/solo-operator --namespace solo-operator --create-namespace --wait --timeout 120s --set image.tag=latest --set image.pullPolicy=Never
       - kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=solo-operator -n solo-operator --timeout=120s
-      - echo ">> Operator ready"
+      - echo ">> All done"
 
   dev:local:deploy:
     desc: Deploy 4-node cluster using docs/example manifests (orbit + nodes + genesis)
