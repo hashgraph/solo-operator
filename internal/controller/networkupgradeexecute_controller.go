@@ -169,12 +169,6 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 			return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
 		}
 
-		// In mainnet mode the host-level provisioner daemon takes over at
-		// ReadyForProvisionerDaemon and may tear down the cluster for infra
-		// upgrades, so the pod must be scaled down first. In cluster-only mode the
-		// provisioner role is filled by the UC sidecar running inside this pod;
-		// scaling down here would kill the UC before it can advance the phase, so
-		// the pod stays up and scale-down is deferred to reconcilePendingNodeUpgrade.
 		capsule, err := r.getCapsule(ctx, &execute)
 		if err != nil {
 			return ctrl.Result{}, err
@@ -186,21 +180,41 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		if mode == uc.ModeMainnet {
-			if err := r.ensureCapsuleOffline(ctx, &execute, capsule); err != nil {
-				return ctrl.Result{}, err
-			}
-		}
 
 		now := metav1.Now()
 		execute.Status.StartTime = &now
-		execute.Status.Phase = operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon
 		execute.Status.ObservedGeneration = execute.Generation
+
+		if mode == uc.ModeMainnet {
+			// Mainnet: the host-level provisioner daemon takes over at
+			// ReadyForProvisionerDaemon and may tear down the cluster for infra
+			// upgrades, so the pod must be scaled down first. The daemon (a host
+			// process that survives pod termination) then advances the phase.
+			if err := r.ensureCapsuleOffline(ctx, &execute, capsule); err != nil {
+				return ctrl.Result{}, err
+			}
+			execute.Status.Phase = operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon
+			if err := r.Status().Update(ctx, &execute); err != nil {
+				return ctrl.Result{}, wrapStatusInit(err)
+			}
+			r.eventf(ctx, &execute, corev1.EventTypeNormal, operatorv1alpha1.EventReadyForDaemon,
+				"waiting for provisioner daemon for operationId %q", execute.Spec.OperationID)
+			return ctrl.Result{Requeue: true}, nil
+		}
+
+		// Cluster-only: there is no provisioner daemon, and the only actor that
+		// could advance ReadyForProvisionerDaemon is the UC sidecar inside the CN
+		// pod — which is scaled to zero during the upgrade and cannot be relied on.
+		// The operator therefore skips ReadyForProvisionerDaemon and drives the CR
+		// straight to PendingNodeUpgrade itself, keeping the transition independent
+		// of the UC. Scale-down happens in reconcilePendingNodeUpgrade.
+		execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+		execute.Status.NodeUpgradeStartTime = &now
 		if err := r.Status().Update(ctx, &execute); err != nil {
 			return ctrl.Result{}, wrapStatusInit(err)
 		}
-		r.eventf(ctx, &execute, corev1.EventTypeNormal, operatorv1alpha1.EventReadyForDaemon,
-			"waiting for provisioner daemon for operationId %q", execute.Spec.OperationID)
+		r.eventf(ctx, &execute, corev1.EventTypeNormal, operatorv1alpha1.EventPendingNodeUpgrade,
+			"cluster-only mode; advancing directly to PendingNodeUpgrade for operationId %q", execute.Spec.OperationID)
 		return ctrl.Result{Requeue: true}, nil
 	}
 
