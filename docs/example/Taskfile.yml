@@ -360,9 +360,15 @@ tasks:
   upgrade:destroy:
     desc: Delete all upgrade CRs for operation upgrade-0-73-0
     cmds:
-      - kubectl delete networkupgradeexecute -n solo-orbit -l operator.solo.hiero.org/operation-id=upgrade-0-73-0 --ignore-not-found
-      - kubectl delete networkupgradefreeze -n solo-orbit -l operator.solo.hiero.org/operation-id=upgrade-0-73-0 --ignore-not-found
-      - kubectl delete networkupgradeprepare -n solo-orbit -l operator.solo.hiero.org/operation-id=upgrade-0-73-0 --ignore-not-found
+      - |
+        set -eu
+        LABEL="operator.solo.hiero.org/operation-id=upgrade-0-73-0"
+        for KIND in networkupgradeexecute networkupgradefreeze networkupgradeprepare; do
+          for NAME in $(kubectl get ${KIND} -n solo-orbit -l ${LABEL} -o name 2>/dev/null); do
+            kubectl patch ${NAME} -n solo-orbit --type=json -p='[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || true
+          done
+          kubectl delete ${KIND} -n solo-orbit -l ${LABEL} --ignore-not-found
+        done
 
   cleanup:
     desc: Uninstall MetalLB, MinIO operator and tenant
