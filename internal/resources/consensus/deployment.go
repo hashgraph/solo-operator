@@ -189,6 +189,7 @@ func (r *StatefulSetSubReconciler) buildGenesisInitContainer(capsule *operatorv1
 		stateDir     = "/data/saved/" + SavedStateDir
 		sentinelFile = "/data/saved/.genesis-init-done"
 		genesisFile  = "/tmp/genesis-config/" + GenesisNetworkFileName
+		genesisProps = "/tmp/genesis-config/" + GenesisPropertiesFileName
 		destDir      = HapiBase + "/data/config/"
 	)
 	// Three sentinels in priority order: checkpoint CM (survives pod restarts),
@@ -206,7 +207,9 @@ while [ ! -f ` + genesisFile + ` ]; do
   fi
   sleep 10
 done
-cp ` + genesisFile + ` ` + destDir + ` && touch ` + sentinelFile + `
+cp ` + genesisFile + ` ` + destDir + ` || { echo "genesis-init: failed to copy genesis-network.json"; exit 1; }
+[ -f ` + genesisProps + ` ] && cp ` + genesisProps + ` ` + destDir + ` && echo "genesis-init: copied genesis.properties"
+touch ` + sentinelFile + `
 echo "genesis-init: done"`
 
 	optional := true
@@ -356,15 +359,6 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 				},
 			},
 		},
-		{
-			Name: "genesis-properties-config",
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{Name: DataConfigMapName(capsule)},
-					DefaultMode:          &defaultMode,
-				},
-			},
-		},
 		// genesis-config is optional: absent until NetworkGenesis runs.
 		{
 			Name: "genesis-config",
@@ -392,7 +386,6 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 		// data-config-dir is the writable data/config directory; individual files overlaid via subPath.
 		{Name: "data-config-dir", MountPath: HapiBase + "/data/config"},
 		{Name: "app-config", MountPath: HapiBase + "/data/config/application.properties", SubPath: "application.properties"},
-		{Name: "genesis-properties-config", MountPath: HapiBase + "/data/config/" + GenesisPropertiesFileName, SubPath: GenesisPropertiesFileName},
 	}
 
 	// ── Optional config CR volumes (only mounted when the ref is set) ─────────
@@ -528,21 +521,27 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 		} else if capsule.Spec.Secrets.SecretResources != nil {
 			var projectedSources []corev1.VolumeProjection
 
-			if capsule.Spec.Secrets.SecretResources.SigningPrivateKey.SecretName != "" {
+			sr := capsule.Spec.Secrets.SecretResources
+			if sr.SigningPrivateKey.SecretName != "" {
+				// Mount under the CN-expected filename derived from nodeId: "s-private-node<nodeId+1>.pem".
+				// The secret key can be named anything; the operator normalizes it here so
+				// users don't need to know CN's internal formatNodeName convention.
+				privateKeyPath := fmt.Sprintf("s-private-node%d.pem", capsule.Spec.NodeId+1)
 				projectedSources = append(projectedSources, corev1.VolumeProjection{
 					Secret: &corev1.SecretProjection{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: capsule.Spec.Secrets.SecretResources.SigningPrivateKey.SecretName,
+							Name: sr.SigningPrivateKey.SecretName,
 						},
 						Items: []corev1.KeyToPath{{
-							Key:  capsule.Spec.Secrets.SecretResources.SigningPrivateKey.KeyName,
-							Path: fmt.Sprintf("s-private-%s.pem", capsule.Name),
+							Key:  sr.SigningPrivateKey.KeyName,
+							Path: privateKeyPath,
 						}},
 					},
 				})
 			}
 
-			// public signing certs for all nodes (optional: absent until NetworkGenesis runs)
+			// All nodes' public signing certs (optional: absent until NetworkGenesis runs).
+			// The CN migration matches each s-public-*.pem to its s-private-*.pem by stem.
 			publicKeysOptional := true
 			projectedSources = append(projectedSources, corev1.VolumeProjection{
 				ConfigMap: &corev1.ConfigMapProjection{
@@ -563,7 +562,6 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 				Name: "keys", MountPath: HapiBase + "/data/keys",
 			})
 
-			sr := capsule.Spec.Secrets.SecretResources
 			if sr.GrpcTlsPrivateKey.SecretName != "" {
 				volumes = append(volumes, corev1.Volume{
 					Name: "grpc-tls-key",

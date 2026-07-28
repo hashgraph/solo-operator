@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# NetworkUpgradeExecute — step 3 of the upgrade flow (one per consensus node).
+#
+# Created by the UC sidecar when it detects now_frozen.mf (FREEZE_COMPLETE).
+# Applied manually here for local dev testing.
+#
+# IMPORTANT: selectedSources must be copied verbatim from Prepare status.
+# The task (upgrade:execute) does this automatically.
+#
+# After creation the operator (per node):
+#   1. Scales the ConsensusCapsule pod offline → ReadyForProvisionerDaemon
+#   2. (cluster-only profile: UC applies ConsensusConfig CRs) → PendingNodeUpgrade
+#   3. Patches ConsensusCapsule with new image digests, clears offline → pod restarts
+#   4. Waits for UC to report ACTIVE → Succeeded
+#
+# consensusNode is templated by the upgrade:execute task; this file is a template.
+apiVersion: operator.solo.hiero.org/v1alpha1
+kind: NetworkUpgradeExecute
+metadata:
+  name: upgrade-0-73-0-execute-NODENAME
+  namespace: solo-orbit
+  labels:
+    operator.solo.hiero.org/operation-id: upgrade-0-73-0
+    operator.solo.hiero.org/step: execute
+spec:
+  orbit: solo-orbit
+  operationId: upgrade-0-73-0
+  consensusNode: NODENAME
+  images:
+    consensusNode:
+      version: "0.73.0"
+      deterministic:
+        supported: false
+      registries:
+        - image: gcr.io/hedera-registry/consensus-node:0.73.0
+  # Populated at apply time by the upgrade:execute task from Prepare status.
+  selectedSources: {}

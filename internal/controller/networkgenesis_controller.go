@@ -116,7 +116,7 @@ func (r *NetworkGenesisReconciler) run(ctx context.Context, ng *operatorv1alpha1
 			return nil, fmt.Errorf("invalid genesisNetworkJSON: %w", err)
 		}
 		if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.GenesisConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,
-			map[string]string{genesis.GenesisNetworkFileName: ng.Spec.GenesisNetworkJSON}, nil); err != nil {
+			buildGenesisConfigData(ng.Spec.GenesisNetworkJSON, ng.Spec.GenesisProperties), nil); err != nil {
 			return nil, errx.WithHints(
 				errx.WithReason(errK8sAPI.Wrap(err, "upsert %s", genesis.GenesisConfigMapName), ReasonConfigMapUpsert),
 				"Confirm the operator has create and update permission on configmaps")
@@ -138,7 +138,7 @@ func (r *NetworkGenesisReconciler) run(ctx context.Context, ng *operatorv1alpha1
 			return nil, fmt.Errorf("build genesis-network.json: %w", err)
 		}
 		if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.GenesisConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,
-			map[string]string{genesis.GenesisNetworkFileName: string(genesisJSON)}, nil); err != nil {
+			buildGenesisConfigData(string(genesisJSON), ng.Spec.GenesisProperties), nil); err != nil {
 			return nil, errx.WithHints(
 				errx.WithReason(errK8sAPI.Wrap(err, "upsert %s", genesis.GenesisConfigMapName), ReasonConfigMapUpsert),
 				"Confirm the operator has create and update permission on configmaps")
@@ -178,6 +178,14 @@ func (r *NetworkGenesisReconciler) run(ctx context.Context, ng *operatorv1alpha1
 	}
 
 	return orbit, nil
+}
+
+func buildGenesisConfigData(genesisJSON, genesisProperties string) map[string]string {
+	data := map[string]string{genesis.GenesisNetworkFileName: genesisJSON}
+	if genesisProperties != "" {
+		data[genesis.GenesisPropertiesFileName] = genesisProperties
+	}
+	return data
 }
 
 // handleDeletion lets generated ConfigMaps outlive the CR — they are still

@@ -63,6 +63,12 @@ spec:
                   skipping roster assembly and discovery. Intended for fresh cluster-only genesis; the
                   mainnet-daemon provisioning path does not populate this field.
                 type: string
+              genesisProperties:
+                description: |-
+                  GenesisProperties is the content of genesis.properties, written to the genesis-config
+                  ConfigMap and copied into data/config/ by the genesis-init container. When omitted,
+                  genesis.properties is not mounted.
+                type: string
               operationId:
                 type: string
               orbit:

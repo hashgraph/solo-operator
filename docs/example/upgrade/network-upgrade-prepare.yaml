@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# NetworkUpgradePrepare — step 1 of the upgrade flow.
+#
+# Created by the UC sidecar when it detects execute_immediate.mf on the node.
+# Applied manually here for local dev testing.
+#
+# The operationId must match across Prepare → Freeze → Execute.
+# It must also match the labels on all three CRs.
+#
+# After creation the operator:
+#   1. Validates the manifest schema (ManifestValidated)
+#   2. Pulls and validates each registry image (ImageValidation)
+#   3. Selects one registry per component, writes status.selectedSources (RegistrySelected)
+#   → phase: Succeeded
+apiVersion: operator.solo.hiero.org/v1alpha1
+kind: NetworkUpgradePrepare
+metadata:
+  name: upgrade-0-73-0-prepare
+  namespace: solo-orbit
+  labels:
+    operator.solo.hiero.org/operation-id: upgrade-0-73-0
+    operator.solo.hiero.org/step: prepare
+spec:
+  orbit: solo-orbit
+  operationId: upgrade-0-73-0
+  images:
+    consensusNode:
+      version: "0.73.0"
+      deterministic:
+        supported: false
+      registries:
+        - image: gcr.io/hedera-registry/consensus-node:0.73.0

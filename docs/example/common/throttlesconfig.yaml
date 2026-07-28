@@ -20,7 +20,7 @@ spec:
   # content is a valid JSON document defining throttle buckets.
   content: |
     {
-      "throttleBuckets": [
+      "buckets": [
         {
           "name": "ThroughputLimits",
           "burstPeriod": 1,

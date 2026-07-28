@@ -4,7 +4,6 @@ package consensus
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -489,10 +488,12 @@ func TestBuildVolumes_PublicKeysPresentEvenWithoutPrivateKeySecret(t *testing.T)
 	}
 }
 
-func TestBuildVolumes_PrivateKeyFilenameUsesCapsuleName(t *testing.T) {
+func TestBuildVolumes_PrivateKeyPathDerivedFromNodeId(t *testing.T) {
 	r := newStsReconciler()
-	capsule := capsuleWithSecretResources("node0-keys", "s-private-node0.pem")
-	// capsule.Name is "node0" from capsuleWithImage
+	// Secret key is named "private.pem" — operator must mount it as s-private-node1.pem
+	// because nodeId=0 → formatNodeName offset+1 = "node1".
+	capsule := capsuleWithSecretResources("node0-keys", "private.pem")
+	capsule.Spec.NodeId = 0
 
 	volumes, _ := r.buildVolumes(capsule)
 
@@ -502,16 +503,21 @@ func TestBuildVolumes_PrivateKeyFilenameUsesCapsuleName(t *testing.T) {
 	}
 
 	for _, src := range proj.Sources {
-		if src.Secret != nil {
-			if len(src.Secret.Items) != 1 {
-				t.Fatalf("expected 1 key mapping, got %d", len(src.Secret.Items))
-			}
-			want := fmt.Sprintf("s-private-%s.pem", capsule.Name)
-			if got := src.Secret.Items[0].Path; got != want {
-				t.Errorf("private key path: want %q, got %q", want, got)
-			}
-			return
+		if src.Secret == nil {
+			continue
 		}
+		if len(src.Secret.Items) != 1 {
+			t.Fatalf("expected 1 key mapping, got %d", len(src.Secret.Items))
+		}
+		item := src.Secret.Items[0]
+		if item.Key != "private.pem" {
+			t.Errorf("secret Key: want %q, got %q", "private.pem", item.Key)
+		}
+		// Path must be s-private-node<nodeId+1>.pem, not the secret key name.
+		if item.Path != "s-private-node1.pem" {
+			t.Errorf("secret Path: want %q, got %q", "s-private-node1.pem", item.Path)
+		}
+		return
 	}
 	t.Error("no Secret projected source found")
 }
