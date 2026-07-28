@@ -12,7 +12,7 @@ tasks:
     cmds:
       - helm repo add metallb https://metallb.github.io/metallb
       - helm repo update
-      - helm upgrade --install --namespace metallb-system --create-namespace metallb metallb/metallb --wait --timeout 180s
+      - helm upgrade --install --namespace metallb-system --create-namespace metallb metallb/metallb --wait --timeout 300s
       - |
         # Use .200-.250 of the kind Docker subnet for LoadBalancer IPs
         SUBNET=$(docker network inspect kind | grep '"Subnet"' | awk -F'"' '{print $4}' | grep -v ':' | head -1)
@@ -229,28 +229,34 @@ tasks:
           exit 1
         fi
         SCHEDULED_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-        kubectl apply -f - <<EOF
-        apiVersion: operator.solo.hiero.org/v1alpha1
-        kind: NetworkUpgradeFreeze
-        metadata:
-          name: upgrade-0-73-0-freeze
-          namespace: solo-orbit
-          labels:
-            operator.solo.hiero.org/operation-id: upgrade-0-73-0
-            operator.solo.hiero.org/step: freeze
-        spec:
-          orbit: solo-orbit
-          operationId: upgrade-0-73-0
-          scheduledTime: "${SCHEDULED_TIME}"
-          images:
-            consensusNode:
-              version: "0.73.0"
-              deterministic:
-                supported: false
-              registries:
-                - image: gcr.io/hedera-registry/consensus-node:0.73.0
-          selectedSources: "${SELECTED}"
-        EOF
+        jq -n \
+          --arg scheduledTime "$SCHEDULED_TIME" \
+          --argjson selectedSources "$SELECTED" \
+          '{
+            apiVersion: "operator.solo.hiero.org/v1alpha1",
+            kind: "NetworkUpgradeFreeze",
+            metadata: {
+              name: "upgrade-0-73-0-freeze",
+              namespace: "solo-orbit",
+              labels: {
+                "operator.solo.hiero.org/operation-id": "upgrade-0-73-0",
+                "operator.solo.hiero.org/step": "freeze"
+              }
+            },
+            spec: {
+              orbit: "solo-orbit",
+              operationId: "upgrade-0-73-0",
+              scheduledTime: $scheduledTime,
+              images: {
+                consensusNode: {
+                  version: "0.73.0",
+                  deterministic: {supported: false},
+                  registries: [{image: "gcr.io/hedera-registry/consensus-node:0.73.0"}]
+                }
+              },
+              selectedSources: $selectedSources
+            }
+          }' | kubectl apply -f -
       - echo ">> Waiting for NetworkUpgradeFreeze to succeed..."
       - kubectl wait --for=jsonpath='{.status.phase}'=Succeeded networkupgradefreeze/upgrade-0-73-0-freeze -n solo-orbit --timeout=120s
       - echo ">> Freeze CR succeeded — submitting FREEZE_ONLY transaction via hashfreeze..."
@@ -301,28 +307,34 @@ tasks:
         fi
         for NODE in node0 node1 node2 node3; do
           echo ">> Applying NetworkUpgradeExecute for ${NODE}..."
-          kubectl apply -f - <<EOF
-        apiVersion: operator.solo.hiero.org/v1alpha1
-        kind: NetworkUpgradeExecute
-        metadata:
-          name: upgrade-0-73-0-execute-${NODE}
-          namespace: solo-orbit
-          labels:
-            operator.solo.hiero.org/operation-id: upgrade-0-73-0
-            operator.solo.hiero.org/step: execute
-        spec:
-          orbit: solo-orbit
-          operationId: upgrade-0-73-0
-          consensusNode: ${NODE}
-          images:
-            consensusNode:
-              version: "0.73.0"
-              deterministic:
-                supported: false
-              registries:
-                - image: gcr.io/hedera-registry/consensus-node:0.73.0
-          selectedSources: "${SELECTED}"
-        EOF
+          jq -n \
+            --arg node "$NODE" \
+            --argjson selectedSources "$SELECTED" \
+            '{
+              apiVersion: "operator.solo.hiero.org/v1alpha1",
+              kind: "NetworkUpgradeExecute",
+              metadata: {
+                name: ("upgrade-0-73-0-execute-" + $node),
+                namespace: "solo-orbit",
+                labels: {
+                  "operator.solo.hiero.org/operation-id": "upgrade-0-73-0",
+                  "operator.solo.hiero.org/step": "execute"
+                }
+              },
+              spec: {
+                orbit: "solo-orbit",
+                operationId: "upgrade-0-73-0",
+                consensusNode: $node,
+                images: {
+                  consensusNode: {
+                    version: "0.73.0",
+                    deterministic: {supported: false},
+                    registries: [{image: "gcr.io/hedera-registry/consensus-node:0.73.0"}]
+                  }
+                },
+                selectedSources: $selectedSources
+              }
+            }' | kubectl apply -f -
         done
       - |
         set -eu
@@ -367,7 +379,7 @@ tasks:
           for NAME in $(kubectl get ${KIND} -n solo-orbit -l ${LABEL} -o name 2>/dev/null); do
             kubectl patch ${NAME} -n solo-orbit --type=json -p='[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || true
           done
-          kubectl delete ${KIND} -n solo-orbit -l ${LABEL} --ignore-not-found
+          kubectl delete ${KIND} -n solo-orbit -l ${LABEL} --ignore-not-found --wait=false
         done
 
   cleanup:

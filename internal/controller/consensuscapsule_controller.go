@@ -151,6 +151,9 @@ func (r *ConsensusCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	result, err := r.subreconciler.Reconcile(ctx, capsule)
 	if err != nil {
+		if apierrors.IsConflict(err) {
+			return ctrl.Result{Requeue: true}, nil
+		}
 		return result, err
 	}
 	if result.Requeue || result.RequeueAfter > 0 {

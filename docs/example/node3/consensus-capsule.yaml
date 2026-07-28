@@ -33,7 +33,7 @@ spec:
 
       # Block streams uploader (cheetah with blob/MinIO storage)
       blocksUploader:
-        enabled: true
+        enabled: false
         name: "blockstream-uploader"
         softwareVersion:
           repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
@@ -57,7 +57,7 @@ spec:
 
       # Record streams uploader (includes sidecar files)
       recordsUploader:
-        enabled: true
+        enabled: false
         name: "record-stream-uploader"
         softwareVersion:
           repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
@@ -81,7 +81,7 @@ spec:
 
       # Events streams uploader
       eventsUploader:
-        enabled: true
+        enabled: false
         name: "event-stream-uploader"
         softwareVersion:
           repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
@@ -105,7 +105,7 @@ spec:
 
       # Backup uploader (rclone-based)
       backupUploader:
-        enabled: true
+        enabled: false
         name: "backup-uploader"
         softwareVersion:
           repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
@@ -159,6 +159,12 @@ spec:
       resources:
         requests:
           storage: 2Gi
+    saved:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi
     upgrade:
       accessModes:
         - ReadWriteOnce
