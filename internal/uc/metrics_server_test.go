@@ -6,6 +6,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -136,24 +137,11 @@ func TestRunMetricsServer_ServesMetrics(t *testing.T) {
 	}
 	body, _ := io.ReadAll(resp.Body)
 	for _, want := range []string{"uc_build_info", "uc_up", "go_goroutines"} {
-		if !contains(string(body), want) {
+		if !strings.Contains(string(body), want) {
 			t.Errorf("response body missing %q", want)
 		}
 	}
 	cancel2()
-}
-
-func contains(s, substr string) bool {
-	return len(s) > 0 && len(substr) > 0 && (s == substr || len(s) > len(substr) && searchString(s, substr))
-}
-
-func searchString(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
 
 type stubMonitor struct {

@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -22,8 +23,11 @@ import (
 const (
 	DefaultConsensusLogFile = "/opt/hgcapp/services-hedera/HapiApp2.0/output/swirlds.log"
 
+	// DefaultLogPollInterval is the cadence at which the log monitor tails the
+	// consensus log file for PLATFORM_STATUS transitions.
+	DefaultLogPollInterval = 1 * time.Second
+
 	logMonitorName    = "log-monitor"
-	logPollInterval   = 1 * time.Second
 	logPersistFile    = "log-monitor-status.json"
 	platformStatusTag = "PLATFORM_STATUS"
 )
@@ -91,7 +95,7 @@ func (m *LogMonitor) Run(ctx context.Context) (retErr error) {
 	m.loadPersisted()
 	m.seedFromTail()
 
-	ticker := time.NewTicker(logPollInterval)
+	ticker := time.NewTicker(m.cfg.LogPollInterval)
 	defer ticker.Stop()
 
 	for {
@@ -153,10 +157,16 @@ func (m *LogMonitor) seedFromTail() {
 	lastCode := operatorv1alpha1.PlatformStatusCodeUnknown
 	var lastName string
 	var bytesRead int64
+	firstLine := true
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
 		bytesRead += int64(len(scanner.Bytes())) + 1
+		if firstLine && start > 0 {
+			firstLine = false
+			continue // discard partial line from mid-file seek
+		}
+		firstLine = false
 		code, name, ok := parsePlatformStatusLog(scanner.Text())
 		if ok {
 			lastCode = code
@@ -275,21 +285,19 @@ type platformStatusLogJSON struct {
 // PLATFORM_STATUS. It anchors on the JSON {"oldStatus":...,"newStatus":...}
 // payload, not the human-readable sentence (robust to log format changes).
 func parsePlatformStatusLog(line string) (code int32, name string, ok bool) {
-	idx := indexOfSubstring(line, platformStatusTag)
-	if idx < 0 {
+	if !strings.Contains(line, platformStatusTag) {
 		return 0, "", false
 	}
 
-	// Find the JSON object in the line.
-	jsonStart := indexOfSubstring(line, "{\"oldStatus\"")
+	jsonStart := strings.Index(line, "{\"oldStatus\"")
 	if jsonStart < 0 {
-		jsonStart = indexOfSubstring(line, "{\"newStatus\"")
+		jsonStart = strings.Index(line, "{\"newStatus\"")
 	}
 	if jsonStart < 0 {
 		return 0, "", false
 	}
 
-	jsonEnd := indexOfSubstring(line[jsonStart:], "}") + jsonStart + 1
+	jsonEnd := strings.Index(line[jsonStart:], "}") + jsonStart + 1
 	if jsonEnd <= jsonStart {
 		return 0, "", false
 	}
@@ -305,13 +313,4 @@ func parsePlatformStatusLog(line string) (code int32, name string, ok bool) {
 
 	code = operatorv1alpha1.PlatformStatusCodeForName(payload.NewStatus)
 	return code, payload.NewStatus, true
-}
-
-func indexOfSubstring(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
 }

@@ -100,6 +100,9 @@ type Config struct {
 	// MetricsStaleness is the threshold after which the metrics-derived status is
 	// considered stale for the effective source. Env: UC_METRICS_STALENESS.
 	MetricsStaleness time.Duration
+	// LogPollInterval is the cadence at which the log monitor tails the consensus
+	// log file for PLATFORM_STATUS transitions. Env: UC_LOG_POLL_INTERVAL.
+	LogPollInterval time.Duration
 
 	// UpgradePath is the directory polled for marker files.
 	//
@@ -145,6 +148,7 @@ func DefaultConfig() Config {
 		MetricsAddr:           DefaultMetricsAddr,
 		ConsensusLogFile:      DefaultConsensusLogFile,
 		MetricsStaleness:      DefaultMetricsStaleness,
+		LogPollInterval:       DefaultLogPollInterval,
 		UpgradePath:           DefaultUpgradePath,
 		PreviousUpgradePath:   DefaultPreviousUpgradePath,
 		EventsPath:            DefaultEventsPath,

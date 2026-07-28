@@ -1,4 +1,4 @@
-{{- if and .Values.uc.metrics.serviceMonitor.enabled }}
+{{- if .Values.uc.metrics.serviceMonitor.enabled }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -12,7 +12,11 @@ spec:
       scrapeTimeout: {{ .Values.uc.metrics.serviceMonitor.scrapeTimeout }}
       path: /metrics
   namespaceSelector:
+    {{- if .Values.uc.metrics.serviceMonitor.namespaceSelector }}
+    {{- toYaml .Values.uc.metrics.serviceMonitor.namespaceSelector | nindent 4 }}
+    {{- else }}
     any: true
+    {{- end }}
   selector:
     matchLabels:
       app.kubernetes.io/managed-by: solo-operator

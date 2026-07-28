@@ -916,6 +916,10 @@ func (r *StatefulSetSubReconciler) buildUcContainer(capsule *operatorv1alpha1.Co
 	}
 	volumeMounts = append(volumeMounts, config.AdditionalVolumeMounts...)
 
+	// UC_METRICS_ADDR, UC_CONSENSUS_LOG_FILE, UC_METRICS_STALENESS, and
+	// UC_LOG_POLL_INTERVAL are intentionally NOT injected here — they use
+	// compiled defaults that match the container's volume layout and port
+	// exposure. They are configurable via CLI flags for local testing only.
 	env := []corev1.EnvVar{
 		{Name: "UC_NODE_ID", Value: fmt.Sprintf("%d", capsule.Spec.NodeId)},
 		{Name: "UC_ORBIT", Value: capsule.Spec.Orbit},

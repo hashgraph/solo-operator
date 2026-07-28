@@ -83,7 +83,12 @@ uc:
     serviceMonitor:
       enabled: false
       interval: 15s
+      # scrapeTimeout must be ≤ interval; Prometheus rejects the ServiceMonitor otherwise.
       scrapeTimeout: 10s
+      # namespaceSelector defaults to any:true because consensus pods live in
+      # the user's network namespace, not the operator's release namespace.
+      # Override to restrict, e.g.: namespaceSelector: { matchNames: [solo] }
+      namespaceSelector: {}
 
 # Health probes configuration
 health:
