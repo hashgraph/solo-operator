@@ -167,19 +167,6 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 			return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
 		}
 
-		capsule, err := r.getCapsule(ctx, &execute)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		if capsule == nil {
-			common.Info(ctx, ReasonCapsuleNotFound).Str("capsule", execute.Spec.ConsensusNode).Msg("ConsensusCapsule not found")
-			return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
-		}
-
-		if err := r.ensureCapsuleOffline(ctx, &execute, capsule); err != nil {
-			return ctrl.Result{}, err
-		}
-
 		now := metav1.Now()
 		execute.Status.StartTime = &now
 		execute.Status.Phase = operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon
@@ -281,6 +268,10 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 
 	capsulePatched := findCondition(execute.Status.Conditions, operatorv1alpha1.CondConsensusCapsulePatched)
 	if capsulePatched == nil || capsulePatched.Status != metav1.ConditionTrue {
+		if err := r.ensureCapsuleOffline(ctx, execute, capsule); err != nil {
+			return ctrl.Result{}, err
+		}
+
 		allOffline, err := r.allPeersOffline(ctx, execute)
 		if err != nil {
 			return ctrl.Result{}, err

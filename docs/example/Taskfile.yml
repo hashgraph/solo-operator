@@ -12,7 +12,7 @@ tasks:
     cmds:
       - helm repo add metallb https://metallb.github.io/metallb
       - helm repo update
-      - helm upgrade --install --namespace metallb-system --create-namespace metallb metallb/metallb --wait --timeout 300s
+      - helm upgrade --install --namespace metallb-system --create-namespace metallb metallb/metallb
       - |
         # Use .200-.250 of the kind Docker subnet for LoadBalancer IPs
         SUBNET=$(docker network inspect kind | grep '"Subnet"' | awk -F'"' '{print $4}' | grep -v ':' | head -1)

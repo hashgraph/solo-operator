@@ -502,7 +502,12 @@ func TestExecuteReconcile_NoValidRegistry_TerminalFailure(t *testing.T) {
 
 func TestExecuteReconcile_ScalesDownCapsule(t *testing.T) {
 	execute := newExecuteForTest()
-	execute.Status.Phase = operatorv1alpha1.ExecutePhasePending
+	// Scale-down now happens at PendingNodeUpgrade (after UC advances the phase),
+	// not at Pending. DaemonResult=True is required to reach PendingNodeUpgrade.
+	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
+		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
+	}
 	capsule := &operatorv1alpha1.ConsensusCapsule{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "node0",
