@@ -210,7 +210,7 @@ tasks:
       - task: destroy:orbit
 
   upgrade:prepare:
-    desc: "Apply NetworkUpgradePrepare and wait for Succeeded (step 1 of upgrade flow)"
+    desc: "Step 1 — apply NetworkUpgradePrepare and wait for operator to validate images"
     cmds:
       - kubectl apply -f upgrade/network-upgrade-prepare.yaml
       - echo ">> Waiting for NetworkUpgradePrepare to succeed..."
@@ -218,7 +218,7 @@ tasks:
       - echo ">> Prepare succeeded"
 
   upgrade:freeze:
-    desc: "Apply NetworkUpgradeFreeze with selectedSources from Prepare, wait for Succeeded (step 2)"
+    desc: "Step 2 — apply NetworkUpgradeFreeze (operator validates registries), then run hashfreeze to stop the nodes"
     cmds:
       - |
         set -eu
@@ -253,10 +253,43 @@ tasks:
         EOF
       - echo ">> Waiting for NetworkUpgradeFreeze to succeed..."
       - kubectl wait --for=jsonpath='{.status.phase}'=Succeeded networkupgradefreeze/upgrade-0-73-0-freeze -n solo-orbit --timeout=120s
-      - echo ">> Freeze succeeded"
+      - echo ">> Freeze CR succeeded — submitting FREEZE_ONLY transaction via hashfreeze..."
+      - task: upgrade:hashfreeze
+      - echo ">> Nodes frozen"
+
+  upgrade:hashfreeze:
+    desc: "Submit a FREEZE_ONLY transaction to stop all consensus nodes (uses hashfreeze image)"
+    vars:
+      FREEZE_TIME:
+        sh: date -u -v+10S '+%Y-%m-%d.%H:%M:%S' 2>/dev/null || date -u --date='10 seconds' '+%Y-%m-%d.%H:%M:%S'
+    cmds:
+      - |
+        set -eu
+        OPERATOR_KEY=$(kubectl get secret relay-operator-creds -n solo-orbit \
+          -o jsonpath='{.data.values\.yaml}' | base64 -d | grep OPERATOR_KEY_MAIN | awk '{print $2}' | tr -d '"')
+        echo ">> Freezing at {{.FREEZE_TIME}} UTC..."
+        kubectl run hashfreeze --restart=Never --rm -i \
+          --image=us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images/hashfreeze:0.1.0 \
+          --image-pull-policy=Always \
+          --namespace=solo-orbit \
+          --env="OPERATOR_KEY=${OPERATOR_KEY}" \
+          -- freeze \
+          --node node0.solo-orbit.svc.cluster.local:50211 \
+          --node-account 0.0.3 \
+          --operator 0.0.2 \
+          --start-time "{{.FREEZE_TIME}}"
+      - echo ">> Waiting for all consensus nodes to reach FREEZE_COMPLETE..."
+      - |
+        set -eu
+        for NODE in node0 node1 node2 node3; do
+          echo ">> Waiting for ${NODE} platformStatus=FREEZE_COMPLETE..."
+          kubectl wait --for=jsonpath='{.status.platformStatus}'=FREEZE_COMPLETE \
+            consensuscapsule/${NODE} -n solo-orbit --timeout=120s
+        done
+      - echo ">> All nodes frozen"
 
   upgrade:execute:
-    desc: "Apply NetworkUpgradeExecute for all 4 nodes and wait for each to succeed (step 3)"
+    desc: "Step 3 — apply NetworkUpgradeExecute for all 4 nodes and wait for each to reach ACTIVE"
     cmds:
       - |
         set -eu
@@ -318,7 +351,7 @@ tasks:
       - kubectl get consensuscapsules -n solo-orbit -o wide || true
 
   upgrade:
-    desc: "Run the full upgrade flow: prepare → freeze → execute (all 4 nodes)"
+    desc: "Run the full upgrade flow: prepare → freeze (+ hashfreeze) → execute"
     cmds:
       - task: upgrade:prepare
       - task: upgrade:freeze
