@@ -95,6 +95,7 @@ type executeReconcileResult struct {
 	execute *operatorv1alpha1.NetworkUpgradeExecute
 	result  ctrl.Result
 	err     error
+	client  client.Client
 }
 
 func reconcileExecuteWith(
@@ -146,7 +147,7 @@ func reconcileExecuteWith(
 		t.Fatalf("get updated execute: %v", getErr)
 	}
 
-	return executeReconcileResult{events: recorded, execute: &updated, result: result, err: err}
+	return executeReconcileResult{events: recorded, execute: &updated, result: result, err: err, client: c}
 }
 
 func withExecuteIndexes(b *fake.ClientBuilder) *fake.ClientBuilder {
@@ -292,6 +293,73 @@ func TestExecuteReconcile_InitializesStatus(t *testing.T) {
 	}
 	if got := countContaining(res.events, "ReadyForProvisionerDaemon"); got != 1 {
 		t.Errorf("expected one ReadyForProvisionerDaemon event, got %d in %v", got, res.events)
+	}
+}
+
+// newMainnetOrbit returns an Orbit with the host-level provisioner daemon
+// enabled, so ResolveUCMode reports mainnet.
+func newMainnetOrbit() *operatorv1alpha1.Orbit {
+	return &operatorv1alpha1.Orbit{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
+		Spec: operatorv1alpha1.OrbitSpec{
+			Consensus: operatorv1alpha1.OrbitConsensus{ProvisionerDaemonEnabled: true},
+		},
+	}
+}
+
+// TestExecuteReconcile_MainnetScalesDownBeforeReady asserts that in mainnet mode
+// the operator scales the capsule down (offline=true) as it enters
+// ReadyForProvisionerDaemon, so the host provisioner daemon operates on a stopped
+// node.
+func TestExecuteReconcile_MainnetScalesDownBeforeReady(t *testing.T) {
+	execute := newExecuteForTest()
+	execute.Status.Phase = "" // start at initialization, before ReadyForProvisionerDaemon
+	capsule := newOnlineCapsule("node0")
+
+	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil),
+		newSucceededPrepare("default", "op-001"), newSucceededFreeze("default", "op-001"),
+		capsule, newMainnetOrbit())
+
+	if res.err != nil {
+		t.Fatalf("unexpected error: %v", res.err)
+	}
+	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon {
+		t.Errorf("expected ReadyForProvisionerDaemon, got %s", res.execute.Status.Phase)
+	}
+	var updated operatorv1alpha1.ConsensusCapsule
+	if err := res.client.Get(context.Background(), client.ObjectKey{Name: "node0", Namespace: "default"}, &updated); err != nil {
+		t.Fatalf("get capsule: %v", err)
+	}
+	if !updated.Spec.Offline {
+		t.Error("expected capsule Offline=true at ReadyForProvisionerDaemon in mainnet mode")
+	}
+}
+
+// TestExecuteReconcile_ClusterOnlyKeepsPodUpAtReady asserts that in cluster-only
+// mode the operator does NOT scale down at ReadyForProvisionerDaemon — the pod
+// (and its in-pod UC) must stay alive so the UC can advance the phase.
+func TestExecuteReconcile_ClusterOnlyKeepsPodUpAtReady(t *testing.T) {
+	execute := newExecuteForTest()
+	execute.Status.Phase = "" // start at initialization, before ReadyForProvisionerDaemon
+	capsule := newOnlineCapsule("node0")
+
+	// No Orbit CR (or ProvisionerDaemonEnabled=false) → cluster-only.
+	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil),
+		newSucceededPrepare("default", "op-001"), newSucceededFreeze("default", "op-001"),
+		capsule)
+
+	if res.err != nil {
+		t.Fatalf("unexpected error: %v", res.err)
+	}
+	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon {
+		t.Errorf("expected ReadyForProvisionerDaemon, got %s", res.execute.Status.Phase)
+	}
+	var updated operatorv1alpha1.ConsensusCapsule
+	if err := res.client.Get(context.Background(), client.ObjectKey{Name: "node0", Namespace: "default"}, &updated); err != nil {
+		t.Fatalf("get capsule: %v", err)
+	}
+	if updated.Spec.Offline {
+		t.Error("expected capsule to stay online at ReadyForProvisionerDaemon in cluster-only mode")
 	}
 }
 
@@ -554,6 +622,61 @@ func TestExecuteReconcile_ScalesDownCapsule(t *testing.T) {
 	}
 	if got := countContaining(evts, "PodScaledDown"); got == 0 {
 		t.Errorf("expected PodScaledDown event, got none in %v", evts)
+	}
+}
+
+// TestExecuteReconcile_PatchesIndependentlyOfPeers is the regression test for the
+// cross-node barrier deadlock: node0 must scale down and patch its own capsule
+// without waiting for sibling nodes. Each node's UC (which advances the phase)
+// dies when its pod is scaled to zero, so a sibling that has not yet reached
+// PendingNodeUpgrade can never help clear a shared barrier — node0 would sit
+// Offline forever. With the barrier removed, node0 proceeds regardless.
+func TestExecuteReconcile_PatchesIndependentlyOfPeers(t *testing.T) {
+	execute := newExecuteForTest()
+	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
+		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
+	}
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1, Log4j2ConfigRef: "network-log4j2",
+			PodProperties: operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "old-repo", ImageName: "cn", ImageTag: "0.74.0"}}}},
+		},
+	}
+
+	// Sibling node1: same operationId, still online, CR not yet patched. Under the
+	// old barrier this blocked node0; now it must be irrelevant.
+	sibling := newExecuteForTest()
+	sibling.ObjectMeta = metav1.ObjectMeta{
+		Name: "upgrade-op-001-node1", Namespace: "default", UID: "sibling-uid",
+		Labels: map[string]string{operatorv1alpha1.LabelOperationID: "op-001", operatorv1alpha1.LabelStep: operatorv1alpha1.StepExecute},
+	}
+	sibling.Spec.ConsensusNode = "node1"
+	siblingCapsule := newOnlineCapsule("node1")
+	siblingCapsule.Spec.NodeId = 1
+
+	scheme := newControllerTestScheme()
+	c := withExecuteIndexes(fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(execute, capsule, sibling, siblingCapsule, newSucceededPrepare("default", "op-001"), newSucceededFreeze("default", "op-001")).
+		WithStatusSubresource(execute)).Build()
+
+	rec := events.NewFakeRecorder(32)
+	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
+	r.Recorder = rec
+	r.Checker = newExecuteChecker(nil, nil)
+
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(execute)}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var updated operatorv1alpha1.ConsensusCapsule
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(capsule), &updated); err != nil {
+		t.Fatalf("get capsule: %v", err)
+	}
+	if !updated.Spec.Offline {
+		t.Error("expected node0 capsule Offline=true despite online sibling — cross-node barrier must be gone")
 	}
 }
 

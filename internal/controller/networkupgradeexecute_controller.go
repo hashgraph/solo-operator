@@ -23,6 +23,7 @@ import (
 	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/registry"
 	consensusresources "github.com/hashgraph/solo-operator/internal/resources/consensus"
+	"github.com/hashgraph/solo-operator/internal/uc"
 )
 
 const (
@@ -93,6 +94,7 @@ func (r *NetworkUpgradeExecuteReconciler) WithNodeActiveAlertInterval(d time.Dur
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeprepares,verbs=get;list;watch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradefreezes,verbs=get;list;watch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=consensuscapsules,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch
 
 func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -165,6 +167,29 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		if freeze == nil || freeze.Status.Phase != operatorv1alpha1.PhaseSucceeded {
 			common.Info(ctx, ReasonWaitingForFreeze).Msg("waiting for NetworkUpgradeFreeze to succeed")
 			return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
+		}
+
+		// In mainnet mode the host-level provisioner daemon takes over at
+		// ReadyForProvisionerDaemon and may tear down the cluster for infra
+		// upgrades, so the pod must be scaled down first. In cluster-only mode the
+		// provisioner role is filled by the UC sidecar running inside this pod;
+		// scaling down here would kill the UC before it can advance the phase, so
+		// the pod stays up and scale-down is deferred to reconcilePendingNodeUpgrade.
+		capsule, err := r.getCapsule(ctx, &execute)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if capsule == nil {
+			return ctrl.Result{RequeueAfter: executeReadyRequeueAfter}, nil
+		}
+		mode, err := consensusresources.ResolveUCMode(ctx, r.Client, capsule)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if mode == uc.ModeMainnet {
+			if err := r.ensureCapsuleOffline(ctx, &execute, capsule); err != nil {
+				return ctrl.Result{}, err
+			}
 		}
 
 		now := metav1.Now()
@@ -272,14 +297,6 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 			return ctrl.Result{}, err
 		}
 
-		allOffline, err := r.allPeersOffline(ctx, execute)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		if !allOffline {
-			return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
-		}
-
 		rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 		skipUC := map[operatorv1alpha1.ComponentName]bool{operatorv1alpha1.ComponentUC: true}
 		updated, registryOK := registry.RevalidateComponents(
@@ -352,14 +369,6 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 
 	capsulesOnline := findCondition(execute.Status.Conditions, operatorv1alpha1.CondCapsulesOnline)
 	if capsulesOnline == nil || capsulesOnline.Status != metav1.ConditionTrue {
-		allPatched, err := r.allPeersPatched(ctx, execute)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		if !allPatched {
-			return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
-		}
-
 		if capsule.Spec.Offline {
 			patch := client.MergeFrom(capsule.DeepCopy())
 			capsule.Spec.Offline = false
@@ -528,61 +537,6 @@ func (r *NetworkUpgradeExecuteReconciler) nodeActiveAlertInterval() time.Duratio
 		return r.NodeActiveAlertInterval
 	}
 	return executeDefaultNodeActiveAlertEvery
-}
-
-func (r *NetworkUpgradeExecuteReconciler) allPeersOffline(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (bool, error) {
-	var list operatorv1alpha1.NetworkUpgradeExecuteList
-	if err := r.List(ctx, &list,
-		client.InNamespace(execute.Namespace),
-		client.MatchingFields{fieldOperationID: execute.Spec.OperationID},
-	); err != nil {
-		return false, errx.WithHints(
-			errx.WithReason(errK8sAPI.Wrap(err, "listing Execute CRs for operationId %q", execute.Spec.OperationID), ReasonListFailed),
-			"Confirm the operator has list permission on networkupgradeexecutes.operator.solo.hiero.org")
-	}
-	for i := range list.Items {
-		sibling := &list.Items[i]
-		if sibling.Spec.ConsensusNode == "" {
-			continue
-		}
-		var capsule operatorv1alpha1.ConsensusCapsule
-		err := r.Get(ctx, types.NamespacedName{Name: sibling.Spec.ConsensusNode, Namespace: sibling.Namespace}, &capsule)
-		if apierrors.IsNotFound(err) {
-			continue
-		}
-		if err != nil {
-			return false, errx.WithHints(
-				errx.WithReason(errK8sAPI.Wrap(err, "getting capsule %s", sibling.Spec.ConsensusNode), ReasonGetFailed),
-				"Confirm the operator has get permission on consensuscapsules")
-		}
-		if !capsule.Spec.Offline {
-			return false, nil
-		}
-	}
-	return true, nil
-}
-
-func (r *NetworkUpgradeExecuteReconciler) allPeersPatched(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (bool, error) {
-	var list operatorv1alpha1.NetworkUpgradeExecuteList
-	if err := r.List(ctx, &list,
-		client.InNamespace(execute.Namespace),
-		client.MatchingFields{fieldOperationID: execute.Spec.OperationID},
-	); err != nil {
-		return false, errx.WithHints(
-			errx.WithReason(errK8sAPI.Wrap(err, "listing Execute CRs for operationId %q", execute.Spec.OperationID), ReasonListFailed),
-			"Confirm the operator has list permission on networkupgradeexecutes.operator.solo.hiero.org")
-	}
-	for i := range list.Items {
-		sibling := &list.Items[i]
-		if sibling.UID == execute.UID {
-			continue
-		}
-		cond := findCondition(sibling.Status.Conditions, operatorv1alpha1.CondConsensusCapsulePatched)
-		if cond == nil || cond.Status != metav1.ConditionTrue {
-			return false, nil
-		}
-	}
-	return true, nil
 }
 
 func (r *NetworkUpgradeExecuteReconciler) getCapsule(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (*operatorv1alpha1.ConsensusCapsule, error) {
