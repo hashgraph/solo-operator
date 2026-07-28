@@ -249,7 +249,7 @@ tasks:
                 supported: false
               registries:
                 - image: gcr.io/hedera-registry/consensus-node:0.73.0
-          selectedSources: ${SELECTED}
+          selectedSources: "${SELECTED}"
         EOF
       - echo ">> Waiting for NetworkUpgradeFreeze to succeed..."
       - kubectl wait --for=jsonpath='{.status.phase}'=Succeeded networkupgradefreeze/upgrade-0-73-0-freeze -n solo-orbit --timeout=120s
@@ -321,7 +321,7 @@ tasks:
                 supported: false
               registries:
                 - image: gcr.io/hedera-registry/consensus-node:0.73.0
-          selectedSources: ${SELECTED}
+          selectedSources: "${SELECTED}"
         EOF
         done
       - |

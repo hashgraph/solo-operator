@@ -115,12 +115,8 @@ func (r *NetworkGenesisReconciler) run(ctx context.Context, ng *operatorv1alpha1
 				"pre-built genesis-network.json rejected: %v", err)
 			return nil, fmt.Errorf("invalid genesisNetworkJSON: %w", err)
 		}
-		genesisConfigData := map[string]string{genesis.GenesisNetworkFileName: ng.Spec.GenesisNetworkJSON}
-		if ng.Spec.GenesisProperties != "" {
-			genesisConfigData[genesis.GenesisPropertiesFileName] = ng.Spec.GenesisProperties
-		}
 		if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.GenesisConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,
-			genesisConfigData, nil); err != nil {
+			buildGenesisConfigData(ng.Spec.GenesisNetworkJSON, ng.Spec.GenesisProperties), nil); err != nil {
 			return nil, errx.WithHints(
 				errx.WithReason(errK8sAPI.Wrap(err, "upsert %s", genesis.GenesisConfigMapName), ReasonConfigMapUpsert),
 				"Confirm the operator has create and update permission on configmaps")
@@ -141,12 +137,8 @@ func (r *NetworkGenesisReconciler) run(ctx context.Context, ng *operatorv1alpha1
 		if err != nil {
 			return nil, fmt.Errorf("build genesis-network.json: %w", err)
 		}
-		genesisConfigData := map[string]string{genesis.GenesisNetworkFileName: string(genesisJSON)}
-		if ng.Spec.GenesisProperties != "" {
-			genesisConfigData[genesis.GenesisPropertiesFileName] = ng.Spec.GenesisProperties
-		}
 		if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.GenesisConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,
-			genesisConfigData, nil); err != nil {
+			buildGenesisConfigData(string(genesisJSON), ng.Spec.GenesisProperties), nil); err != nil {
 			return nil, errx.WithHints(
 				errx.WithReason(errK8sAPI.Wrap(err, "upsert %s", genesis.GenesisConfigMapName), ReasonConfigMapUpsert),
 				"Confirm the operator has create and update permission on configmaps")
@@ -186,6 +178,14 @@ func (r *NetworkGenesisReconciler) run(ctx context.Context, ng *operatorv1alpha1
 	}
 
 	return orbit, nil
+}
+
+func buildGenesisConfigData(genesisJSON, genesisProperties string) map[string]string {
+	data := map[string]string{genesis.GenesisNetworkFileName: genesisJSON}
+	if genesisProperties != "" {
+		data[genesis.GenesisPropertiesFileName] = genesisProperties
+	}
+	return data
 }
 
 // handleDeletion lets generated ConfigMaps outlive the CR — they are still

@@ -29,8 +29,7 @@ const (
 	// (e.g. the UC sidecar) is enabled but the field is empty.
 	ReasonOrbitRequired errx.Reason = "OrbitRequired"
 
-	ReasonImageRequired    errx.Reason = "ImageRequired"
-	ReasonBlobURLRequired  errx.Reason = "BlobURLRequired"
-	ReasonOrbitNameMissing errx.Reason = "OrbitNameMissing"
-	ReasonOrbitNotFound    errx.Reason = "OrbitNotFound"
+	ReasonImageRequired   errx.Reason = "ImageRequired"
+	ReasonBlobURLRequired errx.Reason = "BlobURLRequired"
+	ReasonOrbitNotFound   errx.Reason = "OrbitNotFound"
 )

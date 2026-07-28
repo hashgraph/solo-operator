@@ -207,7 +207,7 @@ while [ ! -f ` + genesisFile + ` ]; do
   fi
   sleep 10
 done
-cp ` + genesisFile + ` ` + destDir + `
+cp ` + genesisFile + ` ` + destDir + ` || { echo "genesis-init: failed to copy genesis-network.json"; exit 1; }
 [ -f ` + genesisProps + ` ] && cp ` + genesisProps + ` ` + destDir + ` && echo "genesis-init: copied genesis.properties"
 touch ` + sentinelFile + `
 echo "genesis-init: done"`
