@@ -11,12 +11,13 @@ import (
 
 	"github.com/automa-saga/daemonkit"
 	"github.com/automa-saga/logx"
+	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/client-go/dynamic"
 
 	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
-// UC is the upgrade-controller sidecar. It runs two supervised monitors:
+// UC is the upgrade-controller sidecar. It runs four supervised monitors:
 //
 //  1. MarkerMonitor — polls marker files and creates NetworkUpgrade* CRs (the
 //     core UC behaviour, all deployment modes).
@@ -24,13 +25,22 @@ import (
 //     phases; rotates/discards the upgrade package accordingly (all modes). In
 //     cluster-only mode it also drives ProvisionerProxy, which advances Execute
 //     CRs from ReadyForProvisionerDaemon -> PendingNodeUpgrade.
+//  3. PlatformStatusMonitor — scrapes the consensus node's metrics endpoint for
+//     platform status and patches the pod condition (all modes).
+//  4. LogMonitor — tails the consensus log for PLATFORM_STATUS transitions and
+//     publishes a sticky status code persisted across restarts (all modes).
 //
 // A daemonkit.Server exposes a Unix-socket control plane (/health, /status).
+// A Prometheus HTTP server on :9990 exposes self-health and consensus status
+// metrics via /metrics.
 type UC struct {
-	cfg      Config
-	client   dynamic.Interface
-	events   *eventSink
-	monitors []daemonkit.MonitorRunner
+	cfg             Config
+	client          dynamic.Interface
+	events          *eventSink
+	monitors        []daemonkit.MonitorRunner
+	registry        *prometheus.Registry
+	platformMonitor *PlatformStatusMonitor
+	logMonitor      *LogMonitor
 }
 
 // New builds the UC from cfg, constructing the K8s client and the enabled monitors.
@@ -76,15 +86,18 @@ func New(cfg Config) (*UC, error) {
 		outcomeMonitor.mu.Unlock()
 	}
 
+	platformMon := NewPlatformStatusMonitor(cfg, client, sink)
+	logMon := NewLogMonitor(cfg)
 	monitors := []daemonkit.MonitorRunner{
 		NewMarkerMonitorWithFactory(cfg, factory),
 		outcomeMonitor,
 		// The platform-status sensor is the sole writer of
 		// ConsensusCapsule.status.platformStatus. It runs in every deployment mode.
-		NewPlatformStatusMonitor(cfg, client, sink),
+		platformMon,
+		logMon,
 	}
 
-	return &UC{cfg: cfg, client: client, events: sink, monitors: monitors}, nil
+	return &UC{cfg: cfg, client: client, events: sink, monitors: monitors, platformMonitor: platformMon, logMonitor: logMon}, nil
 }
 
 // Run starts the control server and all supervised monitors, blocking until ctx
@@ -97,8 +110,14 @@ func (u *UC) Run(ctx context.Context) error {
 	tracker := daemonkit.NewStatusTracker()
 	server := daemonkit.NewServer(u.cfg.SocketPath, daemonkit.ServerOptions{
 		StatusFn: func() any { return u.status(tracker) },
-		Logger:   slog.Default(),
+		ComponentHandlers: []daemonkit.ComponentHandler{
+			NewConsensusStatusHandler(u.cfg.NodeID, u.cfg.MetricsStaleness, u.platformMonitor, u.logMonitor),
+		},
+		Logger: slog.Default(),
 	}, daemonkit.ServerConfig{})
+
+	u.registry = NewMetricsRegistry(u.cfg, tracker, u.monitors)
+	u.registry.MustRegister(NewConsensusStatusCollector(u.cfg.NodeID, u.cfg.MetricsStaleness, u.platformMonitor, u.logMonitor))
 
 	// daemonkit.Group (panic-recovering errgroup): a panic in the control-plane
 	// server or a supervisor goroutine becomes the Wait error instead of crashing
@@ -112,6 +131,10 @@ func (u *UC) Run(ctx context.Context) error {
 
 	g.Go("control-plane-server", func(ctx context.Context) error {
 		return server.Start(ctx)
+	})
+
+	g.Go("metrics-server", func(ctx context.Context) error {
+		return runMetricsServer(ctx, u.cfg.MetricsAddr, u.registry)
 	})
 
 	// a permanently-failed monitor stays up in a degraded state — surfaced via /status, not a pod crash, so the

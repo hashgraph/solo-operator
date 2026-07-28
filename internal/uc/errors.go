@@ -42,6 +42,11 @@ var (
 	// startup. Terminal until the cluster credentials/connectivity are fixed.
 	errClient = errNS.NewType("k8s_client_failed")
 
+	// errMetricsServer: the Prometheus metrics HTTP server failed at runtime
+	// (e.g. unexpected serve error after successful bind). Terminal — requires
+	// investigation.
+	errMetricsServer = errNS.NewType("metrics_server_failed")
+
 	// errPanic: a monitor's Run loop panicked and was recovered by its top-level
 	// defer, then returned to the daemonkit supervisor so the panic becomes a
 	// supervised restart (back-off) instead of crashing the whole UC process.

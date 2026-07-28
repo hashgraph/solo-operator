@@ -51,6 +51,11 @@ const (
 	// interval keeps status.platformStatus responsive without meaningful cost.
 	DefaultPlatformPollInterval = 5 * time.Second
 
+	// DefaultMetricsStaleness is the threshold after which the metrics-derived
+	// platform status is considered stale and the effective source falls back to
+	// the log-derived value. ~3× the default 5s scrape interval.
+	DefaultMetricsStaleness = 15 * time.Second
+
 	// DefaultConfigCRPollInterval is how often the UC re-checks each config CR's
 	// status.conditions while waiting for Valid=True during the execute phase.
 	DefaultConfigCRPollInterval = 1 * time.Second
@@ -79,12 +84,25 @@ type Config struct {
 	// KubeconfigPath is optional; empty means in-cluster config.
 	KubeconfigPath string
 
+	// MetricsAddr is the listen address for the UC's own /metrics endpoint.
+	// Env: UC_METRICS_ADDR.
+	MetricsAddr string
 	// MetricsURL is the consensus node's Prometheus endpoint scraped by the
 	// platform-status sensor. Env: UC_METRICS_URL.
 	MetricsURL string
 	// PlatformPollInterval is the cadence of the platform-status metrics scrape.
 	// Env: UC_PLATFORM_POLL_INTERVAL.
 	PlatformPollInterval time.Duration
+
+	// ConsensusLogFile is the path to the consensus node's log file tailed by the
+	// log monitor for PLATFORM_STATUS transitions. Env: UC_CONSENSUS_LOG_FILE.
+	ConsensusLogFile string
+	// MetricsStaleness is the threshold after which the metrics-derived status is
+	// considered stale for the effective source. Env: UC_METRICS_STALENESS.
+	MetricsStaleness time.Duration
+	// LogPollInterval is the cadence at which the log monitor tails the consensus
+	// log file for PLATFORM_STATUS transitions. Env: UC_LOG_POLL_INTERVAL.
+	LogPollInterval time.Duration
 
 	// UpgradePath is the directory polled for marker files.
 	//
@@ -127,6 +145,10 @@ func DefaultConfig() Config {
 	return Config{
 		Mode:                  ModeMainnet,
 		NodeID:                -1,
+		MetricsAddr:           DefaultMetricsAddr,
+		ConsensusLogFile:      DefaultConsensusLogFile,
+		MetricsStaleness:      DefaultMetricsStaleness,
+		LogPollInterval:       DefaultLogPollInterval,
 		UpgradePath:           DefaultUpgradePath,
 		PreviousUpgradePath:   DefaultPreviousUpgradePath,
 		EventsPath:            DefaultEventsPath,
@@ -185,6 +207,12 @@ func (c Config) Validate() error {
 		return errx.WithHints(
 			errx.WithReason(errConfigInvalid.New("pod-name is required (used to derive the ConsensusCapsule name)"), ReasonConfigInvalid),
 			"Set --pod-name (UC_POD_NAME) via the downward API fieldRef metadata.name",
+		)
+	}
+	if c.MetricsAddr == "" {
+		return errx.WithHints(
+			errx.WithReason(errConfigInvalid.New("metrics-addr is required"), ReasonConfigInvalid),
+			"Set --metrics-addr to the UC metrics listen address (e.g. :9990)",
 		)
 	}
 	if c.MetricsURL == "" {

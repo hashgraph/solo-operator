@@ -798,9 +798,9 @@ func TestBuildUcContainer_AdditionalVolumeMounts(t *testing.T) {
 		},
 	}
 	c := r.buildUcContainer(capsule, config, uc.ModeClusterOnly)
-	// should have upgrade + uc-data + the additional mount
-	if len(c.VolumeMounts) != 3 {
-		t.Errorf("volumeMounts: expected 3 (upgrade + uc-data + data), got %d: %v", len(c.VolumeMounts), c.VolumeMounts)
+	// should have upgrade + uc-data + logs (RO) + the additional mount
+	if len(c.VolumeMounts) != 4 {
+		t.Errorf("volumeMounts: expected 4 (upgrade + uc-data + logs + data), got %d: %v", len(c.VolumeMounts), c.VolumeMounts)
 	}
 	last := c.VolumeMounts[len(c.VolumeMounts)-1]
 	if last.Name != "data" {

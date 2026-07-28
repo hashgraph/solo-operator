@@ -1,0 +1,52 @@
+groups:
+  - name: uc-consensus-status
+    rules:
+      - alert: UCConsensusCatastrophicFailure
+        expr: uc_consensus_status{source="effective"} == 11
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Consensus node {{ $labels.node_id }} reports CATASTROPHIC_FAILURE"
+          description: >-
+            The effective consensus status for node {{ $labels.node_id }} has been
+            CATASTROPHIC_FAILURE (code 11) for more than 1 minute. The node is in
+            an unrecoverable state and likely requires manual intervention.
+
+      - alert: UCConsensusStatusUnknown
+        expr: uc_consensus_status{source="effective"} == -1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Consensus node {{ $labels.node_id }} status is UNKNOWN"
+          description: >-
+            The effective consensus status for node {{ $labels.node_id }} has been
+            UNKNOWN (-1) for more than 5 minutes. Neither the metrics scrape nor
+            the log monitor can determine the platform status. Check that the
+            consensus node is running and that `:9999/metrics` is reachable.
+
+      - alert: UCConsensusStatusAbsent
+        expr: absent(uc_consensus_status{source="effective"})
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "UC effective consensus status metric is absent"
+          description: >-
+            The uc_consensus_status{source="effective"} metric has not been
+            scraped for 5 minutes. The UC sidecar may not be running or its
+            /metrics endpoint (:9990) may be unreachable.
+
+      - alert: UCConsensusLogStale
+        expr: (time() - uc_consensus_log_timestamp) > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Consensus log file for node {{ $labels.node_id }} is stale"
+          description: >-
+            The consensus log file for node {{ $labels.node_id }} has not been
+            modified in over 5 minutes (mtime age: {{ $value | humanizeDuration }}).
+            The consensus node may have stopped writing logs or the PLATFORM_STATUS
+            marker may have been routed to a different file.

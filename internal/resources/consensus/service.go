@@ -141,6 +141,12 @@ func (r *ServiceSubReconciler) buildService(capsule *operatorv1alpha1.ConsensusC
 					TargetPort: intstr.FromInt32(PrometheusPort),
 					Protocol:   corev1.ProtocolTCP,
 				},
+				{
+					Name:       "uc-metrics",
+					Port:       UCMetricsPort,
+					TargetPort: intstr.FromInt32(UCMetricsPort),
+					Protocol:   corev1.ProtocolTCP,
+				},
 			},
 		},
 	}
