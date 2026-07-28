@@ -111,12 +111,23 @@ func freezeSiblingExists(ctx context.Context, c client.Client, namespace, selfUI
 	)
 }
 
-func executeSiblingExists(ctx context.Context, c client.Client, namespace, selfUID, operationID string) (bool, error) {
+func executeSiblingExists(ctx context.Context, c client.Client, namespace, selfUID, selfConsensusNode, operationID string) (bool, error) {
 	var list operatorv1alpha1.NetworkUpgradeExecuteList
-	return siblingExists(ctx, c, namespace, selfUID, operationID, "NetworkUpgradeExecute", &list,
-		func(l *operatorv1alpha1.NetworkUpgradeExecuteList, i int) string { return string(l.Items[i].UID) },
-		func(l *operatorv1alpha1.NetworkUpgradeExecuteList) int { return len(l.Items) },
-	)
+	if err := c.List(ctx, &list,
+		client.InNamespace(namespace),
+		client.MatchingFields{fieldOperationID: operationID},
+	); err != nil {
+		return false, errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "listing NetworkUpgradeExecute siblings"), ReasonListFailed),
+			"Confirm the operator has list permission on NetworkUpgradeExecute")
+	}
+	for i := range list.Items {
+		item := &list.Items[i]
+		if string(item.UID) != selfUID && item.Spec.ConsensusNode == selfConsensusNode {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func abortSiblingExists(ctx context.Context, c client.Client, namespace, selfUID, operationID string) (bool, error) {

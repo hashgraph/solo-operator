@@ -127,12 +127,12 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	if execute.Status.Phase == "" || execute.Status.Phase == operatorv1alpha1.ExecutePhasePending {
-		sibling, err := executeSiblingExists(ctx, r.Client, execute.Namespace, string(execute.UID), execute.Spec.OperationID)
+		sibling, err := executeSiblingExists(ctx, r.Client, execute.Namespace, string(execute.UID), execute.Spec.ConsensusNode, execute.Spec.OperationID)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 		if sibling {
-			msg := fmt.Sprintf("operationId %q already used by another NetworkUpgradeExecute", execute.Spec.OperationID)
+			msg := fmt.Sprintf("operationId %q + consensusNode %q already used by another NetworkUpgradeExecute", execute.Spec.OperationID, execute.Spec.ConsensusNode)
 			r.eventf(ctx, &execute, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
 			execute.Status.Phase = operatorv1alpha1.ExecutePhaseFailed
 			execute.Status.ObservedGeneration = execute.Generation

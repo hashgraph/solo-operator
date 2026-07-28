@@ -603,7 +603,7 @@ func TestExecuteReconcile_DuplicateOperationID_SetsPhaseFailed(t *testing.T) {
 		NamespacedName: client.ObjectKeyFromObject(execute),
 	})
 	if err == nil {
-		t.Error("expected error for duplicate operationId")
+		t.Error("expected error for duplicate operationId+consensusNode")
 	}
 
 	var got operatorv1alpha1.NetworkUpgradeExecute
@@ -630,6 +630,47 @@ func TestExecuteReconcile_DuplicateOperationID_SetsPhaseFailed(t *testing.T) {
 	}
 	if got := countContaining(recorded, "ManifestInvalid"); got != 1 {
 		t.Errorf("expected one ManifestInvalid event, got %d in %v", got, recorded)
+	}
+}
+
+func TestExecuteReconcile_SameOperationID_DifferentNode_NotDuplicate(t *testing.T) {
+	existing := newExecuteForTest()
+	existing.Name = "execute-node0"
+	existing.UID = "uid-node0"
+	existing.Spec.ConsensusNode = "node0"
+	existing.Status = operatorv1alpha1.NetworkUpgradeExecuteStatus{}
+
+	execute := newExecuteForTest()
+	execute.Name = "execute-node1"
+	execute.UID = "uid-node1"
+	execute.Spec.ConsensusNode = "node1"
+	execute.Status = operatorv1alpha1.NetworkUpgradeExecuteStatus{}
+
+	scheme := newControllerTestScheme()
+	c := withExecuteIndexes(fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(existing, execute).
+		WithStatusSubresource(existing, execute)).
+		Build()
+
+	rec := events.NewFakeRecorder(16)
+	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
+	r.Recorder = rec
+	r.Checker = newExecuteChecker(nil, nil)
+
+	_, _ = r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: client.ObjectKeyFromObject(execute),
+	})
+
+	var got operatorv1alpha1.NetworkUpgradeExecute
+	if getErr := c.Get(context.Background(), client.ObjectKeyFromObject(execute), &got); getErr != nil {
+		t.Fatalf("get: %v", getErr)
+	}
+	if got.Status.Phase == operatorv1alpha1.ExecutePhaseFailed {
+		cond := findCondition(got.Status.Conditions, operatorv1alpha1.CondManifestValidated)
+		if cond != nil && cond.Reason == operatorv1alpha1.ReasonDuplicateOpID.String() {
+			t.Error("execute CR for a different consensusNode should not be rejected as a duplicate")
+		}
 	}
 }
 
