@@ -8,12 +8,12 @@ import (
 	"fmt"
 	"text/template"
 
+	"github.com/automa-saga/errx"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
-	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 

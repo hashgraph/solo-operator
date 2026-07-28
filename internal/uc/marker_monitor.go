@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/automa-saga/daemonkit"
+	"github.com/automa-saga/errx"
 	"github.com/automa-saga/logx"
 	"k8s.io/client-go/dynamic"
 
 	"github.com/hashgraph/solo-operator/internal/common"
-	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/uc/events"
 )
 

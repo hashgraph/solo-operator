@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/automa-saga/errx"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/cli"
@@ -24,7 +25,6 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 const (

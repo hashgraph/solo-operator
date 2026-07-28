@@ -6,6 +6,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/automa-saga/errx"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -13,7 +14,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // GVRs for the four NetworkUpgrade CRs the UC creates/watches. The group and

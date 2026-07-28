@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/hashgraph/solo-operator/internal/errx"
+	"github.com/automa-saga/errx"
 )
 
 const (

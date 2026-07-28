@@ -5,10 +5,9 @@ package common
 import (
 	"context"
 
+	"github.com/automa-saga/errx"
 	"github.com/automa-saga/logx"
 	"github.com/rs/zerolog"
-
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 func stampFields(ctx context.Context, ev *zerolog.Event) *zerolog.Event {

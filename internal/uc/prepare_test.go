@@ -20,10 +20,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	k8stesting "k8s.io/client-go/testing"
 
+	"github.com/automa-saga/errx"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 const validComponentsYAML = `schemaVersion: 1

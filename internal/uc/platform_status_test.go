@@ -21,8 +21,8 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
-	"github.com/hashgraph/solo-operator/internal/errx"
 
+	"github.com/automa-saga/errx"
 	"k8s.io/client-go/dynamic/fake"
 )
 

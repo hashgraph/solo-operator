@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/automa-saga/errx"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -17,7 +18,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
-	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/resources/helm"
 	"github.com/hashgraph/solo-operator/internal/resources/helmtest"
 )

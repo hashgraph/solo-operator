@@ -8,6 +8,7 @@ import (
 	"math/rand/v2"
 	"time"
 
+	"github.com/automa-saga/errx"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -20,7 +21,6 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
-	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/registry"
 	consensusresources "github.com/hashgraph/solo-operator/internal/resources/consensus"
 )

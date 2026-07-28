@@ -2,7 +2,7 @@
 
 package uc
 
-import "github.com/hashgraph/solo-operator/internal/errx"
+import "github.com/automa-saga/errx"
 
 // Reason codes for the UC sidecar — the single source of truth for the
 // `reason=` identifier carried by both errors (via errx.WithReason) and

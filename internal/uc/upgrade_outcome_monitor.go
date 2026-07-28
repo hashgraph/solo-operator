@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/automa-saga/daemonkit"
+	"github.com/automa-saga/errx"
 	"github.com/automa-saga/logx"
 	"github.com/rs/zerolog"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -22,7 +23,6 @@ import (
 	"k8s.io/client-go/dynamic"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 const (

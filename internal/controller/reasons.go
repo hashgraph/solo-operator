@@ -2,7 +2,7 @@
 
 package controller
 
-import "github.com/hashgraph/solo-operator/internal/errx"
+import "github.com/automa-saga/errx"
 
 // Log-event reason codes for internal/controller. Generic K8s lifecycle codes
 // live in internal/common; error/condition reasons live in errors.go.

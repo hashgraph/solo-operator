@@ -5,7 +5,7 @@ package common
 import (
 	"strings"
 
-	"github.com/hashgraph/solo-operator/internal/errx"
+	"github.com/automa-saga/errx"
 )
 
 // ReasonFrom returns the reason code carried by err, or fallback if it has none.

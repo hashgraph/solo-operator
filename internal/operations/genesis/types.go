@@ -6,7 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hashgraph/solo-operator/internal/errx"
+	"github.com/automa-saga/errx"
+
 	"github.com/hashgraph/solo-operator/internal/resources/consensus"
 )
 

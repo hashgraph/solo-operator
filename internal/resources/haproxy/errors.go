@@ -3,9 +3,8 @@
 package haproxy
 
 import (
+	"github.com/automa-saga/errx"
 	"github.com/joomcode/errorx"
-
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 var (

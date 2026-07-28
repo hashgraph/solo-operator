@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 
-	"github.com/hashgraph/solo-operator/internal/errx"
+	"github.com/automa-saga/errx"
 )
 
 // PemToDER decodes a PEM-encoded certificate to its raw DER bytes.
