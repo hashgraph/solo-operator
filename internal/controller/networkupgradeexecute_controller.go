@@ -185,36 +185,30 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		execute.Status.StartTime = &now
 		execute.Status.ObservedGeneration = execute.Generation
 
+		// Both modes transition to ReadyForProvisionerDaemon; the difference is who
+		// advances it and whether the pod is scaled down first:
+		//
+		//   - Mainnet: the host-level provisioner daemon takes over and may tear
+		//     down the cluster for infra upgrades, so the pod is scaled down first.
+		//     The daemon (a host process surviving pod termination) then does the
+		//     config step and advances the phase.
+		//   - Cluster-only: the pod stays up. The in-pod UC sidecar reads the upgrade
+		//     package from its PVC, deploys the config CRs, and advances the phase —
+		//     none of which the operator can do, as only the UC can read data/config/.
+		//     ReadyForProvisionerDaemon is precisely the window in which config CRs
+		//     are applied while the pod (and UC) is still alive; scale-down is
+		//     therefore deferred to reconcilePendingNodeUpgrade.
 		if mode == uc.ModeMainnet {
-			// Mainnet: the host-level provisioner daemon takes over at
-			// ReadyForProvisionerDaemon and may tear down the cluster for infra
-			// upgrades, so the pod must be scaled down first. The daemon (a host
-			// process that survives pod termination) then advances the phase.
 			if err := r.ensureCapsuleOffline(ctx, &execute, capsule); err != nil {
 				return ctrl.Result{}, err
 			}
-			execute.Status.Phase = operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon
-			if err := r.Status().Update(ctx, &execute); err != nil {
-				return ctrl.Result{}, wrapStatusInit(err)
-			}
-			r.eventf(ctx, &execute, corev1.EventTypeNormal, operatorv1alpha1.EventReadyForDaemon,
-				"waiting for provisioner daemon for operationId %q", execute.Spec.OperationID)
-			return ctrl.Result{Requeue: true}, nil
 		}
-
-		// Cluster-only: there is no provisioner daemon, and the only actor that
-		// could advance ReadyForProvisionerDaemon is the UC sidecar inside the CN
-		// pod — which is scaled to zero during the upgrade and cannot be relied on.
-		// The operator therefore skips ReadyForProvisionerDaemon and drives the CR
-		// straight to PendingNodeUpgrade itself, keeping the transition independent
-		// of the UC. Scale-down happens in reconcilePendingNodeUpgrade.
-		execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
-		execute.Status.NodeUpgradeStartTime = &now
+		execute.Status.Phase = operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon
 		if err := r.Status().Update(ctx, &execute); err != nil {
 			return ctrl.Result{}, wrapStatusInit(err)
 		}
-		r.eventf(ctx, &execute, corev1.EventTypeNormal, operatorv1alpha1.EventPendingNodeUpgrade,
-			"cluster-only mode; advancing directly to PendingNodeUpgrade for operationId %q", execute.Spec.OperationID)
+		r.eventf(ctx, &execute, corev1.EventTypeNormal, operatorv1alpha1.EventReadyForDaemon,
+			"waiting for provisioner for operationId %q", execute.Spec.OperationID)
 		return ctrl.Result{Requeue: true}, nil
 	}
 
