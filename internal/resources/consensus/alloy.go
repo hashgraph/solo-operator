@@ -69,9 +69,7 @@ func (r *AlloyConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *op
 	if r.needsUpdate(existing.Data, desired.Data) {
 		common.Debug(ctx, common.ReasonConfigMapUpdated).Str("configMap", desired.Name).Msg("Updating Alloy ConfigMap")
 		existing.Data = desired.Data
-		if err := common.WarnOnConflict(ctx, r.Client.Update(ctx, existing)); err != nil {
-			return ctrl.Result{}, err
-		}
+		return ctrl.Result{}, common.WarnOnConflict(ctx, r.Client.Update(ctx, existing))
 	}
 
 	return ctrl.Result{}, nil

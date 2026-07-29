@@ -47,10 +47,9 @@ func (r *RoleSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1al
 	if !rulesEqual(existing.Rules, desired.Rules) || !labelsMatch(existing.Labels, desired.Labels) {
 		existing.Rules = desired.Rules
 		existing.Labels = desired.Labels
-		if err := common.WarnOnConflict(ctx, r.Client.Update(ctx, existing)); err != nil {
-			return ctrl.Result{}, err
-		}
+		return ctrl.Result{}, common.WarnOnConflict(ctx, r.Client.Update(ctx, existing))
 	}
+
 	return ctrl.Result{}, nil
 }
 

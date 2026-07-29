@@ -76,9 +76,7 @@ func (r *StatefulSetSubReconciler) Reconcile(ctx context.Context, capsule *opera
 		common.Debug(ctx, common.ReasonStatefulSetUpdated).Str("statefulSet", desired.Name).Msg("Updating StatefulSet")
 		existing.Spec = desired.Spec
 		existing.Labels = desired.Labels
-		if err := common.WarnOnConflict(ctx, r.Client.Update(ctx, existing)); err != nil {
-			return ctrl.Result{}, err
-		}
+		return ctrl.Result{}, common.WarnOnConflict(ctx, r.Client.Update(ctx, existing))
 	}
 
 	return ctrl.Result{}, nil

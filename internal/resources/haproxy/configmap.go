@@ -61,9 +61,7 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, haproxy *operato
 		common.Debug(ctx, common.ReasonConfigMapUpdated).Str("configMap", desired.Name).Msg("Updating HAProxy config map")
 		existing.Data = desired.Data
 		existing.Labels = desired.Labels
-		if err := common.WarnOnConflict(ctx, r.Client.Update(ctx, existing)); err != nil {
-			return ctrl.Result{}, err
-		}
+		return ctrl.Result{}, common.WarnOnConflict(ctx, r.Client.Update(ctx, existing))
 	}
 
 	return ctrl.Result{}, nil
