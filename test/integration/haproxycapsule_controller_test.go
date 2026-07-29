@@ -518,12 +518,15 @@ var _ = Describe("HAProxyCapsule Controller", func() {
 			By("Updating the HAProxyCapsule with service annotations")
 			haproxyLookupKey := types.NamespacedName{Name: haproxyName, Namespace: haproxyNamespace}
 			updatedHAProxy := &operatorv1alpha1.HAProxyCapsule{}
-			Expect(k8sClient.Get(ctx, haproxyLookupKey, updatedHAProxy)).Should(Succeed())
-
-			updatedHAProxy.Spec.ServiceAnnotations = map[string]string{
-				"cloud.google.com/neg": `{"ingress":true}`,
-			}
-			Expect(k8sClient.Update(ctx, updatedHAProxy)).Should(Succeed())
+			Eventually(func() error {
+				if err := k8sClient.Get(ctx, haproxyLookupKey, updatedHAProxy); err != nil {
+					return err
+				}
+				updatedHAProxy.Spec.ServiceAnnotations = map[string]string{
+					"cloud.google.com/neg": `{"ingress":true}`,
+				}
+				return k8sClient.Update(ctx, updatedHAProxy)
+			}, timeout, interval).Should(Succeed())
 
 			By("Verifying the Service is updated with the new annotations")
 			Eventually(func() bool {
