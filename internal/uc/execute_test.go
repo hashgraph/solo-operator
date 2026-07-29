@@ -15,7 +15,7 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
-const wantExecuteName = "upgrade-0.75.0-20260413t120000z-execute"
+const wantExecuteName = "my-node-upgrade-0.75.0-20260413t120000z-execute"
 
 // wantConsensusNode is the ConsensusCapsule name derived from the UC pod name
 // ("my-node-0" → "my-node") set by executeTestConfig.

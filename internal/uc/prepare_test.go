@@ -53,7 +53,7 @@ images:
 // deterministic across runs.
 var markerCreatedAt = time.Date(2026, 4, 13, 12, 0, 0, 0, time.UTC)
 
-const wantOperationID = "upgrade-0.75.0-20260413T120000Z"
+const wantOperationID = wantConsensusNode + "-upgrade-0.75.0-20260413T120000Z"
 
 // writePackage lays out a marker directory that mirrors the consensus node's
 // extracted package: the marker file and a manifests/ subdir in the same root.
@@ -81,6 +81,7 @@ func testConfig(markerRoot, crPersist string) Config {
 	return Config{
 		Mode:          ModeClusterOnly,
 		NodeID:        0,
+		PodName:       wantConsensusNode + "-0",
 		Orbit:         "my-orbit",
 		Namespace:     "solo",
 		UpgradePath:   markerRoot,
@@ -153,16 +154,15 @@ func TestParseComponentsManifestInvalid(t *testing.T) {
 // rather than failing opaquely at CR Create time.
 func TestMintOperationIDRejectsInvalidName(t *testing.T) {
 	// '_' is legal per sanity.ValidateOperationID but invalid in a metadata.name.
-	if _, err := mintOperationID("0.75.0_rc1", markerCreatedAt); !errorx.IsOfType(err, errManifestInvalid) {
+	if _, err := mintOperationID("0.75.0_rc1", markerCreatedAt, wantConsensusNode); !errorx.IsOfType(err, errManifestInvalid) {
 		t.Fatalf("underscore version: want errManifestInvalid, got %v", err)
 	}
-	// A version long enough to push the operationId past the 63-char label/CRD limit
-	// (id = "upgrade-" + version + "-" + 16-char timestamp).
-	if _, err := mintOperationID(strings.Repeat("9", 45), markerCreatedAt); !errorx.IsOfType(err, errManifestInvalid) {
+	// A version long enough to push the operationId past the 63-char label/CRD limit.
+	if _, err := mintOperationID(strings.Repeat("9", 45), markerCreatedAt, wantConsensusNode); !errorx.IsOfType(err, errManifestInvalid) {
 		t.Fatalf("over-long version: want errManifestInvalid, got %v", err)
 	}
 	// A clean semver version still mints the expected id.
-	id, err := mintOperationID("0.75.0", markerCreatedAt)
+	id, err := mintOperationID("0.75.0", markerCreatedAt, wantConsensusNode)
 	if err != nil {
 		t.Fatalf("clean version: unexpected error %v", err)
 	}
@@ -183,7 +183,7 @@ func TestHandleExecuteImmediateCreatesPrepareCR(t *testing.T) {
 
 	cr := getPrepare(t, f, wantOperationID)
 
-	if got := cr.GetName(); got != "upgrade-0.75.0-20260413t120000z-prepare" {
+	if got := cr.GetName(); got != wantConsensusNode+"-upgrade-0.75.0-20260413t120000z-prepare" {
 		t.Fatalf("name = %q", got)
 	}
 	if got := cr.GetNamespace(); got != "solo" {

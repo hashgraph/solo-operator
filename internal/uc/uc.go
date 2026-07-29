@@ -62,6 +62,7 @@ func New(cfg Config) (*UC, error) {
 	outcomeCfg := UpgradeOutcomeMonitorConfig{
 		Namespace:           cfg.Namespace,
 		NodeID:              cfg.NodeID,
+		ConsensusNode:       cfg.CapsuleName(),
 		UpgradePath:         cfg.UpgradePath,
 		PreviousUpgradePath: cfg.PreviousUpgradePath,
 	}

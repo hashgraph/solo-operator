@@ -15,7 +15,7 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
-const wantAbortName = "upgrade-0.75.0-20260413t120000z-abort"
+const wantAbortName = wantConsensusNode + "-upgrade-0.75.0-20260413t120000z-abort"
 
 // abortMtime is the fixed mtime for freeze_aborted.mf in tests — after
 // markerCreatedAt (execute_immediate.mf mtime) so the staleness guard passes.
@@ -122,8 +122,8 @@ func TestResolveOperationIDDiskFallbackPicksMostRecentByTimestamp(t *testing.T) 
 	// the older upgrade has the lexically-larger id (version "0.9.0" sorts above
 	// "0.75.0"), so a lexical max would wrongly pick it. Recency must come from
 	// the embedded timestamp.
-	older := "upgrade-0.9.0-20260101T000000Z"  // lexically larger, chronologically older
-	newer := "upgrade-0.75.0-20260413T120000Z" // lexically smaller, chronologically newer
+	older := wantConsensusNode + "-upgrade-0.9.0-20260101T000000Z"  // lexically larger, chronologically older
+	newer := wantConsensusNode + "-upgrade-0.75.0-20260413T120000Z" // lexically smaller, chronologically newer
 	for _, id := range []string{older, newer} {
 		cr, err := buildPrepareCR(f.cfg, id, operatorv1alpha1.UpgradeImagesSpec{
 			ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{Version: "x"},
