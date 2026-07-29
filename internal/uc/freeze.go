@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/automa-saga/errx"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // kindNetworkUpgradeFreeze is the CR kind the freeze_scheduled.mf handler creates.

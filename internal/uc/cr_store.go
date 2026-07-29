@@ -8,13 +8,13 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/automa-saga/errx"
 	"github.com/automa-saga/logx"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/yaml"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
-	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/sanity"
 )
 

@@ -3,9 +3,8 @@
 package common
 
 import (
+	"github.com/automa-saga/errx"
 	"github.com/joomcode/errorx"
-
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // All errors here are terminal — the operator must fix the offending content.

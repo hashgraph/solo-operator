@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/automa-saga/errx"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -20,7 +21,6 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 const defaultValuesKey = "values.yaml"

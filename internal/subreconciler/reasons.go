@@ -3,7 +3,7 @@
 package subreconciler
 
 import (
-	"github.com/hashgraph/solo-operator/internal/errx"
+	"github.com/automa-saga/errx"
 )
 
 // Reason codes for logx log events emitted by the subreconciler chain.

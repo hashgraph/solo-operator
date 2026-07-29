@@ -3,7 +3,7 @@
 package registry
 
 import (
-	"github.com/hashgraph/solo-operator/internal/errx"
+	"github.com/automa-saga/errx"
 )
 
 // Reason codes for logx log events emitted during component revalidation.

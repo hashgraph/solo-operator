@@ -3,9 +3,8 @@
 package helm
 
 import (
+	"github.com/automa-saga/errx"
 	"github.com/joomcode/errorx"
-
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // The first four reason codes reuse the vocabulary the HelmCapsule controller

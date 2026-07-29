@@ -3,11 +3,10 @@
 package v1alpha1
 
 import (
+	"github.com/automa-saga/errx"
 	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // HelmComponent identifies a known Hedera ecosystem component managed by a HelmCapsule.

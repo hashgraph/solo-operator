@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/hashgraph/solo-operator/internal/errx"
+	"github.com/automa-saga/errx"
 )
 
 // Mode selects which deployment profile the UC runs under. It governs whether

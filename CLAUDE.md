@@ -142,7 +142,7 @@ The chart is published to `oci://ghcr.io/hashgraph/charts/solo-operator` on ever
 ## Error Handling
 
 Errors use [`github.com/joomcode/errorx`](https://github.com/joomcode/errorx), standardized
-through the shared `internal/errx` package. **Do not** return bare `fmt.Errorf`/`errors.New`
+through the [`github.com/automa-saga/errx`](https://github.com/automa-saga/errx) package. **Do not** return bare `fmt.Errorf`/`errors.New`
 for errors that leave a package boundary.
 
 - **Typed errors per package.** Each subsystem declares its own `errorx` namespace and a small
@@ -162,7 +162,7 @@ for errors that leave a package boundary.
   ```go
   const ReasonK8sListFailed errx.Reason = "ListFailed"
   ```
-- **Reason + hints via `internal/errx`.** Decorate every error with its reason code and, where a
+- **Reason + hints via `errx`.** Decorate every error with its reason code and, where a
   meaningful remediation exists, operator hints:
   ```go
   return errx.WithHints(
@@ -182,8 +182,8 @@ for errors that leave a package boundary.
     onto a zerolog event (see `MarkerMonitor.poll`). `errx` itself stays logger-agnostic.
   - *Human/CLI output:* `errx.Format(err)` renders the message plus a `Resolution:` block of
     hints (wired into the `uc` command's top-level error handler).
-- **`internal/errx` stays dependency-free** (only `errorx`) so it can be extracted as a
-  standalone library; domain reason vocabularies and any logger glue live in consuming packages.
+- **`errx` is dependency-free** (only `errorx`); domain reason vocabularies and any logger glue
+  live in consuming packages.
 
 ## Key Conventions
 

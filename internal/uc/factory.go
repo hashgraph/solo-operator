@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/automa-saga/errx"
 	"github.com/automa-saga/logx"
 	"github.com/joomcode/errorx"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -20,7 +21,6 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // Factory constructs NetworkUpgrade* CRs from deployment-package manifests and

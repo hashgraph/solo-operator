@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/automa-saga/errx"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -17,7 +18,6 @@ import (
 	"k8s.io/client-go/util/exec"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // s6 control-interface commands, full paths per HIP-1494 (the image's consensus/run
