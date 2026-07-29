@@ -5,7 +5,7 @@ package nodesettings
 import (
 	"strings"
 
-	"github.com/hashgraph/solo-operator/internal/errx"
+	"github.com/automa-saga/errx"
 )
 
 func ValidateContent(content string) error {

@@ -2,7 +2,7 @@
 
 package consensus
 
-import "github.com/hashgraph/solo-operator/internal/errx"
+import "github.com/automa-saga/errx"
 
 // Consensus-specific reason codes. Generic K8s lifecycle codes live in internal/common.
 const (

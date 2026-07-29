@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/automa-saga/daemonkit"
+	"github.com/automa-saga/errx"
 	"github.com/automa-saga/logx"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -17,7 +18,6 @@ import (
 	"k8s.io/client-go/dynamic"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // ProvisionerProxy stands in for the host-level solo-provisioner daemon in

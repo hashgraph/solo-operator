@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/automa-saga/daemonkit"
+	"github.com/automa-saga/errx"
 	"github.com/automa-saga/logx"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,7 +20,6 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // platformStatusOperationID is the fixed pseudo operation id under which the

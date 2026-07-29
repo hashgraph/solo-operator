@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/automa-saga/errx"
 	"github.com/automa-saga/logx"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,7 +19,6 @@ import (
 	"k8s.io/client-go/dynamic"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // configSubdir is the subdirectory within the upgrade package that holds the

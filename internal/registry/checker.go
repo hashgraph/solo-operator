@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/automa-saga/errx"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -14,7 +15,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 const (

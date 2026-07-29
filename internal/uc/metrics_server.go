@@ -10,13 +10,12 @@ import (
 	"time"
 
 	"github.com/automa-saga/daemonkit"
+	"github.com/automa-saga/errx"
 	"github.com/automa-saga/logx"
 	"github.com/automa-saga/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 const (

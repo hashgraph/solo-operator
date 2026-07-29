@@ -6,10 +6,9 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/automa-saga/errx"
 	services "github.com/hiero-ledger/hiero-sdk-go/v2/proto/services"
 	"google.golang.org/protobuf/proto"
-
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 func BuildAddressBookBin(materials []RosterMaterial) ([]byte, error) {

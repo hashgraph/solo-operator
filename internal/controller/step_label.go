@@ -6,11 +6,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/automa-saga/errx"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // validateStepLabel enforces the step label invariant: it must be present and

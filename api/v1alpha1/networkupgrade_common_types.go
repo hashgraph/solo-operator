@@ -2,7 +2,7 @@
 
 package v1alpha1
 
-import "github.com/hashgraph/solo-operator/internal/errx"
+import "github.com/automa-saga/errx"
 
 type ComponentName string
 

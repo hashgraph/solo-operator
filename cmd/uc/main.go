@@ -13,12 +13,12 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/automa-saga/errx"
 	"github.com/automa-saga/logx"
 	"github.com/automa-saga/version"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/hashgraph/solo-operator/internal/errx"
 	"github.com/hashgraph/solo-operator/internal/uc"
 )
 

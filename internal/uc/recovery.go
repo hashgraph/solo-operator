@@ -5,11 +5,10 @@ package uc
 import (
 	"context"
 
+	"github.com/automa-saga/errx"
 	"github.com/automa-saga/logx"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // recoverPersistedCRs re-delivers any CR that was persisted to disk before the

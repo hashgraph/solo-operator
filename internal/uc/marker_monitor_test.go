@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashgraph/solo-operator/internal/errx"
+	"github.com/automa-saga/errx"
 )
 
 // fakeDispatcher records which handlers the poll loop invokes and, optionally,

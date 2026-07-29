@@ -2,7 +2,7 @@
 
 package common
 
-import "github.com/hashgraph/solo-operator/internal/errx"
+import "github.com/automa-saga/errx"
 
 // Generic owned-resource lifecycle reason codes, shared across every resource
 // sub-reconciler. The controller/kind fields from ReconcileContext disambiguate

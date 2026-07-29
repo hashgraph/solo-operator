@@ -10,11 +10,10 @@ import (
 	"strconv"
 
 	"github.com/automa-saga/daemonkit"
+	"github.com/automa-saga/errx"
 	"github.com/automa-saga/logx"
 	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/client-go/dynamic"
-
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // UC is the upgrade-controller sidecar. It runs four supervised monitors:

@@ -7,8 +7,9 @@ import (
 	"math/rand/v2"
 	"time"
 
+	"github.com/automa-saga/errx"
+
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 type FailoverResult struct {

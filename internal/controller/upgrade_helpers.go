@@ -5,12 +5,12 @@ package controller
 import (
 	"context"
 
+	"github.com/automa-saga/errx"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // These finalizers block accidental deletion of NetworkUpgrade CRs; the

@@ -5,10 +5,10 @@ package uc
 import (
 	"os"
 
+	"github.com/automa-saga/errx"
 	"sigs.k8s.io/yaml"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // Deployment-package layout the UC reads. The marker directory is the root of the

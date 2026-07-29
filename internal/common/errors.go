@@ -5,10 +5,9 @@ package common
 import (
 	"context"
 
+	"github.com/automa-saga/errx"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"github.com/joomcode/errorx"
-
-	"github.com/hashgraph/solo-operator/internal/errx"
 )
 
 // All errors here are terminal — the operator must fix the offending content.

@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/hashgraph/solo-operator/internal/errx"
+	"github.com/automa-saga/errx"
 )
 
 // defaultControlTimeout bounds a single control-socket request.
