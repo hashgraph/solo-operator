@@ -61,7 +61,7 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, envoy *operatorv
 		common.Debug(ctx, common.ReasonConfigMapUpdated).Str("configMap", desired.Name).Msg("Updating Envoy config map")
 		existing.Data = desired.Data
 		existing.Labels = desired.Labels
-		if err := r.Client.Update(ctx, existing); err != nil {
+		if err := common.WarnOnConflict(ctx, r.Client.Update(ctx, existing)); err != nil {
 			return ctrl.Result{}, err
 		}
 	}

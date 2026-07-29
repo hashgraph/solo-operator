@@ -62,7 +62,7 @@ func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, haproxy *operat
 		common.Debug(ctx, common.ReasonDeploymentUpdated).Msg("Updating HAProxy deployment")
 		existing.Spec = desired.Spec
 		existing.Labels = desired.Labels
-		if err := r.Client.Update(ctx, existing); err != nil {
+		if err := common.WarnOnConflict(ctx, r.Client.Update(ctx, existing)); err != nil {
 			return ctrl.Result{}, err
 		}
 	}

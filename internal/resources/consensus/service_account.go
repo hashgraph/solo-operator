@@ -59,7 +59,7 @@ func (r *ServiceAccountSubReconciler) Reconcile(ctx context.Context, capsule *op
 		common.Debug(ctx, common.ReasonServiceAccountUpdated).Str("serviceAccount", desired.Name).Msg("Updating service account")
 		existing.Labels = desired.Labels
 		existing.Annotations = desired.Annotations
-		if err := r.Client.Update(ctx, existing); err != nil {
+		if err := common.WarnOnConflict(ctx, r.Client.Update(ctx, existing)); err != nil {
 			return ctrl.Result{}, err
 		}
 	}

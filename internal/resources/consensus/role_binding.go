@@ -59,7 +59,7 @@ func (r *RoleBindingSubReconciler) Reconcile(ctx context.Context, capsule *opera
 		existing.Subjects = desired.Subjects
 		existing.RoleRef = desired.RoleRef
 		existing.Labels = desired.Labels
-		if err := r.Client.Update(ctx, existing); err != nil {
+		if err := common.WarnOnConflict(ctx, r.Client.Update(ctx, existing)); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
