@@ -73,7 +73,7 @@ func (r *Log4j2ConfigReconciler) event(ctx context.Context, obj *operatorv1alpha
 func (r *Log4j2ConfigReconciler) updateStatus(ctx context.Context, obj *operatorv1alpha1.Log4j2Config) error {
 	obj.Status.ObservedGeneration = obj.Generation
 	obj.Status.ConfigMapName = log4j2config.ConfigMapName(obj)
-	return r.Status().Update(ctx, obj)
+	return common.WarnOnConflict(ctx, r.Status().Update(ctx, obj))
 }
 
 func (r *Log4j2ConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {

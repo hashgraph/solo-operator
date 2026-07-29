@@ -350,7 +350,7 @@ func (r *OrbitReconciler) updateStatus(ctx context.Context, orbitObj *operatorv1
 		orbitObj.Status.Conditions = append(orbitObj.Status.Conditions, ready)
 	}
 	orbitObj.Status.ObservedGeneration = orbitObj.Generation
-	return r.Status().Update(ctx, orbitObj)
+	return common.WarnOnConflict(ctx, r.Status().Update(ctx, orbitObj))
 }
 
 func (r *OrbitReconciler) SetupWithManager(mgr ctrl.Manager) error {

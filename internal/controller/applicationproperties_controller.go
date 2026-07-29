@@ -69,7 +69,7 @@ func (r *ApplicationPropertiesReconciler) Reconcile(ctx context.Context, req ctr
 func (r *ApplicationPropertiesReconciler) updateStatus(ctx context.Context, obj *operatorv1alpha1.ApplicationProperties) error {
 	obj.Status.ObservedGeneration = obj.Generation
 	obj.Status.ConfigMapName = applicationproperties.ConfigMapName(obj)
-	return r.Status().Update(ctx, obj)
+	return common.WarnOnConflict(ctx, r.Status().Update(ctx, obj))
 }
 
 func (r *ApplicationPropertiesReconciler) event(ctx context.Context, obj *operatorv1alpha1.ApplicationProperties, eventtype string, reason errx.Reason, msg string) {

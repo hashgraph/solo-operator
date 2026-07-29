@@ -69,7 +69,7 @@ func (r *ApplicationOverridePropertiesReconciler) Reconcile(ctx context.Context,
 func (r *ApplicationOverridePropertiesReconciler) updateStatus(ctx context.Context, obj *operatorv1alpha1.ApplicationOverrideProperties) error {
 	obj.Status.ObservedGeneration = obj.Generation
 	obj.Status.ConfigMapName = applicationoverrideproperties.ConfigMapName(obj)
-	return r.Status().Update(ctx, obj)
+	return common.WarnOnConflict(ctx, r.Status().Update(ctx, obj))
 }
 
 func (r *ApplicationOverridePropertiesReconciler) event(ctx context.Context, obj *operatorv1alpha1.ApplicationOverrideProperties, eventtype string, reason errx.Reason, msg string) {

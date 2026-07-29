@@ -69,7 +69,7 @@ func (r *BootstrapPropertiesReconciler) Reconcile(ctx context.Context, req ctrl.
 func (r *BootstrapPropertiesReconciler) updateStatus(ctx context.Context, obj *operatorv1alpha1.BootstrapProperties) error {
 	obj.Status.ObservedGeneration = obj.Generation
 	obj.Status.ConfigMapName = bootstrapproperties.ConfigMapName(obj)
-	return r.Status().Update(ctx, obj)
+	return common.WarnOnConflict(ctx, r.Status().Update(ctx, obj))
 }
 
 func (r *BootstrapPropertiesReconciler) event(ctx context.Context, obj *operatorv1alpha1.BootstrapProperties, eventtype string, reason errx.Reason, msg string) {

@@ -3,6 +3,9 @@
 package common
 
 import (
+	"context"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"github.com/joomcode/errorx"
 
 	"github.com/hashgraph/solo-operator/internal/errx"
@@ -23,3 +26,12 @@ const (
 	ReasonNoPEMBlock   errx.Reason = "NoPEMBlock"
 	ReasonInvalidCert  errx.Reason = "InvalidCertificate"
 )
+
+// WarnOnConflict suppresses 409 Conflict errors since controller-runtime automatically requeues.
+func WarnOnConflict(ctx context.Context, err error) error {
+	if apierrors.IsConflict(err) {
+		Warn(ctx, ReasonConflict).Err(err).Msg("Optimistic concurrency conflict on update; will retry")
+		return nil
+	}
+	return err
+}

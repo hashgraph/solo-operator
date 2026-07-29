@@ -69,7 +69,7 @@ func (r *NodePropertiesReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 func (r *NodePropertiesReconciler) updateStatus(ctx context.Context, obj *operatorv1alpha1.NodePropertiesConfig) error {
 	obj.Status.ObservedGeneration = obj.Generation
 	obj.Status.ConfigMapName = nodeproperties.ConfigMapName(obj)
-	return r.Status().Update(ctx, obj)
+	return common.WarnOnConflict(ctx, r.Status().Update(ctx, obj))
 }
 
 func (r *NodePropertiesReconciler) event(ctx context.Context, obj *operatorv1alpha1.NodePropertiesConfig, eventtype string, reason errx.Reason, msg string) {

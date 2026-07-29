@@ -69,7 +69,7 @@ func (r *ApiPermissionPropertiesReconciler) Reconcile(ctx context.Context, req c
 func (r *ApiPermissionPropertiesReconciler) updateStatus(ctx context.Context, obj *operatorv1alpha1.ApiPermissionProperties) error {
 	obj.Status.ObservedGeneration = obj.Generation
 	obj.Status.ConfigMapName = apipermissionproperties.ConfigMapName(obj)
-	return r.Status().Update(ctx, obj)
+	return common.WarnOnConflict(ctx, r.Status().Update(ctx, obj))
 }
 
 func (r *ApiPermissionPropertiesReconciler) event(ctx context.Context, obj *operatorv1alpha1.ApiPermissionProperties, eventtype string, reason errx.Reason, msg string) {

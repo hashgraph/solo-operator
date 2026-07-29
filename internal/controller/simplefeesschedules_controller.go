@@ -69,7 +69,7 @@ func (r *SimpleFeesSchedulesReconciler) Reconcile(ctx context.Context, req ctrl.
 func (r *SimpleFeesSchedulesReconciler) updateStatus(ctx context.Context, obj *operatorv1alpha1.SimpleFeesSchedules) error {
 	obj.Status.ObservedGeneration = obj.Generation
 	obj.Status.ConfigMapName = simplefeesschedules.ConfigMapName(obj)
-	return r.Status().Update(ctx, obj)
+	return common.WarnOnConflict(ctx, r.Status().Update(ctx, obj))
 }
 
 func (r *SimpleFeesSchedulesReconciler) event(ctx context.Context, obj *operatorv1alpha1.SimpleFeesSchedules, eventtype string, reason errx.Reason, msg string) {
