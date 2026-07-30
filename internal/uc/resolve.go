@@ -4,6 +4,7 @@ package uc
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,7 +78,7 @@ func (f *Factory) resolveOperationIDWith(ctx context.Context, skipPhases map[str
 		if opID == "" {
 			continue
 		}
-		if !operationIDForNode(opID, f.cfg.CapsuleName()) {
+		if !operationIDForNode(opID, f.cfg.NodeID) {
 			continue
 		}
 		if ts := item.GetCreationTimestamp().Time; !found || ts.After(bestTS) {
@@ -103,7 +104,7 @@ func (f *Factory) resolveOperationIDWith(ctx context.Context, skipPhases map[str
 		if p.Step != operatorv1alpha1.StepPrepare {
 			continue
 		}
-		if !operationIDForNode(p.OperationID, f.cfg.CapsuleName()) {
+		if !operationIDForNode(p.OperationID, f.cfg.NodeID) {
 			continue
 		}
 		ts, ok := operationIDTimestamp(p.OperationID)
@@ -178,7 +179,7 @@ func deriveOperationIDPrimary(upgradePath string, nodeID int) (operationID strin
 // from the manifest version alone.
 func (f *Factory) resolveByVersion(ctx context.Context, version string, skipPhases map[string]struct{}) (string, error) {
 	// Node-scoped: match this node's own "<node>-upgrade-<version>-…" chain only.
-	prefix := f.cfg.CapsuleName() + "-upgrade-" + version + "-"
+	prefix := fmt.Sprintf("node%d-upgrade-%s-", f.cfg.NodeID, version)
 
 	listCtx, cancel := context.WithTimeout(ctx, listTimeout)
 	defer cancel()
@@ -264,15 +265,16 @@ func parseVersionFile(upgradePath string) (version string, mtime time.Time, foun
 	return "", time.Time{}, false, nil
 }
 
+// operationIDForNode reports whether operationID belongs to the given nodeID.
+// The "-upgrade-" boundary prevents node 1 from claiming "node10-upgrade-…".
+func operationIDForNode(operationID string, nodeID int) bool {
+	return strings.HasPrefix(operationID, fmt.Sprintf("node%d-upgrade-", nodeID))
+}
+
 // versionFromOperationID extracts the version segment from an operationId of
-// the form "upgrade-<version>-<timestamp>". It strips the "upgrade-" prefix and
+// the form "<node>-upgrade-<version>-<timestamp>". It strips the "upgrade-" prefix and
 // the trailing "-<timestamp>" suffix. Returns ("", false) if the format is
 // unrecognised.
-// operationIDForNode reports whether operationID belongs to consensusNode. The
-// "-upgrade-" boundary prevents node "node1" from claiming "node10-upgrade-…".
-func operationIDForNode(operationID, consensusNode string) bool {
-	return strings.HasPrefix(operationID, consensusNode+"-upgrade-")
-}
 
 func versionFromOperationID(operationID string) (string, bool) {
 	// operationId is "<node>-upgrade-<version>-<timestamp>"; find "upgrade-" rather
