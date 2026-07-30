@@ -67,9 +67,7 @@ func (r *BlockNodesConfigMapSubReconciler) Reconcile(ctx context.Context, capsul
 		common.Debug(ctx, common.ReasonConfigMapUpdated).Str("configMap", desired.Name).Msg("Updating block-nodes ConfigMap")
 		existing.Data = desired.Data
 		existing.Labels = desired.Labels
-		if err := r.Client.Update(ctx, existing); err != nil {
-			return ctrl.Result{}, err
-		}
+		return ctrl.Result{}, common.WarnOnConflict(ctx, r.Client.Update(ctx, existing))
 	}
 
 	return ctrl.Result{}, nil

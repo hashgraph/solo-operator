@@ -135,7 +135,7 @@ func (r *EnvoyProxyReconciler) updateStatus(ctx context.Context, envoyObj *opera
 
 	envoyObj.Status.ObservedGeneration = envoyObj.Generation
 
-	return r.Status().Update(ctx, envoyObj)
+	return common.WarnOnConflict(ctx, r.Status().Update(ctx, envoyObj))
 }
 
 // SetupWithManager sets up the controller with the Manager

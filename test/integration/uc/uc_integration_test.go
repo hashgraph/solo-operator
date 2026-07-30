@@ -21,6 +21,8 @@ import (
 	"github.com/hashgraph/solo-operator/internal/uc"
 )
 
+const testConsensusNode = "node0"
+
 // componentsYAML renders a minimal, schema-valid consensus-node-components.yaml
 // for the given consensus-node version.
 func componentsYAML(version string) string {
@@ -58,7 +60,7 @@ func writePackage(t *testing.T, version string, mtime time.Time) (root, operatio
 	if err := os.Chtimes(marker, mtime, mtime); err != nil {
 		t.Fatalf("chtimes marker: %v", err)
 	}
-	return root, fmt.Sprintf("upgrade-%s-%s", version, mtime.UTC().Format(sanity.TimestampLayout))
+	return root, fmt.Sprintf("%s-upgrade-%s-%s", testConsensusNode, version, mtime.UTC().Format(sanity.TimestampLayout))
 }
 
 // newNamespace creates a fresh namespace named after the test so each test is
@@ -99,6 +101,7 @@ func newFactory(t *testing.T, root, ns string) *uc.Factory {
 		Mode:          uc.ModeClusterOnly,
 		NodeID:        0,
 		Orbit:         "my-orbit",
+		PodName:       "node0-0",
 		Namespace:     ns,
 		UpgradePath:   root,
 		CRPersistPath: t.TempDir(),

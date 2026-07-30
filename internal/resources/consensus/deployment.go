@@ -76,9 +76,7 @@ func (r *StatefulSetSubReconciler) Reconcile(ctx context.Context, capsule *opera
 		common.Debug(ctx, common.ReasonStatefulSetUpdated).Str("statefulSet", desired.Name).Msg("Updating StatefulSet")
 		existing.Spec = desired.Spec
 		existing.Labels = desired.Labels
-		if err := r.Client.Update(ctx, existing); err != nil {
-			return ctrl.Result{}, err
-		}
+		return ctrl.Result{}, common.WarnOnConflict(ctx, r.Client.Update(ctx, existing))
 	}
 
 	return ctrl.Result{}, nil
@@ -171,19 +169,17 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 	return sts, nil
 }
 
-// buildGenesisInitContainer copies genesis-network.json from the optional ConfigMap into
-// the writable data-config-dir so the platform can archive it after the first round.
+// buildGenesisInitContainer populates data-config-dir (an emptyDir, cleared on every pod
+// restart) with genesis-network.json so the consensus node entrypoint's unconditional
+// file-presence check always passes.
 //
-// Two sentinels detect whether this is a fresh cluster:
-//  1. Platform state directory (/data/saved/SavedStateDir) — present on non-fresh nodes
-//     (written after completing at least one round); exit immediately if present.
-//  2. Dot-file (/data/saved/.genesis-init-done) — written after successful copy; guards
-//     pod restarts before the platform creates its own state directory.
-//
-// If neither sentinel is present the cluster is fresh: we wait up to 10 minutes for the
-// genesis-network.json ConfigMap to be mounted (the genesis NetworkOperation may still be
-// in progress). Exits non-zero on timeout so the pod is restarted rather than starting
-// without genesis configuration.
+// On a fresh cluster the ConfigMap may not be ready yet (NetworkGenesis may still be in
+// progress), so the script waits up to 10 minutes before giving up and restarting the pod.
+// Three sentinels guard against blocking on a cluster that has already completed genesis:
+//  1. Checkpoint ConfigMap key genesis-initialized=true — set by the operator on first
+//     non-ready→ready transition; survives pod restarts.
+//  2. Platform state directory (/data/saved/SavedStateDir) — written after round 1.
+//  3. Dot-file (/data/saved/.genesis-init-done) — written by this script after first copy.
 func (r *StatefulSetSubReconciler) buildGenesisInitContainer(capsule *operatorv1alpha1.ConsensusCapsule) corev1.Container {
 	const (
 		stateDir     = "/data/saved/" + SavedStateDir
@@ -192,11 +188,13 @@ func (r *StatefulSetSubReconciler) buildGenesisInitContainer(capsule *operatorv1
 		genesisProps = "/tmp/genesis-config/" + GenesisPropertiesFileName
 		destDir      = HapiBase + "/data/config/"
 	)
-	// Three sentinels in priority order: checkpoint CM (survives pod restarts),
-	// platform state dir (written after round 1), dot-file (written after copy).
-	script := `[ "$GENESIS_INITIALIZED" = "true" ] && { echo "genesis-init: checkpoint set, skipping"; exit 0; }
-[ -d ` + stateDir + ` ] && exit 0
-[ -f ` + sentinelFile + ` ] && exit 0
+	script := `copy_genesis_if_present() {
+  [ -f ` + genesisFile + ` ] && cp ` + genesisFile + ` ` + destDir + ` && echo "genesis-init: copied genesis-network.json"
+  [ -f ` + genesisProps + ` ] && cp ` + genesisProps + ` ` + destDir + `
+}
+[ "$GENESIS_INITIALIZED" = "true" ] && { copy_genesis_if_present; echo "genesis-init: checkpoint set, skipping"; exit 0; }
+[ -d ` + stateDir + ` ] && { copy_genesis_if_present; exit 0; }
+[ -f ` + sentinelFile + ` ] && { copy_genesis_if_present; exit 0; }
 echo "genesis-init: fresh cluster, waiting for genesis-network.json (up to 10m)"
 i=0
 while [ ! -f ` + genesisFile + ` ]; do

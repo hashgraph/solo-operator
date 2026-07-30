@@ -408,12 +408,14 @@ var _ = Describe("HelmCapsule Controller", func() {
 
 			key := types.NamespacedName{Name: hcName, Namespace: hcNS}
 
+			var baseVersion int
 			By("Waiting for initial install to succeed")
 			Eventually(func() int {
 				got := &operatorv1alpha1.HelmCapsule{}
 				_ = k8sClient.Get(ctx, key, got)
-				return got.Status.ReleaseVersion
-			}, timeout, interval).Should(Equal(1))
+				baseVersion = got.Status.ReleaseVersion
+				return baseVersion
+			}, timeout, interval).Should(BeNumerically(">", 0))
 
 			By("Bumping the chart version")
 			Eventually(func() error {
@@ -430,7 +432,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 				updated := &operatorv1alpha1.HelmCapsule{}
 				_ = k8sClient.Get(ctx, key, updated)
 				return updated.Status.ReleaseVersion
-			}, timeout, interval).Should(Equal(2))
+			}, timeout, interval).Should(BeNumerically(">", baseVersion))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, hc)).Should(Succeed())

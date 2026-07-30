@@ -95,6 +95,7 @@ type executeReconcileResult struct {
 	execute *operatorv1alpha1.NetworkUpgradeExecute
 	result  ctrl.Result
 	err     error
+	client  client.Client
 }
 
 func reconcileExecuteWith(
@@ -146,7 +147,7 @@ func reconcileExecuteWith(
 		t.Fatalf("get updated execute: %v", getErr)
 	}
 
-	return executeReconcileResult{events: recorded, execute: &updated, result: result, err: err}
+	return executeReconcileResult{events: recorded, execute: &updated, result: result, err: err, client: c}
 }
 
 func withExecuteIndexes(b *fake.ClientBuilder) *fake.ClientBuilder {
@@ -276,7 +277,11 @@ func TestExecuteReconcile_InitializesStatus(t *testing.T) {
 			SelectedSources: operatorv1alpha1.SelectedSources{ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest}},
 		},
 	}
-	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil), prereqsWithCapsule()...)
+	// Orbit with ProvisionerDaemonEnabled=false → cluster-only. The operator sets
+	// ReadyForProvisionerDaemon (pod stays up so the in-pod UC can deploy config
+	// CRs and advance the phase).
+	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil),
+		append(prereqsWithCapsule(), newClusterOnlyOrbit())...)
 
 	if res.err != nil {
 		t.Fatalf("unexpected error: %v", res.err)
@@ -292,6 +297,87 @@ func TestExecuteReconcile_InitializesStatus(t *testing.T) {
 	}
 	if got := countContaining(res.events, "ReadyForProvisionerDaemon"); got != 1 {
 		t.Errorf("expected one ReadyForProvisionerDaemon event, got %d in %v", got, res.events)
+	}
+}
+
+// newMainnetOrbit returns an Orbit with the host-level provisioner daemon
+// enabled, so ResolveUCMode reports mainnet.
+func newMainnetOrbit() *operatorv1alpha1.Orbit {
+	return &operatorv1alpha1.Orbit{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
+		Spec: operatorv1alpha1.OrbitSpec{
+			Consensus: operatorv1alpha1.OrbitConsensus{ProvisionerDaemonEnabled: true},
+		},
+	}
+}
+
+// newClusterOnlyOrbit returns an Orbit with the provisioner daemon disabled, so
+// ResolveUCMode reports cluster-only. The Orbit CR exists in both modes; only
+// ProvisionerDaemonEnabled distinguishes them.
+func newClusterOnlyOrbit() *operatorv1alpha1.Orbit {
+	return &operatorv1alpha1.Orbit{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
+		Spec: operatorv1alpha1.OrbitSpec{
+			Consensus: operatorv1alpha1.OrbitConsensus{ProvisionerDaemonEnabled: false},
+		},
+	}
+}
+
+// TestExecuteReconcile_MainnetScalesDownBeforeReady asserts that in mainnet mode
+// the operator scales the capsule down (offline=true) as it enters
+// ReadyForProvisionerDaemon, so the host provisioner daemon operates on a stopped
+// node.
+func TestExecuteReconcile_MainnetScalesDownBeforeReady(t *testing.T) {
+	execute := newExecuteForTest()
+	execute.Status.Phase = "" // start at initialization, before ReadyForProvisionerDaemon
+	capsule := newOnlineCapsule("node0")
+
+	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil),
+		newSucceededPrepare("default", "op-001"), newSucceededFreeze("default", "op-001"),
+		capsule, newMainnetOrbit())
+
+	if res.err != nil {
+		t.Fatalf("unexpected error: %v", res.err)
+	}
+	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon {
+		t.Errorf("expected ReadyForProvisionerDaemon, got %s", res.execute.Status.Phase)
+	}
+	var updated operatorv1alpha1.ConsensusCapsule
+	if err := res.client.Get(context.Background(), client.ObjectKey{Name: "node0", Namespace: "default"}, &updated); err != nil {
+		t.Fatalf("get capsule: %v", err)
+	}
+	if !updated.Spec.Offline {
+		t.Error("expected capsule Offline=true at ReadyForProvisionerDaemon in mainnet mode")
+	}
+}
+
+// TestExecuteReconcile_ClusterOnlyKeepsPodUpAtReady asserts that in cluster-only
+// mode the operator sets ReadyForProvisionerDaemon WITHOUT scaling the pod down.
+// The pod (and its in-pod UC sidecar) must stay alive at this phase, because only
+// the UC can read the upgrade package from the pod's PVC to deploy config CRs and
+// then advance the phase. Scale-down is deferred to reconcilePendingNodeUpgrade.
+func TestExecuteReconcile_ClusterOnlyKeepsPodUpAtReady(t *testing.T) {
+	execute := newExecuteForTest()
+	execute.Status.Phase = "" // start at initialization
+	capsule := newOnlineCapsule("node0")
+
+	// Orbit exists with ProvisionerDaemonEnabled=false → cluster-only.
+	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil),
+		newSucceededPrepare("default", "op-001"), newSucceededFreeze("default", "op-001"),
+		capsule, newClusterOnlyOrbit())
+
+	if res.err != nil {
+		t.Fatalf("unexpected error: %v", res.err)
+	}
+	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon {
+		t.Errorf("expected ReadyForProvisionerDaemon, got %s", res.execute.Status.Phase)
+	}
+	var updated operatorv1alpha1.ConsensusCapsule
+	if err := res.client.Get(context.Background(), client.ObjectKey{Name: "node0", Namespace: "default"}, &updated); err != nil {
+		t.Fatalf("get capsule: %v", err)
+	}
+	if updated.Spec.Offline {
+		t.Error("expected capsule to stay online at ReadyForProvisionerDaemon in cluster-only mode (pod must survive for the UC to deploy config CRs)")
 	}
 }
 
@@ -502,7 +588,12 @@ func TestExecuteReconcile_NoValidRegistry_TerminalFailure(t *testing.T) {
 
 func TestExecuteReconcile_ScalesDownCapsule(t *testing.T) {
 	execute := newExecuteForTest()
-	execute.Status.Phase = operatorv1alpha1.ExecutePhasePending
+	// Scale-down now happens at PendingNodeUpgrade (after UC advances the phase),
+	// not at Pending. DaemonResult=True is required to reach PendingNodeUpgrade.
+	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
+		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
+	}
 	capsule := &operatorv1alpha1.ConsensusCapsule{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "node0",
@@ -549,6 +640,61 @@ func TestExecuteReconcile_ScalesDownCapsule(t *testing.T) {
 	}
 	if got := countContaining(evts, "PodScaledDown"); got == 0 {
 		t.Errorf("expected PodScaledDown event, got none in %v", evts)
+	}
+}
+
+// TestExecuteReconcile_PatchesIndependentlyOfPeers is the regression test for the
+// cross-node barrier deadlock: node0 must scale down and patch its own capsule
+// without waiting for sibling nodes. Each node's UC (which advances the phase)
+// dies when its pod is scaled to zero, so a sibling that has not yet reached
+// PendingNodeUpgrade can never help clear a shared barrier — node0 would sit
+// Offline forever. With the barrier removed, node0 proceeds regardless.
+func TestExecuteReconcile_PatchesIndependentlyOfPeers(t *testing.T) {
+	execute := newExecuteForTest()
+	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
+		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
+	}
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1, Log4j2ConfigRef: "network-log4j2",
+			PodProperties: operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "old-repo", ImageName: "cn", ImageTag: "0.74.0"}}}},
+		},
+	}
+
+	// Sibling node1: same operationId, still online, CR not yet patched. Under the
+	// old barrier this blocked node0; now it must be irrelevant.
+	sibling := newExecuteForTest()
+	sibling.ObjectMeta = metav1.ObjectMeta{
+		Name: "upgrade-op-001-node1", Namespace: "default", UID: "sibling-uid",
+		Labels: map[string]string{operatorv1alpha1.LabelOperationID: "op-001", operatorv1alpha1.LabelStep: operatorv1alpha1.StepExecute},
+	}
+	sibling.Spec.ConsensusNode = "node1"
+	siblingCapsule := newOnlineCapsule("node1")
+	siblingCapsule.Spec.NodeId = 1
+
+	scheme := newControllerTestScheme()
+	c := withExecuteIndexes(fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(execute, capsule, sibling, siblingCapsule, newSucceededPrepare("default", "op-001"), newSucceededFreeze("default", "op-001")).
+		WithStatusSubresource(execute)).Build()
+
+	rec := events.NewFakeRecorder(32)
+	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
+	r.Recorder = rec
+	r.Checker = newExecuteChecker(nil, nil)
+
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(execute)}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var updated operatorv1alpha1.ConsensusCapsule
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(capsule), &updated); err != nil {
+		t.Fatalf("get capsule: %v", err)
+	}
+	if !updated.Spec.Offline {
+		t.Error("expected node0 capsule Offline=true despite online sibling — cross-node barrier must be gone")
 	}
 }
 
@@ -603,7 +749,7 @@ func TestExecuteReconcile_DuplicateOperationID_SetsPhaseFailed(t *testing.T) {
 		NamespacedName: client.ObjectKeyFromObject(execute),
 	})
 	if err == nil {
-		t.Error("expected error for duplicate operationId")
+		t.Error("expected error for duplicate operationId+consensusNode")
 	}
 
 	var got operatorv1alpha1.NetworkUpgradeExecute
@@ -630,6 +776,47 @@ func TestExecuteReconcile_DuplicateOperationID_SetsPhaseFailed(t *testing.T) {
 	}
 	if got := countContaining(recorded, "ManifestInvalid"); got != 1 {
 		t.Errorf("expected one ManifestInvalid event, got %d in %v", got, recorded)
+	}
+}
+
+func TestExecuteReconcile_SameOperationID_DifferentNode_NotDuplicate(t *testing.T) {
+	existing := newExecuteForTest()
+	existing.Name = "execute-node0"
+	existing.UID = "uid-node0"
+	existing.Spec.ConsensusNode = "node0"
+	existing.Status = operatorv1alpha1.NetworkUpgradeExecuteStatus{}
+
+	execute := newExecuteForTest()
+	execute.Name = "execute-node1"
+	execute.UID = "uid-node1"
+	execute.Spec.ConsensusNode = "node1"
+	execute.Status = operatorv1alpha1.NetworkUpgradeExecuteStatus{}
+
+	scheme := newControllerTestScheme()
+	c := withExecuteIndexes(fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(existing, execute).
+		WithStatusSubresource(existing, execute)).
+		Build()
+
+	rec := events.NewFakeRecorder(16)
+	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
+	r.Recorder = rec
+	r.Checker = newExecuteChecker(nil, nil)
+
+	_, _ = r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: client.ObjectKeyFromObject(execute),
+	})
+
+	var got operatorv1alpha1.NetworkUpgradeExecute
+	if getErr := c.Get(context.Background(), client.ObjectKeyFromObject(execute), &got); getErr != nil {
+		t.Fatalf("get: %v", getErr)
+	}
+	if got.Status.Phase == operatorv1alpha1.ExecutePhaseFailed {
+		cond := findCondition(got.Status.Conditions, operatorv1alpha1.CondManifestValidated)
+		if cond != nil && cond.Reason == operatorv1alpha1.ReasonDuplicateOpID.String() {
+			t.Error("execute CR for a different consensusNode should not be rejected as a duplicate")
+		}
 	}
 }
 

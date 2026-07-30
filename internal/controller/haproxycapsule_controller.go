@@ -129,7 +129,7 @@ func (r *HAProxyCapsuleReconciler) updateStatus(ctx context.Context, haproxyObj 
 
 	haproxyObj.Status.ObservedGeneration = haproxyObj.Generation
 
-	return r.Status().Update(ctx, haproxyObj)
+	return common.WarnOnConflict(ctx, r.Status().Update(ctx, haproxyObj))
 }
 
 // SetupWithManager sets up the controller with the Manager

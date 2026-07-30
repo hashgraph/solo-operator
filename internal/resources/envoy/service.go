@@ -126,9 +126,7 @@ func (r *ServiceSubReconciler) Reconcile(ctx context.Context, envoy *operatorv1a
 			}
 		}
 
-		if err := r.Client.Update(ctx, existing); err != nil {
-			return ctrl.Result{}, err
-		}
+		return ctrl.Result{}, common.WarnOnConflict(ctx, r.Client.Update(ctx, existing))
 	}
 
 	return ctrl.Result{}, nil

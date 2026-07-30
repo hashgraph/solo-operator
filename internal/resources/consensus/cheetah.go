@@ -69,9 +69,7 @@ func (r *CheetahConfigMapSubReconciler) Reconcile(ctx context.Context, capsule *
 	if r.needsUpdate(existing.Data, desired.Data) {
 		common.Debug(ctx, common.ReasonConfigMapUpdated).Str("configMap", desired.Name).Msg("Updating Cheetah ConfigMap")
 		existing.Data = desired.Data
-		if err := r.Client.Update(ctx, existing); err != nil {
-			return ctrl.Result{}, err
-		}
+		return ctrl.Result{}, common.WarnOnConflict(ctx, r.Client.Update(ctx, existing))
 	}
 
 	return ctrl.Result{}, nil

@@ -16,7 +16,7 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
-const wantFreezeName = "upgrade-0.75.0-20260413t120000z-freeze"
+const wantFreezeName = wantConsensusNode + "-upgrade-0.75.0-20260413t120000z-freeze"
 
 // wantScheduledTime is the scheduled freeze time encoded as epoch seconds in
 // freeze_scheduled.mf file content. It is after markerCreatedAt (execute marker

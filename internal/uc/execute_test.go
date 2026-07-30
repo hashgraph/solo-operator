@@ -15,11 +15,11 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
-const wantExecuteName = "upgrade-0.75.0-20260413t120000z-execute"
+const wantExecuteName = "node0-upgrade-0.75.0-20260413t120000z-execute"
 
 // wantConsensusNode is the ConsensusCapsule name derived from the UC pod name
-// ("my-node-0" → "my-node") set by executeTestConfig.
-const wantConsensusNode = "my-node"
+// ("node0-0" → "node0") set by executeTestConfig.
+const wantConsensusNode = "node0"
 
 // pinnedImage is a digest-pinned image seeded into the Freeze CR's
 // spec.selectedSources so tests can assert it is copied verbatim into the
@@ -35,7 +35,7 @@ var nowFrozenMtime = markerCreatedAt.Add(3 * time.Hour)
 // empty pod name, and the Execute CR requires a non-empty consensusNode.
 func executeTestConfig(markerRoot, crPersist string) Config {
 	cfg := testConfig(markerRoot, crPersist)
-	cfg.PodName = "my-node-0"
+	cfg.PodName = "node0-0"
 	return cfg
 }
 

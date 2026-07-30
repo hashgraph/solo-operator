@@ -73,7 +73,7 @@ func (r *NodeSettingsReconciler) event(ctx context.Context, obj *operatorv1alpha
 func (r *NodeSettingsReconciler) updateStatus(ctx context.Context, obj *operatorv1alpha1.NodeSettings) error {
 	obj.Status.ObservedGeneration = obj.Generation
 	obj.Status.ConfigMapName = nodesettings.ConfigMapName(obj)
-	return r.Status().Update(ctx, obj)
+	return common.WarnOnConflict(ctx, r.Status().Update(ctx, obj))
 }
 
 func (r *NodeSettingsReconciler) SetupWithManager(mgr ctrl.Manager) error {

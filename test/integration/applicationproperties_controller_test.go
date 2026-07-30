@@ -105,9 +105,13 @@ staking.periodMins=1440`
 
 			crKey := types.NamespacedName{Name: crName, Namespace: namespace}
 			fetchedCR := &operatorv1alpha1.ApplicationProperties{}
-			Expect(k8sClient.Get(ctx, crKey, fetchedCR)).Should(Succeed())
-			fetchedCR.Spec.Content = updatedProps
-			Expect(k8sClient.Update(ctx, fetchedCR)).Should(Succeed())
+			Eventually(func() error {
+				if err := k8sClient.Get(ctx, crKey, fetchedCR); err != nil {
+					return err
+				}
+				fetchedCR.Spec.Content = updatedProps
+				return k8sClient.Update(ctx, fetchedCR)
+			}, timeout, interval).Should(Succeed())
 
 			By("Verifying the ConfigMap is updated")
 			Eventually(func() string {

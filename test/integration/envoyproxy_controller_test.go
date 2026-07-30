@@ -215,11 +215,14 @@ static_resources:
 			By("Updating replica count")
 			envoyLookupKey := types.NamespacedName{Name: envoyName, Namespace: envoyNamespace}
 			updatedEnvoy := &operatorv1alpha1.EnvoyProxy{}
-			Expect(k8sClient.Get(ctx, envoyLookupKey, updatedEnvoy)).Should(Succeed())
-
-			newReplicas := int32(3)
-			updatedEnvoy.Spec.Replicas = &newReplicas
-			Expect(k8sClient.Update(ctx, updatedEnvoy)).Should(Succeed())
+			Eventually(func() error {
+				if err := k8sClient.Get(ctx, envoyLookupKey, updatedEnvoy); err != nil {
+					return err
+				}
+				newReplicas := int32(3)
+				updatedEnvoy.Spec.Replicas = &newReplicas
+				return k8sClient.Update(ctx, updatedEnvoy)
+			}, timeout, interval).Should(Succeed())
 
 			By("Verifying deployment is updated")
 			Eventually(func() bool {
@@ -786,12 +789,15 @@ static_resources:
 			By("Updating the EnvoyProxy with service annotations")
 			envoyLookupKey := types.NamespacedName{Name: envoyName, Namespace: envoyNamespace}
 			updatedEnvoy := &operatorv1alpha1.EnvoyProxy{}
-			Expect(k8sClient.Get(ctx, envoyLookupKey, updatedEnvoy)).Should(Succeed())
-
-			updatedEnvoy.Spec.ServiceAnnotations = map[string]string{
-				"cloud.google.com/neg": `{"ingress":true}`,
-			}
-			Expect(k8sClient.Update(ctx, updatedEnvoy)).Should(Succeed())
+			Eventually(func() error {
+				if err := k8sClient.Get(ctx, envoyLookupKey, updatedEnvoy); err != nil {
+					return err
+				}
+				updatedEnvoy.Spec.ServiceAnnotations = map[string]string{
+					"cloud.google.com/neg": `{"ingress":true}`,
+				}
+				return k8sClient.Update(ctx, updatedEnvoy)
+			}, timeout, interval).Should(Succeed())
 
 			By("Verifying the Service is updated with the new annotations")
 			Eventually(func() bool {

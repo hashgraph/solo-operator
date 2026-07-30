@@ -55,9 +55,7 @@ func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, envoy *operator
 		common.Debug(ctx, common.ReasonDeploymentUpdated).Msg("Updating Envoy deployment")
 		existing.Spec = desired.Spec
 		existing.Labels = desired.Labels
-		if err := r.Client.Update(ctx, existing); err != nil {
-			return ctrl.Result{}, err
-		}
+		return ctrl.Result{}, common.WarnOnConflict(ctx, r.Client.Update(ctx, existing))
 	}
 
 	return ctrl.Result{}, nil

@@ -77,9 +77,7 @@ func (r *ServiceSubReconciler) Reconcile(ctx context.Context, capsule *operatorv
 			existing.Spec.Ports = existing.Spec.Ports[:len(desired.Spec.Ports)]
 		}
 
-		if err := r.Client.Update(ctx, existing); err != nil {
-			return ctrl.Result{}, err
-		}
+		return ctrl.Result{}, common.WarnOnConflict(ctx, r.Client.Update(ctx, existing))
 	}
 
 	return ctrl.Result{}, nil

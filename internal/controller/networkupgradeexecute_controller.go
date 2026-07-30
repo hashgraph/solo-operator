@@ -23,6 +23,7 @@ import (
 	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/registry"
 	consensusresources "github.com/hashgraph/solo-operator/internal/resources/consensus"
+	"github.com/hashgraph/solo-operator/internal/uc"
 )
 
 const (
@@ -93,6 +94,7 @@ func (r *NetworkUpgradeExecuteReconciler) WithNodeActiveAlertInterval(d time.Dur
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeprepares,verbs=get;list;watch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradefreezes,verbs=get;list;watch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=consensuscapsules,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch
 
 func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -127,12 +129,12 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	if execute.Status.Phase == "" || execute.Status.Phase == operatorv1alpha1.ExecutePhasePending {
-		sibling, err := executeSiblingExists(ctx, r.Client, execute.Namespace, string(execute.UID), execute.Spec.OperationID)
+		sibling, err := executeSiblingExists(ctx, r.Client, execute.Namespace, string(execute.UID), execute.Spec.ConsensusNode, execute.Spec.OperationID)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 		if sibling {
-			msg := fmt.Sprintf("operationId %q already used by another NetworkUpgradeExecute", execute.Spec.OperationID)
+			msg := fmt.Sprintf("operationId %q + consensusNode %q already used by another NetworkUpgradeExecute", execute.Spec.OperationID, execute.Spec.ConsensusNode)
 			r.eventf(ctx, &execute, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
 			execute.Status.Phase = operatorv1alpha1.ExecutePhaseFailed
 			execute.Status.ObservedGeneration = execute.Generation
@@ -172,23 +174,41 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 			return ctrl.Result{}, err
 		}
 		if capsule == nil {
-			common.Info(ctx, ReasonCapsuleNotFound).Str("capsule", execute.Spec.ConsensusNode).Msg("ConsensusCapsule not found")
-			return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
+			return ctrl.Result{RequeueAfter: executeReadyRequeueAfter}, nil
 		}
-
-		if err := r.ensureCapsuleOffline(ctx, &execute, capsule); err != nil {
+		mode, err := consensusresources.ResolveUCMode(ctx, r.Client, capsule)
+		if err != nil {
 			return ctrl.Result{}, err
 		}
 
 		now := metav1.Now()
 		execute.Status.StartTime = &now
-		execute.Status.Phase = operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon
 		execute.Status.ObservedGeneration = execute.Generation
+
+		// Both modes transition to ReadyForProvisionerDaemon; the difference is who
+		// advances it and whether the pod is scaled down first:
+		//
+		//   - Mainnet: the host-level provisioner daemon takes over and may tear
+		//     down the cluster for infra upgrades, so the pod is scaled down first.
+		//     The daemon (a host process surviving pod termination) then does the
+		//     config step and advances the phase.
+		//   - Cluster-only: the pod stays up. The in-pod UC sidecar reads the upgrade
+		//     package from its PVC, deploys the config CRs, and advances the phase —
+		//     none of which the operator can do, as only the UC can read data/config/.
+		//     ReadyForProvisionerDaemon is precisely the window in which config CRs
+		//     are applied while the pod (and UC) is still alive; scale-down is
+		//     therefore deferred to reconcilePendingNodeUpgrade.
+		if mode == uc.ModeMainnet {
+			if err := r.ensureCapsuleOffline(ctx, &execute, capsule); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		execute.Status.Phase = operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon
 		if err := r.Status().Update(ctx, &execute); err != nil {
 			return ctrl.Result{}, wrapStatusInit(err)
 		}
 		r.eventf(ctx, &execute, corev1.EventTypeNormal, operatorv1alpha1.EventReadyForDaemon,
-			"waiting for provisioner daemon for operationId %q", execute.Spec.OperationID)
+			"waiting for provisioner for operationId %q", execute.Spec.OperationID)
 		return ctrl.Result{Requeue: true}, nil
 	}
 
@@ -281,12 +301,8 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 
 	capsulePatched := findCondition(execute.Status.Conditions, operatorv1alpha1.CondConsensusCapsulePatched)
 	if capsulePatched == nil || capsulePatched.Status != metav1.ConditionTrue {
-		allOffline, err := r.allPeersOffline(ctx, execute)
-		if err != nil {
+		if err := r.ensureCapsuleOffline(ctx, execute, capsule); err != nil {
 			return ctrl.Result{}, err
-		}
-		if !allOffline {
-			return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
 		}
 
 		rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
@@ -361,14 +377,6 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 
 	capsulesOnline := findCondition(execute.Status.Conditions, operatorv1alpha1.CondCapsulesOnline)
 	if capsulesOnline == nil || capsulesOnline.Status != metav1.ConditionTrue {
-		allPatched, err := r.allPeersPatched(ctx, execute)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		if !allPatched {
-			return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
-		}
-
 		if capsule.Spec.Offline {
 			patch := client.MergeFrom(capsule.DeepCopy())
 			capsule.Spec.Offline = false
@@ -537,61 +545,6 @@ func (r *NetworkUpgradeExecuteReconciler) nodeActiveAlertInterval() time.Duratio
 		return r.NodeActiveAlertInterval
 	}
 	return executeDefaultNodeActiveAlertEvery
-}
-
-func (r *NetworkUpgradeExecuteReconciler) allPeersOffline(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (bool, error) {
-	var list operatorv1alpha1.NetworkUpgradeExecuteList
-	if err := r.List(ctx, &list,
-		client.InNamespace(execute.Namespace),
-		client.MatchingFields{fieldOperationID: execute.Spec.OperationID},
-	); err != nil {
-		return false, errx.WithHints(
-			errx.WithReason(errK8sAPI.Wrap(err, "listing Execute CRs for operationId %q", execute.Spec.OperationID), ReasonListFailed),
-			"Confirm the operator has list permission on networkupgradeexecutes.operator.solo.hiero.org")
-	}
-	for i := range list.Items {
-		sibling := &list.Items[i]
-		if sibling.Spec.ConsensusNode == "" {
-			continue
-		}
-		var capsule operatorv1alpha1.ConsensusCapsule
-		err := r.Get(ctx, types.NamespacedName{Name: sibling.Spec.ConsensusNode, Namespace: sibling.Namespace}, &capsule)
-		if apierrors.IsNotFound(err) {
-			continue
-		}
-		if err != nil {
-			return false, errx.WithHints(
-				errx.WithReason(errK8sAPI.Wrap(err, "getting capsule %s", sibling.Spec.ConsensusNode), ReasonGetFailed),
-				"Confirm the operator has get permission on consensuscapsules")
-		}
-		if !capsule.Spec.Offline {
-			return false, nil
-		}
-	}
-	return true, nil
-}
-
-func (r *NetworkUpgradeExecuteReconciler) allPeersPatched(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (bool, error) {
-	var list operatorv1alpha1.NetworkUpgradeExecuteList
-	if err := r.List(ctx, &list,
-		client.InNamespace(execute.Namespace),
-		client.MatchingFields{fieldOperationID: execute.Spec.OperationID},
-	); err != nil {
-		return false, errx.WithHints(
-			errx.WithReason(errK8sAPI.Wrap(err, "listing Execute CRs for operationId %q", execute.Spec.OperationID), ReasonListFailed),
-			"Confirm the operator has list permission on networkupgradeexecutes.operator.solo.hiero.org")
-	}
-	for i := range list.Items {
-		sibling := &list.Items[i]
-		if sibling.UID == execute.UID {
-			continue
-		}
-		cond := findCondition(sibling.Status.Conditions, operatorv1alpha1.CondConsensusCapsulePatched)
-		if cond == nil || cond.Status != metav1.ConditionTrue {
-			return false, nil
-		}
-	}
-	return true, nil
 }
 
 func (r *NetworkUpgradeExecuteReconciler) getCapsule(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (*operatorv1alpha1.ConsensusCapsule, error) {

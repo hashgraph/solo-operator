@@ -3,8 +3,11 @@
 package common
 
 import (
+	"context"
+
 	"github.com/automa-saga/errx"
 	"github.com/joomcode/errorx"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 // All errors here are terminal — the operator must fix the offending content.
@@ -22,3 +25,12 @@ const (
 	ReasonNoPEMBlock   errx.Reason = "NoPEMBlock"
 	ReasonInvalidCert  errx.Reason = "InvalidCertificate"
 )
+
+// WarnOnConflict suppresses 409 Conflict errors since controller-runtime automatically requeues.
+func WarnOnConflict(ctx context.Context, err error) error {
+	if apierrors.IsConflict(err) {
+		Warn(ctx, ReasonConflict).Err(err).Msg("Optimistic concurrency conflict on update; will retry")
+		return nil
+	}
+	return err
+}

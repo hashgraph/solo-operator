@@ -31,3 +31,10 @@ spec:
         supported: false
       registries:
         - image: gcr.io/hedera-registry/consensus-node:0.73.0
+          layerHashes:
+            linux/amd64:
+              - sha256:de786f392f7b3380843b272ef3db56e18da5cd5db1994197c08909516ac4826b
+              - sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef
+            linux/arm64:
+              - sha256:2887403143d432aaa7c7e4d511fdafe2bb15febd04d99c4eb8a077b5af6472b2
+              - sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef

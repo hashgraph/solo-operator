@@ -859,7 +859,7 @@ func (m *UpgradeOutcomeMonitor) matchesDiskOperationID(cr *unstructured.Unstruct
 		return ev.Str("operation_id", operationID).Str("cr_name", crName)
 	}
 
-	diskOpID, _, _, found, err := deriveOperationIDPrimary(m.cfg.UpgradePath)
+	diskOpID, _, _, found, err := deriveOperationIDPrimary(m.cfg.UpgradePath, m.cfg.NodeID)
 	if err != nil {
 		addExtra(logx.As().Warn().Err(err).Str("reason", ReasonUpgradePackageRotateFailed.String())).
 			Msg("could not read disk operationId — skipping")

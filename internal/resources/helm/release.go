@@ -105,7 +105,7 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 				return nil
 			}
 			hc.Status.Phase = operatorv1alpha1.PhaseRunning
-			return r.Client.Status().Update(ctx, hc)
+			return common.WarnOnConflict(ctx, r.Client.Status().Update(ctx, hc))
 		}); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -134,7 +134,7 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 		if info.Status == "deployed" {
 			hc.Status.ValuesHash = hash // only save hash once deployed so failures are retried
 		}
-		return r.Client.Status().Update(ctx, hc)
+		return common.WarnOnConflict(ctx, r.Client.Status().Update(ctx, hc))
 	}); err != nil {
 		return ctrl.Result{}, err
 	}

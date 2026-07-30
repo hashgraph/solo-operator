@@ -4,6 +4,7 @@ package uc
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,6 +78,9 @@ func (f *Factory) resolveOperationIDWith(ctx context.Context, skipPhases map[str
 		if opID == "" {
 			continue
 		}
+		if !operationIDForNode(opID, f.cfg.NodeID) {
+			continue
+		}
 		if ts := item.GetCreationTimestamp().Time; !found || ts.After(bestTS) {
 			best, bestTS, found = opID, ts, true
 		}
@@ -100,6 +104,9 @@ func (f *Factory) resolveOperationIDWith(ctx context.Context, skipPhases map[str
 		if p.Step != operatorv1alpha1.StepPrepare {
 			continue
 		}
+		if !operationIDForNode(p.OperationID, f.cfg.NodeID) {
+			continue
+		}
 		ts, ok := operationIDTimestamp(p.OperationID)
 		if !ok {
 			// A persisted Prepare the UC wrote always carries a parseable timestamp
@@ -120,7 +127,7 @@ func (f *Factory) resolveOperationIDWith(ctx context.Context, skipPhases map[str
 // Returns ("", zero, nil, false, nil) when execute_immediate.mf is absent —
 // caller should fall back to version-based resolution.
 // Returns ("", zero, nil, false, err) on IO or parse error — caller should retry.
-func deriveOperationIDPrimary(upgradePath string) (operationID string, executeMtime time.Time, manifest *componentsManifest, found bool, err error) {
+func deriveOperationIDPrimary(upgradePath string, nodeID int) (operationID string, executeMtime time.Time, manifest *componentsManifest, found bool, err error) {
 	preparePath := filepath.Join(upgradePath, MarkerExecuteImmediate)
 	prepareInfo, err := os.Stat(preparePath)
 	if err != nil {
@@ -137,7 +144,7 @@ func deriveOperationIDPrimary(upgradePath string) (operationID string, executeMt
 		return "", time.Time{}, nil, false, err
 	}
 
-	operationID, err = mintOperationID(manifest.Images.ConsensusNode.Version, prepareInfo.ModTime())
+	operationID, err = mintOperationID(manifest.Images.ConsensusNode.Version, prepareInfo.ModTime(), nodeID)
 	if err != nil {
 		return "", time.Time{}, nil, false,
 			errx.WithReason(errManifestInvalid.Wrap(err, "mint operationId"), ReasonManifestInvalid)
@@ -171,7 +178,8 @@ func deriveOperationIDPrimary(upgradePath string) (operationID string, executeMt
 // fallback. Used when execute_immediate.mf is absent and identity must be inferred
 // from the manifest version alone.
 func (f *Factory) resolveByVersion(ctx context.Context, version string, skipPhases map[string]struct{}) (string, error) {
-	prefix := "upgrade-" + version + "-"
+	// Node-scoped: match this node's own "<node>-upgrade-<version>-…" chain only.
+	prefix := fmt.Sprintf("node%d-upgrade-%s-", f.cfg.NodeID, version)
 
 	listCtx, cancel := context.WithTimeout(ctx, listTimeout)
 	defer cancel()
@@ -257,17 +265,26 @@ func parseVersionFile(upgradePath string) (version string, mtime time.Time, foun
 	return "", time.Time{}, false, nil
 }
 
+// operationIDForNode reports whether operationID belongs to the given nodeID.
+// The "-upgrade-" boundary prevents node 1 from claiming "node10-upgrade-…".
+func operationIDForNode(operationID string, nodeID int) bool {
+	return strings.HasPrefix(operationID, fmt.Sprintf("node%d-upgrade-", nodeID))
+}
+
 // versionFromOperationID extracts the version segment from an operationId of
-// the form "upgrade-<version>-<timestamp>". It strips the "upgrade-" prefix and
+// the form "<node>-upgrade-<version>-<timestamp>". It strips the "upgrade-" prefix and
 // the trailing "-<timestamp>" suffix. Returns ("", false) if the format is
 // unrecognised.
+
 func versionFromOperationID(operationID string) (string, bool) {
-	// Must start with "upgrade-"
-	rest, ok := strings.CutPrefix(operationID, "upgrade-")
-	if !ok {
+	// operationId is "<node>-upgrade-<version>-<timestamp>"; find "upgrade-" rather
+	// than requiring it at position 0.
+	const marker = "upgrade-"
+	i := strings.Index(operationID, marker)
+	if i < 0 {
 		return "", false
 	}
-	// Strip the trailing "-<timestamp>" — split on last "-"
+	rest := operationID[i+len(marker):]
 	idx := strings.LastIndex(rest, "-")
 	if idx <= 0 {
 		return "", false

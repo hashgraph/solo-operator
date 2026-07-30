@@ -38,4 +38,6 @@ const (
 	// ReasonInvalidContent is the fallback for a config reconciler's error log
 	// when the wrapped error carries no reason of its own.
 	ReasonInvalidContent errx.Reason = "InvalidContent"
+
+	ReasonConflict errx.Reason = "Conflict"
 )

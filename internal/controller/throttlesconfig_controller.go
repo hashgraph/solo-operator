@@ -69,7 +69,7 @@ func (r *ThrottlesConfigReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 func (r *ThrottlesConfigReconciler) updateStatus(ctx context.Context, obj *operatorv1alpha1.ThrottlesConfig) error {
 	obj.Status.ObservedGeneration = obj.Generation
 	obj.Status.ConfigMapName = throttlesconfig.ConfigMapName(obj)
-	return r.Status().Update(ctx, obj)
+	return common.WarnOnConflict(ctx, r.Status().Update(ctx, obj))
 }
 
 func (r *ThrottlesConfigReconciler) event(ctx context.Context, obj *operatorv1alpha1.ThrottlesConfig, eventtype string, reason errx.Reason, msg string) {
