@@ -154,15 +154,15 @@ func TestParseComponentsManifestInvalid(t *testing.T) {
 // rather than failing opaquely at CR Create time.
 func TestMintOperationIDRejectsInvalidName(t *testing.T) {
 	// '_' is legal per sanity.ValidateOperationID but invalid in a metadata.name.
-	if _, err := mintOperationID("0.75.0_rc1", markerCreatedAt, wantConsensusNode); !errorx.IsOfType(err, errManifestInvalid) {
-		t.Fatalf("underscore version: want errManifestInvalid, got %v", err)
+	if _, err := mintOperationID("0.75.0_rc1", markerCreatedAt, 0); !errorx.IsOfType(err, errManifestInvalid) {
+		t.Errorf("expected errManifestInvalid, got %v", err)
 	}
 	// A version long enough to push the operationId past the 63-char label/CRD limit.
-	if _, err := mintOperationID(strings.Repeat("9", 45), markerCreatedAt, wantConsensusNode); !errorx.IsOfType(err, errManifestInvalid) {
-		t.Fatalf("over-long version: want errManifestInvalid, got %v", err)
+	if _, err := mintOperationID(strings.Repeat("9", 45), markerCreatedAt, 0); !errorx.IsOfType(err, errManifestInvalid) {
+		t.Errorf("expected errManifestInvalid, got %v", err)
 	}
 	// A clean semver version still mints the expected id.
-	id, err := mintOperationID("0.75.0", markerCreatedAt, wantConsensusNode)
+	id, err := mintOperationID("0.75.0", markerCreatedAt, 0)
 	if err != nil {
 		t.Fatalf("clean version: unexpected error %v", err)
 	}

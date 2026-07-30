@@ -56,9 +56,6 @@ type UpgradeOutcomeMonitorConfig struct {
 	Namespace string
 	// NodeID is the Hedera node identifier, used in log context.
 	NodeID int
-	// ConsensusNode is the owning ConsensusCapsule name (e.g. "node0"). It scopes
-	// the per-node operationId minted when re-deriving from the on-disk package.
-	ConsensusNode string
 	// UpgradePath is the current upgrade-package directory (data/upgrade/current).
 	UpgradePath string
 	// PreviousUpgradePath is the rotation target after a successful install.
@@ -862,7 +859,7 @@ func (m *UpgradeOutcomeMonitor) matchesDiskOperationID(cr *unstructured.Unstruct
 		return ev.Str("operation_id", operationID).Str("cr_name", crName)
 	}
 
-	diskOpID, _, _, found, err := deriveOperationIDPrimary(m.cfg.UpgradePath, m.cfg.ConsensusNode)
+	diskOpID, _, _, found, err := deriveOperationIDPrimary(m.cfg.UpgradePath, m.cfg.NodeID)
 	if err != nil {
 		addExtra(logx.As().Warn().Err(err).Str("reason", ReasonUpgradePackageRotateFailed.String())).
 			Msg("could not read disk operationId — skipping")

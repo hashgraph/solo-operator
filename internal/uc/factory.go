@@ -131,7 +131,7 @@ func (f *Factory) RecoverOnStartup(ctx context.Context) error {
 // The UC copies spec.images verbatim and does NOT do registry selection or
 // layer-hash verification — that is the operator's PrepareReconciler.
 func (f *Factory) HandleExecuteImmediate(ctx context.Context) error {
-	operationID, _, manifest, found, err := deriveOperationIDPrimary(f.cfg.UpgradePath, f.cfg.CapsuleName())
+	operationID, _, manifest, found, err := deriveOperationIDPrimary(f.cfg.UpgradePath, f.cfg.NodeID)
 	if err != nil {
 		if errorx.IsOfType(err, errManifestInvalid) {
 			// ManifestInvalid is terminal — re-reading the same bytes will not fix
@@ -336,7 +336,7 @@ func (f *Factory) HandleFreezeScheduled(ctx context.Context) error {
 	}
 
 	// Primary: re-derive operationId from co-present execute_immediate.mf.
-	operationID, executeMtime, _, found, err := deriveOperationIDPrimary(f.cfg.UpgradePath, f.cfg.CapsuleName())
+	operationID, executeMtime, _, found, err := deriveOperationIDPrimary(f.cfg.UpgradePath, f.cfg.NodeID)
 	if err != nil {
 		if errorx.IsOfType(err, errManifestInvalid) {
 			logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).
@@ -518,7 +518,7 @@ func (f *Factory) HandleNowFrozen(ctx context.Context) error {
 	frozenMarkerMtime := frozenInfo.ModTime()
 
 	// Primary: re-derive operationId from co-present execute_immediate.mf.
-	operationID, executeMtime, _, found, err := deriveOperationIDPrimary(f.cfg.UpgradePath, f.cfg.CapsuleName())
+	operationID, executeMtime, _, found, err := deriveOperationIDPrimary(f.cfg.UpgradePath, f.cfg.NodeID)
 	if err != nil {
 		if errorx.IsOfType(err, errManifestInvalid) {
 			logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).
@@ -700,7 +700,7 @@ func (f *Factory) HandleFreezeAborted(ctx context.Context) error {
 	abortMarkerMtime := abortInfo.ModTime()
 
 	// Primary: re-derive operationId from co-present execute_immediate.mf.
-	operationID, executeMtime, _, found, err := deriveOperationIDPrimary(f.cfg.UpgradePath, f.cfg.CapsuleName())
+	operationID, executeMtime, _, found, err := deriveOperationIDPrimary(f.cfg.UpgradePath, f.cfg.NodeID)
 	if err != nil {
 		if errorx.IsOfType(err, errManifestInvalid) {
 			logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).

@@ -246,9 +246,8 @@ func newOutcomeMonitor(t *testing.T, upgradePath string) *UpgradeOutcomeMonitor 
 	}
 	client := fake.NewSimpleDynamicClient(scheme)
 	cfg := UpgradeOutcomeMonitorConfig{
-		Namespace:     "solo",
-		ConsensusNode: wantConsensusNode,
-		UpgradePath:   upgradePath,
+		Namespace:   "solo",
+		UpgradePath: upgradePath,
 	}
 	return NewUpgradeOutcomeMonitorWithClient(cfg, client)
 }

@@ -142,7 +142,7 @@ func TestDeriveOperationIDPrimaryNoVersionFile(t *testing.T) {
 	// execute_immediate.mf present, VERSION absent → no cross-check, succeeds.
 	root := writePackage(t, validComponentsYAML)
 
-	opID, _, _, found, err := deriveOperationIDPrimary(root, wantConsensusNode)
+	opID, _, _, found, err := deriveOperationIDPrimary(root, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestDeriveOperationIDPrimaryVersionMatches(t *testing.T) {
 		t.Fatalf("write VERSION: %v", err)
 	}
 
-	opID, _, _, found, err := deriveOperationIDPrimary(root, wantConsensusNode)
+	opID, _, _, found, err := deriveOperationIDPrimary(root, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestDeriveOperationIDPrimaryVersionMismatches(t *testing.T) {
 		t.Fatalf("write VERSION: %v", err)
 	}
 
-	_, _, _, found, err := deriveOperationIDPrimary(root, wantConsensusNode)
+	_, _, _, found, err := deriveOperationIDPrimary(root, 0)
 	if err == nil {
 		t.Fatal("expected error for version mismatch, got nil")
 	}

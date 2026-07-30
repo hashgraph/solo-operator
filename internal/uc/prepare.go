@@ -37,10 +37,10 @@ const (
 // same id every tick — the UC "mints once" because the value is deterministic,
 // not because it tracks state. The id is validated for path/shell safety (it
 // flows into a persisted filename and a CR name).
-func mintOperationID(version string, markerCreatedAt time.Time, consensusNode string) (string, error) {
+func mintOperationID(version string, markerCreatedAt time.Time, nodeID int) (string, error) {
 	// Node is a PREFIX so the trailing "-<timestamp>" stays the last segment and
 	// operationIDTimestamp keeps parsing it unchanged.
-	id := fmt.Sprintf("%s-upgrade-%s-%s", consensusNode, version, markerCreatedAt.UTC().Format(sanity.TimestampLayout))
+	id := fmt.Sprintf("node%d-upgrade-%s-%s", nodeID, version, markerCreatedAt.UTC().Format(sanity.TimestampLayout))
 	if err := sanity.ValidateOperationID(id); err != nil {
 		return "", errx.WithHints(
 			errx.WithReason(errManifestInvalid.Wrap(err, "derived operationId %q is invalid", id), ReasonManifestInvalid),

@@ -126,7 +126,7 @@ func (f *Factory) resolveOperationIDWith(ctx context.Context, skipPhases map[str
 // Returns ("", zero, nil, false, nil) when execute_immediate.mf is absent —
 // caller should fall back to version-based resolution.
 // Returns ("", zero, nil, false, err) on IO or parse error — caller should retry.
-func deriveOperationIDPrimary(upgradePath, consensusNode string) (operationID string, executeMtime time.Time, manifest *componentsManifest, found bool, err error) {
+func deriveOperationIDPrimary(upgradePath string, nodeID int) (operationID string, executeMtime time.Time, manifest *componentsManifest, found bool, err error) {
 	preparePath := filepath.Join(upgradePath, MarkerExecuteImmediate)
 	prepareInfo, err := os.Stat(preparePath)
 	if err != nil {
@@ -143,7 +143,7 @@ func deriveOperationIDPrimary(upgradePath, consensusNode string) (operationID st
 		return "", time.Time{}, nil, false, err
 	}
 
-	operationID, err = mintOperationID(manifest.Images.ConsensusNode.Version, prepareInfo.ModTime(), consensusNode)
+	operationID, err = mintOperationID(manifest.Images.ConsensusNode.Version, prepareInfo.ModTime(), nodeID)
 	if err != nil {
 		return "", time.Time{}, nil, false,
 			errx.WithReason(errManifestInvalid.Wrap(err, "mint operationId"), ReasonManifestInvalid)
