@@ -67,6 +67,18 @@ tasks:
       - CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="{{.LDFLAGS}}" -trimpath -o bin/uc-linux-arm64 cmd/uc/main.go
       - chmod +x bin/uc-linux-amd64 bin/uc-linux-arm64
 
+  build:beacon:
+    desc: Build the beacon HAPI control-plane CLI for the current platform
+    cmds:
+      - go build -ldflags="{{.LDFLAGS}}" -o bin/beacon cmd/beacon/main.go
+
+  build:beacon:all:
+    desc: Cross-compile the beacon CLI for all supported platforms (linux/amd64, linux/arm64)
+    cmds:
+      - CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="{{.LDFLAGS}}" -trimpath -o bin/beacon-linux-amd64 cmd/beacon/main.go
+      - CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="{{.LDFLAGS}}" -trimpath -o bin/beacon-linux-arm64 cmd/beacon/main.go
+      - chmod +x bin/beacon-linux-amd64 bin/beacon-linux-arm64
+
   hash:
     desc: Generate SHA256 checksums for all platform binaries
     deps: [ build:binary:all ]
