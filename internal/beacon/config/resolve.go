@@ -59,6 +59,12 @@ func (c *Config) Resolve(payerFlag, nodeAccountFlag, nodeIPFlag string) (*Target
 	}, nil
 }
 
+// FileID composes a bare file num (e.g. 150, 159) with the target network's
+// shard/realm, so special-file ids are never hardcoded 0.0.150.
+func (t *Target) FileID(num uint64) hiero.FileID {
+	return hiero.FileID{Shard: t.Shard, Realm: t.Realm, File: num}
+}
+
 // resolvePayer resolves the payer AccountID from payerFlag, falling back to the
 // network's DefaultPayer.
 func (c *Config) resolvePayer(payerFlag string) (hiero.AccountID, error) {

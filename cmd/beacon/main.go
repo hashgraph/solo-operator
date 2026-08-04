@@ -22,6 +22,8 @@ import (
 	"github.com/automa-saga/version"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+
+	"github.com/hashgraph/solo-operator/internal/beacon/commands"
 )
 
 // envPrefix namespaces beacon's environment variables, e.g. --network maps to
@@ -106,6 +108,18 @@ func newRootCmd() *cobra.Command {
 	root.Flags().BoolVar(&flagVersion, "version", false, "Print version and exit")
 
 	root.AddCommand(versionCmd())
+
+	// The freeze family (and later file/version ops) resolve their session from
+	// the global flags at execution time via this closure over opts.
+	resolve := func() (*commands.Session, error) {
+		return commands.Global{
+			ConfigPath:  opts.Config,
+			Payer:       opts.Payer,
+			NodeAccount: opts.NodeAccount,
+			NodeIP:      opts.NodeIP,
+		}.Resolve()
+	}
+	root.AddCommand(commands.FreezeCommands(resolve)...)
 
 	return root
 }
