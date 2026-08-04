@@ -32,6 +32,9 @@ type Global struct {
 type Session struct {
 	Target *config.Target
 	Client *client.Client
+	// ConfigDir is the directory of the config file — the network's
+	// self-contained context, holding keys/ and sysfiles/ (design §10).
+	ConfigDir string
 }
 
 // Close releases the session's client connections.
@@ -73,5 +76,5 @@ func (g Global) Resolve() (*Session, error) {
 		return nil, err
 	}
 
-	return &Session{Target: target, Client: c}, nil
+	return &Session{Target: target, Client: c, ConfigDir: filepath.Dir(g.ConfigPath)}, nil
 }

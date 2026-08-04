@@ -120,6 +120,7 @@ func newRootCmd() *cobra.Command {
 		}.Resolve()
 	}
 	root.AddCommand(commands.FreezeCommands(resolve)...)
+	root.AddCommand(commands.FileCommands(resolve))
 
 	return root
 }

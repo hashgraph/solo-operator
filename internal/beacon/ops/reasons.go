@@ -10,4 +10,12 @@ import "github.com/automa-saga/errx"
 const (
 	reasonInvalidStartTime errx.Reason = "InvalidStartTime"
 	reasonInvalidHash      errx.Reason = "InvalidUpgradeHash"
+
+	// Special-file upload (design §8.1).
+	reasonEmptyUpload          errx.Reason = "EmptyUpload"
+	reasonFileInfoFailed       errx.Reason = "FileInfoFailed"
+	reasonUploadedHashMismatch errx.Reason = "UploadedHashMismatch"
+	// Log-only reasons for upload progress.
+	reasonUploadStarted  errx.Reason = "UploadStarted"
+	reasonUploadProgress errx.Reason = "UploadProgress"
 )
