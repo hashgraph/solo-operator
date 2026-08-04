@@ -18,21 +18,21 @@
 apiVersion: operator.solo.hiero.org/v1alpha1
 kind: NetworkUpgradeExecute
 metadata:
-  name: upgrade-0-73-0-execute-NODENAME
+  name: upgrade-0-74-2-execute-NODENAME
   namespace: solo-orbit
   labels:
-    operator.solo.hiero.org/operation-id: upgrade-0-73-0
+    operator.solo.hiero.org/operation-id: upgrade-0-74-2
     operator.solo.hiero.org/step: execute
 spec:
   orbit: solo-orbit
-  operationId: upgrade-0-73-0
+  operationId: upgrade-0-74-2
   consensusNode: NODENAME
   images:
     consensusNode:
-      version: "0.73.0"
+      version: "0.74.2"
       deterministic:
         supported: false
       registries:
-        - image: gcr.io/hedera-registry/consensus-node:0.73.0
+        - image: gcr.io/hedera-registry/consensus-node:0.74.2
   # Populated at apply time by the upgrade:execute task from Prepare status.
   selectedSources: {}

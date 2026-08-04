@@ -6,7 +6,7 @@
 # Applied manually here for local dev testing.
 #
 # IMPORTANT: selectedSources must be copied verbatim from
-#   kubectl get nup upgrade-0-73-0-prepare -n solo-orbit -o jsonpath='{.status.selectedSources}'
+#   kubectl get nup upgrade-0-74-2-prepare -n solo-orbit -o jsonpath='{.status.selectedSources}'
 # The task (upgrade:freeze) does this automatically.
 #
 # scheduledTime is set to the past so the freeze triggers immediately in dev.
@@ -18,22 +18,22 @@
 apiVersion: operator.solo.hiero.org/v1alpha1
 kind: NetworkUpgradeFreeze
 metadata:
-  name: upgrade-0-73-0-freeze
+  name: upgrade-0-74-2-freeze
   namespace: solo-orbit
   labels:
-    operator.solo.hiero.org/operation-id: upgrade-0-73-0
+    operator.solo.hiero.org/operation-id: upgrade-0-74-2
     operator.solo.hiero.org/step: freeze
 spec:
   orbit: solo-orbit
-  operationId: upgrade-0-73-0
+  operationId: upgrade-0-74-2
   # Set to a past time — freeze triggers immediately for local dev testing.
   scheduledTime: "2026-01-01T00:00:00Z"
   images:
     consensusNode:
-      version: "0.73.0"
+      version: "0.74.2"
       deterministic:
         supported: false
       registries:
-        - image: gcr.io/hedera-registry/consensus-node:0.73.0
+        - image: gcr.io/hedera-registry/consensus-node:0.74.2
   # Populated at apply time by the upgrade:freeze task from Prepare status.
   selectedSources: {}

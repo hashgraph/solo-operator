@@ -8,7 +8,7 @@
 # Populate, then run the upload:
 #   kubectl apply -f examples/pvc-and-loader.yaml
 #   kubectl -n solo wait --for=condition=Ready pod/beacon-zip-loader
-#   kubectl -n solo cp test/dev/staging/build-v9.99.99.zip beacon-zip-loader:/data/softwareUpgrade.zip
+#   kubectl -n solo cp test/dev/staging/build-v0.74.2.zip beacon-zip-loader:/data/softwareUpgrade.zip
 #   kubectl -n solo delete pod beacon-zip-loader          # PVC keeps the data
 #   kubectl apply -f examples/job-upload-pvc.yaml
 #

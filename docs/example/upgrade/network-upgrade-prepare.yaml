@@ -16,25 +16,25 @@
 apiVersion: operator.solo.hiero.org/v1alpha1
 kind: NetworkUpgradePrepare
 metadata:
-  name: upgrade-0-73-0-prepare
+  name: upgrade-0-74-2-prepare
   namespace: solo-orbit
   labels:
-    operator.solo.hiero.org/operation-id: upgrade-0-73-0
+    operator.solo.hiero.org/operation-id: upgrade-0-74-2
     operator.solo.hiero.org/step: prepare
 spec:
   orbit: solo-orbit
-  operationId: upgrade-0-73-0
+  operationId: upgrade-0-74-2
   images:
     consensusNode:
-      version: "0.73.0"
+      version: "0.74.2"
       deterministic:
         supported: false
       registries:
-        - image: gcr.io/hedera-registry/consensus-node:0.73.0
+        - image: gcr.io/hedera-registry/consensus-node:0.74.2
           layerHashes:
             linux/amd64:
-              - sha256:de786f392f7b3380843b272ef3db56e18da5cd5db1994197c08909516ac4826b
+              - sha256:2e45d3d37f61a52e943f9099c530f861ec1309565de43af8eece36c1e6e56c2d
               - sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef
             linux/arm64:
-              - sha256:2887403143d432aaa7c7e4d511fdafe2bb15febd04d99c4eb8a077b5af6472b2
+              - sha256:4162357a337b3f840df16baed0fc504836ee095afa58a15bf51cbf7db505a3ad
               - sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef

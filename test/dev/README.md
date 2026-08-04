@@ -34,18 +34,24 @@ package built here passes deterministic verification.
 ```bash
 cd test/dev
 
-task setup    # clone hiero-local-node config + download build-v<ver>.zip
-task build    # produce staging/build-v<ver>.zip and staging/build-v9.99.99.zip
+task setup    # download both source zips (HEDERA_BASE_VERSION + HEDERA_UPGRADE_VERSION)
+task build    # produce staging/build-v<base>.zip and staging/build-v<upgrade>.zip
 ```
+
+Two **real** versions are built (set `HEDERA_BASE_VERSION` / `HEDERA_UPGRADE_VERSION`
+at the top of `Taskfile.yml`; defaults `0.74.0` and `0.74.2`). Each must exist both
+as a published source zip on builds.hedera.com and as a consensus-node container
+image (the UC manifest pins the image + layer hashes).
 
 Outputs land in `staging/`:
 
 | File | Purpose |
 |------|---------|
-| `build-v<ver>.zip`   | base package |
-| `build-v9.99.99.zip` | same payload with `VERSION=9.99.99`, for upgrade tests |
+| `build-v<base>.zip`    | the version the network is deployed at (kept for other tests) |
+| `build-v<upgrade>.zip` | the next version — uploaded via beacon (0.0.150) / NMT to drive an upgrade |
 
-Both zips contain `manifests/consensus-node-components.yaml`.
+Each zip carries its own real `VERSION` and a `manifests/consensus-node-components.yaml`
+pinned to that version's image.
 
 ## Configuration
 
