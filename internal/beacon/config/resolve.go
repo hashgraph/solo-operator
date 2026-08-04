@@ -72,7 +72,7 @@ func (c *Config) resolvePayer(payerFlag string) (hiero.AccountID, error) {
 	if s == "" {
 		if c.DefaultPayer == 0 {
 			return hiero.AccountID{}, errx.Decorate(
-				fmt.Errorf("no payer selected and network %q sets no defaultPayer", c.Name),
+				errConfigInvalid.New("no payer selected and network %q sets no defaultPayer", c.Name),
 				reasonUnknownPayer,
 				"Pass --payer/-p or set defaultPayer in config.yaml",
 			)
@@ -111,7 +111,7 @@ func (c *Config) resolveNode(nodeAccountFlag, nodeIPFlag string) (*Node, error) 
 		}
 		if acct == "" {
 			return nil, errx.Decorate(
-				fmt.Errorf("node-ip %q is not in config for network %q and no --node-account was given", ip, c.Name),
+				errConfigInvalid.New("node-ip %q is not in config for network %q and no --node-account was given", ip, c.Name),
 				reasonNodeIPWithoutAccount,
 				"Pass --node-account/-a to target an off-config node by IP, or add the node to config.yaml",
 			)
@@ -133,7 +133,7 @@ func (c *Config) resolveNode(nodeAccountFlag, nodeIPFlag string) (*Node, error) 
 			return node, nil
 		}
 		return nil, errx.Decorate(
-			fmt.Errorf("no node with account %d in network %q", num, c.Name),
+			errConfigInvalid.New("no node with account %d in network %q", num, c.Name),
 			reasonUnknownNode,
 			"Pass --node-ip/-i to target the node by address, or add it to config.yaml",
 		)
@@ -145,7 +145,7 @@ func (c *Config) resolveNode(nodeAccountFlag, nodeIPFlag string) (*Node, error) 
 	}
 	if len(c.Nodes) == 0 {
 		return nil, errx.Decorate(
-			fmt.Errorf("network %q defines no nodes", c.Name),
+			errConfigInvalid.New("network %q defines no nodes", c.Name),
 			reasonNoNodes,
 			"Add at least one node under nodes: in config.yaml, or pass --node-ip with --node-account",
 		)
@@ -206,7 +206,7 @@ func (c *Config) parseAccountNum(literal string) (uint64, error) {
 	}
 	if shard != c.Shard || realm != c.Realm {
 		return 0, errx.Decorate(
-			fmt.Errorf("account %q is not in network %q shard.realm %d.%d", literal, c.Name, c.Shard, c.Realm),
+			errConfigInvalid.New("account %q is not in network %q shard.realm %d.%d", literal, c.Name, c.Shard, c.Realm),
 			reasonInvalidAccountID,
 			fmt.Sprintf("Use a bare account number or an S.R.N literal in shard.realm %d.%d", c.Shard, c.Realm),
 		)
@@ -222,7 +222,7 @@ func (c *Config) parseIDLiteral(literal string) (shard, realm, num uint64, err e
 	s := strings.TrimSpace(literal)
 	if s == "" {
 		return 0, 0, 0, errx.Decorate(
-			fmt.Errorf("empty account/file id"),
+			errConfigInvalid.New("empty account/file id"),
 			reasonInvalidAccountID,
 			"Provide a bare number (e.g. 58) or an S.R.N literal (e.g. 0.0.58)",
 		)
@@ -258,7 +258,7 @@ func (c *Config) parseIDLiteral(literal string) (shard, realm, num uint64, err e
 // invalidIDErr builds the shared malformed-id error.
 func (c *Config) invalidIDErr(literal string) error {
 	return errx.Decorate(
-		fmt.Errorf("invalid account/file id %q", literal),
+		errConfigInvalid.New("invalid account/file id %q", literal),
 		reasonInvalidAccountID,
 		"Use a bare number (e.g. 58) or an S.R.N literal (e.g. 0.0.58)",
 	)

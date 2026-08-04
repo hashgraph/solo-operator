@@ -83,7 +83,7 @@ func ParseStartTime(s string) (time.Time, error) {
 	t, err := time.Parse(StartTimeLayout, strings.TrimSpace(s))
 	if err != nil {
 		return time.Time{}, errx.Decorate(
-			fmt.Errorf("parse start time %q: %w", s, err),
+			errValidation.Wrap(err, "parse start time %q", s),
 			reasonInvalidStartTime,
 			fmt.Sprintf("Use a UTC time in the form %s, e.g. 2026-08-01.14:30:00", "yyyy-MM-dd.HH:mm:ss"),
 		)
@@ -98,7 +98,7 @@ func ParseUpgradeHash(s string) ([]byte, error) {
 	trimmed := strings.TrimSpace(s)
 	if trimmed == "" {
 		return nil, errx.Decorate(
-			fmt.Errorf("empty upgrade hash"),
+			errValidation.New("empty upgrade hash"),
 			reasonInvalidHash,
 			"Pass --upgrade-zip-hash with the SHA-384 hex printed by `beacon package software-zip`",
 		)
@@ -106,14 +106,14 @@ func ParseUpgradeHash(s string) ([]byte, error) {
 	raw, err := hex.DecodeString(trimmed)
 	if err != nil {
 		return nil, errx.Decorate(
-			fmt.Errorf("decode upgrade hash %q: %w", s, err),
+			errValidation.Wrap(err, "decode upgrade hash %q", s),
 			reasonInvalidHash,
 			"The hash must be hex (SHA-384); copy it from `beacon file info software-zip` or `package software-zip`",
 		)
 	}
 	if len(raw) != sha384Len {
 		return nil, errx.Decorate(
-			fmt.Errorf("upgrade hash is %d bytes, want %d (SHA-384)", len(raw), sha384Len),
+			errValidation.New("upgrade hash is %d bytes, want %d (SHA-384)", len(raw), sha384Len),
 			reasonInvalidHash,
 			"Confirm the value is a full SHA-384 digest (96 hex characters)",
 		)

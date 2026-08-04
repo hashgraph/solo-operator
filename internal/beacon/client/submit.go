@@ -36,7 +36,7 @@ func (c *Client) Submit(tx hiero.TransactionInterface, verify VerifyFunc) (*Resu
 	resp, err := c.execute(tx, c.hc)
 	if err != nil {
 		return nil, errx.Decorate(
-			fmt.Errorf("submit transaction: %w", err),
+			errNetworkOp.Wrap(err, "submit transaction"),
 			reasonSubmitFailed,
 			"Confirm the target node is reachable and the payer key is authorized to submit",
 		)
@@ -52,7 +52,7 @@ func (c *Client) Submit(tx hiero.TransactionInterface, verify VerifyFunc) (*Resu
 			return nil, statusError(statusErr.TxID, statusErr.Status)
 		}
 		return nil, errx.Decorate(
-			fmt.Errorf("await receipt: %w", err),
+			errNetworkOp.Wrap(err, "await receipt"),
 			reasonReceiptFailed,
 			"The transaction was submitted but its receipt could not be retrieved; re-query the receipt before resubmitting to avoid a duplicate",
 		)
@@ -87,7 +87,7 @@ func (c *Client) Submit(tx hiero.TransactionInterface, verify VerifyFunc) (*Resu
 // the network status code.
 func statusError(txID hiero.TransactionID, status hiero.Status) error {
 	return errx.Decorate(
-		fmt.Errorf("transaction %s failed with status %s", txID, status),
+		errTxRejected.New("transaction %s failed with status %s", txID, status),
 		reasonTxStatusFailed,
 		fmt.Sprintf("The network rejected the transaction with %s; consult the Hedera response-code reference for that status", status),
 	)

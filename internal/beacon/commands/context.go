@@ -25,6 +25,9 @@ type Global struct {
 	Payer       string
 	NodeAccount string
 	NodeIP      string
+	// LogLevel mirrors -v/--log-level; at "debug" the client turns the SDK's
+	// own retry-loop logging up to TRACE.
+	LogLevel string
 }
 
 // Session is a resolved command context: the target the command acts on plus a
@@ -71,7 +74,7 @@ func (g Global) Resolve() (*Session, error) {
 	}
 
 	network := map[string]hiero.AccountID{target.Node.Endpoint(): target.NodeAccount}
-	c, err := client.New(network, target.Payer, key, client.Options{TLS: target.Node.TLS})
+	c, err := client.New(network, target.Payer, key, client.Options{TLS: target.Node.TLS, LogLevel: g.LogLevel})
 	if err != nil {
 		return nil, err
 	}

@@ -173,7 +173,7 @@ func decodeMemo(fileID hiero.FileID, memo string) []byte {
 // errEmptyUpload is the shared guard for a zero-length payload.
 func errEmptyUpload(fileID hiero.FileID) error {
 	return errx.Decorate(
-		fmt.Errorf("nothing to upload to %s", fileID),
+		errValidation.New("nothing to upload to %s", fileID),
 		reasonEmptyUpload,
 		"Confirm the package file exists and is non-empty",
 	)
@@ -193,14 +193,14 @@ func VerifyUploadedHash(hc *hiero.Client, fileID hiero.FileID, wantRaw []byte) e
 	got, err := hex.DecodeString(memo)
 	if err != nil {
 		return errx.Decorate(
-			fmt.Errorf("on-chain memo for %s is not a hex hash: %q", fileID, memo),
+			errValidation.New("on-chain memo for %s is not a hex hash: %q", fileID, memo),
 			reasonUploadedHashMismatch,
 			"The staged file's memo is not the expected SHA-384; re-upload the package",
 		)
 	}
 	if !bytes.Equal(got, wantRaw) {
 		return errx.Decorate(
-			fmt.Errorf("staged hash %s does not match uploaded %s", memo, hex.EncodeToString(wantRaw)),
+			errValidation.New("staged hash %s does not match uploaded %s", memo, hex.EncodeToString(wantRaw)),
 			reasonUploadedHashMismatch,
 			"The staged file differs from the local package; re-upload before prepare-upgrade",
 		)
@@ -215,7 +215,7 @@ func FileInfoOf(hc *hiero.Client, fileID hiero.FileID) (hiero.FileInfo, error) {
 	info, err := hiero.NewFileInfoQuery().SetFileID(fileID).Execute(hc)
 	if err != nil {
 		return hiero.FileInfo{}, errx.Decorate(
-			fmt.Errorf("query info for %s: %w", fileID, err),
+			errQuery.Wrap(err, "query info for %s", fileID),
 			reasonFileInfoFailed,
 			"Confirm the node is reachable and the payer can pay the query fee",
 		)

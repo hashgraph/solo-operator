@@ -17,7 +17,7 @@ func NetworkVersion(hc *hiero.Client) (hiero.NetworkVersionInfo, error) {
 	info, err := hiero.NewNetworkVersionQuery().Execute(hc)
 	if err != nil {
 		return hiero.NetworkVersionInfo{}, errx.Decorate(
-			fmt.Errorf("query network version: %w", err),
+			errQuery.Wrap(err, "query network version"),
 			reasonVersionQueryFailed,
 			"Confirm the node is reachable and the payer can pay the query fee",
 		)

@@ -56,7 +56,7 @@ func (k *Keystore) Load(account uint64) (hiero.PrivateKey, error) {
 	pemBytes, err := os.ReadFile(pemPath)
 	if err != nil {
 		return hiero.PrivateKey{}, errx.Decorate(
-			fmt.Errorf("read key %q: %w", pemPath, err),
+			errKeyIO.Wrap(err, "read key %q", pemPath),
 			reasonKeyReadFailed,
 			fmt.Sprintf("Confirm the signing key for account %d exists at %q", account, pemPath),
 		)
@@ -70,7 +70,7 @@ func (k *Keystore) Load(account uint64) (hiero.PrivateKey, error) {
 	key, err := hiero.PrivateKeyFromPem(pemBytes, passphrase)
 	if err != nil {
 		return hiero.PrivateKey{}, errx.Decorate(
-			fmt.Errorf("decode key %q: %w", pemPath, err),
+			errKeyDecode.Wrap(err, "decode key %q", pemPath),
 			reasonKeyDecodeFailed,
 			"Confirm the key is a valid Ed25519 or ECDSA PEM and that the passphrase is correct",
 		)
@@ -98,7 +98,7 @@ func (k *Keystore) passphrase(account uint64) (string, error) {
 	case errors.Is(err, os.ErrNotExist):
 		if k.Prompt == nil {
 			return "", errx.Decorate(
-				fmt.Errorf("no passphrase source for account %d", account),
+				errKeyIO.New("no passphrase source for account %d", account),
 				reasonNoPassphraseSource,
 				fmt.Sprintf("Provide %q, or run beacon interactively so it can prompt", passPath),
 			)
@@ -106,7 +106,7 @@ func (k *Keystore) passphrase(account uint64) (string, error) {
 		return k.Prompt(fmt.Sprintf("Passphrase for account%d.pem: ", account))
 	default:
 		return "", errx.Decorate(
-			fmt.Errorf("read passphrase %q: %w", passPath, err),
+			errKeyIO.Wrap(err, "read passphrase %q", passPath),
 			reasonPassReadFailed,
 			fmt.Sprintf("Confirm %q is readable, or remove it to be prompted", passPath),
 		)

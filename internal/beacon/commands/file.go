@@ -135,7 +135,7 @@ func runSoftwareZipUpload(cmd *cobra.Command, resolve SessionFunc, zipPath strin
 	data, err := os.ReadFile(zipPath)
 	if err != nil {
 		return errx.Decorate(
-			fmt.Errorf("read package %q: %w", zipPath, err),
+			errInput.Wrap(err, "read package %q", zipPath),
 			reasonZipReadFailed,
 			fmt.Sprintf("Confirm the package exists at %q, or pass --zip", zipPath),
 		)
@@ -149,7 +149,7 @@ func runSoftwareZipUpload(cmd *cobra.Command, resolve SessionFunc, zipPath strin
 		return err
 	} else if provided && !bytes.Equal(want, localRaw) {
 		return errx.Decorate(
-			fmt.Errorf("local package hash %s does not match expected %s", localHex, hex.EncodeToString(want)),
+			errInput.New("local package hash %s does not match expected %s", localHex, hex.EncodeToString(want)),
 			reasonExpectedHashMismatch,
 			"Nothing was uploaded. The package on disk is not the one you expected — re-check --expect-hash or the zip",
 		)
@@ -190,7 +190,7 @@ func assertPrivilegedPayer(payer hiero.AccountID) error {
 		return nil
 	default:
 		return errx.Decorate(
-			fmt.Errorf("payer account %d is not privileged for special-file upload", payer.Account),
+			errInput.New("payer account %d is not privileged for special-file upload", payer.Account),
 			reasonNotPrivilegedPayer,
 			"Use a privileged payer with --payer/-p: 2, 50, or 58",
 		)
@@ -211,7 +211,7 @@ func expectedHash(hashFlag, fileFlag string) (hash []byte, provided bool, err er
 		content, err := os.ReadFile(fileFlag)
 		if err != nil {
 			return nil, false, errx.Decorate(
-				fmt.Errorf("read expect-hash file %q: %w", fileFlag, err),
+				errInput.Wrap(err, "read expect-hash file %q", fileFlag),
 				reasonExpectHashReadFailed,
 				fmt.Sprintf("Confirm %q exists and is readable", fileFlag),
 			)
@@ -219,7 +219,7 @@ func expectedHash(hashFlag, fileFlag string) (hash []byte, provided bool, err er
 		fields := strings.Fields(string(content))
 		if len(fields) == 0 {
 			return nil, false, errx.Decorate(
-				fmt.Errorf("expect-hash file %q is empty", fileFlag),
+				errInput.New("expect-hash file %q is empty", fileFlag),
 				reasonExpectHashInvalid,
 				"The file must contain the SHA-384 hex (optionally sha384sum format)",
 			)

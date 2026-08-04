@@ -20,6 +20,7 @@ import (
 	"github.com/automa-saga/errx"
 	"github.com/automa-saga/logx"
 	"github.com/automa-saga/version"
+	"github.com/joomcode/errorx"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -35,6 +36,17 @@ const envPrefix = "BEACON_"
 // reasonInvalidEnv marks a global environment variable that failed to parse
 // into its target flag (surfaced with a remediation hint via errx).
 const reasonInvalidEnv errx.Reason = "InvalidEnv"
+
+// beacon error taxonomy for the root command itself. Errors are created from a
+// type here (so the base is a real errorx error, not the generic "unexpected
+// non-errorx error" fallback) and decorated with a reason + hints via errx.
+var (
+	errNS = errorx.NewNamespace("beacon")
+
+	// errInvalidEnv: a BEACON_-prefixed environment variable held a value the
+	// target flag rejected. Terminal — the operator must fix the env var.
+	errInvalidEnv = errNS.NewType("invalid_env")
+)
 
 // globalOptions holds the values of the persistent flags shared by every
 // beacon subcommand. Resolving these into a concrete node/payer is the job of
@@ -118,6 +130,7 @@ func newRootCmd() *cobra.Command {
 			Payer:       opts.Payer,
 			NodeAccount: opts.NodeAccount,
 			NodeIP:      opts.NodeIP,
+			LogLevel:    opts.LogLevel,
 		}.Resolve()
 	}
 	root.AddCommand(commands.FreezeCommands(resolve))
@@ -149,7 +162,7 @@ func bindEnv(cmd *cobra.Command) error {
 		}
 		if err := f.Value.Set(v); err != nil {
 			bindErr = errx.Decorate(
-				fmt.Errorf("invalid value %q for %s: %w", v, env, err),
+				errInvalidEnv.Wrap(err, "invalid value %q for %s", v, env),
 				reasonInvalidEnv,
 				fmt.Sprintf("Set %s to a value valid for the --%s flag, or pass --%s explicitly", env, f.Name, f.Name),
 			)

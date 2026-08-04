@@ -13,7 +13,7 @@
 package client
 
 import (
-	"fmt"
+	"strings"
 
 	"github.com/automa-saga/errx"
 	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
@@ -40,6 +40,13 @@ type Options struct {
 	VerifyCertificate bool
 	// MaxTransactionFee overrides the default flat fee cap when non-zero.
 	MaxTransactionFee hiero.Hbar
+	// LogLevel is beacon's resolved log level (warn|info|debug). When "debug"
+	// the underlying SDK logger is turned up to TRACE so its execute/receipt
+	// retry loop is visible — the single most useful signal when a submit
+	// precheck succeeds but the receipt never arrives ("exceptional precheck
+	// status OK"). Any other value leaves the SDK logger at its default
+	// (quiet). It is independent of beacon's own logx logger.
+	LogLevel string
 }
 
 // Client is a beacon-flavored hiero.Client: the SDK client plus the submit seam
@@ -63,14 +70,14 @@ type Client struct {
 func New(network map[string]hiero.AccountID, payer hiero.AccountID, payerKey hiero.PrivateKey, opts Options) (*Client, error) {
 	if len(network) == 0 {
 		return nil, errx.Decorate(
-			fmt.Errorf("empty node network"),
+			errClientConfig.New("empty node network"),
 			reasonNoNetwork,
 			"Resolve at least one target node before building the client (check config.yaml and --node-*)",
 		)
 	}
 	if payer.Account == 0 {
 		return nil, errx.Decorate(
-			fmt.Errorf("payer account is zero"),
+			errClientConfig.New("payer account is zero"),
 			reasonInvalidPayer,
 			"Set --payer/-p or a network defaultPayer to a privileged account (0.0.2, 0.0.50, or 0.0.58)",
 		)
@@ -83,7 +90,7 @@ func New(network map[string]hiero.AccountID, payer hiero.AccountID, payerKey hie
 	hc, err := hiero.ClientForNetworkV2(network)
 	if err != nil {
 		return nil, errx.Decorate(
-			fmt.Errorf("build client for network: %w", err),
+			errClientConfig.Wrap(err, "build client for network"),
 			reasonNoNetwork,
 			"Ensure all nodes share one shard/realm and each endpoint maps to a valid node account",
 		)
@@ -94,13 +101,21 @@ func New(network map[string]hiero.AccountID, payer hiero.AccountID, payerKey hie
 	hc.SetCertificateVerification(opts.VerifyCertificate)
 	hc.SetOperator(payer, payerKey)
 
+	// At -v debug, surface the SDK's own execute/receipt retry loop (logged at
+	// TRACE) so a stalled receipt shows each per-attempt node status rather than
+	// a single opaque "exceptional precheck status OK". The SDK logger is quiet
+	// by default; we only turn it up, never down.
+	if strings.EqualFold(opts.LogLevel, "debug") {
+		hc.SetLogger(hiero.NewLogger("beacon-sdk", hiero.LoggerLevelTrace))
+	}
+
 	fee := opts.MaxTransactionFee
 	if fee.AsTinybar() == 0 {
 		fee = hiero.NewHbar(defaultMaxTxFeeHbar)
 	}
 	if err := hc.SetDefaultMaxTransactionFee(fee); err != nil {
 		return nil, errx.Decorate(
-			err,
+			errClientConfig.Wrap(err, "set default max transaction fee"),
 			reasonClientInit,
 			"Provide a valid, positive max transaction fee",
 		)

@@ -19,7 +19,7 @@ func promptTerminal(prompt string) (string, error) {
 	fd := int(os.Stdin.Fd())
 	if !term.IsTerminal(fd) {
 		return "", errx.Decorate(
-			fmt.Errorf("no .pass file and stdin is not a terminal"),
+			errKeyIO.New("no .pass file and stdin is not a terminal"),
 			reasonNoPassphraseSource,
 			"Provide a sibling account<N>.pass file, or run beacon interactively so it can prompt for the passphrase",
 		)
@@ -31,7 +31,7 @@ func promptTerminal(prompt string) (string, error) {
 	fmt.Fprintln(os.Stderr)
 	if err != nil {
 		return "", errx.Decorate(
-			fmt.Errorf("read passphrase: %w", err),
+			errKeyIO.Wrap(err, "read passphrase"),
 			reasonPassReadFailed,
 			"Retry and type the passphrase, or provide a sibling account<N>.pass file",
 		)

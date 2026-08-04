@@ -83,7 +83,7 @@ func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, errx.Decorate(
-			fmt.Errorf("read config %q: %w", path, err),
+			errConfigIO.Wrap(err, "read config %q", path),
 			reasonConfigRead,
 			fmt.Sprintf("Confirm %q exists and is readable, or pass --config/-c", path),
 		)
@@ -92,7 +92,7 @@ func Load(path string) (*Config, error) {
 	var c Config
 	if err := yaml.Unmarshal(data, &c); err != nil {
 		return nil, errx.Decorate(
-			fmt.Errorf("parse config %q: %w", path, err),
+			errConfigInvalid.Wrap(err, "parse config %q", path),
 			reasonConfigParse,
 			"Check that config.yaml is valid YAML matching the beacon schema (see docs/beacon/design.md §10)",
 		)
@@ -100,7 +100,7 @@ func Load(path string) (*Config, error) {
 
 	if len(c.Nodes) == 0 {
 		return nil, errx.Decorate(
-			fmt.Errorf("config %q defines no nodes", path),
+			errConfigInvalid.New("config %q defines no nodes", path),
 			reasonConfigParse,
 			"Add at least one entry under nodes: in config.yaml",
 		)

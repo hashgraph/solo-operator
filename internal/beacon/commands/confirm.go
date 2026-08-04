@@ -41,7 +41,7 @@ func (c confirmer) confirm(yes bool, action string) error {
 	}
 	if !c.isTTY {
 		return errx.Decorate(
-			fmt.Errorf("refusing to %s without confirmation on a non-interactive terminal", action),
+			errConfirm.New("refusing to %s without confirmation on a non-interactive terminal", action),
 			reasonConfirmationRequired,
 			"Re-run with --yes to proceed non-interactively (required in CI)",
 		)
@@ -54,7 +54,7 @@ func (c confirmer) confirm(yes bool, action string) error {
 		return nil
 	default:
 		return errx.Decorate(
-			fmt.Errorf("aborted: %s", action),
+			errConfirm.New("aborted: %s", action),
 			reasonAborted,
 			"Nothing was submitted; re-run and confirm, or pass --yes",
 		)
