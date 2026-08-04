@@ -1,0 +1,8 @@
+# Non-zero shard/realm network to exercise ID composition.
+name: shard5
+shard: 5
+realm: 2
+defaultPayer: 58
+defaultNodeAccount: 7
+nodes:
+  - { id: 0, account: 7, host: 10.0.0.7, port: 51211, tls: true }

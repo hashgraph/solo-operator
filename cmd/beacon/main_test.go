@@ -38,12 +38,10 @@ func TestRootCmd_GlobalFlags(t *testing.T) {
 		name  string
 		short string
 	}{
-		{"network", "n"},
 		{"payer", "p"},
 		{"node-account", "a"},
 		{"node-ip", "i"},
 		{"config", "c"},
-		{"working-dir", "w"},
 		{"log-level", "v"},
 	}
 	for _, c := range cases {
@@ -61,9 +59,6 @@ func TestRootCmd_GlobalFlags(t *testing.T) {
 	if got := root.PersistentFlags().Lookup("config").DefValue; got != "config.yaml" {
 		t.Errorf("--config default = %q, want %q", got, "config.yaml")
 	}
-	if got := root.PersistentFlags().Lookup("working-dir").DefValue; got != "." {
-		t.Errorf("--working-dir default = %q, want %q", got, ".")
-	}
 	if got := root.PersistentFlags().Lookup("log-level").DefValue; got != "info" {
 		t.Errorf("--log-level default = %q, want %q", got, "info")
 	}
@@ -76,15 +71,15 @@ func TestRootCmd_GlobalFlags(t *testing.T) {
 
 func TestBindEnv_OverridesDefault(t *testing.T) {
 	resetOpts(t)
-	t.Setenv("BEACON_NETWORK", "mainnet")
+	t.Setenv("BEACON_PAYER", "0.0.58")
 	t.Setenv("BEACON_LOG_LEVEL", "debug")
 	root := parsedRoot(t)
 
 	if err := bindEnv(root); err != nil {
 		t.Fatalf("bindEnv returned error: %v", err)
 	}
-	if opts.Network != "mainnet" {
-		t.Errorf("BEACON_NETWORK not applied: Network = %q, want %q", opts.Network, "mainnet")
+	if opts.Payer != "0.0.58" {
+		t.Errorf("BEACON_PAYER not applied: Payer = %q, want %q", opts.Payer, "0.0.58")
 	}
 	if opts.LogLevel != "debug" {
 		t.Errorf("BEACON_LOG_LEVEL not applied: LogLevel = %q, want %q", opts.LogLevel, "debug")
@@ -93,15 +88,15 @@ func TestBindEnv_OverridesDefault(t *testing.T) {
 
 func TestBindEnv_FlagWinsOverEnv(t *testing.T) {
 	resetOpts(t)
-	t.Setenv("BEACON_NETWORK", "mainnet")
+	t.Setenv("BEACON_PAYER", "0.0.58")
 	// An explicit CLI flag marks the flag as Changed, which bindEnv must honour.
-	root := parsedRoot(t, "--network", "solo-local")
+	root := parsedRoot(t, "--payer", "0.0.2")
 
 	if err := bindEnv(root); err != nil {
 		t.Fatalf("bindEnv returned error: %v", err)
 	}
-	if opts.Network != "solo-local" {
-		t.Errorf("explicit flag should win over env: Network = %q, want %q", opts.Network, "solo-local")
+	if opts.Payer != "0.0.2" {
+		t.Errorf("explicit flag should win over env: Payer = %q, want %q", opts.Payer, "0.0.2")
 	}
 }
 

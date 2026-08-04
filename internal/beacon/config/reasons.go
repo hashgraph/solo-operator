@@ -10,8 +10,6 @@ import "github.com/automa-saga/errx"
 const (
 	reasonConfigRead           errx.Reason = "ConfigReadFailed"
 	reasonConfigParse          errx.Reason = "ConfigInvalid"
-	reasonNoNetworkSelected    errx.Reason = "NoNetworkSelected"
-	reasonUnknownNetwork       errx.Reason = "UnknownNetwork"
 	reasonUnknownNode          errx.Reason = "UnknownNode"
 	reasonNoNodes              errx.Reason = "NoNodes"
 	reasonNodeIPWithoutAccount errx.Reason = "NodeIPWithoutAccount"

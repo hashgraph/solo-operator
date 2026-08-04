@@ -10,24 +10,20 @@ import (
 	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
 )
 
-func loadTestConfig(t *testing.T) *Config {
+// loadNetwork loads the testdata config.yaml for the named network (one file per
+// network, per docs/beacon/design.md §10).
+func loadNetwork(t *testing.T, name string) *Config {
 	t.Helper()
-	c, err := Load(filepath.Join("testdata", "config.yaml"))
+	c, err := Load(filepath.Join("testdata", name, "config.yaml"))
 	if err != nil {
-		t.Fatalf("Load: %v", err)
+		t.Fatalf("Load %s: %v", name, err)
 	}
 	return c
 }
 
 func TestLoad_ParsesAndNormalizes(t *testing.T) {
-	c := loadTestConfig(t)
-
-	if c.DefaultNetwork != "solo-local" {
-		t.Errorf("DefaultNetwork = %q, want solo-local", c.DefaultNetwork)
-	}
-
-	// host/port/tls parse.
-	sl := c.Networks["solo-local"]
+	// name populated from the file, host/port/tls parse.
+	sl := loadNetwork(t, "solo-local")
 	if sl.Name != "solo-local" {
 		t.Errorf("network Name not populated: %q", sl.Name)
 	}
@@ -40,7 +36,7 @@ func TestLoad_ParsesAndNormalizes(t *testing.T) {
 	}
 
 	// ipv4Addr alias → host, and default port applied.
-	mn := c.Networks["mainnet"].Nodes[0]
+	mn := loadNetwork(t, "mainnet").Nodes[0]
 	if mn.Host != "35.237.200.180" {
 		t.Errorf("ipv4Addr alias not applied to Host: %q", mn.Host)
 	}
@@ -49,7 +45,7 @@ func TestLoad_ParsesAndNormalizes(t *testing.T) {
 	}
 
 	// shard/realm propagate onto nodes, non-zero case.
-	s5 := c.Networks["shard5"]
+	s5 := loadNetwork(t, "shard5")
 	if s5.Nodes[0].Shard != 5 || s5.Nodes[0].Realm != 2 {
 		t.Errorf("shard/realm not propagated: %d.%d", s5.Nodes[0].Shard, s5.Nodes[0].Realm)
 	}
@@ -59,11 +55,11 @@ func TestLoad_ParsesAndNormalizes(t *testing.T) {
 }
 
 func TestResolve_DefaultsAndPayer(t *testing.T) {
-	c := loadTestConfig(t)
+	c := loadNetwork(t, "solo-local")
 
-	// Empty network flag → defaultNetwork; empty payer → network defaultPayer;
-	// empty node selection → defaultNodeAccount node.
-	tg, err := c.Resolve("", "", "", "")
+	// Empty payer → network defaultPayer; empty node selection → the
+	// defaultNodeAccount node.
+	tg, err := c.Resolve("", "", "")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -84,15 +80,15 @@ func TestResolve_DefaultsAndPayer(t *testing.T) {
 }
 
 func TestResolve_BareAndLiteralPayer(t *testing.T) {
-	c := loadTestConfig(t)
+	c := loadNetwork(t, "solo-local")
 
 	// Bare number and full S.R.N literal resolve to the same AccountID under the
 	// network's shard/realm.
-	bare, err := c.Resolve("solo-local", "58", "", "")
+	bare, err := c.Resolve("58", "", "")
 	if err != nil {
 		t.Fatalf("Resolve bare payer: %v", err)
 	}
-	literal, err := c.Resolve("solo-local", "0.0.58", "", "")
+	literal, err := c.Resolve("0.0.58", "", "")
 	if err != nil {
 		t.Fatalf("Resolve literal payer: %v", err)
 	}
@@ -103,9 +99,9 @@ func TestResolve_BareAndLiteralPayer(t *testing.T) {
 }
 
 func TestResolve_NonZeroShardRealm(t *testing.T) {
-	c := loadTestConfig(t)
+	c := loadNetwork(t, "shard5")
 
-	tg, err := c.Resolve("shard5", "", "", "")
+	tg, err := c.Resolve("", "", "")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -119,7 +115,7 @@ func TestResolve_NonZeroShardRealm(t *testing.T) {
 	}
 	// FileID for 0.0.150-equivalent is composed as 5.2.150.
 	wantFile := hiero.FileID{Shard: 5, Realm: 2, File: 150}
-	if got := c.Networks["shard5"].FileID(150); got != wantFile {
+	if got := c.FileID(150); got != wantFile {
 		t.Errorf("FileID(150) = %v, want %v", got, wantFile)
 	}
 	// Default node account 7 selected.
@@ -129,9 +125,9 @@ func TestResolve_NonZeroShardRealm(t *testing.T) {
 }
 
 func TestResolve_NodeByAccount(t *testing.T) {
-	c := loadTestConfig(t)
+	c := loadNetwork(t, "solo-local")
 
-	tg, err := c.Resolve("solo-local", "", "4", "")
+	tg, err := c.Resolve("", "4", "")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -141,10 +137,10 @@ func TestResolve_NodeByAccount(t *testing.T) {
 }
 
 func TestResolve_NodeByIPInConfig(t *testing.T) {
-	c := loadTestConfig(t)
+	c := loadNetwork(t, "mainnet")
 
 	// IP present in config (via ipv4Addr alias) selects that node.
-	tg, err := c.Resolve("mainnet", "", "", "35.237.200.180")
+	tg, err := c.Resolve("", "", "35.237.200.180")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -154,36 +150,36 @@ func TestResolve_NodeByIPInConfig(t *testing.T) {
 }
 
 func TestResolve_NodeByIPOffConfigWithAccount(t *testing.T) {
-	c := loadTestConfig(t)
+	c := loadNetwork(t, "solo-local")
 
 	// IP not in config, paired with --node-account → ad-hoc endpoint, does not
 	// mutate config.
-	tg, err := c.Resolve("solo-local", "", "9", "10.9.9.9")
+	tg, err := c.Resolve("", "9", "10.9.9.9")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
 	if tg.Node.Host != "10.9.9.9" || tg.Node.Port != DefaultPort || tg.Node.Account != 9 {
 		t.Errorf("ad-hoc node = %q:%d acct %d", tg.Node.Host, tg.Node.Port, tg.Node.Account)
 	}
-	if len(c.Networks["solo-local"].Nodes) != 2 {
+	if len(c.Nodes) != 2 {
 		t.Error("ad-hoc resolution must not append to config nodes")
 	}
 }
 
 func TestResolve_NodeIPOverrideDoesNotMutateConfig(t *testing.T) {
-	c := loadTestConfig(t)
+	c := loadNetwork(t, "mainnet")
 
 	// IP in config + explicit account overrides the fee-collection account on a
 	// copy, leaving the config node untouched.
-	tg, err := c.Resolve("mainnet", "", "99", "35.237.200.180")
+	tg, err := c.Resolve("", "99", "35.237.200.180")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
 	if tg.Node.Account != 99 {
 		t.Errorf("override account = %d, want 99", tg.Node.Account)
 	}
-	if c.Networks["mainnet"].Nodes[0].Account != 3 {
-		t.Errorf("config node mutated: account = %d, want 3", c.Networks["mainnet"].Nodes[0].Account)
+	if c.Nodes[0].Account != 3 {
+		t.Errorf("config node mutated: account = %d, want 3", c.Nodes[0].Account)
 	}
 }
 
@@ -200,50 +196,33 @@ func wantReason(t *testing.T, err error, reason errx.Reason) {
 }
 
 func TestResolve_Errors(t *testing.T) {
-	c := loadTestConfig(t)
-
-	t.Run("unknown network", func(t *testing.T) {
-		_, err := c.Resolve("nope", "", "", "")
-		wantReason(t, err, reasonUnknownNetwork)
-	})
+	c := loadNetwork(t, "solo-local")
 
 	t.Run("unknown node account", func(t *testing.T) {
-		_, err := c.Resolve("solo-local", "", "404", "")
+		_, err := c.Resolve("", "404", "")
 		wantReason(t, err, reasonUnknownNode)
 	})
 
 	t.Run("ip off-config without account", func(t *testing.T) {
-		_, err := c.Resolve("solo-local", "", "", "1.2.3.4")
+		_, err := c.Resolve("", "", "1.2.3.4")
 		wantReason(t, err, reasonNodeIPWithoutAccount)
 	})
 
 	t.Run("no payer and no defaultPayer", func(t *testing.T) {
 		// Build a network with no defaultPayer.
-		cfg := &Config{
-			DefaultNetwork: "bare",
-			Networks: map[string]*Network{
-				"bare": {Nodes: []*Node{{ID: 0, Account: 3}}},
-			},
-		}
+		cfg := &Config{Name: "bare", Nodes: []*Node{{ID: 0, Account: 3}}}
 		cfg.normalize()
-		_, err := cfg.Resolve("", "", "", "")
+		_, err := cfg.Resolve("", "", "")
 		wantReason(t, err, reasonUnknownPayer)
 	})
 
-	t.Run("no network and no default", func(t *testing.T) {
-		cfg := &Config{Networks: map[string]*Network{"x": {DefaultPayer: 2, Nodes: []*Node{{Account: 3}}}}}
-		cfg.normalize()
-		_, err := cfg.Resolve("", "", "", "")
-		wantReason(t, err, reasonNoNetworkSelected)
-	})
-
 	t.Run("malformed account literal", func(t *testing.T) {
-		_, err := c.Resolve("solo-local", "0.0", "", "")
+		_, err := c.Resolve("0.0", "", "")
 		wantReason(t, err, reasonInvalidAccountID)
 	})
 
 	t.Run("account literal in wrong shard/realm", func(t *testing.T) {
-		_, err := c.Resolve("solo-local", "", "1.0.4", "")
+		_, err := c.Resolve("", "1.0.4", "")
 		wantReason(t, err, reasonInvalidAccountID)
 	})
 }

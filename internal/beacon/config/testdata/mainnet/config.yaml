@@ -1,0 +1,7 @@
+# Public network authored by hand, using the legacy ipv4Addr alias and default port.
+name: mainnet
+shard: 0
+realm: 0
+defaultPayer: 950
+nodes:
+  - { id: 0, account: 3, ipv4Addr: 35.237.200.180 }

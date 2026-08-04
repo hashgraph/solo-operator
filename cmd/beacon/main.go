@@ -35,15 +35,13 @@ const envPrefix = "BEACON_"
 const reasonInvalidEnv errx.Reason = "InvalidEnv"
 
 // globalOptions holds the values of the persistent flags shared by every
-// beacon subcommand. Resolving these into concrete networks/nodes/payers is the
-// job of internal/beacon/config (a later story); here they are only captured.
+// beacon subcommand. Resolving these into a concrete node/payer is the job of
+// internal/beacon/config (a later story); here they are only captured.
 type globalOptions struct {
-	Network     string // -n/--network: target network name from config.yaml
 	Payer       string // -p/--payer: payer account (bare num or S.R.N literal)
 	NodeAccount string // -a/--node-account: override target node's fee-collection account
 	NodeIP      string // -i/--node-ip: target a node by IP
-	Config      string // -c/--config: path to config.yaml
-	WorkingDir  string // -w/--working-dir: root of the <network>/{keys,sysfiles} layout
+	Config      string // -c/--config: path to the network's config.yaml
 	LogLevel    string // -v/--log-level: warn | info | debug
 }
 
@@ -97,12 +95,10 @@ func newRootCmd() *cobra.Command {
 	root.SilenceUsage = true
 
 	f := root.PersistentFlags()
-	f.StringVarP(&opts.Network, "network", "n", "", "Target network name from config.yaml")
 	f.StringVarP(&opts.Payer, "payer", "p", "", "Payer account (bare number or S.R.N literal, e.g. 2 or 0.0.2)")
 	f.StringVarP(&opts.NodeAccount, "node-account", "a", "", "Override the target node's fee-collection account")
 	f.StringVarP(&opts.NodeIP, "node-ip", "i", "", "Target a node by IP")
-	f.StringVarP(&opts.Config, "config", "c", "config.yaml", "Path to config.yaml")
-	f.StringVarP(&opts.WorkingDir, "working-dir", "w", ".", "Root of the <network>/{keys,sysfiles} layout")
+	f.StringVarP(&opts.Config, "config", "c", "config.yaml", "Path to the network's config.yaml; its directory holds keys/ and sysfiles/")
 	f.StringVarP(&opts.LogLevel, "log-level", "v", "info", "Log level: warn, info, or debug")
 
 	// --version is a plain root flag (no short: -v is --log-level); the `version`
