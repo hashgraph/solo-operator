@@ -46,6 +46,7 @@ func softwareZipUploadCmd(resolve SessionFunc) *cobra.Command {
 		fileNum        uint64
 		expectHash     string
 		expectHashFile string
+		restart        bool
 	)
 	cmd := &cobra.Command{
 		Use:   "software-zip",
@@ -53,20 +54,23 @@ func softwareZipUploadCmd(resolve SessionFunc) *cobra.Command {
 		Long: "Stages the hip-1494 deployment package into special file 0.0.150 by an initial FileUpdate " +
 			"followed by chunked FileAppend. It is a convenience alias for `file upload 150`. With " +
 			"--expect-hash/--expect-hash-file it verifies the local zip's SHA-384 before writing anything, " +
-			"and on success prints the confirmed hash for `prepare-upgrade`.",
+			"and on success prints the confirmed hash for `prepare-upgrade`. --restart-from-failure resumes " +
+			"an interrupted upload by matching the on-chain running hash to a chunk boundary and re-sending " +
+			"only the missing chunks.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runSoftwareZipUpload(cmd, resolve, zipPath, fileNum, expectHash, expectHashFile)
+			return runSoftwareZipUpload(cmd, resolve, zipPath, fileNum, expectHash, expectHashFile, restart)
 		},
 	}
 	cmd.Flags().StringVar(&zipPath, "zip", "", "Path to the package zip (default: <config-dir>/sysfiles/"+defaultSoftwareZipName+")")
 	cmd.Flags().Uint64Var(&fileNum, "upgrade-file-num", updateFileNum, "HFS special file number for the upgrade package")
 	cmd.Flags().StringVar(&expectHash, "expect-hash", "", "Expected SHA-384 hex; abort before upload if the zip does not match")
 	cmd.Flags().StringVar(&expectHashFile, "expect-hash-file", "", "File with the expected SHA-384 (bare hex or sha384sum format)")
+	cmd.Flags().BoolVar(&restart, "restart-from-failure", false, "Resume an interrupted upload, re-sending only the chunks the network is missing")
 	cmd.MarkFlagsMutuallyExclusive("expect-hash", "expect-hash-file")
 	return cmd
 }
 
-func runSoftwareZipUpload(cmd *cobra.Command, resolve SessionFunc, zipPath string, fileNum uint64, expectHash, expectHashFile string) error {
+func runSoftwareZipUpload(cmd *cobra.Command, resolve SessionFunc, zipPath string, fileNum uint64, expectHash, expectHashFile string, restart bool) error {
 	session, err := resolve()
 	if err != nil {
 		return err
@@ -109,7 +113,14 @@ func runSoftwareZipUpload(cmd *cobra.Command, resolve SessionFunc, zipPath strin
 		_, e := session.Client.Submit(tx, nil)
 		return e
 	}
-	if err := ops.UploadRawFile(submit, fileID, data); err != nil {
+	if restart {
+		readMemo := func(id hiero.FileID) (string, error) {
+			return ops.FileMemo(session.Client.Hiero(), id)
+		}
+		if err := ops.ResumeUpload(submit, readMemo, fileID, data); err != nil {
+			return err
+		}
+	} else if err := ops.UploadRawFile(submit, fileID, data); err != nil {
 		return err
 	}
 

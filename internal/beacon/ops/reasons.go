@@ -15,7 +15,8 @@ const (
 	reasonEmptyUpload          errx.Reason = "EmptyUpload"
 	reasonFileInfoFailed       errx.Reason = "FileInfoFailed"
 	reasonUploadedHashMismatch errx.Reason = "UploadedHashMismatch"
-	// Log-only reasons for upload progress.
+	// Log-only reasons for upload progress and resume.
 	reasonUploadStarted  errx.Reason = "UploadStarted"
 	reasonUploadProgress errx.Reason = "UploadProgress"
+	reasonUploadResumed  errx.Reason = "UploadResumed"
 )

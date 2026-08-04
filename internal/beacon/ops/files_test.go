@@ -145,6 +145,138 @@ func TestUploadRawFile_SubmitErrorPropagates(t *testing.T) {
 	}
 }
 
+func TestMatchRunningHash_BoundariesOnly(t *testing.T) {
+	// Four chunks of distinct content.
+	data := bytes.Join([][]byte{
+		bytes.Repeat([]byte{0xa}, bytesPerOp),
+		bytes.Repeat([]byte{0xb}, bytesPerOp),
+		bytes.Repeat([]byte{0xc}, bytesPerOp),
+		bytes.Repeat([]byte{0xd}, 100), // remainder
+	}, nil)
+	chunks := chunkBytes(data, bytesPerOp)
+	if len(chunks) != 4 {
+		t.Fatalf("chunk count = %d, want 4", len(chunks))
+	}
+
+	// A memo equal to the running hash at each boundary resolves to that many
+	// completed chunks.
+	for k := 1; k <= len(chunks); k++ {
+		prefix := data[:min(k*bytesPerOp, len(data))]
+		memo := HashBytes(prefix)
+		if got := matchRunningHash(chunks, memo); got != k {
+			t.Errorf("boundary %d: matchRunningHash = %d, want %d", k, got, k)
+		}
+	}
+
+	// A hash of a NON-boundary prefix (one byte short of a boundary) must not
+	// match — the search visits chunk boundaries only, never intermediate byte
+	// offsets.
+	midPrefix := data[:2*bytesPerOp-1]
+	if got := matchRunningHash(chunks, HashBytes(midPrefix)); got != 0 {
+		t.Errorf("non-boundary prefix matched at %d, want 0", got)
+	}
+
+	// An empty or wrong-length memo means no progress.
+	if got := matchRunningHash(chunks, nil); got != 0 {
+		t.Errorf("nil memo matched at %d, want 0", got)
+	}
+	if got := matchRunningHash(chunks, []byte{0x1, 0x2}); got != 0 {
+		t.Errorf("short memo matched at %d, want 0", got)
+	}
+}
+
+func TestResumeUpload_ResumesFromBoundary(t *testing.T) {
+	// 4 chunks; pretend the first 2 are already staged.
+	data := bytes.Repeat([]byte{0x9}, bytesPerOp*3+7)
+	chunks := chunkBytes(data, bytesPerOp)
+	if len(chunks) != 4 {
+		t.Fatalf("chunk count = %d, want 4", len(chunks))
+	}
+	fileID := hiero.FileID{File: 150}
+
+	const done = 2
+	memoHex := hex.EncodeToString(HashBytes(data[:done*bytesPerOp]))
+	readMemo := func(hiero.FileID) (string, error) { return memoHex, nil }
+	rec := &recordingSubmit{}
+
+	if err := ResumeUpload(rec.submit, readMemo, fileID, data); err != nil {
+		t.Fatalf("ResumeUpload: %v", err)
+	}
+
+	// Only the 2 missing chunks are sent, all as FileAppend (never a FileUpdate,
+	// which would truncate the staged prefix). Their contents are chunks[2:].
+	if len(rec.txs) != len(chunks)-done {
+		t.Fatalf("submitted %d ops, want %d", len(rec.txs), len(chunks)-done)
+	}
+	var reassembled []byte
+	for i, tx := range rec.txs {
+		app, ok := tx.(*hiero.FileAppendTransaction)
+		if !ok {
+			t.Fatalf("resume op %d type = %T, want FileAppendTransaction", i, tx)
+		}
+		reassembled = append(reassembled, app.GetContents()...)
+	}
+	if !bytes.Equal(reassembled, bytes.Join(chunks[done:], nil)) {
+		t.Error("resumed appends != missing chunks")
+	}
+}
+
+func TestResumeUpload_NoMemoFallsBackToFullUpload(t *testing.T) {
+	data := bytes.Repeat([]byte{0x5}, bytesPerOp+3) // 2 chunks
+	rec := &recordingSubmit{}
+	// Empty memo: nothing staged yet → full upload (FileUpdate + 1 append).
+	readMemo := func(hiero.FileID) (string, error) { return "", nil }
+
+	if err := ResumeUpload(rec.submit, readMemo, hiero.FileID{File: 150}, data); err != nil {
+		t.Fatalf("ResumeUpload: %v", err)
+	}
+	if len(rec.txs) != 2 {
+		t.Fatalf("submitted %d ops, want 2", len(rec.txs))
+	}
+	if _, ok := rec.txs[0].(*hiero.FileUpdateTransaction); !ok {
+		t.Errorf("first op type = %T, want FileUpdateTransaction (full upload)", rec.txs[0])
+	}
+}
+
+func TestResumeUpload_AlreadyCompleteSendsNothing(t *testing.T) {
+	data := bytes.Repeat([]byte{0x6}, bytesPerOp*2)
+	rec := &recordingSubmit{}
+	// Memo equals the hash of the whole file → every chunk already staged.
+	full := hex.EncodeToString(HashBytes(data))
+	readMemo := func(hiero.FileID) (string, error) { return full, nil }
+
+	if err := ResumeUpload(rec.submit, readMemo, hiero.FileID{File: 150}, data); err != nil {
+		t.Fatalf("ResumeUpload: %v", err)
+	}
+	if len(rec.txs) != 0 {
+		t.Errorf("submitted %d ops, want 0 (upload already complete)", len(rec.txs))
+	}
+}
+
+func TestResumeUpload_MemoReadErrorPropagates(t *testing.T) {
+	sentinel := fmt.Errorf("node unreachable")
+	readMemo := func(hiero.FileID) (string, error) { return "", sentinel }
+	rec := &recordingSubmit{}
+
+	err := ResumeUpload(rec.submit, readMemo, hiero.FileID{File: 150}, bytes.Repeat([]byte{0x1}, 10))
+	if err == nil {
+		t.Fatal("expected error when the memo read fails")
+	}
+	if len(rec.txs) != 0 {
+		t.Errorf("submitted %d ops, want 0 when memo read fails", len(rec.txs))
+	}
+}
+
+func TestResumeUpload_Empty(t *testing.T) {
+	rec := &recordingSubmit{}
+	readMemo := func(hiero.FileID) (string, error) { return "", nil }
+	err := ResumeUpload(rec.submit, readMemo, hiero.FileID{File: 150}, nil)
+	wantReason(t, err, reasonEmptyUpload)
+	if len(rec.txs) != 0 {
+		t.Error("no ops should be submitted for empty data")
+	}
+}
+
 // fitsSingleChunk guards the append configuration: each append is one chunk.
 func TestUploadRawFile_AppendIsSingleChunk(t *testing.T) {
 	data := bytes.Repeat([]byte{0x2}, bytesPerOp+1) // update + 1 append of 1 byte

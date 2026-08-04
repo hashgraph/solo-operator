@@ -164,6 +164,14 @@ func TestSoftwareZipUpload_MutuallyExclusiveHashFlags(t *testing.T) {
 	}
 }
 
+func TestSoftwareZipUpload_HasRestartFlag(t *testing.T) {
+	resolve := func() (*Session, error) { return offlineSession(t, 2, t.TempDir()), nil }
+	cmd := softwareZipUploadCmd(resolve)
+	if cmd.Flags().Lookup("restart-from-failure") == nil {
+		t.Fatal("software-zip is missing --restart-from-failure")
+	}
+}
+
 // TestSoftwareZipUpload_HashMatchesLocalSHA384 documents the local-hash contract
 // the upload prints for prepare-upgrade (the on-chain equality is an integration
 // concern, §14.9).
