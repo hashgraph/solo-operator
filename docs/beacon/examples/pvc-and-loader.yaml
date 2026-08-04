@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Portable way to get the deployment zip into the cluster: a PVC plus a
+# throwaway loader pod you `kubectl cp` into. Use this on real/multi-node
+# clusters where a node hostPath is not an option. On kind (single node) a
+# hostPath is simpler — see kind-config-extramounts.yaml.
+#
+# Populate, then run the upload:
+#   kubectl apply -f examples/pvc-and-loader.yaml
+#   kubectl -n solo wait --for=condition=Ready pod/beacon-zip-loader
+#   kubectl -n solo cp test/dev/staging/build-v9.99.99.zip beacon-zip-loader:/data/softwareUpgrade.zip
+#   kubectl -n solo delete pod beacon-zip-loader          # PVC keeps the data
+#   kubectl apply -f examples/job-upload-pvc.yaml
+#
+# Access mode: ReadWriteOnce is fine on kind (single node). On multi-node
+# clusters either co-schedule loader + Job on one node, or use an RWX class.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: beacon-artifacts
+  namespace: solo
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 512Mi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: beacon-zip-loader
+  namespace: solo
+spec:
+  restartPolicy: Never
+  containers:
+    - name: loader
+      image: busybox:1.36          # busybox ships tar, which `kubectl cp` requires
+      command: ["sh", "-c", "sleep 3600"]
+      volumeMounts:
+        - { name: artifacts, mountPath: /data }
+  volumes:
+    - name: artifacts
+      persistentVolumeClaim:
+        claimName: beacon-artifacts

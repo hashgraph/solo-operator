@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Upload the deployment zip to special file 0.0.150 from inside the cluster,
+# sourcing the (tens-of-MB) artifact from S3. Pattern: an initContainer fetches
+# the zip into a shared emptyDir; beacon then reads it as a local path and
+# uploads over HAPI. Swap the initContainer image/command to pull from MinIO, an
+# OCI artifact (oras), or plain HTTP (curl) — beacon itself is storage-agnostic.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: beacon-upload-software-zip
+  namespace: solo
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 65532          # makes the shared emptyDir + mounted files readable by beacon (uid 65532)
+      initContainers:
+        - name: fetch-zip
+          image: amazon/aws-cli:2.15.30
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              aws s3 cp "s3://${BUCKET}/${KEY}" /work/softwareUpgrade.zip
+              # Optional: fetch the expected hash so beacon can verify before upload.
+              aws s3 cp "s3://${BUCKET}/${KEY}.sha384" /work/softwareUpgrade.zip.sha384 || true
+          env:
+            - { name: BUCKET, value: "my-releases-bucket" }
+            - { name: KEY, value: "hedera/v0.58.3/softwareUpgrade.zip" }
+            # Credentials: prefer IRSA / Workload Identity. For static creds, mount a Secret:
+            # - { name: AWS_ACCESS_KEY_ID,     valueFrom: { secretKeyRef: { name: aws-creds, key: access-key-id } } }
+            # - { name: AWS_SECRET_ACCESS_KEY, valueFrom: { secretKeyRef: { name: aws-creds, key: secret-access-key } } }
+            # - { name: AWS_REGION, value: "us-east-1" }
+          volumeMounts:
+            - { name: work, mountPath: /work }
+      containers:
+        - name: beacon
+          image: ghcr.io/hashgraph/solo-operator-beacon:latest
+          args:
+            - "file"
+            - "upload"
+            - "software-zip"
+            - "-c"
+            - "/etc/beacon/config.yaml"
+            - "--zip"
+            - "/work/softwareUpgrade.zip"
+            - "--expect-hash-file"          # verify-before-upload; drop this pair if no .sha384 was fetched
+            - "/work/softwareUpgrade.zip.sha384"
+          volumeMounts:
+            - { name: config, mountPath: /etc/beacon/config.yaml, subPath: config.yaml, readOnly: true }
+            - { name: keys, mountPath: /etc/beacon/keys, readOnly: true }
+            - { name: work, mountPath: /work, readOnly: true }
+      volumes:
+        - name: config
+          configMap: { name: beacon-config }
+        - name: keys
+          secret: { secretName: beacon-keys }
+        - name: work
+          emptyDir: {}

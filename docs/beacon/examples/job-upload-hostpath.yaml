@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Kind-local variant: source the zip from a hostPath on the kind node instead of
+# S3. Fast for local testing, NOT portable (node-pinned). Stage the file onto
+# the node first, e.g. for a cluster named `solo-operator`:
+#
+#   docker cp ./softwareUpgrade.zip solo-operator-control-plane:/var/beacon/softwareUpgrade.zip
+#
+# (kind runs each node as a container named "<cluster>-control-plane".)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: beacon-upload-software-zip-hostpath
+  namespace: solo
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 65532
+      containers:
+        - name: beacon
+          image: ghcr.io/hashgraph/solo-operator-beacon:latest
+          args:
+            - "file"
+            - "upload"
+            - "software-zip"
+            - "-c"
+            - "/etc/beacon/config.yaml"
+            - "--zip"
+            - "/work/softwareUpgrade.zip"
+            - "--expect-hash"               # inline hex instead of a file, for the local case
+            - "REPLACE_WITH_EXPECTED_SHA384_HEX"
+          volumeMounts:
+            - { name: config, mountPath: /etc/beacon/config.yaml, subPath: config.yaml, readOnly: true }
+            - { name: keys, mountPath: /etc/beacon/keys, readOnly: true }
+            - { name: work, mountPath: /work, readOnly: true }
+      volumes:
+        - name: config
+          configMap: { name: beacon-config }
+        - name: keys
+          secret: { secretName: beacon-keys }
+        - name: work
+          hostPath:
+            path: /var/beacon
+            type: DirectoryOrCreate

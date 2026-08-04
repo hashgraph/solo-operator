@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# kind cluster config that mounts the host's test/dev build output into the node,
+# so a Job's hostPath sees the freshly-built deployment zip with no copy step.
+# After `task build` (in test/dev) writes staging/build-v*.zip, they appear at
+# /var/beacon inside the node — which examples/job-upload-hostpath.yaml mounts.
+#
+# Create with:  kind create cluster --config examples/kind-config-extramounts.yaml
+# Use an ABSOLUTE hostPath (kind resolves relative paths against its own CWD).
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: solo-operator
+nodes:
+  - role: control-plane
+    extraMounts:
+      - hostPath: /ABSOLUTE/PATH/TO/solo-operator/test/dev/staging
+        containerPath: /var/beacon
+        readOnly: true
