@@ -37,7 +37,7 @@ jobs:
     secrets: inherit
 
   docker-publish:
-    name: Release / Docker (operator + UC)
+    name: Release / Docker (operator + UC + beacon)
     needs: release
     if: ${{ needs.release.outputs.released == 'true' && !inputs.dry-run-enabled }}
     runs-on: solo-linux-medium
@@ -77,6 +77,9 @@ jobs:
 
       - name: Build UC Binaries & Checksums
         run: task hash:uc VERSION="${{ needs.release.outputs.version }}"
+
+      - name: Build beacon Binaries & Checksums
+        run: task hash:beacon VERSION="${{ needs.release.outputs.version }}"
 
       - name: Setup QEMU
         uses: step-security/setup-qemu-action@fe44c529aab16157fc475f4991a7f926aa9a02a2 # v4.1.0
@@ -146,3 +149,27 @@ jobs:
           tags: |
             ${{ env.JF_OCI_REGISTRY }}/${{ env.JF_OCI_GROUP }}/solo-operator-uc:${{ needs.release.outputs.version }}
             ${{ env.JF_OCI_REGISTRY }}/${{ env.JF_OCI_GROUP }}/solo-operator-uc:latest
+
+      - name: Build and Push beacon Image (GitHub)
+        uses: step-security/docker-build-push-action@9af9b5acc1751dcec2aa5375a068979fa526bc9a # v7.2.0
+        with:
+          context: .
+          file: Dockerfile.beacon
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          tags: |
+            ${{ env.GH_OCI_REGISTRY }}/hashgraph/solo-operator-beacon:${{ needs.release.outputs.version }}
+            ${{ env.GH_OCI_REGISTRY }}/hashgraph/solo-operator-beacon:latest
+
+      - name: Build and Push beacon Image (JFrog)
+        uses: step-security/docker-build-push-action@9af9b5acc1751dcec2aa5375a068979fa526bc9a # v7.2.0
+        with:
+          context: .
+          file: Dockerfile.beacon
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          tags: |
+            ${{ env.JF_OCI_REGISTRY }}/${{ env.JF_OCI_GROUP }}/solo-operator-beacon:${{ needs.release.outputs.version }}
+            ${{ env.JF_OCI_REGISTRY }}/${{ env.JF_OCI_GROUP }}/solo-operator-beacon:latest

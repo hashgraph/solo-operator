@@ -6,6 +6,7 @@ vars:
   BINARY_NAME: manager
   IMG: ghcr.io/hashgraph/solo-operator:latest
   UC_IMG: ghcr.io/hashgraph/solo-operator-uc:latest
+  BEACON_IMG: ghcr.io/hashgraph/solo-operator-beacon:latest
   DEV_IMG: us-central1-docker.pkg.dev/hashsphere-development/solo-operator/solo-operator
   DEV_TAG: dev
   ENVTEST_K8S_VERSION: "1.32.0"
@@ -92,6 +93,13 @@ tasks:
     cmds:
       - cd bin && sha256sum uc-linux-amd64 > uc-linux-amd64.sha256
       - cd bin && sha256sum uc-linux-arm64 > uc-linux-arm64.sha256
+
+  hash:beacon:
+    desc: Generate SHA256 checksums for all beacon platform binaries
+    deps: [ build:beacon:all ]
+    cmds:
+      - cd bin && sha256sum beacon-linux-amd64 > beacon-linux-amd64.sha256
+      - cd bin && sha256sum beacon-linux-arm64 > beacon-linux-arm64.sha256
 
   run:
     desc: Run the operator locally
@@ -227,6 +235,17 @@ tasks:
     cmds:
       - docker push {{.UC_IMG}}
 
+  docker:build:beacon:
+    desc: Build the beacon CLI Docker image for the current platform (pre-compiles binaries first)
+    deps: [ hash:beacon ]
+    cmds:
+      - docker build -t {{.BEACON_IMG}} -f Dockerfile.beacon .
+
+  docker:push:beacon:
+    desc: Push the beacon CLI Docker image
+    cmds:
+      - docker push {{.BEACON_IMG}}
+
   install:
     desc: Install CRDs into cluster
     cmds:
@@ -266,6 +285,11 @@ tasks:
     desc: Load UC sidecar Docker image into kind cluster
     cmds:
       - kind load docker-image {{.UC_IMG}} --name solo-operator
+
+  kind:load:beacon:
+    desc: Load beacon CLI Docker image into kind cluster
+    cmds:
+      - kind load docker-image {{.BEACON_IMG}} --name solo-operator
 
   kind:metallb:
     desc: Install MetalLB operator via Helm and configure an IP pool so LoadBalancer services get IPs on kind

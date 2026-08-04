@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# Dockerfile for the beacon HAPI control-plane CLI. Published as a separate
+# image, released in lockstep with the operator + UC (see design.md §6, §13),
+# so it can run as an in-cluster Kubernetes Job that reaches consensus-node gRPC
+# endpoints over Service DNS. Mirrors the operator/UC Dockerfiles: a selector
+# stage picks the pre-compiled arch binary, then a distroless final stage runs
+# it. beacon reads its config.yaml (-c) and keys/ from mounted volumes
+# (ConfigMap + Secret) and submits HAPI transactions; it needs no write access.
+
+# Selector stage: pick the pre-compiled binary for the target architecture
+FROM debian:bookworm-slim AS selector
+
+COPY bin/beacon-linux-* /tmp/
+
+RUN ARCH=$(uname -m) && \
+    if [ "${ARCH}" = "x86_64" ]; then ARCH="amd64"; \
+    elif [ "${ARCH}" = "aarch64" ]; then ARCH="arm64"; fi && \
+    cd /tmp && \
+    sha256sum -c beacon-linux-${ARCH}.sha256 && \
+    cp beacon-linux-${ARCH} /beacon && \
+    chmod +x /beacon
+
+# Final stage
+FROM gcr.io/distroless/static-debian13:nonroot
+
+WORKDIR /
+
+COPY --from=selector /beacon .
+
+USER 65532:65532
+
+ENTRYPOINT ["/beacon"]
