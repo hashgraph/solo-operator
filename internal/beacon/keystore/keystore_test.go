@@ -17,7 +17,7 @@ import (
 
 	"github.com/automa-saga/errx"
 	"github.com/automa-saga/logx"
-	"github.com/btcsuite/btcd/btcec/v2"
+	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
 	"github.com/rs/zerolog"
 	"github.com/youmark/pkcs8"
 )
@@ -53,7 +53,10 @@ func ed25519PEM(t *testing.T, pass string) []byte {
 // again matching what the hiero SDK reads.
 func ecdsaPEM(t *testing.T, pass string) []byte {
 	t.Helper()
-	priv, err := btcec.NewPrivateKey()
+	// Generate the secp256k1 key through the hiero SDK (rather than importing a
+	// third-party curve lib directly) — BytesRaw() is the 32-byte scalar, the same
+	// value btcec's Serialize() produced, which we wrap in a SEC1 structure below.
+	priv, err := hiero.PrivateKeyGenerateEcdsa()
 	if err != nil {
 		t.Fatalf("generate ecdsa: %v", err)
 	}
@@ -62,7 +65,7 @@ func ecdsaPEM(t *testing.T, pass string) []byte {
 		PrivateKey    []byte
 		NamedCurveOID asn1.ObjectIdentifier `asn1:"optional,explicit,tag:0"`
 		PublicKey     asn1.BitString        `asn1:"optional,explicit,tag:1"`
-	}{Version: 1, PrivateKey: priv.Serialize(), NamedCurveOID: secp256k1OID}
+	}{Version: 1, PrivateKey: priv.BytesRaw(), NamedCurveOID: secp256k1OID}
 	der, err := asn1.Marshal(ecKey)
 	if err != nil {
 		t.Fatalf("marshal sec1: %v", err)

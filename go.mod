@@ -9,7 +9,6 @@ require (
 	github.com/automa-saga/errx v1.0.0
 	github.com/automa-saga/logx v0.5.1
 	github.com/automa-saga/version v1.0.1
-	github.com/btcsuite/btcd/btcec/v2 v2.5.0
 	github.com/go-logr/logr v1.4.3
 	github.com/google/go-containerregistry v0.21.7
 	github.com/hiero-ledger/hiero-sdk-go/v2 v2.81.0
@@ -48,6 +47,7 @@ require (
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
+	github.com/btcsuite/btcd/btcec/v2 v2.5.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chai2010/gettext-go v1.0.2 // indirect
