@@ -100,7 +100,7 @@ func ParseUpgradeHash(s string) ([]byte, error) {
 		return nil, errx.Decorate(
 			errValidation.New("empty upgrade hash"),
 			reasonInvalidHash,
-			"Pass --upgrade-zip-hash with the SHA-384 hex printed by `beacon package software-zip`",
+			"Pass --upgrade-zip-hash with the SHA-384 hex from `beacon file upload software-zip`, `beacon file info software-zip`, or a local `sha384sum`",
 		)
 	}
 	raw, err := hex.DecodeString(trimmed)
@@ -108,7 +108,7 @@ func ParseUpgradeHash(s string) ([]byte, error) {
 		return nil, errx.Decorate(
 			errValidation.Wrap(err, "decode upgrade hash %q", s),
 			reasonInvalidHash,
-			"The hash must be hex (SHA-384); copy it from `beacon file info software-zip` or `package software-zip`",
+			"The hash must be hex (SHA-384); copy it from `beacon file info software-zip` or a local `sha384sum`",
 		)
 	}
 	if len(raw) != sha384Len {

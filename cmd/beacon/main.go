@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Command beacon is the Solo HAPI control-plane CLI. It submits privileged
-// HAPI transactions (the consensus-node software-upgrade flow: special-file
-// upload, prepare-upgrade, freeze-upgrade, …) to a running Hedera network over
+// HAPI transactions (the consensus-node software-upgrade flow: file upload,
+// freeze prepare, freeze upgrade, …) to a running Hedera network over
 // gRPC, using hiero-sdk-go. It is the Go replacement for the Java yahcli DevOps
 // tool for Solo use cases (see docs/beacon/design.md).
 //
@@ -27,8 +27,8 @@ import (
 	"github.com/hashgraph/solo-operator/internal/beacon/commands"
 )
 
-// envPrefix namespaces beacon's environment variables, e.g. --network maps to
-// BEACON_NETWORK and --log-level to BEACON_LOG_LEVEL. This mirrors the uc
+// envPrefix namespaces beacon's environment variables, e.g. --payer maps to
+// BEACON_PAYER and --log-level to BEACON_LOG_LEVEL. This mirrors the uc
 // sidecar's UC_ convention and lets every global flag be set via the
 // environment in addition to the command line.
 const envPrefix = "BEACON_"
@@ -83,7 +83,7 @@ func newRootCmd() *cobra.Command {
 		Short: "Solo HAPI control-plane CLI for driving Hedera network operations",
 		Long: "beacon submits privileged HAPI transactions to a running Hedera consensus " +
 			"network over gRPC. It drives the consensus-node software-upgrade flow " +
-			"(special-file upload, prepare-upgrade, freeze-upgrade, freeze) and the " +
+			"(special-file upload, freeze prepare, freeze upgrade, freeze abort) and the " +
 			"supporting operations around it, as the Go replacement for yahcli in Solo. " +
 			"It is a protocol-layer tool only: it never touches kubeconfig, Helm, or pods.",
 		// bindEnv applies BEACON_-prefixed env vars, then logging is initialized
@@ -143,7 +143,7 @@ func newRootCmd() *cobra.Command {
 // bindEnv applies BEACON_-prefixed environment variables to any flag the user
 // did not pass explicitly on the command line. Precedence is: CLI flag > env
 // var > default. The env var name is the flag name uppercased with '-' replaced
-// by '_' and the BEACON_ prefix, e.g. --network -> BEACON_NETWORK, --log-level
+// by '_' and the BEACON_ prefix, e.g. --payer -> BEACON_PAYER, --log-level
 // -> BEACON_LOG_LEVEL.
 //
 // Wired via PersistentPreRunE, it visits only the executing command's own flag

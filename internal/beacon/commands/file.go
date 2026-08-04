@@ -53,9 +53,8 @@ func softwareZipInfoCmd(resolve SessionFunc) *cobra.Command {
 		Use:   "software-zip",
 		Short: "Print the SHA-384 the network holds for the upgrade special file (0.0.150)",
 		Long: "Reads special file 0.0.150 via FileInfoQuery and prints the running SHA-384 stored in its " +
-			"memo — the canonical hash H the network validated on upload and that prepare-upgrade/" +
-			"freeze-upgrade must carry (design §7). Use --upgrade-file-num 159 for the telemetry file. " +
-			"It is a convenience alias for `file info 150`.",
+			"memo — the canonical hash H the network validated on upload and that `freeze prepare`/" +
+			"`freeze upgrade` must carry (design §7). Use --upgrade-file-num 159 for the telemetry file.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runSoftwareZipInfo(cmd, resolve, fileNum)
 		},
@@ -99,9 +98,9 @@ func softwareZipUploadCmd(resolve SessionFunc) *cobra.Command {
 		Use:   "software-zip",
 		Short: "Upload the deployment package zip to the upgrade special file (0.0.150)",
 		Long: "Stages the hip-1494 deployment package into special file 0.0.150 by an initial FileUpdate " +
-			"followed by chunked FileAppend. It is a convenience alias for `file upload 150`. With " +
+			"followed by chunked FileAppend. Use --upgrade-file-num to target another special file. With " +
 			"--expect-hash/--expect-hash-file it verifies the local zip's SHA-384 before writing anything, " +
-			"and on success prints the confirmed hash for `prepare-upgrade`. --restart-from-failure resumes " +
+			"and on success prints the confirmed hash for `freeze prepare`. --restart-from-failure resumes " +
 			"an interrupted upload by matching the on-chain running hash to a chunk boundary and re-sending " +
 			"only the missing chunks.",
 		RunE: func(cmd *cobra.Command, _ []string) error {

@@ -70,8 +70,9 @@ whole chain. Upload records it in the `0.0.150` file memo; `file info` reads it
 back; `freeze prepare`/`freeze upgrade` must both carry that exact value.
 
 ```bash
-# 0. (optional) build the artifact + print H, no network
-beacon package software-zip --from <dir> --out softwareUpgrade.zip
+# 0. build the artifact + compute H, no network (see test/dev/Taskfile.yml)
+#    H = the deployment package's SHA-384
+H=$(shasum -a 384 softwareUpgrade.zip | awk '{print $1}')
 
 # 1. stage the zip into special file 0.0.150 (verify-before-upload with --expect-hash)
 beacon file upload software-zip --expect-hash <H>
