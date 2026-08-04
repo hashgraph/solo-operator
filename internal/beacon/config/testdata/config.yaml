@@ -1,0 +1,30 @@
+# Sample beacon config for unit tests (see docs/beacon/design.md §10).
+defaultNetwork: solo-local
+
+networks:
+  # Solo-managed network: host is an FQDN, explicit ports, tls off.
+  solo-local:
+    shard: 0
+    realm: 0
+    defaultPayer: 2
+    defaultNodeAccount: 3
+    nodes:
+      - { id: 0, account: 3, host: network-node1-svc.solo.svc.cluster.local, port: 50211, tls: false }
+      - { id: 1, account: 4, host: network-node2-svc.solo.svc.cluster.local, port: 50211, tls: false }
+
+  # Public network authored by hand, using the legacy ipv4Addr alias and default port.
+  mainnet:
+    shard: 0
+    realm: 0
+    defaultPayer: 950
+    nodes:
+      - { id: 0, account: 3, ipv4Addr: 35.237.200.180 }
+
+  # Non-zero shard/realm network to exercise ID composition.
+  shard5:
+    shard: 5
+    realm: 2
+    defaultPayer: 58
+    defaultNodeAccount: 7
+    nodes:
+      - { id: 0, account: 7, host: 10.0.0.7, port: 51211, tls: true }
