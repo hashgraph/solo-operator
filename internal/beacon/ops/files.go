@@ -208,17 +208,28 @@ func VerifyUploadedHash(hc *hiero.Client, fileID hiero.FileID, wantRaw []byte) e
 	return nil
 }
 
-// FileMemo reads fileID's memo — the running SHA-384 of a special file's staged
-// contents (§7) — via FileInfoQuery, trimmed. It backs both the post-upload
-// read-back (VerifyUploadedHash) and resume's boundary match (ResumeUpload).
-func FileMemo(hc *hiero.Client, fileID hiero.FileID) (string, error) {
+// FileInfoOf reads fileID's on-chain metadata (size, expiry, keys, memo) via
+// FileInfoQuery. For special files the memo holds the running SHA-384 of the
+// staged contents (§7).
+func FileInfoOf(hc *hiero.Client, fileID hiero.FileID) (hiero.FileInfo, error) {
 	info, err := hiero.NewFileInfoQuery().SetFileID(fileID).Execute(hc)
 	if err != nil {
-		return "", errx.Decorate(
+		return hiero.FileInfo{}, errx.Decorate(
 			fmt.Errorf("query info for %s: %w", fileID, err),
 			reasonFileInfoFailed,
 			"Confirm the node is reachable and the payer can pay the query fee",
 		)
+	}
+	return info, nil
+}
+
+// FileMemo reads fileID's memo — the running SHA-384 of a special file's staged
+// contents (§7) — trimmed. It backs both the post-upload read-back
+// (VerifyUploadedHash) and resume's boundary match (ResumeUpload).
+func FileMemo(hc *hiero.Client, fileID hiero.FileID) (string, error) {
+	info, err := FileInfoOf(hc, fileID)
+	if err != nil {
+		return "", err
 	}
 	return strings.TrimSpace(info.FileMemo), nil
 }

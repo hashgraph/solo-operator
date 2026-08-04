@@ -19,4 +19,7 @@ const (
 	reasonUploadStarted  errx.Reason = "UploadStarted"
 	reasonUploadProgress errx.Reason = "UploadProgress"
 	reasonUploadResumed  errx.Reason = "UploadResumed"
+
+	// Verification queries (design §6.2).
+	reasonVersionQueryFailed errx.Reason = "VersionQueryFailed"
 )

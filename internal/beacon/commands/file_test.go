@@ -5,6 +5,7 @@ package commands
 import (
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -161,6 +162,26 @@ func TestSoftwareZipUpload_MutuallyExclusiveHashFlags(t *testing.T) {
 	_, err := runCmd(t, cmd, "--expect-hash", valid, "--expect-hash-file", "x.txt")
 	if err == nil || !strings.Contains(err.Error(), "expect-hash") {
 		t.Errorf("expected mutual-exclusion error, got %v", err)
+	}
+}
+
+func TestFileCommands_InfoRegistered(t *testing.T) {
+	root := FileCommands(func() (*Session, error) { return nil, nil })
+	info, _, err := root.Find([]string{"info", "software-zip"})
+	if err != nil || info.Name() != "software-zip" {
+		t.Fatalf("`file info software-zip` not registered: cmd=%v err=%v", info, err)
+	}
+	if info.Flags().Lookup("upgrade-file-num") == nil {
+		t.Error("`file info software-zip` missing --upgrade-file-num")
+	}
+}
+
+func TestSoftwareZipInfo_ResolveErrorPropagates(t *testing.T) {
+	sentinel := errors.New("no config")
+	cmd := softwareZipInfoCmd(func() (*Session, error) { return nil, sentinel })
+	_, err := runCmd(t, cmd)
+	if !errors.Is(err, sentinel) {
+		t.Errorf("error = %v, want it to wrap the resolve error", err)
 	}
 }
 

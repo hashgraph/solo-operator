@@ -40,14 +40,17 @@ func runCmd(t *testing.T, cmd *cobra.Command, args ...string) (string, error) {
 }
 
 func TestFreezeCommands_AllRegistered(t *testing.T) {
-	cmds := FreezeCommands(func() (*Session, error) { return nil, nil })
-	got := make(map[string]*cobra.Command, len(cmds))
-	for _, c := range cmds {
+	group := FreezeCommands(func() (*Session, error) { return nil, nil })
+	if group.Name() != "freeze" {
+		t.Fatalf("group name = %q, want %q", group.Name(), "freeze")
+	}
+	got := make(map[string]*cobra.Command)
+	for _, c := range group.Commands() {
 		got[c.Name()] = c
 	}
-	for _, name := range []string{"prepare-upgrade", "freeze-upgrade", "upgrade-telemetry", "freeze", "freeze-abort"} {
+	for _, name := range []string{"prepare", "upgrade", "telemetry", "only", "abort"} {
 		if got[name] == nil {
-			t.Errorf("freeze command %q not registered", name)
+			t.Errorf("freeze subcommand %q not registered", name)
 		}
 	}
 	// Every variant carries the --yes gate flag.

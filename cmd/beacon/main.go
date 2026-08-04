@@ -104,12 +104,13 @@ func newRootCmd() *cobra.Command {
 	f.StringVarP(&opts.LogLevel, "log-level", "v", "info", "Log level: warn, info, or debug")
 
 	// --version is a plain root flag (no short: -v is --log-level); the `version`
-	// subcommand offers the same output with a text/json selector.
-	root.Flags().BoolVar(&flagVersion, "version", false, "Print version and exit")
+	// subcommand offers the same beacon build metadata with a text/json selector.
+	// The network's own build is a separate query under `beacon network version`.
+	root.Flags().BoolVar(&flagVersion, "version", false, "Print beacon's build version and exit")
 
 	root.AddCommand(versionCmd())
 
-	// The freeze family (and later file/version ops) resolve their session from
+	// The freeze family, file ops, and network queries resolve their session from
 	// the global flags at execution time via this closure over opts.
 	resolve := func() (*commands.Session, error) {
 		return commands.Global{
@@ -119,8 +120,9 @@ func newRootCmd() *cobra.Command {
 			NodeIP:      opts.NodeIP,
 		}.Resolve()
 	}
-	root.AddCommand(commands.FreezeCommands(resolve)...)
+	root.AddCommand(commands.FreezeCommands(resolve))
 	root.AddCommand(commands.FileCommands(resolve))
+	root.AddCommand(commands.NetworkCommand(resolve))
 
 	return root
 }
@@ -164,14 +166,15 @@ func initLogging(level string) error {
 	})
 }
 
-// versionCmd prints the binary's build metadata, stamped at build time via
+// versionCmd prints beacon's own build metadata, stamped at build time via
 // -ldflags -X into github.com/automa-saga/version. It honours an -o/--output
-// flag (text or json); text is the default.
+// flag (text or json); text is the default. (The connected network's build is a
+// separate query, `beacon network version`.)
 func versionCmd() *cobra.Command {
 	var format string
 	cmd := &cobra.Command{
 		Use:   "version",
-		Short: "Print version information and exit",
+		Short: "Print beacon's build version and exit",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return printVersion(cmd, format)
 		},
@@ -180,8 +183,9 @@ func versionCmd() *cobra.Command {
 	return cmd
 }
 
-// printVersion renders the build metadata in the requested format to the
-// command's output stream.
+// printVersion renders beacon's own build metadata in the requested format to
+// the command's output stream. It backs both the root `--version` flag and the
+// `version` subcommand.
 func printVersion(cmd *cobra.Command, format string) error {
 	out, err := version.Get().Format(format)
 	if err != nil {

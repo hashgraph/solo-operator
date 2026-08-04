@@ -19,18 +19,28 @@ const updateFileNum uint64 = 150
 // telemetryFileNum is the default HFS special file for the telemetry upgrade.
 const telemetryFileNum uint64 = 159
 
-// FreezeCommands returns the freeze-family subcommands (design §6.2): all five
-// FreezeType variants, each a single verified freeze submission behind the
-// irreversible-action gate. resolve provides the per-invocation session.
-func FreezeCommands(resolve SessionFunc) []*cobra.Command {
+// FreezeCommands returns the `freeze` command group (design §6.2): all five
+// FreezeType variants of the HAPI Freeze service, each a single verified freeze
+// submission behind the irreversible-action gate. Grouping by the service noun
+// mirrors yahcli's `freeze` family and beacon's file/network groups. resolve
+// provides the per-invocation session.
+func FreezeCommands(resolve SessionFunc) *cobra.Command {
 	c := defaultConfirmer()
-	return []*cobra.Command{
+	freeze := &cobra.Command{
+		Use:   "freeze",
+		Short: "Drive the network freeze/upgrade lifecycle (HAPI Freeze service)",
+		Long: "The freeze family submits the five FreezeType transactions that drive an upgrade: prepare " +
+			"(stage software), upgrade (freeze + apply), telemetry (apply telemetry bundle), only (halt " +
+			"without upgrading), and abort (cancel a pending freeze).",
+	}
+	freeze.AddCommand(
 		prepareUpgradeCmd(resolve, c),
 		freezeUpgradeCmd(resolve, c),
 		upgradeTelemetryCmd(resolve, c),
 		freezeOnlyCmd(resolve, c),
 		freezeAbortCmd(resolve, c),
-	}
+	)
+	return freeze
 }
 
 // buildFunc turns the resolved target into the concrete transaction to submit.
@@ -71,11 +81,11 @@ func prepareUpgradeCmd(resolve SessionFunc, c confirmer) *cobra.Command {
 		yes     bool
 	)
 	cmd := &cobra.Command{
-		Use:   "prepare-upgrade",
+		Use:   "prepare",
 		Short: "Stage the upgrade software on all nodes (PREPARE_UPGRADE)",
 		Long: "Submits a PREPARE_UPGRADE freeze that stages the software package (special file " +
 			"0.0.150 by default) on every node, pinned to its SHA-384 hash. It does not halt the " +
-			"network; follow it with freeze-upgrade to apply.",
+			"network; follow it with `freeze upgrade` to apply.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runFreeze(cmd.OutOrStdout(), resolve, c, yes,
 				"prepare the network for upgrade (stage software on all nodes)",
@@ -103,11 +113,11 @@ func freezeUpgradeCmd(resolve SessionFunc, c confirmer) *cobra.Command {
 		yes       bool
 	)
 	cmd := &cobra.Command{
-		Use:   "freeze-upgrade",
+		Use:   "upgrade",
 		Short: "Freeze the network and apply the staged upgrade (FREEZE_UPGRADE)",
 		Long: "Submits a FREEZE_UPGRADE freeze that, at --start-time, halts the network and applies the " +
-			"software previously staged by prepare-upgrade. The --upgrade-zip-hash must match the one " +
-			"passed to prepare-upgrade.",
+			"software previously staged by `freeze prepare`. The --upgrade-zip-hash must match the one " +
+			"passed to `freeze prepare`.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runFreeze(cmd.OutOrStdout(), resolve, c, yes,
 				"freeze the network and apply the staged upgrade",
@@ -141,7 +151,7 @@ func upgradeTelemetryCmd(resolve SessionFunc, c confirmer) *cobra.Command {
 		yes       bool
 	)
 	cmd := &cobra.Command{
-		Use:   "upgrade-telemetry",
+		Use:   "telemetry",
 		Short: "Apply the telemetry upgrade at a scheduled time (TELEMETRY_UPGRADE)",
 		Long: "Submits a TELEMETRY_UPGRADE freeze that, at --start-time, applies the telemetry/observability " +
 			"bundle staged in special file 0.0.159 by default, pinned to its SHA-384 hash.",
@@ -176,10 +186,10 @@ func freezeOnlyCmd(resolve SessionFunc, c confirmer) *cobra.Command {
 		yes       bool
 	)
 	cmd := &cobra.Command{
-		Use:   "freeze",
+		Use:   "only",
 		Short: "Halt the network at a scheduled time without upgrading (FREEZE_ONLY)",
 		Long: "Submits a FREEZE_ONLY freeze that halts the network at --start-time without changing any " +
-			"software. Use freeze-abort to cancel it before it fires.",
+			"software. Use `freeze abort` to cancel it before it fires.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runFreeze(cmd.OutOrStdout(), resolve, c, yes,
 				"freeze the network at the given time",
@@ -201,7 +211,7 @@ func freezeOnlyCmd(resolve SessionFunc, c confirmer) *cobra.Command {
 func freezeAbortCmd(resolve SessionFunc, c confirmer) *cobra.Command {
 	var yes bool
 	cmd := &cobra.Command{
-		Use:   "freeze-abort",
+		Use:   "abort",
 		Short: "Cancel a scheduled freeze or upgrade (FREEZE_ABORT)",
 		Long:  "Submits a FREEZE_ABORT freeze that cancels a pending freeze/upgrade before its start time.",
 		RunE: func(cmd *cobra.Command, _ []string) error {

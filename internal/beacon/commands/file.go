@@ -36,8 +36,55 @@ func FileCommands(resolve SessionFunc) *cobra.Command {
 		Short: "Upload contents to an HFS file",
 	}
 	upload.AddCommand(softwareZipUploadCmd(resolve))
-	fileCmd.AddCommand(upload)
+
+	info := &cobra.Command{
+		Use:   "info",
+		Short: "Read an HFS file's on-chain metadata",
+	}
+	info.AddCommand(softwareZipInfoCmd(resolve))
+
+	fileCmd.AddCommand(upload, info)
 	return fileCmd
+}
+
+func softwareZipInfoCmd(resolve SessionFunc) *cobra.Command {
+	var fileNum uint64
+	cmd := &cobra.Command{
+		Use:   "software-zip",
+		Short: "Print the SHA-384 the network holds for the upgrade special file (0.0.150)",
+		Long: "Reads special file 0.0.150 via FileInfoQuery and prints the running SHA-384 stored in its " +
+			"memo — the canonical hash H the network validated on upload and that prepare-upgrade/" +
+			"freeze-upgrade must carry (design §7). Use --upgrade-file-num 159 for the telemetry file. " +
+			"It is a convenience alias for `file info 150`.",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runSoftwareZipInfo(cmd, resolve, fileNum)
+		},
+	}
+	cmd.Flags().Uint64Var(&fileNum, "upgrade-file-num", updateFileNum, "HFS special file number to inspect")
+	return cmd
+}
+
+func runSoftwareZipInfo(cmd *cobra.Command, resolve SessionFunc, fileNum uint64) error {
+	session, err := resolve()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = session.Close() }()
+
+	fileID := session.Target.FileID(fileNum)
+	info, err := ops.FileInfoOf(session.Client.Hiero(), fileID)
+	if err != nil {
+		return err
+	}
+
+	memo := strings.TrimSpace(info.FileMemo)
+	if memo == "" {
+		memo = "(empty — no hash staged)"
+	}
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+		"File %s\n  SHA-384: %s\n  size:    %d bytes\n",
+		fileID, memo, info.Size)
+	return nil
 }
 
 func softwareZipUploadCmd(resolve SessionFunc) *cobra.Command {
@@ -130,7 +177,7 @@ func runSoftwareZipUpload(cmd *cobra.Command, resolve SessionFunc, zipPath strin
 	}
 
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(),
-		"Uploaded %s to %s\nConfirmed SHA-384: %s\nNext: beacon prepare-upgrade --upgrade-zip-hash %s\n",
+		"Uploaded %s to %s\nConfirmed SHA-384: %s\nNext: beacon freeze prepare --upgrade-zip-hash %s\n",
 		zipPath, fileID, localHex, localHex)
 	return nil
 }
