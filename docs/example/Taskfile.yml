@@ -94,6 +94,25 @@ tasks:
       - kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=consensus-node -n solo-orbit --timeout=300s
       - echo ">> All 4 nodes deployed, genesis completed, and pods ready"
 
+  deploy:single:
+    desc: "Deploy a single-node network (node0 only) + genesis — the lightweight path for local beacon testing"
+    deps: [deploy:common]
+    cmds:
+      # Genesis derives the roster from whatever ConsensusCapsules exist
+      # (internal/operations/genesis MaterialsFromCluster lists them), so deploying
+      # only node0 yields a valid 1-node roster with node0 at 100% weight. One node
+      # reaches ACTIVE trivially and will not starve a laptop the way four JVMs do.
+      - kubectl apply -f node0/secrets.yaml
+      - kubectl apply -f node0/consensus-capsule.yaml
+      - kubectl apply -f node0/haproxycapsule.yaml
+      - kubectl apply -f node0/envoyproxycapsule.yaml
+      - kubectl apply -f network-genesis/network-genesis.yaml
+      - echo ">> Waiting for genesis to complete..."
+      - kubectl wait --for=jsonpath='{.status.phase}'=Succeeded networkgenesis/network-genesis -n solo-orbit --timeout=300s
+      - echo ">> Waiting for node0 pod to be ready..."
+      - kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=consensus-node -n solo-orbit --timeout=300s
+      - echo ">> Single-node network deployed (node0). Port-forward via kubectl -n solo-orbit port-forward svc/haproxy-node0 50211 50211"
+
   status:
     desc: Show status of all consensus capsules, pods, and services
     cmds:

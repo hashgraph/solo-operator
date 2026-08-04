@@ -190,10 +190,11 @@ keys — and must pass `--yes` (no TTY to confirm).
 
 ## End-to-end upgrade test (local kind)
 
-A full, from-scratch walkthrough: stand up a 4-node network at **v0.74.0**, then
-use `beacon` to drive a software upgrade to **v0.74.2**. beacon is the HAPI
-control plane (upload + freeze); the consensus node, UC sidecar, operator, and
-provisioner carry out the actual node upgrade after the freeze fires.
+A full, from-scratch walkthrough: stand up a network at **v0.74.0** (a single
+node is enough and is the recommended local path — see step 2), then use `beacon`
+to drive a software upgrade to **v0.74.2**. beacon is the HAPI control plane
+(upload + freeze); the consensus node, UC sidecar, operator, and provisioner
+carry out the actual node upgrade after the freeze fires.
 
 Version map for this test:
 
@@ -251,18 +252,38 @@ docker tag ghcr.io/hashgraph/solo-operator-uc:latest ghcr.io/hashgraph/solo-oper
 kind load docker-image ghcr.io/hashgraph/solo-operator-uc:dev --name solo-operator
 ```
 
-Deploy the network (installs MinIO/MetalLB, then orbit + 4 nodes + genesis into
-namespace `solo-orbit`), and add node0's HAProxy so beacon has a gRPC endpoint:
+Deploy the network into namespace `solo-orbit`. For local beacon testing prefer
+the **single-node** path — one consensus node reaches ACTIVE trivially and won't
+starve a laptop the way four JVMs do (four nodes commonly return `BUSY` and stall
+receipts under CPU pressure). `task deploy:single` deploys orbit + node0 (with
+its HAProxy) + genesis; genesis derives the roster from the deployed capsules, so
+one node yields a valid 1-node roster at 100% weight:
 
 ```bash
 cd "$ROOT/docs/example"
 task setup
-task deploy                                       # waits for consensus pods Ready
-kubectl apply -f node0/haproxycapsule.yaml
+task deploy:single                                # node0 + genesis; waits for Ready + prints the port-forward
+```
+
+<details>
+<summary>Alternative: full 4-node network</summary>
+
+Only needed to exercise multi-node behaviour. Requires a well-resourced Docker VM
+(8+ CPU / 16+ GB); under-provisioned, nodes return `BUSY` and transactions never
+get receipts.
+
+```bash
+cd "$ROOT/docs/example"
+task setup
+task deploy                                       # orbit + 4 nodes + genesis
+kubectl apply -f node0/haproxycapsule.yaml        # node0 gRPC endpoint for beacon
 kubectl -n solo-orbit rollout status deploy/haproxy-node0 --timeout=120s
 ```
 
-Checkpoint — all four pods `3/3 Running` (consensus-node + alloy + uc):
+</details>
+
+Checkpoint — node0 pod `3/3 Running` (consensus-node + alloy + uc); the 4-node
+path shows all four:
 
 ```bash
 kubectl -n solo-orbit get pods -l app.kubernetes.io/component=consensus-node
