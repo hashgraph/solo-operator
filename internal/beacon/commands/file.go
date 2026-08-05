@@ -88,11 +88,12 @@ func runSoftwareZipInfo(cmd *cobra.Command, resolve SessionFunc, fileNum uint64)
 
 func softwareZipUploadCmd(resolve SessionFunc) *cobra.Command {
 	var (
-		zipPath        string
-		fileNum        uint64
-		expectHash     string
-		expectHashFile string
-		fromScratch    bool
+		zipPath         string
+		fileNum         uint64
+		expectHash      string
+		expectHashFile  string
+		fromScratch     bool
+		checkpointEvery int
 	)
 	cmd := &cobra.Command{
 		Use:   "software-zip",
@@ -103,9 +104,10 @@ func softwareZipUploadCmd(resolve SessionFunc) *cobra.Command {
 			"and on success prints the confirmed hash for `freeze prepare`. By default it resumes an " +
 			"interrupted upload by matching the on-chain running hash to a chunk boundary and re-sending only " +
 			"the missing chunks (a fresh file simply uploads from the start); pass --from-scratch to force a " +
-			"full re-upload of every chunk.",
+			"full re-upload of every chunk. Appends are fired without waiting for a receipt; --checkpoint-every " +
+			"controls how often the upload awaits a receipt and verifies the on-chain running hash.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runSoftwareZipUpload(cmd, resolve, zipPath, fileNum, expectHash, expectHashFile, fromScratch)
+			return runSoftwareZipUpload(cmd, resolve, zipPath, fileNum, expectHash, expectHashFile, fromScratch, checkpointEvery)
 		},
 	}
 	cmd.Flags().StringVar(&zipPath, "zip", "", "Path to the package zip (default: <config-dir>/sysfiles/"+defaultSoftwareZipName+")")
@@ -113,11 +115,14 @@ func softwareZipUploadCmd(resolve SessionFunc) *cobra.Command {
 	cmd.Flags().StringVar(&expectHash, "expect-hash", "", "Expected SHA-384 hex; abort before upload if the zip does not match")
 	cmd.Flags().StringVar(&expectHashFile, "expect-hash-file", "", "File with the expected SHA-384 (bare hex or sha384sum format)")
 	cmd.Flags().BoolVar(&fromScratch, "from-scratch", false, "Ignore any partially-staged file and re-upload every chunk from the beginning")
+	cmd.Flags().IntVar(&checkpointEvery, "checkpoint-every", ops.DefaultCheckpointEvery,
+		"Await a receipt and verify the on-chain running hash every N appended chunks. Higher is faster on "+
+			"high-latency networks (fewer receipt waits) but re-sends more on a failure; must be >= 1")
 	cmd.MarkFlagsMutuallyExclusive("expect-hash", "expect-hash-file")
 	return cmd
 }
 
-func runSoftwareZipUpload(cmd *cobra.Command, resolve SessionFunc, zipPath string, fileNum uint64, expectHash, expectHashFile string, fromScratch bool) error {
+func runSoftwareZipUpload(cmd *cobra.Command, resolve SessionFunc, zipPath string, fileNum uint64, expectHash, expectHashFile string, fromScratch bool, checkpointEvery int) error {
 	session, err := resolve()
 	if err != nil {
 		return err
@@ -127,6 +132,14 @@ func runSoftwareZipUpload(cmd *cobra.Command, resolve SessionFunc, zipPath strin
 	// Special-file writes require a privileged payer.
 	if err := assertPrivilegedPayer(session.Target.Payer); err != nil {
 		return err
+	}
+
+	if checkpointEvery < 1 {
+		return errx.Decorate(
+			errInput.New("--checkpoint-every must be >= 1, got %d", checkpointEvery),
+			reasonInvalidCheckpoint,
+			"Pass a positive value; higher values checkpoint less often (faster, but re-send more on failure)",
+		)
 	}
 
 	if zipPath == "" {
@@ -172,7 +185,8 @@ func runSoftwareZipUpload(cmd *cobra.Command, resolve SessionFunc, zipPath strin
 			_, e := session.Client.Submit(tx, nil)
 			return e
 		},
-		ReadMemo: readMemo,
+		ReadMemo:        readMemo,
+		CheckpointEvery: checkpointEvery,
 	}
 	if fromScratch {
 		if err := ops.UploadRawFile(uploader, fileID, data); err != nil {

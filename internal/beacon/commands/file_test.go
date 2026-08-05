@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -190,6 +191,13 @@ func TestSoftwareZipUpload_HasFromScratchFlag(t *testing.T) {
 	cmd := softwareZipUploadCmd(resolve)
 	if cmd.Flags().Lookup("from-scratch") == nil {
 		t.Fatal("software-zip is missing --from-scratch")
+	}
+	cp := cmd.Flags().Lookup("checkpoint-every")
+	if cp == nil {
+		t.Fatal("software-zip is missing --checkpoint-every")
+	}
+	if cp.DefValue != strconv.Itoa(ops.DefaultCheckpointEvery) {
+		t.Errorf("--checkpoint-every default = %s, want %d", cp.DefValue, ops.DefaultCheckpointEvery)
 	}
 }
 

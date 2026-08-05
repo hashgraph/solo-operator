@@ -19,12 +19,12 @@ import (
 // this many bytes (design §8.1).
 const bytesPerOp = 4096
 
-// defaultCheckpointEvery is how often the upload driver awaits a receipt (rather
+// DefaultCheckpointEvery is how often the upload driver awaits a receipt (rather
 // than firing) during a bulk append. It bounds how far the running hash can
 // silently diverge before a rejected chunk surfaces: a failure is caught within
 // this many chunks instead of only at the final hash read-back, so resume has
-// little to redo.
-const defaultCheckpointEvery = 128
+// little to redo. Callers may override it via Uploader.CheckpointEvery.
+const DefaultCheckpointEvery = 128
 
 // SubmitFunc submits one transaction. Depending on which Uploader seam it backs
 // it either fires the transaction (returns at precheck) or awaits its SUCCESS
@@ -146,7 +146,7 @@ func uploadChunks(u Uploader, fileID hiero.FileID, chunks [][]byte, start int) e
 	total := len(chunks)
 	every := u.CheckpointEvery
 	if every <= 0 {
-		every = defaultCheckpointEvery
+		every = DefaultCheckpointEvery
 	}
 
 	// running mirrors the network's incremental SHA-384 of the staged contents.
