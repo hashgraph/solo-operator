@@ -123,11 +123,37 @@ func New(network map[string]hiero.AccountID, payer hiero.AccountID, payerKey hie
 
 	return &Client{
 		hc:      hc,
-		execute: hiero.TransactionExecute,
+		execute: submitTransaction,
 		getReceipt: func(resp *hiero.TransactionResponse, hc *hiero.Client) (hiero.TransactionReceipt, error) {
 			return resp.GetReceipt(hc)
 		},
 	}, nil
+}
+
+// submitTransaction submits tx and returns at the node's precheck ACK, without
+// awaiting a consensus receipt.
+//
+// It exists because hiero.TransactionExecute special-cases *FileAppendTransaction
+// (and *TopicMessageSubmitTransaction) into the SDK's chunked executor, which
+// calls GetReceipt — a full consensus-receipt poll (~one poll interval) — after
+// every chunk. We drive our own single-chunk appends and confirm them via
+// periodic checkpoints + the final hash read-back, so that per-chunk receipt
+// wait is pure overhead: it was silently pacing a large upload to one round-trip
+// per chunk. For a FileAppend we instead freeze it and call the base
+// Transaction.Execute (precheck only, no receipt). All other transactions keep
+// the standard path.
+func submitTransaction(tx hiero.TransactionInterface, hc *hiero.Client) (hiero.TransactionResponse, error) {
+	if fa, ok := tx.(*hiero.FileAppendTransaction); ok {
+		if !fa.IsFrozen() {
+			if _, err := fa.FreezeWith(hc); err != nil {
+				return hiero.TransactionResponse{}, err
+			}
+		}
+		// fa.Transaction is the embedded base *Transaction; its Execute submits
+		// without the chunked executor's per-chunk GetReceipt.
+		return fa.Transaction.Execute(hc)
+	}
+	return hiero.TransactionExecute(tx, hc)
 }
 
 // Hiero returns the underlying SDK client so operations can build transactions
