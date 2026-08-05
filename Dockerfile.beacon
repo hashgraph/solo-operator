@@ -4,9 +4,9 @@
 # image, released in lockstep with the operator + UC (see design.md §6, §13),
 # so it can run as an in-cluster Kubernetes Job that reaches consensus-node gRPC
 # endpoints over Service DNS. Mirrors the operator/UC Dockerfiles: a selector
-# stage picks the pre-compiled arch binary, then a distroless final stage runs
-# it. beacon reads its config.yaml (-c) and keys/ from mounted volumes
-# (ConfigMap + Secret) and submits HAPI transactions; it needs no write access.
+# stage picks the pre-compiled arch binary, then the final stage runs it.
+# beacon reads its config.yaml (-c) and keys/ from mounted volumes (ConfigMap +
+# Secret) and submits HAPI transactions.
 
 # Selector stage: pick the pre-compiled binary for the target architecture.
 # TARGETARCH is set by docker buildx to the target platform (amd64/arm64),
@@ -22,13 +22,24 @@ RUN cd /tmp && \
     cp beacon-linux-${TARGETARCH} /beacon && \
     chmod +x /beacon
 
-# Final stage
-FROM gcr.io/distroless/static-debian13:nonroot
+# Final stage.
+#
+# We use debian:bookworm-slim (not distroless) so the image ships a shell for
+# `kubectl exec` debugging when beacon runs as an in-cluster Job/sidecar, and we
+# create the hedera user (2000:2000) to match the consensus-node and UC images
+# so any shared volume ownership lines up. The runtime user is still overridable
+# per deployment via the pod/container securityContext, which takes precedence
+# over this image USER.
+FROM debian:bookworm-slim
+
+# Match the consensus-node and UC images: hedera group and user, both 2000.
+RUN groupadd --gid 2000 hedera && \
+    useradd --uid 2000 --gid 2000 --create-home --shell /bin/bash hedera
 
 WORKDIR /
 
 COPY --from=selector /beacon .
 
-USER 65532:65532
+USER 2000:2000
 
 ENTRYPOINT ["/beacon"]
