@@ -156,21 +156,32 @@ func runSoftwareZipUpload(cmd *cobra.Command, resolve SessionFunc, zipPath strin
 	}
 
 	fileID := session.Target.FileID(fileNum)
-	submit := func(tx hiero.TransactionInterface) error {
-		_, e := session.Client.Submit(tx, nil)
-		return e
+	readMemo := func(id hiero.FileID) (string, error) {
+		return ops.FileMemo(session.Client.Hiero(), id)
+	}
+	// Fire the bulk of the append chunks (submit + precheck, no receipt) and await
+	// a receipt only at checkpoints; ReadMemo makes each checkpoint also compare the
+	// on-chain running hash, and the final hash read-back below verifies the whole
+	// upload. This runs a large upload at the node's ingest rate rather than one
+	// consensus round-trip per chunk.
+	uploader := ops.Uploader{
+		Fire: func(tx hiero.TransactionInterface) error {
+			return session.Client.Fire(tx)
+		},
+		Verify: func(tx hiero.TransactionInterface) error {
+			_, e := session.Client.Submit(tx, nil)
+			return e
+		},
+		ReadMemo: readMemo,
 	}
 	if fromScratch {
-		if err := ops.UploadRawFile(submit, fileID, data); err != nil {
+		if err := ops.UploadRawFile(uploader, fileID, data); err != nil {
 			return err
 		}
 	} else {
 		// Resume is the default: re-send only the chunks the network is missing.
 		// A fresh (empty-memo) file matches no boundary and uploads from the start.
-		readMemo := func(id hiero.FileID) (string, error) {
-			return ops.FileMemo(session.Client.Hiero(), id)
-		}
-		if err := ops.ResumeUpload(submit, readMemo, fileID, data); err != nil {
+		if err := ops.ResumeUpload(uploader, readMemo, fileID, data); err != nil {
 			return err
 		}
 	}

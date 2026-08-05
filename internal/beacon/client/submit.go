@@ -5,6 +5,7 @@ package client
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/automa-saga/errx"
 	"github.com/automa-saga/logx"
@@ -33,6 +34,7 @@ type Result struct {
 // returned as a typed error carrying the status string; only on SUCCESS does it
 // run verify (when non-nil) and return the Result.
 func (c *Client) Submit(tx hiero.TransactionInterface, verify VerifyFunc) (*Result, error) {
+	execStart := time.Now()
 	resp, err := c.execute(tx, c.hc)
 	if err != nil {
 		return nil, errx.Decorate(
@@ -41,7 +43,9 @@ func (c *Client) Submit(tx hiero.TransactionInterface, verify VerifyFunc) (*Resu
 			"Confirm the target node is reachable and the payer key is authorized to submit",
 		)
 	}
+	execMs := time.Since(execStart).Milliseconds()
 
+	rcptStart := time.Now()
 	receipt, err := c.getReceipt(&resp, c.hc)
 	if err != nil {
 		// The SDK returns ErrHederaReceiptStatus (receipt + status) when the
@@ -73,6 +77,8 @@ func (c *Client) Submit(tx hiero.TransactionInterface, verify VerifyFunc) (*Resu
 		Str("transaction_id", resp.TransactionID.String()).
 		Str("node", resp.NodeID.String()).
 		Str("status", receipt.Status.String()).
+		Int64("execute_ms", execMs).
+		Int64("receipt_ms", time.Since(rcptStart).Milliseconds()).
 		Msg("transaction reached SUCCESS")
 
 	if verify != nil {
@@ -81,6 +87,34 @@ func (c *Client) Submit(tx hiero.TransactionInterface, verify VerifyFunc) (*Resu
 		}
 	}
 	return result, nil
+}
+
+// Fire executes tx and returns once the node has accepted it at precheck,
+// WITHOUT awaiting a consensus receipt. It is the fast path for the bulk of a
+// chunked special-file upload: appends submitted in order to a single node are
+// applied in that order at consensus, so the running-hash memo is preserved
+// without paying a receipt round-trip per chunk. Callers must still confirm the
+// outcome out of band — Submit (verified) for the initial FileUpdate and periodic
+// checkpoints, and the final on-chain hash read-back for the upload as a whole.
+func (c *Client) Fire(tx hiero.TransactionInterface) error {
+	start := time.Now()
+	resp, err := c.execute(tx, c.hc)
+	if err != nil {
+		return errx.Decorate(
+			errNetworkOp.Wrap(err, "submit transaction"),
+			reasonSubmitFailed,
+			"Confirm the target node is reachable and the payer key is authorized to submit",
+		)
+	}
+	// execute_ms is the node's precheck ack latency (no consensus wait). At debug
+	// it exposes where a serial upload spends its time — if this dominates, the
+	// upload is round-trip-bound, not throttle- or consensus-bound.
+	logx.As().Debug().
+		Str("reason", reasonTxSubmitted.String()).
+		Str("transaction_id", resp.TransactionID.String()).
+		Int64("execute_ms", time.Since(start).Milliseconds()).
+		Msg("transaction fired")
+	return nil
 }
 
 // statusError builds the typed non-SUCCESS error carrying the transaction id and

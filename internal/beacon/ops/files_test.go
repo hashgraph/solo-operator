@@ -76,13 +76,21 @@ func (r *recordingSubmit) submit(tx hiero.TransactionInterface) error {
 	return nil
 }
 
+// uploader wires both the fire and verify seams to the recorder, so the
+// submitted-transaction sequence is captured regardless of which path a chunk
+// takes. ReadMemo is left nil (no checkpoint memo comparison) unless a test sets
+// it explicitly.
+func (r *recordingSubmit) uploader() Uploader {
+	return Uploader{Fire: r.submit, Verify: r.submit}
+}
+
 func TestUploadRawFile_SequencesUpdateThenAppends(t *testing.T) {
 	// 3 full chunks + a remainder => 1 FileUpdate + 3 FileAppend.
 	data := bytes.Repeat([]byte{0x7}, bytesPerOp*3+100)
 	rec := &recordingSubmit{}
 	fileID := hiero.FileID{File: 150}
 
-	if err := UploadRawFile(rec.submit, fileID, data); err != nil {
+	if err := UploadRawFile(rec.uploader(), fileID, data); err != nil {
 		t.Fatalf("UploadRawFile: %v", err)
 	}
 
@@ -123,7 +131,7 @@ func TestUploadRawFile_SequencesUpdateThenAppends(t *testing.T) {
 
 func TestUploadRawFile_Empty(t *testing.T) {
 	rec := &recordingSubmit{}
-	err := UploadRawFile(rec.submit, hiero.FileID{File: 150}, nil)
+	err := UploadRawFile(rec.uploader(), hiero.FileID{File: 150}, nil)
 	wantReason(t, err, reasonEmptyUpload)
 	if len(rec.txs) != 0 {
 		t.Error("no ops should be submitted for empty data")
@@ -135,7 +143,7 @@ func TestUploadRawFile_SubmitErrorPropagates(t *testing.T) {
 	sentinel := fmt.Errorf("node unreachable")
 	rec := &recordingSubmit{failAt: 2, failErr: sentinel} // fail on the append
 
-	err := UploadRawFile(rec.submit, hiero.FileID{File: 150}, data)
+	err := UploadRawFile(rec.uploader(), hiero.FileID{File: 150}, data)
 	if err == nil {
 		t.Fatal("expected error when a chunk submit fails")
 	}
@@ -199,7 +207,7 @@ func TestResumeUpload_ResumesFromBoundary(t *testing.T) {
 	readMemo := func(hiero.FileID) (string, error) { return memoHex, nil }
 	rec := &recordingSubmit{}
 
-	if err := ResumeUpload(rec.submit, readMemo, fileID, data); err != nil {
+	if err := ResumeUpload(rec.uploader(), readMemo, fileID, data); err != nil {
 		t.Fatalf("ResumeUpload: %v", err)
 	}
 
@@ -227,7 +235,7 @@ func TestResumeUpload_NoMemoFallsBackToFullUpload(t *testing.T) {
 	// Empty memo: nothing staged yet → full upload (FileUpdate + 1 append).
 	readMemo := func(hiero.FileID) (string, error) { return "", nil }
 
-	if err := ResumeUpload(rec.submit, readMemo, hiero.FileID{File: 150}, data); err != nil {
+	if err := ResumeUpload(rec.uploader(), readMemo, hiero.FileID{File: 150}, data); err != nil {
 		t.Fatalf("ResumeUpload: %v", err)
 	}
 	if len(rec.txs) != 2 {
@@ -245,7 +253,7 @@ func TestResumeUpload_AlreadyCompleteSendsNothing(t *testing.T) {
 	full := hex.EncodeToString(HashBytes(data))
 	readMemo := func(hiero.FileID) (string, error) { return full, nil }
 
-	if err := ResumeUpload(rec.submit, readMemo, hiero.FileID{File: 150}, data); err != nil {
+	if err := ResumeUpload(rec.uploader(), readMemo, hiero.FileID{File: 150}, data); err != nil {
 		t.Fatalf("ResumeUpload: %v", err)
 	}
 	if len(rec.txs) != 0 {
@@ -258,7 +266,7 @@ func TestResumeUpload_MemoReadErrorPropagates(t *testing.T) {
 	readMemo := func(hiero.FileID) (string, error) { return "", sentinel }
 	rec := &recordingSubmit{}
 
-	err := ResumeUpload(rec.submit, readMemo, hiero.FileID{File: 150}, bytes.Repeat([]byte{0x1}, 10))
+	err := ResumeUpload(rec.uploader(), readMemo, hiero.FileID{File: 150}, bytes.Repeat([]byte{0x1}, 10))
 	if err == nil {
 		t.Fatal("expected error when the memo read fails")
 	}
@@ -270,7 +278,7 @@ func TestResumeUpload_MemoReadErrorPropagates(t *testing.T) {
 func TestResumeUpload_Empty(t *testing.T) {
 	rec := &recordingSubmit{}
 	readMemo := func(hiero.FileID) (string, error) { return "", nil }
-	err := ResumeUpload(rec.submit, readMemo, hiero.FileID{File: 150}, nil)
+	err := ResumeUpload(rec.uploader(), readMemo, hiero.FileID{File: 150}, nil)
 	wantReason(t, err, reasonEmptyUpload)
 	if len(rec.txs) != 0 {
 		t.Error("no ops should be submitted for empty data")
@@ -281,7 +289,7 @@ func TestResumeUpload_Empty(t *testing.T) {
 func TestUploadRawFile_AppendIsSingleChunk(t *testing.T) {
 	data := bytes.Repeat([]byte{0x2}, bytesPerOp+1) // update + 1 append of 1 byte
 	rec := &recordingSubmit{}
-	if err := UploadRawFile(rec.submit, hiero.FileID{File: 159}, data); err != nil {
+	if err := UploadRawFile(rec.uploader(), hiero.FileID{File: 159}, data); err != nil {
 		t.Fatalf("UploadRawFile: %v", err)
 	}
 	appendTx, ok := rec.txs[1].(*hiero.FileAppendTransaction)
@@ -291,4 +299,80 @@ func TestUploadRawFile_AppendIsSingleChunk(t *testing.T) {
 	if appendTx.GetMaxChunks() != 1 {
 		t.Errorf("append max chunks = %d, want 1", appendTx.GetMaxChunks())
 	}
+}
+
+// fakeNetwork simulates a node staging a special file: it appends each submitted
+// chunk's contents and reports the running SHA-384 as the file memo. dropChunk
+// (0-based chunk index, -1 = none) silently discards one chunk to model a lost
+// append; fires/verifies count which submit seam each chunk took.
+type fakeNetwork struct {
+	staged    []byte
+	seen      int // next chunk index to be submitted (0 = the FileUpdate)
+	dropChunk int
+	fires     int
+	verifies  int
+}
+
+func newFakeNetwork() *fakeNetwork { return &fakeNetwork{dropChunk: -1} }
+
+func (n *fakeNetwork) apply(tx hiero.TransactionInterface) {
+	idx := n.seen
+	n.seen++
+	if idx == n.dropChunk {
+		return // silently lost — models a fired chunk that never reached consensus
+	}
+	switch op := tx.(type) {
+	case *hiero.FileUpdateTransaction:
+		n.staged = append([]byte{}, op.GetContents()...)
+	case *hiero.FileAppendTransaction:
+		n.staged = append(n.staged, op.GetContents()...)
+	}
+}
+
+func (n *fakeNetwork) fire(tx hiero.TransactionInterface) error { n.fires++; n.apply(tx); return nil }
+func (n *fakeNetwork) verify(tx hiero.TransactionInterface) error {
+	n.verifies++
+	n.apply(tx)
+	return nil
+}
+func (n *fakeNetwork) memo(hiero.FileID) (string, error) {
+	return hex.EncodeToString(HashBytes(n.staged)), nil
+}
+
+// TestUploadRawFile_CheckpointVerifiesRunningHash checks that most chunks are
+// fired and only the initial update, every CheckpointEvery-th append, and the
+// final chunk are verified — and that the running-hash memo matches at each
+// checkpoint so a clean upload succeeds.
+func TestUploadRawFile_CheckpointVerifiesRunningHash(t *testing.T) {
+	data := bytes.Repeat([]byte{0x7}, bytesPerOp*6+100) // 7 chunks (6 full + remainder)
+	n := newFakeNetwork()
+	u := Uploader{Fire: n.fire, Verify: n.verify, ReadMemo: n.memo, CheckpointEvery: 3}
+
+	if err := UploadRawFile(u, hiero.FileID{File: 150}, data); err != nil {
+		t.Fatalf("UploadRawFile: %v", err)
+	}
+	if !bytes.Equal(n.staged, data) {
+		t.Error("staged bytes != original data")
+	}
+	// Verified: FileUpdate (chunk 1) + appends at chunks 3 and 6 + final chunk 7 = 4.
+	// Fired: chunks 2, 4, 5 = 3.
+	if n.verifies != 4 {
+		t.Errorf("verified ops = %d, want 4", n.verifies)
+	}
+	if n.fires != 3 {
+		t.Errorf("fired ops = %d, want 3", n.fires)
+	}
+}
+
+// TestUploadRawFile_CheckpointDetectsDroppedChunk checks that a fired chunk that
+// silently fails to apply is caught at the next checkpoint via the running-hash
+// memo, rather than slipping through to the final read-back.
+func TestUploadRawFile_CheckpointDetectsDroppedChunk(t *testing.T) {
+	data := bytes.Repeat([]byte{0x7}, bytesPerOp*6+100) // 7 chunks
+	n := newFakeNetwork()
+	n.dropChunk = 1 // chunk index 1 (the first append) is fired with CheckpointEvery=3
+	u := Uploader{Fire: n.fire, Verify: n.verify, ReadMemo: n.memo, CheckpointEvery: 3}
+
+	err := UploadRawFile(u, hiero.FileID{File: 150}, data)
+	wantReason(t, err, reasonCheckpointHashMismatch)
 }
