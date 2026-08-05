@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# beacon's per-network config.yaml, delivered as a ConfigMap (it is small — the
+# multi-MB upgrade zip is NOT here; see the upload Jobs). In-cluster, node hosts
+# are Service DNS names so beacon reaches HAPI gRPC over the pod network with no
+# port-forward. Adjust the namespace/service names to your Solo deployment.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: beacon-config
+  namespace: solo
+data:
+  config.yaml: |
+    name: solo-local
+    shard: 0
+    realm: 0
+    defaultPayer: 2          # privileged payer for special-file upload + freeze (0.0.2/50/58)
+    defaultNodeAccount: 3
+    nodes:
+      - id: 0
+        account: 3
+        host: haproxy-node1-svc.solo.svc.cluster.local
+        port: 50211
+        tls: false           # local kind: plaintext gRPC, no cert verification

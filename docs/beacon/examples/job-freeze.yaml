@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Submit a freeze transaction from inside the cluster. No large artifact is
+# involved, so only the config (ConfigMap) and payer key (Secret) are mounted —
+# no emptyDir/initContainer needed. This example runs `freeze prepare`; change
+# args for `freeze upgrade --start-time … --upgrade-zip-hash …`, `freeze abort`,
+# etc. --yes is REQUIRED: the interactive confirm gate cannot prompt in a Job.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: beacon-freeze-prepare
+  namespace: solo
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 65532
+      containers:
+        - name: beacon
+          image: ghcr.io/hashgraph/solo-operator-beacon:latest
+          args:
+            - "freeze"
+            - "prepare"
+            - "-c"
+            - "/etc/beacon/config.yaml"
+            - "--upgrade-zip-hash"
+            - "REPLACE_WITH_UPLOADED_SHA384_HEX"   # the H that `file info software-zip` reported
+            - "--yes"
+          volumeMounts:
+            - { name: config, mountPath: /etc/beacon/config.yaml, subPath: config.yaml, readOnly: true }
+            - { name: keys, mountPath: /etc/beacon/keys, readOnly: true }
+      volumes:
+        - name: config
+          configMap: { name: beacon-config }
+        - name: keys
+          secret: { secretName: beacon-keys }

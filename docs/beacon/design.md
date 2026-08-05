@@ -34,8 +34,8 @@ For the Solo toolkit we need a control-plane trigger that:
 ## 3. Goals / Non-Goals
 
 ### Goals
-- Fully drive and test the CN upgrade flow end-to-end: stage artifact → verify hash → `prepare-upgrade` → `freeze-upgrade` → confirm new version.
-- Reproduce yahcli's freeze family: `freeze` (only), `freeze-upgrade`, `prepare-upgrade`, `freeze-abort`, `upgrade-telemetry`.
+- Fully drive and test the CN upgrade flow end-to-end: stage artifact → verify hash → `freeze prepare` → `freeze upgrade` → confirm new version.
+- Reproduce yahcli's freeze family under a `freeze` group: `freeze only`, `freeze upgrade`, `freeze prepare`, `freeze abort`, `freeze telemetry`.
 - Provide the supporting operations needed around an upgrade: system-file upload/download (incl. special files `0.0.150`/`0.0.159`), special-file hash check, network version query, account balance/info, and DAB `nodes` create/update/delete.
 - Keep yahcli's key material on-disk conventions so existing keys transfer as-is (`<network>/keys/account<N>.pem[/.pass]`); the config is reshaped to one file per network for safety (§10), not the shared multi-network `config.yml`.
 - Be safe by default for privileged operations: explicit target selection, dry-run where feasible, clear success/failure exit codes.
@@ -71,7 +71,7 @@ The network upgrade (hip-1496) is a pipeline across **four distinct components a
 
 Reading the pipeline:
 
-1. **`beacon` (this tool) — the trigger.** A node operator (or CI) stages the deployment package (hip-1494) into system file `0.0.150`, then submits `prepare-upgrade` and `freeze-upgrade` HAPI transactions to the **live network**. This is what sets the whole upgrade in motion.
+1. **`beacon` (this tool) — the trigger.** A node operator (or CI) stages the deployment package (hip-1494) into system file `0.0.150`, then submits `freeze prepare` and `freeze upgrade` HAPI transactions to the **live network**. This is what sets the whole upgrade in motion.
 2. **UC sidecar** (`cmd/uc` in this repo) — watches each node's host-mounted marker directory and translates markers into `NetworkUpgrade*` Custom Resources.
 3. **`solo-operator` controllers** — reconcile those CRs, advancing the upgrade through its phases until a `NetworkUpgradeExecute` CR reaches phase `ReadyForProvisionerDaemon`.
 4. **`solo-provisioner` daemon** — the infra actuator; watches `NetworkUpgradeExecute`, and on that phase performs the host-side execute step (swap binaries, restart the node process).
@@ -163,24 +163,26 @@ wrong. The typical invocation needs no context flag at all:
 
 ### 6.2 Upgrade-critical commands (MVP — Phase 1)
 
-Every freeze variant is a single `FreezeService.freeze` call. Only the fields below are ever set on the `FreezeTransactionBody`; the deprecated `start_hour/min`, `end_hour/min` fields are never used.
+The five freeze variants are grouped under a **`freeze`** command (the HAPI `FreezeService` noun), mirroring beacon's `file`/`network` groups and yahcli's freeze family. Each is a single `FreezeService.freeze` call; only the fields below are ever set on the `FreezeTransactionBody` — the deprecated `start_hour/min`, `end_hour/min` fields are never used.
 
 | Command | `freeze_type` | `start_time` | `update_file` | `file_hash` | HAPI |
 |---|---|---|---|---|---|
-| `prepare-upgrade --upgrade-zip-hash <hex> [--upgrade-file-num 150]` | `PREPARE_UPGRADE` (2) | — | `0.0.150` | ✅ | `Freeze` |
-| `freeze-upgrade --start-time <utc> --upgrade-zip-hash <hex>` | `FREEZE_UPGRADE` (3) | ✅ | `0.0.150` | ✅ | `Freeze` |
-| `upgrade-telemetry --start-time <utc> --upgrade-zip-hash <hex>` | `TELEMETRY_UPGRADE` (5) | ✅ | `0.0.159` | ✅ | `Freeze` |
-| `freeze --start-time <utc>` | `FREEZE_ONLY` (1) | ✅ | — | — | `Freeze` |
-| `freeze-abort` | `FREEZE_ABORT` (4) | — | — | — | `Freeze` |
+| `freeze prepare --upgrade-zip-hash <hex> [--upgrade-file-num 150]` | `PREPARE_UPGRADE` (2) | — | `0.0.150` | ✅ | `Freeze` |
+| `freeze upgrade --start-time <utc> --upgrade-zip-hash <hex>` | `FREEZE_UPGRADE` (3) | ✅ | `0.0.150` | ✅ | `Freeze` |
+| `freeze telemetry --start-time <utc> --upgrade-zip-hash <hex>` | `TELEMETRY_UPGRADE` (5) | ✅ | `0.0.159` | ✅ | `Freeze` |
+| `freeze only --start-time <utc>` | `FREEZE_ONLY` (1) | ✅ | — | — | `Freeze` |
+| `freeze abort` | `FREEZE_ABORT` (4) | — | — | — | `Freeze` |
 | `file upload software-zip [--restart-from-failure]` | — | — | — | — | `FileUpdate` + chunked `FileAppend` → `0.0.150` |
 | `file info software-zip` (alias `file info 150`) | — | — | — | — | `FileInfoQuery` (reads SHA-384 from file memo) |
-| `version` | — | — | — | — | `NetworkVersionInfoQuery` (HAPI `NetworkGetVersionInfo`) |
+| `network version` | — | — | — | — | `NetworkVersionInfoQuery` (HAPI `NetworkGetVersionInfo`) |
+| `version` | — | — | — | — | none (local) — beacon's own build metadata (`-o text\|json`) |
 | `package software-zip --from <dir> --out <zip>` | — | — | — | — | none (local) — deterministic zip + SHA-384 |
 
 - `--start-time` is UTC in yahcli's format `yyyy-MM-dd.HH:mm:ss`, parsed to a `time.Time` (which is what the `hiero-sdk-go` freeze API's `SetStartTime` takes; see §8.3).
-- `--upgrade-zip-hash` is a **hex** SHA-384; it is decoded to raw bytes for `file_hash`. The **same** hash must be passed to `prepare-upgrade` and `freeze-upgrade`.
+- `--upgrade-zip-hash` is a **hex** SHA-384; it is decoded to raw bytes for `file_hash`. The **same** hash must be passed to `freeze prepare` and `freeze upgrade`.
+- `network version` queries the connected network's active build (services + HAPI version); the plain `version` command, by contrast, prints **beacon's own** build metadata and needs no network. (`beacon --version` is the equivalent root flag.)
 - Fee: match yahcli's simple approach — set a generous `maxTransactionFee` rather than computing an exact fee.
-- `package software-zip` is a **local, no-network** convenience: it deterministically zips an already-assembled directory into the raw special-file artifact for `0.0.150` and prints its SHA-384 (the `H` that feeds `prepare-upgrade`/`freeze-upgrade`, §7). beacon owns **only** this final zip+hash step; sourcing the inputs (downloading the consensus-node build, overlaying node config, embedding the UC manifest, bumping `VERSION`) stays in `test/dev/Taskfile.yml`, which invokes this command for the last step. This is the one deliberate, narrow exception to the pure-HAPI boundary (§3/§4) — it touches only local files, never the network or Kubernetes.
+- `package software-zip` is a **local, no-network** convenience: it deterministically zips an already-assembled directory into the raw special-file artifact for `0.0.150` and prints its SHA-384 (the `H` that feeds `freeze prepare`/`freeze upgrade`, §7). beacon owns **only** this final zip+hash step; sourcing the inputs (downloading the consensus-node build, overlaying node config, embedding the UC manifest, bumping `VERSION`) stays in `test/dev/Taskfile.yml`, which invokes this command for the last step. This is the one deliberate, narrow exception to the pure-HAPI boundary (§3/§4) — it touches only local files, never the network or Kubernetes.
 
 ### 6.3 Supporting commands (Phase 2+)
 
@@ -201,15 +203,15 @@ The canonical sequence a node operator (or CI job) runs against a live network, 
 1. beacon file upload software-zip                # FileUpdate + N×FileAppend → 0.0.150
       └─ network records running SHA-384 in the file memo
 2. beacon file info software-zip                  # read memo → the canonical hex hash H
-3. beacon prepare-upgrade  --upgrade-zip-hash H    # nodes validate 0.0.150 against H, unzip & stage
-4. beacon freeze-upgrade   --start-time T \         # schedule the freeze that boots the new software
+3. beacon freeze prepare   --upgrade-zip-hash H    # nodes validate 0.0.150 against H, unzip & stage
+4. beacon freeze upgrade   --start-time T \         # schedule the freeze that boots the new software
                            --upgrade-zip-hash H      #   (H must equal step 3)
    … network freezes at T; UC sidecar → operator controllers → provisioner daemon execute …
-5. beacon version                                   # confirm the new build is live post-restart
-   (abort path: beacon freeze-abort)
+5. beacon network version                           # confirm the new build is live post-restart
+   (abort path: beacon freeze abort)
 ```
 
-The **SHA-384 `H` is the contract that couples the whole chain**: the network stores it in the `0.0.150` file memo after upload, `file info` reads it back, and `prepare-upgrade`/`freeze-upgrade` must both carry that exact value or the nodes reject the upgrade. This is why upload, info, prepare, and freeze must be designed and tested as one chain, not as isolated commands.
+The **SHA-384 `H` is the contract that couples the whole chain**: the network stores it in the `0.0.150` file memo after upload, `file info` reads it back, and `freeze prepare`/`freeze upgrade` must both carry that exact value or the nodes reject the upgrade. This is why upload, info, prepare, and freeze must be designed and tested as one chain, not as isolated commands.
 
 ## 8. Detailed design of the non-trivial parts
 
@@ -342,20 +344,20 @@ _Deferred enhancement:_ `beacon --discover-from-network` could bootstrap the nod
 ## 11. Testing strategy
 
 - **Unit:** freeze-body construction per `FreezeType` (assert exact proto fields); hex/time parsing; the restart-from-failure hash-prefix algorithm against a fixed zip vector; config + keystore loading.
-- **Integration:** against a local Solo network (kind) — run the full §7 sequence and assert `version` reflects the new build; assert `file info` returns the uploaded hash; assert `freeze-abort` cancels a scheduled freeze.
+- **Integration:** against a local Solo network (kind) — run the full §7 sequence and assert `network version` reflects the new build; assert `file info` returns the uploaded hash; assert `freeze abort` cancels a scheduled freeze.
 - **Golden path in CI:** a job that provisions a small network, uploads a signed test package, and exercises the upgrade trigger end-to-end (dovetails with the operator/provisioner e2e once the CR pipeline is wired).
 
 ## 12. Security considerations
 
 - `beacon` handles **privileged Hedera signing keys**. It must never log key material, and passphrase prompts must not echo. This is a distinct trust boundary from the operator's in-cluster RBAC and the provisioner's kubeconfig — a reason to keep it a separate binary with a narrow surface.
 - Target selection is explicit: `-c` names exactly one network's config file (one file = one environment, §10), and `--node-*` the node — no implicit "current context." Consider a confirmation prompt or `--yes` gate for the irreversible freeze/upgrade commands when run interactively.
-- The hash contract (§7) is itself a safety mechanism: nodes reject a `prepare-upgrade` whose `file_hash` disagrees with the staged `0.0.150`.
+- The hash contract (§7) is itself a safety mechanism: nodes reject a `freeze prepare` whose `file_hash` disagrees with the staged `0.0.150`.
 
 ## 13. Phasing
 
 | Phase | Scope |
 |---|---|
-| **P1 — Upgrade MVP** | config + keystore + client substrate; freeze family; special-file upload (sequential) + restart-from-failure; `file info`; version; `package software-zip` (local zip+hash). Enough to fully drive/test hip-1496 upgrades. |
+| **P1 — Upgrade MVP** | config + keystore + client substrate; `freeze` family; special-file upload (sequential) + restart-from-failure; `file info`; `network version`; `package software-zip` (local zip+hash). Enough to fully drive/test hip-1496 upgrades. |
 | **P2 — Operational parity** | `accounts balance/info/send/rekey`; DAB `nodes create/update/delete`; broader `file` uploads with JSON⇄proto serdes. |
 | **P3 — Ergonomics** | burst/concurrent appends; richer dry-run/preview; shell completion; structured (JSON) output for CI. |
 | **P4 — (optional) Extraction** | promote `cmd/beacon` + `internal/beacon` into a standalone `solo-beacon` repository with its own release cadence, if warranted. |
@@ -375,8 +377,8 @@ _Deferred enhancement:_ `beacon --discover-from-network` could bootstrap the nod
 
 ## 15. Decisions & open questions
 
-1. **Deployment-package hashing — resolved.** The node operator supplies the expected SHA-384 (typically shipped with the release). `file upload software-zip` takes `--expect-hash <hex>` **or** `--expect-hash-file <path>` (bare hex or `sha384sum` format); beacon computes `sha384(zip)` locally, **aborts before uploading on mismatch**, and prints the confirmed hash to feed into `prepare-upgrade`. (`package software-zip` prints the same hash at build time, §6.2.)
-2. **Interactive safety gate — resolved (yes).** The irreversible commands (`prepare-upgrade`, `freeze-upgrade`, `freeze`, `upgrade-telemetry`, `freeze-abort`) prompt for confirmation when attached to a TTY; `--yes` bypasses (and is required for non-interactive/CI use).
+1. **Deployment-package hashing — resolved.** The node operator supplies the expected SHA-384 (typically shipped with the release). `file upload software-zip` takes `--expect-hash <hex>` **or** `--expect-hash-file <path>` (bare hex or `sha384sum` format); beacon computes `sha384(zip)` locally, **aborts before uploading on mismatch**, and prints the confirmed hash to feed into `freeze prepare`. (`package software-zip` prints the same hash at build time, §6.2.)
+2. **Interactive safety gate — resolved (yes).** The irreversible commands (`freeze prepare`, `freeze upgrade`, `freeze only`, `freeze telemetry`, `freeze abort`) prompt for confirmation when attached to a TTY; `--yes` bypasses (and is required for non-interactive/CI use).
 3. **Config source of truth — resolved (per-network file + external generator).** One flat `config.yaml` per network (no multi-network map, no `defaultNetwork`) is beacon's only runtime input, selected by the single `-c` flag; its directory holds that network's `keys/` and `sysfiles/` (§10). One file = one environment removes the cross-environment footgun of a shared config. For Solo networks each file is generated from `Orbit.AddressBook` by an external helper so the cluster stays the source of truth (§10.1). HAPI self-discovery (`--discover-from-network`) is a deferred enhancement.
 4. **Shard/realm — resolved.** Per-network `shard`/`realm` (default `0`/`0`), sourced from `Orbit.AddressBook.{ShardId,RealmId}` when generated; all IDs beacon builds are composed with them, and the CLI accepts bare numbers or `S.R.N` literals (§10). _Open:_ confirm whether Solo runs any non-zero-shard network today (drives whether 14.9 needs a non-zero-shard E2E case, else Phase-2).
 5. **Mirror node / explorer — deferred (optional).** Not needed for the upgrade flow: transaction outcome is confirmed via HAPI `TransactionReceipt`/`TransactionRecord`, and upload integrity via `FileInfoQuery` (network-computed SHA-384 in the file memo). A mirror node / explorer is only useful for after-the-fact or independent transaction detail; if wanted later, add an optional per-network `mirrorNode` (and/or `explorerUrl`) field — the config is reserved for it (§10).

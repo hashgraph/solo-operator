@@ -94,6 +94,25 @@ tasks:
       - kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=consensus-node -n solo-orbit --timeout=300s
       - echo ">> All 4 nodes deployed, genesis completed, and pods ready"
 
+  deploy:single:
+    desc: "Deploy a single-node network (node0 only) + genesis — the lightweight path for local beacon testing"
+    deps: [deploy:common]
+    cmds:
+      # Genesis derives the roster from whatever ConsensusCapsules exist
+      # (internal/operations/genesis MaterialsFromCluster lists them), so deploying
+      # only node0 yields a valid 1-node roster with node0 at 100% weight. One node
+      # reaches ACTIVE trivially and will not starve a laptop the way four JVMs do.
+      - kubectl apply -f node0/secrets.yaml
+      - kubectl apply -f node0/consensus-capsule.yaml
+      - kubectl apply -f node0/haproxycapsule.yaml
+      - kubectl apply -f node0/envoyproxycapsule.yaml
+      - kubectl apply -f network-genesis/network-genesis.yaml
+      - echo ">> Waiting for genesis to complete..."
+      - kubectl wait --for=jsonpath='{.status.phase}'=Succeeded networkgenesis/network-genesis -n solo-orbit --timeout=300s
+      - echo ">> Waiting for node0 pod to be ready..."
+      - kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=consensus-node -n solo-orbit --timeout=300s
+      - echo ">> Single-node network deployed (node0). Port-forward via kubectl -n solo-orbit port-forward svc/haproxy-node0 50211 50211"
+
   status:
     desc: Show status of all consensus capsules, pods, and services
     cmds:
@@ -212,12 +231,12 @@ tasks:
   upgrade:prepare:
     desc: "Step 1 — apply a per-node NetworkUpgradePrepare and wait for the operator to validate images"
     cmds:
-      # Per-node operationId (node<N>-upgrade-0-73-0), as the UC mints per node in
+      # Per-node operationId (node<N>-upgrade-0-74-2), as the UC mints per node in
       # the real HFS flow; yq stamps identity onto the shared images template.
       - |
         set -eu
         for NODE in node0 node1 node2 node3; do
-          OP="${NODE}-upgrade-0-73-0"
+          OP="${NODE}-upgrade-0-74-2"
           echo ">> Applying NetworkUpgradePrepare for ${NODE} (operationId ${OP})..."
           yq eval "
             .metadata.name = \"${OP}-prepare\" |
@@ -228,9 +247,9 @@ tasks:
       - |
         set -eu
         for NODE in node0 node1 node2 node3; do
-          echo ">> Waiting for ${NODE}-upgrade-0-73-0-prepare to succeed..."
+          echo ">> Waiting for ${NODE}-upgrade-0-74-2-prepare to succeed..."
           kubectl wait --for=jsonpath='{.status.phase}'=Succeeded \
-            networkupgradeprepare/${NODE}-upgrade-0-73-0-prepare -n solo-orbit --timeout=120s
+            networkupgradeprepare/${NODE}-upgrade-0-74-2-prepare -n solo-orbit --timeout=120s
         done
       - echo ">> All per-node Prepares succeeded"
 
@@ -241,7 +260,7 @@ tasks:
         set -eu
         SCHEDULED_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
         for NODE in node0 node1 node2 node3; do
-          OP="${NODE}-upgrade-0-73-0"
+          OP="${NODE}-upgrade-0-74-2"
           SELECTED=$(kubectl get networkupgradeprepare ${OP}-prepare -n solo-orbit \
             -o jsonpath='{.status.selectedSources}')
           if [ -z "$SELECTED" ] || [ "$SELECTED" = "null" ]; then
@@ -270,9 +289,9 @@ tasks:
                 scheduledTime: $scheduledTime,
                 images: {
                   consensusNode: {
-                    version: "0.73.0",
+                    version: "0.74.2",
                     deterministic: {supported: false},
-                    registries: [{image: "gcr.io/hedera-registry/consensus-node:0.73.0"}]
+                    registries: [{image: "gcr.io/hedera-registry/consensus-node:0.74.2"}]
                   }
                 },
                 selectedSources: $selectedSources
@@ -282,9 +301,9 @@ tasks:
       - |
         set -eu
         for NODE in node0 node1 node2 node3; do
-          echo ">> Waiting for ${NODE}-upgrade-0-73-0-freeze to succeed..."
+          echo ">> Waiting for ${NODE}-upgrade-0-74-2-freeze to succeed..."
           kubectl wait --for=jsonpath='{.status.phase}'=Succeeded \
-            networkupgradefreeze/${NODE}-upgrade-0-73-0-freeze -n solo-orbit --timeout=120s
+            networkupgradefreeze/${NODE}-upgrade-0-74-2-freeze -n solo-orbit --timeout=120s
         done
       - echo ">> All per-node Freeze CRs succeeded — submitting FREEZE_ONLY transaction via hashfreeze..."
       - task: upgrade:hashfreeze
@@ -327,7 +346,7 @@ tasks:
       - |
         set -eu
         for NODE in node0 node1 node2 node3; do
-          OP="${NODE}-upgrade-0-73-0"
+          OP="${NODE}-upgrade-0-74-2"
           SELECTED=$(kubectl get networkupgradeprepare ${OP}-prepare -n solo-orbit \
             -o jsonpath='{.status.selectedSources}')
           if [ -z "$SELECTED" ] || [ "$SELECTED" = "null" ]; then
@@ -356,9 +375,9 @@ tasks:
                 consensusNode: $node,
                 images: {
                   consensusNode: {
-                    version: "0.73.0",
+                    version: "0.74.2",
                     deterministic: {supported: false},
-                    registries: [{image: "gcr.io/hedera-registry/consensus-node:0.73.0"}]
+                    registries: [{image: "gcr.io/hedera-registry/consensus-node:0.74.2"}]
                   }
                 },
                 selectedSources: $selectedSources
@@ -372,7 +391,7 @@ tasks:
         # because the operator races us by writing ReadyForProvisionerDaemon once on
         # admission; a patch landing after that wins (it never reverts PendingNodeUpgrade).
         for NODE in node0 node1 node2 node3; do
-          NAME="${NODE}-upgrade-0-73-0-execute"
+          NAME="${NODE}-upgrade-0-74-2-execute"
           echo ">> Advancing ${NAME} to PendingNodeUpgrade (bypassing UC)..."
           for i in $(seq 1 30); do
             PHASE=$(kubectl get networkupgradeexecute/${NAME} \
@@ -390,7 +409,7 @@ tasks:
       - |
         set -eu
         for NODE in node0 node1 node2 node3; do
-          NAME="${NODE}-upgrade-0-73-0-execute"
+          NAME="${NODE}-upgrade-0-74-2-execute"
           echo ">> Waiting for ${NAME} to succeed..."
           kubectl wait --for=jsonpath='{.status.phase}'=Succeeded \
             networkupgradeexecute/${NAME} \
@@ -400,7 +419,7 @@ tasks:
       - echo ">> All nodes upgraded successfully"
 
   upgrade:status:
-    desc: Show status of all per-node upgrade CRs (operationId node<N>-upgrade-0-73-0)
+    desc: Show status of all per-node upgrade CRs (operationId node<N>-upgrade-0-74-2)
     cmds:
       # No shared operationId label; list all upgrade CRs in the namespace.
       - echo ">> NetworkUpgradePrepare:"

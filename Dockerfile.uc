@@ -5,17 +5,18 @@
 # Dockerfile: a selector stage picks the pre-compiled arch binary, then a
 # distroless final stage runs it.
 
-# Selector stage: pick the pre-compiled binary for the target architecture
+# Selector stage: pick the pre-compiled binary for the target architecture.
+# TARGETARCH is set by docker buildx to the target platform (amd64/arm64),
+# which matches our binary suffix — unlike uname -m which reflects the builder.
 FROM debian:bookworm-slim AS selector
+
+ARG TARGETARCH
 
 COPY bin/uc-linux-* /tmp/
 
-RUN ARCH=$(uname -m) && \
-    if [ "${ARCH}" = "x86_64" ]; then ARCH="amd64"; \
-    elif [ "${ARCH}" = "aarch64" ]; then ARCH="arm64"; fi && \
-    cd /tmp && \
-    sha256sum -c uc-linux-${ARCH}.sha256 && \
-    cp uc-linux-${ARCH} /uc && \
+RUN cd /tmp && \
+    sha256sum -c uc-linux-${TARGETARCH}.sha256 && \
+    cp uc-linux-${TARGETARCH} /uc && \
     chmod +x /uc
 
 # Final stage

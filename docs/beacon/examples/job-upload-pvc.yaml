@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Upload the deployment zip from a pre-populated PVC (see pvc-and-loader.yaml).
+# beacon mounts the PVC read-only; no initContainer/emptyDir needed because the
+# artifact already persists on the volume.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: beacon-upload-software-zip-pvc
+  namespace: solo
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 65532
+      containers:
+        - name: beacon
+          image: ghcr.io/hashgraph/solo-operator-beacon:latest
+          args:
+            - "file"
+            - "upload"
+            - "software-zip"
+            - "-c"
+            - "/etc/beacon/config.yaml"
+            - "--zip"
+            - "/work/softwareUpgrade.zip"   # match the name you `kubectl cp`'d into the PVC
+          volumeMounts:
+            - { name: config, mountPath: /etc/beacon/config.yaml, subPath: config.yaml, readOnly: true }
+            - { name: keys, mountPath: /etc/beacon/keys, readOnly: true }
+            - { name: work, mountPath: /work, readOnly: true }
+      volumes:
+        - name: config
+          configMap: { name: beacon-config }
+        - name: keys
+          secret: { secretName: beacon-keys }
+        - name: work
+          persistentVolumeClaim:
+            claimName: beacon-artifacts
