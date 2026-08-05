@@ -701,6 +701,15 @@ func TestBuildUcContainer_Defaults(t *testing.T) {
 	if c.ImagePullPolicy != corev1.PullIfNotPresent {
 		t.Errorf("imagePullPolicy: got %q, want IfNotPresent", c.ImagePullPolicy)
 	}
+	// The UC must run as hedera (2000:2000) to share the upgrade PVC with the
+	// consensus node — see buildUcContainer.
+	if c.SecurityContext == nil || c.SecurityContext.RunAsUser == nil || c.SecurityContext.RunAsGroup == nil {
+		t.Fatalf("securityContext must pin RunAsUser/RunAsGroup, got %+v", c.SecurityContext)
+	}
+	if *c.SecurityContext.RunAsUser != HederaUID || *c.SecurityContext.RunAsGroup != HederaUID {
+		t.Errorf("runAsUser/runAsGroup: got %d/%d, want %d/%d",
+			*c.SecurityContext.RunAsUser, *c.SecurityContext.RunAsGroup, HederaUID, HederaUID)
+	}
 }
 
 func TestBuildUcContainer_EnvVars(t *testing.T) {

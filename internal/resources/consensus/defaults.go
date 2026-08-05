@@ -26,6 +26,11 @@ const (
 	// HapiBase is the working directory inside the consensus-node container.
 	HapiBase = "/opt/hgcapp/services-hedera/HapiApp2.0"
 
+	// HederaUID is the uid/gid the consensus-node image runs as (the "hedera"
+	// user). The UC sidecar runs as the same uid:gid so it shares ownership of
+	// the upgrade PVC (data/upgrade) with the node; fsGroup uses it as well.
+	HederaUID int64 = 2000
+
 	// GenesisInitImage is the image used by the genesis-config init container.
 	// It only needs sh and cp.
 	GenesisInitImage = "busybox:1.36.1"

@@ -939,14 +939,24 @@ func (r *StatefulSetSubReconciler) buildUcContainer(capsule *operatorv1alpha1.Co
 		},
 	}
 
+	// The UC shares the upgrade PVC (data/upgrade) with the consensus node, which
+	// creates and extracts the upgrade package under current/ as the hedera user
+	// (uid:gid 2000:2000). Run the UC as the same uid:gid so the dirs it creates
+	// and rotates (current/, previous/) are writable by the node's extraction and
+	// vice-versa; a foreign uid leaves them unwritable and the upgrade unzip fails.
+	hederaUID := HederaUID
 	container := corev1.Container{
 		Name:  name,
 		Image: image,
 		Ports: []corev1.ContainerPort{
 			{Name: "uc-metrics", ContainerPort: UCMetricsPort, Protocol: corev1.ProtocolTCP},
 		},
-		Env:                      env,
-		VolumeMounts:             volumeMounts,
+		Env:          env,
+		VolumeMounts: volumeMounts,
+		SecurityContext: &corev1.SecurityContext{
+			RunAsUser:  &hederaUID,
+			RunAsGroup: &hederaUID,
+		},
 		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		ImagePullPolicy:          common.PullPolicyOrDefault(config.SoftwareVersion, corev1.PullIfNotPresent),
@@ -972,7 +982,7 @@ func (r *StatefulSetSubReconciler) applyCheetahFSGroup(sts *appsv1.StatefulSet, 
 		sts.Spec.Template.Spec.SecurityContext = &corev1.PodSecurityContext{}
 	}
 	if sts.Spec.Template.Spec.SecurityContext.FSGroup == nil {
-		fsGroup := int64(2000)
+		fsGroup := HederaUID
 		sts.Spec.Template.Spec.SecurityContext.FSGroup = &fsGroup
 	}
 }
