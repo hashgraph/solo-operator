@@ -1,16 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# Selector stage: pick the pre-compiled binary for the target architecture
+# Selector stage: pick the pre-compiled binary for the target architecture.
+# TARGETARCH is set by docker buildx to the target platform (amd64/arm64),
+# which matches our binary suffix — unlike uname -m which reflects the builder.
 FROM debian:bookworm-slim AS selector
+
+ARG TARGETARCH
 
 COPY bin/manager-linux-* /tmp/
 
-RUN ARCH=$(uname -m) && \
-    if [ "${ARCH}" = "x86_64" ]; then ARCH="amd64"; \
-    elif [ "${ARCH}" = "aarch64" ]; then ARCH="arm64"; fi && \
-    cd /tmp && \
-    sha256sum -c manager-linux-${ARCH}.sha256 && \
-    cp manager-linux-${ARCH} /manager && \
+RUN cd /tmp && \
+    sha256sum -c manager-linux-${TARGETARCH}.sha256 && \
+    cp manager-linux-${TARGETARCH} /manager && \
     chmod +x /manager
 
 # Final stage

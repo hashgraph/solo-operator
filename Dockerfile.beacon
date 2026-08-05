@@ -8,17 +8,18 @@
 # it. beacon reads its config.yaml (-c) and keys/ from mounted volumes
 # (ConfigMap + Secret) and submits HAPI transactions; it needs no write access.
 
-# Selector stage: pick the pre-compiled binary for the target architecture
+# Selector stage: pick the pre-compiled binary for the target architecture.
+# TARGETARCH is set by docker buildx to the target platform (amd64/arm64),
+# which matches our binary suffix — unlike uname -m which reflects the builder.
 FROM debian:bookworm-slim AS selector
+
+ARG TARGETARCH
 
 COPY bin/beacon-linux-* /tmp/
 
-RUN ARCH=$(uname -m) && \
-    if [ "${ARCH}" = "x86_64" ]; then ARCH="amd64"; \
-    elif [ "${ARCH}" = "aarch64" ]; then ARCH="arm64"; fi && \
-    cd /tmp && \
-    sha256sum -c beacon-linux-${ARCH}.sha256 && \
-    cp beacon-linux-${ARCH} /beacon && \
+RUN cd /tmp && \
+    sha256sum -c beacon-linux-${TARGETARCH}.sha256 && \
+    cp beacon-linux-${TARGETARCH} /beacon && \
     chmod +x /beacon
 
 # Final stage
