@@ -92,7 +92,7 @@ func softwareZipUploadCmd(resolve SessionFunc) *cobra.Command {
 		fileNum        uint64
 		expectHash     string
 		expectHashFile string
-		restart        bool
+		fromScratch    bool
 	)
 	cmd := &cobra.Command{
 		Use:   "software-zip",
@@ -100,23 +100,24 @@ func softwareZipUploadCmd(resolve SessionFunc) *cobra.Command {
 		Long: "Stages the hip-1494 deployment package into special file 0.0.150 by an initial FileUpdate " +
 			"followed by chunked FileAppend. Use --upgrade-file-num to target another special file. With " +
 			"--expect-hash/--expect-hash-file it verifies the local zip's SHA-384 before writing anything, " +
-			"and on success prints the confirmed hash for `freeze prepare`. --restart-from-failure resumes " +
-			"an interrupted upload by matching the on-chain running hash to a chunk boundary and re-sending " +
-			"only the missing chunks.",
+			"and on success prints the confirmed hash for `freeze prepare`. By default it resumes an " +
+			"interrupted upload by matching the on-chain running hash to a chunk boundary and re-sending only " +
+			"the missing chunks (a fresh file simply uploads from the start); pass --from-scratch to force a " +
+			"full re-upload of every chunk.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runSoftwareZipUpload(cmd, resolve, zipPath, fileNum, expectHash, expectHashFile, restart)
+			return runSoftwareZipUpload(cmd, resolve, zipPath, fileNum, expectHash, expectHashFile, fromScratch)
 		},
 	}
 	cmd.Flags().StringVar(&zipPath, "zip", "", "Path to the package zip (default: <config-dir>/sysfiles/"+defaultSoftwareZipName+")")
 	cmd.Flags().Uint64Var(&fileNum, "upgrade-file-num", updateFileNum, "HFS special file number for the upgrade package")
 	cmd.Flags().StringVar(&expectHash, "expect-hash", "", "Expected SHA-384 hex; abort before upload if the zip does not match")
 	cmd.Flags().StringVar(&expectHashFile, "expect-hash-file", "", "File with the expected SHA-384 (bare hex or sha384sum format)")
-	cmd.Flags().BoolVar(&restart, "restart-from-failure", false, "Resume an interrupted upload, re-sending only the chunks the network is missing")
+	cmd.Flags().BoolVar(&fromScratch, "from-scratch", false, "Ignore any partially-staged file and re-upload every chunk from the beginning")
 	cmd.MarkFlagsMutuallyExclusive("expect-hash", "expect-hash-file")
 	return cmd
 }
 
-func runSoftwareZipUpload(cmd *cobra.Command, resolve SessionFunc, zipPath string, fileNum uint64, expectHash, expectHashFile string, restart bool) error {
+func runSoftwareZipUpload(cmd *cobra.Command, resolve SessionFunc, zipPath string, fileNum uint64, expectHash, expectHashFile string, fromScratch bool) error {
 	session, err := resolve()
 	if err != nil {
 		return err
@@ -159,15 +160,19 @@ func runSoftwareZipUpload(cmd *cobra.Command, resolve SessionFunc, zipPath strin
 		_, e := session.Client.Submit(tx, nil)
 		return e
 	}
-	if restart {
+	if fromScratch {
+		if err := ops.UploadRawFile(submit, fileID, data); err != nil {
+			return err
+		}
+	} else {
+		// Resume is the default: re-send only the chunks the network is missing.
+		// A fresh (empty-memo) file matches no boundary and uploads from the start.
 		readMemo := func(id hiero.FileID) (string, error) {
 			return ops.FileMemo(session.Client.Hiero(), id)
 		}
 		if err := ops.ResumeUpload(submit, readMemo, fileID, data); err != nil {
 			return err
 		}
-	} else if err := ops.UploadRawFile(submit, fileID, data); err != nil {
-		return err
 	}
 
 	// Read back the staged hash and confirm it equals the local package.

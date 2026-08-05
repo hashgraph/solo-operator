@@ -252,13 +252,22 @@ func chunkBytes(data []byte, size int) [][]byte {
 	return chunks
 }
 
-// logUploadProgress emits an info line at each 10% boundary and at completion, so
-// a large upload reports progress without a line per chunk.
+// logUploadProgress emits a per-chunk debug line (so a --log-level debug run shows
+// live chunk progress alongside each SUCCESS receipt) plus an info line at each 10%
+// boundary and at completion (so a normal run reports progress without a line per
+// chunk).
 func logUploadProgress(fileID hiero.FileID, done, total int) {
 	if total == 0 {
 		return
 	}
 	pct := done * 100 / total
+	logx.As().Debug().
+		Str("reason", reasonUploadProgress.String()).
+		Uint64("file", fileID.File).
+		Int("chunk", done).
+		Int("chunks", total).
+		Int("percent", pct).
+		Msg("chunk uploaded")
 	prev := (done - 1) * 100 / total
 	if done == total || pct/10 != prev/10 {
 		logx.As().Info().

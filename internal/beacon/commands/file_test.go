@@ -185,11 +185,11 @@ func TestSoftwareZipInfo_ResolveErrorPropagates(t *testing.T) {
 	}
 }
 
-func TestSoftwareZipUpload_HasRestartFlag(t *testing.T) {
+func TestSoftwareZipUpload_HasFromScratchFlag(t *testing.T) {
 	resolve := func() (*Session, error) { return offlineSession(t, 2, t.TempDir()), nil }
 	cmd := softwareZipUploadCmd(resolve)
-	if cmd.Flags().Lookup("restart-from-failure") == nil {
-		t.Fatal("software-zip is missing --restart-from-failure")
+	if cmd.Flags().Lookup("from-scratch") == nil {
+		t.Fatal("software-zip is missing --from-scratch")
 	}
 }
 
