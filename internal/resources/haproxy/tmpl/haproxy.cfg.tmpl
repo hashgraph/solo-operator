@@ -6,8 +6,14 @@ defaults
     mode tcp
     option tcplog
     timeout connect 10s
-    timeout client 30s
-    timeout server 30s
+    timeout client 120s
+    timeout server 120s
+    # HAPI uses long-lived gRPC/HTTP-2 channels (special-file uploads, record/block
+    # streaming, idle clients between calls). timeout tunnel governs an established
+    # connection and must be large enough that these are not reaped mid-stream; the
+    # short client/server inactivity timers would otherwise RST the channel on any
+    # lull, aborting the in-flight op on a single-node network (see #1229).
+    timeout tunnel 3600s
 
 frontend grpc_frontend
     bind *:{{.GrpcPort}}
