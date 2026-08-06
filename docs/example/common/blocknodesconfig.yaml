@@ -22,11 +22,12 @@ metadata:
   namespace: solo-orbit
 spec:
   orbit: solo-orbit
+  # No block node is deployed in local dev (blockStream.streamMode=RECORDS), so the
+  # node list is empty. A populated entry makes the consensus node repeatedly try to
+  # DNS-resolve/connect to a non-existent host and spam ServiceConnectionFailure WARNs.
   content: |
     {
-      "nodes": [
-        { "address": "block-node", "streamingPort": 40840, "priority": 0 }
-      ]
+      "nodes": []
     }
 ---
 apiVersion: operator.solo.hiero.org/v1alpha1
@@ -38,9 +39,7 @@ spec:
   orbit: solo-orbit
   content: |
     {
-      "nodes": [
-        { "address": "block-node", "streamingPort": 40840, "priority": 0 }
-      ]
+      "nodes": []
     }
 ---
 apiVersion: operator.solo.hiero.org/v1alpha1
@@ -52,9 +51,7 @@ spec:
   orbit: solo-orbit
   content: |
     {
-      "nodes": [
-        { "address": "block-node", "streamingPort": 40840, "priority": 0 }
-      ]
+      "nodes": []
     }
 ---
 apiVersion: operator.solo.hiero.org/v1alpha1
@@ -66,7 +63,5 @@ spec:
   orbit: solo-orbit
   content: |
     {
-      "nodes": [
-        { "address": "block-node", "streamingPort": 40840, "priority": 0 }
-      ]
+      "nodes": []
     }
