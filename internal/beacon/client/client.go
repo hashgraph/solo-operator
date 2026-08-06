@@ -13,9 +13,13 @@
 package client
 
 import (
+	"fmt"
+	"net"
 	"strings"
+	"time"
 
 	"github.com/automa-saga/errx"
+	"github.com/automa-saga/logx"
 	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
 )
 
@@ -24,6 +28,26 @@ import (
 // estimation, it just caps the fee well above what any upgrade/freeze/file
 // operation costs.
 const defaultMaxTxFeeHbar = 100
+
+// Fail-fast SDK timeouts. The hiero-sdk defaults (2-minute requestTimeout,
+// 10-second grpcDeadline) make a call against an unreachable node stall for two
+// silent minutes before erroring. beacon targets a local Solo/kind network where
+// ops ACK in seconds, so we tighten the total budget while keeping the per-call
+// deadline and the SDK's own retry/backoff (maxAttempts) intact.
+const (
+	clientRequestTimeout = 60 * time.Second
+	clientGrpcDeadline   = 10 * time.Second
+)
+
+// Preflight-probe tuning (see WaitReachable). The TCP dial catches a missing
+// port-forward/Service immediately; the HAPI probe is bounded independently of
+// the SDK's own budget so the wait loop stays responsive.
+const (
+	tcpProbeTimeout     = 2 * time.Second
+	hapiProbeTimeout    = 5 * time.Second
+	probeInitialBackoff = 500 * time.Millisecond
+	probeMaxBackoff     = 5 * time.Second
+)
 
 // Options tunes the underlying hiero.Client. The zero value targets a local,
 // self-contained network (Solo/kind): plaintext transport, no certificate
@@ -101,6 +125,10 @@ func New(network map[string]hiero.AccountID, payer hiero.AccountID, payerKey hie
 	hc.SetCertificateVerification(opts.VerifyCertificate)
 	hc.SetOperator(payer, payerKey)
 
+	// Fail fast instead of the SDK's 2-minute default stall on an unreachable node.
+	hc.SetRequestTimeout(clientRequestTimeout)
+	hc.SetGrpcDeadline(clientGrpcDeadline)
+
 	// At -v debug, surface the SDK's own execute/receipt retry loop (logged at
 	// TRACE) so a stalled receipt shows each per-attempt node status rather than
 	// a single opaque "exceptional precheck status OK". The SDK logger is quiet
@@ -128,6 +156,93 @@ func New(network map[string]hiero.AccountID, payer hiero.AccountID, payerKey hie
 			return resp.GetReceipt(hc)
 		},
 	}, nil
+}
+
+// WaitReachable blocks until the target node endpoint is reachable, or timeout
+// elapses. It is the preflight every network command runs before submitting a
+// transaction, so a command launched (e.g. from a Kubernetes Job) before its
+// port-forward/Service is ready waits for connectivity instead of failing on the
+// first transaction. A timeout <= 0 disables the wait and returns immediately.
+//
+// Reachability is checked in two escalating steps per attempt:
+//  1. a raw TCP dial to endpoint — cheap, and fails immediately when the port is
+//     not being forwarded/served at all (the common local-dev case); then
+//  2. a HAPI NetworkVersionQuery — confirms the consensus node itself answers,
+//     not merely that something (e.g. HAProxy) bound the port.
+//
+// Every unsuccessful attempt logs at WARN (with the endpoint, attempt count, and
+// next retry delay) so a stalled preflight is visible rather than silent; the
+// first success logs once at INFO. On timeout it returns a temporary (retryable)
+// error decorated with the last failure and remediation hints.
+func (c *Client) WaitReachable(endpoint string, timeout time.Duration) error {
+	if timeout <= 0 {
+		return nil
+	}
+
+	deadline := time.Now().Add(timeout)
+	backoff := probeInitialBackoff
+	var lastErr error
+
+	for attempt := 1; ; attempt++ {
+		if conn, err := net.DialTimeout("tcp", endpoint, tcpProbeTimeout); err != nil {
+			lastErr = err
+			logx.As().Warn().Str("reason", reasonNodeUnreachable.String()).
+				Str("endpoint", endpoint).Int("attempt", attempt).Dur("retry_in", backoff).
+				Err(err).Msg("node endpoint not reachable (TCP) — waiting")
+		} else {
+			_ = conn.Close()
+			// Port is open; confirm the node answers HAPI before we proceed.
+			if err := c.probeHAPI(); err != nil {
+				lastErr = err
+				logx.As().Warn().Str("reason", reasonNodeUnreachable.String()).
+					Str("endpoint", endpoint).Int("attempt", attempt).Dur("retry_in", backoff).
+					Err(err).Msg("endpoint open but node not answering HAPI yet — waiting")
+			} else {
+				logx.As().Info().Str("reason", reasonNodeReachable.String()).
+					Str("endpoint", endpoint).Int("attempt", attempt).Msg("node reachable")
+				return nil
+			}
+		}
+
+		// Stop once another full backoff would overrun the deadline, so we never
+		// sleep past the caller's budget.
+		if time.Now().Add(backoff).After(deadline) {
+			return errx.WithHints(
+				errx.WithReason(
+					errNetworkOp.Wrap(lastErr, "node %s not reachable within %s", endpoint, timeout),
+					reasonNodeUnreachable,
+				),
+				"Confirm the node endpoint is reachable (is the kubectl port-forward or Service up?)",
+				"Increase --connect-timeout if the network is still starting up",
+			)
+		}
+
+		time.Sleep(backoff)
+		if backoff < probeMaxBackoff {
+			if backoff *= 2; backoff > probeMaxBackoff {
+				backoff = probeMaxBackoff
+			}
+		}
+	}
+}
+
+// probeHAPI runs a NetworkVersionQuery bounded by hapiProbeTimeout, independent of
+// the SDK's own request budget, so a single probe cannot stall the WaitReachable
+// loop. The query runs in a goroutine; if it outlives the bound it is abandoned
+// (it drains on its own within the client's requestTimeout) and reported as a
+// timeout so the caller retries.
+func (c *Client) probeHAPI() error {
+	done := make(chan error, 1)
+	go func() {
+		_, err := hiero.NewNetworkVersionQuery().Execute(c.hc)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(hapiProbeTimeout):
+		return fmt.Errorf("HAPI probe timed out after %s", hapiProbeTimeout)
+	}
 }
 
 // submitTransaction submits tx and returns at the node's precheck ACK, without

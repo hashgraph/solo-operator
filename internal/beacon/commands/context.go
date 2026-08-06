@@ -7,6 +7,7 @@ package commands
 
 import (
 	"path/filepath"
+	"time"
 
 	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
 
@@ -28,6 +29,12 @@ type Global struct {
 	// LogLevel mirrors -v/--log-level; at "debug" the client turns the SDK's
 	// own retry-loop logging up to TRACE.
 	LogLevel string
+	// ConnectTimeout mirrors --connect-timeout: how long Resolve waits for the
+	// target node endpoint to become reachable before returning the session, so a
+	// command launched before its port-forward/Service is ready waits for
+	// connectivity instead of failing on the first transaction. Zero disables the
+	// wait.
+	ConnectTimeout time.Duration
 }
 
 // Session is a resolved command context: the target the command acts on plus a
@@ -76,6 +83,14 @@ func (g Global) Resolve() (*Session, error) {
 	network := map[string]hiero.AccountID{target.Node.Endpoint(): target.NodeAccount}
 	c, err := client.New(network, target.Payer, key, client.Options{TLS: target.Node.TLS, LogLevel: g.LogLevel})
 	if err != nil {
+		return nil, err
+	}
+
+	// Preflight: wait for the node endpoint to be reachable before handing back a
+	// session, so the first transaction doesn't stall against a not-yet-ready
+	// endpoint. Disabled when ConnectTimeout is zero.
+	if err := c.WaitReachable(target.Node.Endpoint(), g.ConnectTimeout); err != nil {
+		_ = c.Close()
 		return nil, err
 	}
 

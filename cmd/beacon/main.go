@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/automa-saga/errx"
 	"github.com/automa-saga/logx"
@@ -57,6 +58,10 @@ type globalOptions struct {
 	NodeIP      string // -i/--node-ip: target a node by IP
 	Config      string // -c/--config: path to the network's config.yaml
 	LogLevel    string // -v/--log-level: warn | info | debug
+
+	// ConnectTimeout is --connect-timeout: how long to wait for the target node
+	// endpoint to become reachable before a command runs (0 disables the wait).
+	ConnectTimeout time.Duration
 }
 
 var (
@@ -114,6 +119,7 @@ func newRootCmd() *cobra.Command {
 	f.StringVarP(&opts.NodeIP, "node-ip", "i", "", "Target a node by IP")
 	f.StringVarP(&opts.Config, "config", "c", "config.yaml", "Path to the network's config.yaml; its directory holds keys/ and sysfiles/")
 	f.StringVarP(&opts.LogLevel, "log-level", "v", "info", "Log level: warn, info, or debug")
+	f.DurationVar(&opts.ConnectTimeout, "connect-timeout", 30*time.Second, "How long to wait for the target node endpoint to become reachable before running (0 disables the wait)")
 
 	// --version is a plain root flag (no short: -v is --log-level); the `version`
 	// subcommand offers the same beacon build metadata with a text/json selector.
@@ -126,11 +132,12 @@ func newRootCmd() *cobra.Command {
 	// the global flags at execution time via this closure over opts.
 	resolve := func() (*commands.Session, error) {
 		return commands.Global{
-			ConfigPath:  opts.Config,
-			Payer:       opts.Payer,
-			NodeAccount: opts.NodeAccount,
-			NodeIP:      opts.NodeIP,
-			LogLevel:    opts.LogLevel,
+			ConfigPath:     opts.Config,
+			Payer:          opts.Payer,
+			NodeAccount:    opts.NodeAccount,
+			NodeIP:         opts.NodeIP,
+			LogLevel:       opts.LogLevel,
+			ConnectTimeout: opts.ConnectTimeout,
 		}.Resolve()
 	}
 	root.AddCommand(commands.FreezeCommands(resolve))

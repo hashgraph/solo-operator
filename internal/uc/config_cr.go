@@ -430,7 +430,7 @@ func waitForConfigCRsValid(ctx context.Context, client dynamic.Interface, namesp
 				logx.As().Error().Str("reason", ReasonConfigCRFailed.String()).
 					Str("operation_id", operationID).Str("cr_kind", ref.kind).Str("cr_name", name).
 					Str("condition_message", msg).
-					Msg("config CR is Valid=False — operator rejected content, aborting execute phase")
+					Msg("config CR is invalid — operator rejected content, aborting execute phase")
 				return errx.WithHints(
 					errx.WithReason(errK8sAPI.New("%s %s is Valid=False: %s", ref.kind, name, msg), ReasonConfigCRFailed),
 					"Inspect the "+ref.kind+" CR status and fix the config file content in the upgrade package",

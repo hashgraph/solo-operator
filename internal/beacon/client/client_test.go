@@ -6,10 +6,33 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/automa-saga/errx"
 	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
 )
+
+// TestWaitReachable_DisabledReturnsNil verifies a non-positive timeout disables
+// the preflight and returns immediately without touching the network (hc unused).
+func TestWaitReachable_DisabledReturnsNil(t *testing.T) {
+	c := &Client{} // no hc needed on the disabled path
+	if err := c.WaitReachable("127.0.0.1:1", 0); err != nil {
+		t.Fatalf("expected nil on zero timeout, got %v", err)
+	}
+}
+
+// TestWaitReachable_UnreachableTimesOut verifies an unreachable endpoint fails
+// with NodeUnreachable within the budget. Port 1 on loopback refuses/So the TCP
+// dial fails fast and hc is never used, so a bare Client is sufficient.
+func TestWaitReachable_UnreachableTimesOut(t *testing.T) {
+	c := &Client{}
+	start := time.Now()
+	err := c.WaitReachable("127.0.0.1:1", 50*time.Millisecond)
+	wantReason(t, err, reasonNodeUnreachable)
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("WaitReachable overran its budget: took %s", elapsed)
+	}
+}
 
 // wantReason asserts err carries the given errx reason code.
 func wantReason(t *testing.T, err error, reason errx.Reason) {
