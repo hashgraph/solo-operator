@@ -4,9 +4,11 @@ package consensus
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/automa-saga/errx"
+	"github.com/google/go-cmp/cmp"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
@@ -74,7 +76,10 @@ func (r *StatefulSetSubReconciler) Reconcile(ctx context.Context, capsule *opera
 	}
 
 	if r.needsUpdate(existing, desired) {
-		common.Debug(ctx, common.ReasonStatefulSetUpdated).Str("statefulSet", desired.Name).Msg("Updating StatefulSet")
+		common.Info(ctx, common.ReasonStatefulSetUpdated).
+			Str("statefulSet", desired.Name).
+			Str("specDiff", specDiff(existing, desired)).
+			Msg("StatefulSet spec differs; updating")
 		existing.Spec = desired.Spec
 		existing.Labels = desired.Labels
 		return ctrl.Result{}, common.WarnOnConflict(ctx, r.Client.Update(ctx, existing))
@@ -1174,6 +1179,64 @@ func (r *StatefulSetSubReconciler) applyPodProperties(sts *appsv1.StatefulSet, c
 }
 
 func (r *StatefulSetSubReconciler) needsUpdate(existing, desired *appsv1.StatefulSet) bool {
+	normalizeStatefulSetSpec(existing, desired)
 	return !apiequality.Semantic.DeepEqual(existing.Spec, desired.Spec) ||
 		!apiequality.Semantic.DeepEqual(existing.Labels, desired.Labels)
+}
+
+// normalizeStatefulSetSpec copies server-defaulted fields from existing into
+// desired so that a naive DeepEqual converges after the first successful
+// update. Without this, fields the API server fills in (e.g.
+// UpdateStrategy.RollingUpdate, container resource defaults) cause needsUpdate
+// to return true on every reconcile, creating a hot loop.
+func normalizeStatefulSetSpec(existing, desired *appsv1.StatefulSet) {
+	if desired.Spec.UpdateStrategy.Type == appsv1.RollingUpdateStatefulSetStrategyType &&
+		desired.Spec.UpdateStrategy.RollingUpdate == nil {
+		desired.Spec.UpdateStrategy.RollingUpdate = existing.Spec.UpdateStrategy.RollingUpdate
+	}
+
+	normalizeContainers(existing.Spec.Template.Spec.InitContainers, desired.Spec.Template.Spec.InitContainers)
+	normalizeContainers(existing.Spec.Template.Spec.Containers, desired.Spec.Template.Spec.Containers)
+}
+
+// normalizeContainers copies server-defaulted per-container fields (resource
+// requests copied from limits, protocol defaults on ports) from existing into
+// matching desired containers so the comparison converges.
+func normalizeContainers(existing, desired []corev1.Container) {
+	idx := make(map[string]int, len(existing))
+	for i := range existing {
+		idx[existing[i].Name] = i
+	}
+	for i := range desired {
+		ei, ok := idx[desired[i].Name]
+		if !ok {
+			continue
+		}
+		if desired[i].Resources.Requests == nil && existing[ei].Resources.Requests != nil {
+			desired[i].Resources.Requests = existing[ei].Resources.Requests
+		}
+		for j := range desired[i].Ports {
+			if desired[i].Ports[j].Protocol == "" {
+				desired[i].Ports[j].Protocol = corev1.ProtocolTCP
+			}
+		}
+	}
+}
+
+// specDiff renders a field-level diff of the existing vs desired StatefulSet spec.
+// Both specs are routed through JSON first so cmp never touches the unexported
+// fields inside types like resource.Quantity (which would otherwise panic).
+func specDiff(existing, desired *appsv1.StatefulSet) string {
+	toMap := func(spec appsv1.StatefulSetSpec) map[string]any {
+		b, err := json.Marshal(spec)
+		if err != nil {
+			return map[string]any{"marshalError": err.Error()}
+		}
+		var m map[string]any
+		if err := json.Unmarshal(b, &m); err != nil {
+			return map[string]any{"unmarshalError": err.Error()}
+		}
+		return m
+	}
+	return cmp.Diff(toMap(existing.Spec), toMap(desired.Spec))
 }
