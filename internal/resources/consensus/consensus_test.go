@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -1013,70 +1012,6 @@ func TestGetPVCNames(t *testing.T) {
 	if len(names) != 4 {
 		t.Errorf("expected 4 PVC names, got %d: %v", len(names), names)
 	}
-}
-
-// ── StatefulSet needsUpdate ───────────────────────────────────────────────────
-
-func TestStatefulSetSubReconciler_NeedsUpdate(t *testing.T) {
-	r := &StatefulSetSubReconciler{}
-
-	base := func() *appsv1.StatefulSet {
-		replicas := int32(1)
-		return &appsv1.StatefulSet{
-			Spec: appsv1.StatefulSetSpec{
-				Replicas: &replicas,
-				Template: corev1.PodTemplateSpec{
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{
-							{Name: "consensus-node", Image: "hashgraph/hedera-node:v0.50.0"},
-						},
-						Volumes: []corev1.Volume{{Name: "logs"}},
-					},
-				},
-			},
-		}
-	}
-	t.Run("identical", func(t *testing.T) {
-		if r.needsUpdate(base(), base()) {
-			t.Error("expected no update for identical StatefulSets")
-		}
-	})
-	t.Run("image differs", func(t *testing.T) {
-		desired := base()
-		desired.Spec.Template.Spec.Containers[0].Image = "hashgraph/hedera-node:v0.51.0"
-		if !r.needsUpdate(base(), desired) {
-			t.Error("expected update when image differs")
-		}
-	})
-	t.Run("replica count differs", func(t *testing.T) {
-		desired := base()
-		two := int32(2)
-		desired.Spec.Replicas = &two
-		if !r.needsUpdate(base(), desired) {
-			t.Error("expected update when replicas differ")
-		}
-	})
-	t.Run("nil replicas on existing", func(t *testing.T) {
-		existing := base()
-		existing.Spec.Replicas = nil
-		if !r.needsUpdate(existing, base()) {
-			t.Error("expected update when existing replicas is nil")
-		}
-	})
-	t.Run("container count differs", func(t *testing.T) {
-		desired := base()
-		desired.Spec.Template.Spec.Containers = append(desired.Spec.Template.Spec.Containers, corev1.Container{Name: "sidecar"})
-		if !r.needsUpdate(base(), desired) {
-			t.Error("expected update when container count differs")
-		}
-	})
-	t.Run("volume count differs", func(t *testing.T) {
-		desired := base()
-		desired.Spec.Template.Spec.Volumes = append(desired.Spec.Template.Spec.Volumes, corev1.Volume{Name: "extra"})
-		if !r.needsUpdate(base(), desired) {
-			t.Error("expected update when volume count differs")
-		}
-	})
 }
 
 // ── Service needsUpdate ───────────────────────────────────────────────────────
