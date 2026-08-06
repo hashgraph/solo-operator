@@ -200,7 +200,7 @@ func TestBuildStatefulSet_HapiAppSecretsMount(t *testing.T) {
 func TestBuildStatefulSet_BlockNodesMount(t *testing.T) {
 	r := newStsReconciler()
 	capsule := capsuleWithImage("v0.50.0")
-	capsule.Spec.BlockNodes = &operatorv1alpha1.BlockNodesConfig{} // non-nil triggers the configmap volume
+	capsule.Spec.BlockNodesConfigRef = "node0-block-nodes" // ref triggers the configmap volume
 
 	sts, err := r.buildStatefulSet(context.Background(), capsule)
 	if err != nil {
@@ -215,7 +215,7 @@ func TestBuildStatefulSet_BlockNodesMount(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("expected block-nodes-config volume when BlockNodes is set")
+		t.Error("expected block-nodes-config volume when BlockNodesConfigRef is set")
 	}
 }
 

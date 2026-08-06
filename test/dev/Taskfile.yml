@@ -221,13 +221,19 @@ tasks:
 
         pushd {{ .EXTRACT_DIR }} >/dev/null
 
-        # Per-CN block-node config fixtures (issue #1071) — MOCK files; NMT only
-        # selects the file matching install -g <node_id>, it does not parse them.
+        # Per-CN block-node config fixtures (issue #1071). Per HIP-1494 the UC selects
+        # the file matching the target node NODE_ID and stages it verbatim as
+        # data/config/block-nodes.json. This dev network deploys no block node and runs
+        # with blockStream.streamMode=RECORDS (streaming disabled), so the fixture is an
+        # empty node list: valid CN schema ({"nodes":[<addr>:<streamingPort>,priority]}),
+        # parses cleanly, and — since the block-node subsystem still initialises at
+        # startup — avoids the connection-attempt warnings a populated-but-unreachable
+        # entry would emit. Add a node object here only when a block node is deployed.
         info "Adding per-node block-nodes config fixtures"
         mkdir -p block-nodes/config
-        printf "%s\n" "{\"nodeId\":0}" > block-nodes/config/block-nodes-0.json
-        printf "%s\n" "{\"nodeId\":1}" > block-nodes/config/block-nodes-1.json
-        printf "%s\n" "{\"nodeId\":2}" > block-nodes/config/block-nodes-2.json
+        for nid in 0 1 2; do
+          printf "%s\n" "{\"nodes\":[]}" > "block-nodes/config/block-nodes-${nid}.json"
+        done
 
         if [ -f "data/config/bootstrap.properties" ]; then
           info "Modifying bootstrap properties"

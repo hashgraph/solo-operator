@@ -4,6 +4,7 @@ package uc
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -55,6 +56,96 @@ func writeRootFile(t *testing.T, root, filename, content string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(root, filename), []byte(content), 0o644); err != nil {
 		t.Fatalf("write root file: %v", err)
+	}
+}
+
+// writeBlockNodesFile writes a per-node block-node config fixture under
+// block-nodes/config/block-nodes-<nodeID>.json.
+func writeBlockNodesFile(t *testing.T, root string, nodeID int, content string) {
+	t.Helper()
+	dir := filepath.Join(root, blockNodesSubdir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	name := fmt.Sprintf("block-nodes-%d.json", nodeID)
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+		t.Fatalf("write block-nodes file: %v", err)
+	}
+}
+
+func TestDeployBlockNodesConfigCR_SelectsNodeVerbatim(t *testing.T) {
+	root := t.TempDir()
+	writeBlockNodesFile(t, root, 0, `{"nodes":[{"address":"block-node-0","port":8080}],"blockItemBatchSize":256}`)
+	want := `{"nodes":[{"address":"block-node-1","port":8080}],"blockItemBatchSize":256}`
+	writeBlockNodesFile(t, root, 1, want)
+	writeBlockNodesFile(t, root, 2, `{"nodes":[{"address":"block-node-2","port":8080}],"blockItemBatchSize":256}`)
+
+	proxy := newProxyWithFakeClient(t, root)
+	proxy.cfg.NodeID = 1
+	proxy.cfg.CapsuleName = "node1"
+
+	ref, err := proxy.deployBlockNodesConfigCR(context.Background(), testOperationID)
+	if err != nil {
+		t.Fatalf("deploy: %v", err)
+	}
+	if ref == nil {
+		t.Fatal("expected a ref, got nil")
+	}
+	if ref.name != "node1-block-nodes" {
+		t.Errorf("cr name = %q, want node1-block-nodes", ref.name)
+	}
+
+	fc := proxy.client.(*fake.FakeDynamicClient)
+	obj, err := fc.Resource(blockNodesConfigGVR).Namespace("solo").Get(context.Background(), "node1-block-nodes", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("get CR: %v", err)
+	}
+	got, _, _ := unstructured.NestedString(obj.Object, "spec", "content")
+	if got != want {
+		t.Errorf("spec.content = %q, want node 1 file verbatim %q", got, want)
+	}
+	if orbit, _, _ := unstructured.NestedString(obj.Object, "spec", "orbit"); orbit != "test-orbit" {
+		t.Errorf("spec.orbit = %q, want test-orbit", orbit)
+	}
+}
+
+func TestDeployBlockNodesConfigCR_AbsentIsNoop(t *testing.T) {
+	proxy := newProxyWithFakeClient(t, t.TempDir()) // no block-nodes/ dir
+	proxy.cfg.CapsuleName = "node0"
+
+	ref, err := proxy.deployBlockNodesConfigCR(context.Background(), testOperationID)
+	if err != nil {
+		t.Fatalf("deploy: %v", err)
+	}
+	if ref != nil {
+		t.Errorf("expected nil ref when the package has no block-node config, got %+v", ref)
+	}
+}
+
+func TestDeployBlockNodesConfigCR_UpsertsOnReUpgrade(t *testing.T) {
+	root := t.TempDir()
+	writeBlockNodesFile(t, root, 0, `{"nodes":[{"address":"old","port":8080}],"blockItemBatchSize":256}`)
+	proxy := newProxyWithFakeClient(t, root)
+	proxy.cfg.CapsuleName = "node0"
+
+	if _, err := proxy.deployBlockNodesConfigCR(context.Background(), testOperationID); err != nil {
+		t.Fatalf("first deploy: %v", err)
+	}
+
+	// A later upgrade ships new content at the same stable CR name.
+	updated := `{"nodes":[{"address":"new","port":9090}],"blockItemBatchSize":512}`
+	writeBlockNodesFile(t, root, 0, updated)
+	if _, err := proxy.deployBlockNodesConfigCR(context.Background(), "upgrade-0.76.0-20260501t120000z"); err != nil {
+		t.Fatalf("second deploy: %v", err)
+	}
+
+	fc := proxy.client.(*fake.FakeDynamicClient)
+	obj, err := fc.Resource(blockNodesConfigGVR).Namespace("solo").Get(context.Background(), "node0-block-nodes", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("get CR: %v", err)
+	}
+	if got, _, _ := unstructured.NestedString(obj.Object, "spec", "content"); got != updated {
+		t.Errorf("spec.content = %q, want upserted %q", got, updated)
 	}
 }
 
@@ -163,6 +254,25 @@ func TestScanConfigFiles_unrecognised(t *testing.T) {
 	_, err := scanConfigFiles(root)
 	if err == nil {
 		t.Fatal("expected error for unrecognised config file, got nil")
+	}
+}
+
+func TestScanConfigFiles_ignoredFileSkipped(t *testing.T) {
+	root := t.TempDir()
+	writeConfigFile(t, root, "application.properties", "[hedera]")
+	// block-nodes.json ships in the package but is operator-managed — it must be
+	// skipped, not treated as unrecognised, and must not produce a scannedFile.
+	writeConfigFile(t, root, "block-nodes.json", `{"nodes":[]}`)
+
+	got, err := scanConfigFiles(root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("want 1 file (block-nodes.json skipped), got %d", len(got))
+	}
+	if got[0].entry.kind != "ApplicationProperties" {
+		t.Errorf("kind: got %q, want ApplicationProperties", got[0].entry.kind)
 	}
 }
 

@@ -120,6 +120,7 @@ const (
 	// Config-CR deployment (execute-phase, cluster-only).
 	ReasonConfigDirAbsent        errx.Reason = "ConfigDirAbsent"
 	ReasonConfigFileUnrecognised errx.Reason = "ConfigFileUnrecognised"
+	ReasonConfigFileIgnored      errx.Reason = "ConfigFileIgnored"
 	ReasonConfigCRCreateFailed   errx.Reason = "ConfigCRCreateFailed"
 	ReasonConfigCRGetFailed      errx.Reason = "ConfigCRGetFailed"
 	ReasonConfigCRFailed         errx.Reason = "ConfigCRFailed"

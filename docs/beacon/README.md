@@ -329,20 +329,19 @@ Then run the HAPI sequence:
 
 ```bash
 cd "$ROOT"
-BEACON="bin/beacon -c /tmp/beacon-solo/config.yaml"
 
 # a) upload the v0.74.2 package into special file 0.0.150 (verify-before-write)
-$BEACON file upload software-zip --zip "$ZIP" --expect-hash "$H"
+./bin/beacon -c /tmp/beacon-solo/config.yaml file upload software-zip --zip "$ZIP" --expect-hash "$H"
 
 # b) confirm the network holds exactly that hash
-$BEACON file info software-zip                    # SHA-384 must equal H
+./bin/beacon -c /tmp/beacon-solo/config.yaml file info software-zip                    # SHA-384 must equal H
 
 # c) stage the upgrade on every node, pinned to H
-$BEACON freeze prepare --upgrade-zip-hash "$H" --yes
+./bin/beacon -c /tmp/beacon-solo/config.yaml freeze prepare --upgrade-zip-hash "$H" --yes
 
 # d) schedule the freeze that boots the new software (~3 min out, UTC)
 START=$(date -u -v+3M '+%Y-%m-%d.%H:%M:%S' 2>/dev/null || date -u -d '+3 min' '+%Y-%m-%d.%H:%M:%S')
-$BEACON freeze upgrade --start-time "$START" --upgrade-zip-hash "$H" --yes
+./bin/beacon -c /tmp/beacon-solo/config.yaml freeze upgrade --start-time "$START" --upgrade-zip-hash "$H" --yes
 ```
 
 ### 5. Observe the automated upgrade (no beacon involvement past the freeze)

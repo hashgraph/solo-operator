@@ -163,11 +163,6 @@ func RoleBindingName(capsule *operatorv1alpha1.ConsensusCapsule) string {
 	return capsule.Name + RoleBindingSuffix
 }
 
-// BlockNodesConfigMapName returns the block-nodes ConfigMap name for a capsule.
-func BlockNodesConfigMapName(capsule *operatorv1alpha1.ConsensusCapsule) string {
-	return capsule.Name + "-block-nodes-cm"
-}
-
 // CheckpointConfigMapName returns the checkpoint ConfigMap name for a capsule.
 func CheckpointConfigMapName(capsule *operatorv1alpha1.ConsensusCapsule) string {
 	return capsule.Name + "-checkpoint"
@@ -278,7 +273,6 @@ func NewSubReconcilers(c client.Client, scheme *runtime.Scheme, recorder events.
 		NewServiceAccountSubReconciler(c, scheme),
 		NewRoleSubReconciler(c, scheme),
 		NewRoleBindingSubReconciler(c, scheme),
-		NewBlockNodesConfigMapSubReconciler(c, scheme),
 		NewCheetahConfigMapSubReconciler(c, scheme),
 		NewAlloyConfigMapSubReconciler(c, scheme),
 		NewServiceSubReconciler(c, scheme),

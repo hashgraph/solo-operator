@@ -4,6 +4,7 @@ package uc
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -59,6 +60,21 @@ var configFileKinds = map[string]kindEntry{
 // data/config/). They are checked separately from the config subdirectory scan.
 var packageRootFiles = []string{"log4j2.xml", "settings.txt"}
 
+// ignoredConfigFilenames are files that legitimately ship in the upgrade
+// package's data/config/ but are intentionally NOT turned into ConsensusConfig
+// CRs, because the operator manages them by another mechanism. They are skipped
+// (logged, not applied) rather than treated as unrecognised — this preserves the
+// hard abort for genuinely unknown files while not choking on expected ones.
+//
+//   - block-nodes.json: the consensus-node ships a default copy under data/config/,
+//     but the authoritative per-node block-node config is delivered separately as
+//     block-nodes/config/block-nodes-<NODE_ID>.json and staged via the
+//     BlockNodesConfig CR (see deployBlockNodesConfigCR). The data/config/ copy is
+//     therefore skipped here so it is not turned into a network-wide config CR.
+var ignoredConfigFilenames = map[string]struct{}{
+	"block-nodes.json": {},
+}
+
 // knownConfigFilenames returns a sorted slice of all filenames recognised by
 // configFileKinds. Used in warning logs so operators can see the full list
 // without consulting source code.
@@ -110,6 +126,12 @@ func scanConfigFiles(upgradePath string) ([]scannedFile, error) {
 			continue
 		}
 		name := de.Name()
+		if _, skip := ignoredConfigFilenames[name]; skip {
+			logx.As().Info().Str("reason", ReasonConfigFileIgnored.String()).
+				Str("filename", name).Str("dir", configDir).
+				Msg("config file is operator-managed — skipping (no config CR)")
+			continue
+		}
 		entry, ok := configFileKinds[name]
 		if !ok {
 			logx.As().Error().Str("reason", ReasonConfigFileUnrecognised.String()).
@@ -208,14 +230,8 @@ func (p *ProvisionerProxy) deployConfigCRs(ctx context.Context, operationID stri
 	if err != nil {
 		return err
 	}
-	if len(scanned) == 0 {
-		logx.As().Info().Str("reason", ReasonConfigDirAbsent.String()).
-			Str("operation_id", operationID).
-			Msg("no recognised config files in upgrade package — skipping config CR deployment")
-		return nil
-	}
 
-	refs := make([]configCRRef, 0, len(scanned))
+	refs := make([]configCRRef, 0, len(scanned)+1)
 	for _, sf := range scanned {
 		cr, err := buildConfigCR(p.cfg, operationID, sf)
 		if err != nil {
@@ -248,7 +264,116 @@ func (p *ProvisionerProxy) deployConfigCRs(ctx context.Context, operationID stri
 		refs = append(refs, configCRRef{name: cr.GetName(), gvr: sf.entry.gvr, kind: sf.entry.kind})
 	}
 
+	// Per-node block-node config lives outside data/config/ (block-nodes/config/)
+	// and is selected by NODE_ID (HIP-1494), so it is deployed separately.
+	bnRef, err := p.deployBlockNodesConfigCR(ctx, operationID)
+	if err != nil {
+		return err
+	}
+	if bnRef != nil {
+		refs = append(refs, *bnRef)
+	}
+
+	if len(refs) == 0 {
+		logx.As().Info().Str("reason", ReasonConfigDirAbsent.String()).
+			Str("operation_id", operationID).
+			Msg("no config files in upgrade package — skipping config CR deployment")
+		return nil
+	}
+
 	return waitForConfigCRsValid(ctx, p.client, p.cfg.Namespace, operationID, refs, p.cfg.pollInterval())
+}
+
+// blockNodesSubdir is the package subdirectory holding per-node block-node config
+// files (block-nodes-<NODE_ID>.json), separate from data/config/ (HIP-1494).
+const blockNodesSubdir = "block-nodes/config"
+
+// deployBlockNodesConfigCR selects this node's block-node config from the upgrade
+// package (block-nodes/config/block-nodes-<NODE_ID>.json) and upserts it verbatim
+// into a BlockNodesConfig CR named "<capsule>-block-nodes". That name is stable
+// across upgrades so the ConsensusCapsule can reference it via a static
+// spec.blockNodesConfigRef (config refs are not patched during upgrade); a
+// re-upgrade therefore overwrites the content rather than being a no-op. Returns
+// (nil, nil) when the package carries no block-node config for this node, or when
+// the capsule name is unknown (nothing to reference).
+func (p *ProvisionerProxy) deployBlockNodesConfigCR(ctx context.Context, operationID string) (*configCRRef, error) {
+	if p.cfg.CapsuleName == "" {
+		return nil, nil
+	}
+	path := filepath.Join(p.cfg.UpgradePath, blockNodesSubdir, fmt.Sprintf("block-nodes-%d.json", p.cfg.NodeID))
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			logx.As().Info().Str("reason", ReasonConfigDirAbsent.String()).
+				Str("operation_id", operationID).Str("path", path).
+				Msg("no per-node block-node config in upgrade package — skipping")
+			return nil, nil
+		}
+		return nil, errx.WithHints(
+			errx.WithReason(errPersist.Wrap(err, "read block-node config %s", path), ReasonUpgradePathUnreadable),
+			"Confirm the upgrade package was extracted correctly and block-nodes/config/ is readable",
+		)
+	}
+
+	name := p.cfg.CapsuleName + "-block-nodes"
+	cr := &unstructured.Unstructured{}
+	cr.SetAPIVersion(operatorv1alpha1.GroupVersion.String())
+	cr.SetKind("BlockNodesConfig")
+	cr.SetName(name)
+	cr.SetNamespace(p.cfg.Namespace)
+	cr.SetLabels(map[string]string{
+		operatorv1alpha1.LabelOperationID: operationID,
+	})
+	cr.SetAnnotations(map[string]string{
+		annotationCreatedBy: createdByUC,
+	})
+	_ = unstructured.SetNestedField(cr.Object, string(data), "spec", "content")
+	if p.cfg.Orbit != "" {
+		_ = unstructured.SetNestedField(cr.Object, p.cfg.Orbit, "spec", "orbit")
+	}
+
+	if err := p.upsertConfigCR(ctx, blockNodesConfigGVR, cr); err != nil {
+		return nil, errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "apply BlockNodesConfig %s", name), ReasonConfigCRCreateFailed),
+			"Confirm the UC ServiceAccount has create/update permission on blocknodesconfigs.operator.solo.hiero.org",
+		)
+	}
+	logx.As().Info().Str("reason", ReasonCRDelivered.String()).
+		Str("operation_id", operationID).Str("cr_kind", "BlockNodesConfig").
+		Str("cr_name", name).Int("node_id", p.cfg.NodeID).
+		Msg("staged per-node block-node config CR")
+	return &configCRRef{name: name, gvr: blockNodesConfigGVR, kind: "BlockNodesConfig"}, nil
+}
+
+// upsertConfigCR creates cr, or updates the existing object's spec when it already
+// exists. Used for the stable-named block-node CR whose content must track the
+// latest upgrade package.
+func (p *ProvisionerProxy) upsertConfigCR(ctx context.Context, gvr schema.GroupVersionResource, cr *unstructured.Unstructured) error {
+	createCtx, cancel := context.WithTimeout(ctx, createTimeout)
+	_, err := p.client.Resource(gvr).Namespace(p.cfg.Namespace).Create(createCtx, cr, metav1.CreateOptions{})
+	cancel()
+	if err == nil {
+		return nil
+	}
+	if !k8serrors.IsAlreadyExists(err) {
+		return err
+	}
+
+	getCtx, cancel := context.WithTimeout(ctx, listTimeout)
+	existing, getErr := p.client.Resource(gvr).Namespace(p.cfg.Namespace).Get(getCtx, cr.GetName(), metav1.GetOptions{})
+	cancel()
+	if getErr != nil {
+		return getErr
+	}
+	spec, _, _ := unstructured.NestedMap(cr.Object, "spec")
+	if err := unstructured.SetNestedMap(existing.Object, spec, "spec"); err != nil {
+		return err
+	}
+	existing.SetLabels(cr.GetLabels())
+	updateCtx, cancel := context.WithTimeout(ctx, createTimeout)
+	_, updErr := p.client.Resource(gvr).Namespace(p.cfg.Namespace).Update(updateCtx, existing, metav1.UpdateOptions{})
+	cancel()
+	return updErr
 }
 
 // waitForConfigCRsValid polls each config CR's status.conditions until all have

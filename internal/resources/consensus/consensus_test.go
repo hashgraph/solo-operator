@@ -4,7 +4,6 @@ package consensus
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"testing"
 
@@ -88,10 +87,6 @@ func TestResourceNames(t *testing.T) {
 
 	if got := RoleBindingName(capsule); got != "node0-rb" {
 		t.Errorf("expected role binding name node0-rb, got %s", got)
-	}
-
-	if got := BlockNodesConfigMapName(capsule); got != "node0-block-nodes-cm" {
-		t.Errorf("expected block-nodes config map name node0-block-nodes-cm, got %s", got)
 	}
 
 	if got := StatefulSetName(capsule); got != "node0" {
@@ -349,74 +344,6 @@ func TestServiceAccountSubReconciler_UpdateAnnotations(t *testing.T) {
 	}
 }
 
-// ── BlockNodesConfigMap ───────────────────────────────────────────────────────
-
-func TestBlockNodesConfigMapSubReconciler(t *testing.T) {
-	ctx := context.Background()
-	scheme := newTestScheme()
-	capsule := newTestCapsule()
-	capsule.Spec.BlockNodes = &operatorv1alpha1.BlockNodesConfig{
-		Nodes: []operatorv1alpha1.BlockNodeEndpoint{
-			{Address: "block-node-1:8080"},
-			{Address: "block-node-2:8080"},
-		},
-		BlockItemBatchSize: 256,
-	}
-	c := newTestClient(scheme, capsule)
-
-	reconciler := NewBlockNodesConfigMapSubReconciler(c, scheme)
-
-	if !reconciler.ShouldReconcile(ctx, capsule) {
-		t.Error("expected ShouldReconcile true when BlockNodes is set")
-	}
-
-	result, err := reconciler.Reconcile(ctx, capsule)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.Requeue {
-		t.Error("unexpected requeue")
-	}
-
-	cm := &corev1.ConfigMap{}
-	if err := c.Get(ctx, client.ObjectKey{Name: "node0-block-nodes-cm", Namespace: "test-namespace"}, cm); err != nil {
-		t.Fatalf("failed to get block-nodes ConfigMap: %v", err)
-	}
-
-	jsonStr, ok := cm.Data["block-nodes.json"]
-	if !ok {
-		t.Fatal("expected block-nodes.json key in ConfigMap")
-	}
-
-	var parsed operatorv1alpha1.BlockNodesConfig
-	if err := json.Unmarshal([]byte(jsonStr), &parsed); err != nil {
-		t.Fatalf("failed to parse block-nodes.json: %v", err)
-	}
-
-	if len(parsed.Nodes) != 2 {
-		t.Errorf("expected 2 nodes, got %d", len(parsed.Nodes))
-	}
-	if parsed.Nodes[0].Address != "block-node-1:8080" {
-		t.Errorf("unexpected first node address: %s", parsed.Nodes[0].Address)
-	}
-	if parsed.BlockItemBatchSize != 256 {
-		t.Errorf("expected batch size 256, got %d", parsed.BlockItemBatchSize)
-	}
-}
-
-func TestBlockNodesConfigMapSubReconciler_Disabled(t *testing.T) {
-	ctx := context.Background()
-	scheme := newTestScheme()
-	capsule := newTestCapsule() // BlockNodes is nil
-	c := newTestClient(scheme, capsule)
-
-	reconciler := NewBlockNodesConfigMapSubReconciler(c, scheme)
-
-	if reconciler.ShouldReconcile(ctx, capsule) {
-		t.Error("expected ShouldReconcile false when BlockNodes is nil")
-	}
-}
-
 // ── Service ───────────────────────────────────────────────────────────────────
 
 func TestServiceSubReconciler(t *testing.T) {
@@ -662,9 +589,9 @@ func TestStatefulSetVolumes_DefaultEmptyDir(t *testing.T) {
 		}
 	}
 
-	// block-nodes-config must NOT be present (BlockNodes is nil)
+	// block-nodes-config must NOT be present (BlockNodesConfigRef is empty)
 	if _, ok := volByName["block-nodes-config"]; ok {
-		t.Error("expected block-nodes-config volume to be absent when BlockNodes is nil")
+		t.Error("expected block-nodes-config volume to be absent when BlockNodesConfigRef is empty")
 	}
 
 	// consensus-config volume must be gone
@@ -729,9 +656,7 @@ func TestStatefulSetVolumes_WithPVC(t *testing.T) {
 
 func TestStatefulSetVolumes_BlockNodes(t *testing.T) {
 	capsule := newTestCapsule()
-	capsule.Spec.BlockNodes = &operatorv1alpha1.BlockNodesConfig{
-		Nodes: []operatorv1alpha1.BlockNodeEndpoint{{Address: "bn:8080"}},
-	}
+	capsule.Spec.BlockNodesConfigRef = "node0-block-nodes"
 
 	r := &StatefulSetSubReconciler{}
 	volumes, mounts := r.buildVolumes(capsule)

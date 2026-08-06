@@ -44,6 +44,7 @@ var (
 	feeSchedulesGVR                  = gvr("feeschedules")
 	simpleFeesSchedulesGVR           = gvr("simplefeesschedules")
 	apiPermissionPropertiesGVR       = gvr("apipermissionproperties")
+	blockNodesConfigGVR              = gvr("blocknodesconfigs")
 
 	// stepToGVR maps a CR step label value to the GVR of the corresponding
 	// NetworkUpgrade* resource. Used by restart recovery (#998) to re-deliver

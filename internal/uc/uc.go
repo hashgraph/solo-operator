@@ -74,6 +74,7 @@ func New(cfg Config) (*UC, error) {
 			ProvisionerProxyConfig{
 				Namespace:             cfg.Namespace,
 				NodeID:                cfg.NodeID,
+				CapsuleName:           cfg.CapsuleName(),
 				UpgradePath:           cfg.UpgradePath,
 				Orbit:                 cfg.Orbit,
 				ConfigCRPollInterval:  cfg.ConfigCRPollInterval,

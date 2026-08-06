@@ -90,9 +90,13 @@ type ConsensusCapsuleSpec struct {
 	// +optional
 	HapiAppSecretsName string `json:"hapiAppSecretsName,omitempty"`
 
-	// when set, creates a block-nodes ConfigMap and mounts block-nodes.json
+	// references a BlockNodesConfig CR whose managed ConfigMap is subPath-mounted
+	// at data/config/block-nodes.json. Optional — CN falls back to defaults.
+	// The consensus-node deployment package delivers this per node under
+	// block-nodes/config/block-nodes-<NODE_ID>.json; the UC selects the file for
+	// this node and stages it verbatim into the CR (HIP-1494).
 	// +optional
-	BlockNodes *BlockNodesConfig `json:"blockNodes,omitempty"`
+	BlockNodesConfigRef string `json:"blockNodesConfigRef,omitempty"`
 
 	// pod-level configuration
 	PodProperties ConsensusPodProperties `json:"podProperties"`
@@ -153,23 +157,6 @@ type ConsensusCapsuleSpec struct {
 	// +optional
 	// +kubebuilder:default=Auto
 	StartPolicy StartPolicy `json:"startPolicy,omitempty"`
-}
-
-// BlockNodesConfig defines block-node connection settings.
-type BlockNodesConfig struct {
-	// +optional
-	Nodes []BlockNodeEndpoint `json:"nodes,omitempty"`
-
-	// block items per batch
-	// +kubebuilder:default=256
-	// +optional
-	BlockItemBatchSize int `json:"blockItemBatchSize,omitempty"`
-}
-
-// BlockNodeEndpoint is a single block node target.
-type BlockNodeEndpoint struct {
-	// host:port
-	Address string `json:"address"`
 }
 
 // ConsensusSecrets holds TLS and signing key references.

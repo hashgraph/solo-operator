@@ -243,3 +243,7 @@ spec:
 
   # bootstrap.properties (defined in common/bootstrapproperties.yaml)
   bootstrapPropertiesRef: network-bootprops
+
+  # block-nodes.json (defined in common/blocknodesconfig.yaml); the UC overwrites
+  # this CR with the package's per-node file during an upgrade.
+  blockNodesConfigRef: node2-block-nodes

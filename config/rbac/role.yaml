@@ -116,6 +116,7 @@ rules:
   - apipermissionproperties
   - applicationoverrideproperties
   - applicationproperties
+  - blocknodesconfigs
   - bootstrapproperties
   - consensuscapsules
   - envoyproxies
@@ -147,6 +148,7 @@ rules:
   - apipermissionproperties/status
   - applicationoverrideproperties/status
   - applicationproperties/status
+  - blocknodesconfigs/status
   - bootstrapproperties/status
   - consensuscapsules/status
   - envoyproxies/status

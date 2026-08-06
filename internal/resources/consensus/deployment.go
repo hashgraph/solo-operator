@@ -23,6 +23,7 @@ import (
 	"github.com/hashgraph/solo-operator/internal/resources/apipermissionproperties"
 	"github.com/hashgraph/solo-operator/internal/resources/applicationoverrideproperties"
 	"github.com/hashgraph/solo-operator/internal/resources/applicationproperties"
+	"github.com/hashgraph/solo-operator/internal/resources/blocknodesconfig"
 	"github.com/hashgraph/solo-operator/internal/resources/bootstrapproperties"
 	"github.com/hashgraph/solo-operator/internal/resources/feeschedules"
 	"github.com/hashgraph/solo-operator/internal/resources/log4j2config"
@@ -401,6 +402,7 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 		{capsule.Spec.SimpleFeesSchedulesRef, "simple-fee-schedules-config", simplefeesschedules.ConfigMapNameForRef, HapiBase + "/data/config/simpleFeesSchedules.json", "simpleFeesSchedules.json"},
 		{capsule.Spec.ApplicationOverridePropertiesRef, "app-override-config", applicationoverrideproperties.ConfigMapNameForRef, HapiBase + "/data/config/application-override.properties", "application-override.properties"},
 		{capsule.Spec.BootstrapPropertiesRef, "bootstrap-config", bootstrapproperties.ConfigMapNameForRef, HapiBase + "/data/config/bootstrap.properties", "bootstrap.properties"},
+		{capsule.Spec.BlockNodesConfigRef, "block-nodes-config", blocknodesconfig.ConfigMapNameForRef, HapiBase + "/data/config/block-nodes.json", "block-nodes.json"},
 	}
 	for _, om := range optionalConfigs {
 		if om.ref == "" {
@@ -422,24 +424,6 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 			MountPath: om.mountPath,
 			SubPath:   om.subPath,
 			ReadOnly:  true,
-		})
-	}
-
-	// block-nodes.json — only when BlockNodes is configured
-	if capsule.Spec.BlockNodes != nil {
-		volumes = append(volumes, corev1.Volume{
-			Name: "block-nodes-config",
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{Name: BlockNodesConfigMapName(capsule)},
-					DefaultMode:          &defaultMode,
-				},
-			},
-		})
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      "block-nodes-config",
-			MountPath: HapiBase + "/data/config/block-nodes.json",
-			SubPath:   "block-nodes.json",
 		})
 	}
 

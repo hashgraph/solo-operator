@@ -245,6 +245,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = controller.NewBlockNodesConfigReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+	).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "BlockNodesConfig")
+		os.Exit(1)
+	}
+
 	if err = controller.NewFeeSchedulesReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
