@@ -39,5 +39,13 @@ spec:
   consensus:
     genesis:
       addressBook:
-        ledgerId: "298"
+        # ledgerId is the consensus node's ledger.id (network identity);
+        # mainnet, testnet, previewnet use 0x00, 0x01 and 0x02 respectively
+        # 0x01 is the well-known local/dev ledger id.
+        ledgerId: "0x01"
+        
+        # EVM chain id (EIP-155)
+        # mainnet, testnet and plocal
+        # 298 is the well-known local/dev chain id.
+        chainId: "298"
         externalAddresses: []

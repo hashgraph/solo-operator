@@ -73,26 +73,31 @@ func TestBuildClusterConfig_DefaultsAlwaysUsed(t *testing.T) {
 	}
 }
 
-func TestBuildClusterConfig_LedgerIDPropagates(t *testing.T) {
+func TestBuildClusterConfig_LedgerIDAndChainIDPropagate(t *testing.T) {
 	orbit := &operatorv1alpha1.Orbit{
 		Spec: operatorv1alpha1.OrbitSpec{
 			Consensus: operatorv1alpha1.OrbitConsensus{
 				Genesis: operatorv1alpha1.OrbitGenesis{
-					AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x01"},
+					AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x01", ChainId: "298"},
 				},
 			},
 		},
 	}
 	data := BuildClusterConfig(orbit, []RosterMaterial{{NodeID: 0, GossipHost: "h", GossipPort: 1, Weight: 1}}, nil)
 
+	// config.txt swirld uses the chain id (the historical local value 298).
 	if !strings.HasPrefix(data[ConfigKeyConfigTxt], "swirld, 298\n") {
-		t.Errorf("config.txt should use ledger 298 for 0x01; got first line: %q", firstLine(data[ConfigKeyConfigTxt]))
+		t.Errorf("config.txt swirld should be the chain id 298; got first line: %q", firstLine(data[ConfigKeyConfigTxt]))
+	}
+	// ledger.id comes from LedgerId verbatim; contracts.chainId from ChainId.
+	if !strings.Contains(data["application.properties"], "ledger.id=0x01") {
+		t.Errorf("application.properties ledger.id should be 0x01")
 	}
 	if !strings.Contains(data["application.properties"], "contracts.chainId=298") {
-		t.Errorf("application.properties chainId should be 298 for ledger 0x01")
+		t.Errorf("application.properties chainId should be 298")
 	}
 	if !strings.Contains(data["bootstrap.properties"], "contracts.chainId=298") {
-		t.Errorf("bootstrap.properties chainId should be 298 for ledger 0x01")
+		t.Errorf("bootstrap.properties chainId should be 298")
 	}
 }
 
@@ -101,21 +106,4 @@ func firstLine(s string) string {
 		return s[:idx]
 	}
 	return s
-}
-
-func TestLedgerIDToHex(t *testing.T) {
-	cases := []struct{ in, wantID, wantChain string }{
-		{"0x01", "0x01", "298"},
-		{"0x00", "0x00", "0"},
-		{"298", "0x01", "298"},
-		{"0", "0x00", "0"},
-		{"0xab", "0xab", "ab"},
-		{"42", "0x42", "42"},
-	}
-	for _, tc := range cases {
-		gotID, gotChain := ledgerIDToHex(tc.in)
-		if gotID != tc.wantID || gotChain != tc.wantChain {
-			t.Errorf("ledgerIDToHex(%q) = (%q, %q), want (%q, %q)", tc.in, gotID, gotChain, tc.wantID, tc.wantChain)
-		}
-	}
 }

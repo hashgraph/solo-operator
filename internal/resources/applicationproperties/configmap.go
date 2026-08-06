@@ -52,7 +52,10 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 			}
 			return ctrl.Result{}, err
 		}
-		if orbitLedgerID := orbitLedgerID(orbit); orbitLedgerID != "" && ledgerID != orbitLedgerID {
+		// Compare ledger id to ledger id (both are the network's ledger.id, e.g.
+		// "0x01"), tolerating hex-representation differences. The EVM chain id lives
+		// in the Orbit's separate chainId field, so there is no chain-id mapping here.
+		if orbitLedgerID := orbitLedgerID(orbit); orbitLedgerID != "" && !LedgerIDsEqual(ledgerID, orbitLedgerID) {
 			return r.reject(ctx, obj, "LedgerIDMismatch", fmt.Sprintf("spec.content ledger.id %q does not match Orbit %q ledger.id %q", ledgerID, obj.Spec.Orbit, orbitLedgerID))
 		}
 	}

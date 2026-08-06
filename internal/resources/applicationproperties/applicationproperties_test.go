@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -144,6 +145,74 @@ func TestConfigMapSubReconciler_UpdatesConfigMap(t *testing.T) {
 	}
 	if cm.Data[ConfigFileName] != validProperties {
 		t.Errorf("ConfigMap not updated: got %q, want %q", cm.Data[ConfigFileName], validProperties)
+	}
+}
+
+// orbitWithLedgerID builds a cluster-scoped Orbit CR with the given raw ledger id.
+func orbitWithLedgerID(name, ledgerID string) *operatorv1alpha1.Orbit {
+	o := &operatorv1alpha1.Orbit{ObjectMeta: metav1.ObjectMeta{Name: name}}
+	o.Spec.Consensus.Genesis.AddressBook.LedgerId = ledgerID
+	return o
+}
+
+func validCondition(obj *operatorv1alpha1.ApplicationProperties) *metav1.Condition {
+	return apimeta.FindStatusCondition(obj.Status.Conditions, operatorv1alpha1.ApplicationPropertiesConditionTypeValid)
+}
+
+// TestConfigMapSubReconciler_LedgerIDEquivalent verifies the validator accepts a
+// content ledger.id that matches the Orbit's ledgerId across hex-representation
+// differences: content "0x1" vs Orbit "0x01" name the same ledger, so it must
+// validate and create the ConfigMap rather than reject on a raw string mismatch.
+func TestConfigMapSubReconciler_LedgerIDEquivalent(t *testing.T) {
+	scheme := newScheme(t)
+	obj := &operatorv1alpha1.ApplicationProperties{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default"},
+		Spec: operatorv1alpha1.ApplicationPropertiesSpec{
+			Orbit:   "solo-orbit",
+			Content: "hedera.config.version=0\nledger.id=0x1",
+		},
+	}
+	orbit := orbitWithLedgerID("solo-orbit", "0x01")
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(obj, orbit).Build()
+	r := NewConfigMapSubReconciler(c, scheme, nil)
+
+	if _, err := r.Reconcile(context.Background(), obj); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cond := validCondition(obj); cond == nil || cond.Status != metav1.ConditionTrue {
+		t.Fatalf("expected Valid=True for 0x1 vs 0x01, got %+v", cond)
+	}
+	cm := &corev1.ConfigMap{}
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "node0-application-properties-cm", Namespace: "default"}, cm); err != nil {
+		t.Fatalf("ConfigMap should have been created: %v", err)
+	}
+}
+
+// TestConfigMapSubReconciler_LedgerIDMismatch verifies a genuinely different
+// ledger id (0x02 vs Orbit 0x01) is rejected: Valid=False and no ConfigMap.
+func TestConfigMapSubReconciler_LedgerIDMismatch(t *testing.T) {
+	scheme := newScheme(t)
+	obj := &operatorv1alpha1.ApplicationProperties{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default"},
+		Spec: operatorv1alpha1.ApplicationPropertiesSpec{
+			Orbit:   "solo-orbit",
+			Content: "hedera.config.version=0\nledger.id=0x02",
+		},
+	}
+	orbit := orbitWithLedgerID("solo-orbit", "0x01")
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(obj, orbit).Build()
+	r := NewConfigMapSubReconciler(c, scheme, nil)
+
+	if _, err := r.Reconcile(context.Background(), obj); err != nil {
+		t.Fatalf("expected nil (stop retrying) on mismatch, got: %v", err)
+	}
+	cond := validCondition(obj)
+	if cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "LedgerIDMismatch" {
+		t.Fatalf("expected Valid=False/LedgerIDMismatch for 0x02 vs 298, got %+v", cond)
+	}
+	cm := &corev1.ConfigMap{}
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "node0-application-properties-cm", Namespace: "default"}, cm); err == nil {
+		t.Error("ConfigMap should not have been created on ledger mismatch")
 	}
 }
 

@@ -212,13 +212,16 @@ func TestMergeValues_requiredMissingConfigMapErrors(t *testing.T) {
 
 // ─── Per-component injection ──────────────────────────────────────────────────
 
-func makeOrbit(name, ledgerID string) *operatorv1alpha1.Orbit {
+// makeOrbit sets both LedgerId and ChainId to id for test convenience. The relay
+// test reads ChainId (CHAIN_ID) and the explorer test reads LedgerId (ledgerID);
+// setting both keeps existing single-arg callers unchanged.
+func makeOrbit(name, id string) *operatorv1alpha1.Orbit {
 	return &operatorv1alpha1.Orbit{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Spec: operatorv1alpha1.OrbitSpec{
 			Consensus: operatorv1alpha1.OrbitConsensus{
 				Genesis: operatorv1alpha1.OrbitGenesis{
-					AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: ledgerID},
+					AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: id, ChainId: id},
 				},
 			},
 		},
