@@ -16,7 +16,7 @@
 #   T1:  task -d docs/beacon uc-image
 #   T2:  task -d docs/beacon operator          # leave running
 #   T1:  task -d docs/beacon deploy
-#   T1:  task -d docs/beacon config
+#   T1:  task -d docs/beacon upload-build-zip
 #   T3:  task -d docs/beacon port-forward       # leave running
 #   T1:  task -d docs/beacon upgrade
 #   T1:  task -d docs/beacon watch  /  version
@@ -43,6 +43,8 @@ vars:
   # Version map — mirror test/dev/Taskfile.yml. beacon uploads the UPGRADE zip.
   BASE_VERSION: "0.74.0"
   UPGRADE_VERSION: "0.74.2"
+  CONSENSUS_IMAGE_REPO: gcr.io/hedera-registry/consensus-node
+  ALLOY_IMAGE: grafana/alloy:v1.14.2
   # The deployment package beacon uploads, and its SHA-384 (H) — the value that
   # couples the whole chain (upload memo, file info, freeze prepare, freeze
   # upgrade). Recomputed from the zip on every task run, so a rebuild is picked
@@ -139,15 +141,29 @@ tasks:
       - task: cluster
       - task: uc-image
 
+  warm-up-cluster:
+    desc: "Preload consensus-node (base+upgrade) and Alloy images into kind as linux/amd64 archives"
+    cmds:
+      - docker pull --platform=linux/amd64 {{.CONSENSUS_IMAGE_REPO}}:{{.BASE_VERSION}}
+      - docker pull --platform=linux/amd64 {{.CONSENSUS_IMAGE_REPO}}:{{.UPGRADE_VERSION}}
+      - docker pull --platform=linux/amd64 {{.ALLOY_IMAGE}}
+      - docker save --platform=linux/amd64 -o /tmp/consensus-node-{{.BASE_VERSION}}.tar {{.CONSENSUS_IMAGE_REPO}}:{{.BASE_VERSION}}
+      - docker save --platform=linux/amd64 -o /tmp/consensus-node-{{.UPGRADE_VERSION}}.tar {{.CONSENSUS_IMAGE_REPO}}:{{.UPGRADE_VERSION}}
+      - docker save --platform=linux/amd64 -o /tmp/grafana-alloy-v1.14.2.tar {{.ALLOY_IMAGE}}
+      - kind load image-archive /tmp/consensus-node-{{.BASE_VERSION}}.tar --name {{.CLUSTER}}
+      - kind load image-archive /tmp/consensus-node-{{.UPGRADE_VERSION}}.tar --name {{.CLUSTER}}
+      - kind load image-archive /tmp/grafana-alloy-v1.14.2.tar --name {{.CLUSTER}}
+
   # ── 3. network ────────────────────────────────────────────────────────────--
   deploy:
     desc: "Install kind prereqs (MetalLB/MinIO) and deploy a single-node v{{.BASE_VERSION}} network + genesis"
     cmds:
+      - task: warm-up-cluster
       - task: example:setup
       - task: example:deploy:single
 
-  # ── 4. beacon config ─────────────────────────────────────────────────────────
-  config:
+  # ── 4. beacon upload-build-zip─────────────────────────────────────────────────────────
+  upload-build-zip:
     desc: "Build bin/beacon and write {{.BEACON_HOME}} config.yaml + 0.0.2 payer key"
     cmds:
       - task: root:build:beacon
