@@ -29,7 +29,7 @@ func TestBuildRole_UCPodStatusScopedToOwnPod(t *testing.T) {
 	capsule := newTestCapsule()
 	capsule.Spec.PodProperties.Containers.UC = &operatorv1alpha1.UcSidecar{Enabled: true}
 
-	role := (&RoleSubReconciler{}).buildRole(capsule)
+	role := (&RoleSubReconciler{}).buildRole(capsule, true)
 
 	rule := findRule(role.Rules, "pods/status")
 	if rule == nil {
@@ -48,8 +48,82 @@ func TestBuildRole_UCPodStatusScopedToOwnPod(t *testing.T) {
 // UC sidecar is enabled — a capsule without the sidecar gets no pod-patch permission.
 func TestBuildRole_NoUCNoPodStatus(t *testing.T) {
 	capsule := newTestCapsule() // no UC sidecar
-	role := (&RoleSubReconciler{}).buildRole(capsule)
+	role := (&RoleSubReconciler{}).buildRole(capsule, false)
 	if rule := findRule(role.Rules, "pods/status"); rule != nil {
 		t.Errorf("expected no pods/status rule without the UC sidecar, got %+v", rule)
+	}
+}
+
+// TestBuildRole_UCConfigCRGrants verifies the UC sidecar is granted create+get+update on
+// every ConsensusConfig CR kind it upserts during the execute phase, in cluster-only mode.
+// Without these the provisioner-proxy's config-CR staging is forbidden (see
+// internal/uc/config_cr.go). The resource plurals here must stay in lockstep with the CRD
+// spec.names.plural and the GVRs in internal/uc/k8s.go.
+func TestBuildRole_UCConfigCRGrants(t *testing.T) {
+	capsule := newTestCapsule()
+	capsule.Spec.PodProperties.Containers.UC = &operatorv1alpha1.UcSidecar{Enabled: true}
+
+	role := (&RoleSubReconciler{}).buildRole(capsule, true) // cluster-only
+
+	// Every config CR kind the UC creates/gets/updates via upsertConfigCR.
+	wantResources := []string{
+		"log4j2configs",
+		"nodesettings",
+		"applicationproperties",
+		"applicationoverrideproperties",
+		"bootstrapproperties",
+		"nodepropertiesconfigs",
+		"throttlesconfigs",
+		"feeschedules",
+		"simplefeesschedules",
+		"apipermissionproperties",
+		"blocknodesconfigs",
+	}
+	wantVerbs := map[string]bool{"create": true, "get": true, "update": true}
+
+	for _, res := range wantResources {
+		rule := findRule(role.Rules, res)
+		if rule == nil {
+			t.Errorf("expected a grant for %q, got none", res)
+			continue
+		}
+		got := map[string]bool{}
+		for _, v := range rule.Verbs {
+			got[v] = true
+		}
+		for v := range wantVerbs {
+			if !got[v] {
+				t.Errorf("resource %q: missing verb %q (got %v)", res, v, rule.Verbs)
+			}
+		}
+	}
+}
+
+// TestBuildRole_NoUCNoConfigCRGrants verifies the config-CR grants are gated on the UC
+// sidecar: a capsule without the sidecar gets none of them.
+func TestBuildRole_NoUCNoConfigCRGrants(t *testing.T) {
+	capsule := newTestCapsule() // no UC sidecar
+	role := (&RoleSubReconciler{}).buildRole(capsule, false)
+	if rule := findRule(role.Rules, "apipermissionproperties"); rule != nil {
+		t.Errorf("expected no config-CR grant without the UC sidecar, got %+v", rule)
+	}
+}
+
+// TestBuildRole_MainnetNoConfigCRGrants verifies that with the UC sidecar enabled but in
+// mainnet mode (host provisioner daemon), the config-CR grant is withheld — the UC never
+// creates config CRs there, so granting them would violate least-privilege. The
+// NetworkUpgrade* and pods/status grants remain, since they apply in both modes.
+func TestBuildRole_MainnetNoConfigCRGrants(t *testing.T) {
+	capsule := newTestCapsule()
+	capsule.Spec.PodProperties.Containers.UC = &operatorv1alpha1.UcSidecar{Enabled: true}
+
+	role := (&RoleSubReconciler{}).buildRole(capsule, false) // mainnet
+
+	if rule := findRule(role.Rules, "apipermissionproperties"); rule != nil {
+		t.Errorf("expected no config-CR grant in mainnet mode, got %+v", rule)
+	}
+	// The network-upgrade grants are mode-independent and must still be present.
+	if rule := findRule(role.Rules, "networkupgradeexecutes"); rule == nil {
+		t.Error("expected networkupgradeexecutes grant in mainnet mode, got none")
 	}
 }

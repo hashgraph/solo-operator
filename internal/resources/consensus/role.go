@@ -16,6 +16,7 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
+	"github.com/hashgraph/solo-operator/internal/uc"
 )
 
 type RoleSubReconciler struct {
@@ -29,7 +30,21 @@ func NewRoleSubReconciler(c client.Client, scheme *runtime.Scheme) *RoleSubRecon
 }
 
 func (r *RoleSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
-	desired := r.buildRole(capsule)
+	// The config-CR grant is needed only in cluster-only mode, where the UC's
+	// provisioner-proxy stages the ConsensusConfig CRs itself. In mainnet mode
+	// (host provisioner daemon) the UC never creates them, so we withhold the
+	// grant to keep the node ServiceAccount least-privilege. Resolve the mode
+	// only when the sidecar is enabled to avoid an unnecessary Orbit lookup.
+	clusterOnly := false
+	if sidecar := capsule.Spec.PodProperties.Containers.UC; sidecar != nil && sidecar.Enabled {
+		mode, err := ResolveUCMode(ctx, r.Client, capsule)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		clusterOnly = mode == uc.ModeClusterOnly
+	}
+
+	desired := r.buildRole(capsule, clusterOnly)
 	if err := controllerutil.SetControllerReference(capsule, desired, r.Scheme); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -53,16 +68,17 @@ func (r *RoleSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1al
 	return ctrl.Result{}, nil
 }
 
-func (r *RoleSubReconciler) buildRole(capsule *operatorv1alpha1.ConsensusCapsule) *rbacv1.Role {
+func (r *RoleSubReconciler) buildRole(capsule *operatorv1alpha1.ConsensusCapsule, clusterOnly bool) *rbacv1.Role {
 	rules := []rbacv1.PolicyRule{
 		{APIGroups: []string{""}, Resources: []string{"configmaps"}, Verbs: []string{"get", "list", "watch"}},
 		{APIGroups: []string{""}, Resources: []string{"secrets"}, Verbs: []string{"get", "list", "watch"}},
 	}
 
-	uc := capsule.Spec.PodProperties.Containers.UC
-	if uc != nil && uc.Enabled {
+	sidecar := capsule.Spec.PodProperties.Containers.UC
+	if sidecar != nil && sidecar.Enabled {
 		// The UC sidecar creates NetworkUpgrade* CRs and watches them by spec.operationId via
 		// the field indexer. The provisioner-proxy also patches NetworkUpgradeExecute status.
+		// These are needed in both mainnet and cluster-only mode.
 		networkUpgradeResources := []string{
 			"networkupgradeprepares",
 			"networkupgradefreezes",
@@ -93,6 +109,39 @@ func (r *RoleSubReconciler) buildRole(capsule *operatorv1alpha1.ConsensusCapsule
 				ResourceNames: []string{PodName(capsule)},
 			},
 		)
+
+		// Config-CR grant — cluster-only mode ONLY. In this mode the UC's
+		// provisioner-proxy upserts the ConsensusConfig CR family from the deployment
+		// package's data/config/ files (internal/uc/config_cr.go upsertConfigCR:
+		// Create, then Get+Update on conflict). In mainnet mode the host provisioner
+		// daemon owns config delivery and the UC never creates these, so the grant is
+		// withheld to keep the ServiceAccount least-privilege.
+		//
+		// Resource plurals must match the CRD spec.names.plural (and internal/uc/k8s.go
+		// GVRs) verbatim, so an RBAC allow actually matches the API server's registered
+		// resource. Kinds already ending in "s" keep that as their plural
+		// (ApplicationProperties -> applicationproperties); the rest take the usual
+		// trailing "s" (Log4j2Config -> log4j2configs).
+		if clusterOnly {
+			configResources := []string{
+				"log4j2configs",
+				"nodesettings",
+				"applicationproperties",
+				"applicationoverrideproperties",
+				"bootstrapproperties",
+				"nodepropertiesconfigs",
+				"throttlesconfigs",
+				"feeschedules",
+				"simplefeesschedules",
+				"apipermissionproperties",
+				"blocknodesconfigs",
+			}
+			rules = append(rules, rbacv1.PolicyRule{
+				APIGroups: []string{"operator.solo.hiero.org"},
+				Resources: configResources,
+				Verbs:     []string{"create", "get", "list", "watch", "update", "patch"},
+			})
+		}
 	}
 
 	return &rbacv1.Role{

@@ -132,7 +132,7 @@ func scanConfigFiles(upgradePath string) ([]scannedFile, error) {
 		if _, skip := ignoredConfigFilenames[name]; skip {
 			logx.As().Info().Str("reason", ReasonConfigFileIgnored.String()).
 				Str("filename", name).Str("dir", configDir).
-				Msg("config file is operator-managed — skipping (no config CR)")
+				Msg("config file is skipped (no config CR)")
 			continue
 		}
 		entry, ok := configFileKinds[name]
