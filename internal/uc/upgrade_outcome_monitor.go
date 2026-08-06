@@ -802,7 +802,7 @@ func (m *UpgradeOutcomeMonitor) emitDaemonTriggered(cr *unstructured.Unstructure
 
 	logx.As().Info().Str("reason", ReasonDaemonTriggered.String()).
 		Str("operation_id", operationID).Str("cr_name", cr.GetName()).
-		Msg("Execute CR at ReadyForProvisionerDaemon; operator will trigger the provisioner daemon")
+		Msg("Execute CR at ReadyForProvisionerDaemon")
 	m.events.info(operationID, ReasonDaemonTriggered.String(),
 		"Execute CR "+cr.GetName()+" reached ReadyForProvisionerDaemon")
 }

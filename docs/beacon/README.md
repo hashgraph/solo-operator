@@ -75,10 +75,10 @@ back; `freeze prepare`/`freeze upgrade` must both carry that exact value.
 H=$(shasum -a 384 softwareUpgrade.zip | awk '{print $1}')
 
 # 1. stage the zip into special file 0.0.150 (verify-before-upload with --expect-hash)
-beacon file upload software-zip --expect-hash <H>
+beacon file upload --expect-hash <H>
 
 # 2. read back the canonical hash the network holds
-beacon file info software-zip
+beacon file info
 
 # 3. stage the software on every node, pinned to H
 beacon freeze prepare  --upgrade-zip-hash <H>
@@ -178,7 +178,7 @@ kubectl apply -f examples/job-upload-hostpath.yaml
 
 ```bash
 kubectl apply -f examples/job-upload-s3.yaml       # or job-upload-hostpath.yaml
-kubectl -n solo logs -f job/beacon-upload-software-zip
+kubectl -n solo logs -f job/beacon-upload
 # note the "Confirmed SHA-384: <H>" line, then:
 #   edit examples/job-freeze.yaml → set --upgrade-zip-hash <H>
 kubectl apply -f examples/job-freeze.yaml
@@ -340,10 +340,10 @@ Then run the HAPI sequence:
 cd "$ROOT"
 
 # a) upload the v0.74.2 package into special file 0.0.150 (verify-before-write)
-./bin/beacon -c /tmp/beacon-solo/config.yaml file upload software-zip --zip "$ZIP" --expect-hash "$H"
+./bin/beacon -c /tmp/beacon-solo/config.yaml file upload --zip "$ZIP" --expect-hash "$H"
 
 # b) confirm the network holds exactly that hash
-./bin/beacon -c /tmp/beacon-solo/config.yaml file info software-zip                    # SHA-384 must equal H
+./bin/beacon -c /tmp/beacon-solo/config.yaml file info                    # SHA-384 must equal H
 
 # c) stage the upgrade on every node, pinned to H
 ./bin/beacon -c /tmp/beacon-solo/config.yaml freeze prepare --upgrade-zip-hash "$H" --yes
@@ -407,6 +407,6 @@ kind delete cluster --name solo-operator
 - **passphrase error in a Job** — add `account<N>.pass` to the `beacon-keys`
   Secret, or use an unencrypted PEM.
 - **`freeze prepare` rejected / hash mismatch** — the `--upgrade-zip-hash` must
-  equal what `file info software-zip` reports; re-upload if they differ.
+  equal what `file info` reports; re-upload if they differ.
 - **TLS / cert errors against local nodes** — keep `tls: false` for plaintext
   `50211`; cert verification only engages for ledger-pinned networks.

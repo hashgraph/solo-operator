@@ -27,7 +27,7 @@ spec:
             - "-c"
             - "/etc/beacon/config.yaml"
             - "--upgrade-zip-hash"
-            - "REPLACE_WITH_UPLOADED_SHA384_HEX"   # the H that `file info software-zip` reported
+            - "REPLACE_WITH_UPLOADED_SHA384_HEX"   # the H that `beacon file info` reported
             - "--yes"
           volumeMounts:
             - { name: config, mountPath: /etc/beacon/config.yaml, subPath: config.yaml, readOnly: true }

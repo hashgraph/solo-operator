@@ -45,7 +45,7 @@ spec:
         ledgerId: "0x01"
         
         # EVM chain id (EIP-155)
-        # mainnet, testnet and plocal
+        # mainnet, testnet and local
         # 298 is the well-known local/dev chain id.
         chainId: "298"
         externalAddresses: []

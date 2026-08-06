@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/automa-saga/errx"
 	"github.com/automa-saga/logx"
@@ -148,6 +149,7 @@ func uploadChunks(u Uploader, fileID hiero.FileID, chunks [][]byte, start int) e
 	if every <= 0 {
 		every = DefaultCheckpointEvery
 	}
+	t0 := time.Now()
 
 	// running mirrors the network's incremental SHA-384 of the staged contents.
 	// Seed it with the chunks already on-chain when resuming from start > 0.
@@ -182,6 +184,7 @@ func uploadChunks(u Uploader, fileID hiero.FileID, chunks [][]byte, start int) e
 			Str("file", fileID.String()).
 			Int("percent", done*100/total).
 			Str("hash", hex.EncodeToString(want)).
+			Str("elapsed", time.Since(t0).Truncate(time.Millisecond).String()).
 			Msg("checkpoint verified: staged hash matches")
 		return nil
 	}
@@ -196,7 +199,7 @@ func uploadChunks(u Uploader, fileID hiero.FileID, chunks [][]byte, start int) e
 			return fmt.Errorf("initial file update (chunk 1/%d): %w", total, err)
 		}
 		running.Write(chunks[0])
-		logUploadProgress(fileID, 1, total)
+		logUploadProgress(fileID, 1, total, t0)
 		if err := checkpoint(1); err != nil {
 			return err
 		}
@@ -219,7 +222,7 @@ func uploadChunks(u Uploader, fileID hiero.FileID, chunks [][]byte, start int) e
 			return fmt.Errorf("append chunk %d/%d: %w", i+1, total, err)
 		}
 		running.Write(chunks[i])
-		logUploadProgress(fileID, i+1, total)
+		logUploadProgress(fileID, i+1, total, t0)
 		if isCheckpoint {
 			if err := checkpoint(i + 1); err != nil {
 				return err
@@ -357,17 +360,19 @@ func chunkBytes(data []byte, size int) [][]byte {
 // live chunk progress alongside each SUCCESS receipt) plus an info line at each 10%
 // boundary and at completion (so a normal run reports progress without a line per
 // chunk).
-func logUploadProgress(fileID hiero.FileID, done, total int) {
+func logUploadProgress(fileID hiero.FileID, done, total int, t0 time.Time) {
 	if total == 0 {
 		return
 	}
 	pct := done * 100 / total
+	elapsed := time.Since(t0).Truncate(time.Millisecond).String()
 	logx.As().Debug().
 		Str("reason", reasonUploadProgress.String()).
 		Uint64("file", fileID.File).
 		Int("chunk", done).
 		Int("chunks", total).
 		Int("percent", pct).
+		Str("elapsed", elapsed).
 		Msg("chunk uploaded")
 	prev := (done - 1) * 100 / total
 	if done == total || pct/10 != prev/10 {
@@ -377,6 +382,7 @@ func logUploadProgress(fileID hiero.FileID, done, total int) {
 			Int("chunk", done).
 			Int("chunks", total).
 			Int("percent", pct).
+			Str("elapsed", elapsed).
 			Msg("upload progress")
 	}
 }
