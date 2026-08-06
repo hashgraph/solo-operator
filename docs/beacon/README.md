@@ -197,6 +197,15 @@ to drive a software upgrade to **v0.74.2**. beacon is the HAPI control plane
 (upload + freeze); the consensus node, UC sidecar, operator, and provisioner
 carry out the actual node upgrade after the freeze fires.
 
+> **Quick path — [`docs/beacon/Taskfile.yml`](Taskfile.yml).** Every step below is
+> wrapped as a task. Run `task -d docs/beacon` to print the ordered runbook, then
+> the tasks in sequence (`build`, `cluster`, `uc-image`, `operator`, `deploy`,
+> `config`, `port-forward`, `upgrade`, `watch`, `version`, `cleanup`). The
+> `operator` and `port-forward` tasks are long-running and each want their own
+> terminal; everything else is one-shot. The tasks run from the current checkout
+> (no worktree juggling) and `includes` the root, `docs/example`, and `test/dev`
+> Taskfiles. The manual steps below remain the reference for what each task does.
+
 Version map for this test:
 
 | Role | Version | Where it is set |

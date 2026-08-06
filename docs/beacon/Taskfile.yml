@@ -1,0 +1,246 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# beacon end-to-end upgrade test (local kind).
+#
+# Automates the runbook in docs/beacon/README.md § "End-to-end upgrade test":
+# stand up a v0.74.0 single-node network on kind, then drive a beacon software
+# upgrade to v0.74.2 and watch the UC → operator → provisioner pipeline finish it.
+#
+# Two steps are long-running and MUST each get their own terminal — the operator
+# and the node port-forward. Everything else is a plain task. Run `task -d docs/beacon`
+# (or `cd docs/beacon && task`) to see the ordered runbook.
+#
+# Typical flow (three terminals):
+#   T1:  task -d docs/beacon build
+#   T1:  task -d docs/beacon cluster
+#   T1:  task -d docs/beacon uc-image
+#   T2:  task -d docs/beacon operator          # leave running
+#   T1:  task -d docs/beacon deploy
+#   T1:  task -d docs/beacon config
+#   T3:  task -d docs/beacon port-forward       # leave running
+#   T1:  task -d docs/beacon upgrade
+#   T1:  task -d docs/beacon watch  /  version
+#   T1:  task -d docs/beacon cleanup
+
+version: '3'
+
+includes:
+  root:
+    taskfile: ../../Taskfile.yml
+    dir: ../..
+  example:
+    taskfile: ../example/Taskfile.yml
+    dir: ../example
+  dev:
+    taskfile: ../../test/dev/Taskfile.yml
+    dir: ../../test/dev
+
+vars:
+  # Absolute repo root, so beacon (bin/beacon) and the staging zip resolve
+  # regardless of the directory a task runs in.
+  ROOT:
+    sh: cd ../.. && pwd
+  # Version map — mirror test/dev/Taskfile.yml. beacon uploads the UPGRADE zip.
+  BASE_VERSION: "0.74.0"
+  UPGRADE_VERSION: "0.74.2"
+  # The deployment package beacon uploads, and its SHA-384 (H) — the value that
+  # couples the whole chain (upload memo, file info, freeze prepare, freeze
+  # upgrade). Recomputed from the zip on every task run, so a rebuild is picked
+  # up automatically; empty until `task build` has produced the zip.
+  ZIP: "{{.ROOT}}/test/dev/staging/build-v{{.UPGRADE_VERSION}}.zip"
+  H:
+    sh: >-
+      shasum -a 384 "{{.ROOT}}/test/dev/staging/build-v{{.UPGRADE_VERSION}}.zip" 2>/dev/null
+      | awk '{print $1}'
+  # kind cluster name (matches root Taskfile kind:* tasks).
+  CLUSTER: solo-operator
+  UC_IMG_DEV: ghcr.io/hashgraph/solo-operator-uc:dev
+  # beacon's network context: config.yaml + keys/ live here.
+  BEACON_HOME: /tmp/beacon-solo
+  BEACON: "{{.ROOT}}/bin/beacon"
+  CONFIG: "{{.BEACON_HOME}}/config.yaml"
+  # Node HAPI endpoint exposed to the host.
+  NS: solo-orbit
+  PF_SVC: haproxy-node0
+  PORT: "50211"
+  # How far out (minutes) to schedule the upgrade freeze.
+  FREEZE_DELAY_MIN: "3"
+  # Well-known 0.0.2 genesis key (its public key matches the network-genesis
+  # bootstrap.genesisPublicKey used by docs/example).
+  ACCOUNT2_KEY_HEX: "302e020100300506032b65700422042091132178e72057a1d7528025956fe39b0b847f200ab59b2fdd367017f3087137"
+
+tasks:
+  default:
+    desc: Print the ordered e2e runbook (operator + port-forward each need their own terminal)
+    silent: true
+    cmds:
+      - |
+        cat <<'EOF'
+        beacon end-to-end upgrade test — run in order (3 terminals):
+
+          T1  task -d docs/beacon build         # zips v{{.BASE_VERSION}} + v{{.UPGRADE_VERSION}}, prints H
+          T1  task -d docs/beacon cluster        # kind reset + CRDs
+          T1  task -d docs/beacon uc-image       # build + load the UC sidecar image (:dev)
+          T2  task -d docs/beacon operator       # operator (go run) — LEAVE RUNNING
+          T1  task -d docs/beacon deploy          # single-node network + genesis (needs operator up)
+          T1  task -d docs/beacon config          # beacon binary + /tmp/beacon-solo config & key
+          T3  task -d docs/beacon port-forward     # node0 HAPI :50211 — LEAVE RUNNING
+          T1  task -d docs/beacon upgrade          # upload -> info -> prepare -> freeze
+          T1  task -d docs/beacon watch            # observe the automated pipeline
+          T1  task -d docs/beacon version          # confirm Services v{{.UPGRADE_VERSION}} is live
+          T1  task -d docs/beacon cleanup          # kind delete
+
+        One-shot helpers: `prepare-cluster` (build+cluster+uc-image), then start the
+        operator, then `deploy` + `config`, then start the port-forward, then `upgrade`.
+        EOF
+
+  # ── 1. artifacts ────────────────────────────────────────────────────────────
+  build:
+    desc: "Download base+upgrade zips (needs internet) and build staging/build-v*.zip; prints H"
+    cmds:
+      - task: dev:setup
+      - task: dev:build
+      - task: print-hash
+
+  print-hash:
+    desc: "Print the upgrade zip path and its SHA-384 (H)"
+    silent: true
+    cmds:
+      - |
+        if [ ! -f "{{.ZIP}}" ]; then
+          echo "!! upgrade zip not found: {{.ZIP}} — run 'task -d docs/beacon build' first" >&2
+          exit 1
+        fi
+        echo "ZIP={{.ZIP}}"
+        echo "H={{.H}}"
+
+  # ── 2. cluster + operator + UC image ─────────────────────────────────────────
+  cluster:
+    desc: "Reset the kind cluster ({{.CLUSTER}}) and install CRDs"
+    cmds:
+      - task: root:kind:reset
+
+  uc-image:
+    desc: "Build the UC sidecar image, tag it :dev, and load it into kind (PullIfNotPresent needs it local)"
+    cmds:
+      - task: root:docker:build:uc
+      - docker tag ghcr.io/hashgraph/solo-operator-uc:latest {{.UC_IMG_DEV}}
+      - kind load docker-image {{.UC_IMG_DEV}} --name {{.CLUSTER}}
+
+  operator:
+    desc: "Run the operator locally (foreground — LEAVE RUNNING in its own terminal)"
+    cmds:
+      - task: root:run
+
+  prepare-cluster:
+    desc: "One-shot: build zips + reset cluster + load UC image (do this before starting the operator)"
+    cmds:
+      - task: build
+      - task: cluster
+      - task: uc-image
+
+  # ── 3. network ────────────────────────────────────────────────────────────--
+  deploy:
+    desc: "Install kind prereqs (MetalLB/MinIO) and deploy a single-node v{{.BASE_VERSION}} network + genesis"
+    cmds:
+      - task: example:setup
+      - task: example:deploy:single
+
+  # ── 4. beacon config ─────────────────────────────────────────────────────────
+  config:
+    desc: "Build bin/beacon and write {{.BEACON_HOME}} config.yaml + 0.0.2 payer key"
+    cmds:
+      - task: root:build:beacon
+      - mkdir -p {{.BEACON_HOME}}/keys
+      - |
+        # 0.0.2 genesis key as an unencrypted PEM (+ empty passphrase file).
+        { echo "-----BEGIN PRIVATE KEY-----"; \
+          echo "{{.ACCOUNT2_KEY_HEX}}" | xxd -r -p | base64; \
+          echo "-----END PRIVATE KEY-----"; } > {{.BEACON_HOME}}/keys/account2.pem
+        : > {{.BEACON_HOME}}/keys/account2.pass
+      - |
+        cat > {{.CONFIG}} <<'EOF'
+        name: solo-local
+        shard: 0
+        realm: 0
+        defaultPayer: 2
+        defaultNodeAccount: 3
+        nodes:
+          - id: 0
+            account: 3
+            host: 127.0.0.1
+            port: {{.PORT}}
+            tls: false
+        EOF
+      - echo ">> wrote {{.CONFIG}} and {{.BEACON_HOME}}/keys/account2.pem"
+
+  port-forward:
+    desc: "Port-forward node0 HAPI gRPC to localhost:{{.PORT}} (foreground — LEAVE RUNNING in its own terminal)"
+    cmds:
+      - kubectl -n {{.NS}} port-forward svc/{{.PF_SVC}} {{.PORT}}:{{.PORT}}
+
+  # ── 5. drive the upgrade (needs the port-forward running) ─────────────────────
+  upload:
+    desc: "Upload the v{{.UPGRADE_VERSION}} package into special file 0.0.150 (verify-before-write with H)"
+    preconditions:
+      - sh: 'test -f "{{.ZIP}}"'
+        msg: "upgrade zip not found: {{.ZIP}} — run 'task -d docs/beacon build'"
+      - sh: 'test -f "{{.CONFIG}}"'
+        msg: "beacon config not found: {{.CONFIG}} — run 'task -d docs/beacon config'"
+    cmds:
+      - '{{.BEACON}} -c {{.CONFIG}} file upload software-zip --zip "{{.ZIP}}" --expect-hash "{{.H}}"'
+
+  info:
+    desc: "Read back the canonical hash the network holds (must equal H)"
+    cmds:
+      - '{{.BEACON}} -c {{.CONFIG}} file info software-zip'
+
+  prepare:
+    desc: "Stage the upgrade on every node, pinned to H (freeze prepare)"
+    cmds:
+      - '{{.BEACON}} -c {{.CONFIG}} freeze prepare --upgrade-zip-hash "{{.H}}" --yes'
+
+  freeze:
+    desc: "Schedule the freeze that boots the new software (~{{.FREEZE_DELAY_MIN}} min out, UTC)"
+    cmds:
+      - |
+        START=$(date -u -v+{{.FREEZE_DELAY_MIN}}M '+%Y-%m-%d.%H:%M:%S' 2>/dev/null \
+          || date -u -d '+{{.FREEZE_DELAY_MIN}} min' '+%Y-%m-%d.%H:%M:%S')
+        echo ">> freeze start-time (UTC): $START"
+        {{.BEACON}} -c {{.CONFIG}} freeze upgrade --start-time "$START" --upgrade-zip-hash "{{.H}}" --yes
+
+  upgrade:
+    desc: "Full beacon sequence: upload -> info -> prepare -> freeze"
+    cmds:
+      - task: upload
+      - task: info
+      - task: prepare
+      - task: freeze
+
+  abort:
+    desc: "Abort a scheduled freeze before it fires"
+    cmds:
+      - '{{.BEACON}} -c {{.CONFIG}} freeze abort --yes'
+
+  # ── 6. observe + verify ───────────────────────────────────────────────────────
+  watch:
+    desc: "Watch the NetworkUpgrade* CRs advance (UC -> operator -> provisioner)"
+    cmds:
+      - kubectl -n {{.NS}} get networkupgradeprepare,networkupgradefreeze,networkupgradeexecute -w
+
+  uc-logs:
+    desc: "Tail the UC sidecar log on node0 (marker detection, CR creation, ACTIVE)"
+    cmds:
+      - kubectl -n {{.NS}} logs -f node0-0 -c uc
+
+  version:
+    desc: "Confirm the live Services version (expect {{.UPGRADE_VERSION}} after the upgrade)"
+    cmds:
+      - '{{.BEACON}} -c {{.CONFIG}} network version'
+      - kubectl -n {{.NS}} get pods -l app.kubernetes.io/component=consensus-node -o wide
+
+  # ── 7. cleanup ────────────────────────────────────────────────────────────────
+  cleanup:
+    desc: "Delete the kind cluster ({{.CLUSTER}})"
+    cmds:
+      - task: root:kind:delete
