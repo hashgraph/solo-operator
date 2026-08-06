@@ -94,8 +94,20 @@ func main() {
 		fmt.Fprintf(os.Stderr, "failed to initialize logging: %v\n", err)
 		os.Exit(1)
 	}
+	// Stamp the build identity onto every log line so operators can tell which
+	// build is running. Image tags are reused (CI stamps 0.0.0-<sha>) and the
+	// version may be a fixed placeholder, so build_commit is the always-reliable
+	// discriminator. Done before SetLogger so controller-runtime's logr lines
+	// inherit the fields too.
+	logx.SetLogger(logx.As().With().
+		Str("build_version", version.Version).
+		Str("build_commit", version.Commit).
+		Logger())
 	// Route controller-runtime's own logs through logx.
 	ctrl.SetLogger(logr.FromSlogHandler(logx.NewSlogHandler()))
+	bi := version.Get()
+	setupLog.Info("starting solo-operator manager",
+		"build_date", bi.Date, "go_version", bi.GoVersion)
 
 	// If the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will

@@ -260,16 +260,17 @@ func TestScanConfigFiles_unrecognised(t *testing.T) {
 func TestScanConfigFiles_ignoredFileSkipped(t *testing.T) {
 	root := t.TempDir()
 	writeConfigFile(t, root, "application.properties", "[hedera]")
-	// block-nodes.json ships in the package but is operator-managed — it must be
-	// skipped, not treated as unrecognised, and must not produce a scannedFile.
-	writeConfigFile(t, root, "block-nodes.json", `{"nodes":[]}`)
+	// genesis-network.json is a HIP data/config/ file but operator-managed via
+	// NetworkGenesis — it must be skipped, not treated as unrecognised, and must
+	// not produce a scannedFile.
+	writeConfigFile(t, root, "genesis-network.json", `{"nodes":[]}`)
 
 	got, err := scanConfigFiles(root)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(got) != 1 {
-		t.Fatalf("want 1 file (block-nodes.json skipped), got %d", len(got))
+		t.Fatalf("want 1 file (genesis-network.json skipped), got %d", len(got))
 	}
 	if got[0].entry.kind != "ApplicationProperties" {
 		t.Errorf("kind: got %q, want ApplicationProperties", got[0].entry.kind)

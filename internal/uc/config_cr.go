@@ -66,13 +66,16 @@ var packageRootFiles = []string{"log4j2.xml", "settings.txt"}
 // (logged, not applied) rather than treated as unrecognised — this preserves the
 // hard abort for genuinely unknown files while not choking on expected ones.
 //
-//   - block-nodes.json: the consensus-node ships a default copy under data/config/,
-//     but the authoritative per-node block-node config is delivered separately as
-//     block-nodes/config/block-nodes-<NODE_ID>.json and staged via the
-//     BlockNodesConfig CR (see deployBlockNodesConfigCR). The data/config/ copy is
-//     therefore skipped here so it is not turned into a network-wide config CR.
+// Note: per-node block-node config (block-nodes/config/block-nodes-<NODE_ID>.json)
+// and job descriptors (jobs/) live outside data/config/, so they are not scanned
+// here and need no entry — only files that actually land in data/config/ do.
+//
+//   - genesis-network.json: a HIP-1494 data/config/ file (present for cluster-only
+//     genesis), but it is the genesis roster / address book, which the operator
+//     produces via the NetworkGenesis flow rather than a ConsensusConfig CR. The
+//     package copy is skipped so it is not turned into a config CR.
 var ignoredConfigFilenames = map[string]struct{}{
-	"block-nodes.json": {},
+	"genesis-network.json": {},
 }
 
 // knownConfigFilenames returns a sorted slice of all filenames recognised by

@@ -172,11 +172,21 @@ func bindEnv(cmd *cobra.Command) error {
 }
 
 // initLogging configures the global logx logger from the resolved log level.
+// It also stamps the build identity onto every log line so any beacon output
+// can be traced to a specific build. Image tags/versions may be reused or fixed
+// placeholders, so build_commit is the always-reliable discriminator.
 func initLogging(level string) error {
-	return logx.Initialize(logx.LoggingConfig{
+	if err := logx.Initialize(logx.LoggingConfig{
 		Level:          level,
 		ConsoleLogging: true,
-	})
+	}); err != nil {
+		return err
+	}
+	logx.SetLogger(logx.As().With().
+		Str("build_version", version.Version).
+		Str("build_commit", version.Commit).
+		Logger())
+	return nil
 }
 
 // versionCmd prints beacon's own build metadata, stamped at build time via
