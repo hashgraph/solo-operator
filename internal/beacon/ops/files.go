@@ -182,7 +182,7 @@ func uploadChunks(u Uploader, fileID hiero.FileID, chunks [][]byte, start int) e
 			Str("file", fileID.String()).
 			Int("percent", done*100/total).
 			Str("hash", hex.EncodeToString(want)).
-			Msg("checkpoint verified: staged hash matches")
+			Msg("checkpoint verified: file hash matches")
 		return nil
 	}
 

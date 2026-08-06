@@ -221,6 +221,25 @@ tasks:
 
         pushd {{ .EXTRACT_DIR }} >/dev/null
 
+        # Curate data/config/ to the HIP-1494 package set. The base zip and the
+        # vendored overlay ship node-local files (e.g. evm-addresses-blocklist.csv,
+        # CNtoBNConfig/, a default block-nodes.json) that are NOT part of the HIP
+        # package format. The consensus node receives config only via operator-created
+        # config CRs, so leaving unrecognised files in data/config/ makes the UC abort
+        # at execute time. Keep only the filenames HIP-1494 defines for data/config/.
+        info "Curating data/config to the HIP-1494 package set"
+        keep="application.properties application-override.properties api-permission.properties bootstrap.properties node.properties feeSchedules.json simpleFeesSchedules.json throttles.json genesis-network.json"
+        if [ -d data/config ]; then
+          for path in data/config/* data/config/.[!.]*; do
+            [ -e "$path" ] || continue
+            base="$(basename "$path")"
+            case " $keep " in
+              *" $base "*) ;;
+              *) warn "Pruning non-HIP config: data/config/$base"; rm -rf "$path" ;;
+            esac
+          done
+        fi
+
         # Per-CN block-node config fixtures (issue #1071). Per HIP-1494 the UC selects
         # the file matching the target node NODE_ID and stages it verbatim as
         # data/config/block-nodes.json. This dev network deploys no block node and runs
