@@ -15,6 +15,7 @@ import (
 const (
 	PartOfSimpleFeesSchedules = "simple-fees-schedules"
 	ConfigFileName            = "simpleFeesSchedules.json"
+	ConfigMapSuffix           = "simple-fee-schedules"
 )
 
 func CommonLabels(obj *operatorv1alpha1.SimpleFeesSchedules) map[string]string {
@@ -26,7 +27,7 @@ func CommonLabels(obj *operatorv1alpha1.SimpleFeesSchedules) map[string]string {
 }
 
 func ConfigMapName(obj *operatorv1alpha1.SimpleFeesSchedules) string {
-	return obj.Name
+	return obj.Spec.Scope + "-" + ConfigMapSuffix
 }
 
 func ConfigMapNameForRef(name string) string {

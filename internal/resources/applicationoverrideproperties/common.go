@@ -15,6 +15,7 @@ import (
 const (
 	PartOfApplicationOverrideProperties = "application-override-properties"
 	ConfigFileName                      = "application-override.properties"
+	ConfigMapSuffix                     = "application-override-properties"
 )
 
 func CommonLabels(obj *operatorv1alpha1.ApplicationOverrideProperties) map[string]string {
@@ -26,7 +27,7 @@ func CommonLabels(obj *operatorv1alpha1.ApplicationOverrideProperties) map[strin
 }
 
 func ConfigMapName(obj *operatorv1alpha1.ApplicationOverrideProperties) string {
-	return obj.Name
+	return obj.Spec.Scope + "-" + ConfigMapSuffix
 }
 
 func ConfigMapNameForRef(name string) string {

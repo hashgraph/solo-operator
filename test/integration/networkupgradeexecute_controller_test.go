@@ -27,8 +27,9 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 		createNamespaceIgnoreExisting(ctx, ns)
 
 		log4j2 := &operatorv1alpha1.Log4j2Config{
-			ObjectMeta: metav1.ObjectMeta{Name: "network-log4j2", Namespace: ns},
+			ObjectMeta: metav1.ObjectMeta{Name: "node0-log4j2", Namespace: ns},
 			Spec: operatorv1alpha1.Log4j2ConfigSpec{
+				Scope:   "node0",
 				Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`,
 			},
 		}
@@ -37,16 +38,17 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 		}
 
 		nodeSettings := &operatorv1alpha1.NodeSettings{
-			ObjectMeta: metav1.ObjectMeta{Name: "network-settings", Namespace: ns},
-			Spec:       operatorv1alpha1.NodeSettingsSpec{Content: "checkSignedStateFromDisk,              1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "node0-settings", Namespace: ns},
+			Spec:       operatorv1alpha1.NodeSettingsSpec{Scope: "node0", Content: "checkSignedStateFromDisk,              1"},
 		}
 		if err := k8sClient.Create(ctx, nodeSettings); err != nil {
 			Expect(err.Error()).To(ContainSubstring("already exists"))
 		}
 
 		appProps := &operatorv1alpha1.ApplicationProperties{
-			ObjectMeta: metav1.ObjectMeta{Name: "network-application-properties", Namespace: ns},
+			ObjectMeta: metav1.ObjectMeta{Name: "node0-application-properties", Namespace: ns},
 			Spec: operatorv1alpha1.ApplicationPropertiesSpec{
+				Scope:   "node0",
 				Content: "hedera.config.version=0\nnetty.mode=TEST",
 			},
 		}
@@ -126,9 +128,9 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 				NodeId:                   0,
 				AccountId:                "0.0.3",
 				Weight:                   1,
-				Log4j2ConfigRef:          "network-log4j2",
-				SettingsConfigRef:        "network-settings",
-				ApplicationPropertiesRef: "network-application-properties",
+				Log4j2ConfigRef:          "node0-log4j2",
+				SettingsConfigRef:        "node0-settings",
+				ApplicationPropertiesRef: "node0-application-properties",
 				PodProperties: operatorv1alpha1.ConsensusPodProperties{
 					Containers: operatorv1alpha1.ConsensusContainers{
 						ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{

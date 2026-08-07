@@ -202,6 +202,7 @@ func buildConfigCR(cfg ProvisionerProxyConfig, operationID string, sf scannedFil
 		annotationCreatedBy: createdByUC,
 	})
 	_ = unstructured.SetNestedField(cr.Object, string(data), "spec", "content")
+	_ = unstructured.SetNestedField(cr.Object, fmt.Sprintf("node%d", cfg.NodeID), "spec", "scope")
 	if cfg.Orbit != "" {
 		_ = unstructured.SetNestedField(cr.Object, cfg.Orbit, "spec", "orbit")
 	}
@@ -331,6 +332,7 @@ func (p *ProvisionerProxy) deployBlockNodesConfigCR(ctx context.Context, operati
 		annotationCreatedBy: createdByUC,
 	})
 	_ = unstructured.SetNestedField(cr.Object, string(data), "spec", "content")
+	_ = unstructured.SetNestedField(cr.Object, fmt.Sprintf("node%d", p.cfg.NodeID), "spec", "scope")
 	if p.cfg.Orbit != "" {
 		_ = unstructured.SetNestedField(cr.Object, p.cfg.Orbit, "spec", "orbit")
 	}

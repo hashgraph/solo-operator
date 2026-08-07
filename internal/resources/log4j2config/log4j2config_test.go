@@ -63,9 +63,10 @@ func TestCommonLabels(t *testing.T) {
 func TestConfigMapName(t *testing.T) {
 	obj := &operatorv1alpha1.Log4j2Config{
 		ObjectMeta: metav1.ObjectMeta{Name: "node0"},
+		Spec:       operatorv1alpha1.Log4j2ConfigSpec{Scope: "node0"},
 	}
-	if got := ConfigMapName(obj); got != "node0" {
-		t.Errorf("ConfigMapName: got %q, want %q", got, "node0")
+	if got := ConfigMapName(obj); got != "node0-log4j2" {
+		t.Errorf("ConfigMapName: got %q, want %q", got, "node0-log4j2")
 	}
 }
 
@@ -117,7 +118,7 @@ func TestConfigMapSubReconciler_CreatesConfigMap(t *testing.T) {
 	scheme := newScheme(t)
 	obj := &operatorv1alpha1.Log4j2Config{
 		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default"},
-		Spec:       operatorv1alpha1.Log4j2ConfigSpec{Content: validXML},
+		Spec:       operatorv1alpha1.Log4j2ConfigSpec{Content: validXML, Scope: "node0"},
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(obj).Build()
 	r := NewConfigMapSubReconciler(c, scheme, nil)
@@ -128,7 +129,7 @@ func TestConfigMapSubReconciler_CreatesConfigMap(t *testing.T) {
 	}
 
 	cm := &corev1.ConfigMap{}
-	if err := c.Get(context.Background(), types.NamespacedName{Name: "node0", Namespace: "default"}, cm); err != nil {
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "node0-log4j2", Namespace: "default"}, cm); err != nil {
 		t.Fatalf("ConfigMap not found: %v", err)
 	}
 	if cm.Data[ConfigFileName] != validXML {
@@ -140,10 +141,10 @@ func TestConfigMapSubReconciler_UpdatesConfigMap(t *testing.T) {
 	scheme := newScheme(t)
 	obj := &operatorv1alpha1.Log4j2Config{
 		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default"},
-		Spec:       operatorv1alpha1.Log4j2ConfigSpec{Content: validXML},
+		Spec:       operatorv1alpha1.Log4j2ConfigSpec{Content: validXML, Scope: "node0"},
 	}
 	existingCM := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: "node0-log4j2", Namespace: "default"},
 		Data:       map[string]string{ConfigFileName: "<Configuration status=\"INFO\"/>"},
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(obj, existingCM).Build()
@@ -155,7 +156,7 @@ func TestConfigMapSubReconciler_UpdatesConfigMap(t *testing.T) {
 	}
 
 	cm := &corev1.ConfigMap{}
-	if err := c.Get(context.Background(), types.NamespacedName{Name: "node0", Namespace: "default"}, cm); err != nil {
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "node0-log4j2", Namespace: "default"}, cm); err != nil {
 		t.Fatalf("ConfigMap not found: %v", err)
 	}
 	if cm.Data[ConfigFileName] != validXML {
@@ -167,7 +168,7 @@ func TestConfigMapSubReconciler_InvalidXML(t *testing.T) {
 	scheme := newScheme(t)
 	obj := &operatorv1alpha1.Log4j2Config{
 		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default"},
-		Spec:       operatorv1alpha1.Log4j2ConfigSpec{Content: "<NotLog4j/>"},
+		Spec:       operatorv1alpha1.Log4j2ConfigSpec{Content: "<NotLog4j/>", Scope: "node0"},
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(obj).Build()
 	r := NewConfigMapSubReconciler(c, scheme, nil)
@@ -178,7 +179,7 @@ func TestConfigMapSubReconciler_InvalidXML(t *testing.T) {
 	}
 
 	cm := &corev1.ConfigMap{}
-	if getErr := c.Get(context.Background(), types.NamespacedName{Name: "node0", Namespace: "default"}, cm); getErr == nil {
+	if getErr := c.Get(context.Background(), types.NamespacedName{Name: "node0-log4j2", Namespace: "default"}, cm); getErr == nil {
 		t.Error("ConfigMap should not have been created for invalid XML")
 	}
 }

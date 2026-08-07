@@ -15,6 +15,7 @@ import (
 const (
 	PartOfApiPermissionProperties = "api-permission-properties"
 	ConfigFileName                = "api-permission.properties"
+	ConfigMapSuffix               = "api-permission-properties"
 )
 
 func CommonLabels(obj *operatorv1alpha1.ApiPermissionProperties) map[string]string {
@@ -26,7 +27,7 @@ func CommonLabels(obj *operatorv1alpha1.ApiPermissionProperties) map[string]stri
 }
 
 func ConfigMapName(obj *operatorv1alpha1.ApiPermissionProperties) string {
-	return obj.Name
+	return obj.Spec.Scope + "-" + ConfigMapSuffix
 }
 
 func ConfigMapNameForRef(name string) string {

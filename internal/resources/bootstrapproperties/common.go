@@ -15,6 +15,7 @@ import (
 const (
 	PartOfBootstrapProperties = "bootstrap-properties"
 	ConfigFileName            = "bootstrap.properties"
+	ConfigMapSuffix           = "bootstrap-properties"
 )
 
 func CommonLabels(obj *operatorv1alpha1.BootstrapProperties) map[string]string {
@@ -26,7 +27,7 @@ func CommonLabels(obj *operatorv1alpha1.BootstrapProperties) map[string]string {
 }
 
 func ConfigMapName(obj *operatorv1alpha1.BootstrapProperties) string {
-	return obj.Name
+	return obj.Spec.Scope + "-" + ConfigMapSuffix
 }
 
 func ConfigMapNameForRef(name string) string {

@@ -1,23 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# Shared SimpleFeesSchedules — creates a ConfigMap named network-simple-fee-schedules
+# Shared SimpleFeesSchedules — creates a ConfigMap named NODEID-simple-fee-schedules
 # that is subPath-mounted at data/config/simpleFeesSchedules.json in every ConsensusCapsule pod.
 #
 # Each ConsensusCapsule must reference this CR via:
 #   spec:
-#     simpleFeesSchedulesRef: network-simple-fee-schedules
+#     simpleFeesSchedulesRef: NODEID-simple-fee-schedules
 #
 # This field is optional. When omitted the file is not mounted. Updating spec.content
 # propagates the new file to all referencing nodes on the next pod restart.
 apiVersion: operator.solo.hiero.org/v1alpha1
 kind: SimpleFeesSchedules
 metadata:
-  name: network-simple-fee-schedules
+  name: NODEID-simple-fee-schedules
   namespace: solo-orbit
 spec:
   # orbit links this resource to the Orbit for cascade deletion.
   orbit: solo-orbit
-  # content is a valid JSON document defining simple fee schedules.
+  scope: NODEID  # content is a valid JSON document defining simple fee schedules.
   content: |
     {
       "schedules": []

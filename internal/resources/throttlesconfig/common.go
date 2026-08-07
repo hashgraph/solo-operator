@@ -15,6 +15,7 @@ import (
 const (
 	PartOfThrottlesConfig = "throttles-config"
 	ConfigFileName        = "throttles.json"
+	ConfigMapSuffix       = "throttles"
 )
 
 func CommonLabels(obj *operatorv1alpha1.ThrottlesConfig) map[string]string {
@@ -26,7 +27,7 @@ func CommonLabels(obj *operatorv1alpha1.ThrottlesConfig) map[string]string {
 }
 
 func ConfigMapName(obj *operatorv1alpha1.ThrottlesConfig) string {
-	return obj.Name
+	return obj.Spec.Scope + "-" + ConfigMapSuffix
 }
 
 func ConfigMapNameForRef(name string) string {

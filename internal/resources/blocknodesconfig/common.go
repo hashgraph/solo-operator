@@ -15,6 +15,7 @@ import (
 const (
 	PartOfBlockNodesConfig = "block-nodes-config"
 	ConfigFileName         = "block-nodes.json"
+	ConfigMapSuffix        = "block-nodes"
 )
 
 func CommonLabels(obj *operatorv1alpha1.BlockNodesConfig) map[string]string {
@@ -26,7 +27,7 @@ func CommonLabels(obj *operatorv1alpha1.BlockNodesConfig) map[string]string {
 }
 
 func ConfigMapName(obj *operatorv1alpha1.BlockNodesConfig) string {
-	return obj.Name
+	return obj.Spec.Scope + "-" + ConfigMapSuffix
 }
 
 func ConfigMapNameForRef(name string) string {

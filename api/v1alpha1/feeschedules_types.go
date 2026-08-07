@@ -7,6 +7,13 @@ import (
 )
 
 type FeeSchedulesSpec struct {
+	// Scope determines the ConfigMap name prefix. The reconciler builds the
+	// ConfigMap name as scope + "-" + <kind-suffix>. Must match "node" followed
+	// by one or more digits (e.g. node0, node1).
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Pattern=`^node\d+$`
+	Scope string `json:"scope"`
+
 	// +kubebuilder:validation:MinLength=1
 	Content string `json:"content"`
 

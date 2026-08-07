@@ -7,6 +7,13 @@ import (
 )
 
 type BlockNodesConfigSpec struct {
+	// Scope determines the ConfigMap name prefix. The reconciler builds the
+	// ConfigMap name as scope + "-" + <kind-suffix>. Must match "node" followed
+	// by one or more digits (e.g. node0, node1).
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Pattern=`^node\d+$`
+	Scope string `json:"scope"`
+
 	// Raw block-nodes.json content, staged verbatim into the managed ConfigMap.
 	// The consensus-node deployment package delivers this per node under
 	// block-nodes/config/block-nodes-<NODE_ID>.json (HIP-1494); the UC selects the

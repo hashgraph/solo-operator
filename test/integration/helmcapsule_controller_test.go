@@ -182,8 +182,8 @@ var _ = Describe("HelmCapsule Controller", func() {
 			}
 
 			nsSettings := &operatorv1alpha1.NodeSettings{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-settings", Namespace: hcNS},
-				Spec:       operatorv1alpha1.NodeSettingsSpec{Content: "checkSignedStateFromDisk,              1"},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-settings", Namespace: hcNS},
+				Spec:       operatorv1alpha1.NodeSettingsSpec{Scope: "node0", Content: "checkSignedStateFromDisk,              1"},
 			}
 			err = k8sClient.Create(ctx, nsSettings)
 			if err != nil {
@@ -191,9 +191,9 @@ var _ = Describe("HelmCapsule Controller", func() {
 			}
 
 			appPropsMirror := &operatorv1alpha1.ApplicationProperties{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-application-properties", Namespace: hcNS},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-application-properties", Namespace: hcNS},
 				Spec: operatorv1alpha1.ApplicationPropertiesSpec{
-					Content: "hedera.config.version=0\nnetty.mode=TEST",
+					Scope: "node0", Content: "hedera.config.version=0\nnetty.mode=TEST",
 				},
 			}
 			err = k8sClient.Create(ctx, appPropsMirror)
@@ -212,9 +212,9 @@ var _ = Describe("HelmCapsule Controller", func() {
 						NodeId:                   int64(i),
 						AccountId:                fmt.Sprintf("0.0.%d", i+2),
 						Weight:                   1,
-						Log4j2ConfigRef:          "network-log4j2",
-						SettingsConfigRef:        "network-settings",
-						ApplicationPropertiesRef: "network-application-properties",
+						Log4j2ConfigRef:          "node0-log4j2",
+						SettingsConfigRef:        "node0-settings",
+						ApplicationPropertiesRef: "node0-application-properties",
 						PodProperties: operatorv1alpha1.ConsensusPodProperties{
 							Containers: operatorv1alpha1.ConsensusContainers{
 								ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -473,8 +473,8 @@ var _ = Describe("HelmCapsule Controller", func() {
 			}
 
 			nsSettingsRelay := &operatorv1alpha1.NodeSettings{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-settings", Namespace: hcNS},
-				Spec:       operatorv1alpha1.NodeSettingsSpec{Content: "checkSignedStateFromDisk,              1"},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-settings", Namespace: hcNS},
+				Spec:       operatorv1alpha1.NodeSettingsSpec{Scope: "node0", Content: "checkSignedStateFromDisk,              1"},
 			}
 			err = k8sClient.Create(ctx, nsSettingsRelay)
 			if err != nil {
@@ -482,9 +482,9 @@ var _ = Describe("HelmCapsule Controller", func() {
 			}
 
 			appPropsRelay := &operatorv1alpha1.ApplicationProperties{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-application-properties", Namespace: hcNS},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-application-properties", Namespace: hcNS},
 				Spec: operatorv1alpha1.ApplicationPropertiesSpec{
-					Content: "hedera.config.version=0\nnetty.mode=TEST",
+					Scope: "node0", Content: "hedera.config.version=0\nnetty.mode=TEST",
 				},
 			}
 			err = k8sClient.Create(ctx, appPropsRelay)
@@ -499,9 +499,9 @@ var _ = Describe("HelmCapsule Controller", func() {
 					NodeId:                   1,
 					AccountId:                "0.0.3",
 					Weight:                   1,
-					Log4j2ConfigRef:          "network-log4j2",
-					SettingsConfigRef:        "network-settings",
-					ApplicationPropertiesRef: "network-application-properties",
+					Log4j2ConfigRef:          "node0-log4j2",
+					SettingsConfigRef:        "node0-settings",
+					ApplicationPropertiesRef: "node0-application-properties",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -646,8 +646,8 @@ var _ = Describe("HelmCapsule Controller", func() {
 			}
 
 			nsSettingsBN := &operatorv1alpha1.NodeSettings{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-settings", Namespace: hcNS},
-				Spec:       operatorv1alpha1.NodeSettingsSpec{Content: "checkSignedStateFromDisk,              1"},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-settings", Namespace: hcNS},
+				Spec:       operatorv1alpha1.NodeSettingsSpec{Scope: "node0", Content: "checkSignedStateFromDisk,              1"},
 			}
 			err = k8sClient.Create(ctx, nsSettingsBN)
 			if err != nil {
@@ -655,9 +655,9 @@ var _ = Describe("HelmCapsule Controller", func() {
 			}
 
 			appPropsBN := &operatorv1alpha1.ApplicationProperties{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-application-properties", Namespace: hcNS},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-application-properties", Namespace: hcNS},
 				Spec: operatorv1alpha1.ApplicationPropertiesSpec{
-					Content: "hedera.config.version=0\nnetty.mode=TEST",
+					Scope: "node0", Content: "hedera.config.version=0\nnetty.mode=TEST",
 				},
 			}
 			err = k8sClient.Create(ctx, appPropsBN)
@@ -672,9 +672,9 @@ var _ = Describe("HelmCapsule Controller", func() {
 					NodeId:                   1,
 					AccountId:                "0.0.3",
 					Weight:                   1,
-					Log4j2ConfigRef:          "network-log4j2",
-					SettingsConfigRef:        "network-settings",
-					ApplicationPropertiesRef: "network-application-properties",
+					Log4j2ConfigRef:          "node0-log4j2",
+					SettingsConfigRef:        "node0-settings",
+					ApplicationPropertiesRef: "node0-application-properties",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{

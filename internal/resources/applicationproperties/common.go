@@ -15,6 +15,7 @@ import (
 const (
 	PartOfApplicationProperties = "application-properties"
 	ConfigFileName              = "application.properties"
+	ConfigMapSuffix             = "application-properties"
 )
 
 func CommonLabels(obj *operatorv1alpha1.ApplicationProperties) map[string]string {
@@ -26,7 +27,7 @@ func CommonLabels(obj *operatorv1alpha1.ApplicationProperties) map[string]string
 }
 
 func ConfigMapName(obj *operatorv1alpha1.ApplicationProperties) string {
-	return obj.Name
+	return obj.Spec.Scope + "-" + ConfigMapSuffix
 }
 
 func ConfigMapNameForRef(name string) string {

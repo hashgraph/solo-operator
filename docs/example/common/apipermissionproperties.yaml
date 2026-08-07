@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# Shared ApiPermissionProperties — creates a ConfigMap named network-api-permission-properties
+# Shared ApiPermissionProperties — creates a ConfigMap named NODEID-api-permission-properties
 # that is subPath-mounted at data/config/api-permission.properties in every ConsensusCapsule pod.
 #
 # Each ConsensusCapsule must reference this CR via:
 #   spec:
-#     apiPermissionPropertiesRef: network-api-permission-properties
+#     apiPermissionPropertiesRef: NODEID-api-permission-properties
 #
 # This field is optional. When omitted the file is not mounted (the node falls back
 # to whatever is baked into the container image). Updating spec.content propagates
@@ -13,12 +13,12 @@
 apiVersion: operator.solo.hiero.org/v1alpha1
 kind: ApiPermissionProperties
 metadata:
-  name: network-api-permission-properties
+  name: NODEID-api-permission-properties
   namespace: solo-orbit
 spec:
   # orbit links this resource to the Orbit for cascade deletion.
   orbit: solo-orbit
-  # content is the raw api-permission.properties in Java key=value format.
+  scope: NODEID  # content is the raw api-permission.properties in Java key=value format.
   content: |
     # Crypto
     createAccount=0-*

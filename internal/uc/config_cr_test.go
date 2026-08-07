@@ -334,6 +334,10 @@ func TestBuildConfigCR_nameAndLabels(t *testing.T) {
 	if orbit != "my-orbit" {
 		t.Errorf("spec.orbit = %q, want my-orbit", orbit)
 	}
+	scope, _, _ := unstructured.NestedString(cr.Object, "spec", "scope")
+	if scope != "node0" {
+		t.Errorf("spec.scope = %q, want node0", scope)
+	}
 }
 
 func TestBuildConfigCR_noOrbit(t *testing.T) {

@@ -15,6 +15,7 @@ import (
 const (
 	PartOfNodeSettings = "node-settings"
 	ConfigFileName     = "settings.txt"
+	ConfigMapSuffix    = "settings"
 )
 
 func CommonLabels(obj *operatorv1alpha1.NodeSettings) map[string]string {
@@ -26,7 +27,7 @@ func CommonLabels(obj *operatorv1alpha1.NodeSettings) map[string]string {
 }
 
 func ConfigMapName(obj *operatorv1alpha1.NodeSettings) string {
-	return obj.Name
+	return obj.Spec.Scope + "-" + ConfigMapSuffix
 }
 
 func ConfigMapNameForRef(name string) string {

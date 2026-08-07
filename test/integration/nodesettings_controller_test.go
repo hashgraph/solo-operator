@@ -40,12 +40,12 @@ var _ = Describe("NodeSettings Controller", func() {
 			By("Creating a NodeSettings CR")
 			cr := &operatorv1alpha1.NodeSettings{
 				ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: namespace},
-				Spec:       operatorv1alpha1.NodeSettingsSpec{Content: validSettingsTxt},
+				Spec:       operatorv1alpha1.NodeSettingsSpec{Scope: "node0", Content: validSettingsTxt},
 			}
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 
 			By("Verifying the ConfigMap is created")
-			cmKey := types.NamespacedName{Name: crName, Namespace: namespace}
+			cmKey := types.NamespacedName{Name: "node0-settings", Namespace: namespace}
 			createdCM := &corev1.ConfigMap{}
 			Eventually(func() bool {
 				return k8sClient.Get(ctx, cmKey, createdCM) == nil
@@ -61,7 +61,7 @@ var _ = Describe("NodeSettings Controller", func() {
 					return ""
 				}
 				return updatedCR.Status.ConfigMapName
-			}, timeout, interval).Should(Equal(crName))
+			}, timeout, interval).Should(Equal("node0-settings"))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, cr)).Should(Succeed())
@@ -87,11 +87,11 @@ var _ = Describe("NodeSettings Controller", func() {
 			By("Creating a NodeSettings CR")
 			cr := &operatorv1alpha1.NodeSettings{
 				ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: namespace},
-				Spec:       operatorv1alpha1.NodeSettingsSpec{Content: validSettingsTxt},
+				Spec:       operatorv1alpha1.NodeSettingsSpec{Scope: "node0", Content: validSettingsTxt},
 			}
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 
-			cmKey := types.NamespacedName{Name: crName, Namespace: namespace}
+			cmKey := types.NamespacedName{Name: "node0-settings", Namespace: namespace}
 			createdCM := &corev1.ConfigMap{}
 			Eventually(func() bool {
 				return k8sClient.Get(ctx, cmKey, createdCM) == nil
@@ -144,12 +144,12 @@ var _ = Describe("NodeSettings Controller", func() {
 			By("Creating a NodeSettings with a line missing a comma")
 			cr := &operatorv1alpha1.NodeSettings{
 				ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: namespace},
-				Spec:       operatorv1alpha1.NodeSettingsSpec{Content: "badline without comma"},
+				Spec:       operatorv1alpha1.NodeSettingsSpec{Scope: "node0", Content: "badline without comma"},
 			}
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 
 			By("Verifying no ConfigMap is created")
-			cmKey := types.NamespacedName{Name: crName, Namespace: namespace}
+			cmKey := types.NamespacedName{Name: "node0-settings", Namespace: namespace}
 			Consistently(func() bool {
 				cm := &corev1.ConfigMap{}
 				return k8sClient.Get(ctx, cmKey, cm) == nil

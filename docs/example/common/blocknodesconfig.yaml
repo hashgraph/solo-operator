@@ -22,6 +22,7 @@ metadata:
   namespace: solo-orbit
 spec:
   orbit: solo-orbit
+  scope: node0
   # No block node is deployed in local dev (blockStream.streamMode=RECORDS), so the
   # node list is empty. A populated entry makes the consensus node repeatedly try to
   # DNS-resolve/connect to a non-existent host and spam ServiceConnectionFailure WARNs.
@@ -37,6 +38,7 @@ metadata:
   namespace: solo-orbit
 spec:
   orbit: solo-orbit
+  scope: node1
   content: |
     {
       "nodes": []
@@ -49,6 +51,7 @@ metadata:
   namespace: solo-orbit
 spec:
   orbit: solo-orbit
+  scope: node2
   content: |
     {
       "nodes": []
@@ -61,6 +64,7 @@ metadata:
   namespace: solo-orbit
 spec:
   orbit: solo-orbit
+  scope: node3
   content: |
     {
       "nodes": []
