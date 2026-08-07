@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -122,41 +123,39 @@ func writeZip(t *testing.T, dir string, content []byte) string {
 	return path
 }
 
-func TestSoftwareZipUpload_NonPrivilegedPayerRejected(t *testing.T) {
+func TestUpload_NonPrivilegedPayerRejected(t *testing.T) {
 	dir := t.TempDir()
 	resolve := func() (*Session, error) { return offlineSession(t, 3, dir), nil }
-	cmd := softwareZipUploadCmd(resolve)
+	cmd := uploadCmd(resolve)
 
 	_, err := runCmd(t, cmd)
 	wantReason(t, err, reasonNotPrivilegedPayer)
 }
 
-func TestSoftwareZipUpload_MismatchAbortsBeforeUpload(t *testing.T) {
+func TestUpload_MismatchAbortsBeforeUpload(t *testing.T) {
 	dir := t.TempDir()
 	writeZip(t, dir, []byte("the real package bytes"))
 	resolve := func() (*Session, error) { return offlineSession(t, 2, dir), nil }
-	cmd := softwareZipUploadCmd(resolve)
+	cmd := uploadCmd(resolve)
 
-	// An expected hash that does not match the zip must abort before any submit
-	// (the offline client would error if a submit were attempted).
 	wrongHash := strings.Repeat("cd", 48)
 	_, err := runCmd(t, cmd, "--expect-hash", wrongHash)
 	wantReason(t, err, reasonExpectedHashMismatch)
 }
 
-func TestSoftwareZipUpload_MissingZipReported(t *testing.T) {
-	dir := t.TempDir() // no sysfiles/ zip written
+func TestUpload_MissingZipReported(t *testing.T) {
+	dir := t.TempDir()
 	resolve := func() (*Session, error) { return offlineSession(t, 2, dir), nil }
-	cmd := softwareZipUploadCmd(resolve)
+	cmd := uploadCmd(resolve)
 
 	_, err := runCmd(t, cmd)
 	wantReason(t, err, reasonZipReadFailed)
 }
 
-func TestSoftwareZipUpload_MutuallyExclusiveHashFlags(t *testing.T) {
+func TestUpload_MutuallyExclusiveHashFlags(t *testing.T) {
 	dir := t.TempDir()
 	resolve := func() (*Session, error) { return offlineSession(t, 2, dir), nil }
-	cmd := softwareZipUploadCmd(resolve)
+	cmd := uploadCmd(resolve)
 
 	valid := strings.Repeat("ab", 48)
 	_, err := runCmd(t, cmd, "--expect-hash", valid, "--expect-hash-file", "x.txt")
@@ -167,36 +166,43 @@ func TestSoftwareZipUpload_MutuallyExclusiveHashFlags(t *testing.T) {
 
 func TestFileCommands_InfoRegistered(t *testing.T) {
 	root := FileCommands(func() (*Session, error) { return nil, nil })
-	info, _, err := root.Find([]string{"info", "software-zip"})
-	if err != nil || info.Name() != "software-zip" {
-		t.Fatalf("`file info software-zip` not registered: cmd=%v err=%v", info, err)
+	info, _, err := root.Find([]string{"info"})
+	if err != nil || info.Name() != "info" {
+		t.Fatalf("`file info` not registered: cmd=%v err=%v", info, err)
 	}
-	if info.Flags().Lookup("upgrade-file-num") == nil {
-		t.Error("`file info software-zip` missing --upgrade-file-num")
+	if info.Flags().Lookup("file-id") == nil {
+		t.Error("`file info` missing --file-id")
 	}
 }
 
-func TestSoftwareZipInfo_ResolveErrorPropagates(t *testing.T) {
+func TestInfo_ResolveErrorPropagates(t *testing.T) {
 	sentinel := errors.New("no config")
-	cmd := softwareZipInfoCmd(func() (*Session, error) { return nil, sentinel })
+	cmd := infoCmd(func() (*Session, error) { return nil, sentinel })
 	_, err := runCmd(t, cmd)
 	if !errors.Is(err, sentinel) {
 		t.Errorf("error = %v, want it to wrap the resolve error", err)
 	}
 }
 
-func TestSoftwareZipUpload_HasRestartFlag(t *testing.T) {
+func TestUpload_HasFromScratchFlag(t *testing.T) {
 	resolve := func() (*Session, error) { return offlineSession(t, 2, t.TempDir()), nil }
-	cmd := softwareZipUploadCmd(resolve)
-	if cmd.Flags().Lookup("restart-from-failure") == nil {
-		t.Fatal("software-zip is missing --restart-from-failure")
+	cmd := uploadCmd(resolve)
+	if cmd.Flags().Lookup("from-scratch") == nil {
+		t.Fatal("upload is missing --from-scratch")
+	}
+	cp := cmd.Flags().Lookup("checkpoint-every")
+	if cp == nil {
+		t.Fatal("upload is missing --checkpoint-every")
+	}
+	if cp.DefValue != strconv.Itoa(ops.DefaultCheckpointEvery) {
+		t.Errorf("--checkpoint-every default = %s, want %d", cp.DefValue, ops.DefaultCheckpointEvery)
 	}
 }
 
-// TestSoftwareZipUpload_HashMatchesLocalSHA384 documents the local-hash contract
+// TestUpload_HashMatchesLocalSHA384 documents the local-hash contract
 // the upload prints for prepare-upgrade (the on-chain equality is an integration
 // concern, §14.9).
-func TestSoftwareZipUpload_HashMatchesLocalSHA384(t *testing.T) {
+func TestUpload_HashMatchesLocalSHA384(t *testing.T) {
 	content := []byte("deployment package v1")
 	want := hex.EncodeToString(ops.HashBytes(content))
 	if len(want) != 96 {

@@ -75,10 +75,10 @@ back; `freeze prepare`/`freeze upgrade` must both carry that exact value.
 H=$(shasum -a 384 softwareUpgrade.zip | awk '{print $1}')
 
 # 1. stage the zip into special file 0.0.150 (verify-before-upload with --expect-hash)
-beacon file upload software-zip --expect-hash <H>
+beacon file upload --expect-hash <H>
 
 # 2. read back the canonical hash the network holds
-beacon file info software-zip
+beacon file info
 
 # 3. stage the software on every node, pinned to H
 beacon freeze prepare  --upgrade-zip-hash <H>
@@ -178,7 +178,7 @@ kubectl apply -f examples/job-upload-hostpath.yaml
 
 ```bash
 kubectl apply -f examples/job-upload-s3.yaml       # or job-upload-hostpath.yaml
-kubectl -n solo logs -f job/beacon-upload-software-zip
+kubectl -n solo logs -f job/beacon-upload
 # note the "Confirmed SHA-384: <H>" line, then:
 #   edit examples/job-freeze.yaml → set --upgrade-zip-hash <H>
 kubectl apply -f examples/job-freeze.yaml
@@ -196,6 +196,15 @@ node is enough and is the recommended local path — see step 2), then use `beac
 to drive a software upgrade to **v0.74.2**. beacon is the HAPI control plane
 (upload + freeze); the consensus node, UC sidecar, operator, and provisioner
 carry out the actual node upgrade after the freeze fires.
+
+> **Quick path — [`docs/beacon/Taskfile.yml`](Taskfile.yml).** Every step below is
+> wrapped as a task. Run `task -d docs/beacon` to print the ordered runbook, then
+> the tasks in sequence (`build`, `cluster`, `uc-image`, `operator`, `deploy`,
+> `config`, `port-forward`, `upgrade`, `watch`, `version`, `cleanup`). The
+> `operator` and `port-forward` tasks are long-running and each want their own
+> terminal; everything else is one-shot. The tasks run from the current checkout
+> (no worktree juggling) and `includes` the root, `docs/example`, and `test/dev`
+> Taskfiles. The manual steps below remain the reference for what each task does.
 
 Version map for this test:
 
@@ -329,20 +338,19 @@ Then run the HAPI sequence:
 
 ```bash
 cd "$ROOT"
-BEACON="bin/beacon -c /tmp/beacon-solo/config.yaml"
 
 # a) upload the v0.74.2 package into special file 0.0.150 (verify-before-write)
-$BEACON file upload software-zip --zip "$ZIP" --expect-hash "$H"
+./bin/beacon -c /tmp/beacon-solo/config.yaml file upload --zip "$ZIP" --expect-hash "$H"
 
 # b) confirm the network holds exactly that hash
-$BEACON file info software-zip                    # SHA-384 must equal H
+./bin/beacon -c /tmp/beacon-solo/config.yaml file info                    # SHA-384 must equal H
 
 # c) stage the upgrade on every node, pinned to H
-$BEACON freeze prepare --upgrade-zip-hash "$H" --yes
+./bin/beacon -c /tmp/beacon-solo/config.yaml freeze prepare --upgrade-zip-hash "$H" --yes
 
 # d) schedule the freeze that boots the new software (~3 min out, UTC)
 START=$(date -u -v+3M '+%Y-%m-%d.%H:%M:%S' 2>/dev/null || date -u -d '+3 min' '+%Y-%m-%d.%H:%M:%S')
-$BEACON freeze upgrade --start-time "$START" --upgrade-zip-hash "$H" --yes
+./bin/beacon -c /tmp/beacon-solo/config.yaml freeze upgrade --start-time "$START" --upgrade-zip-hash "$H" --yes
 ```
 
 ### 5. Observe the automated upgrade (no beacon involvement past the freeze)
@@ -399,6 +407,6 @@ kind delete cluster --name solo-operator
 - **passphrase error in a Job** — add `account<N>.pass` to the `beacon-keys`
   Secret, or use an unencrypted PEM.
 - **`freeze prepare` rejected / hash mismatch** — the `--upgrade-zip-hash` must
-  equal what `file info software-zip` reports; re-upload if they differ.
+  equal what `file info` reports; re-upload if they differ.
 - **TLS / cert errors against local nodes** — keep `tls: false` for plaintext
   `50211`; cert verification only engages for ledger-pinned networks.

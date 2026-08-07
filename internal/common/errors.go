@@ -26,11 +26,13 @@ const (
 	ReasonInvalidCert  errx.Reason = "InvalidCertificate"
 )
 
-// WarnOnConflict suppresses 409 Conflict errors since controller-runtime automatically requeues.
+// WarnOnConflict logs a warning on 409 Conflict but returns the error so the
+// caller (or its parent reconciler) can requeue. Swallowing the error to nil
+// would prevent requeue: controller-runtime only requeues on a non-nil error
+// or an explicit Result.Requeue.
 func WarnOnConflict(ctx context.Context, err error) error {
 	if apierrors.IsConflict(err) {
 		Warn(ctx, ReasonConflict).Err(err).Msg("Optimistic concurrency conflict on update; will retry")
-		return nil
 	}
 	return err
 }

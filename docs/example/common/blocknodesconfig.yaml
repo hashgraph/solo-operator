@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Per-node BlockNodesConfig CRs. Each creates a ConfigMap named
+# node<N>-block-nodes-block-nodes-cm that is subPath-mounted at
+# data/config/block-nodes.json in the matching ConsensusCapsule pod.
+#
+# Each ConsensusCapsule references its own CR via:
+#   spec:
+#     blockNodesConfigRef: node<N>-block-nodes
+#
+# Unlike the other ConsensusConfig files (network-wide), block-node configuration
+# is per node. The CR name is the stable "<capsule>-block-nodes" the UC upserts
+# during an upgrade: the consensus-node deployment package delivers
+# block-nodes/config/block-nodes-<NODE_ID>.json (HIP-1494) and the UC stages the
+# file matching each node's NODE_ID into this CR verbatim, overwriting the genesis
+# content below. spec.content is therefore the consensus node's native
+# block-nodes.json, passed through unchanged.
+apiVersion: operator.solo.hiero.org/v1alpha1
+kind: BlockNodesConfig
+metadata:
+  name: node0-block-nodes
+  namespace: solo-orbit
+spec:
+  orbit: solo-orbit
+  # No block node is deployed in local dev (blockStream.streamMode=RECORDS), so the
+  # node list is empty. A populated entry makes the consensus node repeatedly try to
+  # DNS-resolve/connect to a non-existent host and spam ServiceConnectionFailure WARNs.
+  content: |
+    {
+      "nodes": []
+    }
+---
+apiVersion: operator.solo.hiero.org/v1alpha1
+kind: BlockNodesConfig
+metadata:
+  name: node1-block-nodes
+  namespace: solo-orbit
+spec:
+  orbit: solo-orbit
+  content: |
+    {
+      "nodes": []
+    }
+---
+apiVersion: operator.solo.hiero.org/v1alpha1
+kind: BlockNodesConfig
+metadata:
+  name: node2-block-nodes
+  namespace: solo-orbit
+spec:
+  orbit: solo-orbit
+  content: |
+    {
+      "nodes": []
+    }
+---
+apiVersion: operator.solo.hiero.org/v1alpha1
+kind: BlockNodesConfig
+metadata:
+  name: node3-block-nodes
+  namespace: solo-orbit
+spec:
+  orbit: solo-orbit
+  content: |
+    {
+      "nodes": []
+    }

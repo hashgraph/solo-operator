@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -254,6 +255,36 @@ func TestHandleFreezeScheduledSetsScheduledTimeFromContent(t *testing.T) {
 	}
 	if !got.Equal(wantScheduledTime) {
 		t.Fatalf("scheduledTime = %v, want %v (from file content epoch seconds)", got, wantScheduledTime)
+	}
+}
+
+// TestHandleFreezeScheduledEventLogsScheduledTime verifies that the freeze's
+// scheduled time is recorded on the single-shot MarkerDetected JSONL event, so
+// the audit trail says when the network is scheduled to freeze — not just that a
+// freeze marker was seen.
+func TestHandleFreezeScheduledEventLogsScheduledTime(t *testing.T) {
+	root := writeFreezePackage(t, validComponentsYAML, wantScheduledTime)
+	evDir := t.TempDir()
+	f := newFakeFactory(t, testConfig(root, t.TempDir()))
+	f.events = newEventSink(evDir, "0")
+	seedSucceededPrepare(t, f, wantOperationID, nil)
+
+	if err := f.HandleFreezeScheduled(context.Background()); err != nil {
+		t.Fatalf("HandleFreezeScheduled: %v", err)
+	}
+	f.events.Close()
+
+	data, err := os.ReadFile(filepath.Join(evDir, wantOperationID+".jsonl"))
+	if err != nil {
+		t.Fatalf("read jsonl: %v", err)
+	}
+	got := string(data)
+	wantTime := wantScheduledTime.UTC().Format(time.RFC3339)
+	if !strings.Contains(got, `"reason":"MarkerDetected"`) {
+		t.Fatalf("no MarkerDetected event\n%s", got)
+	}
+	if !strings.Contains(got, "scheduled_time="+wantTime) {
+		t.Errorf("MarkerDetected event missing scheduled_time=%s\n%s", wantTime, got)
 	}
 }
 

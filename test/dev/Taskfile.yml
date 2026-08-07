@@ -221,13 +221,38 @@ tasks:
 
         pushd {{ .EXTRACT_DIR }} >/dev/null
 
-        # Per-CN block-node config fixtures (issue #1071) — MOCK files; NMT only
-        # selects the file matching install -g <node_id>, it does not parse them.
+        # Curate data/config/ to the HIP-1494 package set. The base zip and the
+        # vendored overlay ship node-local files (e.g. evm-addresses-blocklist.csv,
+        # CNtoBNConfig/, a default block-nodes.json) that are NOT part of the HIP
+        # package format. The consensus node receives config only via operator-created
+        # config CRs, so leaving unrecognised files in data/config/ makes the UC abort
+        # at execute time. Keep only the filenames HIP-1494 defines for data/config/.
+        info "Curating data/config to the HIP-1494 package set"
+        keep="application.properties application-override.properties api-permission.properties bootstrap.properties node.properties feeSchedules.json simpleFeesSchedules.json throttles.json genesis-network.json"
+        if [ -d data/config ]; then
+          for path in data/config/* data/config/.[!.]*; do
+            [ -e "$path" ] || continue
+            base="$(basename "$path")"
+            case " $keep " in
+              *" $base "*) ;;
+              *) warn "Pruning non-HIP config: data/config/$base"; rm -rf "$path" ;;
+            esac
+          done
+        fi
+
+        # Per-CN block-node config fixtures (issue #1071). Per HIP-1494 the UC selects
+        # the file matching the target node NODE_ID and stages it verbatim as
+        # data/config/block-nodes.json. This dev network deploys no block node and runs
+        # with blockStream.streamMode=RECORDS (streaming disabled), so the fixture is an
+        # empty node list: valid CN schema ({"nodes":[<addr>:<streamingPort>,priority]}),
+        # parses cleanly, and — since the block-node subsystem still initialises at
+        # startup — avoids the connection-attempt warnings a populated-but-unreachable
+        # entry would emit. Add a node object here only when a block node is deployed.
         info "Adding per-node block-nodes config fixtures"
         mkdir -p block-nodes/config
-        printf "%s\n" "{\"nodeId\":0}" > block-nodes/config/block-nodes-0.json
-        printf "%s\n" "{\"nodeId\":1}" > block-nodes/config/block-nodes-1.json
-        printf "%s\n" "{\"nodeId\":2}" > block-nodes/config/block-nodes-2.json
+        for nid in 0 1 2; do
+          printf "%s\n" "{\"nodes\":[]}" > "block-nodes/config/block-nodes-${nid}.json"
+        done
 
         if [ -f "data/config/bootstrap.properties" ]; then
           info "Modifying bootstrap properties"

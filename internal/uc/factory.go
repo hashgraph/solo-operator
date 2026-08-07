@@ -175,7 +175,17 @@ func (f *Factory) HandleExecuteImmediate(ctx context.Context) error {
 // admissionRejectRetryCooldown before retrying — so the create does not repeat
 // every tick, yet a fixed VAP still self-heals without a UC restart. Forbidden is
 // treated as transient, not terminal, since it also covers RBAC gaps.
-func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource, operationID, step, kind string, cr *unstructured.Unstructured) error {
+// crDetail is an optional structured attribute a step attaches to the single-shot
+// "upgrade marker detected" audit record — a log field plus a "key=value" suffix
+// on the JSONL event message (the eventlog schema has no free-form fields). It
+// lets a step surface context such as the freeze's scheduled time without every
+// caller having to supply anything.
+type crDetail struct {
+	key string
+	val string
+}
+
+func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource, operationID, step, kind string, cr *unstructured.Unstructured, details ...crDetail) error {
 	if f.inRejectCooldown(operationID, step) {
 		// A prior admission rejection (#1133) is still within its cooldown window.
 		// Skip the whole persist/create cycle silently: the marker persists on disk,
@@ -215,9 +225,15 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 			marker = unknownLabel
 		}
 	}
-	logx.As().Info().Str("reason", ReasonMarkerDetected.String()).Str("operation_id", operationID).
-		Str("marker", marker).Str("step", step).Msg("upgrade marker detected")
-	f.events.info(operationID, ReasonMarkerDetected.String(), "Detected "+marker)
+	ev := logx.As().Info().Str("reason", ReasonMarkerDetected.String()).Str("operation_id", operationID).
+		Str("marker", marker).Str("step", step)
+	msg := "Detected " + marker
+	for _, d := range details {
+		ev = ev.Str(d.key, d.val)
+		msg += " " + d.key + "=" + d.val
+	}
+	ev.Msg("upgrade marker detected")
+	f.events.info(operationID, ReasonMarkerDetected.String(), msg)
 
 	if _, err := f.store.Persist(operationID, step, cr); err != nil {
 		// Already an errx-decorated persist (disk) error.
@@ -408,7 +424,8 @@ func (f *Factory) HandleFreezeScheduled(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return f.deliverCR(ctx, networkUpgradeFreezeGVR, operationID, operatorv1alpha1.StepFreeze, kindNetworkUpgradeFreeze, cr)
+	return f.deliverCR(ctx, networkUpgradeFreezeGVR, operationID, operatorv1alpha1.StepFreeze, kindNetworkUpgradeFreeze, cr,
+		crDetail{"scheduled_time", scheduledTime.UTC().Format(time.RFC3339)})
 }
 
 // fetchPreparePayload looks up the NetworkUpgradePrepare CR for operationID and

@@ -9,7 +9,6 @@ import (
 	"github.com/automa-saga/errx"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -23,6 +22,7 @@ import (
 	"github.com/hashgraph/solo-operator/internal/resources/apipermissionproperties"
 	"github.com/hashgraph/solo-operator/internal/resources/applicationoverrideproperties"
 	"github.com/hashgraph/solo-operator/internal/resources/applicationproperties"
+	"github.com/hashgraph/solo-operator/internal/resources/blocknodesconfig"
 	"github.com/hashgraph/solo-operator/internal/resources/bootstrapproperties"
 	"github.com/hashgraph/solo-operator/internal/resources/feeschedules"
 	"github.com/hashgraph/solo-operator/internal/resources/log4j2config"
@@ -72,14 +72,18 @@ func (r *StatefulSetSubReconciler) Reconcile(ctx context.Context, capsule *opera
 		return ctrl.Result{}, err
 	}
 
-	if r.needsUpdate(existing, desired) {
-		common.Debug(ctx, common.ReasonStatefulSetUpdated).Str("statefulSet", desired.Name).Msg("Updating StatefulSet")
-		existing.Spec = desired.Spec
-		existing.Labels = desired.Labels
-		return ctrl.Result{}, common.WarnOnConflict(ctx, r.Client.Update(ctx, existing))
-	}
-
-	return ctrl.Result{}, nil
+	// Always apply the desired state and let the API server decide whether anything
+	// actually changed. The server bumps .metadata.generation only when the stored
+	// spec differs (after server-side defaulting), so GenerationChangedPredicate
+	// will NOT re-trigger a reconcile for no-op updates.
+	//
+	// Do NOT add a needsUpdate / DeepEqual guard here. The API server applies
+	// field defaults (fieldRef.apiVersion, securityContext, protocol, etc.) that
+	// the operator never sets, so a local comparison always sees phantom diffs and
+	// the "optimisation" becomes the cause of a hot reconcile loop (#1219).
+	existing.Spec = desired.Spec
+	existing.Labels = desired.Labels
+	return ctrl.Result{}, common.WarnOnConflict(ctx, r.Client.Update(ctx, existing))
 }
 
 // buildStatefulSet builds the desired StatefulSet purely from the capsule spec; it
@@ -401,6 +405,7 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 		{capsule.Spec.SimpleFeesSchedulesRef, "simple-fee-schedules-config", simplefeesschedules.ConfigMapNameForRef, HapiBase + "/data/config/simpleFeesSchedules.json", "simpleFeesSchedules.json"},
 		{capsule.Spec.ApplicationOverridePropertiesRef, "app-override-config", applicationoverrideproperties.ConfigMapNameForRef, HapiBase + "/data/config/application-override.properties", "application-override.properties"},
 		{capsule.Spec.BootstrapPropertiesRef, "bootstrap-config", bootstrapproperties.ConfigMapNameForRef, HapiBase + "/data/config/bootstrap.properties", "bootstrap.properties"},
+		{capsule.Spec.BlockNodesConfigRef, "block-nodes-config", blocknodesconfig.ConfigMapNameForRef, HapiBase + "/data/config/block-nodes.json", "block-nodes.json"},
 	}
 	for _, om := range optionalConfigs {
 		if om.ref == "" {
@@ -422,24 +427,6 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 			MountPath: om.mountPath,
 			SubPath:   om.subPath,
 			ReadOnly:  true,
-		})
-	}
-
-	// block-nodes.json — only when BlockNodes is configured
-	if capsule.Spec.BlockNodes != nil {
-		volumes = append(volumes, corev1.Volume{
-			Name: "block-nodes-config",
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{Name: BlockNodesConfigMapName(capsule)},
-					DefaultMode:          &defaultMode,
-				},
-			},
-		})
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      "block-nodes-config",
-			MountPath: HapiBase + "/data/config/block-nodes.json",
-			SubPath:   "block-nodes.json",
 		})
 	}
 
@@ -939,14 +926,24 @@ func (r *StatefulSetSubReconciler) buildUcContainer(capsule *operatorv1alpha1.Co
 		},
 	}
 
+	// The UC shares the upgrade PVC (data/upgrade) with the consensus node, which
+	// creates and extracts the upgrade package under current/ as the hedera user
+	// (uid:gid 2000:2000). Run the UC as the same uid:gid so the dirs it creates
+	// and rotates (current/, previous/) are writable by the node's extraction and
+	// vice-versa; a foreign uid leaves them unwritable and the upgrade unzip fails.
+	hederaUID := HederaUID
 	container := corev1.Container{
 		Name:  name,
 		Image: image,
 		Ports: []corev1.ContainerPort{
 			{Name: "uc-metrics", ContainerPort: UCMetricsPort, Protocol: corev1.ProtocolTCP},
 		},
-		Env:                      env,
-		VolumeMounts:             volumeMounts,
+		Env:          env,
+		VolumeMounts: volumeMounts,
+		SecurityContext: &corev1.SecurityContext{
+			RunAsUser:  &hederaUID,
+			RunAsGroup: &hederaUID,
+		},
 		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		ImagePullPolicy:          common.PullPolicyOrDefault(config.SoftwareVersion, corev1.PullIfNotPresent),
@@ -972,7 +969,7 @@ func (r *StatefulSetSubReconciler) applyCheetahFSGroup(sts *appsv1.StatefulSet, 
 		sts.Spec.Template.Spec.SecurityContext = &corev1.PodSecurityContext{}
 	}
 	if sts.Spec.Template.Spec.SecurityContext.FSGroup == nil {
-		fsGroup := int64(2000)
+		fsGroup := HederaUID
 		sts.Spec.Template.Spec.SecurityContext.FSGroup = &fsGroup
 	}
 }
@@ -1177,9 +1174,4 @@ func (r *StatefulSetSubReconciler) applyPodProperties(sts *appsv1.StatefulSet, c
 	if podProps.ServiceAccount != nil && podProps.ServiceAccount.Name != "" {
 		sts.Spec.Template.Spec.ServiceAccountName = podProps.ServiceAccount.Name
 	}
-}
-
-func (r *StatefulSetSubReconciler) needsUpdate(existing, desired *appsv1.StatefulSet) bool {
-	return !apiequality.Semantic.DeepEqual(existing.Spec, desired.Spec) ||
-		!apiequality.Semantic.DeepEqual(existing.Labels, desired.Labels)
 }

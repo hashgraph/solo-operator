@@ -8,7 +8,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: beacon-upload-software-zip
+  name: beacon-upload
   namespace: solo
 spec:
   backoffLimit: 2
@@ -43,7 +43,6 @@ spec:
           args:
             - "file"
             - "upload"
-            - "software-zip"
             - "-c"
             - "/etc/beacon/config.yaml"
             - "--zip"

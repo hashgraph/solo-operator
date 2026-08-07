@@ -34,6 +34,7 @@ import (
 	"github.com/hashgraph/solo-operator/internal/resources/apipermissionproperties"
 	"github.com/hashgraph/solo-operator/internal/resources/applicationoverrideproperties"
 	"github.com/hashgraph/solo-operator/internal/resources/applicationproperties"
+	"github.com/hashgraph/solo-operator/internal/resources/blocknodesconfig"
 	"github.com/hashgraph/solo-operator/internal/resources/bootstrapproperties"
 	"github.com/hashgraph/solo-operator/internal/resources/consensus"
 	"github.com/hashgraph/solo-operator/internal/resources/feeschedules"
@@ -198,6 +199,7 @@ func (r *ConsensusCapsuleReconciler) configRefs(c *operatorv1alpha1.ConsensusCap
 		{"SimpleFeesSchedulesReady", c.Spec.SimpleFeesSchedulesRef, simplefeesschedules.ConfigMapNameForRef},
 		{"ApplicationOverridePropertiesReady", c.Spec.ApplicationOverridePropertiesRef, applicationoverrideproperties.ConfigMapNameForRef},
 		{"BootstrapPropertiesReady", c.Spec.BootstrapPropertiesRef, bootstrapproperties.ConfigMapNameForRef},
+		{"BlockNodesConfigReady", c.Spec.BlockNodesConfigRef, blocknodesconfig.ConfigMapNameForRef},
 	} {
 		if opt.ref != "" {
 			refs = append(refs, configRef{opt.condType, opt.ref, opt.fn(opt.ref)})

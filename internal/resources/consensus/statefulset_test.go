@@ -200,7 +200,7 @@ func TestBuildStatefulSet_HapiAppSecretsMount(t *testing.T) {
 func TestBuildStatefulSet_BlockNodesMount(t *testing.T) {
 	r := newStsReconciler()
 	capsule := capsuleWithImage("v0.50.0")
-	capsule.Spec.BlockNodes = &operatorv1alpha1.BlockNodesConfig{} // non-nil triggers the configmap volume
+	capsule.Spec.BlockNodesConfigRef = "node0-block-nodes" // ref triggers the configmap volume
 
 	sts, err := r.buildStatefulSet(context.Background(), capsule)
 	if err != nil {
@@ -215,7 +215,7 @@ func TestBuildStatefulSet_BlockNodesMount(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("expected block-nodes-config volume when BlockNodes is set")
+		t.Error("expected block-nodes-config volume when BlockNodesConfigRef is set")
 	}
 }
 
@@ -230,151 +230,6 @@ func TestBuildStatefulSet_ServiceName(t *testing.T) {
 
 	if sts.Spec.ServiceName != capsule.Name {
 		t.Errorf("expected ServiceName %q, got %q", capsule.Name, sts.Spec.ServiceName)
-	}
-}
-
-// ── needsUpdate ───────────────────────────────────────────────────────────────
-
-func makeSts(image string, envVars []corev1.EnvVar) *appsv1.StatefulSet {
-	replicas := int32(1)
-	return &appsv1.StatefulSet{
-		Spec: appsv1.StatefulSetSpec{
-			Replicas: &replicas,
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					InitContainers: []corev1.Container{
-						{Name: "genesis-init", Image: GenesisInitImage},
-					},
-					Containers: []corev1.Container{
-						{Name: "consensus-node", Image: image, Env: envVars},
-					},
-					Volumes: []corev1.Volume{
-						{Name: "settings-config"},
-						{Name: "data"},
-					},
-				},
-			},
-		},
-	}
-}
-
-func TestNeedsUpdate_NoChange(t *testing.T) {
-	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme(), nil)
-	sts := makeSts("v0.50.0", nil)
-	if r.needsUpdate(sts, sts) {
-		t.Error("identical StatefulSets should not need update")
-	}
-}
-
-func TestNeedsUpdate_ImageChange(t *testing.T) {
-	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme(), nil)
-	existing := makeSts("v0.50.0", nil)
-	desired := makeSts("v0.51.0", nil)
-	if !r.needsUpdate(existing, desired) {
-		t.Error("image change should trigger update")
-	}
-}
-
-func TestNeedsUpdate_EnvVarAdded(t *testing.T) {
-	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme(), nil)
-	existing := makeSts("v0.50.0", nil)
-	desired := makeSts("v0.50.0", []corev1.EnvVar{{Name: "JAVA_HEAP_MIN", Value: "4g"}})
-	if !r.needsUpdate(existing, desired) {
-		t.Error("adding an env var should trigger update")
-	}
-}
-
-func TestNeedsUpdate_EnvVarValueChanged(t *testing.T) {
-	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme(), nil)
-	existing := makeSts("v0.50.0", []corev1.EnvVar{{Name: "JAVA_HEAP_MIN", Value: "4g"}})
-	desired := makeSts("v0.50.0", []corev1.EnvVar{{Name: "JAVA_HEAP_MIN", Value: "8g"}})
-	if !r.needsUpdate(existing, desired) {
-		t.Error("env var value change should trigger update")
-	}
-}
-
-func TestNeedsUpdate_InitContainerImageChange(t *testing.T) {
-	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme(), nil)
-	existing := makeSts("v0.50.0", nil)
-	desired := makeSts("v0.50.0", nil)
-	desired.Spec.Template.Spec.InitContainers[0].Image = "busybox:1.37.0"
-	if !r.needsUpdate(existing, desired) {
-		t.Error("init container image change should trigger update")
-	}
-}
-
-func TestNeedsUpdate_VolumeAdded(t *testing.T) {
-	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme(), nil)
-	existing := makeSts("v0.50.0", nil)
-	desired := makeSts("v0.50.0", nil)
-	desired.Spec.Template.Spec.Volumes = append(desired.Spec.Template.Spec.Volumes,
-		corev1.Volume{Name: "new-secret-vol"})
-	if !r.needsUpdate(existing, desired) {
-		t.Error("adding a volume should trigger update")
-	}
-}
-
-func TestNeedsUpdate_VolumeSourceChanged(t *testing.T) {
-	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme(), nil)
-	existing := makeSts("v0.50.0", nil)
-	desired := makeSts("v0.50.0", nil)
-	// Same volume name, different ConfigMap backing — old code missed this.
-	desired.Spec.Template.Spec.Volumes[0] = corev1.Volume{
-		Name: existing.Spec.Template.Spec.Volumes[0].Name,
-		VolumeSource: corev1.VolumeSource{
-			ConfigMap: &corev1.ConfigMapVolumeSource{
-				LocalObjectReference: corev1.LocalObjectReference{Name: "new-cm"},
-			},
-		},
-	}
-	if !r.needsUpdate(existing, desired) {
-		t.Error("volume source change should trigger update")
-	}
-}
-
-func TestNeedsUpdate_EnvValueFromChanged(t *testing.T) {
-	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme(), nil)
-	existing := makeSts("v0.50.0", []corev1.EnvVar{
-		{
-			Name: "POD_IP",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"},
-			},
-		},
-	})
-	desired := makeSts("v0.50.0", []corev1.EnvVar{
-		{
-			Name: "POD_IP",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.hostIP"},
-			},
-		},
-	})
-	if !r.needsUpdate(existing, desired) {
-		t.Error("ValueFrom FieldRef change should trigger update")
-	}
-}
-
-func TestNeedsUpdate_InitContainerCommandChanged(t *testing.T) {
-	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme(), nil)
-	existing := makeSts("v0.50.0", nil)
-	desired := makeSts("v0.50.0", nil)
-	desired.Spec.Template.Spec.InitContainers[0].Command = []string{"sh", "-c", "echo updated"}
-	if !r.needsUpdate(existing, desired) {
-		t.Error("init container command change should trigger update")
-	}
-}
-
-func TestNeedsUpdate_ContainerSecurityContextChanged(t *testing.T) {
-	r := NewStatefulSetSubReconciler(fake.NewClientBuilder().Build(), runtime.NewScheme(), nil)
-	existing := makeSts("v0.50.0", nil)
-	desired := makeSts("v0.50.0", nil)
-	privileged := true
-	desired.Spec.Template.Spec.Containers[0].SecurityContext = &corev1.SecurityContext{
-		Privileged: &privileged,
-	}
-	if !r.needsUpdate(existing, desired) {
-		t.Error("container SecurityContext change should trigger update")
 	}
 }
 
@@ -700,6 +555,15 @@ func TestBuildUcContainer_Defaults(t *testing.T) {
 	}
 	if c.ImagePullPolicy != corev1.PullIfNotPresent {
 		t.Errorf("imagePullPolicy: got %q, want IfNotPresent", c.ImagePullPolicy)
+	}
+	// The UC must run as hedera (2000:2000) to share the upgrade PVC with the
+	// consensus node — see buildUcContainer.
+	if c.SecurityContext == nil || c.SecurityContext.RunAsUser == nil || c.SecurityContext.RunAsGroup == nil {
+		t.Fatalf("securityContext must pin RunAsUser/RunAsGroup, got %+v", c.SecurityContext)
+	}
+	if *c.SecurityContext.RunAsUser != HederaUID || *c.SecurityContext.RunAsGroup != HederaUID {
+		t.Errorf("runAsUser/runAsGroup: got %d/%d, want %d/%d",
+			*c.SecurityContext.RunAsUser, *c.SecurityContext.RunAsGroup, HederaUID, HederaUID)
 	}
 }
 

@@ -6,5 +6,6 @@ spec:
   consensus:
     genesis:
       addressBook:
-        ledgerId: "0x00"
+        ledgerId: "0x01"
+        chainId: "298"
         externalAddresses: []

@@ -91,6 +91,7 @@ func injectComponentValues(ctx context.Context, c client.Client, namespace strin
 	}
 
 	ledgerID := orbit.Spec.Consensus.Genesis.AddressBook.LedgerId
+	chainID := orbit.Spec.Consensus.Genesis.AddressBook.ChainId
 
 	switch *spec.Component {
 	case operatorv1alpha1.HelmComponentMirror:
@@ -104,7 +105,7 @@ func injectComponentValues(ctx context.Context, c client.Client, namespace strin
 		if err != nil {
 			return nil, err
 		}
-		return relayValues(ctx, capsules, namespace, ledgerID)
+		return relayValues(ctx, capsules, namespace, chainID)
 	case operatorv1alpha1.HelmComponentExplorer:
 		return explorerValues(orbit, ledgerID)
 	case operatorv1alpha1.HelmComponentBlockNode:
@@ -145,7 +146,7 @@ func mirrorValues(ctx context.Context, c client.Client, namespace string, capsul
 	return vals, nil
 }
 
-func relayValues(ctx context.Context, capsules []operatorv1alpha1.ConsensusCapsule, namespace, ledgerID string) (map[string]interface{}, error) {
+func relayValues(ctx context.Context, capsules []operatorv1alpha1.ConsensusCapsule, namespace, chainID string) (map[string]interface{}, error) {
 	network, err := hederaNetworkJSON(ctx, capsules)
 	if err != nil {
 		return nil, err
@@ -154,8 +155,9 @@ func relayValues(ctx context.Context, capsules []operatorv1alpha1.ConsensusCapsu
 		"HEDERA_NETWORK":  network,
 		"MIRROR_NODE_URL": fmt.Sprintf("http://mirror.%s.svc.cluster.local", namespace),
 	}
-	if ledgerID != "" {
-		config["CHAIN_ID"] = ledgerID
+	// The JSON-RPC relay's CHAIN_ID is the EVM chain id, not the ledger id.
+	if chainID != "" {
+		config["CHAIN_ID"] = chainID
 	}
 	return map[string]interface{}{"config": config}, nil
 }

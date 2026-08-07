@@ -100,9 +100,24 @@ type OrbitAddressBook struct {
 	// +optional
 	ShardId int `json:"shardId,omitempty"`
 
-	// LedgerId is the ledger identifier (swirld entry)
+	// LedgerId is the network's ledger identity, written verbatim to the
+	// consensus node's application.properties (and bootstrap.properties)
+	// ledger.id. It is a 0x-prefixed hex byte: mainnet 0x00, testnet 0x01,
+	// previewnet 0x02; local/dev networks use 0x01. This is distinct from
+	// ChainId — do not put an EVM chain id here.
+	//
+	// NOTE: this static ledger.id is expected to be superseded by the TSS ledger
+	// id (a public key) in a future consensus-node release; treat this field as
+	// transitional and avoid building new coupling on its byte format.
 	// +kubebuilder:validation:MinLength=1
 	LedgerId string `json:"ledgerId"`
+
+	// ChainId is the network's EVM chain id (EIP-155), written to the consensus
+	// node's contracts.chainId and used as the JSON-RPC relay's CHAIN_ID. It is a
+	// decimal number: mainnet 295, testnet 296, previewnet 297; local/dev 298.
+	// This is distinct from LedgerId. Optional; when empty it is treated as "0".
+	// +optional
+	ChainId string `json:"chainId,omitempty"`
 
 	// ExternalAddresses lists external nodes not managed by this operator
 	// +optional

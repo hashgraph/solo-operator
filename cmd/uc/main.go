@@ -192,8 +192,18 @@ func run(cmd *cobra.Command, _ []string) error {
 	}); err != nil {
 		return err
 	}
+	// Stamp the build identity onto every log line so operators can tell which
+	// UC build produced a given log. Image tags are reused (local :dev, CI
+	// 0.0.0-<sha>) and the version string may be a fixed placeholder, so
+	// build_commit is the always-reliable discriminator; build_version aids
+	// released builds. The full build date + Go version go on the startup banner.
+	logx.SetLogger(logx.As().With().
+		Str("build_version", version.Version).
+		Str("build_commit", version.Commit).
+		Logger())
 	// Bridge the stdlib log/slog seam to logx so the daemonkit kernel (which
-	// logs via slog) emits to the same zerolog sinks logx just configured.
+	// logs via slog) emits to the same zerolog sinks logx just configured. Done
+	// after SetLogger so slog lines inherit the uc_version field too.
 	slog.SetDefault(slog.New(logx.NewSlogHandler()))
 
 	if err := cfg.Validate(); err != nil {

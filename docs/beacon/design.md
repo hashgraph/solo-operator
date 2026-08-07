@@ -172,8 +172,8 @@ The five freeze variants are grouped under a **`freeze`** command (the HAPI `Fre
 | `freeze telemetry --start-time <utc> --upgrade-zip-hash <hex>` | `TELEMETRY_UPGRADE` (5) | ✅ | `0.0.159` | ✅ | `Freeze` |
 | `freeze only --start-time <utc>` | `FREEZE_ONLY` (1) | ✅ | — | — | `Freeze` |
 | `freeze abort` | `FREEZE_ABORT` (4) | — | — | — | `Freeze` |
-| `file upload software-zip [--restart-from-failure]` | — | — | — | — | `FileUpdate` + chunked `FileAppend` → `0.0.150` |
-| `file info software-zip` (alias `file info 150`) | — | — | — | — | `FileInfoQuery` (reads SHA-384 from file memo) |
+| `file upload [--file-id 150]` | — | — | — | — | `FileUpdate` + chunked `FileAppend` → `0.0.150` |
+| `file info [--file-id 150]` | — | — | — | — | `FileInfoQuery` (reads SHA-384 from file memo) |
 | `network version` | — | — | — | — | `NetworkVersionInfoQuery` (HAPI `NetworkGetVersionInfo`) |
 | `version` | — | — | — | — | none (local) — beacon's own build metadata (`-o text\|json`) |
 | `package software-zip --from <dir> --out <zip>` | — | — | — | — | none (local) — deterministic zip + SHA-384 |
@@ -189,7 +189,7 @@ The five freeze variants are grouped under a **`freeze`** command (the HAPI `Fre
 - The `file` command group operates on the Hedera File Service by **file id** (a bare number or `S.R.N` literal, composed with the network's shard/realm — e.g. `121`, `122`, `159`, or `0.0.150`). It is named `file` (not the yahcli-era `sysfiles`) because it is generic over *any* file, not just the privileged system files.
 - `file download <file-id> -o <path>` is **fully generic today**: `FileContentsQuery` returns the raw bytes of *any* file, written verbatim — no serdes needed.
 - `file info <file-id>` is generic today: `FileInfoQuery` returns size, expiry, keys, and the memo (for special files, the running SHA-384) — it subsumes the old `hash-check`.
-- `file upload <file-id> <path>` is generic **only for raw/special files** (`150`/`159`, uploaded verbatim). Structured system files (app properties `0.0.121`, api permissions `0.0.122`, fee schedules, throttles) additionally require the JSON⇄protobuf serdes that lives in the Java services code (§9 gap 4) — that remains Phase 2. `software-zip` is a convenience alias for `file upload 150` (special-file path). _(Note: the legacy address-book files `0.0.101/102` are largely superseded by the roster; they are only examples of "any file id", not promised named commands.)_
+- `file upload <file-id> <path>` is generic **only for raw/special files** (`150`/`159`, uploaded verbatim). Structured system files (app properties `0.0.121`, api permissions `0.0.122`, fee schedules, throttles) additionally require the JSON⇄protobuf serdes that lives in the Java services code (§9 gap 4) — that remains Phase 2. `--file-id 150` is the default for the upgrade special file. _(Note: the legacy address-book files `0.0.101/102` are largely superseded by the roster; they are only examples of "any file id", not promised named commands.)_
 - `accounts balance|info|send|rekey` — pre/post-upgrade sanity probes and key management.
 - `nodes create|update|delete` (DAB) → `NodeCreate/NodeUpdate/NodeDelete` — address-book membership changes that may accompany an upgrade.
 - `keys gen-new|print-public` — offline key utilities.
@@ -200,9 +200,9 @@ The canonical sequence a node operator (or CI job) runs against a live network, 
 
 ```
 0. beacon package software-zip --from <dir> --out <zip>  # (optional) build the artifact + print SHA-384 H, no network
-1. beacon file upload software-zip                # FileUpdate + N×FileAppend → 0.0.150
+1. beacon file upload                             # FileUpdate + N×FileAppend → 0.0.150
       └─ network records running SHA-384 in the file memo
-2. beacon file info software-zip                  # read memo → the canonical hex hash H
+2. beacon file info                               # read memo → the canonical hex hash H
 3. beacon freeze prepare   --upgrade-zip-hash H    # nodes validate 0.0.150 against H, unzip & stage
 4. beacon freeze upgrade   --start-time T \         # schedule the freeze that boots the new software
                            --upgrade-zip-hash H      #   (H must equal step 3)
@@ -377,7 +377,7 @@ _Deferred enhancement:_ `beacon --discover-from-network` could bootstrap the nod
 
 ## 15. Decisions & open questions
 
-1. **Deployment-package hashing — resolved.** The node operator supplies the expected SHA-384 (typically shipped with the release). `file upload software-zip` takes `--expect-hash <hex>` **or** `--expect-hash-file <path>` (bare hex or `sha384sum` format); beacon computes `sha384(zip)` locally, **aborts before uploading on mismatch**, and prints the confirmed hash to feed into `freeze prepare`. (`package software-zip` prints the same hash at build time, §6.2.)
+1. **Deployment-package hashing — resolved.** The node operator supplies the expected SHA-384 (typically shipped with the release). `file upload` takes `--expect-hash <hex>` **or** `--expect-hash-file <path>` (bare hex or `sha384sum` format); beacon computes `sha384(zip)` locally, **aborts before uploading on mismatch**, and prints the confirmed hash to feed into `freeze prepare`. (`package software-zip` prints the same hash at build time, §6.2.)
 2. **Interactive safety gate — resolved (yes).** The irreversible commands (`freeze prepare`, `freeze upgrade`, `freeze only`, `freeze telemetry`, `freeze abort`) prompt for confirmation when attached to a TTY; `--yes` bypasses (and is required for non-interactive/CI use).
 3. **Config source of truth — resolved (per-network file + external generator).** One flat `config.yaml` per network (no multi-network map, no `defaultNetwork`) is beacon's only runtime input, selected by the single `-c` flag; its directory holds that network's `keys/` and `sysfiles/` (§10). One file = one environment removes the cross-environment footgun of a shared config. For Solo networks each file is generated from `Orbit.AddressBook` by an external helper so the cluster stays the source of truth (§10.1). HAPI self-discovery (`--discover-from-network`) is a deferred enhancement.
 4. **Shard/realm — resolved.** Per-network `shard`/`realm` (default `0`/`0`), sourced from `Orbit.AddressBook.{ShardId,RealmId}` when generated; all IDs beacon builds are composed with them, and the CLI accepts bare numbers or `S.R.N` literals (§10). _Open:_ confirm whether Solo runs any non-zero-shard network today (drives whether 14.9 needs a non-zero-shard E2E case, else Phase-2).

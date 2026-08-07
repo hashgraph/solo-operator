@@ -12,6 +12,7 @@ import (
 	"github.com/automa-saga/daemonkit"
 	"github.com/automa-saga/errx"
 	"github.com/automa-saga/logx"
+	"github.com/automa-saga/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/client-go/dynamic"
 )
@@ -74,6 +75,7 @@ func New(cfg Config) (*UC, error) {
 			ProvisionerProxyConfig{
 				Namespace:             cfg.Namespace,
 				NodeID:                cfg.NodeID,
+				CapsuleName:           cfg.CapsuleName(),
 				UpgradePath:           cfg.UpgradePath,
 				Orbit:                 cfg.Orbit,
 				ConfigCRPollInterval:  cfg.ConfigCRPollInterval,
@@ -151,8 +153,14 @@ func (u *UC) Run(ctx context.Context) error {
 	if err := daemonkit.NotifyReady(); err != nil {
 		logx.As().Warn().Err(err).Str("reason", ReasonSdNotifyReadyFailed.String()).Msg("Failed to send READY=1 to systemd")
 	}
+	// build_version/build_commit are already global fields on every line (see
+	// cmd/uc/main.go); the banner adds the build date and Go version so the
+	// startup line fully identifies the running binary.
+	bi := version.Get()
 	logx.As().Info().
 		Str("reason", ReasonUCStarted.String()).
+		Str("build_date", bi.Date).
+		Str("go_version", bi.GoVersion).
 		Str("mode", string(u.cfg.Mode)).
 		Int("monitors", len(u.monitors)).
 		Msg("UC started")

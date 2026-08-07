@@ -56,7 +56,7 @@ func CollectPodIPs(ctx context.Context, c client.Client, namespace string) ([]st
 func buildConfigTxt(orbit *operatorv1alpha1.Orbit, materials []RosterMaterial) string {
 	var sb strings.Builder
 
-	fmt.Fprintf(&sb, "swirld, %s\n", configTxtLedgerID(orbitLedgerID(orbit)))
+	fmt.Fprintf(&sb, "swirld, %s\n", orbitChainID(orbit))
 	sb.WriteString("app, HederaNode.jar\n")
 
 	for _, m := range materials {
@@ -77,20 +77,23 @@ func buildConfigTxt(orbit *operatorv1alpha1.Orbit, materials []RosterMaterial) s
 	return sb.String()
 }
 
+// orbitLedgerID returns the network's ledger identity (application.properties
+// ledger.id), defaulting to mainnet's 0x00 when unset.
 func orbitLedgerID(orbit *operatorv1alpha1.Orbit) string {
-	return orbit.Spec.Consensus.Genesis.AddressBook.LedgerId
+	if v := orbit.Spec.Consensus.Genesis.AddressBook.LedgerId; v != "" {
+		return v
+	}
+	return "0x00"
 }
 
-// configTxtLedgerID returns the decimal form the legacy config.txt swirld
-// header expects. "0x01" maps to mainnet's "298".
-func configTxtLedgerID(raw string) string {
-	if raw == "" {
-		return "0"
+// orbitChainID returns the network's EVM chain id (contracts.chainId / relay
+// CHAIN_ID / the config.txt swirld id). It is a DECIMAL number (295/296/297/298),
+// not a hex byte like ledger.id — so the unset default is decimal "0", not "0x00".
+func orbitChainID(orbit *operatorv1alpha1.Orbit) string {
+	if v := orbit.Spec.Consensus.Genesis.AddressBook.ChainId; v != "" {
+		return v
 	}
-	if raw == "0x01" {
-		return "298"
-	}
-	return strings.TrimPrefix(raw, "0x")
+	return "0"
 }
 
 func buildSettingsTxt(_ *operatorv1alpha1.Orbit) string {
@@ -117,39 +120,9 @@ func buildSettingsTxt(_ *operatorv1alpha1.Orbit) string {
 	return consensus.RenderSettingsTxt(settings)
 }
 
-func ledgerIDToHex(raw string) (ledgerID, chainID string) {
-	if strings.HasPrefix(raw, "0x") {
-		switch raw {
-		case "0x01":
-			return raw, "298"
-		case "0x00":
-			return raw, "0"
-		default:
-			return raw, raw[2:]
-		}
-	}
-	switch raw {
-	case "298":
-		return "0x01", "298"
-	case "0":
-		return "0x00", "0"
-	default:
-		return "0x" + raw, raw
-	}
-}
-
 func buildApplicationProperties(orbit *operatorv1alpha1.Orbit) string {
-	ledgerID, chainID := defaultedLedgerIDHex(orbit)
-	overrides := map[string]string{"ledger.id": ledgerID, "contracts.chainId": chainID}
+	overrides := map[string]string{"ledger.id": orbitLedgerID(orbit), "contracts.chainId": orbitChainID(orbit)}
 	return consensus.MergeApplicationProperties(overrides)
-}
-
-func defaultedLedgerIDHex(orbit *operatorv1alpha1.Orbit) (ledgerID, chainID string) {
-	raw := orbitLedgerID(orbit)
-	if raw == "" {
-		return "0x00", "0"
-	}
-	return ledgerIDToHex(raw)
 }
 
 func buildApiPermissionProperties(orbit *operatorv1alpha1.Orbit) string {
@@ -174,11 +147,10 @@ func buildApiPermissionProperties(orbit *operatorv1alpha1.Orbit) string {
 }
 
 func buildBootstrapProperties(orbit *operatorv1alpha1.Orbit) string {
-	ledgerID, chainID := defaultedLedgerIDHex(orbit)
 	props := map[string]string{
-		"ledger.id":                                   ledgerID,
+		"ledger.id":                                   orbitLedgerID(orbit),
 		"netty.mode":                                  "DEV",
-		"contracts.chainId":                           chainID,
+		"contracts.chainId":                           orbitChainID(orbit),
 		"hedera.recordStream.logPeriod":               "1",
 		"balances.exportPeriodSecs":                   "400",
 		"files.maxSizeKb":                             "2048",

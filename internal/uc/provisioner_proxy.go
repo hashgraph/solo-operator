@@ -57,8 +57,14 @@ type ProvisionerProxy struct {
 type ProvisionerProxyConfig struct {
 	// Namespace is the orbit namespace to patch NetworkUpgradeExecute CRs in.
 	Namespace string
-	// NodeID is the Hedera node identifier, used in log context.
+	// NodeID is the Hedera node identifier, used in log context and to select the
+	// per-node block-node config file (block-nodes/config/block-nodes-<NodeID>.json).
 	NodeID int
+	// CapsuleName is the owning ConsensusCapsule name (derived from the pod name).
+	// The per-node BlockNodesConfig CR is created at the stable name
+	// "<CapsuleName>-block-nodes" so the capsule can reference it via a static
+	// spec.blockNodesConfigRef (config refs are not patched during upgrade).
+	CapsuleName string
 	// UpgradePath is the root of the extracted upgrade package
 	// (data/upgrade/current). The proxy scans <UpgradePath>/data/config/ and
 	// <UpgradePath>/ (for log4j2.xml and settings.txt) during the execute phase.

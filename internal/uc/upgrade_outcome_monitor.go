@@ -604,7 +604,8 @@ func (m *UpgradeOutcomeMonitor) observePhase(cr *unstructured.Unstructured) {
 		from = nonePhase
 	}
 	logx.As().Info().Str("reason", ReasonPhaseChanged.String()).Str("operation_id", operationID).
-		Str("step", step).Str("phase", phase).Str("previous_phase", from).Msg("CR phase changed")
+		Str("cr_kind", cr.GetKind()).Str("step", step).Str("phase", phase).Str("previous_phase", from).
+		Msg("CR phase changed")
 	m.events.info(operationID, ReasonPhaseChanged.String(),
 		fmt.Sprintf("%s phase %s -> %s", step, from, phase))
 
@@ -801,7 +802,7 @@ func (m *UpgradeOutcomeMonitor) emitDaemonTriggered(cr *unstructured.Unstructure
 
 	logx.As().Info().Str("reason", ReasonDaemonTriggered.String()).
 		Str("operation_id", operationID).Str("cr_name", cr.GetName()).
-		Msg("Execute CR at ReadyForProvisionerDaemon; operator will trigger the provisioner daemon")
+		Msg("Execute CR at ReadyForProvisionerDaemon")
 	m.events.info(operationID, ReasonDaemonTriggered.String(),
 		"Execute CR "+cr.GetName()+" reached ReadyForProvisionerDaemon")
 }

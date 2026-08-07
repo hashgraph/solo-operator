@@ -2,8 +2,8 @@
 
 # Dockerfile for the Upgrade Controller (UC) sidecar. Published as a separate
 # image with its own release cadence (HIP XXXX2 §902). Mirrors the operator
-# Dockerfile: a selector stage picks the pre-compiled arch binary, then a
-# distroless final stage runs it.
+# Dockerfile: a selector stage picks the pre-compiled arch binary, then the
+# final stage runs it.
 
 # Selector stage: pick the pre-compiled binary for the target architecture.
 # TARGETARCH is set by docker buildx to the target platform (amd64/arm64),
@@ -19,16 +19,27 @@ RUN cd /tmp && \
     cp uc-linux-${TARGETARCH} /uc && \
     chmod +x /uc
 
-# Final stage
-FROM gcr.io/distroless/static-debian13:nonroot
+# Final stage.
+#
+# The UC shares the upgrade PVC (data/upgrade) with the consensus node, which
+# creates and extracts the upgrade package under current/ as the hedera user.
+# The UC must therefore run as the SAME uid:gid as the consensus node (hedera,
+# 2000:2000) so it can create/rotate current/ and previous/ and the node can
+# write into them — a distroless nonroot (65532) UC left those dirs owned by a
+# foreign uid, so the node's extraction failed with mkdir "Permission denied".
+#
+# We use debian:bookworm-slim (not distroless) so the image ships a shell for
+# `kubectl exec` debugging of the shared upgrade tree.
+FROM debian:bookworm-slim
+
+# Match the consensus-node image: hedera group and user, both 2000.
+RUN groupadd --gid 2000 hedera && \
+    useradd --uid 2000 --gid 2000 --create-home --shell /bin/bash hedera
 
 WORKDIR /
 
 COPY --from=selector /uc .
 
-# The effective runtime user is set by the pod securityContext so the sidecar
-# can write the CN-owned upgrade directory (hedera group). 65532 is the image
-# default for non-Kubernetes runs.
-USER 65532:65532
+USER 2000:2000
 
 ENTRYPOINT ["/uc"]

@@ -24,11 +24,17 @@ spec:
           imagePullPolicy: IfNotPresent
         resources:
           limits:
-            cpu: "1"
-            memory: 2Gi
+            cpu: "2"
+            memory: 5Gi
           requests:
             cpu: "250m"
             memory: 1Gi
+        # Set the Java heap explicitly. With no -Xmx the JVM defaults MaxHeapSize to
+        # 25% of the memory limit, which starves a 0.74 consensus node and triggers
+        # OutOfMemoryError / GC death-spiral stalls (see #1223). Heap + direct memory
+        # (MaxDirectMemorySize=1500m) + JVM overhead must fit under limits.memory.
+        javaHeapMin: "1g"
+        javaHeapMax: "3g"
         javaOpts: "-XX:+UseG1GC -XX:MaxDirectMemorySize=1500m --add-opens java.base/jdk.internal.misc=ALL-UNNAMED --add-opens java.base/java.nio=ALL-UNNAMED -Dio.netty.tryReflectionSetAccessible=true"
 
       # Block streams uploader (cheetah with blob/MinIO storage)
@@ -237,3 +243,7 @@ spec:
 
   # bootstrap.properties (defined in common/bootstrapproperties.yaml)
   bootstrapPropertiesRef: network-bootprops
+
+  # block-nodes.json (defined in common/blocknodesconfig.yaml); the UC overwrites
+  # this CR with the package's per-node file during an upgrade.
+  blockNodesConfigRef: node2-block-nodes

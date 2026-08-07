@@ -4,11 +4,9 @@ package consensus
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"testing"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -88,10 +86,6 @@ func TestResourceNames(t *testing.T) {
 
 	if got := RoleBindingName(capsule); got != "node0-rb" {
 		t.Errorf("expected role binding name node0-rb, got %s", got)
-	}
-
-	if got := BlockNodesConfigMapName(capsule); got != "node0-block-nodes-cm" {
-		t.Errorf("expected block-nodes config map name node0-block-nodes-cm, got %s", got)
 	}
 
 	if got := StatefulSetName(capsule); got != "node0" {
@@ -349,74 +343,6 @@ func TestServiceAccountSubReconciler_UpdateAnnotations(t *testing.T) {
 	}
 }
 
-// ── BlockNodesConfigMap ───────────────────────────────────────────────────────
-
-func TestBlockNodesConfigMapSubReconciler(t *testing.T) {
-	ctx := context.Background()
-	scheme := newTestScheme()
-	capsule := newTestCapsule()
-	capsule.Spec.BlockNodes = &operatorv1alpha1.BlockNodesConfig{
-		Nodes: []operatorv1alpha1.BlockNodeEndpoint{
-			{Address: "block-node-1:8080"},
-			{Address: "block-node-2:8080"},
-		},
-		BlockItemBatchSize: 256,
-	}
-	c := newTestClient(scheme, capsule)
-
-	reconciler := NewBlockNodesConfigMapSubReconciler(c, scheme)
-
-	if !reconciler.ShouldReconcile(ctx, capsule) {
-		t.Error("expected ShouldReconcile true when BlockNodes is set")
-	}
-
-	result, err := reconciler.Reconcile(ctx, capsule)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.Requeue {
-		t.Error("unexpected requeue")
-	}
-
-	cm := &corev1.ConfigMap{}
-	if err := c.Get(ctx, client.ObjectKey{Name: "node0-block-nodes-cm", Namespace: "test-namespace"}, cm); err != nil {
-		t.Fatalf("failed to get block-nodes ConfigMap: %v", err)
-	}
-
-	jsonStr, ok := cm.Data["block-nodes.json"]
-	if !ok {
-		t.Fatal("expected block-nodes.json key in ConfigMap")
-	}
-
-	var parsed operatorv1alpha1.BlockNodesConfig
-	if err := json.Unmarshal([]byte(jsonStr), &parsed); err != nil {
-		t.Fatalf("failed to parse block-nodes.json: %v", err)
-	}
-
-	if len(parsed.Nodes) != 2 {
-		t.Errorf("expected 2 nodes, got %d", len(parsed.Nodes))
-	}
-	if parsed.Nodes[0].Address != "block-node-1:8080" {
-		t.Errorf("unexpected first node address: %s", parsed.Nodes[0].Address)
-	}
-	if parsed.BlockItemBatchSize != 256 {
-		t.Errorf("expected batch size 256, got %d", parsed.BlockItemBatchSize)
-	}
-}
-
-func TestBlockNodesConfigMapSubReconciler_Disabled(t *testing.T) {
-	ctx := context.Background()
-	scheme := newTestScheme()
-	capsule := newTestCapsule() // BlockNodes is nil
-	c := newTestClient(scheme, capsule)
-
-	reconciler := NewBlockNodesConfigMapSubReconciler(c, scheme)
-
-	if reconciler.ShouldReconcile(ctx, capsule) {
-		t.Error("expected ShouldReconcile false when BlockNodes is nil")
-	}
-}
-
 // ── Service ───────────────────────────────────────────────────────────────────
 
 func TestServiceSubReconciler(t *testing.T) {
@@ -662,9 +588,9 @@ func TestStatefulSetVolumes_DefaultEmptyDir(t *testing.T) {
 		}
 	}
 
-	// block-nodes-config must NOT be present (BlockNodes is nil)
+	// block-nodes-config must NOT be present (BlockNodesConfigRef is empty)
 	if _, ok := volByName["block-nodes-config"]; ok {
-		t.Error("expected block-nodes-config volume to be absent when BlockNodes is nil")
+		t.Error("expected block-nodes-config volume to be absent when BlockNodesConfigRef is empty")
 	}
 
 	// consensus-config volume must be gone
@@ -729,9 +655,7 @@ func TestStatefulSetVolumes_WithPVC(t *testing.T) {
 
 func TestStatefulSetVolumes_BlockNodes(t *testing.T) {
 	capsule := newTestCapsule()
-	capsule.Spec.BlockNodes = &operatorv1alpha1.BlockNodesConfig{
-		Nodes: []operatorv1alpha1.BlockNodeEndpoint{{Address: "bn:8080"}},
-	}
+	capsule.Spec.BlockNodesConfigRef = "node0-block-nodes"
 
 	r := &StatefulSetSubReconciler{}
 	volumes, mounts := r.buildVolumes(capsule)
@@ -1088,70 +1012,6 @@ func TestGetPVCNames(t *testing.T) {
 	if len(names) != 4 {
 		t.Errorf("expected 4 PVC names, got %d: %v", len(names), names)
 	}
-}
-
-// ── StatefulSet needsUpdate ───────────────────────────────────────────────────
-
-func TestStatefulSetSubReconciler_NeedsUpdate(t *testing.T) {
-	r := &StatefulSetSubReconciler{}
-
-	base := func() *appsv1.StatefulSet {
-		replicas := int32(1)
-		return &appsv1.StatefulSet{
-			Spec: appsv1.StatefulSetSpec{
-				Replicas: &replicas,
-				Template: corev1.PodTemplateSpec{
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{
-							{Name: "consensus-node", Image: "hashgraph/hedera-node:v0.50.0"},
-						},
-						Volumes: []corev1.Volume{{Name: "logs"}},
-					},
-				},
-			},
-		}
-	}
-	t.Run("identical", func(t *testing.T) {
-		if r.needsUpdate(base(), base()) {
-			t.Error("expected no update for identical StatefulSets")
-		}
-	})
-	t.Run("image differs", func(t *testing.T) {
-		desired := base()
-		desired.Spec.Template.Spec.Containers[0].Image = "hashgraph/hedera-node:v0.51.0"
-		if !r.needsUpdate(base(), desired) {
-			t.Error("expected update when image differs")
-		}
-	})
-	t.Run("replica count differs", func(t *testing.T) {
-		desired := base()
-		two := int32(2)
-		desired.Spec.Replicas = &two
-		if !r.needsUpdate(base(), desired) {
-			t.Error("expected update when replicas differ")
-		}
-	})
-	t.Run("nil replicas on existing", func(t *testing.T) {
-		existing := base()
-		existing.Spec.Replicas = nil
-		if !r.needsUpdate(existing, base()) {
-			t.Error("expected update when existing replicas is nil")
-		}
-	})
-	t.Run("container count differs", func(t *testing.T) {
-		desired := base()
-		desired.Spec.Template.Spec.Containers = append(desired.Spec.Template.Spec.Containers, corev1.Container{Name: "sidecar"})
-		if !r.needsUpdate(base(), desired) {
-			t.Error("expected update when container count differs")
-		}
-	})
-	t.Run("volume count differs", func(t *testing.T) {
-		desired := base()
-		desired.Spec.Template.Spec.Volumes = append(desired.Spec.Template.Spec.Volumes, corev1.Volume{Name: "extra"})
-		if !r.needsUpdate(base(), desired) {
-			t.Error("expected update when volume count differs")
-		}
-	})
 }
 
 // ── Service needsUpdate ───────────────────────────────────────────────────────

@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/automa-saga/errx"
 	"github.com/automa-saga/logx"
@@ -19,10 +20,41 @@ import (
 // this many bytes (design §8.1).
 const bytesPerOp = 4096
 
-// SubmitFunc submits one transaction and verifies its outcome (SUCCESS). It is
-// the seam between the network-free upload driver here and the client package's
-// verified-submit helper, and lets UploadRawFile be unit-tested without a node.
+// DefaultCheckpointEvery is how often the upload driver awaits a receipt (rather
+// than firing) during a bulk append. It bounds how far the running hash can
+// silently diverge before a rejected chunk surfaces: a failure is caught within
+// this many chunks instead of only at the final hash read-back, so resume has
+// little to redo. Callers may override it via Uploader.CheckpointEvery.
+const DefaultCheckpointEvery = 128
+
+// SubmitFunc submits one transaction. Depending on which Uploader seam it backs
+// it either fires the transaction (returns at precheck) or awaits its SUCCESS
+// receipt. It is the seam between the network-free upload driver here and the
+// client package, and lets the driver be unit-tested without a node.
 type SubmitFunc func(tx hiero.TransactionInterface) error
+
+// Uploader drives special-file upload transactions. It separates the fast Fire
+// path (submit + precheck, no receipt) used for the bulk of the append chunks
+// from the Verify path (submit + await SUCCESS receipt) used for the initial
+// FileUpdate and periodic checkpoints. Firing most chunks lets a large upload run
+// at the node's ingest rate instead of one consensus round-trip per chunk, while
+// the checkpoints still catch a rejected chunk early; the caller's final on-chain
+// hash read-back verifies the upload as a whole. Both seams are injected so the
+// driver stays unit-testable without a node.
+type Uploader struct {
+	// Fire submits a transaction and returns at precheck, without a receipt.
+	Fire SubmitFunc
+	// Verify submits a transaction and awaits its SUCCESS receipt.
+	Verify SubmitFunc
+	// ReadMemo reads the target file's running-hash memo. When set, each checkpoint
+	// compares it against the expected SHA-384 of the chunks staged so far, so a
+	// fired chunk that silently failed is caught within CheckpointEvery chunks
+	// rather than only at the final read-back. Leave nil for files whose memo is
+	// not a running hash (checkpoints then rely on the append receipt alone).
+	ReadMemo MemoFunc
+	// CheckpointEvery awaits a receipt every N append chunks; <=0 uses the default.
+	CheckpointEvery int
+}
 
 // MemoFunc returns a file's current memo — where the network records the running
 // SHA-384 of a special file's staged contents (§7), as hex. It is the read seam
@@ -40,9 +72,10 @@ func HashBytes(data []byte) []byte {
 // UploadRawFile writes data verbatim into fileID: an initial FileUpdate carrying
 // the first chunk, then sequential FileAppend chunks of up to bytesPerOp until
 // the file is fully written (design §8.1, §9 gaps 1–2 — the SDK's append
-// defaults are bypassed by driving the loop ourselves for progress control). It
-// is generic over the target file, so the telemetry file (0.0.159) reuses it.
-func UploadRawFile(submit SubmitFunc, fileID hiero.FileID, data []byte) error {
+// defaults are bypassed by driving the loop ourselves for progress control and
+// checkpointing). It is generic over the target file, so the telemetry file
+// (0.0.159) reuses it.
+func UploadRawFile(u Uploader, fileID hiero.FileID, data []byte) error {
 	if len(data) == 0 {
 		return errEmptyUpload(fileID)
 	}
@@ -53,7 +86,7 @@ func UploadRawFile(submit SubmitFunc, fileID hiero.FileID, data []byte) error {
 		Int("bytes", len(data)).
 		Int("chunks", len(chunks)).
 		Msg("uploading special file")
-	return uploadChunks(submit, fileID, chunks, 0)
+	return uploadChunks(u, fileID, chunks, 0)
 }
 
 // ResumeUpload continues an interrupted UploadRawFile without re-sending chunks
@@ -64,7 +97,7 @@ func UploadRawFile(submit SubmitFunc, fileID hiero.FileID, data []byte) error {
 // truncate the file); if no boundary matches (empty/unreadable memo, or a
 // mismatch), it falls back to a full upload from chunk 0, which FileUpdate
 // safely resets.
-func ResumeUpload(submit SubmitFunc, readMemo MemoFunc, fileID hiero.FileID, data []byte) error {
+func ResumeUpload(u Uploader, readMemo MemoFunc, fileID hiero.FileID, data []byte) error {
 	if len(data) == 0 {
 		return errEmptyUpload(fileID)
 	}
@@ -93,7 +126,7 @@ func ResumeUpload(submit SubmitFunc, readMemo MemoFunc, fileID hiero.FileID, dat
 		Int("chunks", total).
 		Int("resume_from", done).
 		Msg("resuming special-file upload")
-	return uploadChunks(submit, fileID, chunks, done)
+	return uploadChunks(u, fileID, chunks, done)
 }
 
 // uploadChunks writes chunks[start:] to fileID. When start is 0 the first op is
@@ -101,17 +134,75 @@ func ResumeUpload(submit SubmitFunc, readMemo MemoFunc, fileID hiero.FileID, dat
 // when start is greater than 0 it emits FileAppend only, resuming from that
 // chunk without disturbing the chunks already on-chain. Each append is forced to
 // a single chunk (the payload never exceeds bytesPerOp).
-func uploadChunks(submit SubmitFunc, fileID hiero.FileID, chunks [][]byte, start int) error {
+//
+// The initial FileUpdate and every u.CheckpointEvery-th append await a receipt
+// (Verify); the remaining appends are fired without waiting (Fire), which is the
+// bulk of the speed-up. Because appends are submitted in order to a single node
+// they are applied in that order at consensus, so the running hash stays correct.
+// At each checkpoint, when u.ReadMemo is set, the on-chain running-hash memo is
+// compared against the expected SHA-384 of everything staged so far — so a fired
+// chunk that silently failed is caught within CheckpointEvery chunks (bounding
+// what resume must redo) rather than only at the caller's final read-back.
+func uploadChunks(u Uploader, fileID hiero.FileID, chunks [][]byte, start int) error {
 	total := len(chunks)
+	every := u.CheckpointEvery
+	if every <= 0 {
+		every = DefaultCheckpointEvery
+	}
+	t0 := time.Now()
+
+	// running mirrors the network's incremental SHA-384 of the staged contents.
+	// Seed it with the chunks already on-chain when resuming from start > 0.
+	running := sha512.New384()
+	for k := 0; k < start; k++ {
+		running.Write(chunks[k])
+	}
+	// checkpoint compares the on-chain memo against running after chunk done-1 (0
+	// based) has been applied. A SUCCESS receipt on the checkpoint append means it
+	// (and every earlier chunk, by consensus order) is applied, so the memo is a
+	// valid cumulative check.
+	checkpoint := func(done int) error {
+		if u.ReadMemo == nil {
+			return nil
+		}
+		memo, err := u.ReadMemo(fileID)
+		if err != nil {
+			return err
+		}
+		want := running.Sum(nil)
+		if !bytes.Equal(decodeMemo(fileID, memo), want) {
+			return errx.Decorate(
+				errValidation.New("staged hash %s does not match expected %s at chunk %d/%d",
+					strings.TrimSpace(memo), hex.EncodeToString(want), done, total),
+				reasonCheckpointHashMismatch,
+				"An earlier chunk did not apply; re-run the upload to resume and re-send the missing chunks",
+			)
+		}
+		logx.As().Info().
+			Int("chunk", done).
+			Int("chunks", total).
+			Str("file", fileID.String()).
+			Int("percent", done*100/total).
+			Str("hash", hex.EncodeToString(want)).
+			Str("elapsed", time.Since(t0).Truncate(time.Millisecond).String()).
+			Msg("checkpoint verified: staged hash matches")
+		return nil
+	}
+
 	i := start
 	if start == 0 {
-		// Initial op: FileUpdate with chunk 0 (replaces the file's contents).
-		if err := submit(hiero.NewFileUpdateTransaction().SetFileID(fileID).SetContents(chunks[0])); err != nil {
+		// Initial op: FileUpdate with chunk 0 (replaces the file's contents). Always
+		// verified — the entire upload is appended onto it.
+		if err := u.Verify(hiero.NewFileUpdateTransaction().SetFileID(fileID).SetContents(chunks[0])); err != nil {
 			// The submit error is already decorated at the client boundary; wrap
 			// for context with %w so its reason survives.
 			return fmt.Errorf("initial file update (chunk 1/%d): %w", total, err)
 		}
-		logUploadProgress(fileID, 1, total)
+		running.Write(chunks[0])
+		logUploadProgress(fileID, 1, total, t0)
+		if err := checkpoint(1); err != nil {
+			return err
+		}
 		i = 1
 	}
 	for ; i < total; i++ {
@@ -120,10 +211,23 @@ func uploadChunks(submit SubmitFunc, fileID hiero.FileID, chunks [][]byte, start
 			SetContents(chunks[i]).
 			SetMaxChunkSize(bytesPerOp).
 			SetMaxChunks(1)
+		// Await a receipt at each checkpoint boundary and on the final chunk; fire
+		// the rest without waiting.
+		isCheckpoint := i == total-1 || (i+1)%every == 0
+		submit := u.Fire
+		if isCheckpoint {
+			submit = u.Verify
+		}
 		if err := submit(tx); err != nil {
 			return fmt.Errorf("append chunk %d/%d: %w", i+1, total, err)
 		}
-		logUploadProgress(fileID, i+1, total)
+		running.Write(chunks[i])
+		logUploadProgress(fileID, i+1, total, t0)
+		if isCheckpoint {
+			if err := checkpoint(i + 1); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -252,13 +356,24 @@ func chunkBytes(data []byte, size int) [][]byte {
 	return chunks
 }
 
-// logUploadProgress emits an info line at each 10% boundary and at completion, so
-// a large upload reports progress without a line per chunk.
-func logUploadProgress(fileID hiero.FileID, done, total int) {
+// logUploadProgress emits a per-chunk debug line (so a --log-level debug run shows
+// live chunk progress alongside each SUCCESS receipt) plus an info line at each 10%
+// boundary and at completion (so a normal run reports progress without a line per
+// chunk).
+func logUploadProgress(fileID hiero.FileID, done, total int, t0 time.Time) {
 	if total == 0 {
 		return
 	}
 	pct := done * 100 / total
+	elapsed := time.Since(t0).Truncate(time.Millisecond).String()
+	logx.As().Debug().
+		Str("reason", reasonUploadProgress.String()).
+		Uint64("file", fileID.File).
+		Int("chunk", done).
+		Int("chunks", total).
+		Int("percent", pct).
+		Str("elapsed", elapsed).
+		Msg("chunk uploaded")
 	prev := (done - 1) * 100 / total
 	if done == total || pct/10 != prev/10 {
 		logx.As().Info().
@@ -267,6 +382,7 @@ func logUploadProgress(fileID hiero.FileID, done, total int) {
 			Int("chunk", done).
 			Int("chunks", total).
 			Int("percent", pct).
+			Str("elapsed", elapsed).
 			Msg("upload progress")
 	}
 }

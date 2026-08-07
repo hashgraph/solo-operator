@@ -76,26 +76,14 @@ spec:
                   is subPath-mounted at data/config/application.properties.
                 minLength: 1
                 type: string
-              blockNodes:
-                description: when set, creates a block-nodes ConfigMap and mounts
-                  block-nodes.json
-                properties:
-                  blockItemBatchSize:
-                    default: 256
-                    description: block items per batch
-                    type: integer
-                  nodes:
-                    items:
-                      description: BlockNodeEndpoint is a single block node target.
-                      properties:
-                        address:
-                          description: host:port
-                          type: string
-                      required:
-                      - address
-                      type: object
-                    type: array
-                type: object
+              blockNodesConfigRef:
+                description: |-
+                  references a BlockNodesConfig CR whose managed ConfigMap is subPath-mounted
+                  at data/config/block-nodes.json. Optional — CN falls back to defaults.
+                  The consensus-node deployment package delivers this per node under
+                  block-nodes/config/block-nodes-<NODE_ID>.json; the UC selects the file for
+                  this node and stages it verbatim into the CR (HIP-1494).
+                type: string
               bootstrapPropertiesRef:
                 description: |-
                   references a BootstrapProperties CR whose managed ConfigMap is subPath-mounted

@@ -12,9 +12,10 @@ const (
 	reasonInvalidHash      errx.Reason = "InvalidUpgradeHash"
 
 	// Special-file upload (design §8.1).
-	reasonEmptyUpload          errx.Reason = "EmptyUpload"
-	reasonFileInfoFailed       errx.Reason = "FileInfoFailed"
-	reasonUploadedHashMismatch errx.Reason = "UploadedHashMismatch"
+	reasonEmptyUpload            errx.Reason = "EmptyUpload"
+	reasonFileInfoFailed         errx.Reason = "FileInfoFailed"
+	reasonUploadedHashMismatch   errx.Reason = "UploadedHashMismatch"
+	reasonCheckpointHashMismatch errx.Reason = "CheckpointHashMismatch"
 	// Log-only reasons for upload progress and resume.
 	reasonUploadStarted  errx.Reason = "UploadStarted"
 	reasonUploadProgress errx.Reason = "UploadProgress"

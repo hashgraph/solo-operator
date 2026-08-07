@@ -22,48 +22,38 @@ import (
 const defaultSoftwareZipName = "softwareUpgrade.zip"
 
 // FileCommands returns the `file` command group for Hedera File Service
-// operations. The MVP wires only `file upload software-zip` (the special-file
-// upload path, design §8.1); download/info are later stories.
+// operations: `file upload` and `file info`, each targeting an HFS file by
+// its bare file number via --file-id (default 150, the upgrade special file).
 func FileCommands(resolve SessionFunc) *cobra.Command {
 	fileCmd := &cobra.Command{
 		Use:   "file",
 		Short: "Operate on Hedera File Service files",
-		Long: "Commands that read and write Hedera File Service files by id. The MVP covers " +
-			"uploading the deployment package to the upgrade special file (0.0.150).",
+		Long: "Commands that read and write Hedera File Service files by id. " +
+			"Use --file-id to target a specific file (default: 150, the upgrade special file).",
 	}
-	upload := &cobra.Command{
-		Use:   "upload",
-		Short: "Upload contents to an HFS file",
-	}
-	upload.AddCommand(softwareZipUploadCmd(resolve))
-
-	info := &cobra.Command{
-		Use:   "info",
-		Short: "Read an HFS file's on-chain metadata",
-	}
-	info.AddCommand(softwareZipInfoCmd(resolve))
-
-	fileCmd.AddCommand(upload, info)
+	fileCmd.AddCommand(uploadCmd(resolve))
+	fileCmd.AddCommand(infoCmd(resolve))
 	return fileCmd
 }
 
-func softwareZipInfoCmd(resolve SessionFunc) *cobra.Command {
+func infoCmd(resolve SessionFunc) *cobra.Command {
 	var fileNum uint64
 	cmd := &cobra.Command{
-		Use:   "software-zip",
-		Short: "Print the SHA-384 the network holds for the upgrade special file (0.0.150)",
-		Long: "Reads special file 0.0.150 via FileInfoQuery and prints the running SHA-384 stored in its " +
+		Use:   "info",
+		Short: "Print the SHA-384 the network holds for an HFS file",
+		Long: "Reads an HFS file via FileInfoQuery and prints the running SHA-384 stored in its " +
 			"memo — the canonical hash H the network validated on upload and that `freeze prepare`/" +
-			"`freeze upgrade` must carry (design §7). Use --upgrade-file-num 159 for the telemetry file.",
+			"`freeze upgrade` must carry (design §7). Defaults to special file 0.0.150; use " +
+			"--file-id 159 for the telemetry file.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runSoftwareZipInfo(cmd, resolve, fileNum)
+			return runFileInfo(cmd, resolve, fileNum)
 		},
 	}
-	cmd.Flags().Uint64Var(&fileNum, "upgrade-file-num", updateFileNum, "HFS special file number to inspect")
+	cmd.Flags().Uint64Var(&fileNum, "file-id", updateFileNum, "HFS file number to inspect (e.g. 150, 159)")
 	return cmd
 }
 
-func runSoftwareZipInfo(cmd *cobra.Command, resolve SessionFunc, fileNum uint64) error {
+func runFileInfo(cmd *cobra.Command, resolve SessionFunc, fileNum uint64) error {
 	session, err := resolve()
 	if err != nil {
 		return err
@@ -86,46 +76,60 @@ func runSoftwareZipInfo(cmd *cobra.Command, resolve SessionFunc, fileNum uint64)
 	return nil
 }
 
-func softwareZipUploadCmd(resolve SessionFunc) *cobra.Command {
+func uploadCmd(resolve SessionFunc) *cobra.Command {
 	var (
-		zipPath        string
-		fileNum        uint64
-		expectHash     string
-		expectHashFile string
-		restart        bool
+		zipPath         string
+		fileNum         uint64
+		expectHash      string
+		expectHashFile  string
+		fromScratch     bool
+		checkpointEvery int
 	)
 	cmd := &cobra.Command{
-		Use:   "software-zip",
-		Short: "Upload the deployment package zip to the upgrade special file (0.0.150)",
-		Long: "Stages the hip-1494 deployment package into special file 0.0.150 by an initial FileUpdate " +
-			"followed by chunked FileAppend. Use --upgrade-file-num to target another special file. With " +
-			"--expect-hash/--expect-hash-file it verifies the local zip's SHA-384 before writing anything, " +
-			"and on success prints the confirmed hash for `freeze prepare`. --restart-from-failure resumes " +
-			"an interrupted upload by matching the on-chain running hash to a chunk boundary and re-sending " +
-			"only the missing chunks.",
+		Use:   "upload",
+		Short: "Upload the deployment package zip to an HFS special file",
+		Long: "Stages the hip-1494 deployment package into the target HFS file (default 0.0.150) by an " +
+			"initial FileUpdate followed by chunked FileAppend. Use --file-id to target another special " +
+			"file. With --expect-hash/--expect-hash-file it verifies the local zip's SHA-384 before " +
+			"writing anything, and on success prints the confirmed hash for `freeze prepare`. By default " +
+			"it resumes an interrupted upload by matching the on-chain running hash to a chunk boundary " +
+			"and re-sending only the missing chunks (a fresh file simply uploads from the start); pass " +
+			"--from-scratch to force a full re-upload of every chunk. Appends are fired without waiting " +
+			"for a receipt; --checkpoint-every controls how often the upload awaits a receipt and verifies " +
+			"the on-chain running hash.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runSoftwareZipUpload(cmd, resolve, zipPath, fileNum, expectHash, expectHashFile, restart)
+			return runFileUpload(cmd, resolve, zipPath, fileNum, expectHash, expectHashFile, fromScratch, checkpointEvery)
 		},
 	}
 	cmd.Flags().StringVar(&zipPath, "zip", "", "Path to the package zip (default: <config-dir>/sysfiles/"+defaultSoftwareZipName+")")
-	cmd.Flags().Uint64Var(&fileNum, "upgrade-file-num", updateFileNum, "HFS special file number for the upgrade package")
+	cmd.Flags().Uint64Var(&fileNum, "file-id", updateFileNum, "HFS file number for the target file (e.g. 150, 159)")
 	cmd.Flags().StringVar(&expectHash, "expect-hash", "", "Expected SHA-384 hex; abort before upload if the zip does not match")
 	cmd.Flags().StringVar(&expectHashFile, "expect-hash-file", "", "File with the expected SHA-384 (bare hex or sha384sum format)")
-	cmd.Flags().BoolVar(&restart, "restart-from-failure", false, "Resume an interrupted upload, re-sending only the chunks the network is missing")
+	cmd.Flags().BoolVar(&fromScratch, "from-scratch", false, "Ignore any partially-staged file and re-upload every chunk from the beginning")
+	cmd.Flags().IntVar(&checkpointEvery, "checkpoint-every", ops.DefaultCheckpointEvery,
+		"Await a receipt and verify the on-chain running hash every N appended chunks. Higher is faster on "+
+			"high-latency networks (fewer receipt waits) but re-sends more on a failure; must be >= 1")
 	cmd.MarkFlagsMutuallyExclusive("expect-hash", "expect-hash-file")
 	return cmd
 }
 
-func runSoftwareZipUpload(cmd *cobra.Command, resolve SessionFunc, zipPath string, fileNum uint64, expectHash, expectHashFile string, restart bool) error {
+func runFileUpload(cmd *cobra.Command, resolve SessionFunc, zipPath string, fileNum uint64, expectHash, expectHashFile string, fromScratch bool, checkpointEvery int) error {
 	session, err := resolve()
 	if err != nil {
 		return err
 	}
 	defer func() { _ = session.Close() }()
 
-	// Special-file writes require a privileged payer.
 	if err := assertPrivilegedPayer(session.Target.Payer); err != nil {
 		return err
+	}
+
+	if checkpointEvery < 1 {
+		return errx.Decorate(
+			errInput.New("--checkpoint-every must be >= 1, got %d", checkpointEvery),
+			reasonInvalidCheckpoint,
+			"Pass a positive value; higher values checkpoint less often (faster, but re-send more on failure)",
+		)
 	}
 
 	if zipPath == "" {
@@ -143,7 +147,6 @@ func runSoftwareZipUpload(cmd *cobra.Command, resolve SessionFunc, zipPath strin
 	localRaw := ops.HashBytes(data)
 	localHex := hex.EncodeToString(localRaw)
 
-	// Verify-before-upload (§15 Q1): abort before any on-chain write on mismatch.
 	if want, provided, err := expectedHash(expectHash, expectHashFile); err != nil {
 		return err
 	} else if provided && !bytes.Equal(want, localRaw) {
@@ -155,22 +158,30 @@ func runSoftwareZipUpload(cmd *cobra.Command, resolve SessionFunc, zipPath strin
 	}
 
 	fileID := session.Target.FileID(fileNum)
-	submit := func(tx hiero.TransactionInterface) error {
-		_, e := session.Client.Submit(tx, nil)
-		return e
+	readMemo := func(id hiero.FileID) (string, error) {
+		return ops.FileMemo(session.Client.Hiero(), id)
 	}
-	if restart {
-		readMemo := func(id hiero.FileID) (string, error) {
-			return ops.FileMemo(session.Client.Hiero(), id)
-		}
-		if err := ops.ResumeUpload(submit, readMemo, fileID, data); err != nil {
+	uploader := ops.Uploader{
+		Fire: func(tx hiero.TransactionInterface) error {
+			return session.Client.Fire(tx)
+		},
+		Verify: func(tx hiero.TransactionInterface) error {
+			_, e := session.Client.Submit(tx, nil)
+			return e
+		},
+		ReadMemo:        readMemo,
+		CheckpointEvery: checkpointEvery,
+	}
+	if fromScratch {
+		if err := ops.UploadRawFile(uploader, fileID, data); err != nil {
 			return err
 		}
-	} else if err := ops.UploadRawFile(submit, fileID, data); err != nil {
-		return err
+	} else {
+		if err := ops.ResumeUpload(uploader, readMemo, fileID, data); err != nil {
+			return err
+		}
 	}
 
-	// Read back the staged hash and confirm it equals the local package.
 	if err := ops.VerifyUploadedHash(session.Client.Hiero(), fileID, localRaw); err != nil {
 		return err
 	}
