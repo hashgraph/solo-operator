@@ -140,6 +140,12 @@ func (u *UC) Run(ctx context.Context) error {
 		return runMetricsServer(ctx, u.cfg.MetricsAddr, u.registry)
 	})
 
+	if probe := buildComponentProbeNilSafe("uc", u.monitors); probe != nil {
+		if err := probe.Probe(ctx); err != nil {
+			return err
+		}
+	}
+
 	// a permanently-failed monitor stays up in a degraded state — surfaced via /status, not a pod crash, so the
 	// operator gets an actionable signal instead of restart churn
 	for _, mon := range u.monitors {
@@ -264,4 +270,23 @@ func mkdirInherit(dir, root string) error {
 		return os.MkdirAll(dir, 0o750)
 	}
 	return os.MkdirAll(dir, info.Mode().Perm())
+}
+
+// buildComponentProbeNilSafe collects RequiredProbe() from every ProbableMonitor,
+// filtering out nil probes (monitors that have no prerequisite in the current mode).
+func buildComponentProbeNilSafe(componentName string, monitors []daemonkit.MonitorRunner) daemonkit.ComponentProbe {
+	var leafProbes []daemonkit.Probe
+	for _, m := range monitors {
+		pm, ok := m.(daemonkit.ProbableMonitor)
+		if !ok {
+			continue
+		}
+		if p := pm.RequiredProbe(); p != nil {
+			leafProbes = append(leafProbes, p)
+		}
+	}
+	if len(leafProbes) == 0 {
+		return nil
+	}
+	return daemonkit.NewCompositeProbe(componentName, leafProbes...)
 }
