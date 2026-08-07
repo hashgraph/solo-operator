@@ -284,6 +284,16 @@ type UcSidecar struct {
 
 	// +optional
 	AdditionalVolumeMounts []corev1.VolumeMount `json:"additionalVolumeMounts,omitempty"`
+
+	// Interval between marker-file polls during normal operation (default: 60s).
+	// +optional
+	// +kubebuilder:validation:Pattern=`^([1-9][0-9]*h)?([1-5]?[0-9]m)?([1-5]?[0-9]s)?([1-9][0-9]{0,2}ms)?$`
+	PollInterval string `json:"pollInterval,omitempty"`
+
+	// Interval between marker-file polls during the freeze window (default: 1s).
+	// +optional
+	// +kubebuilder:validation:Pattern=`^([1-9][0-9]*h)?([1-5]?[0-9]m)?([1-5]?[0-9]s)?([1-9][0-9]{0,2}ms)?$`
+	FreezePollInterval string `json:"freezePollInterval,omitempty"`
 }
 
 // ConsensusNodeContainer configures the main consensus node container.

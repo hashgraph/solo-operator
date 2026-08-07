@@ -5168,7 +5168,17 @@ spec:
                           enabled:
                             default: false
                             type: boolean
+                          freezePollInterval:
+                            description: 'Interval between marker-file polls during
+                              the freeze window (default: 1s).'
+                            pattern: ^([1-9][0-9]*h)?([1-5]?[0-9]m)?([1-5]?[0-9]s)?([1-9][0-9]{0,2}ms)?$
+                            type: string
                           name:
+                            type: string
+                          pollInterval:
+                            description: 'Interval between marker-file polls during
+                              normal operation (default: 60s).'
+                            pattern: ^([1-9][0-9]*h)?([1-5]?[0-9]m)?([1-5]?[0-9]s)?([1-9][0-9]{0,2}ms)?$
                             type: string
                           resources:
                             description: ResourceRequirements describes the compute
