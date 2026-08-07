@@ -137,7 +137,7 @@ func TestPlatformStatusMonitor_TransitionOnlyPatchesOwnPod(t *testing.T) {
 	cfg.Namespace = "solo"
 	cfg.PodName = "node0-0"
 	cfg.MetricsURL = srv.URL
-	m := NewPlatformStatusMonitor(cfg, fakeClient, nil)
+	m := NewPlatformStatusMonitor(cfg, fakeClient, nil, nil)
 	ctx := context.Background()
 
 	count := func() int {
@@ -270,7 +270,7 @@ func TestPlatformStatusMonitor_RepatchesOnCodeChangeSameName(t *testing.T) {
 	cfg.Namespace = "solo"
 	cfg.PodName = "node0-0"
 	cfg.MetricsURL = srv.URL
-	m := NewPlatformStatusMonitor(cfg, fakeClient, nil)
+	m := NewPlatformStatusMonitor(cfg, fakeClient, nil, nil)
 	ctx := context.Background()
 
 	count := func() int { mu.Lock(); defer mu.Unlock(); return len(patches) }
@@ -376,6 +376,149 @@ func TestPlatformStatusConditionPatch_PreservesKubeletConditions(t *testing.T) {
 	}
 }
 
+// TestPlatformStatusMonitor_LogFallbackWhenMetricsDown verifies that when the
+// metrics endpoint is unreachable but the log monitor has a known status, the
+// pod condition reflects the log-derived status instead of UNKNOWN.
+func TestPlatformStatusMonitor_LogFallbackWhenMetricsDown(t *testing.T) {
+	var metricCode atomic.Int64
+	metricCode.Store(2) // ACTIVE
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		c := metricCode.Load()
+		if c < 0 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		fmt.Fprintf(w, "platform_PlatformStatus{node=\"0\"} %d\n", c)
+	}))
+	defer srv.Close()
+
+	scheme := runtime.NewScheme()
+	if err := operatorv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add to scheme: %v", err)
+	}
+	fakeClient := fake.NewSimpleDynamicClient(scheme)
+
+	var (
+		mu      sync.Mutex
+		patches []k8stesting.PatchAction
+	)
+	fakeClient.PrependReactor("patch", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		mu.Lock()
+		patches = append(patches, action.(k8stesting.PatchAction))
+		mu.Unlock()
+		return true, &unstructured.Unstructured{Object: map[string]interface{}{}}, nil
+	})
+
+	cfg := DefaultConfig()
+	cfg.Namespace = "solo"
+	cfg.PodName = "node0-0"
+	cfg.MetricsURL = srv.URL
+
+	logMon := NewLogMonitor(cfg)
+	logMon.snapshot.Store(&LogStatusSnapshot{Code: 9, Status: operatorv1alpha1.PlatformStatusChecking})
+
+	m := NewPlatformStatusMonitor(cfg, fakeClient, nil, logMon)
+	ctx := context.Background()
+
+	count := func() int { mu.Lock(); defer mu.Unlock(); return len(patches) }
+	lastCond := func() corev1.PodCondition {
+		t.Helper()
+		mu.Lock()
+		defer mu.Unlock()
+		var body patchBody
+		if err := json.Unmarshal(patches[len(patches)-1].GetPatch(), &body); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		return body.Status.Conditions[0]
+	}
+
+	// Metrics up → ACTIVE from metrics.
+	m.poll(ctx)
+	if count() != 1 {
+		t.Fatalf("expected 1 patch, got %d", count())
+	}
+	if c := lastCond(); c.Reason != operatorv1alpha1.PlatformStatusActive {
+		t.Fatalf("expected ACTIVE, got %q", c.Reason)
+	}
+
+	// Metrics down → should fall back to log (CHECKING), NOT UNKNOWN.
+	metricCode.Store(-1)
+	m.poll(ctx)
+	if count() != 2 {
+		t.Fatalf("expected 2 patches, got %d", count())
+	}
+	cond := lastCond()
+	if cond.Reason != operatorv1alpha1.PlatformStatusChecking {
+		t.Errorf("expected CHECKING from log fallback, got %q", cond.Reason)
+	}
+	if cond.Status != corev1.ConditionTrue {
+		t.Errorf("expected ConditionTrue for a concrete log-derived status, got %q", cond.Status)
+	}
+
+	// Metrics recover → ACTIVE again from metrics.
+	metricCode.Store(2)
+	m.poll(ctx)
+	if count() != 3 {
+		t.Fatalf("expected 3 patches, got %d", count())
+	}
+	if c := lastCond(); c.Reason != operatorv1alpha1.PlatformStatusActive {
+		t.Errorf("expected ACTIVE after recovery, got %q", c.Reason)
+	}
+}
+
+// TestPlatformStatusMonitor_UnmappedCodeDoesNotFallback verifies that an unmapped
+// numeric code (e.g. 3 or 999) that maps to UNKNOWN does NOT trigger the log
+// fallback — only the sentinel "metrics unreachable" code does.
+func TestPlatformStatusMonitor_UnmappedCodeDoesNotFallback(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, "platform_PlatformStatus{node=\"0\"} 3\n") // unmapped → UNKNOWN
+	}))
+	defer srv.Close()
+
+	scheme := runtime.NewScheme()
+	if err := operatorv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add to scheme: %v", err)
+	}
+	fakeClient := fake.NewSimpleDynamicClient(scheme)
+
+	var (
+		mu      sync.Mutex
+		patches []k8stesting.PatchAction
+	)
+	fakeClient.PrependReactor("patch", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		mu.Lock()
+		patches = append(patches, action.(k8stesting.PatchAction))
+		mu.Unlock()
+		return true, &unstructured.Unstructured{Object: map[string]interface{}{}}, nil
+	})
+
+	cfg := DefaultConfig()
+	cfg.Namespace = "solo"
+	cfg.PodName = "node0-0"
+	cfg.MetricsURL = srv.URL
+
+	logMon := NewLogMonitor(cfg)
+	logMon.snapshot.Store(&LogStatusSnapshot{Code: 9, Status: operatorv1alpha1.PlatformStatusChecking})
+
+	m := NewPlatformStatusMonitor(cfg, fakeClient, nil, logMon)
+	ctx := context.Background()
+
+	m.poll(ctx)
+	mu.Lock()
+	defer mu.Unlock()
+	if len(patches) != 1 {
+		t.Fatalf("expected 1 patch, got %d", len(patches))
+	}
+	var body patchBody
+	if err := json.Unmarshal(patches[0].GetPatch(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	cond := body.Status.Conditions[0]
+	if cond.Reason != operatorv1alpha1.PlatformStatusUnknown {
+		t.Errorf("expected UNKNOWN (no fallback for unmapped code), got %q", cond.Reason)
+	}
+}
+
 // panicRoundTripper panics on every request, simulating an unexpected panic in
 // the scrape path.
 type panicRoundTripper struct{}
@@ -399,7 +542,7 @@ func TestPlatformStatusMonitor_RunRecoversPanic(t *testing.T) {
 	cfg.Namespace = "solo"
 	cfg.PodName = "node0-0"
 	cfg.MetricsURL = "http://127.0.0.1:0/metrics"
-	m := NewPlatformStatusMonitor(cfg, fakeClient, nil)
+	m := NewPlatformStatusMonitor(cfg, fakeClient, nil, nil)
 	m.http = &http.Client{Transport: panicRoundTripper{}}
 
 	// Run does an immediate scrape before entering its ticker loop; the panicking

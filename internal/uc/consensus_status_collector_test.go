@@ -40,7 +40,7 @@ func TestConsensusStatusCollector_MetricsSource_NoSnapshot(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Namespace = "solo"
 	cfg.PodName = "node0-0"
-	mon := NewPlatformStatusMonitor(cfg, nil, nil)
+	mon := NewPlatformStatusMonitor(cfg, nil, nil, nil)
 
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(NewConsensusStatusCollector(0, DefaultMetricsStaleness, mon, nil))
@@ -74,7 +74,7 @@ func TestConsensusStatusCollector_MetricsSource_WithSnapshot(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Namespace = "solo"
 	cfg.PodName = "node0-0"
-	mon := NewPlatformStatusMonitor(cfg, nil, nil)
+	mon := NewPlatformStatusMonitor(cfg, nil, nil, nil)
 
 	now := time.Now()
 	mon.scrapeSnapshot.Store(&PlatformScrapeSnapshot{Code: 2, Status: "ACTIVE", ScrapedAt: now})
@@ -108,7 +108,7 @@ func TestConsensusStatusCollector_MetricsSource_AllCodes(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Namespace = "solo"
 	cfg.PodName = "node0-0"
-	mon := NewPlatformStatusMonitor(cfg, nil, nil)
+	mon := NewPlatformStatusMonitor(cfg, nil, nil, nil)
 
 	codes := []int32{1, 2, 4, 5, 6, 7, 8, 9, 10, 11}
 	for _, code := range codes {
@@ -135,7 +135,7 @@ func TestConsensusStatusCollector_Effective_FreshMetrics(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Namespace = "solo"
 	cfg.PodName = "node0-0"
-	mon := NewPlatformStatusMonitor(cfg, nil, nil)
+	mon := NewPlatformStatusMonitor(cfg, nil, nil, nil)
 	mon.scrapeSnapshot.Store(&PlatformScrapeSnapshot{Code: 2, Status: "ACTIVE", ScrapedAt: time.Now()})
 
 	logMon := NewLogMonitor(cfg)
@@ -159,7 +159,7 @@ func TestConsensusStatusCollector_Effective_StaleMetricsFallsBackToLog(t *testin
 	cfg := DefaultConfig()
 	cfg.Namespace = "solo"
 	cfg.PodName = "node0-0"
-	mon := NewPlatformStatusMonitor(cfg, nil, nil)
+	mon := NewPlatformStatusMonitor(cfg, nil, nil, nil)
 	mon.scrapeSnapshot.Store(&PlatformScrapeSnapshot{Code: 2, Status: "ACTIVE", ScrapedAt: time.Now().Add(-30 * time.Second)})
 
 	logMon := NewLogMonitor(cfg)
@@ -183,7 +183,7 @@ func TestConsensusStatusCollector_Effective_NeitherKnown(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Namespace = "solo"
 	cfg.PodName = "node0-0"
-	mon := NewPlatformStatusMonitor(cfg, nil, nil)
+	mon := NewPlatformStatusMonitor(cfg, nil, nil, nil)
 
 	coll := NewConsensusStatusCollector(0, DefaultMetricsStaleness, mon, nil)
 	reg := prometheus.NewRegistry()
@@ -203,7 +203,7 @@ func TestConsensusStatusCollector_Effective_StalenessEdge(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Namespace = "solo"
 	cfg.PodName = "node0-0"
-	mon := NewPlatformStatusMonitor(cfg, nil, nil)
+	mon := NewPlatformStatusMonitor(cfg, nil, nil, nil)
 
 	staleness := 15 * time.Second
 	fixedNow := time.Date(2026, 7, 1, 0, 0, 30, 0, time.UTC)
