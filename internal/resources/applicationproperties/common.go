@@ -14,7 +14,6 @@ import (
 
 const (
 	PartOfApplicationProperties = "application-properties"
-	ConfigMapSuffix             = ""
 	ConfigFileName              = "application.properties"
 )
 
@@ -27,11 +26,11 @@ func CommonLabels(obj *operatorv1alpha1.ApplicationProperties) map[string]string
 }
 
 func ConfigMapName(obj *operatorv1alpha1.ApplicationProperties) string {
-	return obj.Name + ConfigMapSuffix
+	return obj.Name
 }
 
 func ConfigMapNameForRef(name string) string {
-	return name + ConfigMapSuffix
+	return name
 }
 
 func NewSubReconcilers(c client.Client, scheme *runtime.Scheme, recorder events.EventRecorder) *subreconciler.Chain[*operatorv1alpha1.ApplicationProperties] {

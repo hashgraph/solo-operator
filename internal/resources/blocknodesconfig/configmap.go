@@ -57,7 +57,12 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, r.Client.Create(ctx, desired)
 		}
+
 		return ctrl.Result{}, err
+	}
+
+	if conflict := common.ConfigMapOwnerConflict(existing, obj); conflict != "" {
+		return r.reject(ctx, obj, "OwnershipConflict", conflict)
 	}
 
 	if common.ConfigMapNeedsUpdate(existing, desired) {

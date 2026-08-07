@@ -14,7 +14,6 @@ import (
 
 const (
 	PartOfApplicationOverrideProperties = "application-override-properties"
-	ConfigMapSuffix                     = ""
 	ConfigFileName                      = "application-override.properties"
 )
 
@@ -27,11 +26,11 @@ func CommonLabels(obj *operatorv1alpha1.ApplicationOverrideProperties) map[strin
 }
 
 func ConfigMapName(obj *operatorv1alpha1.ApplicationOverrideProperties) string {
-	return obj.Name + ConfigMapSuffix
+	return obj.Name
 }
 
 func ConfigMapNameForRef(name string) string {
-	return name + ConfigMapSuffix
+	return name
 }
 
 func NewSubReconcilers(c client.Client, scheme *runtime.Scheme, recorder events.EventRecorder) *subreconciler.Chain[*operatorv1alpha1.ApplicationOverrideProperties] {

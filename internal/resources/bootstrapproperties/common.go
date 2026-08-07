@@ -14,7 +14,6 @@ import (
 
 const (
 	PartOfBootstrapProperties = "bootstrap-properties"
-	ConfigMapSuffix           = ""
 	ConfigFileName            = "bootstrap.properties"
 )
 
@@ -27,11 +26,11 @@ func CommonLabels(obj *operatorv1alpha1.BootstrapProperties) map[string]string {
 }
 
 func ConfigMapName(obj *operatorv1alpha1.BootstrapProperties) string {
-	return obj.Name + ConfigMapSuffix
+	return obj.Name
 }
 
 func ConfigMapNameForRef(name string) string {
-	return name + ConfigMapSuffix
+	return name
 }
 
 func NewSubReconcilers(c client.Client, scheme *runtime.Scheme, recorder events.EventRecorder) *subreconciler.Chain[*operatorv1alpha1.BootstrapProperties] {
