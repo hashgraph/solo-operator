@@ -117,6 +117,9 @@ const (
 	ReasonUpgradePackageDiscarded            errx.Reason = "UpgradePackageDiscarded"
 	ReasonUpgradePackageRotateFailed         errx.Reason = "UpgradePackageRotateFailed"
 
+	// Config-CR RBAC preflight (cluster-only).
+	ReasonConfigCRAccessDenied errx.Reason = "ConfigCRAccessDenied"
+
 	// Config-CR deployment (execute-phase, cluster-only).
 	ReasonConfigDirAbsent        errx.Reason = "ConfigDirAbsent"
 	ReasonConfigFileUnrecognised errx.Reason = "ConfigFileUnrecognised"

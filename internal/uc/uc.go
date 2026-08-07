@@ -60,10 +60,12 @@ func New(cfg Config) (*UC, error) {
 	factory.events = sink
 
 	outcomeCfg := UpgradeOutcomeMonitorConfig{
-		Namespace:           cfg.Namespace,
-		NodeID:              cfg.NodeID,
-		UpgradePath:         cfg.UpgradePath,
-		PreviousUpgradePath: cfg.PreviousUpgradePath,
+		Namespace:               cfg.Namespace,
+		NodeID:                  cfg.NodeID,
+		UpgradePath:             cfg.UpgradePath,
+		PreviousUpgradePath:     cfg.PreviousUpgradePath,
+		ProvisionerProxyEnabled: cfg.ProvisionerProxyEnabled(),
+		CapsuleName:             cfg.CapsuleName(),
 	}
 	outcomeMonitor := NewUpgradeOutcomeMonitorWithClient(outcomeCfg, client)
 	outcomeMonitor.onPhaseUpdate = factory.markCreated
