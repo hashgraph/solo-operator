@@ -56,8 +56,8 @@ func TestConfigMapName(t *testing.T) {
 	obj := &operatorv1alpha1.ApplicationProperties{
 		ObjectMeta: metav1.ObjectMeta{Name: "node0"},
 	}
-	if got := ConfigMapName(obj); got != "node0-application-properties-cm" {
-		t.Errorf("ConfigMapName: got %q, want %q", got, "node0-application-properties-cm")
+	if got := ConfigMapName(obj); got != "node0" {
+		t.Errorf("ConfigMapName: got %q, want %q", got, "node0")
 	}
 }
 
@@ -113,7 +113,7 @@ func TestConfigMapSubReconciler_CreatesConfigMap(t *testing.T) {
 	}
 
 	cm := &corev1.ConfigMap{}
-	if err := c.Get(context.Background(), types.NamespacedName{Name: "node0-application-properties-cm", Namespace: "default"}, cm); err != nil {
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "node0", Namespace: "default"}, cm); err != nil {
 		t.Fatalf("ConfigMap not found: %v", err)
 	}
 	if cm.Data[ConfigFileName] != validProperties {
@@ -128,7 +128,7 @@ func TestConfigMapSubReconciler_UpdatesConfigMap(t *testing.T) {
 		Spec:       operatorv1alpha1.ApplicationPropertiesSpec{Content: validProperties},
 	}
 	existingCM := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "node0-application-properties-cm", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default"},
 		Data:       map[string]string{ConfigFileName: "hedera.config.version=1"},
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(obj, existingCM).Build()
@@ -140,7 +140,7 @@ func TestConfigMapSubReconciler_UpdatesConfigMap(t *testing.T) {
 	}
 
 	cm := &corev1.ConfigMap{}
-	if err := c.Get(context.Background(), types.NamespacedName{Name: "node0-application-properties-cm", Namespace: "default"}, cm); err != nil {
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "node0", Namespace: "default"}, cm); err != nil {
 		t.Fatalf("ConfigMap not found: %v", err)
 	}
 	if cm.Data[ConfigFileName] != validProperties {
@@ -183,7 +183,7 @@ func TestConfigMapSubReconciler_LedgerIDEquivalent(t *testing.T) {
 		t.Fatalf("expected Valid=True for 0x1 vs 0x01, got %+v", cond)
 	}
 	cm := &corev1.ConfigMap{}
-	if err := c.Get(context.Background(), types.NamespacedName{Name: "node0-application-properties-cm", Namespace: "default"}, cm); err != nil {
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "node0", Namespace: "default"}, cm); err != nil {
 		t.Fatalf("ConfigMap should have been created: %v", err)
 	}
 }
@@ -211,7 +211,7 @@ func TestConfigMapSubReconciler_LedgerIDMismatch(t *testing.T) {
 		t.Fatalf("expected Valid=False/LedgerIDMismatch for 0x02 vs 298, got %+v", cond)
 	}
 	cm := &corev1.ConfigMap{}
-	if err := c.Get(context.Background(), types.NamespacedName{Name: "node0-application-properties-cm", Namespace: "default"}, cm); err == nil {
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "node0", Namespace: "default"}, cm); err == nil {
 		t.Error("ConfigMap should not have been created on ledger mismatch")
 	}
 }
@@ -231,7 +231,7 @@ func TestConfigMapSubReconciler_InvalidContent(t *testing.T) {
 	}
 
 	cm := &corev1.ConfigMap{}
-	if getErr := c.Get(context.Background(), types.NamespacedName{Name: "node0-application-properties-cm", Namespace: "default"}, cm); getErr == nil {
+	if getErr := c.Get(context.Background(), types.NamespacedName{Name: "node0", Namespace: "default"}, cm); getErr == nil {
 		t.Error("ConfigMap should not have been created for invalid content")
 	}
 }

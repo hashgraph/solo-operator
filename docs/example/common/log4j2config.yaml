@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# Shared Log4j2Config — creates a ConfigMap named network-log4j2-cm containing
+# Shared Log4j2Config — creates a ConfigMap named network-log4j2 containing
 # the log4j2.xml mounted directly into each ConsensusCapsule pod.
 #
 # Each ConsensusCapsule references this CR via:

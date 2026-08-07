@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# Shared ThrottlesConfig — creates a ConfigMap named network-throttles-throttles-cm
+# Shared ThrottlesConfig — creates a ConfigMap named network-throttles
 # that is subPath-mounted at data/config/throttles.json in every ConsensusCapsule pod.
 #
 # Each ConsensusCapsule must reference this CR via:

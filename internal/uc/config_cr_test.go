@@ -310,7 +310,7 @@ func TestBuildConfigCR_nameAndLabels(t *testing.T) {
 		t.Fatalf("buildConfigCR: %v", err)
 	}
 
-	wantName := testOperationID + "-log4j2config"
+	wantName := testOperationID + "-log4j2"
 	if cr.GetName() != wantName {
 		t.Errorf("name = %q, want %q", cr.GetName(), wantName)
 	}

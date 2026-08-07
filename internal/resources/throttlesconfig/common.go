@@ -14,7 +14,7 @@ import (
 
 const (
 	PartOfThrottlesConfig = "throttles-config"
-	ConfigMapSuffix       = "-throttles-cm"
+	ConfigMapSuffix       = ""
 	ConfigFileName        = "throttles.json"
 )
 

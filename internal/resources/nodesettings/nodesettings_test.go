@@ -54,14 +54,14 @@ func TestConfigMapName(t *testing.T) {
 	obj := &operatorv1alpha1.NodeSettings{
 		ObjectMeta: metav1.ObjectMeta{Name: "node0"},
 	}
-	if got := ConfigMapName(obj); got != "node0-settings-cm" {
-		t.Errorf("ConfigMapName: got %q, want %q", got, "node0-settings-cm")
+	if got := ConfigMapName(obj); got != "node0" {
+		t.Errorf("ConfigMapName: got %q, want %q", got, "node0")
 	}
 }
 
 func TestConfigMapNameForRef(t *testing.T) {
-	if got := ConfigMapNameForRef("network"); got != "network-settings-cm" {
-		t.Errorf("ConfigMapNameForRef: got %q, want %q", got, "network-settings-cm")
+	if got := ConfigMapNameForRef("network"); got != "network" {
+		t.Errorf("ConfigMapNameForRef: got %q, want %q", got, "network")
 	}
 }
 
@@ -117,7 +117,7 @@ func TestConfigMapSubReconciler_CreatesConfigMap(t *testing.T) {
 	}
 
 	cm := &corev1.ConfigMap{}
-	if err := c.Get(context.Background(), types.NamespacedName{Name: "node0-settings-cm", Namespace: "default"}, cm); err != nil {
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "node0", Namespace: "default"}, cm); err != nil {
 		t.Fatalf("ConfigMap not found: %v", err)
 	}
 	if cm.Data[ConfigFileName] != validSettings {
@@ -132,7 +132,7 @@ func TestConfigMapSubReconciler_UpdatesConfigMap(t *testing.T) {
 		Spec:       operatorv1alpha1.NodeSettingsSpec{Content: validSettings},
 	}
 	existingCM := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "node0-settings-cm", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default"},
 		Data:       map[string]string{ConfigFileName: "checkSignedStateFromDisk, 0"},
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(obj, existingCM).Build()
@@ -144,7 +144,7 @@ func TestConfigMapSubReconciler_UpdatesConfigMap(t *testing.T) {
 	}
 
 	cm := &corev1.ConfigMap{}
-	if err := c.Get(context.Background(), types.NamespacedName{Name: "node0-settings-cm", Namespace: "default"}, cm); err != nil {
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "node0", Namespace: "default"}, cm); err != nil {
 		t.Fatalf("ConfigMap not found: %v", err)
 	}
 	if cm.Data[ConfigFileName] != validSettings {
@@ -167,7 +167,7 @@ func TestConfigMapSubReconciler_InvalidContent(t *testing.T) {
 	}
 
 	cm := &corev1.ConfigMap{}
-	if getErr := c.Get(context.Background(), types.NamespacedName{Name: "node0-settings-cm", Namespace: "default"}, cm); getErr == nil {
+	if getErr := c.Get(context.Background(), types.NamespacedName{Name: "node0", Namespace: "default"}, cm); getErr == nil {
 		t.Error("ConfigMap should not have been created for invalid content")
 	}
 }

@@ -14,7 +14,7 @@ import (
 
 const (
 	PartOfApplicationProperties = "application-properties"
-	ConfigMapSuffix             = "-application-properties-cm"
+	ConfigMapSuffix             = ""
 	ConfigFileName              = "application.properties"
 )
 

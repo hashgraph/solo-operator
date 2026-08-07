@@ -14,7 +14,7 @@ import (
 
 const (
 	PartOfBlockNodesConfig = "block-nodes-config"
-	ConfigMapSuffix        = "-block-nodes-cm"
+	ConfigMapSuffix        = ""
 	ConfigFileName         = "block-nodes.json"
 )
 

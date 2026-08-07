@@ -123,7 +123,7 @@ var _ = Describe("E2E Tests", func() {
 						Weight:                   1,
 						Log4j2ConfigRef:          "network-log4j2",
 						SettingsConfigRef:        "network-settings",
-						ApplicationPropertiesRef: "network-appprops",
+						ApplicationPropertiesRef: "network-application-properties",
 						PodProperties: operatorv1alpha1.ConsensusPodProperties{
 							Containers: operatorv1alpha1.ConsensusContainers{
 								ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -457,7 +457,7 @@ var _ = Describe("E2E Tests", func() {
 						Weight:                   1,
 						Log4j2ConfigRef:          "network-log4j2",
 						SettingsConfigRef:        "network-settings",
-						ApplicationPropertiesRef: "network-appprops",
+						ApplicationPropertiesRef: "network-application-properties",
 						PodProperties: operatorv1alpha1.ConsensusPodProperties{
 							Containers: operatorv1alpha1.ConsensusContainers{
 								ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -564,7 +564,7 @@ var _ = Describe("E2E Tests", func() {
 						Weight:                   1,
 						Log4j2ConfigRef:          "network-log4j2",
 						SettingsConfigRef:        "network-settings",
-						ApplicationPropertiesRef: "network-appprops",
+						ApplicationPropertiesRef: "network-application-properties",
 						PodProperties: operatorv1alpha1.ConsensusPodProperties{
 							Containers: operatorv1alpha1.ConsensusContainers{
 								ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{

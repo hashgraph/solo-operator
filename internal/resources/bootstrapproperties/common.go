@@ -14,7 +14,7 @@ import (
 
 const (
 	PartOfBootstrapProperties = "bootstrap-properties"
-	ConfigMapSuffix           = "-bootstrap-properties-cm"
+	ConfigMapSuffix           = ""
 	ConfigFileName            = "bootstrap.properties"
 )
 

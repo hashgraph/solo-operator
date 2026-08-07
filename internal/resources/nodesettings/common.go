@@ -14,7 +14,7 @@ import (
 
 const (
 	PartOfNodeSettings = "node-settings"
-	ConfigMapSuffix    = "-settings-cm"
+	ConfigMapSuffix    = ""
 	ConfigFileName     = "settings.txt"
 )
 

@@ -14,7 +14,7 @@ import (
 
 const (
 	PartOfNodeProperties = "node-properties"
-	ConfigMapSuffix      = "-node-properties-cm"
+	ConfigMapSuffix      = ""
 	ConfigFileName       = "node.properties"
 )
 

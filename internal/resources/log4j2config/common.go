@@ -14,7 +14,7 @@ import (
 
 const (
 	PartOfLog4j2Config = "log4j2-config"
-	ConfigMapSuffix    = "-log4j2-cm"
+	ConfigMapSuffix    = ""
 	ConfigFileName     = "log4j2.xml"
 )
 

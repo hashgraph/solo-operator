@@ -14,7 +14,7 @@ import (
 
 const (
 	PartOfApplicationOverrideProperties = "application-override-properties"
-	ConfigMapSuffix                     = "-application-override-properties-cm"
+	ConfigMapSuffix                     = ""
 	ConfigFileName                      = "application-override.properties"
 )
 

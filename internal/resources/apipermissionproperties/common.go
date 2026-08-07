@@ -14,7 +14,7 @@ import (
 
 const (
 	PartOfApiPermissionProperties = "api-permission-properties"
-	ConfigMapSuffix               = "-api-permission-properties-cm"
+	ConfigMapSuffix               = ""
 	ConfigFileName                = "api-permission.properties"
 )
 

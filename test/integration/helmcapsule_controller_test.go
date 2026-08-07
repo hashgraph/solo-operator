@@ -191,7 +191,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 			}
 
 			appPropsMirror := &operatorv1alpha1.ApplicationProperties{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-appprops", Namespace: hcNS},
+				ObjectMeta: metav1.ObjectMeta{Name: "network-application-properties", Namespace: hcNS},
 				Spec: operatorv1alpha1.ApplicationPropertiesSpec{
 					Content: "hedera.config.version=0\nnetty.mode=TEST",
 				},
@@ -214,7 +214,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 						Weight:                   1,
 						Log4j2ConfigRef:          "network-log4j2",
 						SettingsConfigRef:        "network-settings",
-						ApplicationPropertiesRef: "network-appprops",
+						ApplicationPropertiesRef: "network-application-properties",
 						PodProperties: operatorv1alpha1.ConsensusPodProperties{
 							Containers: operatorv1alpha1.ConsensusContainers{
 								ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -482,7 +482,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 			}
 
 			appPropsRelay := &operatorv1alpha1.ApplicationProperties{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-appprops", Namespace: hcNS},
+				ObjectMeta: metav1.ObjectMeta{Name: "network-application-properties", Namespace: hcNS},
 				Spec: operatorv1alpha1.ApplicationPropertiesSpec{
 					Content: "hedera.config.version=0\nnetty.mode=TEST",
 				},
@@ -501,7 +501,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 					Weight:                   1,
 					Log4j2ConfigRef:          "network-log4j2",
 					SettingsConfigRef:        "network-settings",
-					ApplicationPropertiesRef: "network-appprops",
+					ApplicationPropertiesRef: "network-application-properties",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -655,7 +655,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 			}
 
 			appPropsBN := &operatorv1alpha1.ApplicationProperties{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-appprops", Namespace: hcNS},
+				ObjectMeta: metav1.ObjectMeta{Name: "network-application-properties", Namespace: hcNS},
 				Spec: operatorv1alpha1.ApplicationPropertiesSpec{
 					Content: "hedera.config.version=0\nnetty.mode=TEST",
 				},
@@ -674,7 +674,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 					Weight:                   1,
 					Log4j2ConfigRef:          "network-log4j2",
 					SettingsConfigRef:        "network-settings",
-					ApplicationPropertiesRef: "network-appprops",
+					ApplicationPropertiesRef: "network-application-properties",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{

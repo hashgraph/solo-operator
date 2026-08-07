@@ -73,7 +73,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}
 
 			appProps := &operatorv1alpha1.ApplicationProperties{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-appprops", Namespace: capsuleNamespace},
+				ObjectMeta: metav1.ObjectMeta{Name: "network-application-properties", Namespace: capsuleNamespace},
 				Spec: operatorv1alpha1.ApplicationPropertiesSpec{
 					Content: "hedera.config.version=0\nnetty.mode=TEST",
 				},
@@ -98,7 +98,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 					Weight:                   1,
 					Log4j2ConfigRef:          "network-log4j2",
 					SettingsConfigRef:        "network-settings",
-					ApplicationPropertiesRef: "network-appprops",
+					ApplicationPropertiesRef: "network-application-properties",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -215,7 +215,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}
 
 			appProps := &operatorv1alpha1.ApplicationProperties{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-appprops", Namespace: capsuleNamespace},
+				ObjectMeta: metav1.ObjectMeta{Name: "network-application-properties", Namespace: capsuleNamespace},
 				Spec: operatorv1alpha1.ApplicationPropertiesSpec{
 					Content: "hedera.config.version=0\nnetty.mode=TEST",
 				},
@@ -241,7 +241,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 					Weight:                   1,
 					Log4j2ConfigRef:          "network-log4j2",
 					SettingsConfigRef:        "network-settings",
-					ApplicationPropertiesRef: "network-appprops",
+					ApplicationPropertiesRef: "network-application-properties",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -349,7 +349,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}
 
 			appProps := &operatorv1alpha1.ApplicationProperties{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-appprops", Namespace: capsuleNamespace},
+				ObjectMeta: metav1.ObjectMeta{Name: "network-application-properties", Namespace: capsuleNamespace},
 				Spec:       operatorv1alpha1.ApplicationPropertiesSpec{Content: "hedera.config.version=0\nnetty.mode=TEST"},
 			}
 			err = k8sClient.Create(ctx, appProps)
@@ -368,7 +368,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 					Weight:                   1,
 					Log4j2ConfigRef:          "network-log4j2",
 					SettingsConfigRef:        "network-settings",
-					ApplicationPropertiesRef: "network-appprops",
+					ApplicationPropertiesRef: "network-application-properties",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -466,7 +466,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}
 
 			appProps := &operatorv1alpha1.ApplicationProperties{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-appprops", Namespace: capsuleNamespace},
+				ObjectMeta: metav1.ObjectMeta{Name: "network-application-properties", Namespace: capsuleNamespace},
 				Spec:       operatorv1alpha1.ApplicationPropertiesSpec{Content: "hedera.config.version=0\nnetty.mode=TEST"},
 			}
 			err = k8sClient.Create(ctx, appProps)
@@ -485,7 +485,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 					Weight:                   1,
 					Log4j2ConfigRef:          "network-log4j2",
 					SettingsConfigRef:        "network-settings",
-					ApplicationPropertiesRef: "network-appprops",
+					ApplicationPropertiesRef: "network-application-properties",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{

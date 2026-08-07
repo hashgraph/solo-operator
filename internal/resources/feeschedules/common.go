@@ -14,7 +14,7 @@ import (
 
 const (
 	PartOfFeeSchedules = "fee-schedules"
-	ConfigMapSuffix    = "-fee-schedules-cm"
+	ConfigMapSuffix    = ""
 	ConfigFileName     = "feeSchedules.json"
 )
 

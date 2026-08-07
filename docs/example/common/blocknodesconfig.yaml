@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Per-node BlockNodesConfig CRs. Each creates a ConfigMap named
-# node<N>-block-nodes-block-nodes-cm that is subPath-mounted at
+# node<N>-block-nodes that is subPath-mounted at
 # data/config/block-nodes.json in the matching ConsensusCapsule pod.
 #
 # Each ConsensusCapsule references its own CR via:
