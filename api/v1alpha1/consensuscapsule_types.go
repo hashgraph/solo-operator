@@ -287,12 +287,12 @@ type UcSidecar struct {
 
 	// Interval between marker-file polls during normal operation (default: 60s).
 	// +optional
-	// +kubebuilder:validation:Pattern=`^([1-9][0-9]*h)?([1-5]?[0-9]m)?([1-5]?[0-9]s)?([1-9][0-9]{0,2}ms)?$`
+	// +kubebuilder:validation:XValidation:rule="duration(self) > duration('0s')",message="pollInterval must be a positive Go duration (e.g. '10s', '1m30s')"
 	PollInterval string `json:"pollInterval,omitempty"`
 
 	// Interval between marker-file polls during the freeze window (default: 1s).
 	// +optional
-	// +kubebuilder:validation:Pattern=`^([1-9][0-9]*h)?([1-5]?[0-9]m)?([1-5]?[0-9]s)?([1-9][0-9]{0,2}ms)?$`
+	// +kubebuilder:validation:XValidation:rule="duration(self) > duration('0s')",message="freezePollInterval must be a positive Go duration (e.g. '100ms', '1s')"
 	FreezePollInterval string `json:"freezePollInterval,omitempty"`
 }
 
