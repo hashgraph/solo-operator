@@ -87,8 +87,8 @@ func New(cfg Config) (*UC, error) {
 		outcomeMonitor.mu.Unlock()
 	}
 
-	platformMon := NewPlatformStatusMonitor(cfg, client, sink)
 	logMon := NewLogMonitor(cfg)
+	platformMon := NewPlatformStatusMonitor(cfg, client, sink, logMon)
 	monitors := []daemonkit.MonitorRunner{
 		NewMarkerMonitorWithFactory(cfg, factory),
 		outcomeMonitor,

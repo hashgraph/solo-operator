@@ -212,7 +212,7 @@ func TestConsensusStatusCollector_LogSource(t *testing.T) {
 	logMon := NewLogMonitor(cfg)
 	logMon.seedFromTail()
 
-	platMon := NewPlatformStatusMonitor(cfg, nil, nil)
+	platMon := NewPlatformStatusMonitor(cfg, nil, nil, nil)
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(NewConsensusStatusCollector(0, DefaultMetricsStaleness, platMon, logMon))
 
@@ -245,7 +245,7 @@ func TestConsensusStatusCollector_LogSource_NoMonitor(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Namespace = "solo"
 	cfg.PodName = "node0-0"
-	platMon := NewPlatformStatusMonitor(cfg, nil, nil)
+	platMon := NewPlatformStatusMonitor(cfg, nil, nil, nil)
 
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(NewConsensusStatusCollector(0, DefaultMetricsStaleness, platMon, nil))

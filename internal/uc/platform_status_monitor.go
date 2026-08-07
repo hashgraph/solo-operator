@@ -62,6 +62,11 @@ type PlatformStatusMonitor struct {
 	http   *http.Client
 	events *eventSink
 
+	// logMonitor provides the log-based fallback status. When the metrics
+	// endpoint is unreachable, the effective status is derived from the log
+	// monitor instead of reporting UNKNOWN.
+	logMonitor *LogMonitor
+
 	// last is the last platform-status name written to the pod condition, and lastCode
 	// the numeric code that accompanied it. A patch is issued when a freshly-scraped
 	// reading differs in EITHER field, so a code change that maps to the same name (only
@@ -76,13 +81,15 @@ type PlatformStatusMonitor struct {
 	scrapeSnapshot  atomic.Pointer[PlatformScrapeSnapshot]
 }
 
-// NewPlatformStatusMonitor constructs the platform-status sensor.
-func NewPlatformStatusMonitor(cfg Config, client dynamic.Interface, sink *eventSink) *PlatformStatusMonitor {
+// NewPlatformStatusMonitor constructs the platform-status sensor. logMon may be
+// nil (the monitor falls back to raw-scrape-only behaviour).
+func NewPlatformStatusMonitor(cfg Config, client dynamic.Interface, sink *eventSink, logMon *LogMonitor) *PlatformStatusMonitor {
 	return &PlatformStatusMonitor{
-		cfg:    cfg,
-		client: client,
-		http:   &http.Client{Timeout: metricsScrapeTimeout},
-		events: sink,
+		cfg:        cfg,
+		client:     client,
+		http:       &http.Client{Timeout: metricsScrapeTimeout},
+		events:     sink,
+		logMonitor: logMon,
 	}
 }
 
@@ -143,9 +150,19 @@ func (m *PlatformStatusMonitor) Run(ctx context.Context) (retErr error) {
 
 // poll scrapes the current platform status and, if the reading differs from the
 // last written one (in name OR numeric code), patches the pod condition and — on a
-// genuine name change — records the transition.
+// genuine name change — records the transition. When the metrics scrape reports
+// UNKNOWN (endpoint unreachable or sample absent), the log monitor's status is
+// used as a fallback so a dead :9999 no longer masks a status the log already knows.
 func (m *PlatformStatusMonitor) poll(ctx context.Context) {
 	code, name := m.scrape(ctx)
+
+	if name == operatorv1alpha1.PlatformStatusUnknown && m.logMonitor != nil {
+		if snap := m.logMonitor.Snapshot(); snap != nil && snap.Status != operatorv1alpha1.PlatformStatusUnknown {
+			code = snap.Code
+			name = snap.Status
+		}
+	}
+
 	if name == m.last && code == m.lastCode {
 		return // nothing observable changed — no write
 	}
