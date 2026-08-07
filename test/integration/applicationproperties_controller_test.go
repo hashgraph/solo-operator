@@ -46,7 +46,7 @@ var _ = Describe("ApplicationProperties Controller", func() {
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 
 			By("Verifying the ConfigMap is created")
-			cmKey := types.NamespacedName{Name: crName + "-application-properties-cm", Namespace: namespace}
+			cmKey := types.NamespacedName{Name: crName, Namespace: namespace}
 			createdCM := &corev1.ConfigMap{}
 			Eventually(func() bool {
 				return k8sClient.Get(ctx, cmKey, createdCM) == nil
@@ -62,7 +62,7 @@ var _ = Describe("ApplicationProperties Controller", func() {
 					return ""
 				}
 				return updatedCR.Status.ConfigMapName
-			}, timeout, interval).Should(Equal(crName + "-application-properties-cm"))
+			}, timeout, interval).Should(Equal(crName))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, cr)).Should(Succeed())
@@ -92,7 +92,7 @@ var _ = Describe("ApplicationProperties Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 
-			cmKey := types.NamespacedName{Name: crName + "-application-properties-cm", Namespace: namespace}
+			cmKey := types.NamespacedName{Name: crName, Namespace: namespace}
 			createdCM := &corev1.ConfigMap{}
 			Eventually(func() bool {
 				return k8sClient.Get(ctx, cmKey, createdCM) == nil
@@ -150,7 +150,7 @@ staking.periodMins=1440`
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 
 			By("Verifying no ConfigMap is created")
-			cmKey := types.NamespacedName{Name: crName + "-application-properties-cm", Namespace: namespace}
+			cmKey := types.NamespacedName{Name: crName, Namespace: namespace}
 			Consistently(func() bool {
 				cm := &corev1.ConfigMap{}
 				return k8sClient.Get(ctx, cmKey, cm) == nil
