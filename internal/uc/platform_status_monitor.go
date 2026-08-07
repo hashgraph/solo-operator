@@ -156,7 +156,7 @@ func (m *PlatformStatusMonitor) Run(ctx context.Context) (retErr error) {
 func (m *PlatformStatusMonitor) poll(ctx context.Context) {
 	code, name := m.scrape(ctx)
 
-	if name == operatorv1alpha1.PlatformStatusUnknown && m.logMonitor != nil {
+	if code == platformStatusCodeUnknown && m.logMonitor != nil {
 		if snap := m.logMonitor.Snapshot(); snap != nil && snap.Status != operatorv1alpha1.PlatformStatusUnknown {
 			code = snap.Code
 			name = snap.Status

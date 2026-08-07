@@ -466,6 +466,59 @@ func TestPlatformStatusMonitor_LogFallbackWhenMetricsDown(t *testing.T) {
 	}
 }
 
+// TestPlatformStatusMonitor_UnmappedCodeDoesNotFallback verifies that an unmapped
+// numeric code (e.g. 3 or 999) that maps to UNKNOWN does NOT trigger the log
+// fallback — only the sentinel "metrics unreachable" code does.
+func TestPlatformStatusMonitor_UnmappedCodeDoesNotFallback(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, "platform_PlatformStatus{node=\"0\"} 3\n") // unmapped → UNKNOWN
+	}))
+	defer srv.Close()
+
+	scheme := runtime.NewScheme()
+	if err := operatorv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add to scheme: %v", err)
+	}
+	fakeClient := fake.NewSimpleDynamicClient(scheme)
+
+	var (
+		mu      sync.Mutex
+		patches []k8stesting.PatchAction
+	)
+	fakeClient.PrependReactor("patch", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		mu.Lock()
+		patches = append(patches, action.(k8stesting.PatchAction))
+		mu.Unlock()
+		return true, &unstructured.Unstructured{Object: map[string]interface{}{}}, nil
+	})
+
+	cfg := DefaultConfig()
+	cfg.Namespace = "solo"
+	cfg.PodName = "node0-0"
+	cfg.MetricsURL = srv.URL
+
+	logMon := NewLogMonitor(cfg)
+	logMon.snapshot.Store(&LogStatusSnapshot{Code: 9, Status: operatorv1alpha1.PlatformStatusChecking})
+
+	m := NewPlatformStatusMonitor(cfg, fakeClient, nil, logMon)
+	ctx := context.Background()
+
+	m.poll(ctx)
+	mu.Lock()
+	defer mu.Unlock()
+	if len(patches) != 1 {
+		t.Fatalf("expected 1 patch, got %d", len(patches))
+	}
+	var body patchBody
+	if err := json.Unmarshal(patches[0].GetPatch(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	cond := body.Status.Conditions[0]
+	if cond.Reason != operatorv1alpha1.PlatformStatusUnknown {
+		t.Errorf("expected UNKNOWN (no fallback for unmapped code), got %q", cond.Reason)
+	}
+}
+
 // panicRoundTripper panics on every request, simulating an unexpected panic in
 // the scrape path.
 type panicRoundTripper struct{}
