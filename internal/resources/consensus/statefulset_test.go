@@ -672,6 +672,41 @@ func TestBuildUcContainer_AdditionalVolumeMounts(t *testing.T) {
 	}
 }
 
+func TestBuildUcContainer_PollIntervals_Defaults(t *testing.T) {
+	r := newStsReconciler()
+	capsule := capsuleWithImage("v0.50.0")
+	config := &operatorv1alpha1.UcSidecar{Enabled: true}
+	c := r.buildUcContainer(capsule, config, uc.ModeClusterOnly)
+	for _, e := range c.Env {
+		if e.Name == "UC_POLL_INTERVAL" || e.Name == "UC_FREEZE_POLL_INTERVAL" {
+			t.Errorf("env %s should not be set when omitted from spec", e.Name)
+		}
+	}
+}
+
+func TestBuildUcContainer_PollIntervals_Custom(t *testing.T) {
+	r := newStsReconciler()
+	capsule := capsuleWithImage("v0.50.0")
+	config := &operatorv1alpha1.UcSidecar{
+		Enabled:            true,
+		PollInterval:       "10s",
+		FreezePollInterval: "100ms",
+	}
+	c := r.buildUcContainer(capsule, config, uc.ModeClusterOnly)
+	envMap := map[string]string{}
+	for _, e := range c.Env {
+		if e.Value != "" {
+			envMap[e.Name] = e.Value
+		}
+	}
+	if envMap["UC_POLL_INTERVAL"] != "10s" {
+		t.Errorf("UC_POLL_INTERVAL: got %q, want %q", envMap["UC_POLL_INTERVAL"], "10s")
+	}
+	if envMap["UC_FREEZE_POLL_INTERVAL"] != "100ms" {
+		t.Errorf("UC_FREEZE_POLL_INTERVAL: got %q, want %q", envMap["UC_FREEZE_POLL_INTERVAL"], "100ms")
+	}
+}
+
 func TestBuildUcContainer_NoSoftwareVersion_UsesDefault(t *testing.T) {
 	r := newStsReconciler()
 	capsule := capsuleWithImage("v0.50.0")

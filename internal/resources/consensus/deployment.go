@@ -926,6 +926,13 @@ func (r *StatefulSetSubReconciler) buildUcContainer(capsule *operatorv1alpha1.Co
 		},
 	}
 
+	if config.PollInterval != "" {
+		env = append(env, corev1.EnvVar{Name: "UC_POLL_INTERVAL", Value: config.PollInterval})
+	}
+	if config.FreezePollInterval != "" {
+		env = append(env, corev1.EnvVar{Name: "UC_FREEZE_POLL_INTERVAL", Value: config.FreezePollInterval})
+	}
+
 	// The UC shares the upgrade PVC (data/upgrade) with the consensus node, which
 	// creates and extracts the upgrade package under current/ as the hedera user
 	// (uid:gid 2000:2000). Run the UC as the same uid:gid so the dirs it creates
