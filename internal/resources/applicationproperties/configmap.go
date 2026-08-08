@@ -83,6 +83,10 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 		return ctrl.Result{}, err
 	}
 
+	if conflict := common.ConfigMapOwnerConflict(existing, obj); conflict != "" {
+		return r.reject(ctx, obj, "OwnershipConflict", conflict)
+	}
+
 	if common.ConfigMapNeedsUpdate(existing, desired) {
 		existing.Data = desired.Data
 		existing.Labels = desired.Labels

@@ -310,7 +310,7 @@ func TestBuildConfigCR_nameAndLabels(t *testing.T) {
 		t.Fatalf("buildConfigCR: %v", err)
 	}
 
-	wantName := testOperationID + "-log4j2config"
+	wantName := testOperationID + "-log4j2"
 	if cr.GetName() != wantName {
 		t.Errorf("name = %q, want %q", cr.GetName(), wantName)
 	}
@@ -333,6 +333,10 @@ func TestBuildConfigCR_nameAndLabels(t *testing.T) {
 	orbit, _, _ := unstructured.NestedString(cr.Object, "spec", "orbit")
 	if orbit != "my-orbit" {
 		t.Errorf("spec.orbit = %q, want my-orbit", orbit)
+	}
+	scope, _, _ := unstructured.NestedString(cr.Object, "spec", "scope")
+	if scope != "node0" {
+		t.Errorf("spec.scope = %q, want node0", scope)
 	}
 }
 

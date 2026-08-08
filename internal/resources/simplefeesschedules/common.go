@@ -14,8 +14,8 @@ import (
 
 const (
 	PartOfSimpleFeesSchedules = "simple-fees-schedules"
-	ConfigMapSuffix           = "-simple-fee-schedules-cm"
 	ConfigFileName            = "simpleFeesSchedules.json"
+	ConfigMapSuffix           = "simple-fee-schedules"
 )
 
 func CommonLabels(obj *operatorv1alpha1.SimpleFeesSchedules) map[string]string {
@@ -27,11 +27,11 @@ func CommonLabels(obj *operatorv1alpha1.SimpleFeesSchedules) map[string]string {
 }
 
 func ConfigMapName(obj *operatorv1alpha1.SimpleFeesSchedules) string {
-	return obj.Name + ConfigMapSuffix
+	return obj.Spec.Scope + "-" + ConfigMapSuffix
 }
 
 func ConfigMapNameForRef(name string) string {
-	return name + ConfigMapSuffix
+	return name
 }
 
 func NewSubReconcilers(c client.Client, scheme *runtime.Scheme, recorder events.EventRecorder) *subreconciler.Chain[*operatorv1alpha1.SimpleFeesSchedules] {

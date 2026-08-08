@@ -59,10 +59,29 @@ tasks:
       - kubectl apply -f common/orbit.yaml
 
   deploy:common:
-    desc: Deploy all common config CRs, ConfigMaps, and secrets
+    desc: Deploy secrets, ConfigMaps, per-node block-node config, and per-node config CRs (templated from common/)
     deps: [deploy:orbit]
     cmds:
-      - kubectl apply -f common/
+      - kubectl apply -f common/secrets.yaml
+      - kubectl apply -f common/configs.yaml
+      - kubectl apply -f common/blocknodesconfig.yaml
+      - |
+        set -eu
+        TEMPLATES=$(ls common/apipermissionproperties.yaml \
+                       common/applicationoverrideproperties.yaml \
+                       common/applicationproperties.yaml \
+                       common/bootstrapproperties.yaml \
+                       common/feeschedules.yaml \
+                       common/log4j2config.yaml \
+                       common/nodeproperties.yaml \
+                       common/nodesettings.yaml \
+                       common/simplefeesschedules.yaml \
+                       common/throttlesconfig.yaml)
+        for NODE_ID in node0 node1 node2 node3; do
+          for TPL in $TEMPLATES; do
+            sed "s/NODEID/${NODE_ID}/g" "$TPL" | kubectl apply -f -
+          done
+        done
 
   deploy:nodes:
     desc: Deploy all node secrets and consensus capsules
@@ -207,8 +226,26 @@ tasks:
       - kubectl delete -f node0/secrets.yaml || true
 
   destroy:common:
-    desc: Destroy common configs and secrets
+    desc: Destroy per-node config CRs, block-node config, ConfigMaps, and secrets
     cmds:
+      - |
+        set -eu
+        TEMPLATES=$(ls common/apipermissionproperties.yaml \
+                       common/applicationoverrideproperties.yaml \
+                       common/applicationproperties.yaml \
+                       common/bootstrapproperties.yaml \
+                       common/feeschedules.yaml \
+                       common/log4j2config.yaml \
+                       common/nodeproperties.yaml \
+                       common/nodesettings.yaml \
+                       common/simplefeesschedules.yaml \
+                       common/throttlesconfig.yaml 2>/dev/null) || true
+        for NODE_ID in node0 node1 node2 node3; do
+          for TPL in $TEMPLATES; do
+            sed "s/NODEID/${NODE_ID}/g" "$TPL" | kubectl delete -f - || true
+          done
+        done
+      - kubectl delete -f common/blocknodesconfig.yaml || true
       - kubectl delete -f common/configs.yaml || true
       - kubectl delete -f common/secrets.yaml || true
 

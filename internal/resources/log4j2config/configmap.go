@@ -69,6 +69,18 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 		return ctrl.Result{}, err
 	}
 
+	if conflict := common.ConfigMapOwnerConflict(existing, obj); conflict != "" {
+		apimeta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:               operatorv1alpha1.ConditionTypeValid,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: obj.Generation,
+			Reason:             "OwnershipConflict",
+			Message:            conflict,
+		})
+		common.Eventf(ctx, r.Recorder, obj, corev1.EventTypeWarning, common.ReasonOwnershipConflict, "ConfigMap", "%s", conflict)
+		return ctrl.Result{}, nil
+	}
+
 	if common.ConfigMapNeedsUpdate(existing, desired) {
 		common.Debug(ctx, common.ReasonConfigMapUpdated).Str("configMap", desired.Name).Msg("Updating Log4j2 ConfigMap")
 		existing.Data = desired.Data

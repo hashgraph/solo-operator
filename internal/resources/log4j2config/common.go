@@ -14,8 +14,8 @@ import (
 
 const (
 	PartOfLog4j2Config = "log4j2-config"
-	ConfigMapSuffix    = "-log4j2-cm"
 	ConfigFileName     = "log4j2.xml"
+	ConfigMapSuffix    = "log4j2"
 )
 
 func CommonLabels(obj *operatorv1alpha1.Log4j2Config) map[string]string {
@@ -27,12 +27,12 @@ func CommonLabels(obj *operatorv1alpha1.Log4j2Config) map[string]string {
 }
 
 func ConfigMapName(obj *operatorv1alpha1.Log4j2Config) string {
-	return obj.Name + ConfigMapSuffix
+	return obj.Spec.Scope + "-" + ConfigMapSuffix
 }
 
 // ConfigMapNameForRef returns the ConfigMap name for a Log4j2Config referenced by name.
 func ConfigMapNameForRef(name string) string {
-	return name + ConfigMapSuffix
+	return name
 }
 
 func NewSubReconcilers(c client.Client, scheme *runtime.Scheme, recorder events.EventRecorder) *subreconciler.Chain[*operatorv1alpha1.Log4j2Config] {

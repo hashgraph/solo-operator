@@ -212,37 +212,37 @@ spec:
         keyName: "public.pem"
         secretName: "node2-gossip-keys"
 
-  # Reference a shared Log4j2Config CR (defined in common/log4j2config.yaml). Takes effect on next pod restart.
-  log4j2ConfigRef: network-log4j2
+  # Reference this node's Log4j2Config CR (defined in common/log4j2config.yaml). Takes effect on next pod restart.
+  log4j2ConfigRef: node2-log4j2
 
-  # Reference a shared NodeSettings CR (defined in common/nodesettings.yaml). Takes effect on next pod restart.
-  settingsConfigRef: network-settings
+  # Reference this node's NodeSettings CR (defined in common/nodesettings.yaml). Takes effect on next pod restart.
+  settingsConfigRef: node2-settings
 
-  # Reference a shared ApplicationProperties CR (defined in common/applicationproperties.yaml).
-  applicationPropertiesRef: network-appprops
+  # Reference this node's ApplicationProperties CR (defined in common/applicationproperties.yaml).
+  applicationPropertiesRef: node2-application-properties
 
   # Optional config CRs — omit any field to skip mounting that file entirely.
 
   # api-permission.properties (defined in common/apipermissionproperties.yaml)
-  apiPermissionPropertiesRef: network-apipermprops
+  apiPermissionPropertiesRef: node2-api-permission-properties
 
   # node.properties (defined in common/nodeproperties.yaml)
-  nodePropertiesRef: network-nodeprops
+  nodePropertiesRef: node2-node-properties
 
   # throttles.json (defined in common/throttlesconfig.yaml)
-  throttlesConfigRef: network-throttles
+  throttlesConfigRef: node2-throttles
 
   # feeSchedules.json (defined in common/feeschedules.yaml)
-  feeSchedulesRef: network-feesched
+  feeSchedulesRef: node2-fee-schedules
 
   # simpleFeesSchedules.json (defined in common/simplefeesschedules.yaml)
-  simpleFeesSchedulesRef: network-simplefeesched
+  simpleFeesSchedulesRef: node2-simple-fee-schedules
 
   # application-override.properties (defined in common/applicationoverrideproperties.yaml)
-  applicationOverridePropertiesRef: network-appoverprops
+  applicationOverridePropertiesRef: node2-application-override-properties
 
   # bootstrap.properties (defined in common/bootstrapproperties.yaml)
-  bootstrapPropertiesRef: network-bootprops
+  bootstrapPropertiesRef: node2-bootstrap-properties
 
   # block-nodes.json (defined in common/blocknodesconfig.yaml); the UC overwrites
   # this CR with the package's per-node file during an upgrade.

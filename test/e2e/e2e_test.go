@@ -121,9 +121,9 @@ var _ = Describe("E2E Tests", func() {
 						NodeId:                   0,
 						AccountId:                "0.0.3",
 						Weight:                   1,
-						Log4j2ConfigRef:          "network-log4j2",
-						SettingsConfigRef:        "network-settings",
-						ApplicationPropertiesRef: "network-appprops",
+						Log4j2ConfigRef:          "node0-log4j2",
+						SettingsConfigRef:        "node0-settings",
+						ApplicationPropertiesRef: "node0-application-properties",
 						PodProperties: operatorv1alpha1.ConsensusPodProperties{
 							Containers: operatorv1alpha1.ConsensusContainers{
 								ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -455,9 +455,9 @@ var _ = Describe("E2E Tests", func() {
 						NodeId:                   int64(i),
 						AccountId:                fmt.Sprintf("0.0.%d", i+3),
 						Weight:                   1,
-						Log4j2ConfigRef:          "network-log4j2",
-						SettingsConfigRef:        "network-settings",
-						ApplicationPropertiesRef: "network-appprops",
+						Log4j2ConfigRef:          "node0-log4j2",
+						SettingsConfigRef:        "node0-settings",
+						ApplicationPropertiesRef: "node0-application-properties",
 						PodProperties: operatorv1alpha1.ConsensusPodProperties{
 							Containers: operatorv1alpha1.ConsensusContainers{
 								ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -562,9 +562,9 @@ var _ = Describe("E2E Tests", func() {
 						NodeId:                   0,
 						AccountId:                "0.0.3",
 						Weight:                   1,
-						Log4j2ConfigRef:          "network-log4j2",
-						SettingsConfigRef:        "network-settings",
-						ApplicationPropertiesRef: "network-appprops",
+						Log4j2ConfigRef:          "node0-log4j2",
+						SettingsConfigRef:        "node0-settings",
+						ApplicationPropertiesRef: "node0-application-properties",
 						PodProperties: operatorv1alpha1.ConsensusPodProperties{
 							Containers: operatorv1alpha1.ConsensusContainers{
 								ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -641,8 +641,8 @@ var _ = Describe("Operator Reconciliation Tests", Label("operator-required"), fu
 					NodeId:            0,
 					AccountId:         "0.0.3",
 					Weight:            1,
-					Log4j2ConfigRef:   "network-log4j2",
-					SettingsConfigRef: "network-settings",
+					Log4j2ConfigRef:   "node0-log4j2",
+					SettingsConfigRef: "node0-settings",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{

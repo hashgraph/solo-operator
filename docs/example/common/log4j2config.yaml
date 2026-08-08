@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# Shared Log4j2Config — creates a ConfigMap named network-log4j2-cm containing
+# Shared Log4j2Config — creates a ConfigMap named NODEID-log4j2 containing
 # the log4j2.xml mounted directly into each ConsensusCapsule pod.
 #
 # Each ConsensusCapsule references this CR via:
 #   spec:
-#     log4j2ConfigRef: network-log4j2
+#     log4j2ConfigRef: NODEID-log4j2
 #
 # Updating spec.content takes effect on the next pod restart (subPath mounts
 # are not live-synced). To apply per-node overrides, create a separate
@@ -13,12 +13,12 @@
 apiVersion: operator.solo.hiero.org/v1alpha1
 kind: Log4j2Config
 metadata:
-  name: network-log4j2
+  name: NODEID-log4j2
   namespace: solo-orbit
 spec:
   # orbit links this resource to the Orbit for cascade deletion.
   orbit: solo-orbit
-  # content is the raw log4j2.xml. Must be well-formed XML with a <Configuration> root element.
+  scope: NODEID  # content is the raw log4j2.xml. Must be well-formed XML with a <Configuration> root element.
   content: |
     <?xml version="1.0" encoding="UTF-8"?>
     <Configuration status="WARN" monitorInterval="600">

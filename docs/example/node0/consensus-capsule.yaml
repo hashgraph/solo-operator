@@ -218,43 +218,37 @@ spec:
         keyName: "public.pem"
         secretName: "node0-gossip-keys"
 
-  # Reference a shared Log4j2Config CR (defined in common/log4j2config.yaml).
-  # All nodes share the same logging configuration; update the Log4j2Config to
-  # change logging for every node at once. Takes effect on next pod restart.
-  log4j2ConfigRef: network-log4j2
+  # Reference this node's Log4j2Config CR (defined in common/log4j2config.yaml). Takes effect on next pod restart.
+  log4j2ConfigRef: node0-log4j2
 
-  # Reference a shared NodeSettings CR (defined in common/nodesettings.yaml).
-  # All nodes share the same settings.txt; update the NodeSettings to change
-  # platform settings for every node at once. Takes effect on next pod restart.
-  settingsConfigRef: network-settings
+  # Reference this node's NodeSettings CR (defined in common/nodesettings.yaml). Takes effect on next pod restart.
+  settingsConfigRef: node0-settings
 
-  # Reference a shared ApplicationProperties CR (defined in common/applicationproperties.yaml).
-  # Overrides the Orbit-derived application.properties for all nodes; omit to fall back
-  # to spec.consensus.applicationConfiguration on the Orbit merged with Solo defaults.
-  applicationPropertiesRef: network-appprops
+  # Reference this node's ApplicationProperties CR (defined in common/applicationproperties.yaml).
+  applicationPropertiesRef: node0-application-properties
 
   # Optional config CRs — omit any field to skip mounting that file entirely.
 
   # api-permission.properties (defined in common/apipermissionproperties.yaml)
-  apiPermissionPropertiesRef: network-apipermprops
+  apiPermissionPropertiesRef: node0-api-permission-properties
 
   # node.properties (defined in common/nodeproperties.yaml)
-  nodePropertiesRef: network-nodeprops
+  nodePropertiesRef: node0-node-properties
 
   # throttles.json (defined in common/throttlesconfig.yaml)
-  throttlesConfigRef: network-throttles
+  throttlesConfigRef: node0-throttles
 
   # feeSchedules.json (defined in common/feeschedules.yaml)
-  feeSchedulesRef: network-feesched
+  feeSchedulesRef: node0-fee-schedules
 
   # simpleFeesSchedules.json (defined in common/simplefeesschedules.yaml)
-  simpleFeesSchedulesRef: network-simplefeesched
+  simpleFeesSchedulesRef: node0-simple-fee-schedules
 
   # application-override.properties (defined in common/applicationoverrideproperties.yaml)
-  applicationOverridePropertiesRef: network-appoverprops
+  applicationOverridePropertiesRef: node0-application-override-properties
 
   # bootstrap.properties (defined in common/bootstrapproperties.yaml)
-  bootstrapPropertiesRef: network-bootprops
+  bootstrapPropertiesRef: node0-bootstrap-properties
 
   # block-nodes.json (defined in common/blocknodesconfig.yaml); the UC overwrites
   # this CR with the package's per-node file during an upgrade.

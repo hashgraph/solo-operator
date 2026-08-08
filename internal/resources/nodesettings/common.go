@@ -14,8 +14,8 @@ import (
 
 const (
 	PartOfNodeSettings = "node-settings"
-	ConfigMapSuffix    = "-settings-cm"
 	ConfigFileName     = "settings.txt"
+	ConfigMapSuffix    = "settings"
 )
 
 func CommonLabels(obj *operatorv1alpha1.NodeSettings) map[string]string {
@@ -27,11 +27,11 @@ func CommonLabels(obj *operatorv1alpha1.NodeSettings) map[string]string {
 }
 
 func ConfigMapName(obj *operatorv1alpha1.NodeSettings) string {
-	return obj.Name + ConfigMapSuffix
+	return obj.Spec.Scope + "-" + ConfigMapSuffix
 }
 
 func ConfigMapNameForRef(name string) string {
-	return name + ConfigMapSuffix
+	return name
 }
 
 func NewSubReconcilers(c client.Client, scheme *runtime.Scheme, recorder events.EventRecorder) *subreconciler.Chain[*operatorv1alpha1.NodeSettings] {

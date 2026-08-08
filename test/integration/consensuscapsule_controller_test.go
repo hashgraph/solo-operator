@@ -51,8 +51,9 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}
 
 			log4j2 := &operatorv1alpha1.Log4j2Config{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-log4j2", Namespace: capsuleNamespace},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-log4j2", Namespace: capsuleNamespace},
 				Spec: operatorv1alpha1.Log4j2ConfigSpec{
+					Scope:   "node0",
 					Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`,
 				},
 			}
@@ -62,8 +63,9 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}
 
 			nodeSettings := &operatorv1alpha1.NodeSettings{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-settings", Namespace: capsuleNamespace},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-settings", Namespace: capsuleNamespace},
 				Spec: operatorv1alpha1.NodeSettingsSpec{
+					Scope:   "node0",
 					Content: "checkSignedStateFromDisk,              1",
 				},
 			}
@@ -73,8 +75,9 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}
 
 			appProps := &operatorv1alpha1.ApplicationProperties{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-appprops", Namespace: capsuleNamespace},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-application-properties", Namespace: capsuleNamespace},
 				Spec: operatorv1alpha1.ApplicationPropertiesSpec{
+					Scope:   "node0",
 					Content: "hedera.config.version=0\nnetty.mode=TEST",
 				},
 			}
@@ -96,9 +99,9 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 					NodeId:                   0,
 					AccountId:                "0.0.3",
 					Weight:                   1,
-					Log4j2ConfigRef:          "network-log4j2",
-					SettingsConfigRef:        "network-settings",
-					ApplicationPropertiesRef: "network-appprops",
+					Log4j2ConfigRef:          "node0-log4j2",
+					SettingsConfigRef:        "node0-settings",
+					ApplicationPropertiesRef: "node0-application-properties",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -193,8 +196,9 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}
 
 			log4j2 := &operatorv1alpha1.Log4j2Config{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-log4j2", Namespace: capsuleNamespace},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-log4j2", Namespace: capsuleNamespace},
 				Spec: operatorv1alpha1.Log4j2ConfigSpec{
+					Scope:   "node0",
 					Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`,
 				},
 			}
@@ -204,8 +208,9 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}
 
 			nodeSettings := &operatorv1alpha1.NodeSettings{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-settings", Namespace: capsuleNamespace},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-settings", Namespace: capsuleNamespace},
 				Spec: operatorv1alpha1.NodeSettingsSpec{
+					Scope:   "node0",
 					Content: "checkSignedStateFromDisk,              1",
 				},
 			}
@@ -215,8 +220,9 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}
 
 			appProps := &operatorv1alpha1.ApplicationProperties{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-appprops", Namespace: capsuleNamespace},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-application-properties", Namespace: capsuleNamespace},
 				Spec: operatorv1alpha1.ApplicationPropertiesSpec{
+					Scope:   "node0",
 					Content: "hedera.config.version=0\nnetty.mode=TEST",
 				},
 			}
@@ -239,9 +245,9 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 					NodeId:                   1,
 					AccountId:                "0.0.4",
 					Weight:                   1,
-					Log4j2ConfigRef:          "network-log4j2",
-					SettingsConfigRef:        "network-settings",
-					ApplicationPropertiesRef: "network-appprops",
+					Log4j2ConfigRef:          "node0-log4j2",
+					SettingsConfigRef:        "node0-settings",
+					ApplicationPropertiesRef: "node0-application-properties",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -331,8 +337,8 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}
 
 			log4j2 := &operatorv1alpha1.Log4j2Config{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-log4j2", Namespace: capsuleNamespace},
-				Spec:       operatorv1alpha1.Log4j2ConfigSpec{Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-log4j2", Namespace: capsuleNamespace},
+				Spec:       operatorv1alpha1.Log4j2ConfigSpec{Scope: "node0", Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`},
 			}
 			err = k8sClient.Create(ctx, log4j2)
 			if err != nil {
@@ -340,8 +346,8 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}
 
 			nodeSettings := &operatorv1alpha1.NodeSettings{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-settings", Namespace: capsuleNamespace},
-				Spec:       operatorv1alpha1.NodeSettingsSpec{Content: "checkSignedStateFromDisk,              1"},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-settings", Namespace: capsuleNamespace},
+				Spec:       operatorv1alpha1.NodeSettingsSpec{Scope: "node0", Content: "checkSignedStateFromDisk,              1"},
 			}
 			err = k8sClient.Create(ctx, nodeSettings)
 			if err != nil {
@@ -349,8 +355,8 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}
 
 			appProps := &operatorv1alpha1.ApplicationProperties{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-appprops", Namespace: capsuleNamespace},
-				Spec:       operatorv1alpha1.ApplicationPropertiesSpec{Content: "hedera.config.version=0\nnetty.mode=TEST"},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-application-properties", Namespace: capsuleNamespace},
+				Spec:       operatorv1alpha1.ApplicationPropertiesSpec{Scope: "node0", Content: "hedera.config.version=0\nnetty.mode=TEST"},
 			}
 			err = k8sClient.Create(ctx, appProps)
 			if err != nil {
@@ -366,9 +372,9 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 					NodeId:                   2,
 					AccountId:                "0.0.5",
 					Weight:                   1,
-					Log4j2ConfigRef:          "network-log4j2",
-					SettingsConfigRef:        "network-settings",
-					ApplicationPropertiesRef: "network-appprops",
+					Log4j2ConfigRef:          "node0-log4j2",
+					SettingsConfigRef:        "node0-settings",
+					ApplicationPropertiesRef: "node0-application-properties",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
@@ -448,8 +454,8 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}
 
 			log4j2 := &operatorv1alpha1.Log4j2Config{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-log4j2", Namespace: capsuleNamespace},
-				Spec:       operatorv1alpha1.Log4j2ConfigSpec{Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-log4j2", Namespace: capsuleNamespace},
+				Spec:       operatorv1alpha1.Log4j2ConfigSpec{Scope: "node0", Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`},
 			}
 			err = k8sClient.Create(ctx, log4j2)
 			if err != nil {
@@ -457,8 +463,8 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}
 
 			nodeSettings := &operatorv1alpha1.NodeSettings{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-settings", Namespace: capsuleNamespace},
-				Spec:       operatorv1alpha1.NodeSettingsSpec{Content: "checkSignedStateFromDisk,              1"},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-settings", Namespace: capsuleNamespace},
+				Spec:       operatorv1alpha1.NodeSettingsSpec{Scope: "node0", Content: "checkSignedStateFromDisk,              1"},
 			}
 			err = k8sClient.Create(ctx, nodeSettings)
 			if err != nil {
@@ -466,8 +472,8 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}
 
 			appProps := &operatorv1alpha1.ApplicationProperties{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-appprops", Namespace: capsuleNamespace},
-				Spec:       operatorv1alpha1.ApplicationPropertiesSpec{Content: "hedera.config.version=0\nnetty.mode=TEST"},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-application-properties", Namespace: capsuleNamespace},
+				Spec:       operatorv1alpha1.ApplicationPropertiesSpec{Scope: "node0", Content: "hedera.config.version=0\nnetty.mode=TEST"},
 			}
 			err = k8sClient.Create(ctx, appProps)
 			if err != nil {
@@ -483,9 +489,9 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 					NodeId:                   3,
 					AccountId:                "0.0.6",
 					Weight:                   1,
-					Log4j2ConfigRef:          "network-log4j2",
-					SettingsConfigRef:        "network-settings",
-					ApplicationPropertiesRef: "network-appprops",
+					Log4j2ConfigRef:          "node0-log4j2",
+					SettingsConfigRef:        "node0-settings",
+					ApplicationPropertiesRef: "node0-application-properties",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{

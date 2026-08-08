@@ -52,8 +52,17 @@ spec:
               orbit:
                 description: Set so the Orbit can cascade-delete this resource.
                 type: string
+              scope:
+                description: |-
+                  Scope determines the ConfigMap name prefix. The reconciler builds the
+                  ConfigMap name as scope + "-" + <kind-suffix>. Must match "node" followed
+                  by one or more digits (e.g. node0, node1).
+                minLength: 1
+                pattern: ^node\d+$
+                type: string
             required:
             - content
+            - scope
             type: object
           status:
             properties:

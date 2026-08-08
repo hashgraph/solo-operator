@@ -42,18 +42,18 @@ type kindEntry struct {
 // type in api/v1alpha1/ — no schema change needed (HIP-1496 §236).
 var configFileKinds = map[string]kindEntry{
 	// Package-root files.
-	"log4j2.xml":   {gvr: log4j2ConfigGVR, kind: "Log4j2Config", nameSuffix: "log4j2config"},
-	"settings.txt": {gvr: nodeSettingsGVR, kind: "NodeSettings", nameSuffix: "nodesettings"},
+	"log4j2.xml":   {gvr: log4j2ConfigGVR, kind: "Log4j2Config", nameSuffix: "log4j2"},
+	"settings.txt": {gvr: nodeSettingsGVR, kind: "NodeSettings", nameSuffix: "settings"},
 
 	// data/config/ files.
-	"application.properties":          {gvr: applicationPropertiesGVR, kind: "ApplicationProperties", nameSuffix: "applicationproperties"},
-	"application-override.properties": {gvr: applicationOverridePropertiesGVR, kind: "ApplicationOverrideProperties", nameSuffix: "applicationoverrideproperties"},
-	"bootstrap.properties":            {gvr: bootstrapPropertiesGVR, kind: "BootstrapProperties", nameSuffix: "bootstrapproperties"},
-	"node.properties":                 {gvr: nodePropertiesGVR, kind: "NodePropertiesConfig", nameSuffix: "nodepropertiesconfig"},
-	"throttles.json":                  {gvr: throttlesConfigGVR, kind: "ThrottlesConfig", nameSuffix: "throttlesconfig"},
-	"feeSchedules.json":               {gvr: feeSchedulesGVR, kind: "FeeSchedules", nameSuffix: "feeschedules"},
-	"simpleFeesSchedules.json":        {gvr: simpleFeesSchedulesGVR, kind: "SimpleFeesSchedules", nameSuffix: "simplefeesschedules"},
-	"api-permission.properties":       {gvr: apiPermissionPropertiesGVR, kind: "ApiPermissionProperties", nameSuffix: "apipermissionproperties"},
+	"application.properties":          {gvr: applicationPropertiesGVR, kind: "ApplicationProperties", nameSuffix: "application-properties"},
+	"application-override.properties": {gvr: applicationOverridePropertiesGVR, kind: "ApplicationOverrideProperties", nameSuffix: "application-override-properties"},
+	"bootstrap.properties":            {gvr: bootstrapPropertiesGVR, kind: "BootstrapProperties", nameSuffix: "bootstrap-properties"},
+	"node.properties":                 {gvr: nodePropertiesGVR, kind: "NodePropertiesConfig", nameSuffix: "node-properties"},
+	"throttles.json":                  {gvr: throttlesConfigGVR, kind: "ThrottlesConfig", nameSuffix: "throttles"},
+	"feeSchedules.json":               {gvr: feeSchedulesGVR, kind: "FeeSchedules", nameSuffix: "fee-schedules"},
+	"simpleFeesSchedules.json":        {gvr: simpleFeesSchedulesGVR, kind: "SimpleFeesSchedules", nameSuffix: "simple-fee-schedules"},
+	"api-permission.properties":       {gvr: apiPermissionPropertiesGVR, kind: "ApiPermissionProperties", nameSuffix: "api-permission-properties"},
 }
 
 // packageRootFiles lists the filenames that live at the package root (not under
@@ -202,6 +202,7 @@ func buildConfigCR(cfg ProvisionerProxyConfig, operationID string, sf scannedFil
 		annotationCreatedBy: createdByUC,
 	})
 	_ = unstructured.SetNestedField(cr.Object, string(data), "spec", "content")
+	_ = unstructured.SetNestedField(cr.Object, fmt.Sprintf("node%d", cfg.NodeID), "spec", "scope")
 	if cfg.Orbit != "" {
 		_ = unstructured.SetNestedField(cr.Object, cfg.Orbit, "spec", "orbit")
 	}
@@ -331,6 +332,7 @@ func (p *ProvisionerProxy) deployBlockNodesConfigCR(ctx context.Context, operati
 		annotationCreatedBy: createdByUC,
 	})
 	_ = unstructured.SetNestedField(cr.Object, string(data), "spec", "content")
+	_ = unstructured.SetNestedField(cr.Object, fmt.Sprintf("node%d", p.cfg.NodeID), "spec", "scope")
 	if p.cfg.Orbit != "" {
 		_ = unstructured.SetNestedField(cr.Object, p.cfg.Orbit, "spec", "orbit")
 	}

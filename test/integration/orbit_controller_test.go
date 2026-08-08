@@ -84,20 +84,23 @@ var _ = Describe("Orbit Controller", func() {
 			})).Should(Succeed())
 
 			Expect(k8sClient.Create(ctx, &operatorv1alpha1.Log4j2Config{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-log4j2", Namespace: nsA},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-log4j2", Namespace: nsA},
 				Spec: operatorv1alpha1.Log4j2ConfigSpec{
+					Scope:   "node0",
 					Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`,
 				},
 			})).Should(Succeed())
 			Expect(k8sClient.Create(ctx, &operatorv1alpha1.NodeSettings{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-settings", Namespace: nsA},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-settings", Namespace: nsA},
 				Spec: operatorv1alpha1.NodeSettingsSpec{
+					Scope:   "node0",
 					Content: "checkSignedStateFromDisk,              1",
 				},
 			})).Should(Succeed())
 			Expect(k8sClient.Create(ctx, &operatorv1alpha1.ApplicationProperties{
-				ObjectMeta: metav1.ObjectMeta{Name: "network-appprops", Namespace: nsA},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-application-properties", Namespace: nsA},
 				Spec: operatorv1alpha1.ApplicationPropertiesSpec{
+					Scope:   "node0",
 					Content: "hedera.config.version=0\nnetty.mode=TEST",
 				},
 			})).Should(Succeed())
@@ -109,9 +112,9 @@ var _ = Describe("Orbit Controller", func() {
 					NodeId:                   0,
 					AccountId:                "0.0.3",
 					Weight:                   1,
-					Log4j2ConfigRef:          "network-log4j2",
-					SettingsConfigRef:        "network-settings",
-					ApplicationPropertiesRef: "network-appprops",
+					Log4j2ConfigRef:          "node0-log4j2",
+					SettingsConfigRef:        "node0-settings",
+					ApplicationPropertiesRef: "node0-application-properties",
 					PodProperties: operatorv1alpha1.ConsensusPodProperties{
 						Containers: operatorv1alpha1.ConsensusContainers{
 							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
