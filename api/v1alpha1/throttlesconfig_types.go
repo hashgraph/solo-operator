@@ -35,7 +35,10 @@ type ThrottlesConfigStatus struct {
 	Conditions []Condition `json:"conditions,omitempty"`
 }
 
-const ThrottlesConfigConditionTypeValid = "Valid"
+const (
+	ThrottlesConfigConditionTypeValid       = "Valid"
+	ThrottlesConfigConditionTypeOpsCoverage = "OperationCoverage"
+)
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
