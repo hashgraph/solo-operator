@@ -60,6 +60,11 @@ type UpgradeOutcomeMonitorConfig struct {
 	UpgradePath string
 	// PreviousUpgradePath is the rotation target after a successful install.
 	PreviousUpgradePath string
+	// ProvisionerProxyEnabled is true in cluster-only mode. Controls whether
+	// RequiredProbe returns the RBAC self-check.
+	ProvisionerProxyEnabled bool
+	// CapsuleName is the owning ConsensusCapsule, used in RBAC probe hints.
+	CapsuleName string
 }
 
 // UpgradeOutcomeMonitor is a core UC monitor that always runs (all deployment
@@ -142,6 +147,29 @@ func NewUpgradeOutcomeMonitorWithClient(cfg UpgradeOutcomeMonitorConfig, client 
 
 // Name implements daemonkit.MonitorRunner.
 func (m *UpgradeOutcomeMonitor) Name() string { return "upgrade-outcome-monitor" }
+
+// RequiredProbe implements daemonkit.ProbableMonitor. In cluster-only mode it
+// returns an RBAC self-check that blocks until the SA can create/get/update
+// every config-CR. In mainnet mode it returns nil (no probe).
+func (m *UpgradeOutcomeMonitor) RequiredProbe() daemonkit.Probe {
+	if !m.cfg.ProvisionerProxyEnabled {
+		return nil
+	}
+	inner := &RBACProbe{
+		Client:    m.client,
+		Namespace: m.cfg.Namespace,
+	}
+	return &daemonkit.TaggedProbe{
+		Inner:  inner,
+		Reason: ReasonConfigCRAccessDenied.String(),
+		Resolution: fmt.Sprintf(
+			"Ensure the node Role (%s-role) grants create/get/update on all config-CR "+
+				"resources in group %s; the operator reconciles this automatically in "+
+				"cluster-only mode — check the ConsensusCapsule and Orbit CRs",
+			m.cfg.CapsuleName, operatorv1alpha1.GroupVersion.Group,
+		),
+	}
+}
 
 // ConnectivityError implements daemonkit.ConnectivityMonitor.
 func (m *UpgradeOutcomeMonitor) ConnectivityError() *daemonkit.StatusError {
