@@ -65,7 +65,7 @@ func TestConfigMapOwnerConflict(t *testing.T) {
 					Kind: "NodeSettings", Name: "other", UID: "uid-99", Controller: &isController,
 				}},
 			}},
-			wantMsg: false,
+			wantMsg: true,
 		},
 	}
 

@@ -30,19 +30,16 @@ func SameController(existing, desired *corev1.ConfigMap) bool {
 }
 
 // ConfigMapOwnerConflict checks whether an existing ConfigMap is already owned by
-// a controller of a different kind than the caller. Returns a human-readable error
-// message if there is a conflict, or "" if the ConfigMap is safe to adopt.
+// a different controller than the caller (any kind, any UID). Returns a
+// human-readable message if there is a conflict, or "" if safe to adopt.
 func ConfigMapOwnerConflict(existing *corev1.ConfigMap, caller client.Object) string {
 	ctrl := metav1.GetControllerOf(existing)
 	if ctrl == nil {
 		return ""
 	}
-	callerKind := caller.GetObjectKind().GroupVersionKind().Kind
-	if ctrl.Kind == callerKind && ctrl.UID == caller.GetUID() {
+	if ctrl.UID == caller.GetUID() {
 		return ""
 	}
-	if ctrl.Kind != callerKind {
-		return fmt.Sprintf("ConfigMap %q is already owned by %s/%s", existing.Name, ctrl.Kind, ctrl.Name)
-	}
-	return ""
+	return fmt.Sprintf("ConfigMap %q is already owned by %s/%s (uid %s)",
+		existing.Name, ctrl.Kind, ctrl.Name, ctrl.UID)
 }
