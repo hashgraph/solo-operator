@@ -197,14 +197,38 @@ to drive a software upgrade to **v0.74.2**. beacon is the HAPI control plane
 (upload + freeze); the consensus node, UC sidecar, operator, and provisioner
 carry out the actual node upgrade after the freeze fires.
 
-> **Quick path — [`docs/beacon/Taskfile.yml`](Taskfile.yml).** Every step below is
-> wrapped as a task. Run `task -d docs/beacon` to print the ordered runbook, then
-> the tasks in sequence (`build`, `cluster`, `uc-image`, `operator`, `deploy`,
-> `config`, `port-forward`, `upgrade`, `watch`, `version`, `cleanup`). The
-> `operator` and `port-forward` tasks are long-running and each want their own
-> terminal; everything else is one-shot. The tasks run from the current checkout
-> (no worktree juggling) and `includes` the root, `docs/example`, and `test/dev`
-> Taskfiles. The manual steps below remain the reference for what each task does.
+> **Quick path — [`docs/beacon/Taskfile.yml`](Taskfile.yml).** Use the following
+> terminal split and command order:
+>
+> ```bash
+> # Terminal 1 — one-shot setup
+> task -d docs/beacon prepare-cluster
+>
+> # Terminal 2 — operator (leave running)
+> task -d docs/beacon operator
+>
+> # Terminal 1 — deploy network + beacon config
+> task -d docs/beacon deploy
+> task -d docs/beacon config
+>
+> # Terminal 3 — port-forward (leave running)
+> task -d docs/beacon port-forward
+>
+> # Terminal 1 — drive the upgrade
+> task -d docs/beacon upgrade
+> # upload -> info -> prepare -> freeze (freeze is scheduled ~3 min out)
+>
+> # Terminal 1 — watch + verify
+> task -d docs/beacon watch
+> task -d docs/beacon version
+>
+> # Terminal 1 — cleanup
+> task -d docs/beacon cleanup
+> ```
+>
+> The tasks run from the current checkout (no worktree juggling) and `includes`
+> the root, `docs/example`, and `test/dev` Taskfiles. The manual steps below remain
+> the reference for what each task does.
 
 Version map for this test:
 
