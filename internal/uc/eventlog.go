@@ -98,7 +98,11 @@ func (s *eventSink) writer(operationID string) *events.Writer {
 	if _, bad := s.failed[operationID]; bad {
 		return nil
 	}
-	w, err := events.Open(s.dir, operationID, s.nodeID)
+	var openOpts []events.OpenOption
+	if operationID == platformStatusOperationID {
+		openOpts = append(openOpts, events.WithoutTimestampWarning())
+	}
+	w, err := events.Open(s.dir, operationID, s.nodeID, openOpts...)
 	if err != nil {
 		s.failed[operationID] = struct{}{}
 		logx.As().Warn().Err(err).Str("reason", ReasonEventLogOpenFailed.String()).

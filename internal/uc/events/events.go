@@ -63,6 +63,20 @@ type Writer struct {
 	nodeID      string
 }
 
+// OpenOption configures optional Open behaviour.
+type OpenOption func(*openOpts)
+
+type openOpts struct {
+	suppressTimestampWarning bool
+}
+
+// WithoutTimestampWarning suppresses the warning emitted when the operationID
+// carries no parseable timestamp. Use this for well-known non-upgrade
+// operationIDs (e.g. "platform-status") that are expected to have no timestamp.
+func WithoutTimestampWarning() OpenOption {
+	return func(o *openOpts) { o.suppressTimestampWarning = true }
+}
+
 // Open returns a Writer that appends to "<operationID>.jsonl" in dir, creating
 // the file if it does not exist. operationID is validated for path/shell safety
 // (sanity.ValidateOperationID); it is NOT required to follow the timestamp
@@ -70,14 +84,18 @@ type Writer struct {
 // semantic ordering retention prefers and ages out by mtime instead, so Open
 // logs a warning in that case. nodeID is the consensus node identity recorded on
 // every event. The caller must Close the Writer.
-func Open(dir, operationID, nodeID string) (*Writer, error) {
+func Open(dir, operationID, nodeID string, opts ...OpenOption) (*Writer, error) {
+	var o openOpts
+	for _, fn := range opts {
+		fn(&o)
+	}
 	if err := sanity.ValidateOperationID(operationID); err != nil {
 		return nil, err
 	}
 	if nodeID == "" {
 		return nil, eventlog.ErrInvalidEvent.New("nodeID is required")
 	}
-	if !hasTimestamp(operationID) {
+	if !o.suppressTimestampWarning && !hasTimestamp(operationID) {
 		logx.As().Warn().
 			Str("reason", "OperationIDMissingTimestamp").
 			Str("operationId", operationID).
