@@ -23,7 +23,7 @@ func (f *fakeCaller) DeepCopyObject() runtime.Object   { return f }
 func TestConfigMapOwnerConflict(t *testing.T) {
 	caller := &fakeCaller{
 		ObjectMeta: metav1.ObjectMeta{Name: "my-settings", UID: types.UID("uid-1")},
-		TypeMeta:   metav1.TypeMeta{Kind: "NodeSettings", APIVersion: "v1alpha1"},
+		TypeMeta:   metav1.TypeMeta{Kind: "NodeSettings", APIVersion: "operator.solo.hiero.org/v1alpha1"},
 	}
 	isController := true
 
@@ -52,17 +52,30 @@ func TestConfigMapOwnerConflict(t *testing.T) {
 			cm: &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
 				Name: "my-settings",
 				OwnerReferences: []metav1.OwnerReference{{
-					Kind: "Log4j2Config", Name: "my-settings", UID: "uid-2", Controller: &isController,
+					APIVersion: "operator.solo.hiero.org/v1alpha1",
+					Kind:       "Log4j2Config", Name: "my-settings", UID: "uid-2", Controller: &isController,
 				}},
 			}},
 			wantMsg: true,
 		},
 		{
-			name: "same kind different UID",
+			name: "same kind different UID — allowed for upgrade takeover",
 			cm: &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
 				Name: "my-settings",
 				OwnerReferences: []metav1.OwnerReference{{
-					Kind: "NodeSettings", Name: "other", UID: "uid-99", Controller: &isController,
+					APIVersion: "operator.solo.hiero.org/v1alpha1",
+					Kind:       "NodeSettings", Name: "other", UID: "uid-99", Controller: &isController,
+				}},
+			}},
+			wantMsg: false,
+		},
+		{
+			name: "same kind different APIVersion",
+			cm: &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+				Name: "my-settings",
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "other.group/v1beta1",
+					Kind:       "NodeSettings", Name: "other", UID: "uid-99", Controller: &isController,
 				}},
 			}},
 			wantMsg: true,

@@ -85,6 +85,7 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 		common.Debug(ctx, common.ReasonConfigMapUpdated).Str("configMap", desired.Name).Msg("Updating NodeSettings ConfigMap")
 		existing.Data = desired.Data
 		existing.Labels = desired.Labels
+		common.ClearControllerRef(existing)
 		// Re-apply owner reference on update so a pre-existing CM without a controller
 		// reference gets cascade-GC wired up correctly.
 		if err := controllerutil.SetControllerReference(obj, existing, r.Scheme); err != nil {

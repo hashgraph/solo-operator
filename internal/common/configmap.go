@@ -30,8 +30,10 @@ func SameController(existing, desired *corev1.ConfigMap) bool {
 }
 
 // ConfigMapOwnerConflict checks whether an existing ConfigMap is already owned by
-// a different controller than the caller (any kind, any UID). Returns a
-// human-readable message if there is a conflict, or "" if safe to adopt.
+// a different controller than the caller. Same-kind takeover is allowed so that
+// an upgrade-scoped config CR can replace the static CR's ConfigMap (both are
+// the same Kind, e.g. ApiPermissionProperties, but different UIDs). A conflict
+// is reported only when the existing owner is a different Kind entirely.
 func ConfigMapOwnerConflict(existing *corev1.ConfigMap, caller client.Object) string {
 	ctrl := metav1.GetControllerOf(existing)
 	if ctrl == nil {
@@ -40,6 +42,24 @@ func ConfigMapOwnerConflict(existing *corev1.ConfigMap, caller client.Object) st
 	if ctrl.UID == caller.GetUID() {
 		return ""
 	}
+	callerGVK := caller.GetObjectKind().GroupVersionKind()
+	if ctrl.Kind == callerGVK.Kind && ctrl.APIVersion == callerGVK.GroupVersion().String() {
+		return ""
+	}
 	return fmt.Sprintf("ConfigMap %q is already owned by %s/%s (uid %s)",
 		existing.Name, ctrl.Kind, ctrl.Name, ctrl.UID)
+}
+
+// ClearControllerRef removes the existing controller owner reference from obj
+// so that a new controller of the same Kind can adopt it via SetControllerReference.
+func ClearControllerRef(obj metav1.Object) {
+	refs := obj.GetOwnerReferences()
+	filtered := make([]metav1.OwnerReference, 0, len(refs))
+	for _, r := range refs {
+		if r.Controller != nil && *r.Controller {
+			continue
+		}
+		filtered = append(filtered, r)
+	}
+	obj.SetOwnerReferences(filtered)
 }
