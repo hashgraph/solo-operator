@@ -615,7 +615,7 @@ func (f *Factory) HandleNowFrozen(ctx context.Context) error {
 
 	provisioner, provErr := declaredProvisionerVersions(f.cfg.UpgradePath)
 	if provErr != nil {
-		logx.As().Warn().Err(provErr).Str("reason", ReasonManifestReadFailed.String()).
+		common.LogErr(logx.As().Warn(), provErr, ReasonManifestReadFailed).
 			Str("operation_id", operationID).
 			Msg("failed to read infrastructure-versions.yaml — provisioner versions will not be set on Execute CR")
 	}

@@ -31,6 +31,7 @@ const (
 	ReasonWaitingForConfigCRsApplied errx.Reason = "WaitingForConfigCRsApplied"
 	ReasonAbortAfterFreeze           errx.Reason = "AbortAfterFreeze"
 	ReasonPhaseTransition            errx.Reason = "PhaseTransition"
+	ReasonGracePeriodRestoreFailed   errx.Reason = "GracePeriodRestoreFailed"
 
 	// NetworkUpgradePrepare registry audit.
 	ReasonRegistryStrategy        errx.Reason = "RegistryStrategy"

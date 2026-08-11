@@ -241,7 +241,10 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 }
 
 func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (ctrl.Result, error) {
-	capsule, _ := r.getCapsule(ctx, execute)
+	capsule, err := r.getCapsule(ctx, execute)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 	ucfg := r.resolveUpgradeConfig(ctx, capsule)
 
 	daemonCond := findCondition(execute.Status.Conditions, operatorv1alpha1.CondDaemonResult)
@@ -285,7 +288,10 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 }
 
 func (r *NetworkUpgradeExecuteReconciler) reconcilePendingInfraUpgrade(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (ctrl.Result, error) {
-	capsule, _ := r.getCapsule(ctx, execute)
+	capsule, err := r.getCapsule(ctx, execute)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 	ucfg := r.resolveUpgradeConfig(ctx, capsule)
 
 	cond := findCondition(execute.Status.Conditions, operatorv1alpha1.CondConfigCRsApplied)
@@ -448,7 +454,10 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 		return r.warnDeadlineExceeded(ctx, execute)
 
 	case upgradeCatastrophic:
-		_ = r.restoreGracePeriod(ctx, capsule)
+		if restoreErr := r.restoreGracePeriod(ctx, capsule); restoreErr != nil {
+			common.Warn(ctx, ReasonGracePeriodRestoreFailed).Err(restoreErr).
+				Str("capsule", capsule.Name).Msg("failed to restore terminationGracePeriodSeconds after catastrophic failure")
+		}
 		return r.failUpgrade(ctx, execute,
 			fmt.Sprintf("consensus node reported platform status %s after upgrade", operatorv1alpha1.PlatformStatusCatastrophicFailure),
 			fmt.Sprintf("consensus node %s reported CATASTROPHIC_FAILURE after upgrade for operationId %q", capsule.Name, execute.Spec.OperationID))

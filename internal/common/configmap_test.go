@@ -129,7 +129,7 @@ func TestConfigMapSuperseded(t *testing.T) {
 			name: "same UID",
 			cm: &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
 				Name:            "cm",
-				Annotations:     map[string]string{AnnotationOwnerCreatedAt: now.Format(time.RFC3339)},
+				Annotations:     map[string]string{AnnotationOwnerCreatedAt: now.Format(time.RFC3339Nano)},
 				OwnerReferences: []metav1.OwnerReference{{UID: "uid-1", Controller: &isController}},
 			}},
 			caller: makeCallerAt("uid-1", earlier),
@@ -148,7 +148,7 @@ func TestConfigMapSuperseded(t *testing.T) {
 			name: "caller is older — superseded",
 			cm: &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
 				Name:            "cm",
-				Annotations:     map[string]string{AnnotationOwnerCreatedAt: now.Format(time.RFC3339)},
+				Annotations:     map[string]string{AnnotationOwnerCreatedAt: now.Format(time.RFC3339Nano)},
 				OwnerReferences: []metav1.OwnerReference{{UID: "uid-2", Controller: &isController}},
 			}},
 			caller: makeCallerAt("uid-1", earlier),
@@ -158,7 +158,7 @@ func TestConfigMapSuperseded(t *testing.T) {
 			name: "caller is newer — not superseded",
 			cm: &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
 				Name:            "cm",
-				Annotations:     map[string]string{AnnotationOwnerCreatedAt: now.Format(time.RFC3339)},
+				Annotations:     map[string]string{AnnotationOwnerCreatedAt: now.Format(time.RFC3339Nano)},
 				OwnerReferences: []metav1.OwnerReference{{UID: "uid-2", Controller: &isController}},
 			}},
 			caller: makeCallerAt("uid-1", later),
@@ -168,7 +168,7 @@ func TestConfigMapSuperseded(t *testing.T) {
 			name: "same creation time — superseded (not strictly after)",
 			cm: &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
 				Name:            "cm",
-				Annotations:     map[string]string{AnnotationOwnerCreatedAt: now.Format(time.RFC3339)},
+				Annotations:     map[string]string{AnnotationOwnerCreatedAt: now.Format(time.RFC3339Nano)},
 				OwnerReferences: []metav1.OwnerReference{{UID: "uid-2", Controller: &isController}},
 			}},
 			caller: makeCallerAt("uid-1", now),

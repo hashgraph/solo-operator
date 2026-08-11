@@ -90,7 +90,7 @@ func ConfigMapSuperseded(existing *corev1.ConfigMap, caller client.Object) bool 
 	if !ok {
 		return false
 	}
-	ownerCreated, err := time.Parse(time.RFC3339, raw)
+	ownerCreated, err := time.Parse(time.RFC3339Nano, raw)
 	if err != nil {
 		return false
 	}
@@ -104,6 +104,6 @@ func StampOwnerCreatedAt(cm *corev1.ConfigMap, caller client.Object) {
 	if ann == nil {
 		ann = make(map[string]string)
 	}
-	ann[AnnotationOwnerCreatedAt] = caller.GetCreationTimestamp().UTC().Format(time.RFC3339)
+	ann[AnnotationOwnerCreatedAt] = caller.GetCreationTimestamp().UTC().Format(time.RFC3339Nano)
 	cm.SetAnnotations(ann)
 }
