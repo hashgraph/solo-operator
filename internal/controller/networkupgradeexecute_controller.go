@@ -27,9 +27,7 @@ import (
 )
 
 const (
-	executePrereqRequeueAfter = 30 * time.Second
 	executeDaemonRequeueAfter = 10 * time.Second
-	executeReadyRequeueAfter  = 10 * time.Second
 	// executeDefaultNodeActiveTimeout is the backstop for a node to reach platform
 	// status ACTIVE after an upgrade, anchored to nodeUpgradeStartTime. It covers a
 	// dead/missing UC that never advances the capsule phase. Reaching ACTIVE can
@@ -63,6 +61,17 @@ func NewNetworkUpgradeExecuteReconciler(c client.Client, scheme *runtime.Scheme)
 		NodeActiveTimeout:       executeDefaultNodeActiveTimeout,
 		NodeActiveAlertInterval: executeDefaultNodeActiveAlertEvery,
 	}
+}
+
+func (r *NetworkUpgradeExecuteReconciler) logPhaseElapsed(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute, phase string) {
+	if execute.Status.StartTime == nil {
+		return
+	}
+	elapsed := time.Since(execute.Status.StartTime.Time).Truncate(time.Millisecond)
+	common.Info(ctx, ReasonPhaseTransition).
+		Str("phase", phase).
+		Str("elapsed", elapsed.String()).
+		Msg("execute phase transition")
 }
 
 func (r *NetworkUpgradeExecuteReconciler) WithStrategy(name string) *NetworkUpgradeExecuteReconciler {
@@ -155,9 +164,15 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		if err != nil {
 			return ctrl.Result{}, err
 		}
+		capsule, err := r.getCapsule(ctx, &execute)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		ucfg := r.resolveUpgradeConfig(ctx, capsule)
+
 		if prepare == nil || prepare.Status.Phase != operatorv1alpha1.PhaseSucceeded {
 			common.Info(ctx, ReasonWaitingForPrepare).Msg("waiting for NetworkUpgradePrepare to succeed")
-			return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
+			return ctrl.Result{RequeueAfter: ucfg.PrereqRequeueInterval}, nil
 		}
 
 		freeze, err := findFreeze(ctx, r.Client, execute.Namespace, execute.Spec.OperationID)
@@ -166,15 +181,11 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		}
 		if freeze == nil || freeze.Status.Phase != operatorv1alpha1.PhaseSucceeded {
 			common.Info(ctx, ReasonWaitingForFreeze).Msg("waiting for NetworkUpgradeFreeze to succeed")
-			return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
+			return ctrl.Result{RequeueAfter: ucfg.PrereqRequeueInterval}, nil
 		}
 
-		capsule, err := r.getCapsule(ctx, &execute)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
 		if capsule == nil {
-			return ctrl.Result{RequeueAfter: executeReadyRequeueAfter}, nil
+			return ctrl.Result{RequeueAfter: ucfg.NodeReadyRequeueInterval}, nil
 		}
 		mode, err := consensusresources.ResolveUCMode(ctx, r.Client, capsule)
 		if err != nil {
@@ -207,6 +218,7 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		if err := r.Status().Update(ctx, &execute); err != nil {
 			return ctrl.Result{}, wrapStatusInit(err)
 		}
+		r.logPhaseElapsed(ctx, &execute, string(operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon))
 		r.eventf(ctx, &execute, corev1.EventTypeNormal, operatorv1alpha1.EventReadyForDaemon,
 			"waiting for provisioner for operationId %q", execute.Spec.OperationID)
 		return ctrl.Result{Requeue: true}, nil
@@ -263,16 +275,20 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 		}
 		return ctrl.Result{}, wrapStatusUpdate(err, "advancing to PendingInfraUpgrade")
 	}
+	r.logPhaseElapsed(ctx, execute, string(operatorv1alpha1.ExecutePhasePendingInfraUpgrade))
 	r.eventf(ctx, execute, corev1.EventTypeNormal, operatorv1alpha1.EventPendingInfraUpgrade,
 		"provisioner daemon succeeded; advancing to PendingInfraUpgrade for operationId %q", execute.Spec.OperationID)
 	return ctrl.Result{Requeue: true}, nil
 }
 
 func (r *NetworkUpgradeExecuteReconciler) reconcilePendingInfraUpgrade(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (ctrl.Result, error) {
+	capsule, _ := r.getCapsule(ctx, execute)
+	ucfg := r.resolveUpgradeConfig(ctx, capsule)
+
 	cond := findCondition(execute.Status.Conditions, operatorv1alpha1.CondConfigCRsApplied)
 	if cond == nil || cond.Status != metav1.ConditionTrue {
 		common.Info(ctx, ReasonWaitingForConfigCRsApplied).Msg("waiting for daemon to set CondConfigCRsApplied=True")
-		return ctrl.Result{RequeueAfter: executePrereqRequeueAfter}, nil
+		return ctrl.Result{RequeueAfter: ucfg.PrereqRequeueInterval}, nil
 	}
 
 	now := metav1.Now()
@@ -285,6 +301,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingInfraUpgrade(ctx conte
 		}
 		return ctrl.Result{}, wrapStatusUpdate(err, "advancing to PendingNodeUpgrade")
 	}
+	r.logPhaseElapsed(ctx, execute, string(operatorv1alpha1.ExecutePhasePendingNodeUpgrade))
 	r.eventf(ctx, execute, corev1.EventTypeNormal, operatorv1alpha1.EventPendingNodeUpgrade,
 		"daemon applied config CRs; advancing to PendingNodeUpgrade for operationId %q", execute.Spec.OperationID)
 	return ctrl.Result{Requeue: true}, nil
@@ -295,8 +312,9 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+	ucfg := r.resolveUpgradeConfig(ctx, capsule)
 	if capsule == nil {
-		return ctrl.Result{RequeueAfter: executeReadyRequeueAfter}, nil
+		return ctrl.Result{RequeueAfter: ucfg.NodeReadyRequeueInterval}, nil
 	}
 
 	capsulePatched := findCondition(execute.Status.Conditions, operatorv1alpha1.CondConsensusCapsulePatched)
@@ -370,6 +388,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 			}
 			return ctrl.Result{}, wrapStatusUpdate(err, "updating status after capsule patch")
 		}
+		r.logPhaseElapsed(ctx, execute, "CapsulePatched")
 		r.eventf(ctx, execute, corev1.EventTypeNormal, operatorv1alpha1.EventCapsulePatched,
 			"ConsensusCapsule %s patched with new images for operationId %q", capsule.Name, execute.Spec.OperationID)
 		return ctrl.Result{Requeue: true}, nil
@@ -399,9 +418,10 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 			}
 			return ctrl.Result{}, wrapStatusUpdate(err, "updating status after bringing capsule online")
 		}
+		r.logPhaseElapsed(ctx, execute, "CapsulesOnline")
 		r.eventf(ctx, execute, corev1.EventTypeNormal, operatorv1alpha1.EventCapsulesOnline,
 			"ConsensusCapsule %s brought online for operationId %q", capsule.Name, execute.Spec.OperationID)
-		return ctrl.Result{RequeueAfter: executeReadyRequeueAfter}, nil
+		return ctrl.Result{RequeueAfter: ucfg.NodeReadyRequeueInterval}, nil
 	}
 
 	outcome, err := r.checkUpgradeGate(ctx, execute, capsule)
@@ -435,12 +455,13 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 			}
 			return ctrl.Result{}, wrapStatusUpdate(err, "updating status to succeeded")
 		}
+		r.logPhaseElapsed(ctx, execute, string(operatorv1alpha1.ExecutePhaseSucceeded))
 		r.eventf(ctx, execute, corev1.EventTypeNormal, operatorv1alpha1.EventUpgradeSucceeded,
 			"upgrade succeeded for operationId %q capsule %s", execute.Spec.OperationID, capsule.Name)
 		return ctrl.Result{}, nil
 
 	default: // upgradeWaiting — the consensus node has not yet reached ACTIVE.
-		return ctrl.Result{RequeueAfter: executeReadyRequeueAfter}, nil
+		return ctrl.Result{RequeueAfter: ucfg.NodeReadyRequeueInterval}, nil
 	}
 }
 
@@ -559,6 +580,21 @@ func (r *NetworkUpgradeExecuteReconciler) getCapsule(ctx context.Context, execut
 			"Confirm the operator has get permission on consensuscapsules")
 	}
 	return &capsule, nil
+}
+
+func (r *NetworkUpgradeExecuteReconciler) getOrbit(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) *operatorv1alpha1.Orbit {
+	if capsule == nil || capsule.Spec.Orbit == "" {
+		return nil
+	}
+	var orbit operatorv1alpha1.Orbit
+	if err := r.Get(ctx, client.ObjectKey{Name: capsule.Spec.Orbit}, &orbit); err != nil {
+		return nil
+	}
+	return &orbit
+}
+
+func (r *NetworkUpgradeExecuteReconciler) resolveUpgradeConfig(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) operatorv1alpha1.EffectiveUpgradeConfig {
+	return operatorv1alpha1.ResolveUpgradeConfig(r.getOrbit(ctx, capsule))
 }
 
 func (r *NetworkUpgradeExecuteReconciler) ensureCapsuleOffline(

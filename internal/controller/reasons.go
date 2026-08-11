@@ -30,6 +30,7 @@ const (
 	ReasonUnhandledPhase             errx.Reason = "UnhandledPhase"
 	ReasonWaitingForConfigCRsApplied errx.Reason = "WaitingForConfigCRsApplied"
 	ReasonAbortAfterFreeze           errx.Reason = "AbortAfterFreeze"
+	ReasonPhaseTransition            errx.Reason = "PhaseTransition"
 
 	// NetworkUpgradePrepare registry audit.
 	ReasonRegistryStrategy        errx.Reason = "RegistryStrategy"

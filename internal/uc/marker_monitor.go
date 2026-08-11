@@ -182,9 +182,16 @@ func (m *MarkerMonitor) Run(ctx context.Context) (retErr error) {
 func (m *MarkerMonitor) poll(ctx context.Context, current time.Duration) time.Duration {
 	next := current
 	for _, name := range AllMarkers {
-		if _, err := os.Stat(filepath.Join(m.cfg.UpgradePath, name)); err != nil {
+		info, err := os.Stat(filepath.Join(m.cfg.UpgradePath, name))
+		if err != nil {
 			continue
 		}
+		detectionLatency := time.Since(info.ModTime()).Truncate(time.Millisecond)
+		logx.As().Info().
+			Str("reason", ReasonMarkerDetected.String()).
+			Str("marker", name).
+			Str("latency", detectionLatency.String()).
+			Msg("marker detected")
 		if err := m.dispatch(ctx, name); err != nil {
 			common.LogErr(logx.As().Error(), err, ReasonMarkerHandlerFailed).
 				Str("marker", name).Msg("failed to handle marker")
