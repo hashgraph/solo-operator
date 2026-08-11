@@ -31,6 +31,7 @@ type MarkerMonitor struct {
 	factory markerDispatcher
 
 	connectivityErr atomic.Pointer[daemonkit.StatusError]
+	seen            map[string]struct{}
 }
 
 // markerDispatcher routes a detected marker to the handler that constructs the
@@ -56,6 +57,7 @@ func NewMarkerMonitorWithFactory(cfg Config, f *Factory) *MarkerMonitor {
 	return &MarkerMonitor{
 		cfg:     cfg,
 		factory: f,
+		seen:    make(map[string]struct{}),
 	}
 }
 
@@ -184,14 +186,18 @@ func (m *MarkerMonitor) poll(ctx context.Context, current time.Duration) time.Du
 	for _, name := range AllMarkers {
 		info, err := os.Stat(filepath.Join(m.cfg.UpgradePath, name))
 		if err != nil {
+			delete(m.seen, name)
 			continue
 		}
-		detectionLatency := time.Since(info.ModTime()).Truncate(time.Millisecond)
-		logx.As().Info().
-			Str("reason", ReasonMarkerDetected.String()).
-			Str("marker", name).
-			Str("latency", detectionLatency.String()).
-			Msg("marker detected")
+		if _, already := m.seen[name]; !already {
+			detectionLatency := time.Since(info.ModTime()).Truncate(time.Millisecond)
+			logx.As().Info().
+				Str("reason", ReasonMarkerDetected.String()).
+				Str("marker", name).
+				Str("latency", detectionLatency.String()).
+				Msg("marker detected")
+			m.seen[name] = struct{}{}
+		}
 		if err := m.dispatch(ctx, name); err != nil {
 			common.LogErr(logx.As().Error(), err, ReasonMarkerHandlerFailed).
 				Str("marker", name).Msg("failed to handle marker")
