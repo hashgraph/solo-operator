@@ -208,16 +208,16 @@ carry out the actual node upgrade after the freeze fires.
 > task -d docs/beacon operator
 >
 > # Terminal 1 — deploy network + beacon config
-> task -d docs/beacon deploy
-> task -d docs/beacon config
+> task -d docs/beacon network-deploy
+> task -d docs/beacon beacon-config
 >
 > # Terminal 3 — port-forward (leave running)
 > task -d docs/beacon port-forward
 >
 > # Terminal 1 — drive the upgrade
-> task -d docs/beacon upload
-> task -d docs/beacon info
-> task -d docs/beacon prepare
+> task -d docs/beacon zip-upload
+> task -d docs/beacon zip-info
+> task -d docs/beacon freeze-prepare
 > task -d docs/beacon freeze
 > # freeze is scheduled ~3 min out
 >

@@ -89,19 +89,21 @@ tasks:
           T1  task -d docs/beacon build         # zips v{{.BASE_VERSION}} + v{{.UPGRADE_VERSION}}, prints H
           T2  task -d docs/beacon cluster        # kind reset + CRDs
           T3  task -d docs/beacon uc-image       # build + load the UC sidecar image (:dev)
-          T4  task -d docs/beacon operator       # operator (go run) — LEAVE RUNNING
-          T5  task -d docs/beacon deploy          # single-node network + genesis (needs operator up)
-          T6  task -d docs/beacon config          # beacon binary + /tmp/beacon-solo config & key
-          T7  task -d docs/beacon port-forward     # node0 HAPI :50211 — LEAVE RUNNING
-          T8  task -d docs/beacon upload           # upload the build-zip to 0.0.150
-          T9  task -d docs/beacon prepare          # prepare the upgrade
-          T10  task -d docs/beacon  freeze         # freeze the network
+          T4  task -d docs/beacon operator        # operator (go run) — LEAVE RUNNING
+          T5  task -d docs/beacon network-deploy  # single-node network + genesis (needs operator up)
+          T6  task -d docs/beacon beacon-config   # beacon binary + /tmp/beacon-solo config & key
+          T7  task -d docs/beacon port-forward    # node0 HAPI :50211 — LEAVE RUNNING
+          T8  task -d docs/beacon zip-upload      # upload the build-zip to 0.0.150
+          T9  task -d docs/beacon zip-info        # confirm the hash the network holds
+          T10 task -d docs/beacon freeze-prepare  # stage the upgrade on every node
+          T11 task -d docs/beacon freeze          # schedule the freeze
           T11  task -d docs/beacon watch            # observe the automated pipeline
           T12  task -d docs/beacon version          # confirm Services v{{.UPGRADE_VERSION}} is live
           T13  task -d docs/beacon cleanup          # kind delete
         
         One-shot helpers: `prepare-cluster` (build+cluster+uc-image), then start the
-        operator, then `deploy` + `config`, then start the port-forward, then `upgrade`.
+        operator, then `network-deploy` + `beacon-config`, then start the port-forward,
+        then `zip-upload` + `zip-info` + `freeze-prepare` + `freeze`.
         EOF
   
   # ── 1. artifacts ────────────────────────────────────────────────────────────
@@ -173,7 +175,7 @@ tasks:
       - kind load image-archive /tmp/haproxy-2.8.10-alpine3.20.tar --name {{.CLUSTER}}
   
   # ── 3. network ────────────────────────────────────────────────────────────--
-  deploy:
+  network-deploy:
     desc: "Install kind prereqs (MetalLB/MinIO) and deploy a single-node v{{.BASE_VERSION}} network + genesis"
     cmds:
       - task: warm-up-cluster
@@ -181,7 +183,7 @@ tasks:
       - task: example:deploy:single
   
   # ── 4. beacon config ─────────────────────────────────────────────────────────
-  config:
+  beacon-config:
     desc: "Build bin/beacon and write {{.BEACON_HOME}} config.yaml + 0.0.2 payer key"
     cmds:
       - task: root:build:beacon
@@ -214,22 +216,22 @@ tasks:
       - kubectl -n {{.NS}} port-forward svc/{{.PF_SVC}} {{.PORT}}:{{.PORT}}
   
   # ── 5. drive the upgrade (needs the port-forward running) ─────────────────────
-  upload:
+  zip-upload:
     desc: "Upload the v{{.UPGRADE_VERSION}} package into special file 0.0.150 (verify-before-write with H)"
     preconditions:
       - sh: 'test -f "{{.ZIP}}"'
         msg: "upgrade zip not found: {{.ZIP}} — run 'task -d docs/beacon build'"
       - sh: 'test -f "{{.CONFIG}}"'
-        msg: "beacon config not found: {{.CONFIG}} — run 'task -d docs/beacon config'"
+        msg: "beacon config not found: {{.CONFIG}} — run 'task -d docs/beacon beacon-config'"
     cmds:
       - '{{.BEACON}} -c {{.CONFIG}} file upload --zip "{{.ZIP}}" --expect-hash "{{.H}}"'
   
-  info:
+  zip-info:
     desc: "Read back the canonical hash the network holds (must equal H)"
     cmds:
       - '{{.BEACON}} -c {{.CONFIG}} file info'
   
-  prepare:
+  freeze-prepare:
     desc: "Stage the upgrade on every node, pinned to H (freeze prepare)"
     cmds:
       - '{{.BEACON}} -c {{.CONFIG}} freeze prepare --upgrade-zip-hash "{{.H}}" --yes'
@@ -244,11 +246,11 @@ tasks:
         {{.BEACON}} -c {{.CONFIG}} freeze upgrade --start-time "$START" --upgrade-zip-hash "{{.H}}" --yes
   
   upgrade:
-    desc: "Full beacon sequence: upload -> info -> prepare -> freeze"
+    desc: "Full beacon sequence: zip-upload -> zip-info -> freeze-prepare -> freeze"
     cmds:
-      - task: upload
-      - task: info
-      - task: prepare
+      - task: zip-upload
+      - task: zip-info
+      - task: freeze-prepare
       - task: freeze
   
   abort:
