@@ -137,6 +137,7 @@ spec:
       # UC sidecar — patches platform-status condition on its own pod; required.
       uc:
         enabled: true
+        pollInterval: "5s"
         platformPollInterval: "1s"
 
       # Alloy enabled — scrapes Prometheus metrics at :9999.
