@@ -5667,6 +5667,11 @@ spec:
                         type: string
                     type: object
                   terminationGracePeriodSeconds:
+                    description: |-
+                      TerminationGracePeriodSeconds is the steady-state grace period for the
+                      consensus pod (default 30s via the StatefulSet builder). During upgrades
+                      this is temporarily overridden by Orbit.spec.upgrade.consensusNode.
+                      executeTerminationGracePeriodSeconds and restored after completion.
                     format: int64
                     type: integer
                   tolerations:

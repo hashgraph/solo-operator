@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand/v2"
+	"strconv"
 	"time"
 
 	"github.com/automa-saga/errx"
@@ -376,6 +377,9 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 
 		patch := client.MergeFrom(capsule.DeepCopy())
 		r.applyImagePatch(execute, capsule)
+		if rollingRestart {
+			r.applyExecuteGracePeriod(capsule, ucfg.ExecuteTerminationGracePeriodSeconds)
+		}
 		if err := r.Patch(ctx, capsule, patch); err != nil {
 			return ctrl.Result{}, errx.WithHints(
 				errx.WithReason(errK8sAPI.Wrap(err, "patching capsule %s", capsule.Name), ReasonPatchFailed),
@@ -444,11 +448,15 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 		return r.warnDeadlineExceeded(ctx, execute)
 
 	case upgradeCatastrophic:
+		_ = r.restoreGracePeriod(ctx, capsule)
 		return r.failUpgrade(ctx, execute,
 			fmt.Sprintf("consensus node reported platform status %s after upgrade", operatorv1alpha1.PlatformStatusCatastrophicFailure),
 			fmt.Sprintf("consensus node %s reported CATASTROPHIC_FAILURE after upgrade for operationId %q", capsule.Name, execute.Spec.OperationID))
 
 	case upgradeSucceeded:
+		if err := r.restoreGracePeriod(ctx, capsule); err != nil {
+			return ctrl.Result{}, err
+		}
 		now := metav1.Now()
 		execute.Status.Phase = operatorv1alpha1.ExecutePhaseSucceeded
 		execute.Status.CompletionTime = &now
@@ -793,6 +801,54 @@ func (r *NetworkUpgradeExecuteReconciler) checkUpgradeGate(
 	}
 
 	return upgradeWaiting, nil
+}
+
+// applyExecuteGracePeriod saves the capsule's current terminationGracePeriodSeconds
+// as an annotation and sets the upgrade-time override. The annotation is read by
+// restoreGracePeriod after the upgrade completes.
+func (r *NetworkUpgradeExecuteReconciler) applyExecuteGracePeriod(capsule *operatorv1alpha1.ConsensusCapsule, seconds int64) {
+	ann := capsule.GetAnnotations()
+	if ann == nil {
+		ann = make(map[string]string)
+	}
+	if _, exists := ann[operatorv1alpha1.AnnotationOriginalGracePeriod]; !exists {
+		orig := ""
+		if capsule.Spec.PodProperties.TerminationGracePeriodSeconds != nil {
+			orig = strconv.FormatInt(*capsule.Spec.PodProperties.TerminationGracePeriodSeconds, 10)
+		}
+		ann[operatorv1alpha1.AnnotationOriginalGracePeriod] = orig
+		capsule.SetAnnotations(ann)
+	}
+	capsule.Spec.PodProperties.TerminationGracePeriodSeconds = &seconds
+}
+
+// restoreGracePeriod restores the capsule's terminationGracePeriodSeconds from
+// the annotation saved by applyExecuteGracePeriod, then removes the annotation.
+// No-op if the annotation is absent (non-rolling-restart path, or already restored).
+func (r *NetworkUpgradeExecuteReconciler) restoreGracePeriod(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) error {
+	ann := capsule.GetAnnotations()
+	orig, exists := ann[operatorv1alpha1.AnnotationOriginalGracePeriod]
+	if !exists {
+		return nil
+	}
+	patch := client.MergeFrom(capsule.DeepCopy())
+	if orig == "" {
+		capsule.Spec.PodProperties.TerminationGracePeriodSeconds = nil
+	} else {
+		v, err := strconv.ParseInt(orig, 10, 64)
+		if err != nil {
+			return errx.WithReason(errReconcile.Wrap(err, "parsing original grace period annotation"), ReasonPatchFailed)
+		}
+		capsule.Spec.PodProperties.TerminationGracePeriodSeconds = &v
+	}
+	delete(ann, operatorv1alpha1.AnnotationOriginalGracePeriod)
+	capsule.SetAnnotations(ann)
+	if err := r.Patch(ctx, capsule, patch); err != nil {
+		return errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "restoring grace period on capsule %s", capsule.Name), ReasonPatchFailed),
+			"Confirm the operator has patch permission on consensuscapsules")
+	}
+	return nil
 }
 
 func (r *NetworkUpgradeExecuteReconciler) eventf(ctx context.Context, obj *operatorv1alpha1.NetworkUpgradeExecute, eventtype string, reason errx.Reason, format string, args ...any) {

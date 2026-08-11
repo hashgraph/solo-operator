@@ -178,6 +178,12 @@ const (
 	AnnotationProvisionerCLIVersion    = "operator.solo.hiero.org/provisioner-cli-version"
 )
 
+// AnnotationOriginalGracePeriod is set on the ConsensusCapsule during a rolling
+// restart to remember the pre-upgrade terminationGracePeriodSeconds. The execute
+// reconciler restores it when the upgrade completes. An empty value means the
+// field was nil (use the StatefulSet default).
+const AnnotationOriginalGracePeriod = "operator.solo.hiero.org/original-termination-grace-period"
+
 const (
 	StepPrepare = "prepare"
 	StepFreeze  = "freeze"

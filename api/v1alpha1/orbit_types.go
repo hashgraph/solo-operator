@@ -80,10 +80,14 @@ type OrbitUpgrade struct {
 // execute phase.
 type ConsensusNodeUpgrade struct {
 	// ExecuteTerminationGracePeriodSeconds overrides the consensus pod's
-	// terminationGracePeriodSeconds during the execute phase only. This does
-	// not change the pod's normal termination grace period outside of upgrades.
-	// Default: 30. Lower values (e.g. 5) reduce upgrade latency but give the
-	// consensus node less time to flush state on shutdown.
+	// terminationGracePeriodSeconds during the execute phase only, distinct from
+	// ConsensusCapsule.spec.podProperties.terminationGracePeriodSeconds which
+	// governs steady-state restarts/rollouts. During an upgrade the consensus
+	// node is already in FREEZE_COMPLETE (state flushed, no in-flight work),
+	// so a short value is safe and reduces upgrade latency. The original
+	// value is saved as an annotation on the capsule and restored when the
+	// upgrade completes.
+	// Default: 5.
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=300
 	// +optional
@@ -125,7 +129,7 @@ const (
 	DefaultExecutePrereqRequeueInterval    = 30 * time.Second
 	DefaultExecuteDaemonRequeueInterval    = 10 * time.Second
 	DefaultExecuteNodeReadyRequeueInterval = 10 * time.Second
-	DefaultExecuteTerminationGracePeriod   = int64(30)
+	DefaultExecuteTerminationGracePeriod   = int64(5)
 	MinRequeueInterval                     = 1 * time.Second
 )
 

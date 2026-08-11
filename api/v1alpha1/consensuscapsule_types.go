@@ -226,6 +226,10 @@ type ConsensusPodProperties struct {
 	// +optional
 	SecurityContext *corev1.PodSecurityContext `json:"securityContext,omitempty"`
 
+	// TerminationGracePeriodSeconds is the steady-state grace period for the
+	// consensus pod (default 30s via the StatefulSet builder). During upgrades
+	// this is temporarily overridden by Orbit.spec.upgrade.consensusNode.
+	// executeTerminationGracePeriodSeconds and restored after completion.
 	// +optional
 	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
 

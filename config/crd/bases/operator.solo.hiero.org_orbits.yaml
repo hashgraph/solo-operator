@@ -481,10 +481,14 @@ spec:
                       executeTerminationGracePeriodSeconds:
                         description: |-
                           ExecuteTerminationGracePeriodSeconds overrides the consensus pod's
-                          terminationGracePeriodSeconds during the execute phase only. This does
-                          not change the pod's normal termination grace period outside of upgrades.
-                          Default: 30. Lower values (e.g. 5) reduce upgrade latency but give the
-                          consensus node less time to flush state on shutdown.
+                          terminationGracePeriodSeconds during the execute phase only, distinct from
+                          ConsensusCapsule.spec.podProperties.terminationGracePeriodSeconds which
+                          governs steady-state restarts/rollouts. During an upgrade the consensus
+                          node is already in FREEZE_COMPLETE (state flushed, no in-flight work),
+                          so a short value is safe and reduces upgrade latency. The original
+                          value is saved as an annotation on the capsule and restored when the
+                          upgrade completes.
+                          Default: 5.
                         format: int64
                         maximum: 300
                         minimum: 1
