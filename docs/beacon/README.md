@@ -215,8 +215,11 @@ carry out the actual node upgrade after the freeze fires.
 > task -d docs/beacon port-forward
 >
 > # Terminal 1 — drive the upgrade
-> task -d docs/beacon upgrade
-> # upload -> info -> prepare -> freeze (freeze is scheduled ~3 min out)
+> task -d docs/beacon upload
+> task -d docs/beacon info
+> task -d docs/beacon prepare
+> task -d docs/beacon freeze
+> # freeze is scheduled ~3 min out
 >
 > # Terminal 1 — watch + verify
 > task -d docs/beacon watch

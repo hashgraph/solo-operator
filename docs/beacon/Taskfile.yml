@@ -49,6 +49,8 @@ vars:
   CONSENSUS_IMAGE_REPO: gcr.io/hedera-registry/consensus-node
   ALLOY_IMAGE: grafana/alloy:v1.14.2
   BUSYBOX_IMAGE: busybox:1.36.1
+  ENVOY_IMAGE: envoyproxy/envoy-distroless:v1.21.6
+  HAPROXY_IMAGE: haproxy:2.8.10-alpine3.20
   # The deployment package beacon uploads, and its SHA-384 (H) — the value that
   # couples the whole chain (upload memo, file info, freeze prepare, freeze
   # upgrade). Recomputed from the zip on every task run, so a rebuild is picked
@@ -149,20 +151,26 @@ tasks:
       - task: uc-image
   
   warm-up-cluster:
-    desc: "Preload consensus-node (base+upgrade), Alloy, and BusyBox images into kind as linux/amd64 archives"
+    desc: "Preload consensus-node (base+upgrade), Alloy, BusyBox, Envoy, and HAProxy images into kind as linux/amd64 archives"
     cmds:
       - docker pull --platform=linux/amd64 {{.CONSENSUS_IMAGE_REPO}}:{{.BASE_VERSION}}
       - docker pull --platform=linux/amd64 {{.CONSENSUS_IMAGE_REPO}}:{{.UPGRADE_VERSION}}
       - docker pull --platform=linux/amd64 {{.ALLOY_IMAGE}}
       - docker pull --platform=linux/amd64 {{.BUSYBOX_IMAGE}}
+      - docker pull --platform=linux/amd64 {{.ENVOY_IMAGE}}
+      - docker pull --platform=linux/amd64 {{.HAPROXY_IMAGE}}
       - docker save --platform=linux/amd64 -o /tmp/consensus-node-{{.BASE_VERSION}}.tar {{.CONSENSUS_IMAGE_REPO}}:{{.BASE_VERSION}}
       - docker save --platform=linux/amd64 -o /tmp/consensus-node-{{.UPGRADE_VERSION}}.tar {{.CONSENSUS_IMAGE_REPO}}:{{.UPGRADE_VERSION}}
       - docker save --platform=linux/amd64 -o /tmp/grafana-alloy-v1.14.2.tar {{.ALLOY_IMAGE}}
       - docker save --platform=linux/amd64 -o /tmp/busybox-1.36.1.tar {{.BUSYBOX_IMAGE}}
+      - docker save --platform=linux/amd64 -o /tmp/envoy-distroless-v1.21.6.tar {{.ENVOY_IMAGE}}
+      - docker save --platform=linux/amd64 -o /tmp/haproxy-2.8.10-alpine3.20.tar {{.HAPROXY_IMAGE}}
       - kind load image-archive /tmp/consensus-node-{{.BASE_VERSION}}.tar --name {{.CLUSTER}}
       - kind load image-archive /tmp/consensus-node-{{.UPGRADE_VERSION}}.tar --name {{.CLUSTER}}
       - kind load image-archive /tmp/grafana-alloy-v1.14.2.tar --name {{.CLUSTER}}
       - kind load image-archive /tmp/busybox-1.36.1.tar --name {{.CLUSTER}}
+      - kind load image-archive /tmp/envoy-distroless-v1.21.6.tar --name {{.CLUSTER}}
+      - kind load image-archive /tmp/haproxy-2.8.10-alpine3.20.tar --name {{.CLUSTER}}
   
   # ── 3. network ────────────────────────────────────────────────────────────--
   deploy:
