@@ -182,6 +182,9 @@ func (m *MarkerMonitor) Run(ctx context.Context) (retErr error) {
 //   - It also survives volume remounts and container restarts without any watch
 //     re-registration plumbing.
 func (m *MarkerMonitor) poll(ctx context.Context, current time.Duration) time.Duration {
+	if m.seen == nil {
+		m.seen = make(map[string]struct{})
+	}
 	next := current
 	for _, name := range AllMarkers {
 		info, err := os.Stat(filepath.Join(m.cfg.UpgradePath, name))

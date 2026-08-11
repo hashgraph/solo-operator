@@ -5,11 +5,16 @@ package common
 import (
 	"fmt"
 	"maps"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+const AnnotationOwnerCreatedAt = "operator.solo.hiero.org/owner-created-at"
+
+const ConditionReasonSuperseded = "Superseded"
 
 // ConfigMapNeedsUpdate reports whether an existing ConfigMap differs from the desired one.
 func ConfigMapNeedsUpdate(existing, desired *corev1.ConfigMap) bool {
@@ -62,4 +67,43 @@ func ClearControllerRef(obj metav1.Object) {
 		filtered = append(filtered, r)
 	}
 	obj.SetOwnerReferences(filtered)
+}
+
+// ConfigMapSuperseded reports whether the caller CR is older than the CR that
+// last wrote the ConfigMap. It compares the caller's creationTimestamp against
+// the AnnotationOwnerCreatedAt annotation on the ConfigMap. When the caller is
+// older (or equal-age but different UID), it should skip writing so that only
+// the most recently created same-Kind CR owns the ConfigMap.
+func ConfigMapSuperseded(existing *corev1.ConfigMap, caller client.Object) bool {
+	ctrl := metav1.GetControllerOf(existing)
+	if ctrl == nil {
+		return false
+	}
+	if ctrl.UID == caller.GetUID() {
+		return false
+	}
+	ann := existing.GetAnnotations()
+	if ann == nil {
+		return false
+	}
+	raw, ok := ann[AnnotationOwnerCreatedAt]
+	if !ok {
+		return false
+	}
+	ownerCreated, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return false
+	}
+	return !caller.GetCreationTimestamp().After(ownerCreated)
+}
+
+// StampOwnerCreatedAt records the caller's creationTimestamp on the ConfigMap
+// so that older same-Kind CRs can detect they have been superseded.
+func StampOwnerCreatedAt(cm *corev1.ConfigMap, caller client.Object) {
+	ann := cm.GetAnnotations()
+	if ann == nil {
+		ann = make(map[string]string)
+	}
+	ann[AnnotationOwnerCreatedAt] = caller.GetCreationTimestamp().UTC().Format(time.RFC3339)
+	cm.SetAnnotations(ann)
 }

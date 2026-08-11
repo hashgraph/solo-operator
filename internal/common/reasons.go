@@ -8,8 +8,9 @@ import "github.com/automa-saga/errx"
 // sub-reconciler. The controller/kind fields from ReconcileContext disambiguate
 // the subsystem. Domain-specific reasons stay in their own package's reasons.go.
 const (
-	ReasonConfigMapCreated errx.Reason = "ConfigMapCreated"
-	ReasonConfigMapUpdated errx.Reason = "ConfigMapUpdated"
+	ReasonConfigMapCreated    errx.Reason = "ConfigMapCreated"
+	ReasonConfigMapUpdated    errx.Reason = "ConfigMapUpdated"
+	ReasonConfigMapSuperseded errx.Reason = "ConfigMapSuperseded"
 
 	ReasonServiceCreated errx.Reason = "ServiceCreated"
 	ReasonServiceUpdated errx.Reason = "ServiceUpdated"
