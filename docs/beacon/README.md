@@ -218,8 +218,8 @@ carry out the actual node upgrade after the freeze fires.
 > task -d docs/beacon zip-upload
 > task -d docs/beacon zip-info
 > task -d docs/beacon freeze-prepare
-> task -d docs/beacon freeze
-> # freeze is scheduled ~3 min out
+> # freeze is scheduled ~1 min out
+> task -d docs/beacon freeze FREEZE_DELAY_MIN=1
 >
 > # Terminal 1 — watch + verify
 > task -d docs/beacon watch

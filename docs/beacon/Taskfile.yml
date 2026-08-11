@@ -144,7 +144,7 @@ tasks:
     cmds:
       - task: root:build
       - rm -f ./operator.log 2>/dev/null || true
-      - go run ../../cmd/main.go --log-level=debug 2>&1 | tee ./operator.log
+      - go run ../../cmd/main.go --log-level=info 2>&1 | tee ./operator.log
   
   prepare-cluster:
     desc: "One-shot: build zips + reset cluster + load UC image (do this before starting the operator)"
