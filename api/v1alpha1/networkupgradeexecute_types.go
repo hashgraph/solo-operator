@@ -35,16 +35,23 @@ type NetworkUpgradeExecuteSpec struct {
 
 	SelectedSources SelectedSources `json:"selectedSources"`
 
-	// RequiresInfraAccess indicates that the upgrade package declares
-	// provisioner daemon or CLI versions (in infrastructure-versions.yaml)
-	// that differ from the versions currently annotated on the Orbit CR.
-	// When true the execute reconciler uses the scale-down-to-0 /
-	// scale-up-to-1 sequence regardless of the Orbit-level rollingRestart
-	// setting. The UC sets this automatically by comparing the manifest
-	// versions against the Orbit annotations.
-	// +kubebuilder:default=false
+	// Provisioner carries the provisioner daemon and CLI versions declared in
+	// the upgrade package's infrastructure-versions.yaml. The execute
+	// reconciler compares these against the Orbit CR's annotations to decide
+	// whether infra-level work requires a full pod scale-down.
 	// +optional
-	RequiresInfraAccess bool `json:"requiresInfraAccess,omitempty"`
+	Provisioner *DeclaredProvisionerVersions `json:"provisioner,omitempty"`
+}
+
+// DeclaredProvisionerVersions holds the provisioner versions declared in the
+// upgrade package's infrastructure-versions.yaml (HIP-1494).
+type DeclaredProvisionerVersions struct {
+	// DaemonVersion is the provisioner daemon version from the manifest.
+	// +optional
+	DaemonVersion string `json:"daemonVersion,omitempty"`
+	// CLIVersion is the provisioner CLI version from the manifest.
+	// +optional
+	CLIVersion string `json:"cliVersion,omitempty"`
 }
 
 type NetworkUpgradeExecuteStatus struct {

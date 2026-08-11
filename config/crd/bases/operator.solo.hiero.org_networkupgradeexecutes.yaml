@@ -406,17 +406,22 @@ spec:
                 type: string
               orbit:
                 type: string
-              requiresInfraAccess:
-                default: false
+              provisioner:
                 description: |-
-                  RequiresInfraAccess indicates that the upgrade package declares
-                  provisioner daemon or CLI versions (in infrastructure-versions.yaml)
-                  that differ from the versions currently annotated on the Orbit CR.
-                  When true the execute reconciler uses the scale-down-to-0 /
-                  scale-up-to-1 sequence regardless of the Orbit-level rollingRestart
-                  setting. The UC sets this automatically by comparing the manifest
-                  versions against the Orbit annotations.
-                type: boolean
+                  Provisioner carries the provisioner daemon and CLI versions declared in
+                  the upgrade package's infrastructure-versions.yaml. The execute
+                  reconciler compares these against the Orbit CR's annotations to decide
+                  whether infra-level work requires a full pod scale-down.
+                properties:
+                  cliVersion:
+                    description: CLIVersion is the provisioner CLI version from the
+                      manifest.
+                    type: string
+                  daemonVersion:
+                    description: DaemonVersion is the provisioner daemon version from
+                      the manifest.
+                    type: string
+                type: object
               selectedSources:
                 description: |-
                   SelectedSources is the per-component validation outcome. Lives in

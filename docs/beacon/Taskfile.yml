@@ -143,6 +143,7 @@ tasks:
     desc: "Run the operator locally (foreground — LEAVE RUNNING in its own terminal)"
     cmds:
       - task: root:build
+      - rm -f ./operator.log 2>/dev/null || true
       - go run ../../cmd/main.go --log-level=debug 2>&1 | tee ./operator.log
   
   prepare-cluster:

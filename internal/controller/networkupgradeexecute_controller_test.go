@@ -588,7 +588,7 @@ func TestExecuteReconcile_NoValidRegistry_TerminalFailure(t *testing.T) {
 
 func TestExecuteReconcile_ScalesDownCapsule(t *testing.T) {
 	execute := newExecuteForTest()
-	execute.Spec.RequiresInfraAccess = true
+	execute.Spec.Provisioner = &operatorv1alpha1.DeclaredProvisionerVersions{DaemonVersion: "0.33.0"}
 	// Scale-down now happens at PendingNodeUpgrade (after UC advances the phase),
 	// not at Pending. DaemonResult=True is required to reach PendingNodeUpgrade.
 	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
@@ -646,7 +646,7 @@ func TestExecuteReconcile_ScalesDownCapsule(t *testing.T) {
 
 func TestExecuteReconcile_RollingRestart_SkipsScaleDown(t *testing.T) {
 	execute := newExecuteForTest()
-	// RequiresInfraAccess defaults to false → rolling restart path is used
+	// No Provisioner versions declared → rolling restart path is used
 	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
 	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
 		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
@@ -708,7 +708,7 @@ func TestExecuteReconcile_RollingRestart_SkipsScaleDown(t *testing.T) {
 // Offline forever. With the barrier removed, node0 proceeds regardless.
 func TestExecuteReconcile_PatchesIndependentlyOfPeers(t *testing.T) {
 	execute := newExecuteForTest()
-	execute.Spec.RequiresInfraAccess = true
+	execute.Spec.Provisioner = &operatorv1alpha1.DeclaredProvisionerVersions{DaemonVersion: "0.33.0"}
 	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
 	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
 		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
@@ -1010,7 +1010,7 @@ func TestExecuteReconcile_PendingNodeUpgrade_PatchesCapsule(t *testing.T) {
 
 func TestExecuteReconcile_PendingNodeUpgrade_BringsCapsuleOnline(t *testing.T) {
 	execute := newExecuteForTest()
-	execute.Spec.RequiresInfraAccess = true
+	execute.Spec.Provisioner = &operatorv1alpha1.DeclaredProvisionerVersions{DaemonVersion: "0.33.0"}
 	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
 	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
 		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},

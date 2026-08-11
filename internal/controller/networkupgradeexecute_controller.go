@@ -319,7 +319,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 		return ctrl.Result{RequeueAfter: ucfg.NodeReadyRequeueInterval}, nil
 	}
 
-	rollingRestart := ucfg.RollingRestart && !execute.Spec.RequiresInfraAccess
+	rollingRestart := ucfg.RollingRestart && !r.requiresInfraAccess(ctx, execute, capsule)
 
 	capsulePatched := findCondition(execute.Status.Conditions, operatorv1alpha1.CondConsensusCapsulePatched)
 	if capsulePatched == nil || capsulePatched.Status != metav1.ConditionTrue {
@@ -605,6 +605,28 @@ func (r *NetworkUpgradeExecuteReconciler) getOrbit(ctx context.Context, capsule 
 
 func (r *NetworkUpgradeExecuteReconciler) resolveUpgradeConfig(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) operatorv1alpha1.EffectiveUpgradeConfig {
 	return operatorv1alpha1.ResolveUpgradeConfig(r.getOrbit(ctx, capsule))
+}
+
+// requiresInfraAccess compares the declared provisioner versions on the Execute
+// CR spec against the Orbit CR annotations. Returns true when either version
+// differs (or the annotation is absent but a version is declared — safe fallback).
+func (r *NetworkUpgradeExecuteReconciler) requiresInfraAccess(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute, capsule *operatorv1alpha1.ConsensusCapsule) bool {
+	prov := execute.Spec.Provisioner
+	if prov == nil || (prov.DaemonVersion == "" && prov.CLIVersion == "") {
+		return false
+	}
+	orbit := r.getOrbit(ctx, capsule)
+	if orbit == nil {
+		return prov.DaemonVersion != "" || prov.CLIVersion != ""
+	}
+	ann := orbit.GetAnnotations()
+	if prov.DaemonVersion != "" && prov.DaemonVersion != ann[operatorv1alpha1.AnnotationProvisionerDaemonVersion] {
+		return true
+	}
+	if prov.CLIVersion != "" && prov.CLIVersion != ann[operatorv1alpha1.AnnotationProvisionerCLIVersion] {
+		return true
+	}
+	return false
 }
 
 func (r *NetworkUpgradeExecuteReconciler) ensureCapsuleOffline(
