@@ -101,7 +101,7 @@ tasks:
           T12  task -d docs/beacon version          # confirm Services v{{.UPGRADE_VERSION}} is live
           T13  task -d docs/beacon cleanup          # kind delete
         
-        One-shot helpers: `prepare-cluster` (build+cluster+uc-image), then start the
+        One-shot helpers: `prepare-cluster` (build+cluster+uc-image+warm-up), then start the
         operator, then `network-deploy` + `beacon-config`, then start the port-forward,
         then `zip-upload` + `zip-info` + `freeze-prepare` + `freeze`.
         EOF
@@ -147,11 +147,12 @@ tasks:
       - go run ../../cmd/main.go --log-level=info 2>&1 | tee ./operator.log
   
   prepare-cluster:
-    desc: "One-shot: build zips + reset cluster + load UC image (do this before starting the operator)"
+    desc: "One-shot: build zips + reset cluster + load UC image + warm up runtime images (do this before starting the operator)"
     cmds:
       - task: build
       - task: cluster
       - task: uc-image
+      - task: warm-up-cluster
   
   warm-up-cluster:
     desc: "Preload consensus-node (base+upgrade), Alloy, BusyBox, Envoy, and HAProxy images into kind as linux/amd64 archives"
@@ -179,7 +180,6 @@ tasks:
   network-deploy:
     desc: "Install kind prereqs (MetalLB/MinIO) and deploy a single-node v{{.BASE_VERSION}} network + genesis"
     cmds:
-      - task: warm-up-cluster
       - task: example:setup
       - task: example:deploy:single
   

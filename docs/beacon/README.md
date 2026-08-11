@@ -202,7 +202,7 @@ carry out the actual node upgrade after the freeze fires.
 >
 > ```bash
 > # Terminal 1 — one-shot setup
-> task -d docs/beacon prepare-cluster
+> task -d docs/beacon prepare-cluster   # build + cluster + uc-image + warm-up
 >
 > # Terminal 2 — operator (leave running)
 > task -d docs/beacon operator
