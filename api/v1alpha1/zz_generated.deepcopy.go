@@ -1198,6 +1198,11 @@ func (in *ConsensusNodeUpgrade) DeepCopyInto(out *ConsensusNodeUpgrade) {
 		*out = new(metav1.Duration)
 		**out = **in
 	}
+	if in.DaemonRequeueInterval != nil {
+		in, out := &in.DaemonRequeueInterval, &out.DaemonRequeueInterval
+		*out = new(metav1.Duration)
+		**out = **in
+	}
 	if in.NodeReadyRequeueInterval != nil {
 		in, out := &in.NodeReadyRequeueInterval, &out.NodeReadyRequeueInterval
 		*out = new(metav1.Duration)

@@ -932,6 +932,9 @@ func (r *StatefulSetSubReconciler) buildUcContainer(capsule *operatorv1alpha1.Co
 	if config.FreezePollInterval != "" {
 		env = append(env, corev1.EnvVar{Name: "UC_FREEZE_POLL_INTERVAL", Value: config.FreezePollInterval})
 	}
+	if config.PlatformPollInterval != "" {
+		env = append(env, corev1.EnvVar{Name: "UC_PLATFORM_POLL_INTERVAL", Value: config.PlatformPollInterval})
+	}
 
 	// The UC shares the upgrade PVC (data/upgrade) with the consensus node, which
 	// creates and extracts the upgrade package under current/ as the hedera user

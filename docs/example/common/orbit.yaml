@@ -40,6 +40,7 @@ spec:
     consensusNode:
       executeTerminationGracePeriodSeconds: 5
       prereqRequeueInterval: 2s
+      daemonRequeueInterval: 2s
       nodeReadyRequeueInterval: 2s
   consensus:
     genesis:

@@ -27,7 +27,6 @@ import (
 )
 
 const (
-	executeDaemonRequeueAfter = 10 * time.Second
 	// executeDefaultNodeActiveTimeout is the backstop for a node to reach platform
 	// status ACTIVE after an upgrade, anchored to nodeUpgradeStartTime. It covers a
 	// dead/missing UC that never advances the capsule phase. Reaching ACTIVE can
@@ -241,6 +240,9 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 }
 
 func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (ctrl.Result, error) {
+	capsule, _ := r.getCapsule(ctx, execute)
+	ucfg := r.resolveUpgradeConfig(ctx, capsule)
+
 	daemonCond := findCondition(execute.Status.Conditions, operatorv1alpha1.CondDaemonResult)
 
 	if daemonCond == nil {
@@ -251,7 +253,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 			}
 			return ctrl.Result{}, wrapStatusUpdate(err, "updating status")
 		}
-		return ctrl.Result{RequeueAfter: executeDaemonRequeueAfter}, nil
+		return ctrl.Result{RequeueAfter: ucfg.DaemonRequeueInterval}, nil
 	}
 
 	if daemonCond.Status == metav1.ConditionFalse {

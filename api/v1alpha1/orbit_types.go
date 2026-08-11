@@ -96,6 +96,12 @@ type ConsensusNodeUpgrade struct {
 	// +optional
 	PrereqRequeueInterval *metav1.Duration `json:"prereqRequeueInterval,omitempty"`
 
+	// DaemonRequeueInterval is how often the execute reconciler polls for the
+	// provisioner daemon result condition. Default: 10s.
+	// +kubebuilder:validation:Format=duration
+	// +optional
+	DaemonRequeueInterval *metav1.Duration `json:"daemonRequeueInterval,omitempty"`
+
 	// NodeReadyRequeueInterval is how often the execute reconciler polls for
 	// the consensus node to reach ACTIVE after the pod is brought online.
 	// Default: 10s.
@@ -106,6 +112,7 @@ type ConsensusNodeUpgrade struct {
 
 const (
 	DefaultExecutePrereqRequeueInterval    = 30 * time.Second
+	DefaultExecuteDaemonRequeueInterval    = 10 * time.Second
 	DefaultExecuteNodeReadyRequeueInterval = 10 * time.Second
 	DefaultExecuteTerminationGracePeriod   = int64(30)
 	MinRequeueInterval                     = 1 * time.Second
@@ -116,6 +123,7 @@ const (
 type EffectiveUpgradeConfig struct {
 	ExecuteTerminationGracePeriodSeconds int64
 	PrereqRequeueInterval                time.Duration
+	DaemonRequeueInterval                time.Duration
 	NodeReadyRequeueInterval             time.Duration
 }
 
@@ -125,6 +133,7 @@ func ResolveUpgradeConfig(orbit *Orbit) EffectiveUpgradeConfig {
 	cfg := EffectiveUpgradeConfig{
 		ExecuteTerminationGracePeriodSeconds: DefaultExecuteTerminationGracePeriod,
 		PrereqRequeueInterval:                DefaultExecutePrereqRequeueInterval,
+		DaemonRequeueInterval:                DefaultExecuteDaemonRequeueInterval,
 		NodeReadyRequeueInterval:             DefaultExecuteNodeReadyRequeueInterval,
 	}
 	if orbit == nil || orbit.Spec.Upgrade == nil || orbit.Spec.Upgrade.ConsensusNode == nil {
@@ -137,6 +146,9 @@ func ResolveUpgradeConfig(orbit *Orbit) EffectiveUpgradeConfig {
 	}
 	if u.PrereqRequeueInterval != nil && u.PrereqRequeueInterval.Duration >= MinRequeueInterval {
 		cfg.PrereqRequeueInterval = u.PrereqRequeueInterval.Duration
+	}
+	if u.DaemonRequeueInterval != nil && u.DaemonRequeueInterval.Duration >= MinRequeueInterval {
+		cfg.DaemonRequeueInterval = u.DaemonRequeueInterval.Duration
 	}
 	if u.NodeReadyRequeueInterval != nil && u.NodeReadyRequeueInterval.Duration >= MinRequeueInterval {
 		cfg.NodeReadyRequeueInterval = u.NodeReadyRequeueInterval.Duration

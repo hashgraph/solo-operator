@@ -472,6 +472,12 @@ spec:
                       execute phase. All fields are optional; when unset the operator uses
                       safe production defaults.
                     properties:
+                      daemonRequeueInterval:
+                        description: |-
+                          DaemonRequeueInterval is how often the execute reconciler polls for the
+                          provisioner daemon result condition. Default: 10s.
+                        format: duration
+                        type: string
                       executeTerminationGracePeriodSeconds:
                         description: |-
                           ExecuteTerminationGracePeriodSeconds overrides the consensus pod's

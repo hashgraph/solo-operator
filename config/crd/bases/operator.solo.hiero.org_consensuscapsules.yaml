@@ -5178,6 +5178,16 @@ spec:
                               rule: duration(self) > duration('0s')
                           name:
                             type: string
+                          platformPollInterval:
+                            description: |-
+                              Interval between platform-status metrics scrapes (default: 5s).
+                              Lower values detect ACTIVE faster after an upgrade but increase
+                              metrics endpoint load.
+                            type: string
+                            x-kubernetes-validations:
+                            - message: platformPollInterval must be a positive Go
+                                duration (e.g. '1s', '5s')
+                              rule: duration(self) > duration('0s')
                           pollInterval:
                             description: 'Interval between marker-file polls during
                               normal operation (default: 60s).'
