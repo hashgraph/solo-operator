@@ -19,11 +19,13 @@ const (
 )
 
 func CommonLabels(obj *operatorv1alpha1.ThrottlesConfig) map[string]string {
-	return map[string]string{
+	labels := map[string]string{
 		common.LabelManagedBy: common.ManagedByValue,
 		common.LabelPartOf:    PartOfThrottlesConfig,
 		"app":                 obj.Name,
 	}
+	common.PropagateOperationID(labels, obj)
+	return labels
 }
 
 func ConfigMapName(obj *operatorv1alpha1.ThrottlesConfig) string {
