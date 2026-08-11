@@ -5,6 +5,13 @@ package throttlesconfig
 import (
 	"encoding/json"
 	"sort"
+
+	"github.com/automa-saga/errx"
+)
+
+const (
+	ReasonMissingOperations errx.Reason = "MissingOperations"
+	ReasonFullCoverage      errx.Reason = "FullCoverage"
 )
 
 var requiredOps = []string{

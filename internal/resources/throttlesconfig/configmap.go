@@ -98,6 +98,15 @@ func (r *ConfigMapSubReconciler) reject(ctx context.Context, obj *operatorv1alph
 func (r *ConfigMapSubReconciler) checkOperationCoverage(ctx context.Context, obj *operatorv1alpha1.ThrottlesConfig) {
 	missing, err := ValidateThrottleOps(obj.Spec.Content)
 	if err != nil {
+		msg := fmt.Sprintf("failed to parse throttle operations: %v", err)
+		apimeta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:               operatorv1alpha1.ThrottlesConfigConditionTypeOpsCoverage,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: obj.Generation,
+			Reason:             string(common.ReasonInvalidContent),
+			Message:            msg,
+		})
+		common.Eventf(ctx, r.Recorder, obj, corev1.EventTypeWarning, common.ReasonInvalidContent, "ConfigMap", "%s", msg)
 		return
 	}
 
@@ -107,10 +116,10 @@ func (r *ConfigMapSubReconciler) checkOperationCoverage(ctx context.Context, obj
 			Type:               operatorv1alpha1.ThrottlesConfigConditionTypeOpsCoverage,
 			Status:             metav1.ConditionFalse,
 			ObservedGeneration: obj.Generation,
-			Reason:             "MissingOperations",
+			Reason:             string(ReasonMissingOperations),
 			Message:            msg,
 		})
-		common.Eventf(ctx, r.Recorder, obj, corev1.EventTypeWarning, "MissingOperations", "ConfigMap", "%s", msg)
+		common.Eventf(ctx, r.Recorder, obj, corev1.EventTypeWarning, ReasonMissingOperations, "ConfigMap", "%s", msg)
 		return
 	}
 
@@ -118,7 +127,7 @@ func (r *ConfigMapSubReconciler) checkOperationCoverage(ctx context.Context, obj
 		Type:               operatorv1alpha1.ThrottlesConfigConditionTypeOpsCoverage,
 		Status:             metav1.ConditionTrue,
 		ObservedGeneration: obj.Generation,
-		Reason:             "FullCoverage",
+		Reason:             string(ReasonFullCoverage),
 		Message:            "all required operations are covered by throttle buckets",
 	})
 }
