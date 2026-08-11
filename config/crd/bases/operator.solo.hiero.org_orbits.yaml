@@ -503,6 +503,17 @@ spec:
                           Default: 30s.
                         format: duration
                         type: string
+                      rollingRestart:
+                        default: true
+                        description: |-
+                          RollingRestart controls whether the execute phase patches the
+                          ConsensusCapsule images in-place and lets the StatefulSet RollingUpdate
+                          strategy restart the pod (true), or uses the legacy scale-down-to-0 /
+                          scale-up-to-1 sequence (false). The rolling path saves ~10s by
+                          eliminating the intermediate 0-replica state. Set to false when a
+                          host-level provisioner daemon requires the pod to be fully absent before
+                          infrastructure work can proceed.
+                        type: boolean
                     type: object
                 type: object
             required:

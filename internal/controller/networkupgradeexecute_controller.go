@@ -319,10 +319,14 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 		return ctrl.Result{RequeueAfter: ucfg.NodeReadyRequeueInterval}, nil
 	}
 
+	rollingRestart := ucfg.RollingRestart && !execute.Spec.RequiresInfraAccess
+
 	capsulePatched := findCondition(execute.Status.Conditions, operatorv1alpha1.CondConsensusCapsulePatched)
 	if capsulePatched == nil || capsulePatched.Status != metav1.ConditionTrue {
-		if err := r.ensureCapsuleOffline(ctx, execute, capsule); err != nil {
-			return ctrl.Result{}, err
+		if !rollingRestart {
+			if err := r.ensureCapsuleOffline(ctx, execute, capsule); err != nil {
+				return ctrl.Result{}, err
+			}
 		}
 
 		rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
@@ -398,7 +402,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 
 	capsulesOnline := findCondition(execute.Status.Conditions, operatorv1alpha1.CondCapsulesOnline)
 	if capsulesOnline == nil || capsulesOnline.Status != metav1.ConditionTrue {
-		if capsule.Spec.Offline {
+		if !rollingRestart && capsule.Spec.Offline {
 			patch := client.MergeFrom(capsule.DeepCopy())
 			capsule.Spec.Offline = false
 			if err := r.Patch(ctx, capsule, patch); err != nil {
@@ -407,11 +411,15 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 					"Confirm the operator has patch permission on consensuscapsules")
 			}
 		}
+		onlineMsg := "ConsensusCapsule brought online"
+		if rollingRestart {
+			onlineMsg = "ConsensusCapsule images patched in-place; RollingUpdate will restart the pod"
+		}
 		setCondition(&execute.Status.Conditions, metav1.Condition{
 			Type:    operatorv1alpha1.CondCapsulesOnline,
 			Status:  metav1.ConditionTrue,
 			Reason:  operatorv1alpha1.ReasonCapsulesOnline.String(),
-			Message: "ConsensusCapsule brought online",
+			Message: onlineMsg,
 		})
 		execute.Status.ObservedGeneration = execute.Generation
 		if err := r.Status().Update(ctx, execute); err != nil {

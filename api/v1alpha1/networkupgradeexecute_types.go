@@ -34,6 +34,17 @@ type NetworkUpgradeExecuteSpec struct {
 	Images UpgradeImagesSpec `json:"images"`
 
 	SelectedSources SelectedSources `json:"selectedSources"`
+
+	// RequiresInfraAccess indicates that the upgrade package declares
+	// provisioner daemon or CLI versions (in infrastructure-versions.yaml)
+	// that differ from the versions currently annotated on the Orbit CR.
+	// When true the execute reconciler uses the scale-down-to-0 /
+	// scale-up-to-1 sequence regardless of the Orbit-level rollingRestart
+	// setting. The UC sets this automatically by comparing the manifest
+	// versions against the Orbit annotations.
+	// +kubebuilder:default=false
+	// +optional
+	RequiresInfraAccess bool `json:"requiresInfraAccess,omitempty"`
 }
 
 type NetworkUpgradeExecuteStatus struct {

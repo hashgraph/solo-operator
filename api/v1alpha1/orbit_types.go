@@ -108,6 +108,17 @@ type ConsensusNodeUpgrade struct {
 	// +kubebuilder:validation:Format=duration
 	// +optional
 	NodeReadyRequeueInterval *metav1.Duration `json:"nodeReadyRequeueInterval,omitempty"`
+
+	// RollingRestart controls whether the execute phase patches the
+	// ConsensusCapsule images in-place and lets the StatefulSet RollingUpdate
+	// strategy restart the pod (true), or uses the legacy scale-down-to-0 /
+	// scale-up-to-1 sequence (false). The rolling path saves ~10s by
+	// eliminating the intermediate 0-replica state. Set to false when a
+	// host-level provisioner daemon requires the pod to be fully absent before
+	// infrastructure work can proceed.
+	// +kubebuilder:default=true
+	// +optional
+	RollingRestart *bool `json:"rollingRestart,omitempty"`
 }
 
 const (
@@ -125,6 +136,7 @@ type EffectiveUpgradeConfig struct {
 	PrereqRequeueInterval                time.Duration
 	DaemonRequeueInterval                time.Duration
 	NodeReadyRequeueInterval             time.Duration
+	RollingRestart                       bool
 }
 
 // ResolveUpgradeConfig returns the effective upgrade tuning values from an Orbit,
@@ -135,6 +147,7 @@ func ResolveUpgradeConfig(orbit *Orbit) EffectiveUpgradeConfig {
 		PrereqRequeueInterval:                DefaultExecutePrereqRequeueInterval,
 		DaemonRequeueInterval:                DefaultExecuteDaemonRequeueInterval,
 		NodeReadyRequeueInterval:             DefaultExecuteNodeReadyRequeueInterval,
+		RollingRestart:                       true,
 	}
 	if orbit == nil || orbit.Spec.Upgrade == nil || orbit.Spec.Upgrade.ConsensusNode == nil {
 		return cfg
@@ -152,6 +165,9 @@ func ResolveUpgradeConfig(orbit *Orbit) EffectiveUpgradeConfig {
 	}
 	if u.NodeReadyRequeueInterval != nil && u.NodeReadyRequeueInterval.Duration >= MinRequeueInterval {
 		cfg.NodeReadyRequeueInterval = u.NodeReadyRequeueInterval.Duration
+	}
+	if u.RollingRestart != nil {
+		cfg.RollingRestart = *u.RollingRestart
 	}
 	return cfg
 }
