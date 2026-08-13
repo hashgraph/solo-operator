@@ -3,6 +3,8 @@
 package v1alpha1
 
 import (
+	"time"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -25,6 +27,11 @@ type OrbitSpec struct {
 	// Telemetry contains telemetry configuration
 	// +optional
 	Telemetry *OrbitTelemetry `json:"telemetry,omitempty"`
+
+	// Upgrade contains tuning knobs for the network upgrade lifecycle,
+	// scoped per component type.
+	// +optional
+	Upgrade *OrbitUpgrade `json:"upgrade,omitempty"`
 
 	// Consensus contains shared configuration for all ConsensusCapsules
 	Consensus OrbitConsensus `json:"consensus"`
@@ -58,6 +65,79 @@ type OrbitAlloyDefaults struct {
 	// Config contains default Alloy collector configuration (exporters, processors, etc.)
 	// +optional
 	Config *AlloyCollectorConfig `json:"config,omitempty"`
+}
+
+// OrbitUpgrade contains per-component upgrade tuning knobs.
+type OrbitUpgrade struct {
+	// ConsensusNode contains tuning knobs for the consensus node upgrade
+	// execute phase. All fields are optional; when unset the operator uses
+	// safe production defaults.
+	// +optional
+	ConsensusNode *ConsensusNodeUpgrade `json:"consensusNode,omitempty"`
+}
+
+// ConsensusNodeUpgrade contains tuning knobs for the consensus node upgrade
+// execute phase.
+type ConsensusNodeUpgrade struct {
+	// PrereqRequeueInterval is how often the execute reconciler polls for
+	// prerequisite CRs (Prepare/Freeze succeeded, ConfigCRsApplied).
+	// Default: 30s.
+	// +kubebuilder:validation:Format=duration
+	// +optional
+	PrereqRequeueInterval *metav1.Duration `json:"prereqRequeueInterval,omitempty"`
+
+	// DaemonRequeueInterval is how often the execute reconciler polls for the
+	// provisioner daemon result condition. Default: 10s.
+	// +kubebuilder:validation:Format=duration
+	// +optional
+	DaemonRequeueInterval *metav1.Duration `json:"daemonRequeueInterval,omitempty"`
+
+	// NodeReadyRequeueInterval is how often the execute reconciler polls for
+	// the consensus node to reach ACTIVE after the pod is brought online.
+	// Default: 10s.
+	// +kubebuilder:validation:Format=duration
+	// +optional
+	NodeReadyRequeueInterval *metav1.Duration `json:"nodeReadyRequeueInterval,omitempty"`
+}
+
+const (
+	DefaultExecutePrereqRequeueInterval    = 30 * time.Second
+	DefaultExecuteDaemonRequeueInterval    = 10 * time.Second
+	DefaultExecuteNodeReadyRequeueInterval = 10 * time.Second
+	MinRequeueInterval                     = 1 * time.Second
+)
+
+// EffectiveUpgradeConfig holds the resolved upgrade tuning knobs for use by the
+// execute reconciler: Orbit spec value when set, otherwise the hardcoded default.
+type EffectiveUpgradeConfig struct {
+	PrereqRequeueInterval    time.Duration
+	DaemonRequeueInterval    time.Duration
+	NodeReadyRequeueInterval time.Duration
+}
+
+// ResolveUpgradeConfig returns the effective upgrade tuning values from an Orbit,
+// falling back to production-safe defaults for any field not set.
+func ResolveUpgradeConfig(orbit *Orbit) EffectiveUpgradeConfig {
+	cfg := EffectiveUpgradeConfig{
+		PrereqRequeueInterval:    DefaultExecutePrereqRequeueInterval,
+		DaemonRequeueInterval:    DefaultExecuteDaemonRequeueInterval,
+		NodeReadyRequeueInterval: DefaultExecuteNodeReadyRequeueInterval,
+	}
+	if orbit == nil || orbit.Spec.Upgrade == nil || orbit.Spec.Upgrade.ConsensusNode == nil {
+		return cfg
+	}
+	u := orbit.Spec.Upgrade.ConsensusNode
+
+	if u.PrereqRequeueInterval != nil && u.PrereqRequeueInterval.Duration >= MinRequeueInterval {
+		cfg.PrereqRequeueInterval = u.PrereqRequeueInterval.Duration
+	}
+	if u.DaemonRequeueInterval != nil && u.DaemonRequeueInterval.Duration >= MinRequeueInterval {
+		cfg.DaemonRequeueInterval = u.DaemonRequeueInterval.Duration
+	}
+	if u.NodeReadyRequeueInterval != nil && u.NodeReadyRequeueInterval.Duration >= MinRequeueInterval {
+		cfg.NodeReadyRequeueInterval = u.NodeReadyRequeueInterval.Duration
+	}
+	return cfg
 }
 
 // OrbitConsensus contains shared consensus configuration

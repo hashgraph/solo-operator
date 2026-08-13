@@ -496,8 +496,8 @@ func TestExecuteReconcile_WaitsForPrereqs(t *testing.T) {
 	if res.err != nil {
 		t.Fatalf("unexpected error: %v", res.err)
 	}
-	if res.result.RequeueAfter != executePrereqRequeueAfter {
-		t.Errorf("expected RequeueAfter=%v, got %v", executePrereqRequeueAfter, res.result.RequeueAfter)
+	if res.result.RequeueAfter != operatorv1alpha1.DefaultExecutePrereqRequeueInterval {
+		t.Errorf("expected RequeueAfter=%v, got %v", operatorv1alpha1.DefaultExecutePrereqRequeueInterval, res.result.RequeueAfter)
 	}
 }
 
@@ -1052,8 +1052,8 @@ func TestExecuteReconcile_PendingNodeUpgrade_WaitsForActive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.RequeueAfter != executeReadyRequeueAfter {
-		t.Errorf("expected RequeueAfter=%v, got %v", executeReadyRequeueAfter, result.RequeueAfter)
+	if result.RequeueAfter != operatorv1alpha1.DefaultExecuteNodeReadyRequeueInterval {
+		t.Errorf("expected RequeueAfter=%v, got %v", operatorv1alpha1.DefaultExecuteNodeReadyRequeueInterval, result.RequeueAfter)
 	}
 
 	var updated operatorv1alpha1.NetworkUpgradeExecute
@@ -1098,8 +1098,8 @@ func TestExecuteReconcile_PendingNodeUpgrade_NotFooledByPreUpgradeActive(t *test
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.RequeueAfter != executeReadyRequeueAfter {
-		t.Errorf("expected RequeueAfter=%v, got %v", executeReadyRequeueAfter, result.RequeueAfter)
+	if result.RequeueAfter != operatorv1alpha1.DefaultExecuteNodeReadyRequeueInterval {
+		t.Errorf("expected RequeueAfter=%v, got %v", operatorv1alpha1.DefaultExecuteNodeReadyRequeueInterval, result.RequeueAfter)
 	}
 
 	var updated operatorv1alpha1.NetworkUpgradeExecute
