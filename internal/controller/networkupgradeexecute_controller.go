@@ -240,7 +240,10 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 }
 
 func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (ctrl.Result, error) {
-	capsule, _ := r.getCapsule(ctx, execute)
+	capsule, err := r.getCapsule(ctx, execute)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 	ucfg := r.resolveUpgradeConfig(ctx, capsule)
 
 	daemonCond := findCondition(execute.Status.Conditions, operatorv1alpha1.CondDaemonResult)
@@ -284,7 +287,10 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 }
 
 func (r *NetworkUpgradeExecuteReconciler) reconcilePendingInfraUpgrade(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (ctrl.Result, error) {
-	capsule, _ := r.getCapsule(ctx, execute)
+	capsule, err := r.getCapsule(ctx, execute)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 	ucfg := r.resolveUpgradeConfig(ctx, capsule)
 
 	cond := findCondition(execute.Status.Conditions, operatorv1alpha1.CondConfigCRsApplied)

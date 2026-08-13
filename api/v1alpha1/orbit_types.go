@@ -81,20 +81,21 @@ type OrbitUpgrade struct {
 type ConsensusNodeUpgrade struct {
 	// PrereqRequeueInterval is how often the execute reconciler polls for
 	// prerequisite CRs (Prepare/Freeze succeeded, ConfigCRsApplied).
-	// Default: 30s.
+	// Default: 30s. Values below 1s are ignored and the default is used.
 	// +kubebuilder:validation:Format=duration
 	// +optional
 	PrereqRequeueInterval *metav1.Duration `json:"prereqRequeueInterval,omitempty"`
 
 	// DaemonRequeueInterval is how often the execute reconciler polls for the
-	// provisioner daemon result condition. Default: 10s.
+	// provisioner daemon result condition. Default: 10s. Values below 1s are
+	// ignored and the default is used.
 	// +kubebuilder:validation:Format=duration
 	// +optional
 	DaemonRequeueInterval *metav1.Duration `json:"daemonRequeueInterval,omitempty"`
 
 	// NodeReadyRequeueInterval is how often the execute reconciler polls for
 	// the consensus node to reach ACTIVE after the pod is brought online.
-	// Default: 10s.
+	// Default: 10s. Values below 1s are ignored and the default is used.
 	// +kubebuilder:validation:Format=duration
 	// +optional
 	NodeReadyRequeueInterval *metav1.Duration `json:"nodeReadyRequeueInterval,omitempty"`
