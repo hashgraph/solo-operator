@@ -167,7 +167,10 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		ucfg := r.resolveUpgradeConfig(ctx, capsule)
+		ucfg, err := r.resolveUpgradeConfig(ctx, capsule)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 
 		if prepare == nil || prepare.Status.Phase != operatorv1alpha1.PhaseSucceeded {
 			common.Info(ctx, ReasonWaitingForPrepare).Msg("waiting for NetworkUpgradePrepare to succeed")
@@ -244,7 +247,10 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	ucfg := r.resolveUpgradeConfig(ctx, capsule)
+	ucfg, err := r.resolveUpgradeConfig(ctx, capsule)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	daemonCond := findCondition(execute.Status.Conditions, operatorv1alpha1.CondDaemonResult)
 
@@ -291,7 +297,10 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingInfraUpgrade(ctx conte
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	ucfg := r.resolveUpgradeConfig(ctx, capsule)
+	ucfg, err := r.resolveUpgradeConfig(ctx, capsule)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	cond := findCondition(execute.Status.Conditions, operatorv1alpha1.CondConfigCRsApplied)
 	if cond == nil || cond.Status != metav1.ConditionTrue {
@@ -320,15 +329,26 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	ucfg := r.resolveUpgradeConfig(ctx, capsule)
+	ucfg, err := r.resolveUpgradeConfig(ctx, capsule)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 	if capsule == nil {
 		return ctrl.Result{RequeueAfter: ucfg.NodeReadyRequeueInterval}, nil
 	}
 
+	infraAccess, err := r.requiresInfraAccess(ctx, execute, capsule)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	skipScaleDown := ucfg.SkipScaleDown && !infraAccess
+
 	capsulePatched := findCondition(execute.Status.Conditions, operatorv1alpha1.CondConsensusCapsulePatched)
 	if capsulePatched == nil || capsulePatched.Status != metav1.ConditionTrue {
-		if err := r.ensureCapsuleOffline(ctx, execute, capsule); err != nil {
-			return ctrl.Result{}, err
+		if !skipScaleDown {
+			if err := r.ensureCapsuleOffline(ctx, execute, capsule); err != nil {
+				return ctrl.Result{}, err
+			}
 		}
 
 		rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
@@ -396,7 +416,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 			}
 			return ctrl.Result{}, wrapStatusUpdate(err, "updating status after capsule patch")
 		}
-		r.logPhaseElapsed(ctx, execute, "CapsulePatched")
+		r.logPhaseElapsed(ctx, execute, operatorv1alpha1.CondConsensusCapsulePatched)
 		r.eventf(ctx, execute, corev1.EventTypeNormal, operatorv1alpha1.EventCapsulePatched,
 			"ConsensusCapsule %s patched with new images for operationId %q", capsule.Name, execute.Spec.OperationID)
 		return ctrl.Result{Requeue: true}, nil
@@ -404,7 +424,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 
 	capsulesOnline := findCondition(execute.Status.Conditions, operatorv1alpha1.CondCapsulesOnline)
 	if capsulesOnline == nil || capsulesOnline.Status != metav1.ConditionTrue {
-		if capsule.Spec.Offline {
+		if !skipScaleDown && capsule.Spec.Offline {
 			patch := client.MergeFrom(capsule.DeepCopy())
 			capsule.Spec.Offline = false
 			if err := r.Patch(ctx, capsule, patch); err != nil {
@@ -413,11 +433,15 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 					"Confirm the operator has patch permission on consensuscapsules")
 			}
 		}
+		onlineMsg := "ConsensusCapsule brought online"
+		if skipScaleDown {
+			onlineMsg = "ConsensusCapsule images patched in-place; RollingUpdate will restart the pod"
+		}
 		setCondition(&execute.Status.Conditions, metav1.Condition{
 			Type:    operatorv1alpha1.CondCapsulesOnline,
 			Status:  metav1.ConditionTrue,
 			Reason:  operatorv1alpha1.ReasonCapsulesOnline.String(),
-			Message: "ConsensusCapsule brought online",
+			Message: onlineMsg,
 		})
 		execute.Status.ObservedGeneration = execute.Generation
 		if err := r.Status().Update(ctx, execute); err != nil {
@@ -426,7 +450,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 			}
 			return ctrl.Result{}, wrapStatusUpdate(err, "updating status after bringing capsule online")
 		}
-		r.logPhaseElapsed(ctx, execute, "CapsulesOnline")
+		r.logPhaseElapsed(ctx, execute, operatorv1alpha1.CondCapsulesOnline)
 		r.eventf(ctx, execute, corev1.EventTypeNormal, operatorv1alpha1.EventCapsulesOnline,
 			"ConsensusCapsule %s brought online for operationId %q", capsule.Name, execute.Spec.OperationID)
 		return ctrl.Result{RequeueAfter: ucfg.NodeReadyRequeueInterval}, nil
@@ -590,24 +614,57 @@ func (r *NetworkUpgradeExecuteReconciler) getCapsule(ctx context.Context, execut
 	return &capsule, nil
 }
 
-func (r *NetworkUpgradeExecuteReconciler) getOrbit(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) *operatorv1alpha1.Orbit {
+// getOrbit fetches the Orbit referenced by the capsule. A missing capsule,
+// empty Orbit ref, or NotFound Orbit returns (nil, nil) — the caller falls back
+// to defaults. Any other API error is returned so the reconcile retries rather
+// than silently flipping behavior between reconciles on a transient blip.
+func (r *NetworkUpgradeExecuteReconciler) getOrbit(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (*operatorv1alpha1.Orbit, error) {
 	if capsule == nil || capsule.Spec.Orbit == "" {
-		return nil
+		return nil, nil
 	}
 	var orbit operatorv1alpha1.Orbit
 	if err := r.Get(ctx, client.ObjectKey{Name: capsule.Spec.Orbit}, &orbit); err != nil {
-		if !apierrors.IsNotFound(err) {
-			common.Warn(ctx, ReasonOrbitLookupFailed).Err(err).
-				Str("orbit", capsule.Spec.Orbit).
-				Msg("failed to fetch Orbit, falling back to default upgrade config")
+		if apierrors.IsNotFound(err) {
+			return nil, nil
 		}
-		return nil
+		return nil, errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "getting Orbit %s", capsule.Spec.Orbit), ReasonGetFailed),
+			"Confirm the operator has get permission on orbits")
 	}
-	return &orbit
+	return &orbit, nil
 }
 
-func (r *NetworkUpgradeExecuteReconciler) resolveUpgradeConfig(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) operatorv1alpha1.EffectiveUpgradeConfig {
-	return operatorv1alpha1.ResolveUpgradeConfig(r.getOrbit(ctx, capsule))
+func (r *NetworkUpgradeExecuteReconciler) resolveUpgradeConfig(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (operatorv1alpha1.EffectiveUpgradeConfig, error) {
+	orbit, err := r.getOrbit(ctx, capsule)
+	if err != nil {
+		return operatorv1alpha1.EffectiveUpgradeConfig{}, err
+	}
+	return operatorv1alpha1.ResolveUpgradeConfig(orbit), nil
+}
+
+// requiresInfraAccess compares the declared provisioner versions on the Execute
+// CR spec against the Orbit CR annotations. Returns true when either version
+// differs (or the annotation is absent but a version is declared — safe fallback).
+func (r *NetworkUpgradeExecuteReconciler) requiresInfraAccess(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute, capsule *operatorv1alpha1.ConsensusCapsule) (bool, error) {
+	prov := execute.Spec.Provisioner
+	if prov == nil || (prov.DaemonVersion == "" && prov.CLIVersion == "") {
+		return false, nil
+	}
+	orbit, err := r.getOrbit(ctx, capsule)
+	if err != nil {
+		return false, err
+	}
+	if orbit == nil {
+		return prov.DaemonVersion != "" || prov.CLIVersion != "", nil
+	}
+	ann := orbit.GetAnnotations()
+	if prov.DaemonVersion != "" && prov.DaemonVersion != ann[operatorv1alpha1.AnnotationProvisionerDaemonVersion] {
+		return true, nil
+	}
+	if prov.CLIVersion != "" && prov.CLIVersion != ann[operatorv1alpha1.AnnotationProvisionerCLIVersion] {
+		return true, nil
+	}
+	return false, nil
 }
 
 func (r *NetworkUpgradeExecuteReconciler) ensureCapsuleOffline(

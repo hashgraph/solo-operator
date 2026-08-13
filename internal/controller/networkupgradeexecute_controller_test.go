@@ -616,6 +616,7 @@ func TestExecuteReconcile_NoValidRegistry_TerminalFailure(t *testing.T) {
 
 func TestExecuteReconcile_ScalesDownCapsule(t *testing.T) {
 	execute := newExecuteForTest()
+	execute.Spec.Provisioner = &operatorv1alpha1.DeclaredProvisionerVersions{DaemonVersion: "0.33.0"}
 	// Scale-down now happens at PendingNodeUpgrade (after UC advances the phase),
 	// not at Pending. DaemonResult=True is required to reach PendingNodeUpgrade.
 	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
@@ -671,6 +672,62 @@ func TestExecuteReconcile_ScalesDownCapsule(t *testing.T) {
 	}
 }
 
+func TestExecuteReconcile_SkipScaleDown_PatchesInPlace(t *testing.T) {
+	execute := newExecuteForTest()
+	// No Provisioner versions declared → rolling restart path is used
+	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
+		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
+	}
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "node0",
+			Namespace: "default",
+			Labels:    map[string]string{common.LabelOrbit: "test-orbit"},
+		},
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1,
+			Log4j2ConfigRef: "network-log4j2",
+			PodProperties:   operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "old-repo", ImageName: "cn", ImageTag: "0.74.0"}}}},
+		},
+	}
+
+	scheme := newControllerTestScheme()
+	c := withExecuteIndexes(fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(execute, capsule, newSucceededPrepare("default", "op-001"), newSucceededFreeze("default", "op-001")).
+		WithStatusSubresource(execute)).Build()
+	_ = c.Status().Update(context.Background(), newSucceededPrepare("default", "op-001"))
+	_ = c.Status().Update(context.Background(), newSucceededFreeze("default", "op-001"))
+
+	rec := events.NewFakeRecorder(32)
+	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
+	r.Recorder = rec
+	r.Checker = newExecuteChecker(nil, nil)
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(execute)})
+	close(rec.Events)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var updated operatorv1alpha1.ConsensusCapsule
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(capsule), &updated); err != nil {
+		t.Fatalf("get capsule: %v", err)
+	}
+	if updated.Spec.Offline {
+		t.Error("expected capsule Offline=false with rolling restart (no scale-down)")
+	}
+
+	var evts []string
+	for e := range rec.Events {
+		evts = append(evts, e)
+	}
+	if got := countContaining(evts, "PodScaledDown"); got != 0 {
+		t.Errorf("expected no PodScaledDown event with rolling restart, got %d in %v", got, evts)
+	}
+}
+
 // TestExecuteReconcile_PatchesIndependentlyOfPeers is the regression test for the
 // cross-node barrier deadlock: node0 must scale down and patch its own capsule
 // without waiting for sibling nodes. Each node's UC (which advances the phase)
@@ -679,6 +736,7 @@ func TestExecuteReconcile_ScalesDownCapsule(t *testing.T) {
 // Offline forever. With the barrier removed, node0 proceeds regardless.
 func TestExecuteReconcile_PatchesIndependentlyOfPeers(t *testing.T) {
 	execute := newExecuteForTest()
+	execute.Spec.Provisioner = &operatorv1alpha1.DeclaredProvisionerVersions{DaemonVersion: "0.33.0"}
 	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
 	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
 		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
@@ -980,6 +1038,7 @@ func TestExecuteReconcile_PendingNodeUpgrade_PatchesCapsule(t *testing.T) {
 
 func TestExecuteReconcile_PendingNodeUpgrade_BringsCapsuleOnline(t *testing.T) {
 	execute := newExecuteForTest()
+	execute.Spec.Provisioner = &operatorv1alpha1.DeclaredProvisionerVersions{DaemonVersion: "0.33.0"}
 	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
 	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
 		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},

@@ -4,6 +4,7 @@ package uc
 
 import (
 	"os"
+	"path/filepath"
 
 	"github.com/automa-saga/errx"
 	"sigs.k8s.io/yaml"
@@ -18,6 +19,7 @@ import (
 const (
 	manifestsSubdir        = "manifests"
 	componentsManifestFile = "consensus-node-components.yaml"
+	infraVersionsFile      = "infrastructure-versions.yaml"
 
 	// componentsSchemaVersion is the only consensus-node-components.yaml schema
 	// version this UC understands. schemaVersion is an integer (HIP-1494); an
@@ -26,6 +28,68 @@ const (
 	// changes do not require a UC upgrade.
 	componentsSchemaVersion = 1
 )
+
+// infraVersionsManifest is the thin wrapper around infrastructure-versions.yaml
+// (HIP-1494). Only the provisioner.daemon.version and provisioner.cli.version
+// fields are needed — the UC compares them against the Orbit CR annotations to
+// decide whether infra-level work is required.
+type infraVersionsManifest struct {
+	Provisioner struct {
+		CLI    infraVersionEntry `json:"cli"`
+		Daemon infraVersionEntry `json:"daemon"`
+	} `json:"provisioner"`
+}
+
+type infraVersionEntry struct {
+	Version string `json:"version"`
+}
+
+// parseInfraVersionsManifest reads infrastructure-versions.yaml from the
+// upgrade package. Returns nil (not an error) when the file does not exist —
+// absence means no infra upgrade is declared.
+func parseInfraVersionsManifest(upgradePath string) (*infraVersionsManifest, error) {
+	path := filepath.Join(upgradePath, manifestsSubdir, infraVersionsFile)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, errx.WithHints(
+			errx.WithReason(errPersist.Wrap(err, "read infra-versions manifest %s", path), ReasonManifestReadFailed),
+			"Check that manifests/infrastructure-versions.yaml is readable",
+		)
+	}
+	var m infraVersionsManifest
+	if err := yaml.Unmarshal(data, &m); err != nil {
+		return nil, errx.WithHints(
+			errx.WithReason(errManifestInvalid.Wrap(err, "parse %s", path), ReasonManifestInvalid),
+			"Regenerate the deployment package — infrastructure-versions.yaml is not valid YAML",
+		)
+	}
+	return &m, nil
+}
+
+// declaredProvisionerVersions reads the provisioner daemon and CLI versions
+// from the upgrade package's infrastructure-versions.yaml. Returns nil when
+// the manifest is absent or declares no versions.
+func declaredProvisionerVersions(upgradePath string) (*operatorv1alpha1.DeclaredProvisionerVersions, error) {
+	infra, err := parseInfraVersionsManifest(upgradePath)
+	if err != nil {
+		return nil, err
+	}
+	if infra == nil {
+		return nil, nil
+	}
+	daemon := infra.Provisioner.Daemon.Version
+	cli := infra.Provisioner.CLI.Version
+	if daemon == "" && cli == "" {
+		return nil, nil
+	}
+	return &operatorv1alpha1.DeclaredProvisionerVersions{
+		DaemonVersion: daemon,
+		CLIVersion:    cli,
+	}, nil
+}
 
 // componentsManifest is the thin wrapper around consensus-node-components.yaml.
 // The `images:` block maps 1:1 onto UpgradeImagesSpec (HIP-1494) — reused

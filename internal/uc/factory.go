@@ -613,7 +613,13 @@ func (f *Factory) HandleNowFrozen(ctx context.Context) error {
 		return nil
 	}
 
-	cr, err := buildExecuteCR(f.cfg, operationID, images, selectedSources)
+	provisioner, provErr := declaredProvisionerVersions(f.cfg.UpgradePath)
+	if provErr != nil {
+		common.LogErr(logx.As().Warn(), provErr, ReasonManifestReadFailed).
+			Str("operation_id", operationID).
+			Msg("failed to read infrastructure-versions.yaml — provisioner versions will not be set on Execute CR")
+	}
+	cr, err := buildExecuteCR(f.cfg, operationID, images, selectedSources, provisioner)
 	if err != nil {
 		return err
 	}

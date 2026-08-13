@@ -38,6 +38,11 @@ spec:
           #   scrapeInterval: "15s"
   upgrade:
     consensusNode:
+      # skipScaleDown: when true (default) images are patched in-place and the
+      # StatefulSet RollingUpdate restarts the pod; set false to use the
+      # scale-down-to-0 / scale-up sequence. Ignored (forced scale-down) when a
+      # host-level provisioner daemon requires the pod to be fully absent.
+      skipScaleDown: true
       prereqRequeueInterval: 2s
       daemonRequeueInterval: 2s
       nodeReadyRequeueInterval: 2s

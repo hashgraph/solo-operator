@@ -169,6 +169,15 @@ const (
 	LabelStep        = "operator.solo.hiero.org/step"
 )
 
+// Annotations written by the provisioner daemon and CLI on the Orbit CR to
+// advertise their running versions. The execute reconciler compares these
+// against the declared versions on the Execute CR spec to determine whether
+// infra-level work requires a full pod scale-down.
+const (
+	AnnotationProvisionerDaemonVersion = "operator.solo.hiero.org/provisioner-daemon-version"
+	AnnotationProvisionerCLIVersion    = "operator.solo.hiero.org/provisioner-cli-version"
+)
+
 const (
 	StepPrepare = "prepare"
 	StepFreeze  = "freeze"
