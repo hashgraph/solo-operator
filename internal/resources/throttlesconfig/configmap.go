@@ -5,7 +5,6 @@ package throttlesconfig
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/automa-saga/errx"
 	corev1 "k8s.io/api/core/v1"
@@ -48,8 +47,6 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 		Message:            "spec.content is valid throttles.json",
 	})
 
-	r.checkOperationCoverage(ctx, obj)
-
 	desired := r.buildConfigMap(obj)
 	if err := controllerutil.SetControllerReference(obj, desired, r.Scheme); err != nil {
 		return ctrl.Result{}, err
@@ -59,6 +56,7 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 	err := r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
+			common.StampOwnerCreatedAt(desired, obj)
 			return ctrl.Result{}, r.Client.Create(ctx, desired)
 		}
 
@@ -69,14 +67,28 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 		return r.reject(ctx, obj, "OwnershipConflict", conflict)
 	}
 
+	if common.ConfigMapSuperseded(existing, obj) {
+		ownerRef := metav1.GetControllerOf(existing)
+		apimeta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:               operatorv1alpha1.ThrottlesConfigConditionTypeValid,
+			Status:             metav1.ConditionTrue,
+			ObservedGeneration: obj.Generation,
+			Reason:             common.ConditionReasonSuperseded,
+			Message:            fmt.Sprintf("ConfigMap %s is owned by a newer CR %s (uid %s)", desired.Name, ownerRef.Name, ownerRef.UID),
+		})
+		return ctrl.Result{}, nil
+	}
+
 	if common.ConfigMapNeedsUpdate(existing, desired) {
 		existing.Data = desired.Data
 		existing.Labels = desired.Labels
+		common.ClearControllerRef(existing)
 		// Re-apply owner reference on update so a pre-existing CM without a controller
 		// reference gets cascade-GC wired up correctly.
 		if err := controllerutil.SetControllerReference(obj, existing, r.Scheme); err != nil {
 			return ctrl.Result{}, err
 		}
+		common.StampOwnerCreatedAt(existing, obj)
 		return ctrl.Result{}, common.WarnOnConflict(ctx, r.Client.Update(ctx, existing))
 	}
 
@@ -93,43 +105,6 @@ func (r *ConfigMapSubReconciler) reject(ctx context.Context, obj *operatorv1alph
 	})
 	common.Eventf(ctx, r.Recorder, obj, corev1.EventTypeWarning, errx.Reason(reason), "ConfigMap", "%s", msg)
 	return ctrl.Result{}, nil
-}
-
-func (r *ConfigMapSubReconciler) checkOperationCoverage(ctx context.Context, obj *operatorv1alpha1.ThrottlesConfig) {
-	missing, err := ValidateThrottleOps(obj.Spec.Content)
-	if err != nil {
-		msg := fmt.Sprintf("failed to parse throttle operations: %v", err)
-		apimeta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
-			Type:               operatorv1alpha1.ThrottlesConfigConditionTypeOpsCoverage,
-			Status:             metav1.ConditionFalse,
-			ObservedGeneration: obj.Generation,
-			Reason:             string(common.ReasonInvalidContent),
-			Message:            msg,
-		})
-		common.Eventf(ctx, r.Recorder, obj, corev1.EventTypeWarning, common.ReasonInvalidContent, "ConfigMap", "%s", msg)
-		return
-	}
-
-	if len(missing) > 0 {
-		msg := fmt.Sprintf("throttle buckets are missing required operations (network will deny them with BUSY): %s", strings.Join(missing, ", "))
-		apimeta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
-			Type:               operatorv1alpha1.ThrottlesConfigConditionTypeOpsCoverage,
-			Status:             metav1.ConditionFalse,
-			ObservedGeneration: obj.Generation,
-			Reason:             string(ReasonMissingOperations),
-			Message:            msg,
-		})
-		common.Eventf(ctx, r.Recorder, obj, corev1.EventTypeWarning, ReasonMissingOperations, "ConfigMap", "%s", msg)
-		return
-	}
-
-	apimeta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
-		Type:               operatorv1alpha1.ThrottlesConfigConditionTypeOpsCoverage,
-		Status:             metav1.ConditionTrue,
-		ObservedGeneration: obj.Generation,
-		Reason:             string(ReasonFullCoverage),
-		Message:            "all required operations are covered by throttle buckets",
-	})
 }
 
 func (r *ConfigMapSubReconciler) buildConfigMap(obj *operatorv1alpha1.ThrottlesConfig) *corev1.ConfigMap {
