@@ -5,6 +5,7 @@ package throttlesconfig
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/automa-saga/errx"
 	corev1 "k8s.io/api/core/v1"
@@ -46,6 +47,8 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 		Reason:             "ContentValid",
 		Message:            "spec.content is valid throttles.json",
 	})
+
+	r.checkOperationCoverage(ctx, obj)
 
 	desired := r.buildConfigMap(obj)
 	if err := controllerutil.SetControllerReference(obj, desired, r.Scheme); err != nil {
@@ -105,6 +108,43 @@ func (r *ConfigMapSubReconciler) reject(ctx context.Context, obj *operatorv1alph
 	})
 	common.Eventf(ctx, r.Recorder, obj, corev1.EventTypeWarning, errx.Reason(reason), "ConfigMap", "%s", msg)
 	return ctrl.Result{}, nil
+}
+
+func (r *ConfigMapSubReconciler) checkOperationCoverage(ctx context.Context, obj *operatorv1alpha1.ThrottlesConfig) {
+	missing, err := ValidateThrottleOps(obj.Spec.Content)
+	if err != nil {
+		msg := fmt.Sprintf("failed to parse throttle operations: %v", err)
+		apimeta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:               operatorv1alpha1.ThrottlesConfigConditionTypeOpsCoverage,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: obj.Generation,
+			Reason:             string(common.ReasonInvalidContent),
+			Message:            msg,
+		})
+		common.Eventf(ctx, r.Recorder, obj, corev1.EventTypeWarning, common.ReasonInvalidContent, "ConfigMap", "%s", msg)
+		return
+	}
+
+	if len(missing) > 0 {
+		msg := fmt.Sprintf("throttle buckets are missing required operations (network will deny them with BUSY): %s", strings.Join(missing, ", "))
+		apimeta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:               operatorv1alpha1.ThrottlesConfigConditionTypeOpsCoverage,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: obj.Generation,
+			Reason:             string(ReasonMissingOperations),
+			Message:            msg,
+		})
+		common.Eventf(ctx, r.Recorder, obj, corev1.EventTypeWarning, ReasonMissingOperations, "ConfigMap", "%s", msg)
+		return
+	}
+
+	apimeta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.ThrottlesConfigConditionTypeOpsCoverage,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: obj.Generation,
+		Reason:             string(ReasonFullCoverage),
+		Message:            "all required operations are covered by throttle buckets",
+	})
 }
 
 func (r *ConfigMapSubReconciler) buildConfigMap(obj *operatorv1alpha1.ThrottlesConfig) *corev1.ConfigMap {
