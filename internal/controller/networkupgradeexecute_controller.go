@@ -614,22 +614,22 @@ func (r *NetworkUpgradeExecuteReconciler) getCapsule(ctx context.Context, execut
 	return &capsule, nil
 }
 
-// getOrbit fetches the Orbit referenced by the capsule. A missing capsule,
-// empty Orbit ref, or NotFound Orbit returns (nil, nil) — the caller falls back
-// to defaults. Any other API error is returned so the reconcile retries rather
-// than silently flipping behavior between reconciles on a transient blip.
+// getOrbit fetches the Orbit referenced by the capsule. A nil capsule or empty
+// Orbit ref returns (nil, nil). Otherwise the referenced Orbit must exist:
+// spec.orbit is a required field and the Orbit's finalizer cascade-deletes its
+// capsules, so a live capsule always has a live Orbit. A NotFound (or any other
+// API error) therefore returns an error so the reconcile retries rather than
+// silently falling back to defaults against a dangling ref — e.g. a transient
+// window during Orbit deletion, or a misnamed spec.orbit.
 func (r *NetworkUpgradeExecuteReconciler) getOrbit(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (*operatorv1alpha1.Orbit, error) {
 	if capsule == nil || capsule.Spec.Orbit == "" {
 		return nil, nil
 	}
 	var orbit operatorv1alpha1.Orbit
 	if err := r.Get(ctx, client.ObjectKey{Name: capsule.Spec.Orbit}, &orbit); err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil, nil
-		}
 		return nil, errx.WithHints(
-			errx.WithReason(errK8sAPI.Wrap(err, "getting Orbit %s", capsule.Spec.Orbit), ReasonGetFailed),
-			"Confirm the operator has get permission on orbits")
+			errx.WithReason(errK8sAPI.Wrap(err, "getting Orbit %s referenced by capsule %s", capsule.Spec.Orbit, capsule.Name), ReasonGetFailed),
+			"Confirm the ConsensusCapsule's spec.orbit names an existing Orbit and the operator has get permission on orbits")
 	}
 	return &orbit, nil
 }

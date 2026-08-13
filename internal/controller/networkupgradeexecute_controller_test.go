@@ -110,6 +110,20 @@ func reconcileExecuteWith(
 	objs := []client.Object{execute}
 	objs = append(objs, extra...)
 
+	// A ConsensusCapsule always references an existing Orbit (spec.orbit is
+	// required, and the Orbit finalizer cascade-deletes its capsules), so seed the
+	// default test Orbit unless the test provides its own.
+	hasOrbit := false
+	for _, o := range extra {
+		if _, ok := o.(*operatorv1alpha1.Orbit); ok {
+			hasOrbit = true
+			break
+		}
+	}
+	if !hasOrbit {
+		objs = append(objs, newTestOrbit())
+	}
+
 	c := withExecuteIndexes(fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(objs...).
@@ -148,6 +162,13 @@ func reconcileExecuteWith(
 	}
 
 	return executeReconcileResult{events: recorded, execute: &updated, result: result, err: err, client: c}
+}
+
+// newTestOrbit returns the minimal cluster-scoped Orbit that every test capsule
+// references via spec.orbit ("test-orbit"). getOrbit requires the referenced
+// Orbit to exist, mirroring production where a capsule cannot outlive its Orbit.
+func newTestOrbit() *operatorv1alpha1.Orbit {
+	return &operatorv1alpha1.Orbit{ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"}}
 }
 
 func withExecuteIndexes(b *fake.ClientBuilder) *fake.ClientBuilder {
@@ -639,7 +660,7 @@ func TestExecuteReconcile_ScalesDownCapsule(t *testing.T) {
 	scheme := newControllerTestScheme()
 	c := withExecuteIndexes(fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(execute, capsule, newSucceededPrepare("default", "op-001"), newSucceededFreeze("default", "op-001")).
+		WithObjects(execute, capsule, newSucceededPrepare("default", "op-001"), newSucceededFreeze("default", "op-001"), newTestOrbit()).
 		WithStatusSubresource(execute)).Build()
 	_ = c.Status().Update(context.Background(), newSucceededPrepare("default", "op-001"))
 	_ = c.Status().Update(context.Background(), newSucceededFreeze("default", "op-001"))
@@ -695,7 +716,7 @@ func TestExecuteReconcile_SkipScaleDown_PatchesInPlace(t *testing.T) {
 	scheme := newControllerTestScheme()
 	c := withExecuteIndexes(fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(execute, capsule, newSucceededPrepare("default", "op-001"), newSucceededFreeze("default", "op-001")).
+		WithObjects(execute, capsule, newSucceededPrepare("default", "op-001"), newSucceededFreeze("default", "op-001"), newTestOrbit()).
 		WithStatusSubresource(execute)).Build()
 	_ = c.Status().Update(context.Background(), newSucceededPrepare("default", "op-001"))
 	_ = c.Status().Update(context.Background(), newSucceededFreeze("default", "op-001"))
@@ -763,7 +784,7 @@ func TestExecuteReconcile_PatchesIndependentlyOfPeers(t *testing.T) {
 	scheme := newControllerTestScheme()
 	c := withExecuteIndexes(fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(execute, capsule, sibling, siblingCapsule, newSucceededPrepare("default", "op-001"), newSucceededFreeze("default", "op-001")).
+		WithObjects(execute, capsule, sibling, siblingCapsule, newSucceededPrepare("default", "op-001"), newSucceededFreeze("default", "op-001"), newTestOrbit()).
 		WithStatusSubresource(execute)).Build()
 
 	rec := events.NewFakeRecorder(32)
@@ -994,7 +1015,7 @@ func TestExecuteReconcile_PendingNodeUpgrade_PatchesCapsule(t *testing.T) {
 	scheme := newControllerTestScheme()
 	c := withExecuteIndexes(fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(execute, capsule).
+		WithObjects(execute, capsule, newTestOrbit()).
 		WithStatusSubresource(execute)).Build()
 	if err := c.Status().Update(context.Background(), execute); err != nil {
 		t.Fatalf("pre-set execute status: %v", err)
@@ -1065,7 +1086,7 @@ func TestExecuteReconcile_PendingNodeUpgrade_BringsCapsuleOnline(t *testing.T) {
 	scheme := newControllerTestScheme()
 	c := withExecuteIndexes(fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(execute, capsule).
+		WithObjects(execute, capsule, newTestOrbit()).
 		WithStatusSubresource(execute)).Build()
 	if err := c.Status().Update(context.Background(), execute); err != nil {
 		t.Fatalf("pre-set execute status: %v", err)
@@ -1119,7 +1140,7 @@ func TestExecuteReconcile_PendingNodeUpgrade_WaitsForActive(t *testing.T) {
 	scheme := newControllerTestScheme()
 	c := withExecuteIndexes(fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(execute, capsule, sts).
+		WithObjects(execute, capsule, sts, newTestOrbit()).
 		WithStatusSubresource(execute, capsule, sts)).Build()
 	if err := c.Status().Update(context.Background(), execute); err != nil {
 		t.Fatalf("pre-set execute status: %v", err)
@@ -1165,7 +1186,7 @@ func TestExecuteReconcile_PendingNodeUpgrade_NotFooledByPreUpgradeActive(t *test
 	scheme := newControllerTestScheme()
 	c := withExecuteIndexes(fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(execute, capsule, sts).
+		WithObjects(execute, capsule, sts, newTestOrbit()).
 		WithStatusSubresource(execute, capsule, sts)).Build()
 	if err := c.Status().Update(context.Background(), execute); err != nil {
 		t.Fatalf("pre-set execute status: %v", err)
@@ -1213,7 +1234,7 @@ func TestExecuteReconcile_PendingNodeUpgrade_CatastrophicFastFail(t *testing.T) 
 	scheme := newControllerTestScheme()
 	c := withExecuteIndexes(fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(execute, capsule, sts).
+		WithObjects(execute, capsule, sts, newTestOrbit()).
 		WithStatusSubresource(execute, capsule, sts)).Build()
 	if err := c.Status().Update(context.Background(), execute); err != nil {
 		t.Fatalf("pre-set execute status: %v", err)
@@ -1268,7 +1289,7 @@ func TestExecuteReconcile_PendingNodeUpgrade_SucceedsWhenActiveOnNewRevision(t *
 	scheme := newControllerTestScheme()
 	c := withExecuteIndexes(fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(execute, capsule, sts).
+		WithObjects(execute, capsule, sts, newTestOrbit()).
 		WithStatusSubresource(execute, capsule, sts)).Build()
 	if err := c.Status().Update(context.Background(), execute); err != nil {
 		t.Fatalf("pre-set execute status: %v", err)
@@ -1349,7 +1370,7 @@ func TestExecuteReconcile_NodeActiveDeadlineExceeded(t *testing.T) {
 	scheme := newControllerTestScheme()
 	c := withExecuteIndexes(fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(execute, capsule, sts).
+		WithObjects(execute, capsule, sts, newTestOrbit()).
 		WithStatusSubresource(execute, sts)).Build()
 	if err := c.Status().Update(context.Background(), execute); err != nil {
 		t.Fatalf("pre-set execute status: %v", err)
@@ -1443,7 +1464,7 @@ func TestExecuteReconcile_NodeActiveDeadlineExceeded_PeriodicAlert(t *testing.T)
 	scheme := newControllerTestScheme()
 	c := withExecuteIndexes(fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(execute, capsule, sts).
+		WithObjects(execute, capsule, sts, newTestOrbit()).
 		WithStatusSubresource(execute, sts)).Build()
 	if err := c.Status().Update(context.Background(), execute); err != nil {
 		t.Fatalf("pre-set execute status: %v", err)
@@ -1523,7 +1544,7 @@ func TestExecuteReconcile_NodeActiveDeadlineExceeded_ShortCircuitWithinInterval(
 	scheme := newControllerTestScheme()
 	c := withExecuteIndexes(fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(execute, capsule, sts).
+		WithObjects(execute, capsule, sts, newTestOrbit()).
 		WithStatusSubresource(execute, sts)).Build()
 	if err := c.Status().Update(context.Background(), execute); err != nil {
 		t.Fatalf("pre-set execute status: %v", err)
@@ -1574,7 +1595,7 @@ func TestExecuteReconcile_CatastrophicBeforeNewPod_NoFastFail(t *testing.T) {
 	scheme := newControllerTestScheme()
 	c := withExecuteIndexes(fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(execute, capsule, sts).
+		WithObjects(execute, capsule, sts, newTestOrbit()).
 		WithStatusSubresource(execute, capsule, sts)).Build()
 	if err := c.Status().Update(context.Background(), execute); err != nil {
 		t.Fatalf("pre-set execute status: %v", err)

@@ -615,9 +615,16 @@ func (f *Factory) HandleNowFrozen(ctx context.Context) error {
 
 	provisioner, provErr := declaredProvisionerVersions(f.cfg.UpgradePath)
 	if provErr != nil {
-		common.LogErr(logx.As().Warn(), provErr, ReasonManifestReadFailed).
+		// A present-but-unreadable/invalid infrastructure-versions.yaml must not
+		// silently disable the infra-access safety fallback: proceeding without
+		// provisioner versions would let the execute reconciler take the
+		// skipScaleDown in-place path even when an infra upgrade was declared.
+		// Fail closed and retry on the next marker tick. (An absent manifest
+		// returns nil,nil and is not an error — no infra work declared.)
+		common.LogErr(logx.As().Error(), provErr, ReasonManifestReadFailed).
 			Str("operation_id", operationID).
-			Msg("failed to read infrastructure-versions.yaml — provisioner versions will not be set on Execute CR")
+			Msg("cannot determine declared provisioner versions; retrying before creating Execute CR")
+		return provErr
 	}
 	cr, err := buildExecuteCR(f.cfg, operationID, images, selectedSources, provisioner)
 	if err != nil {
