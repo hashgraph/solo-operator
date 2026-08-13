@@ -197,7 +197,7 @@ func (m *MarkerMonitor) poll(ctx context.Context, current time.Duration) time.Du
 			logx.As().Info().
 				Str("reason", ReasonMarkerDetected.String()).
 				Str("marker", name).
-				Str("latency", detectionLatency.String()).
+				Dur("latency", detectionLatency).
 				Msg("marker detected")
 			m.seen[name] = struct{}{}
 		}

@@ -87,7 +87,9 @@ func WithoutTimestampWarning() OpenOption {
 func Open(dir, operationID, nodeID string, opts ...OpenOption) (*Writer, error) {
 	var o openOpts
 	for _, fn := range opts {
-		fn(&o)
+		if fn != nil {
+			fn(&o)
+		}
 	}
 	if err := sanity.ValidateOperationID(operationID); err != nil {
 		return nil, err
