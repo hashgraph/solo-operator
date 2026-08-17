@@ -63,7 +63,9 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 		return ctrl.Result{}, err
 	}
 
-	if conflict := common.ConfigMapOwnerConflict(existing, obj); conflict != "" {
+	callerUID := obj.GetUID()
+	callerGVK := operatorv1alpha1.GroupVersion.WithKind("ApiPermissionProperties")
+	if conflict := common.ConfigMapOwnerConflict(existing, callerUID, callerGVK); conflict != "" {
 		return r.reject(ctx, obj, "OwnershipConflict", conflict)
 	}
 

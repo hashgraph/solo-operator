@@ -71,7 +71,9 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 		return ctrl.Result{}, err
 	}
 
-	if conflict := common.ConfigMapOwnerConflict(existing, obj); conflict != "" {
+	callerUID := obj.GetUID()
+	callerGVK := operatorv1alpha1.GroupVersion.WithKind("NodeSettings")
+	if conflict := common.ConfigMapOwnerConflict(existing, callerUID, callerGVK); conflict != "" {
 		apimeta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 			Type:               operatorv1alpha1.NodeSettingsConditionTypeValid,
 			Status:             metav1.ConditionFalse,

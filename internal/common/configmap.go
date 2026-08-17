@@ -9,11 +9,17 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// AnnotationOwnerCreatedAt records the owning CR's creationTimestamp on a
+// ConfigMap so that older same-Kind CRs can detect they have been superseded.
 const AnnotationOwnerCreatedAt = "operator.solo.hiero.org/owner-created-at"
 
+// ConditionReasonSuperseded is the status condition reason set on a config CR
+// when a newer same-Kind CR has taken ownership of the shared ConfigMap.
 const ConditionReasonSuperseded = "Superseded"
 
 // ConfigMapNeedsUpdate reports whether an existing ConfigMap differs from the desired one.
@@ -39,15 +45,17 @@ func SameController(existing, desired *corev1.ConfigMap) bool {
 // an upgrade-scoped config CR can replace the static CR's ConfigMap (both are
 // the same Kind, e.g. ApiPermissionProperties, but different UIDs). A conflict
 // is reported only when the existing owner is a different Kind entirely.
-func ConfigMapOwnerConflict(existing *corev1.ConfigMap, caller client.Object) string {
+//
+// callerGVK is passed explicitly because controller-runtime's cached client
+// strips TypeMeta from returned objects, making GetObjectKind() unreliable.
+func ConfigMapOwnerConflict(existing *corev1.ConfigMap, callerUID types.UID, callerGVK schema.GroupVersionKind) string {
 	ctrl := metav1.GetControllerOf(existing)
 	if ctrl == nil {
 		return ""
 	}
-	if ctrl.UID == caller.GetUID() {
+	if ctrl.UID == callerUID {
 		return ""
 	}
-	callerGVK := caller.GetObjectKind().GroupVersionKind()
 	if ctrl.Kind == callerGVK.Kind && ctrl.APIVersion == callerGVK.GroupVersion().String() {
 		return ""
 	}

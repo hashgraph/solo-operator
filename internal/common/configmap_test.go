@@ -13,6 +13,14 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+var testGVK = schema.GroupVersionKind{
+	Group:   "operator.solo.hiero.org",
+	Version: "v1alpha1",
+	Kind:    "NodeSettings",
+}
+
+var _ = runtime.Object(&fakeCaller{})
+
 type fakeCaller struct {
 	metav1.ObjectMeta
 	metav1.TypeMeta
@@ -22,10 +30,7 @@ func (f *fakeCaller) GetObjectKind() schema.ObjectKind { return &f.TypeMeta }
 func (f *fakeCaller) DeepCopyObject() runtime.Object   { return f }
 
 func TestConfigMapOwnerConflict(t *testing.T) {
-	caller := &fakeCaller{
-		ObjectMeta: metav1.ObjectMeta{Name: "my-settings", UID: types.UID("uid-1")},
-		TypeMeta:   metav1.TypeMeta{Kind: "NodeSettings", APIVersion: "operator.solo.hiero.org/v1alpha1"},
-	}
+	callerUID := types.UID("uid-1")
 	isController := true
 
 	tests := []struct {
@@ -85,7 +90,7 @@ func TestConfigMapOwnerConflict(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			msg := ConfigMapOwnerConflict(tt.cm, caller)
+			msg := ConfigMapOwnerConflict(tt.cm, callerUID, testGVK)
 			if tt.wantMsg && msg == "" {
 				t.Error("expected conflict message, got empty")
 			}
@@ -93,6 +98,20 @@ func TestConfigMapOwnerConflict(t *testing.T) {
 				t.Errorf("expected no conflict, got %q", msg)
 			}
 		})
+	}
+}
+
+func TestConfigMapOwnerConflict_ExplicitGVK(t *testing.T) {
+	isController := true
+	cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+		Name: "my-settings",
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: "operator.solo.hiero.org/v1alpha1",
+			Kind:       "NodeSettings", Name: "other", UID: "uid-99", Controller: &isController,
+		}},
+	}}
+	if msg := ConfigMapOwnerConflict(cm, types.UID("uid-1"), testGVK); msg != "" {
+		t.Errorf("expected same-kind takeover with explicit GVK, got conflict: %s", msg)
 	}
 }
 
