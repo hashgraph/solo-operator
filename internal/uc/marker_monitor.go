@@ -4,6 +4,7 @@ package uc
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -189,7 +190,10 @@ func (m *MarkerMonitor) poll(ctx context.Context, current time.Duration) time.Du
 	for _, name := range AllMarkers {
 		info, err := os.Stat(filepath.Join(m.cfg.UpgradePath, name))
 		if err != nil {
-			delete(m.seen, name)
+			if errors.Is(err, os.ErrNotExist) {
+				// Reset dedup so reappearance is logged; skip on transient I/O errors.
+				delete(m.seen, name)
+			}
 			continue
 		}
 		if _, already := m.seen[name]; !already {
