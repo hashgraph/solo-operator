@@ -596,6 +596,11 @@ func (r *NetworkUpgradeExecuteReconciler) getOrbit(ctx context.Context, capsule 
 	}
 	var orbit operatorv1alpha1.Orbit
 	if err := r.Get(ctx, client.ObjectKey{Name: capsule.Spec.Orbit}, &orbit); err != nil {
+		if !apierrors.IsNotFound(err) {
+			common.Warn(ctx, ReasonOrbitLookupFailed).Err(err).
+				Str("orbit", capsule.Spec.Orbit).
+				Msg("failed to fetch Orbit, falling back to default upgrade config")
+		}
 		return nil
 	}
 	return &orbit

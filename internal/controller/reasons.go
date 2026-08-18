@@ -40,5 +40,6 @@ const (
 	ReasonRegistryUnexpectedState errx.Reason = "RegistryUnexpectedState"
 
 	// Orbit.
+	ReasonOrbitLookupFailed         errx.Reason = "OrbitLookupFailed"
 	ReasonWaitingForCapsuleDeletion errx.Reason = "WaitingForCapsuleDeletion"
 )
