@@ -61,10 +61,12 @@ func BuildPrefetchJob(
 	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(prepare.Spec.OperationID+"\x00"+targetID+"\x00"+image)))[:8]
 	opID := dnsNormalize(prepare.Spec.OperationID, 20)
 	tgtName := dnsNormalize(targetID, 20)
+	// Each segment is bounded by dnsNormalize (<=20) plus an 8-char hash, so the
+	// name is at most len("prefetch-")+20+1+20+1+8 = 59 chars — always within the
+	// 63-char limit the Job controller needs (it stamps the job name as the
+	// job-name label value on pods, and label values must be <=63). The
+	// NameBounded test guards this invariant.
 	name := fmt.Sprintf("prefetch-%s-%s-%s", opID, tgtName, hash)
-	if len(name) > 63 {
-		name = name[:63]
-	}
 
 	backoffLimit := int32(3)
 	activeDeadlineSeconds := int64(600)

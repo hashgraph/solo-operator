@@ -115,7 +115,7 @@ func TestBuildPrefetchJob_CapsuleBased(t *testing.T) {
 	}
 }
 
-func TestBuildPrefetchJob_NameTruncation(t *testing.T) {
+func TestBuildPrefetchJob_NameBounded(t *testing.T) {
 	scheme := testScheme()
 	prepare := &operatorv1alpha1.NetworkUpgradePrepare{
 		ObjectMeta: metav1.ObjectMeta{
@@ -134,8 +134,17 @@ func TestBuildPrefetchJob_NameTruncation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	// Even with over-long inputs the name stays within 63 chars (so the
+	// job-name label the Job controller adds to pods is a valid label value)
+	// and is a valid DNS-1123 subdomain.
 	if len(job.Name) > 63 {
 		t.Errorf("job name length %d exceeds 63: %s", len(job.Name), job.Name)
+	}
+	if errs := validation.IsDNS1123Subdomain(job.Name); len(errs) > 0 {
+		t.Errorf("job name %q is not a valid DNS-1123 subdomain: %v", job.Name, errs)
+	}
+	if errs := validation.IsValidLabelValue(job.Name); len(errs) > 0 {
+		t.Errorf("job name %q is not a valid label value: %v", job.Name, errs)
 	}
 }
 
