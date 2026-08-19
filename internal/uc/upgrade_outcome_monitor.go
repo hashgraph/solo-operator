@@ -372,18 +372,21 @@ func (m *UpgradeOutcomeMonitor) listAndSeed(ctx context.Context) (prepareRV, fre
 	}
 
 	// Archive any terminal CRs that survived a prior UC restart unarchived.
-	for i := range prepareList.Items {
-		m.archiveIfTerminalPhase(ctx, &prepareList.Items[i])
-	}
-	for i := range freezeList.Items {
-		m.archiveIfTerminalPhase(ctx, &freezeList.Items[i])
-	}
-	for i := range execList.Items {
-		m.archiveIfTerminalPhase(ctx, &execList.Items[i])
-	}
-	for i := range abortList.Items {
-		m.archiveIfTerminalPhase(ctx, &abortList.Items[i])
-	}
+	// Runs in the background so it does not block the watch startup path.
+	go func() {
+		for i := range prepareList.Items {
+			m.archiveIfTerminalPhase(ctx, &prepareList.Items[i])
+		}
+		for i := range freezeList.Items {
+			m.archiveIfTerminalPhase(ctx, &freezeList.Items[i])
+		}
+		for i := range execList.Items {
+			m.archiveIfTerminalPhase(ctx, &execList.Items[i])
+		}
+		for i := range abortList.Items {
+			m.archiveIfTerminalPhase(ctx, &abortList.Items[i])
+		}
+	}()
 
 	// Recover any Execute CR already at ReadyForProvisionerDaemon (arrived while UC was offline).
 	var pending []*unstructured.Unstructured
@@ -932,9 +935,9 @@ func (m *UpgradeOutcomeMonitor) archiveCR(ctx context.Context, cr *unstructured.
 
 func kindToGVR(kind string) (schema.GroupVersionResource, bool) {
 	switch kind {
-	case "NetworkUpgradePrepare":
+	case kindNetworkUpgradePrepare:
 		return networkUpgradePrepareGVR, true
-	case "NetworkUpgradeFreeze":
+	case kindNetworkUpgradeFreeze:
 		return networkUpgradeFreezeGVR, true
 	case kindNetworkUpgradeExecute:
 		return networkUpgradeExecuteGVR, true
