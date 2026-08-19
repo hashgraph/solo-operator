@@ -5,6 +5,7 @@ package prefetch
 import (
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -35,7 +36,13 @@ func testPrepare() *operatorv1alpha1.NetworkUpgradePrepare {
 
 func TestBuildPrefetchJob_NodePinned(t *testing.T) {
 	scheme := testScheme()
-	target := TargetFromNode("node-3", "my-sa")
+	tolerations := []corev1.Toleration{{
+		Key:      "dedicated",
+		Operator: corev1.TolerationOpEqual,
+		Value:    "consensus",
+		Effect:   corev1.TaintEffectNoExecute,
+	}}
+	target := TargetFromNode("node-3", "my-sa", tolerations)
 
 	job, err := BuildPrefetchJob(testPrepare(), target, "node-3", "ghcr.io/cn:0.62.0", 7776000, scheme)
 	if err != nil {
@@ -64,6 +71,10 @@ func TestBuildPrefetchJob_NodePinned(t *testing.T) {
 	}
 	if spec.ServiceAccountName != "my-sa" {
 		t.Errorf("ServiceAccountName = %q, want my-sa", spec.ServiceAccountName)
+	}
+	if len(spec.Tolerations) != 1 || spec.Tolerations[0].Key != "dedicated" ||
+		spec.Tolerations[0].Effect != corev1.TaintEffectNoExecute {
+		t.Errorf("node-pinned Job must carry tolerations, got %+v", spec.Tolerations)
 	}
 	if job.Spec.TTLSecondsAfterFinished == nil || *job.Spec.TTLSecondsAfterFinished != 7776000 {
 		t.Errorf("TTLSecondsAfterFinished = %v, want 7776000", job.Spec.TTLSecondsAfterFinished)
@@ -115,7 +126,7 @@ func TestBuildPrefetchJob_NameTruncation(t *testing.T) {
 			Orbit:       "test-orbit",
 		},
 	}
-	target := TargetFromNode("extremely-long-node-name-here-that-is-very-long", "")
+	target := TargetFromNode("extremely-long-node-name-here-that-is-very-long", "", nil)
 
 	job, err := BuildPrefetchJob(prepare, target, "extremely-long-node-name-here-that-is-very-long", "ghcr.io/cn:0.62.0", 300, scheme)
 	if err != nil {

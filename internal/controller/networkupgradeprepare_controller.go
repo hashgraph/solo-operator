@@ -395,14 +395,39 @@ func (r *NetworkUpgradePrepareReconciler) resolvePrefetchTargets(
 
 	common.Info(ctx, operatorv1alpha1.ReasonPrefetchCreated).
 		Msgf("pinning prefetch Jobs to %d candidate nodes", len(candidateNodes))
+	tolerations := unionTolerations(capsules)
 	targets = make([]prefetchTargetEntry, 0, len(candidateNodes))
 	for _, nodeName := range candidateNodes {
 		targets = append(targets, prefetchTargetEntry{
-			target: prefetch.TargetFromNode(nodeName, saName),
+			target: prefetch.TargetFromNode(nodeName, saName, tolerations),
 			id:     nodeName,
 		})
 	}
 	return targets, len(candidateNodes)
+}
+
+// unionTolerations returns the deduplicated union of tolerations across all
+// capsules. Node-pinned prefetch Jobs bypass the scheduler (so NoSchedule taints
+// are ignored) but the taint manager still evicts pods lacking a matching
+// toleration for NoExecute taints; applying the union keeps prefetch pods on
+// dedicated, tainted consensus node pools.
+func unionTolerations(capsules []operatorv1alpha1.ConsensusCapsule) []corev1.Toleration {
+	seen := make(map[string]bool)
+	var out []corev1.Toleration
+	for i := range capsules {
+		for _, t := range capsules[i].Spec.PodProperties.Tolerations {
+			key := fmt.Sprintf("%s\x00%s\x00%s\x00%s", t.Key, t.Operator, t.Value, t.Effect)
+			if t.TolerationSeconds != nil {
+				key += fmt.Sprintf("\x00%d", *t.TolerationSeconds)
+			}
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 func capsuleTargets(capsules []operatorv1alpha1.ConsensusCapsule) []prefetchTargetEntry {

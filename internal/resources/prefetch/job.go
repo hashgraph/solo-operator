@@ -30,9 +30,14 @@ type PrefetchTarget struct {
 	ServiceAccountName string
 }
 
-// TargetFromNode creates a target pinned to a specific node.
-func TargetFromNode(nodeName, serviceAccountName string) PrefetchTarget {
-	return PrefetchTarget{NodeName: nodeName, ServiceAccountName: serviceAccountName}
+// TargetFromNode creates a target pinned to a specific node. Tolerations are
+// still applied even though the Job is pinned via NodeName: pinning bypasses the
+// scheduler (so NoSchedule taints are ignored), but the taint manager still
+// evicts pods that lack a matching toleration for NoExecute taints. Passing the
+// union of the consensus capsules' tolerations keeps prefetch pods alive on
+// dedicated, tainted node pools.
+func TargetFromNode(nodeName, serviceAccountName string, tolerations []corev1.Toleration) PrefetchTarget {
+	return PrefetchTarget{NodeName: nodeName, ServiceAccountName: serviceAccountName, Tolerations: tolerations}
 }
 
 // TargetFromCapsule creates a target using capsule scheduling constraints.
@@ -76,11 +81,14 @@ func BuildPrefetchJob(
 		ServiceAccountName: target.ServiceAccountName,
 	}
 
+	// Tolerations apply in both modes: node-pinned pods still need them to
+	// survive NoExecute taints on dedicated node pools (NodeName pinning only
+	// bypasses the scheduler's NoSchedule check, not taint-manager eviction).
+	podSpec.Tolerations = target.Tolerations
 	if target.NodeName != "" {
 		podSpec.NodeName = target.NodeName
 	} else {
 		podSpec.NodeSelector = target.NodeSelector
-		podSpec.Tolerations = target.Tolerations
 		podSpec.Affinity = target.Affinity
 	}
 
