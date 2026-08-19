@@ -496,8 +496,36 @@ func TestExecuteReconcile_WaitsForPrereqs(t *testing.T) {
 	if res.err != nil {
 		t.Fatalf("unexpected error: %v", res.err)
 	}
-	if res.result.RequeueAfter != executePrereqRequeueAfter {
-		t.Errorf("expected RequeueAfter=%v, got %v", executePrereqRequeueAfter, res.result.RequeueAfter)
+	if res.result.RequeueAfter != operatorv1alpha1.DefaultExecutePrereqRequeueInterval {
+		t.Errorf("expected RequeueAfter=%v, got %v", operatorv1alpha1.DefaultExecutePrereqRequeueInterval, res.result.RequeueAfter)
+	}
+}
+
+// TestExecuteReconcile_OrbitOverridesRequeue verifies that
+// Orbit.spec.upgrade.consensusNode.* overrides the hardcoded requeue defaults,
+// exercising the getCapsule → getOrbit → ResolveUpgradeConfig wiring.
+func TestExecuteReconcile_OrbitOverridesRequeue(t *testing.T) {
+	const override = 3 * time.Second
+	orbit := &operatorv1alpha1.Orbit{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
+		Spec: operatorv1alpha1.OrbitSpec{
+			Upgrade: &operatorv1alpha1.OrbitUpgrade{
+				ConsensusNode: &operatorv1alpha1.ConsensusNodeUpgrade{
+					PrereqRequeueInterval: &metav1.Duration{Duration: override},
+				},
+			},
+		},
+	}
+	execute := newExecuteForTest()
+	execute.Status.Phase = operatorv1alpha1.ExecutePhasePending
+	// node0 capsule references test-orbit, so config resolves through the Orbit.
+	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil), orbit, newOfflineCapsule("node0"))
+	if res.err != nil {
+		t.Fatalf("unexpected error: %v", res.err)
+	}
+	// No Prepare in fake client → requeues after the Orbit-provided prereq interval.
+	if res.result.RequeueAfter != override {
+		t.Errorf("expected RequeueAfter=%v (Orbit override), got %v", override, res.result.RequeueAfter)
 	}
 }
 
@@ -1052,8 +1080,8 @@ func TestExecuteReconcile_PendingNodeUpgrade_WaitsForActive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.RequeueAfter != executeReadyRequeueAfter {
-		t.Errorf("expected RequeueAfter=%v, got %v", executeReadyRequeueAfter, result.RequeueAfter)
+	if result.RequeueAfter != operatorv1alpha1.DefaultExecuteNodeReadyRequeueInterval {
+		t.Errorf("expected RequeueAfter=%v, got %v", operatorv1alpha1.DefaultExecuteNodeReadyRequeueInterval, result.RequeueAfter)
 	}
 
 	var updated operatorv1alpha1.NetworkUpgradeExecute
@@ -1098,8 +1126,8 @@ func TestExecuteReconcile_PendingNodeUpgrade_NotFooledByPreUpgradeActive(t *test
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.RequeueAfter != executeReadyRequeueAfter {
-		t.Errorf("expected RequeueAfter=%v, got %v", executeReadyRequeueAfter, result.RequeueAfter)
+	if result.RequeueAfter != operatorv1alpha1.DefaultExecuteNodeReadyRequeueInterval {
+		t.Errorf("expected RequeueAfter=%v, got %v", operatorv1alpha1.DefaultExecuteNodeReadyRequeueInterval, result.RequeueAfter)
 	}
 
 	var updated operatorv1alpha1.NetworkUpgradeExecute

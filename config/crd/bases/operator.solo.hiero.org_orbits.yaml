@@ -461,6 +461,39 @@ spec:
                         type: object
                     type: object
                 type: object
+              upgrade:
+                description: |-
+                  Upgrade contains tuning knobs for the network upgrade lifecycle,
+                  scoped per component type.
+                properties:
+                  consensusNode:
+                    description: |-
+                      ConsensusNode contains tuning knobs for the consensus node upgrade
+                      execute phase. All fields are optional; when unset the operator uses
+                      safe production defaults.
+                    properties:
+                      daemonRequeueInterval:
+                        description: |-
+                          DaemonRequeueInterval is how often the execute reconciler polls for the
+                          provisioner daemon result condition. Default: 10s.
+                        format: duration
+                        type: string
+                      nodeReadyRequeueInterval:
+                        description: |-
+                          NodeReadyRequeueInterval is how often the execute reconciler polls for
+                          the consensus node to reach ACTIVE after the pod is brought online.
+                          Default: 10s.
+                        format: duration
+                        type: string
+                      prereqRequeueInterval:
+                        description: |-
+                          PrereqRequeueInterval is how often the execute reconciler polls for
+                          prerequisite CRs (Prepare/Freeze succeeded, ConfigCRsApplied).
+                          Default: 30s.
+                        format: duration
+                        type: string
+                    type: object
+                type: object
             required:
             - consensus
             type: object

@@ -36,6 +36,11 @@ spec:
           #   enabled: true
           #   endpoint: "http://prometheus.observability:9090/api/v1/write"
           #   scrapeInterval: "15s"
+  upgrade:
+    consensusNode:
+      prereqRequeueInterval: 2s
+      daemonRequeueInterval: 2s
+      nodeReadyRequeueInterval: 2s
   consensus:
     genesis:
       addressBook:

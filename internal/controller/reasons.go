@@ -30,6 +30,7 @@ const (
 	ReasonUnhandledPhase             errx.Reason = "UnhandledPhase"
 	ReasonWaitingForConfigCRsApplied errx.Reason = "WaitingForConfigCRsApplied"
 	ReasonAbortAfterFreeze           errx.Reason = "AbortAfterFreeze"
+	ReasonPhaseTransition            errx.Reason = "PhaseTransition"
 
 	// NetworkUpgradePrepare registry audit.
 	ReasonRegistryStrategy        errx.Reason = "RegistryStrategy"
@@ -39,5 +40,6 @@ const (
 	ReasonRegistryUnexpectedState errx.Reason = "RegistryUnexpectedState"
 
 	// Orbit.
+	ReasonOrbitLookupFailed         errx.Reason = "OrbitLookupFailed"
 	ReasonWaitingForCapsuleDeletion errx.Reason = "WaitingForCapsuleDeletion"
 )

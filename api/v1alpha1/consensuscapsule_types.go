@@ -294,6 +294,13 @@ type UcSidecar struct {
 	// +optional
 	// +kubebuilder:validation:XValidation:rule="duration(self) > duration('0s')",message="freezePollInterval must be a positive Go duration (e.g. '100ms', '1s')"
 	FreezePollInterval string `json:"freezePollInterval,omitempty"`
+
+	// Interval between platform-status metrics scrapes (default: 5s).
+	// Lower values detect ACTIVE faster after an upgrade but increase
+	// metrics endpoint load.
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="duration(self) > duration('0s')",message="platformPollInterval must be a positive Go duration (e.g. '1s', '5s')"
+	PlatformPollInterval string `json:"platformPollInterval,omitempty"`
 }
 
 // ConsensusNodeContainer configures the main consensus node container.
