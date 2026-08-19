@@ -3,11 +3,13 @@
 package prefetch
 
 import (
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/validation"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
@@ -134,6 +136,30 @@ func TestBuildPrefetchJob_NameTruncation(t *testing.T) {
 	}
 	if len(job.Name) > 63 {
 		t.Errorf("job name length %d exceeds 63: %s", len(job.Name), job.Name)
+	}
+}
+
+func TestBuildPrefetchJob_LabelValueNormalized(t *testing.T) {
+	scheme := testScheme()
+	// A target name longer than 63 chars, mixed case, with characters that are
+	// invalid in a Kubernetes label value (underscore-prefixed, trailing dot).
+	longName := "Node_" + strings.Repeat("x", 70) + "."
+	target := TargetFromNode(longName, "", nil)
+
+	job, err := BuildPrefetchJob(testPrepare(), target, longName, "img:v1", 300, scheme)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	v := job.Labels[operatorv1alpha1.LabelCapsule]
+	if errs := validation.IsValidLabelValue(v); len(errs) > 0 {
+		t.Errorf("LabelCapsule value %q is not a valid label value: %v", v, errs)
+	}
+	if len(job.Name) > 63 {
+		t.Errorf("job name length %d exceeds 63: %s", len(job.Name), job.Name)
+	}
+	if errs := validation.IsDNS1123Subdomain(job.Name); len(errs) > 0 {
+		t.Errorf("job name %q is not a valid DNS-1123 subdomain: %v", job.Name, errs)
 	}
 }
 

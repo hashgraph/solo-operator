@@ -100,7 +100,11 @@ func BuildPrefetchJob(
 				operatorv1alpha1.LabelOperationID:  prepare.Spec.OperationID,
 				operatorv1alpha1.LabelStep:         operatorv1alpha1.StepPrepare,
 				operatorv1alpha1.LabelPrefetchRole: operatorv1alpha1.RolePrefetch,
-				operatorv1alpha1.LabelCapsule:      targetID,
+				// targetID (a node or capsule name) is a DNS subdomain that may
+				// exceed 63 chars or contain characters invalid in a label
+				// value; normalize it so Job creation never fails validation.
+				// This label is informational only (never used as a selector).
+				operatorv1alpha1.LabelCapsule: dnsNormalize(targetID, 63),
 			},
 		},
 		Spec: batchv1.JobSpec{
@@ -119,8 +123,10 @@ func BuildPrefetchJob(
 	return job, nil
 }
 
-// dnsNormalize lowercases s, replaces non-alphanumeric chars with hyphens,
-// and truncates to maxLen — producing a valid DNS-1123 label fragment.
+// dnsNormalize lowercases s, replaces non-alphanumeric chars with hyphens, and
+// truncates to maxLen. The result is trimmed of leading/trailing hyphens so it
+// is a valid DNS-1123 label fragment and a valid Kubernetes label value (both
+// must start and end with an alphanumeric character).
 func dnsNormalize(s string, maxLen int) string {
 	s = strings.ToLower(s)
 	var b strings.Builder
@@ -135,7 +141,7 @@ func dnsNormalize(s string, maxLen int) string {
 	if len(out) > maxLen {
 		out = out[:maxLen]
 	}
-	return strings.TrimRight(out, "-")
+	return strings.Trim(out, "-")
 }
 
 func serviceAccountName(capsule *operatorv1alpha1.ConsensusCapsule) string {
