@@ -116,7 +116,7 @@ func TestBuildExecuteCR(t *testing.T) {
 		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: pinnedImage, Digest: "sha256:pinned"},
 	}
 
-	cr, err := buildExecuteCR(cfg, wantOperationID, images, ss)
+	cr, err := buildExecuteCR(cfg, wantOperationID, images, ss, nil)
 	if err != nil {
 		t.Fatalf("buildExecuteCR: %v", err)
 	}

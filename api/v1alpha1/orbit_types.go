@@ -99,6 +99,18 @@ type ConsensusNodeUpgrade struct {
 	// +kubebuilder:validation:Format=duration
 	// +optional
 	NodeReadyRequeueInterval *metav1.Duration `json:"nodeReadyRequeueInterval,omitempty"`
+
+	// SkipScaleDown controls how the execute phase restarts the consensus pod
+	// onto the new image. When true (default) the operator patches the
+	// ConsensusCapsule images in-place and lets the StatefulSet RollingUpdate
+	// strategy restart the pod, skipping the scale-down-to-0 / scale-up-to-1
+	// sequence and saving ~10s. When false it uses the scale-down sequence.
+	// The operator forces the scale-down path regardless when a host-level
+	// provisioner daemon requires the pod to be fully absent before
+	// infrastructure work can proceed.
+	// +kubebuilder:default=true
+	// +optional
+	SkipScaleDown *bool `json:"skipScaleDown,omitempty"`
 }
 
 const (
@@ -114,6 +126,7 @@ type EffectiveUpgradeConfig struct {
 	PrereqRequeueInterval    time.Duration
 	DaemonRequeueInterval    time.Duration
 	NodeReadyRequeueInterval time.Duration
+	SkipScaleDown            bool
 }
 
 // ResolveUpgradeConfig returns the effective upgrade tuning values from an Orbit,
@@ -123,6 +136,7 @@ func ResolveUpgradeConfig(orbit *Orbit) EffectiveUpgradeConfig {
 		PrereqRequeueInterval:    DefaultExecutePrereqRequeueInterval,
 		DaemonRequeueInterval:    DefaultExecuteDaemonRequeueInterval,
 		NodeReadyRequeueInterval: DefaultExecuteNodeReadyRequeueInterval,
+		SkipScaleDown:            true,
 	}
 	if orbit == nil || orbit.Spec.Upgrade == nil || orbit.Spec.Upgrade.ConsensusNode == nil {
 		return cfg
@@ -137,6 +151,9 @@ func ResolveUpgradeConfig(orbit *Orbit) EffectiveUpgradeConfig {
 	}
 	if u.NodeReadyRequeueInterval != nil && u.NodeReadyRequeueInterval.Duration >= MinRequeueInterval {
 		cfg.NodeReadyRequeueInterval = u.NodeReadyRequeueInterval.Duration
+	}
+	if u.SkipScaleDown != nil {
+		cfg.SkipScaleDown = *u.SkipScaleDown
 	}
 	return cfg
 }

@@ -38,6 +38,7 @@ func buildExecuteCR(
 	operationID string,
 	images operatorv1alpha1.UpgradeImagesSpec,
 	selectedSources operatorv1alpha1.SelectedSources,
+	provisioner *operatorv1alpha1.DeclaredProvisionerVersions,
 ) (*unstructured.Unstructured, error) {
 	execute := &operatorv1alpha1.NetworkUpgradeExecute{
 		TypeMeta: metav1.TypeMeta{
@@ -61,6 +62,7 @@ func buildExecuteCR(
 			ConsensusNode:   cfg.CapsuleName(),
 			Images:          images,
 			SelectedSources: selectedSources,
+			Provisioner:     provisioner,
 		},
 	}
 

@@ -475,23 +475,36 @@ spec:
                       daemonRequeueInterval:
                         description: |-
                           DaemonRequeueInterval is how often the execute reconciler polls for the
-                          provisioner daemon result condition. Default: 10s.
+                          provisioner daemon result condition. Default: 10s. Values below 1s are
+                          ignored and the default is used.
                         format: duration
                         type: string
                       nodeReadyRequeueInterval:
                         description: |-
                           NodeReadyRequeueInterval is how often the execute reconciler polls for
                           the consensus node to reach ACTIVE after the pod is brought online.
-                          Default: 10s.
+                          Default: 10s. Values below 1s are ignored and the default is used.
                         format: duration
                         type: string
                       prereqRequeueInterval:
                         description: |-
                           PrereqRequeueInterval is how often the execute reconciler polls for
                           prerequisite CRs (Prepare/Freeze succeeded, ConfigCRsApplied).
-                          Default: 30s.
+                          Default: 30s. Values below 1s are ignored and the default is used.
                         format: duration
                         type: string
+                      skipScaleDown:
+                        default: true
+                        description: |-
+                          SkipScaleDown controls how the execute phase restarts the consensus pod
+                          onto the new image. When true (default) the operator patches the
+                          ConsensusCapsule images in-place and lets the StatefulSet RollingUpdate
+                          strategy restart the pod, skipping the scale-down-to-0 / scale-up-to-1
+                          sequence and saving ~10s. When false it uses the scale-down sequence.
+                          The operator forces the scale-down path regardless when a host-level
+                          provisioner daemon requires the pod to be fully absent before
+                          infrastructure work can proceed.
+                        type: boolean
                     type: object
                 type: object
             required:

@@ -34,6 +34,24 @@ type NetworkUpgradeExecuteSpec struct {
 	Images UpgradeImagesSpec `json:"images"`
 
 	SelectedSources SelectedSources `json:"selectedSources"`
+
+	// Provisioner carries the provisioner daemon and CLI versions declared in
+	// the upgrade package's infrastructure-versions.yaml. The execute
+	// reconciler compares these against the Orbit CR's annotations to decide
+	// whether infra-level work requires a full pod scale-down.
+	// +optional
+	Provisioner *DeclaredProvisionerVersions `json:"provisioner,omitempty"`
+}
+
+// DeclaredProvisionerVersions holds the provisioner versions declared in the
+// upgrade package's infrastructure-versions.yaml (HIP-1494).
+type DeclaredProvisionerVersions struct {
+	// DaemonVersion is the provisioner daemon version from the manifest.
+	// +optional
+	DaemonVersion string `json:"daemonVersion,omitempty"`
+	// CLIVersion is the provisioner CLI version from the manifest.
+	// +optional
+	CLIVersion string `json:"cliVersion,omitempty"`
 }
 
 type NetworkUpgradeExecuteStatus struct {
