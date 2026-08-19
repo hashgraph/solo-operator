@@ -4,6 +4,7 @@ package uc
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -31,6 +32,7 @@ type MarkerMonitor struct {
 	factory markerDispatcher
 
 	connectivityErr atomic.Pointer[daemonkit.StatusError]
+	seen            map[string]struct{}
 }
 
 // markerDispatcher routes a detected marker to the handler that constructs the
@@ -56,6 +58,7 @@ func NewMarkerMonitorWithFactory(cfg Config, f *Factory) *MarkerMonitor {
 	return &MarkerMonitor{
 		cfg:     cfg,
 		factory: f,
+		seen:    make(map[string]struct{}),
 	}
 }
 
@@ -180,10 +183,27 @@ func (m *MarkerMonitor) Run(ctx context.Context) (retErr error) {
 //   - It also survives volume remounts and container restarts without any watch
 //     re-registration plumbing.
 func (m *MarkerMonitor) poll(ctx context.Context, current time.Duration) time.Duration {
+	if m.seen == nil {
+		m.seen = make(map[string]struct{})
+	}
 	next := current
 	for _, name := range AllMarkers {
-		if _, err := os.Stat(filepath.Join(m.cfg.UpgradePath, name)); err != nil {
+		info, err := os.Stat(filepath.Join(m.cfg.UpgradePath, name))
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				// Reset dedup so reappearance is logged; skip on transient I/O errors.
+				delete(m.seen, name)
+			}
 			continue
+		}
+		if _, already := m.seen[name]; !already {
+			detectionLatency := time.Since(info.ModTime()).Truncate(time.Millisecond)
+			logx.As().Info().
+				Str("reason", ReasonMarkerDetected.String()).
+				Str("marker", name).
+				Dur("latency", detectionLatency).
+				Msg("marker detected")
+			m.seen[name] = struct{}{}
 		}
 		if err := m.dispatch(ctx, name); err != nil {
 			common.LogErr(logx.As().Error(), err, ReasonMarkerHandlerFailed).
