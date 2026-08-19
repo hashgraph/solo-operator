@@ -6,6 +6,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/events"
@@ -655,5 +656,74 @@ func TestReconcilePrefetch_NoCapsules_SkipsPrefetch(t *testing.T) {
 	}
 	if completedCond.Reason != operatorv1alpha1.ReasonPrefetchSkipped.String() {
 		t.Errorf("expected reason PrefetchSkipped, got %s", completedCond.Reason)
+	}
+}
+
+// TestCheckPrefetchJobs_EmptyListInconclusive verifies that when the created
+// condition is set (Jobs were created) but no Jobs remain after the cache-lag
+// grace window, checkPrefetchJobs does NOT declare success: an empty list is
+// ambiguous (a failed Job may have been TTL-cleaned), so it must mark the
+// outcome inconclusive (Completed=False) to force downstream registry
+// validation rather than skipping it on an unverifiable assumption.
+func TestCheckPrefetchJobs_EmptyListInconclusive(t *testing.T) {
+	scheme := newControllerTestScheme()
+	prepare := newPrepareForTest()
+	// Pre-set the finalizer so a single Reconcile proceeds past ensureFinalizer
+	// straight into the prefetch check.
+	prepare.Finalizers = []string{FinalizerNetworkUpgradePrepare}
+	prepare.Status.Phase = operatorv1alpha1.PhaseSucceeded
+	prepare.Status.SelectedSources = &operatorv1alpha1.SelectedSources{}
+	prepare.Status.SelectedSources.Set(operatorv1alpha1.ComponentConsensusNode,
+		&operatorv1alpha1.SelectedSource{Image: "gcr.io/cn:v1", Digest: "sha256:abc"})
+	// created=True set well beyond the 30s cache-lag grace window, with no Jobs
+	// present in the cluster.
+	prepare.Status.Conditions = []operatorv1alpha1.Condition{{
+		Type:               operatorv1alpha1.CondImagePrefetchCreated,
+		Status:             metav1.ConditionTrue,
+		Reason:             operatorv1alpha1.ReasonPrefetchCreated.String(),
+		LastTransitionTime: metav1.NewTime(time.Now().Add(-time.Minute)),
+	}}
+
+	orbit := &operatorv1alpha1.Orbit{
+		ObjectMeta: metav1.ObjectMeta{Name: prepare.Spec.Orbit},
+	}
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(prepare, orbit).
+		WithStatusSubresource(prepare).
+		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, prepareIndexFunc).
+		WithIndex(&operatorv1alpha1.ConsensusCapsule{}, fieldCapsuleOrbit, capsuleOrbitIndexFunc).
+		Build()
+
+	rec := events.NewFakeRecorder(64)
+	r := NewNetworkUpgradePrepareReconciler(c, scheme)
+	r.Recorder = rec
+
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: client.ObjectKeyFromObject(prepare),
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var got operatorv1alpha1.NetworkUpgradePrepare
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(prepare), &got); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	completedCond := findCondition(got.Status.Conditions, operatorv1alpha1.CondImagePrefetchCompleted)
+	if completedCond == nil {
+		t.Fatal("expected CondImagePrefetchCompleted to be set")
+	}
+	if completedCond.Status != metav1.ConditionFalse {
+		t.Errorf("expected CondImagePrefetchCompleted=False, got %s", completedCond.Status)
+	}
+	if completedCond.Reason != operatorv1alpha1.ReasonPrefetchInconclusive.String() {
+		t.Errorf("expected reason PrefetchInconclusive, got %s", completedCond.Reason)
+	}
+
+	// prefetchCompleted must report not-succeeded so Freeze/Execute fall back to
+	// registry validation.
+	if _, ok := prefetchCompleted(&got); ok {
+		t.Error("prefetchCompleted should report not-succeeded for an inconclusive outcome")
 	}
 }

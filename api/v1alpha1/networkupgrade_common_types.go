@@ -249,11 +249,12 @@ const (
 	ReasonUpgradeFailed              errx.Reason = "UpgradeFailed"
 	ReasonNodeActiveDeadlineExceeded errx.Reason = "NodeActiveDeadlineExceeded"
 
-	ReasonPrefetchCreated   errx.Reason = "PrefetchCreated"
-	ReasonPrefetchCompleted errx.Reason = "PrefetchCompleted"
-	ReasonPrefetchFailed    errx.Reason = "PrefetchFailed"
-	ReasonPrefetchPending   errx.Reason = "PrefetchPending"
-	ReasonPrefetchSkipped   errx.Reason = "PrefetchSkipped"
+	ReasonPrefetchCreated      errx.Reason = "PrefetchCreated"
+	ReasonPrefetchCompleted    errx.Reason = "PrefetchCompleted"
+	ReasonPrefetchFailed       errx.Reason = "PrefetchFailed"
+	ReasonPrefetchPending      errx.Reason = "PrefetchPending"
+	ReasonPrefetchSkipped      errx.Reason = "PrefetchSkipped"
+	ReasonPrefetchInconclusive errx.Reason = "PrefetchInconclusive"
 
 	ReasonAbortSuccess     errx.Reason = "Success"
 	ReasonAbortAfterFreeze errx.Reason = "AbortAfterFreeze"

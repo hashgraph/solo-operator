@@ -523,17 +523,25 @@ func (r *NetworkUpgradePrepareReconciler) checkPrefetchJobs(ctx context.Context,
 	if len(jobs.Items) == 0 {
 		// Guard against informer-cache staleness: if the created condition was
 		// set very recently, the cache may not have observed the Jobs yet.
-		// Requeue to let the cache catch up before declaring completion.
+		// Requeue to let the cache catch up before deciding.
 		created := findCondition(prepare.Status.Conditions, operatorv1alpha1.CondImagePrefetchCreated)
 		if created != nil && time.Since(created.LastTransitionTime.Time) < 30*time.Second {
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 
+		// We got here with created=True (Jobs were created) but the list is now
+		// empty, so the Jobs vanished — TTL-cleaned, manually deleted, or a
+		// cache stall beyond the grace window. An empty list is ambiguous: it
+		// could mean every Job succeeded, but it could equally hide a failed
+		// Job that was already cleaned. Prefetch is a best-effort optimization,
+		// so bias toward the safe direction: do NOT claim success. Mark the
+		// outcome inconclusive so Freeze/Execute fall back to normal registry
+		// validation instead of skipping it on an unverifiable assumption.
 		setCondition(&prepare.Status.Conditions, metav1.Condition{
 			Type:    operatorv1alpha1.CondImagePrefetchCompleted,
-			Status:  metav1.ConditionTrue,
-			Reason:  operatorv1alpha1.ReasonPrefetchCompleted.String(),
-			Message: "all prefetch Jobs completed (or TTL-cleaned)",
+			Status:  metav1.ConditionFalse,
+			Reason:  operatorv1alpha1.ReasonPrefetchInconclusive.String(),
+			Message: "prefetch Jobs no longer present; completion could not be confirmed — falling back to registry validation",
 		})
 		if err := r.Status().Update(ctx, prepare); err != nil {
 			return ctrl.Result{}, wrapStatusUpdate(err, "updating prefetch completed status")
