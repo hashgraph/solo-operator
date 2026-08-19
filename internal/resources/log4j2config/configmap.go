@@ -4,6 +4,7 @@ package log4j2config
 
 import (
 	"context"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -64,12 +65,15 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			common.Info(ctx, common.ReasonConfigMapCreated).Str("configMap", desired.Name).Msg("Creating Log4j2 ConfigMap")
+			common.StampOwnerCreatedAt(desired, obj)
 			return ctrl.Result{}, r.Client.Create(ctx, desired)
 		}
 		return ctrl.Result{}, err
 	}
 
-	if conflict := common.ConfigMapOwnerConflict(existing, obj); conflict != "" {
+	callerUID := obj.GetUID()
+	callerGVK := operatorv1alpha1.GroupVersion.WithKind("Log4j2Config")
+	if conflict := common.ConfigMapOwnerConflict(existing, callerUID, callerGVK); conflict != "" {
 		apimeta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 			Type:               operatorv1alpha1.ConditionTypeValid,
 			Status:             metav1.ConditionFalse,
@@ -81,15 +85,29 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 		return ctrl.Result{}, nil
 	}
 
+	if common.ConfigMapSuperseded(existing, obj) {
+		ownerRef := metav1.GetControllerOf(existing)
+		apimeta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:               operatorv1alpha1.ConditionTypeValid,
+			Status:             metav1.ConditionTrue,
+			ObservedGeneration: obj.Generation,
+			Reason:             common.ConditionReasonSuperseded,
+			Message:            fmt.Sprintf("ConfigMap %s is owned by a newer CR %s (uid %s)", desired.Name, ownerRef.Name, ownerRef.UID),
+		})
+		return ctrl.Result{}, nil
+	}
+
 	if common.ConfigMapNeedsUpdate(existing, desired) {
 		common.Debug(ctx, common.ReasonConfigMapUpdated).Str("configMap", desired.Name).Msg("Updating Log4j2 ConfigMap")
 		existing.Data = desired.Data
 		existing.Labels = desired.Labels
+		common.ClearControllerRef(existing)
 		// Re-apply owner reference on update so a pre-existing CM without a controller
 		// reference gets cascade-GC wired up correctly.
 		if err := controllerutil.SetControllerReference(obj, existing, r.Scheme); err != nil {
 			return ctrl.Result{}, err
 		}
+		common.StampOwnerCreatedAt(existing, obj)
 		return ctrl.Result{}, common.WarnOnConflict(ctx, r.Client.Update(ctx, existing))
 	}
 

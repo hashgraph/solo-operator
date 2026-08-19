@@ -78,23 +78,40 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 	err := r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
+			common.StampOwnerCreatedAt(desired, obj)
 			return ctrl.Result{}, r.Client.Create(ctx, desired)
 		}
 		return ctrl.Result{}, err
 	}
 
-	if conflict := common.ConfigMapOwnerConflict(existing, obj); conflict != "" {
+	callerUID := obj.GetUID()
+	callerGVK := operatorv1alpha1.GroupVersion.WithKind("ApplicationProperties")
+	if conflict := common.ConfigMapOwnerConflict(existing, callerUID, callerGVK); conflict != "" {
 		return r.reject(ctx, obj, "OwnershipConflict", conflict)
+	}
+
+	if common.ConfigMapSuperseded(existing, obj) {
+		ownerRef := metav1.GetControllerOf(existing)
+		apimeta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:               operatorv1alpha1.ApplicationPropertiesConditionTypeValid,
+			Status:             metav1.ConditionTrue,
+			ObservedGeneration: obj.Generation,
+			Reason:             common.ConditionReasonSuperseded,
+			Message:            fmt.Sprintf("ConfigMap %s is owned by a newer CR %s (uid %s)", desired.Name, ownerRef.Name, ownerRef.UID),
+		})
+		return ctrl.Result{}, nil
 	}
 
 	if common.ConfigMapNeedsUpdate(existing, desired) {
 		existing.Data = desired.Data
 		existing.Labels = desired.Labels
+		common.ClearControllerRef(existing)
 		// Re-apply owner reference on update so a pre-existing CM without a controller
 		// reference gets cascade-GC wired up correctly.
 		if err := controllerutil.SetControllerReference(obj, existing, r.Scheme); err != nil {
 			return ctrl.Result{}, err
 		}
+		common.StampOwnerCreatedAt(existing, obj)
 		return ctrl.Result{}, common.WarnOnConflict(ctx, r.Client.Update(ctx, existing))
 	}
 
