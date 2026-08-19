@@ -43,6 +43,8 @@ const (
 	ReasonSpecMutated       errx.Reason = "SpecMutationRejected"
 	ReasonConfigMapNotFound errx.Reason = "ConfigMapNotFound"
 	ReasonConfigMapFound    errx.Reason = "ConfigMapFound"
+	ReasonPrefetchJobBuild  errx.Reason = "PrefetchJobBuildFailed"
+	ReasonPrefetchJobCreate errx.Reason = "PrefetchJobCreateFailed"
 
 	ReasonUCSidecarRequired errx.Reason = "UCSidecarRequired"
 )

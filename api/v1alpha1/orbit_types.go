@@ -100,6 +100,15 @@ type ConsensusNodeUpgrade struct {
 	// +optional
 	NodeReadyRequeueInterval *metav1.Duration `json:"nodeReadyRequeueInterval,omitempty"`
 
+	// PrefetchJobTTL is how long completed prefetch Jobs linger before
+	// Kubernetes auto-deletes them via the TTL controller. Default: 90d.
+	// Caution: this TTL applies to both succeeded and failed Jobs. Setting
+	// a short duration causes failed Jobs to be deleted, losing debug info
+	// (logs, events) needed to diagnose prefetch failures.
+	// +kubebuilder:validation:Format=duration
+	// +optional
+	PrefetchJobTTL *metav1.Duration `json:"prefetchJobTTL,omitempty"`
+
 	// SkipScaleDown controls how the execute phase restarts the consensus pod
 	// onto the new image. When true (default) the operator patches the
 	// ConsensusCapsule images in-place and lets the StatefulSet RollingUpdate
@@ -117,6 +126,7 @@ const (
 	DefaultExecutePrereqRequeueInterval    = 30 * time.Second
 	DefaultExecuteDaemonRequeueInterval    = 10 * time.Second
 	DefaultExecuteNodeReadyRequeueInterval = 10 * time.Second
+	DefaultPrefetchJobTTL                  = 90 * 24 * time.Hour
 	MinRequeueInterval                     = 1 * time.Second
 )
 
@@ -126,6 +136,7 @@ type EffectiveUpgradeConfig struct {
 	PrereqRequeueInterval    time.Duration
 	DaemonRequeueInterval    time.Duration
 	NodeReadyRequeueInterval time.Duration
+	PrefetchJobTTL           time.Duration
 	SkipScaleDown            bool
 }
 
@@ -136,6 +147,7 @@ func ResolveUpgradeConfig(orbit *Orbit) EffectiveUpgradeConfig {
 		PrereqRequeueInterval:    DefaultExecutePrereqRequeueInterval,
 		DaemonRequeueInterval:    DefaultExecuteDaemonRequeueInterval,
 		NodeReadyRequeueInterval: DefaultExecuteNodeReadyRequeueInterval,
+		PrefetchJobTTL:           DefaultPrefetchJobTTL,
 		SkipScaleDown:            true,
 	}
 	if orbit == nil || orbit.Spec.Upgrade == nil || orbit.Spec.Upgrade.ConsensusNode == nil {
@@ -151,6 +163,9 @@ func ResolveUpgradeConfig(orbit *Orbit) EffectiveUpgradeConfig {
 	}
 	if u.NodeReadyRequeueInterval != nil && u.NodeReadyRequeueInterval.Duration >= MinRequeueInterval {
 		cfg.NodeReadyRequeueInterval = u.NodeReadyRequeueInterval.Duration
+	}
+	if u.PrefetchJobTTL != nil && u.PrefetchJobTTL.Duration >= 0 {
+		cfg.PrefetchJobTTL = u.PrefetchJobTTL.Duration
 	}
 	if u.SkipScaleDown != nil {
 		cfg.SkipScaleDown = *u.SkipScaleDown

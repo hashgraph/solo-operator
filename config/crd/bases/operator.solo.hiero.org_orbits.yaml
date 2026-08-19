@@ -486,6 +486,12 @@ spec:
                           Default: 10s. Values below 1s are ignored and the default is used.
                         format: duration
                         type: string
+                      prefetchJobTTL:
+                        description: |-
+                          PrefetchJobTTL is how long completed prefetch Jobs linger before
+                          Kubernetes auto-deletes them via the TTL controller. Default: 90d.
+                        format: duration
+                        type: string
                       prereqRequeueInterval:
                         description: |-
                           PrereqRequeueInterval is how often the execute reconciler polls for

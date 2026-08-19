@@ -1203,6 +1203,11 @@ func (in *ConsensusNodeUpgrade) DeepCopyInto(out *ConsensusNodeUpgrade) {
 		*out = new(metav1.Duration)
 		**out = **in
 	}
+	if in.PrefetchJobTTL != nil {
+		in, out := &in.PrefetchJobTTL, &out.PrefetchJobTTL
+		*out = new(metav1.Duration)
+		**out = **in
+	}
 	if in.SkipScaleDown != nil {
 		in, out := &in.SkipScaleDown, &out.SkipScaleDown
 		*out = new(bool)

@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/automa-saga/errx"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/events"
@@ -19,6 +21,7 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/registry"
+	"github.com/hashgraph/solo-operator/internal/resources/prefetch"
 )
 
 const checkTimeout = 15 * time.Second
@@ -62,9 +65,12 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 		return *res, err
 	}
 
-	if prepare.Status.Phase == operatorv1alpha1.PhaseSucceeded ||
-		prepare.Status.Phase == operatorv1alpha1.PhaseFailed {
+	if prepare.Status.Phase == operatorv1alpha1.PhaseFailed {
 		return ctrl.Result{}, nil
+	}
+
+	if prepare.Status.Phase == operatorv1alpha1.PhaseSucceeded {
+		return r.reconcilePrefetch(ctx, &prepare)
 	}
 
 	if ok, msg := validateOperationIDLabel(prepare.Labels, prepare.Spec.OperationID); !ok {
@@ -240,7 +246,195 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 			errx.WithReason(errReconcile.New("no valid registry for one or more components"), ReasonNoValidRegistry),
 			"Confirm at least one configured registry serves a valid image for each component")
 	}
+	return ctrl.Result{Requeue: true}, nil
+}
+
+func (r *NetworkUpgradePrepareReconciler) reconcilePrefetch(ctx context.Context, prepare *operatorv1alpha1.NetworkUpgradePrepare) (ctrl.Result, error) {
+	completed := findCondition(prepare.Status.Conditions, operatorv1alpha1.CondImagePrefetchCompleted)
+	if completed != nil {
+		return ctrl.Result{}, nil
+	}
+
+	created := findCondition(prepare.Status.Conditions, operatorv1alpha1.CondImagePrefetchCreated)
+	if created == nil {
+		return r.createPrefetchJobs(ctx, prepare)
+	}
+
+	return r.checkPrefetchJobs(ctx, prepare)
+}
+
+func (r *NetworkUpgradePrepareReconciler) createPrefetchJobs(ctx context.Context, prepare *operatorv1alpha1.NetworkUpgradePrepare) (ctrl.Result, error) {
+	if prepare.Status.SelectedSources == nil {
+		return ctrl.Result{}, nil
+	}
+
+	ucfg, err := resolveUpgradeConfigFromOrbit(ctx, r.Client, prepare.Spec.Orbit)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	ttlSeconds := int32(ucfg.PrefetchJobTTL.Seconds())
+
+	var capsules operatorv1alpha1.ConsensusCapsuleList
+	if err := r.List(ctx, &capsules,
+		client.InNamespace(prepare.Namespace),
+		client.MatchingFields{fieldCapsuleOrbit: prepare.Spec.Orbit},
+	); err != nil {
+		return ctrl.Result{}, errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "listing ConsensusCapsules"), ReasonListFailed),
+			"Confirm the operator has list permission on ConsensusCapsules")
+	}
+
+	if len(capsules.Items) == 0 {
+		setCondition(&prepare.Status.Conditions, metav1.Condition{
+			Type:    operatorv1alpha1.CondImagePrefetchCreated,
+			Status:  metav1.ConditionFalse,
+			Reason:  operatorv1alpha1.ReasonPrefetchSkipped.String(),
+			Message: "no ConsensusCapsules found for orbit",
+		})
+		setCondition(&prepare.Status.Conditions, metav1.Condition{
+			Type:    operatorv1alpha1.CondImagePrefetchCompleted,
+			Status:  metav1.ConditionTrue,
+			Reason:  operatorv1alpha1.ReasonPrefetchSkipped.String(),
+			Message: "no ConsensusCapsules found; prefetch skipped",
+		})
+		if err := r.Status().Update(ctx, prepare); err != nil {
+			return ctrl.Result{}, wrapStatusUpdate(err, "updating prefetch status")
+		}
+		return ctrl.Result{}, nil
+	}
+
+	images := collectUniqueImages(prepare.Status.SelectedSources)
+	if len(images) == 0 {
+		return ctrl.Result{}, nil
+	}
+
+	jobCount := 0
+	for i := range capsules.Items {
+		capsule := &capsules.Items[i]
+		for _, image := range images {
+			job, err := prefetch.BuildPrefetchJob(prepare, capsule, image, ttlSeconds, r.Scheme)
+			if err != nil {
+				return ctrl.Result{}, errx.WithReason(errReconcile.Wrap(err, "building prefetch Job"), ReasonPrefetchJobBuild)
+			}
+			if err := r.Create(ctx, job); err != nil {
+				if apierrors.IsAlreadyExists(err) {
+					continue
+				}
+				return ctrl.Result{}, errx.WithHints(
+					errx.WithReason(errK8sAPI.Wrap(err, "creating prefetch Job %s", job.Name), ReasonPrefetchJobCreate),
+					"Confirm the operator has create permission on batch/v1 Jobs")
+			}
+			jobCount++
+		}
+	}
+
+	r.eventf(ctx, prepare, corev1.EventTypeNormal, operatorv1alpha1.EventPrefetchCreated,
+		"created %d prefetch Jobs across %d capsules", jobCount, len(capsules.Items))
+
+	setCondition(&prepare.Status.Conditions, metav1.Condition{
+		Type:    operatorv1alpha1.CondImagePrefetchCreated,
+		Status:  metav1.ConditionTrue,
+		Reason:  operatorv1alpha1.ReasonPrefetchCreated.String(),
+		Message: fmt.Sprintf("created %d prefetch Jobs", jobCount),
+	})
+	if err := r.Status().Update(ctx, prepare); err != nil {
+		return ctrl.Result{}, wrapStatusUpdate(err, "updating prefetch created status")
+	}
+	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+}
+
+func (r *NetworkUpgradePrepareReconciler) checkPrefetchJobs(ctx context.Context, prepare *operatorv1alpha1.NetworkUpgradePrepare) (ctrl.Result, error) {
+	var jobs batchv1.JobList
+	if err := r.List(ctx, &jobs,
+		client.InNamespace(prepare.Namespace),
+		client.MatchingLabels{
+			operatorv1alpha1.LabelOperationID:  prepare.Spec.OperationID,
+			operatorv1alpha1.LabelPrefetchRole: operatorv1alpha1.RolePrefetch,
+		},
+	); err != nil {
+		return ctrl.Result{}, errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(err, "listing prefetch Jobs"), ReasonListFailed),
+			"Confirm the operator has list permission on batch/v1 Jobs")
+	}
+
+	if len(jobs.Items) == 0 {
+		setCondition(&prepare.Status.Conditions, metav1.Condition{
+			Type:    operatorv1alpha1.CondImagePrefetchCompleted,
+			Status:  metav1.ConditionTrue,
+			Reason:  operatorv1alpha1.ReasonPrefetchCompleted.String(),
+			Message: "all prefetch Jobs completed (or TTL-cleaned)",
+		})
+		if err := r.Status().Update(ctx, prepare); err != nil {
+			return ctrl.Result{}, wrapStatusUpdate(err, "updating prefetch completed status")
+		}
+		return ctrl.Result{}, nil
+	}
+
+	allDone := true
+	anyFailed := false
+	for i := range jobs.Items {
+		j := &jobs.Items[i]
+		if jobHasCondition(j, batchv1.JobComplete) {
+			continue
+		}
+		if jobHasCondition(j, batchv1.JobFailed) {
+			anyFailed = true
+			r.eventf(ctx, prepare, corev1.EventTypeWarning, operatorv1alpha1.EventPrefetchFailed,
+				"prefetch Job %s failed", j.Name)
+			continue
+		}
+		allDone = false
+	}
+
+	if !allDone {
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	cond := metav1.Condition{
+		Type:   operatorv1alpha1.CondImagePrefetchCompleted,
+		Status: metav1.ConditionTrue,
+		Reason: operatorv1alpha1.ReasonPrefetchCompleted.String(),
+	}
+	if anyFailed {
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = operatorv1alpha1.ReasonPrefetchFailed.String()
+		cond.Message = "one or more prefetch Jobs failed; upgrade will use registry pull"
+	} else {
+		cond.Message = "all prefetch Jobs succeeded; images cached on nodes"
+		r.eventf(ctx, prepare, corev1.EventTypeNormal, operatorv1alpha1.EventPrefetchCompleted,
+			"all prefetch Jobs succeeded for operationId %q", prepare.Spec.OperationID)
+	}
+	setCondition(&prepare.Status.Conditions, cond)
+	if err := r.Status().Update(ctx, prepare); err != nil {
+		return ctrl.Result{}, wrapStatusUpdate(err, "updating prefetch completed status")
+	}
 	return ctrl.Result{}, nil
+}
+
+func jobHasCondition(j *batchv1.Job, condType batchv1.JobConditionType) bool {
+	for _, c := range j.Status.Conditions {
+		if c.Type == condType && c.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return false
+}
+
+func collectUniqueImages(sources *operatorv1alpha1.SelectedSources) []string {
+	if sources == nil {
+		return nil
+	}
+	seen := make(map[string]bool)
+	var images []string
+	for _, name := range operatorv1alpha1.AllUpgradeComponents {
+		src := sources.Get(name)
+		if src == nil || seen[src.Image] {
+			continue
+		}
+		seen[src.Image] = true
+		images = append(images, src.Image)
+	}
+	return images
 }
 
 func (r *NetworkUpgradePrepareReconciler) eventf(ctx context.Context, obj *operatorv1alpha1.NetworkUpgradePrepare, eventtype string, reason errx.Reason, format string, args ...any) {
@@ -251,6 +445,22 @@ const fieldOperationID = "spec.operationId"
 
 func prepareIndexFunc(o client.Object) []string {
 	return []string{o.(*operatorv1alpha1.NetworkUpgradePrepare).Spec.OperationID}
+}
+
+const fieldCapsuleOrbit = "spec.orbit"
+
+func capsuleOrbitIndexFunc(o client.Object) []string {
+	return []string{o.(*operatorv1alpha1.ConsensusCapsule).Spec.Orbit}
+}
+
+// RegisterCapsuleOrbitIndex registers the spec.orbit field index on ConsensusCapsule.
+func RegisterCapsuleOrbitIndex(mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&operatorv1alpha1.ConsensusCapsule{},
+		fieldCapsuleOrbit,
+		capsuleOrbitIndexFunc,
+	)
 }
 
 // RegisterPrepareIndex registers the fieldOperationID field index on NetworkUpgradePrepare.
@@ -272,6 +482,7 @@ func (r *NetworkUpgradePrepareReconciler) SetupWithManager(mgr ctrl.Manager) err
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.NetworkUpgradePrepare{}).
+		Owns(&batchv1.Job{}).
 		Named("networkupgradeprepare").
 		Complete(r)
 }

@@ -61,12 +61,16 @@ type reconcileResult struct {
 
 func reconcilePrepare(t *testing.T, prepare *operatorv1alpha1.NetworkUpgradePrepare, checker registry.ImageChecker) reconcileResult {
 	t.Helper()
+	orbit := &operatorv1alpha1.Orbit{
+		ObjectMeta: metav1.ObjectMeta{Name: prepare.Spec.Orbit},
+	}
 	scheme := newControllerTestScheme()
 	c := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(prepare).
+		WithObjects(prepare, orbit).
 		WithStatusSubresource(prepare).
 		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, prepareIndexFunc).
+		WithIndex(&operatorv1alpha1.ConsensusCapsule{}, fieldCapsuleOrbit, capsuleOrbitIndexFunc).
 		Build()
 
 	rec := events.NewFakeRecorder(64)
@@ -548,11 +552,15 @@ func TestPrepareReconcile_UniqueOperationID_IgnoresSibling(t *testing.T) {
 	prepare.UID = "uid-mine"
 	// prepare.Spec.OperationID == "op-001" (from newPrepareForTest)
 
+	orbit := &operatorv1alpha1.Orbit{
+		ObjectMeta: metav1.ObjectMeta{Name: prepare.Spec.Orbit},
+	}
 	c := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(sibling, prepare).
+		WithObjects(sibling, prepare, orbit).
 		WithStatusSubresource(sibling, prepare).
 		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, prepareIndexFunc).
+		WithIndex(&operatorv1alpha1.ConsensusCapsule{}, fieldCapsuleOrbit, capsuleOrbitIndexFunc).
 		Build()
 
 	rec := events.NewFakeRecorder(64)
@@ -579,5 +587,73 @@ func TestPrepareReconcile_UniqueOperationID_IgnoresSibling(t *testing.T) {
 	}
 	if got.Status.Phase != operatorv1alpha1.PhaseSucceeded {
 		t.Errorf("expected PhaseSucceeded when sibling has different operationId, got %s", got.Status.Phase)
+	}
+}
+
+func TestCollectUniqueImages(t *testing.T) {
+	sources := &operatorv1alpha1.SelectedSources{}
+	sources.Set(operatorv1alpha1.ComponentConsensusNode, &operatorv1alpha1.SelectedSource{Image: "gcr.io/cn:v1"})
+	sources.Set(operatorv1alpha1.ComponentRecordStreamUploader, &operatorv1alpha1.SelectedSource{Image: "gcr.io/rsu:v1"})
+	sources.Set(operatorv1alpha1.ComponentEventStreamUploader, &operatorv1alpha1.SelectedSource{Image: "gcr.io/cn:v1"})
+
+	images := collectUniqueImages(sources)
+	if len(images) != 2 {
+		t.Fatalf("expected 2 unique images, got %d: %v", len(images), images)
+	}
+
+	if images := collectUniqueImages(nil); len(images) != 0 {
+		t.Errorf("expected 0 images for nil sources, got %d", len(images))
+	}
+}
+
+func TestReconcilePrefetch_NoCapsules_SkipsPrefetch(t *testing.T) {
+	scheme := newControllerTestScheme()
+	prepare := newPrepareForTest()
+	prepare.Status.Phase = operatorv1alpha1.PhaseSucceeded
+	prepare.Status.SelectedSources = &operatorv1alpha1.SelectedSources{}
+	prepare.Status.SelectedSources.Set(operatorv1alpha1.ComponentConsensusNode,
+		&operatorv1alpha1.SelectedSource{Image: "gcr.io/cn:v1", Digest: "sha256:abc"})
+
+	orbit := &operatorv1alpha1.Orbit{
+		ObjectMeta: metav1.ObjectMeta{Name: prepare.Spec.Orbit},
+	}
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(prepare, orbit).
+		WithStatusSubresource(prepare).
+		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, prepareIndexFunc).
+		WithIndex(&operatorv1alpha1.ConsensusCapsule{}, fieldCapsuleOrbit, capsuleOrbitIndexFunc).
+		Build()
+
+	rec := events.NewFakeRecorder(64)
+	r := NewNetworkUpgradePrepareReconciler(c, scheme)
+	r.Recorder = rec
+
+	for i := 0; i < 5; i++ {
+		res, err := r.Reconcile(context.Background(), ctrl.Request{
+			NamespacedName: client.ObjectKeyFromObject(prepare),
+		})
+		if err != nil {
+			t.Fatalf("unexpected error on iteration %d: %v", i, err)
+		}
+		if !res.Requeue && res.RequeueAfter == 0 {
+			break
+		}
+	}
+
+	var got operatorv1alpha1.NetworkUpgradePrepare
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(prepare), &got); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	completedCond := findCondition(got.Status.Conditions, operatorv1alpha1.CondImagePrefetchCompleted)
+	if completedCond == nil {
+		t.Fatal("expected CondImagePrefetchCompleted to be set")
+	}
+	if completedCond.Status != metav1.ConditionTrue {
+		t.Errorf("expected CondImagePrefetchCompleted=True, got %s", completedCond.Status)
+	}
+	if completedCond.Reason != operatorv1alpha1.ReasonPrefetchSkipped.String() {
+		t.Errorf("expected reason PrefetchSkipped, got %s", completedCond.Reason)
 	}
 }
