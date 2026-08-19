@@ -19,10 +19,13 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 )
 
 const (
@@ -48,6 +51,11 @@ const (
 	// open FDs cannot grow without bound. Keyed off the timestamp embedded in the
 	// operationId, so it mirrors the 90-day-ish window without wall-clock coupling.
 	maxOperationAge = 90 * 24 * time.Hour
+
+	// listNotArchivedSelector excludes completed NetworkUpgrade CRs from startup
+	// List calls so the UC cache-seed only hydrates in-flight CRs. Watch calls
+	// stay unfiltered so the UC sees terminal transitions in real time.
+	listNotArchivedSelector = common.LabelLifecycle + "!=" + common.LifecycleArchived
 )
 
 // UpgradeOutcomeMonitorConfig configures the upgrade-outcome monitor.
@@ -283,7 +291,7 @@ func (m *UpgradeOutcomeMonitor) listAndSeed(ctx context.Context) (prepareRV, fre
 	defer cancel()
 
 	prepareList, err := m.client.Resource(networkUpgradePrepareGVR).Namespace(m.cfg.Namespace).
-		List(listCtx, metav1.ListOptions{})
+		List(listCtx, metav1.ListOptions{LabelSelector: listNotArchivedSelector})
 	if err != nil {
 		return "", "", "", "", errx.WithHints(
 			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradePrepare"), ReasonPrepareListFailed),
@@ -292,7 +300,7 @@ func (m *UpgradeOutcomeMonitor) listAndSeed(ctx context.Context) (prepareRV, fre
 	}
 
 	freezeList, err := m.client.Resource(networkUpgradeFreezeGVR).Namespace(m.cfg.Namespace).
-		List(listCtx, metav1.ListOptions{})
+		List(listCtx, metav1.ListOptions{LabelSelector: listNotArchivedSelector})
 	if err != nil {
 		return "", "", "", "", errx.WithHints(
 			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradeFreeze"), ReasonFreezeListFailed),
@@ -301,7 +309,7 @@ func (m *UpgradeOutcomeMonitor) listAndSeed(ctx context.Context) (prepareRV, fre
 	}
 
 	execList, err := m.client.Resource(networkUpgradeExecuteGVR).Namespace(m.cfg.Namespace).
-		List(listCtx, metav1.ListOptions{})
+		List(listCtx, metav1.ListOptions{LabelSelector: listNotArchivedSelector})
 	if err != nil {
 		return "", "", "", "", errx.WithHints(
 			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradeExecute"), ReasonExecuteListFailed),
@@ -310,7 +318,7 @@ func (m *UpgradeOutcomeMonitor) listAndSeed(ctx context.Context) (prepareRV, fre
 	}
 
 	abortList, err := m.client.Resource(networkUpgradeFreezeAbortGVR).Namespace(m.cfg.Namespace).
-		List(listCtx, metav1.ListOptions{})
+		List(listCtx, metav1.ListOptions{LabelSelector: listNotArchivedSelector})
 	if err != nil {
 		return "", "", "", "", errx.WithHints(
 			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradeFreezeAbort"), ReasonFreezeAbortListFailed),
@@ -361,6 +369,20 @@ func (m *UpgradeOutcomeMonitor) listAndSeed(ctx context.Context) (prepareRV, fre
 		if operatorv1alpha1.Phase(phase) == operatorv1alpha1.PhaseSucceeded {
 			m.handleTerminalAbort(&abortList.Items[i])
 		}
+	}
+
+	// Archive any terminal CRs that survived a prior UC restart unarchived.
+	for i := range prepareList.Items {
+		m.archiveIfTerminalPhase(ctx, &prepareList.Items[i])
+	}
+	for i := range freezeList.Items {
+		m.archiveIfTerminalPhase(ctx, &freezeList.Items[i])
+	}
+	for i := range execList.Items {
+		m.archiveIfTerminalPhase(ctx, &execList.Items[i])
+	}
+	for i := range abortList.Items {
+		m.archiveIfTerminalPhase(ctx, &abortList.Items[i])
 	}
 
 	// Recover any Execute CR already at ReadyForProvisionerDaemon (arrived while UC was offline).
@@ -471,6 +493,7 @@ func (m *UpgradeOutcomeMonitor) runWatch(ctx context.Context, prepareRV, freezeR
 					m.onPhaseUpdate(opID, cr.GetLabels()[operatorv1alpha1.LabelStep], phase)
 				}
 			}
+			m.archiveIfTerminalPhase(ctx, cr)
 		case event, ok := <-freezeWatcher.ResultChan():
 			if !ok {
 				return nil
@@ -497,6 +520,7 @@ func (m *UpgradeOutcomeMonitor) runWatch(ctx context.Context, prepareRV, freezeR
 					m.onPhaseUpdate(opID, cr.GetLabels()[operatorv1alpha1.LabelStep], phase)
 				}
 			}
+			m.archiveIfTerminalPhase(ctx, cr)
 		case event, ok := <-execWatcher.ResultChan():
 			if !ok {
 				return nil
@@ -517,6 +541,7 @@ func (m *UpgradeOutcomeMonitor) runWatch(ctx context.Context, prepareRV, freezeR
 				continue
 			}
 			m.handleExecuteEvent(ctx, cr, proxy)
+			m.archiveIfTerminalPhase(ctx, cr)
 		case event, ok := <-abortWatcher.ResultChan():
 			if !ok {
 				return nil
@@ -546,6 +571,7 @@ func (m *UpgradeOutcomeMonitor) runWatch(ctx context.Context, prepareRV, freezeR
 			if operatorv1alpha1.Phase(phase) == operatorv1alpha1.PhaseSucceeded {
 				m.handleTerminalAbort(cr)
 			}
+			m.archiveIfTerminalPhase(ctx, cr)
 		}
 	}
 }
@@ -866,6 +892,57 @@ func (m *UpgradeOutcomeMonitor) handleTerminalAbort(cr *unstructured.Unstructure
 		return
 	}
 	discardUpgradePackage(m.cfg.UpgradePath, operationIDOf(cr))
+}
+
+// archiveIfTerminalPhase stamps lifecycle=archived on a terminal CR so future
+// List calls with the archive-exclusion selector skip it. No-op for non-terminal phases.
+func (m *UpgradeOutcomeMonitor) archiveIfTerminalPhase(ctx context.Context, cr *unstructured.Unstructured) {
+	phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
+	if phase == string(operatorv1alpha1.PhaseSucceeded) || phase == string(operatorv1alpha1.PhaseFailed) {
+		m.archiveCR(ctx, cr)
+	}
+}
+
+// archiveCR patches the lifecycle=archived label onto a CR. Idempotent.
+func (m *UpgradeOutcomeMonitor) archiveCR(ctx context.Context, cr *unstructured.Unstructured) {
+	if cr.GetLabels()[common.LabelLifecycle] == common.LifecycleArchived {
+		return
+	}
+	gvr, ok := kindToGVR(cr.GetKind())
+	if !ok {
+		logx.As().Warn().Str("reason", ReasonCRArchiveFailed.String()).
+			Str("kind", cr.GetKind()).Msg("unknown CR kind — cannot archive")
+		return
+	}
+	patch := []byte(fmt.Sprintf(
+		`{"metadata":{"labels":{%q:%q}}}`, common.LabelLifecycle, common.LifecycleArchived))
+	patchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if _, err := m.client.Resource(gvr).Namespace(cr.GetNamespace()).
+		Patch(patchCtx, cr.GetName(), types.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
+		logx.As().Warn().Str("reason", ReasonCRArchiveFailed.String()).
+			Str("cr_name", cr.GetName()).Str("kind", cr.GetKind()).Err(err).
+			Msg("failed to archive CR — will retry on next list cycle")
+		return
+	}
+	logx.As().Info().Str("reason", ReasonCRArchived.String()).
+		Str("cr_name", cr.GetName()).Str("operation_id", operationIDOf(cr)).
+		Msg("archived terminal CR")
+}
+
+func kindToGVR(kind string) (schema.GroupVersionResource, bool) {
+	switch kind {
+	case "NetworkUpgradePrepare":
+		return networkUpgradePrepareGVR, true
+	case "NetworkUpgradeFreeze":
+		return networkUpgradeFreezeGVR, true
+	case kindNetworkUpgradeExecute:
+		return networkUpgradeExecuteGVR, true
+	case kindNetworkUpgradeFreezeAbort:
+		return networkUpgradeFreezeAbortGVR, true
+	default:
+		return schema.GroupVersionResource{}, false
+	}
 }
 
 // matchesDiskOperationID returns true when the CR's operationID matches the

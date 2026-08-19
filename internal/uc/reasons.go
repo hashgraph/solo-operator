@@ -145,4 +145,8 @@ const (
 	// systemd notify.
 	ReasonSdNotifyReadyFailed    errx.Reason = "SdNotifyReadyFailed"
 	ReasonSdNotifyStoppingFailed errx.Reason = "SdNotifyStoppingFailed"
+
+	// Lifecycle archiving.
+	ReasonCRArchived      errx.Reason = "CRArchived"
+	ReasonCRArchiveFailed errx.Reason = "CRArchiveFailed"
 )
