@@ -4,10 +4,13 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -16,6 +19,8 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/registry"
+	"github.com/hashgraph/solo-operator/internal/resources/consensus"
+	"github.com/hashgraph/solo-operator/internal/resources/prefetch"
 )
 
 func boolPtr(b bool) *bool { return &b }
@@ -651,11 +656,15 @@ func TestReconcilePrefetch_NoCapsules_SkipsPrefetch(t *testing.T) {
 	if completedCond == nil {
 		t.Fatal("expected CondImagePrefetchCompleted to be set")
 	}
-	if completedCond.Status != metav1.ConditionTrue {
-		t.Errorf("expected CondImagePrefetchCompleted=True, got %s", completedCond.Status)
+	if completedCond.Status != metav1.ConditionFalse {
+		t.Errorf("expected CondImagePrefetchCompleted=False (skipped), got %s", completedCond.Status)
 	}
 	if completedCond.Reason != operatorv1alpha1.ReasonPrefetchSkipped.String() {
 		t.Errorf("expected reason PrefetchSkipped, got %s", completedCond.Reason)
+	}
+	// A skipped prefetch must not read as succeeded to Freeze/Execute.
+	if _, ok := prefetchCompleted(&got); ok {
+		t.Error("prefetchCompleted should report not-succeeded when prefetch was skipped")
 	}
 }
 
@@ -725,5 +734,219 @@ func TestCheckPrefetchJobs_EmptyListInconclusive(t *testing.T) {
 	// registry validation.
 	if _, ok := prefetchCompleted(&got); ok {
 		t.Error("prefetchCompleted should report not-succeeded for an inconclusive outcome")
+	}
+}
+
+func capsuleForPrefetch(name, ns, orbit string, nodeID int64, nodeSelector map[string]string, sa string) operatorv1alpha1.ConsensusCapsule {
+	c := operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+	}
+	c.Spec.Orbit = orbit
+	c.Spec.NodeId = nodeID
+	c.Spec.PodProperties.NodeSelector = nodeSelector
+	if sa != "" {
+		c.Spec.PodProperties.ServiceAccount = &operatorv1alpha1.ServiceAccountConfig{Name: sa}
+	}
+	return c
+}
+
+func consensusPodOn(capsule *operatorv1alpha1.ConsensusCapsule, nodeName string) *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      capsule.Name + "-0",
+			Namespace: capsule.Namespace,
+			Labels:    consensus.SelectorLabels(capsule),
+		},
+		Spec: corev1.PodSpec{NodeName: nodeName},
+	}
+}
+
+func labeledNode(name string, labels map[string]string) *corev1.Node {
+	return &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: name, Labels: labels}}
+}
+
+// When the nodeSelector can't bound the pool (here: absent), targeting falls
+// back to pinning one Job per node currently hosting a consensus pod, using each
+// capsule's own ServiceAccount.
+func TestResolvePrefetchTargets_FallbackToPodNodes(t *testing.T) {
+	scheme := newControllerTestScheme()
+	cap0 := capsuleForPrefetch("cap-0", "test", "test-orbit", 0, nil, "sa-cn")
+	cap1 := capsuleForPrefetch("cap-1", "test", "test-orbit", 1, nil, "sa-cn")
+	pod0 := consensusPodOn(&cap0, "node-a")
+	pod1 := consensusPodOn(&cap1, "node-b")
+
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(&cap0, &cap1, pod0, pod1).Build()
+	r := NewNetworkUpgradePrepareReconciler(c, scheme)
+
+	targets := r.resolvePrefetchTargets(context.Background(),
+		[]operatorv1alpha1.ConsensusCapsule{cap0, cap1}, 30)
+
+	if len(targets) != 2 {
+		t.Fatalf("expected 2 pod-node targets, got len=%d", len(targets))
+	}
+	got := map[string]prefetch.PrefetchTarget{}
+	for _, tg := range targets {
+		got[tg.id] = tg.target
+	}
+	for _, n := range []string{"node-a", "node-b"} {
+		tgt, ok := got[n]
+		if !ok {
+			t.Fatalf("expected a target for %s, got %+v", n, got)
+		}
+		if tgt.NodeName != n {
+			t.Errorf("target %s: NodeName=%q, want %q", n, tgt.NodeName, n)
+		}
+		if tgt.ServiceAccountName != "sa-cn" {
+			t.Errorf("target %s: ServiceAccountName=%q, want sa-cn", n, tgt.ServiceAccountName)
+		}
+	}
+}
+
+// With a scoped nodeSelector within the cap, node-pinned coverage includes every
+// matching node — including a spare node with no pod on it — so a pod that
+// migrates to the spare still hits the cache.
+func TestResolvePrefetchTargets_NodePinnedCoversSpareNodes(t *testing.T) {
+	scheme := newControllerTestScheme()
+	sel := map[string]string{"role": "consensus"}
+	cap0 := capsuleForPrefetch("cap-0", "test", "test-orbit", 0, sel, "sa-cn")
+	pod0 := consensusPodOn(&cap0, "node-a")
+
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(&cap0, labeledNode("node-a", sel), labeledNode("node-spare", sel), pod0).Build()
+	r := NewNetworkUpgradePrepareReconciler(c, scheme)
+
+	targets := r.resolvePrefetchTargets(context.Background(),
+		[]operatorv1alpha1.ConsensusCapsule{cap0}, 30)
+
+	if len(targets) != 2 {
+		t.Fatalf("expected 2 node-pinned targets (incl. spare), got len=%d", len(targets))
+	}
+	ids := map[string]bool{}
+	for _, tg := range targets {
+		ids[tg.id] = true
+	}
+	if !ids["node-a"] || !ids["node-spare"] {
+		t.Errorf("expected node-a and node-spare covered, got %+v", ids)
+	}
+}
+
+// The pod-node fallback deduplicates nodes shared across capsules and skips pods
+// that are not yet scheduled.
+func TestResolvePrefetchTargets_FallbackDedupsAndSkipsUnscheduled(t *testing.T) {
+	scheme := newControllerTestScheme()
+	cap0 := capsuleForPrefetch("cap-0", "test", "test-orbit", 0, nil, "sa-cn")
+	cap1 := capsuleForPrefetch("cap-1", "test", "test-orbit", 1, nil, "sa-cn")
+	cap2 := capsuleForPrefetch("cap-2", "test", "test-orbit", 2, nil, "sa-cn")
+	pod0 := consensusPodOn(&cap0, "node-a")
+	pod1 := consensusPodOn(&cap1, "node-a") // same node → dedup
+	pod2 := consensusPodOn(&cap2, "")       // unscheduled → skip
+
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(&cap0, &cap1, &cap2, pod0, pod1, pod2).Build()
+	r := NewNetworkUpgradePrepareReconciler(c, scheme)
+
+	targets := r.resolvePrefetchTargets(context.Background(),
+		[]operatorv1alpha1.ConsensusCapsule{cap0, cap1, cap2}, 30)
+
+	if len(targets) != 1 || targets[0].id != "node-a" {
+		t.Fatalf("expected exactly one deduped target node-a, got targets=%+v", targets)
+	}
+}
+
+// checkPrefetchJobs must derive terminal state from Job conditions: all complete
+// → success; any failed → failed (upgrade falls back to registry pull); any
+// still running → requeue without deciding.
+func TestCheckPrefetchJobs_TerminalDetection(t *testing.T) {
+	complete := []batchv1.JobCondition{{Type: batchv1.JobComplete, Status: corev1.ConditionTrue}}
+	failed := []batchv1.JobCondition{{Type: batchv1.JobFailed, Status: corev1.ConditionTrue}}
+	running := []batchv1.JobCondition(nil)
+
+	tests := []struct {
+		name          string
+		jobConds      [][]batchv1.JobCondition
+		wantCompleted bool
+		wantStatus    metav1.ConditionStatus
+		wantReason    string
+	}{
+		{
+			name:          "all complete → success",
+			jobConds:      [][]batchv1.JobCondition{complete, complete},
+			wantCompleted: true,
+			wantStatus:    metav1.ConditionTrue,
+			wantReason:    operatorv1alpha1.ReasonPrefetchCompleted.String(),
+		},
+		{
+			name:          "one failed → failed",
+			jobConds:      [][]batchv1.JobCondition{complete, failed},
+			wantCompleted: true,
+			wantStatus:    metav1.ConditionFalse,
+			wantReason:    operatorv1alpha1.ReasonPrefetchFailed.String(),
+		},
+		{
+			name:          "one still running → requeue, undecided",
+			jobConds:      [][]batchv1.JobCondition{complete, running},
+			wantCompleted: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := newControllerTestScheme()
+			prepare := newPrepareForTest()
+			prepare.Status.Phase = operatorv1alpha1.PhaseSucceeded
+			// created=True (and completed unset) is the state in which
+			// checkPrefetchJobs runs.
+			prepare.Status.Conditions = []operatorv1alpha1.Condition{{
+				Type:   operatorv1alpha1.CondImagePrefetchCreated,
+				Status: metav1.ConditionTrue,
+				Reason: operatorv1alpha1.ReasonPrefetchCreated.String(),
+			}}
+
+			objs := []client.Object{prepare}
+			for i, conds := range tt.jobConds {
+				objs = append(objs, &batchv1.Job{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      fmt.Sprintf("prefetch-%d", i),
+						Namespace: prepare.Namespace,
+						Labels: map[string]string{
+							operatorv1alpha1.LabelOperationID:  prepare.Spec.OperationID,
+							operatorv1alpha1.LabelPrefetchRole: operatorv1alpha1.RolePrefetch,
+						},
+					},
+					Status: batchv1.JobStatus{Conditions: conds},
+				})
+			}
+
+			c := fake.NewClientBuilder().WithScheme(scheme).
+				WithObjects(objs...).WithStatusSubresource(prepare).Build()
+			r := NewNetworkUpgradePrepareReconciler(c, scheme)
+			r.Recorder = events.NewFakeRecorder(64)
+
+			res, err := r.checkPrefetchJobs(context.Background(), prepare)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			completed := findCondition(prepare.Status.Conditions, operatorv1alpha1.CondImagePrefetchCompleted)
+			if !tt.wantCompleted {
+				if completed != nil {
+					t.Errorf("expected no Completed condition while a Job is running, got %+v", completed)
+				}
+				if res.RequeueAfter == 0 {
+					t.Errorf("expected a requeue while a Job is running, got %+v", res)
+				}
+				return
+			}
+			if completed == nil {
+				t.Fatal("expected CondImagePrefetchCompleted to be set")
+			}
+			if completed.Status != tt.wantStatus {
+				t.Errorf("Completed.Status = %s, want %s", completed.Status, tt.wantStatus)
+			}
+			if completed.Reason != tt.wantReason {
+				t.Errorf("Completed.Reason = %s, want %s", completed.Reason, tt.wantReason)
+			}
+		})
 	}
 }

@@ -21,6 +21,7 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/registry"
+	"github.com/hashgraph/solo-operator/internal/resources/consensus"
 	"github.com/hashgraph/solo-operator/internal/resources/prefetch"
 )
 
@@ -53,6 +54,7 @@ func (r *NetworkUpgradePrepareReconciler) WithStrategy(name string) *NetworkUpgr
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeprepares/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeprepares/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 
 func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var prepare operatorv1alpha1.NetworkUpgradePrepare
@@ -294,7 +296,7 @@ func (r *NetworkUpgradePrepareReconciler) createPrefetchJobs(ctx context.Context
 		})
 		setCondition(&prepare.Status.Conditions, metav1.Condition{
 			Type:    operatorv1alpha1.CondImagePrefetchCompleted,
-			Status:  metav1.ConditionTrue,
+			Status:  metav1.ConditionFalse,
 			Reason:  operatorv1alpha1.ReasonPrefetchSkipped.String(),
 			Message: "no ConsensusCapsules found; prefetch skipped",
 		})
@@ -309,15 +311,36 @@ func (r *NetworkUpgradePrepareReconciler) createPrefetchJobs(ctx context.Context
 		return ctrl.Result{}, nil
 	}
 
-	targets, targetCount := r.resolvePrefetchTargets(ctx, capsules.Items, ucfg.MaxPrefetchNodes)
+	targets := r.resolvePrefetchTargets(ctx, capsules.Items, ucfg.MaxPrefetchNodes)
+	if len(targets) == 0 {
+		// No node could be resolved (e.g. no consensus pods are scheduled yet).
+		// Nothing to prefetch — mark skipped so Freeze/Execute fall through to
+		// normal registry validation.
+		setCondition(&prepare.Status.Conditions, metav1.Condition{
+			Type:    operatorv1alpha1.CondImagePrefetchCreated,
+			Status:  metav1.ConditionFalse,
+			Reason:  operatorv1alpha1.ReasonPrefetchSkipped.String(),
+			Message: "no prefetch targets could be resolved",
+		})
+		setCondition(&prepare.Status.Conditions, metav1.Condition{
+			Type:    operatorv1alpha1.CondImagePrefetchCompleted,
+			Status:  metav1.ConditionFalse,
+			Reason:  operatorv1alpha1.ReasonPrefetchSkipped.String(),
+			Message: "no prefetch targets; prefetch skipped",
+		})
+		if err := r.Status().Update(ctx, prepare); err != nil {
+			return ctrl.Result{}, wrapStatusUpdate(err, "updating prefetch status")
+		}
+		return ctrl.Result{}, nil
+	}
 
 	// Create one Job per (target, image) in a single pass. Concurrent registry
 	// pulls are already bounded without pacing: node-pinned mode is capped at
-	// MaxPrefetchNodes candidate nodes and capsule mode at the (small) capsule
-	// count, and kubelet serializes image pulls per node, so at most a few dozen
-	// distinct nodes ever pull at once. Job names are deterministic, so Create is
-	// idempotent (AlreadyExists is skipped) and a retry after a partial failure
-	// is safe.
+	// MaxPrefetchNodes candidate nodes and pod-node mode by the (small) consensus
+	// node count, and kubelet serializes image pulls per node, so at most a few
+	// dozen distinct nodes ever pull at once. Job names are deterministic, so
+	// Create is idempotent (AlreadyExists is skipped) and a retry after a partial
+	// failure is safe.
 	for _, target := range targets {
 		for _, image := range images {
 			job, err := prefetch.BuildPrefetchJob(prepare, target.target, target.id, image, ttlSeconds, r.Scheme)
@@ -335,6 +358,7 @@ func (r *NetworkUpgradePrepareReconciler) createPrefetchJobs(ctx context.Context
 		}
 	}
 
+	targetCount := len(targets)
 	totalJobs := targetCount * len(images)
 	r.eventf(ctx, prepare, corev1.EventTypeNormal, operatorv1alpha1.EventPrefetchCreated,
 		"created %d prefetch Jobs across %d targets for %d images", totalJobs, targetCount, len(images))
@@ -356,49 +380,84 @@ type prefetchTargetEntry struct {
 	id     string
 }
 
-// resolvePrefetchTargets determines whether to use node-pinned or capsule-based
-// prefetch Jobs. It collects unique nodeSelectors from capsules, lists matching
-// nodes, and if the candidate count is within the threshold, returns one
-// node-pinned target per candidate node. Otherwise falls back to one target per
-// capsule — in large clusters with broad or absent nodeSelectors the candidate
-// set can include hundreds of unrelated nodes (infra, block-node pools, etc.);
-// prefetching consensus images onto all of them wastes bandwidth and registry
-// capacity, so we limit to the nodes already running consensus pods.
+// resolvePrefetchTargets picks the set of prefetch Jobs to create: targetsBySelector
+// when node-selector coverage applies, otherwise targetsByPod.
 func (r *NetworkUpgradePrepareReconciler) resolvePrefetchTargets(
 	ctx context.Context,
 	capsules []operatorv1alpha1.ConsensusCapsule,
 	maxNodes int32,
-) (targets []prefetchTargetEntry, count int) {
+) []prefetchTargetEntry {
+	if t, ok := r.targetsBySelector(ctx, capsules, maxNodes); ok {
+		return t
+	}
+	return r.targetsByPod(ctx, capsules)
+}
+
+// targetsBySelector derives targets from the capsules' nodeSelector: it pins one
+// Job to every node the selector matches — i.e. every node a pod could
+// reschedule onto — which is the best coverage for mobile pods on network PVCs.
+//
+// It returns (targets, true) when this coverage applies, or (nil, false) —
+// logging why — to signal the caller to fall back to targetsByPod. It applies
+// only when node-pinning is enabled (maxNodes > 0), all capsules share a
+// ServiceAccount (so one common SA carries the pull secrets), a nodeSelector is
+// set, and the matched pool is non-empty and within maxNodes.
+func (r *NetworkUpgradePrepareReconciler) targetsBySelector(
+	ctx context.Context,
+	capsules []operatorv1alpha1.ConsensusCapsule,
+	maxNodes int32,
+) ([]prefetchTargetEntry, bool) {
 	if maxNodes <= 0 {
-		return capsuleTargets(capsules), len(capsules)
+		common.Debug(ctx, operatorv1alpha1.ReasonPrefetchCreated).
+			Msg("maxPrefetchNodes <= 0; using pod-node targeting")
+		return nil, false
 	}
 
 	saName, saOK := commonServiceAccount(capsules)
 	if !saOK {
+		// Expected when capsules carry per-node pull secrets; targetsByPod lets
+		// each Job use its own capsule's ServiceAccount. Not an error.
 		common.Info(ctx, operatorv1alpha1.ReasonPrefetchCreated).
-			Msg("capsules use different ServiceAccounts; using capsule-based scheduling so each Job inherits the correct pull secrets")
-		return capsuleTargets(capsules), len(capsules)
+			Msg("capsules use different ServiceAccounts; using pod-node targeting")
+		return nil, false
 	}
 
-	candidateNodes := r.collectCandidateNodes(ctx, capsules)
-	if len(candidateNodes) == 0 || int32(len(candidateNodes)) > maxNodes {
-		common.Info(ctx, operatorv1alpha1.ReasonPrefetchCreated).
-			Msgf("candidate nodes (%d) exceeds maxPrefetchNodes (%d) or could not be resolved; using capsule-based scheduling",
+	selectors := collectUniqueNodeSelectors(capsules)
+	if len(selectors) == 0 {
+		// No nodeSelector (e.g. single-node clusters) — nothing to enumerate. The
+		// normal path there, not an error.
+		common.Debug(ctx, operatorv1alpha1.ReasonPrefetchCreated).
+			Msg("node-selector is empty; using pod-node targeting")
+		return nil, false
+	}
+
+	candidateNodes := r.collectCandidateNodes(ctx, selectors)
+	switch {
+	case len(candidateNodes) == 0:
+		// A nodeSelector is set but matched no nodes (or the node list failed).
+		common.Debug(ctx, operatorv1alpha1.ReasonPrefetchCreated).
+			Msg("consensus nodeSelector matched no nodes; using pod-node targeting")
+		return nil, false
+	case int32(len(candidateNodes)) > maxNodes:
+		// Genuine degradation: the matched pool is larger than the cap, so we
+		// cannot cache on every node the pod could reschedule onto. Surface it.
+		common.Warn(ctx, operatorv1alpha1.ReasonPrefetchCreated).
+			Msgf("%d nodes match the consensus nodeSelector, exceeding maxPrefetchNodes (%d); using pod-node targeting (spare-node coverage reduced — raise maxPrefetchNodes to cover the pool)",
 				len(candidateNodes), maxNodes)
-		return capsuleTargets(capsules), len(capsules)
+		return nil, false
 	}
 
 	common.Info(ctx, operatorv1alpha1.ReasonPrefetchCreated).
-		Msgf("pinning prefetch Jobs to %d candidate nodes", len(candidateNodes))
+		Msgf("pinning prefetch Jobs to %d nodes matching the consensus nodeSelector", len(candidateNodes))
 	tolerations := unionTolerations(capsules)
-	targets = make([]prefetchTargetEntry, 0, len(candidateNodes))
+	targets := make([]prefetchTargetEntry, 0, len(candidateNodes))
 	for _, nodeName := range candidateNodes {
 		targets = append(targets, prefetchTargetEntry{
 			target: prefetch.TargetFromNode(nodeName, saName, tolerations),
 			id:     nodeName,
 		})
 	}
-	return targets, len(candidateNodes)
+	return targets, true
 }
 
 // unionTolerations returns the deduplicated union of tolerations across all
@@ -425,35 +484,61 @@ func unionTolerations(capsules []operatorv1alpha1.ConsensusCapsule) []corev1.Tol
 	return out
 }
 
-func capsuleTargets(capsules []operatorv1alpha1.ConsensusCapsule) []prefetchTargetEntry {
-	targets := make([]prefetchTargetEntry, len(capsules))
+// targetsByPod derives targets from the nodes currently hosting the consensus
+// pods: it pins one Job per such node, each using its hosting capsule's
+// ServiceAccount and tolerations. It is the fallback when targetsBySelector
+// cannot apply. A StatefulSet RollingUpdate recreates the pod on the same node
+// (guaranteed for node-local storage, and the common case otherwise), so the
+// current pod-node is the best predictor of the restart node. Pods that are not
+// yet scheduled are skipped (best-effort), and nodes are deduplicated across
+// capsules.
+func (r *NetworkUpgradePrepareReconciler) targetsByPod(
+	ctx context.Context,
+	capsules []operatorv1alpha1.ConsensusCapsule,
+) []prefetchTargetEntry {
+	seen := make(map[string]bool)
+	var targets []prefetchTargetEntry
 	for i := range capsules {
-		targets[i] = prefetchTargetEntry{
-			target: prefetch.TargetFromCapsule(&capsules[i]),
-			id:     capsules[i].Name,
+		capsule := &capsules[i]
+		var pods corev1.PodList
+		if err := r.List(ctx, &pods,
+			client.InNamespace(capsule.Namespace),
+			client.MatchingLabels(consensus.SelectorLabels(capsule)),
+		); err != nil {
+			common.Warn(ctx, operatorv1alpha1.ReasonPrefetchCreated).
+				Msgf("failed to list pods for capsule %s: %v; skipping", capsule.Name, err)
+			continue
+		}
+		// SA + tolerations come from the hosting capsule.
+		ct := prefetch.TargetFromCapsule(capsule)
+		for j := range pods.Items {
+			nodeName := pods.Items[j].Spec.NodeName
+			if nodeName == "" || seen[nodeName] {
+				continue
+			}
+			seen[nodeName] = true
+			targets = append(targets, prefetchTargetEntry{
+				target: prefetch.TargetFromNode(nodeName, ct.ServiceAccountName, ct.Tolerations),
+				id:     nodeName,
+			})
 		}
 	}
 	return targets
 }
 
-// collectCandidateNodes lists nodes matching any capsule's nodeSelector and
-// returns a deduplicated list of node names.
+// collectCandidateNodes lists nodes matching the given nodeSelectors and returns
+// a deduplicated list of node names.
 func (r *NetworkUpgradePrepareReconciler) collectCandidateNodes(
 	ctx context.Context,
-	capsules []operatorv1alpha1.ConsensusCapsule,
+	selectors []map[string]string,
 ) []string {
-	uniqueSelectors := collectUniqueNodeSelectors(capsules)
-	if len(uniqueSelectors) == 0 {
-		return nil
-	}
-
 	seen := make(map[string]bool)
 	var nodes []string
-	for _, sel := range uniqueSelectors {
+	for _, sel := range selectors {
 		var nodeList corev1.NodeList
 		if err := r.List(ctx, &nodeList, client.MatchingLabels(sel)); err != nil {
-			common.Info(ctx, operatorv1alpha1.ReasonPrefetchCreated).
-				Msgf("failed to list nodes for selector %v: %v; falling back to capsule-based", sel, err)
+			common.Warn(ctx, operatorv1alpha1.ReasonPrefetchCreated).
+				Msgf("failed to list nodes for selector %v: %v; pinning to current pod nodes", sel, err)
 			return nil
 		}
 		for i := range nodeList.Items {
