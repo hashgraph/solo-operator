@@ -1208,6 +1208,11 @@ func (in *ConsensusNodeUpgrade) DeepCopyInto(out *ConsensusNodeUpgrade) {
 		*out = new(metav1.Duration)
 		**out = **in
 	}
+	if in.MaxPrefetchNodes != nil {
+		in, out := &in.MaxPrefetchNodes, &out.MaxPrefetchNodes
+		*out = new(int32)
+		**out = **in
+	}
 	if in.SkipScaleDown != nil {
 		in, out := &in.SkipScaleDown, &out.SkipScaleDown
 		*out = new(bool)

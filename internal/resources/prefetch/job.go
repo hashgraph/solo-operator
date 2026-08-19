@@ -16,23 +16,74 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
+// PrefetchTarget describes where a prefetch Job should run.
+type PrefetchTarget struct {
+	// NodeName pins the Job to a specific node (node-based mode).
+	// When empty, capsule scheduling constraints are used instead.
+	NodeName string
+
+	// Capsule-based scheduling (used when NodeName is empty).
+	NodeSelector map[string]string
+	Tolerations  []corev1.Toleration
+	Affinity     *corev1.Affinity
+
+	ServiceAccountName string
+}
+
+// TargetFromNode creates a target pinned to a specific node.
+func TargetFromNode(nodeName, serviceAccountName string) PrefetchTarget {
+	return PrefetchTarget{NodeName: nodeName, ServiceAccountName: serviceAccountName}
+}
+
+// TargetFromCapsule creates a target using capsule scheduling constraints.
+func TargetFromCapsule(capsule *operatorv1alpha1.ConsensusCapsule) PrefetchTarget {
+	return PrefetchTarget{
+		NodeSelector:       capsule.Spec.PodProperties.NodeSelector,
+		Tolerations:        capsule.Spec.PodProperties.Tolerations,
+		Affinity:           capsule.Spec.PodProperties.Affinity,
+		ServiceAccountName: serviceAccountName(capsule),
+	}
+}
+
 func BuildPrefetchJob(
 	prepare *operatorv1alpha1.NetworkUpgradePrepare,
-	capsule *operatorv1alpha1.ConsensusCapsule,
+	target PrefetchTarget,
+	targetID string,
 	image string,
 	ttlSeconds int32,
 	scheme *runtime.Scheme,
 ) (*batchv1.Job, error) {
-	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(prepare.Spec.OperationID+"\x00"+capsule.Name+"\x00"+image)))[:8]
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(prepare.Spec.OperationID+"\x00"+targetID+"\x00"+image)))[:8]
 	opID := dnsNormalize(prepare.Spec.OperationID, 20)
-	capName := dnsNormalize(capsule.Name, 20)
-	name := fmt.Sprintf("prefetch-%s-%s-%s", opID, capName, hash)
+	tgtName := dnsNormalize(targetID, 20)
+	name := fmt.Sprintf("prefetch-%s-%s-%s", opID, tgtName, hash)
 	if len(name) > 63 {
 		name = name[:63]
 	}
 
 	backoffLimit := int32(3)
 	activeDeadlineSeconds := int64(600)
+	podSpec := corev1.PodSpec{
+		RestartPolicy: corev1.RestartPolicyNever,
+		Containers: []corev1.Container{
+			{
+				Name:            "prefetch",
+				Image:           image,
+				Command:         []string{"/bin/sh", "-c", "exit 0"},
+				ImagePullPolicy: corev1.PullIfNotPresent,
+			},
+		},
+		ServiceAccountName: target.ServiceAccountName,
+	}
+
+	if target.NodeName != "" {
+		podSpec.NodeName = target.NodeName
+	} else {
+		podSpec.NodeSelector = target.NodeSelector
+		podSpec.Tolerations = target.Tolerations
+		podSpec.Affinity = target.Affinity
+	}
+
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -41,7 +92,7 @@ func BuildPrefetchJob(
 				operatorv1alpha1.LabelOperationID:  prepare.Spec.OperationID,
 				operatorv1alpha1.LabelStep:         operatorv1alpha1.StepPrepare,
 				operatorv1alpha1.LabelPrefetchRole: operatorv1alpha1.RolePrefetch,
-				operatorv1alpha1.LabelCapsule:      capsule.Name,
+				operatorv1alpha1.LabelCapsule:      targetID,
 			},
 		},
 		Spec: batchv1.JobSpec{
@@ -49,24 +100,7 @@ func BuildPrefetchJob(
 			BackoffLimit:            &backoffLimit,
 			ActiveDeadlineSeconds:   &activeDeadlineSeconds,
 			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					RestartPolicy: corev1.RestartPolicyNever,
-					Containers: []corev1.Container{
-						{
-							Name:            "prefetch",
-							Image:           image,
-							Command:         []string{"/bin/sh", "-c", "exit 0"},
-							ImagePullPolicy: corev1.PullIfNotPresent,
-						},
-					},
-					// Copy scheduling constraints so the prefetch pod lands on the
-					// same node as the consensus pod, caching the image where it
-					// will actually be needed during Execute.
-					NodeSelector:       capsule.Spec.PodProperties.NodeSelector,
-					Tolerations:        capsule.Spec.PodProperties.Tolerations,
-					Affinity:           capsule.Spec.PodProperties.Affinity,
-					ServiceAccountName: serviceAccountName(capsule),
-				},
+				Spec: podSpec,
 			},
 		},
 	}

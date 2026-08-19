@@ -52,6 +52,7 @@ func (r *NetworkUpgradePrepareReconciler) WithStrategy(name string) *NetworkUpgr
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeprepares,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeprepares/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeprepares/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 
 func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var prepare operatorv1alpha1.NetworkUpgradePrepare
@@ -308,11 +309,17 @@ func (r *NetworkUpgradePrepareReconciler) createPrefetchJobs(ctx context.Context
 		return ctrl.Result{}, nil
 	}
 
+	targets, targetCount := r.resolvePrefetchTargets(ctx, capsules.Items, ucfg.MaxPrefetchNodes)
+
+	// Stagger Job creation in batches to avoid overwhelming the container
+	// registry with concurrent image pulls from many nodes at once.
+	const prefetchBatchSize = 10
+	const prefetchBatchDelay = 10 * time.Second
+
 	jobCount := 0
-	for i := range capsules.Items {
-		capsule := &capsules.Items[i]
+	for _, target := range targets {
 		for _, image := range images {
-			job, err := prefetch.BuildPrefetchJob(prepare, capsule, image, ttlSeconds, r.Scheme)
+			job, err := prefetch.BuildPrefetchJob(prepare, target.target, target.id, image, ttlSeconds, r.Scheme)
 			if err != nil {
 				return ctrl.Result{}, errx.WithReason(errReconcile.Wrap(err, "building prefetch Job"), ReasonPrefetchJobBuild)
 			}
@@ -325,22 +332,158 @@ func (r *NetworkUpgradePrepareReconciler) createPrefetchJobs(ctx context.Context
 					"Confirm the operator has create permission on batch/v1 Jobs")
 			}
 			jobCount++
+			if jobCount >= prefetchBatchSize {
+				common.Info(ctx, operatorv1alpha1.ReasonPrefetchCreated).
+					Msgf("created %d prefetch Jobs this batch; requeueing for next batch", jobCount)
+				return ctrl.Result{RequeueAfter: prefetchBatchDelay}, nil
+			}
 		}
 	}
 
+	totalJobs := targetCount * len(images)
 	r.eventf(ctx, prepare, corev1.EventTypeNormal, operatorv1alpha1.EventPrefetchCreated,
-		"created %d prefetch Jobs across %d capsules", jobCount, len(capsules.Items))
+		"created %d prefetch Jobs across %d targets for %d images", totalJobs, targetCount, len(images))
 
 	setCondition(&prepare.Status.Conditions, metav1.Condition{
 		Type:    operatorv1alpha1.CondImagePrefetchCreated,
 		Status:  metav1.ConditionTrue,
 		Reason:  operatorv1alpha1.ReasonPrefetchCreated.String(),
-		Message: fmt.Sprintf("created %d prefetch Jobs", jobCount),
+		Message: fmt.Sprintf("created %d prefetch Jobs across %d targets for %d images", totalJobs, targetCount, len(images)),
 	})
 	if err := r.Status().Update(ctx, prepare); err != nil {
 		return ctrl.Result{}, wrapStatusUpdate(err, "updating prefetch created status")
 	}
 	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+}
+
+type prefetchTargetEntry struct {
+	target prefetch.PrefetchTarget
+	id     string
+}
+
+// resolvePrefetchTargets determines whether to use node-pinned or capsule-based
+// prefetch Jobs. It collects unique nodeSelectors from capsules, lists matching
+// nodes, and if the candidate count is within the threshold, returns one
+// node-pinned target per candidate node. Otherwise falls back to one target per
+// capsule — in large clusters with broad or absent nodeSelectors the candidate
+// set can include hundreds of unrelated nodes (infra, block-node pools, etc.);
+// prefetching consensus images onto all of them wastes bandwidth and registry
+// capacity, so we limit to the nodes already running consensus pods.
+func (r *NetworkUpgradePrepareReconciler) resolvePrefetchTargets(
+	ctx context.Context,
+	capsules []operatorv1alpha1.ConsensusCapsule,
+	maxNodes int32,
+) (targets []prefetchTargetEntry, count int) {
+	if maxNodes <= 0 {
+		return capsuleTargets(capsules), len(capsules)
+	}
+
+	saName, saOK := commonServiceAccount(capsules)
+	if !saOK {
+		common.Info(ctx, operatorv1alpha1.ReasonPrefetchCreated).
+			Msg("capsules use different ServiceAccounts; using capsule-based scheduling so each Job inherits the correct pull secrets")
+		return capsuleTargets(capsules), len(capsules)
+	}
+
+	candidateNodes := r.collectCandidateNodes(ctx, capsules)
+	if len(candidateNodes) == 0 || int32(len(candidateNodes)) > maxNodes {
+		common.Info(ctx, operatorv1alpha1.ReasonPrefetchCreated).
+			Msgf("candidate nodes (%d) exceeds maxPrefetchNodes (%d) or could not be resolved; using capsule-based scheduling",
+				len(candidateNodes), maxNodes)
+		return capsuleTargets(capsules), len(capsules)
+	}
+
+	common.Info(ctx, operatorv1alpha1.ReasonPrefetchCreated).
+		Msgf("pinning prefetch Jobs to %d candidate nodes", len(candidateNodes))
+	targets = make([]prefetchTargetEntry, 0, len(candidateNodes))
+	for _, nodeName := range candidateNodes {
+		targets = append(targets, prefetchTargetEntry{
+			target: prefetch.TargetFromNode(nodeName, saName),
+			id:     nodeName,
+		})
+	}
+	return targets, len(candidateNodes)
+}
+
+func capsuleTargets(capsules []operatorv1alpha1.ConsensusCapsule) []prefetchTargetEntry {
+	targets := make([]prefetchTargetEntry, len(capsules))
+	for i := range capsules {
+		targets[i] = prefetchTargetEntry{
+			target: prefetch.TargetFromCapsule(&capsules[i]),
+			id:     capsules[i].Name,
+		}
+	}
+	return targets
+}
+
+// collectCandidateNodes lists nodes matching any capsule's nodeSelector and
+// returns a deduplicated list of node names.
+func (r *NetworkUpgradePrepareReconciler) collectCandidateNodes(
+	ctx context.Context,
+	capsules []operatorv1alpha1.ConsensusCapsule,
+) []string {
+	uniqueSelectors := collectUniqueNodeSelectors(capsules)
+	if len(uniqueSelectors) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]bool)
+	var nodes []string
+	for _, sel := range uniqueSelectors {
+		var nodeList corev1.NodeList
+		if err := r.List(ctx, &nodeList, client.MatchingLabels(sel)); err != nil {
+			common.Info(ctx, operatorv1alpha1.ReasonPrefetchCreated).
+				Msgf("failed to list nodes for selector %v: %v; falling back to capsule-based", sel, err)
+			return nil
+		}
+		for i := range nodeList.Items {
+			name := nodeList.Items[i].Name
+			if !seen[name] {
+				seen[name] = true
+				nodes = append(nodes, name)
+			}
+		}
+	}
+	return nodes
+}
+
+// collectUniqueNodeSelectors returns the deduplicated set of non-empty
+// nodeSelector maps from capsules. Returns nil if any capsule has no
+// nodeSelector (can't enumerate without a selector).
+func collectUniqueNodeSelectors(capsules []operatorv1alpha1.ConsensusCapsule) []map[string]string {
+	type selectorKey string
+	seen := make(map[selectorKey]bool)
+	var selectors []map[string]string
+
+	for i := range capsules {
+		ns := capsules[i].Spec.PodProperties.NodeSelector
+		if len(ns) == 0 {
+			return nil
+		}
+		key := selectorKey(fmt.Sprintf("%v", ns))
+		if !seen[key] {
+			seen[key] = true
+			selectors = append(selectors, ns)
+		}
+	}
+	return selectors
+}
+
+// commonServiceAccount returns the SA name and true if all capsules share the
+// same ServiceAccount. When they differ, node-pinned Jobs can't inherit the
+// correct pull secrets, so the caller should fall back to capsule-based
+// scheduling.
+func commonServiceAccount(capsules []operatorv1alpha1.ConsensusCapsule) (string, bool) {
+	if len(capsules) == 0 {
+		return "", true
+	}
+	sa := prefetch.TargetFromCapsule(&capsules[0]).ServiceAccountName
+	for i := 1; i < len(capsules); i++ {
+		if prefetch.TargetFromCapsule(&capsules[i]).ServiceAccountName != sa {
+			return "", false
+		}
+	}
+	return sa, true
 }
 
 func (r *NetworkUpgradePrepareReconciler) checkPrefetchJobs(ctx context.Context, prepare *operatorv1alpha1.NetworkUpgradePrepare) (ctrl.Result, error) {
@@ -358,6 +501,14 @@ func (r *NetworkUpgradePrepareReconciler) checkPrefetchJobs(ctx context.Context,
 	}
 
 	if len(jobs.Items) == 0 {
+		// Guard against informer-cache staleness: if the created condition was
+		// set very recently, the cache may not have observed the Jobs yet.
+		// Requeue to let the cache catch up before declaring completion.
+		created := findCondition(prepare.Status.Conditions, operatorv1alpha1.CondImagePrefetchCreated)
+		if created != nil && time.Since(created.LastTransitionTime.Time) < 30*time.Second {
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+
 		setCondition(&prepare.Status.Conditions, metav1.Condition{
 			Type:    operatorv1alpha1.CondImagePrefetchCompleted,
 			Status:  metav1.ConditionTrue,

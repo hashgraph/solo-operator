@@ -19,9 +19,8 @@ func testScheme() *runtime.Scheme {
 	return s
 }
 
-func TestBuildPrefetchJob(t *testing.T) {
-	scheme := testScheme()
-	prepare := &operatorv1alpha1.NetworkUpgradePrepare{
+func testPrepare() *operatorv1alpha1.NetworkUpgradePrepare {
+	return &operatorv1alpha1.NetworkUpgradePrepare{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "prep-1",
 			Namespace: "test-ns",
@@ -32,16 +31,13 @@ func TestBuildPrefetchJob(t *testing.T) {
 			Orbit:       "test-orbit",
 		},
 	}
-	capsule := &operatorv1alpha1.ConsensusCapsule{
-		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "test-ns"},
-		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-			PodProperties: operatorv1alpha1.ConsensusPodProperties{
-				NodeSelector: map[string]string{"kubernetes.io/hostname": "node-3"},
-			},
-		},
-	}
+}
 
-	job, err := BuildPrefetchJob(prepare, capsule, "ghcr.io/cn:0.62.0", 7776000, scheme)
+func TestBuildPrefetchJob_NodePinned(t *testing.T) {
+	scheme := testScheme()
+	target := TargetFromNode("node-3", "my-sa")
+
+	job, err := BuildPrefetchJob(testPrepare(), target, "node-3", "ghcr.io/cn:0.62.0", 7776000, scheme)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -55,19 +51,19 @@ func TestBuildPrefetchJob(t *testing.T) {
 	if job.Labels[operatorv1alpha1.LabelPrefetchRole] != operatorv1alpha1.RolePrefetch {
 		t.Errorf("role label = %q, want %s", job.Labels[operatorv1alpha1.LabelPrefetchRole], operatorv1alpha1.RolePrefetch)
 	}
-	if job.Labels[operatorv1alpha1.LabelCapsule] != "node0" {
-		t.Errorf("capsule label = %q, want node0", job.Labels[operatorv1alpha1.LabelCapsule])
-	}
 
 	spec := job.Spec.Template.Spec
+	if spec.NodeName != "node-3" {
+		t.Errorf("nodeName = %q, want node-3", spec.NodeName)
+	}
 	if len(spec.Containers) != 1 {
 		t.Fatalf("expected 1 container, got %d", len(spec.Containers))
 	}
 	if spec.Containers[0].Image != "ghcr.io/cn:0.62.0" {
 		t.Errorf("image = %q, want ghcr.io/cn:0.62.0", spec.Containers[0].Image)
 	}
-	if spec.NodeSelector["kubernetes.io/hostname"] != "node-3" {
-		t.Errorf("nodeSelector not copied from capsule")
+	if spec.ServiceAccountName != "my-sa" {
+		t.Errorf("ServiceAccountName = %q, want my-sa", spec.ServiceAccountName)
 	}
 	if job.Spec.TTLSecondsAfterFinished == nil || *job.Spec.TTLSecondsAfterFinished != 7776000 {
 		t.Errorf("TTLSecondsAfterFinished = %v, want 7776000", job.Spec.TTLSecondsAfterFinished)
@@ -77,6 +73,32 @@ func TestBuildPrefetchJob(t *testing.T) {
 	}
 	if len(job.OwnerReferences) == 0 {
 		t.Error("expected owner reference to be set")
+	}
+}
+
+func TestBuildPrefetchJob_CapsuleBased(t *testing.T) {
+	scheme := testScheme()
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "test-ns"},
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			PodProperties: operatorv1alpha1.ConsensusPodProperties{
+				NodeSelector: map[string]string{"kubernetes.io/hostname": "node-3"},
+			},
+		},
+	}
+	target := TargetFromCapsule(capsule)
+
+	job, err := BuildPrefetchJob(testPrepare(), target, capsule.Name, "ghcr.io/cn:0.62.0", 7776000, scheme)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	spec := job.Spec.Template.Spec
+	if spec.NodeName != "" {
+		t.Errorf("nodeName should be empty for capsule-based, got %q", spec.NodeName)
+	}
+	if spec.NodeSelector["kubernetes.io/hostname"] != "node-3" {
+		t.Errorf("nodeSelector not copied from capsule")
 	}
 }
 
@@ -93,14 +115,9 @@ func TestBuildPrefetchJob_NameTruncation(t *testing.T) {
 			Orbit:       "test-orbit",
 		},
 	}
-	capsule := &operatorv1alpha1.ConsensusCapsule{
-		ObjectMeta: metav1.ObjectMeta{Name: "extremely-long-capsule-name-here", Namespace: "test-ns"},
-		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-			PodProperties: operatorv1alpha1.ConsensusPodProperties{},
-		},
-	}
+	target := TargetFromNode("extremely-long-node-name-here-that-is-very-long", "")
 
-	job, err := BuildPrefetchJob(prepare, capsule, "ghcr.io/cn:0.62.0", 300, scheme)
+	job, err := BuildPrefetchJob(prepare, target, "extremely-long-node-name-here-that-is-very-long", "ghcr.io/cn:0.62.0", 300, scheme)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -109,15 +126,8 @@ func TestBuildPrefetchJob_NameTruncation(t *testing.T) {
 	}
 }
 
-func TestBuildPrefetchJob_ServiceAccountName(t *testing.T) {
+func TestBuildPrefetchJob_ServiceAccountFromCapsule(t *testing.T) {
 	scheme := testScheme()
-	prepare := &operatorv1alpha1.NetworkUpgradePrepare{
-		ObjectMeta: metav1.ObjectMeta{Name: "prep-1", Namespace: "ns", UID: "uid-1"},
-		Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
-			OperationID: "op-001",
-			Orbit:       "test-orbit",
-		},
-	}
 	capsule := &operatorv1alpha1.ConsensusCapsule{
 		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "ns"},
 		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
@@ -126,8 +136,9 @@ func TestBuildPrefetchJob_ServiceAccountName(t *testing.T) {
 			},
 		},
 	}
+	target := TargetFromCapsule(capsule)
 
-	job, err := BuildPrefetchJob(prepare, capsule, "img:v1", 300, scheme)
+	job, err := BuildPrefetchJob(testPrepare(), target, capsule.Name, "img:v1", 300, scheme)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -109,6 +109,15 @@ type ConsensusNodeUpgrade struct {
 	// +optional
 	PrefetchJobTTL *metav1.Duration `json:"prefetchJobTTL,omitempty"`
 
+	// MaxPrefetchNodes is the maximum number of candidate nodes onto which the
+	// operator will create prefetch Jobs. When the number of nodes matching
+	// capsule nodeSelectors exceeds this threshold, the operator falls back to
+	// capsule-based scheduling (one Job per capsule) instead of per-node pinning.
+	// Default: 30. Set to 0 to disable node-based prefetch entirely.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	MaxPrefetchNodes *int32 `json:"maxPrefetchNodes,omitempty"`
+
 	// SkipScaleDown controls how the execute phase restarts the consensus pod
 	// onto the new image. When true (default) the operator patches the
 	// ConsensusCapsule images in-place and lets the StatefulSet RollingUpdate
@@ -127,6 +136,7 @@ const (
 	DefaultExecuteDaemonRequeueInterval    = 10 * time.Second
 	DefaultExecuteNodeReadyRequeueInterval = 10 * time.Second
 	DefaultPrefetchJobTTL                  = 90 * 24 * time.Hour
+	DefaultMaxPrefetchNodes                = int32(30)
 	MinRequeueInterval                     = 1 * time.Second
 )
 
@@ -137,6 +147,7 @@ type EffectiveUpgradeConfig struct {
 	DaemonRequeueInterval    time.Duration
 	NodeReadyRequeueInterval time.Duration
 	PrefetchJobTTL           time.Duration
+	MaxPrefetchNodes         int32
 	SkipScaleDown            bool
 }
 
@@ -148,6 +159,7 @@ func ResolveUpgradeConfig(orbit *Orbit) EffectiveUpgradeConfig {
 		DaemonRequeueInterval:    DefaultExecuteDaemonRequeueInterval,
 		NodeReadyRequeueInterval: DefaultExecuteNodeReadyRequeueInterval,
 		PrefetchJobTTL:           DefaultPrefetchJobTTL,
+		MaxPrefetchNodes:         DefaultMaxPrefetchNodes,
 		SkipScaleDown:            true,
 	}
 	if orbit == nil || orbit.Spec.Upgrade == nil || orbit.Spec.Upgrade.ConsensusNode == nil {
@@ -166,6 +178,9 @@ func ResolveUpgradeConfig(orbit *Orbit) EffectiveUpgradeConfig {
 	}
 	if u.PrefetchJobTTL != nil && u.PrefetchJobTTL.Duration >= 0 {
 		cfg.PrefetchJobTTL = u.PrefetchJobTTL.Duration
+	}
+	if u.MaxPrefetchNodes != nil && *u.MaxPrefetchNodes >= 0 {
+		cfg.MaxPrefetchNodes = *u.MaxPrefetchNodes
 	}
 	if u.SkipScaleDown != nil {
 		cfg.SkipScaleDown = *u.SkipScaleDown

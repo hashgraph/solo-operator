@@ -180,16 +180,17 @@ func resolveUpgradeConfigFromOrbit(ctx context.Context, c client.Client, orbitNa
 	return operatorv1alpha1.ResolveUpgradeConfig(orbit), nil
 }
 
-// prefetchCompleted checks the Prepare CR's prefetch condition.
-// Returns (true, true) when prefetch succeeded, (true, false) when prefetch
-// failed, and (false, false) when prefetch is still pending or was never
-// attempted (caller should fall through to normal registry checks).
+// prefetchCompleted checks the Prepare CR's prefetch conditions.
+// Returns (true, true) when prefetch Jobs were created AND all completed
+// successfully. Returns (true, false) when prefetch was attempted but failed.
+// Returns (false, false) when prefetch is pending, was never attempted, or was
+// skipped (no capsules) — caller should fall through to normal registry checks.
 func prefetchCompleted(prepare *operatorv1alpha1.NetworkUpgradePrepare) (decided, succeeded bool) {
 	if prepare == nil {
 		return false, false
 	}
 	created := findCondition(prepare.Status.Conditions, operatorv1alpha1.CondImagePrefetchCreated)
-	if created == nil {
+	if created == nil || created.Status != metav1.ConditionTrue {
 		return false, false
 	}
 	completed := findCondition(prepare.Status.Conditions, operatorv1alpha1.CondImagePrefetchCompleted)

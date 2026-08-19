@@ -479,6 +479,16 @@ spec:
                           ignored and the default is used.
                         format: duration
                         type: string
+                      maxPrefetchNodes:
+                        description: |-
+                          MaxPrefetchNodes is the maximum number of candidate nodes onto which the
+                          operator will create prefetch Jobs. When the number of nodes matching
+                          capsule nodeSelectors exceeds this threshold, the operator falls back to
+                          capsule-based scheduling (one Job per capsule) instead of per-node pinning.
+                          Default: 30. Set to 0 to disable node-based prefetch entirely.
+                        format: int32
+                        minimum: 0
+                        type: integer
                       nodeReadyRequeueInterval:
                         description: |-
                           NodeReadyRequeueInterval is how often the execute reconciler polls for
@@ -490,6 +500,9 @@ spec:
                         description: |-
                           PrefetchJobTTL is how long completed prefetch Jobs linger before
                           Kubernetes auto-deletes them via the TTL controller. Default: 90d.
+                          Caution: this TTL applies to both succeeded and failed Jobs. Setting
+                          a short duration causes failed Jobs to be deleted, losing debug info
+                          (logs, events) needed to diagnose prefetch failures.
                         format: duration
                         type: string
                       prereqRequeueInterval:
