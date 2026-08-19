@@ -311,12 +311,13 @@ func (r *NetworkUpgradePrepareReconciler) createPrefetchJobs(ctx context.Context
 
 	targets, targetCount := r.resolvePrefetchTargets(ctx, capsules.Items, ucfg.MaxPrefetchNodes)
 
-	// Stagger Job creation in batches to avoid overwhelming the container
-	// registry with concurrent image pulls from many nodes at once.
-	const prefetchBatchSize = 10
-	const prefetchBatchDelay = 10 * time.Second
-
-	jobCount := 0
+	// Create one Job per (target, image) in a single pass. Concurrent registry
+	// pulls are already bounded without pacing: node-pinned mode is capped at
+	// MaxPrefetchNodes candidate nodes and capsule mode at the (small) capsule
+	// count, and kubelet serializes image pulls per node, so at most a few dozen
+	// distinct nodes ever pull at once. Job names are deterministic, so Create is
+	// idempotent (AlreadyExists is skipped) and a retry after a partial failure
+	// is safe.
 	for _, target := range targets {
 		for _, image := range images {
 			job, err := prefetch.BuildPrefetchJob(prepare, target.target, target.id, image, ttlSeconds, r.Scheme)
@@ -330,12 +331,6 @@ func (r *NetworkUpgradePrepareReconciler) createPrefetchJobs(ctx context.Context
 				return ctrl.Result{}, errx.WithHints(
 					errx.WithReason(errK8sAPI.Wrap(err, "creating prefetch Job %s", job.Name), ReasonPrefetchJobCreate),
 					"Confirm the operator has create permission on batch/v1 Jobs")
-			}
-			jobCount++
-			if jobCount >= prefetchBatchSize {
-				common.Info(ctx, operatorv1alpha1.ReasonPrefetchCreated).
-					Msgf("created %d prefetch Jobs this batch; requeueing for next batch", jobCount)
-				return ctrl.Result{RequeueAfter: prefetchBatchDelay}, nil
 			}
 		}
 	}
