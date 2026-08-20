@@ -75,10 +75,15 @@ func BuildPrefetchJob(
 		RestartPolicy: corev1.RestartPolicyNever,
 		Containers: []corev1.Container{
 			{
-				Name:            "prefetch",
-				Image:           image,
-				Command:         []string{"/bin/sh", "-c", "exit 0"},
-				ImagePullPolicy: corev1.PullIfNotPresent,
+				Name:    "prefetch",
+				Image:   image,
+				Command: []string{"/bin/sh", "-c", "exit 0"},
+				// Always pull: a mutable :tag already cached on the node would
+				// satisfy IfNotPresent and skip fetching the current layers,
+				// defeating the prefetch (and letting a stale image look
+				// "prefetched"). A pull failure then fails the Job so the upgrade
+				// falls back to the normal registry path.
+				ImagePullPolicy: corev1.PullAlways,
 				// The container does nothing (the pull happens at the kubelet
 				// level); keep requests tiny so the Job schedules anywhere, with
 				// modest limits as a safety cap.

@@ -71,6 +71,9 @@ func TestBuildPrefetchJob_NodePinned(t *testing.T) {
 	if spec.Containers[0].Image != "ghcr.io/cn:0.62.0" {
 		t.Errorf("image = %q, want ghcr.io/cn:0.62.0", spec.Containers[0].Image)
 	}
+	if spec.Containers[0].ImagePullPolicy != corev1.PullAlways {
+		t.Errorf("ImagePullPolicy = %q, want Always (must refresh mutable tags)", spec.Containers[0].ImagePullPolicy)
+	}
 	if spec.ServiceAccountName != "my-sa" {
 		t.Errorf("ServiceAccountName = %q, want my-sa", spec.ServiceAccountName)
 	}
