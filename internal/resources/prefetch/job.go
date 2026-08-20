@@ -9,6 +9,7 @@ import (
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -78,6 +79,19 @@ func BuildPrefetchJob(
 				Image:           image,
 				Command:         []string{"/bin/sh", "-c", "exit 0"},
 				ImagePullPolicy: corev1.PullIfNotPresent,
+				// The container does nothing (the pull happens at the kubelet
+				// level); keep requests tiny so the Job schedules anywhere, with
+				// modest limits as a safety cap.
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("10m"),
+						corev1.ResourceMemory: resource.MustParse("16Mi"),
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("100m"),
+						corev1.ResourceMemory: resource.MustParse("64Mi"),
+					},
+				},
 			},
 		},
 		ServiceAccountName: target.ServiceAccountName,
