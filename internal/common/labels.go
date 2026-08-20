@@ -17,6 +17,12 @@ const (
 const (
 	LabelOrbit       = "operator.solo.hiero.org/orbit"
 	LabelOperationID = "operator.solo.hiero.org/operation-id"
+	LabelLifecycle   = "operator.solo.hiero.org/lifecycle"
+)
+
+// Lifecycle label values.
+const (
+	LifecycleArchived = "archived"
 )
 
 // Standard label values.

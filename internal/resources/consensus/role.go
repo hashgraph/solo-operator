@@ -85,11 +85,13 @@ func (r *RoleSubReconciler) buildRole(capsule *operatorv1alpha1.ConsensusCapsule
 			"networkupgradeexecutes",
 			"networkupgradefreezeaborts",
 		}
+		// patch is needed so the UC can stamp lifecycle=archived on terminal CRs
+		// after completing its side effects (package rotation, discard, audit).
 		rules = append(rules,
 			rbacv1.PolicyRule{
 				APIGroups: []string{"operator.solo.hiero.org"},
 				Resources: networkUpgradeResources,
-				Verbs:     []string{"create", "get", "list", "watch"},
+				Verbs:     []string{"create", "get", "list", "patch", "watch"},
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{"operator.solo.hiero.org"},

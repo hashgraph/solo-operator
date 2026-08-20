@@ -14,11 +14,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic/fake"
 	k8stesting "k8s.io/client-go/testing"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 )
 
 // TestObservePhaseWritesOnTransitionOnly verifies the #1003 phase monitor writes
@@ -641,5 +643,138 @@ func TestUpgradeOutcomeMonitor_RunWatchRecoversPanic(t *testing.T) {
 	}
 	if reason, _ := errx.ReasonOf(err); reason != ReasonProvisionerProxyWatchPanic {
 		t.Errorf("reason = %q, want %q", reason, ReasonProvisionerProxyWatchPanic)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// archiveIfTerminalPhase tests
+// ---------------------------------------------------------------------------
+
+func newTestCR(kind, name, namespace, operationID, step string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": operatorv1alpha1.GroupVersion.String(),
+			"kind":       kind,
+			"metadata": map[string]interface{}{
+				"name":      name,
+				"namespace": namespace,
+				"labels": map[string]interface{}{
+					operatorv1alpha1.LabelOperationID: operationID,
+					operatorv1alpha1.LabelStep:        step,
+				},
+			},
+			"spec": map[string]interface{}{
+				"operationId": operationID,
+			},
+		},
+	}
+}
+
+func TestArchiveIfTerminalPhase_AllKinds(t *testing.T) {
+	cases := []struct {
+		kind string
+		step string
+		gvr  schema.GroupVersionResource
+	}{
+		{"NetworkUpgradePrepare", operatorv1alpha1.StepPrepare, networkUpgradePrepareGVR},
+		{"NetworkUpgradeFreeze", operatorv1alpha1.StepFreeze, networkUpgradeFreezeGVR},
+		{kindNetworkUpgradeExecute, operatorv1alpha1.StepExecute, networkUpgradeExecuteGVR},
+		{kindNetworkUpgradeFreezeAbort, operatorv1alpha1.StepAbort, networkUpgradeFreezeAbortGVR},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.kind+"/Succeeded", func(t *testing.T) {
+			m := newOutcomeMonitor(t, t.TempDir())
+			cr := newTestCR(tc.kind, "test-cr", "solo", "upgrade-0.75.0-20260413T120000Z", tc.step)
+			_ = unstructured.SetNestedField(cr.Object, string(operatorv1alpha1.PhaseSucceeded), "status", "phase")
+
+			_, err := m.client.Resource(tc.gvr).Namespace("solo").
+				Create(context.Background(), cr, metav1.CreateOptions{})
+			if err != nil {
+				t.Fatalf("pre-create: %v", err)
+			}
+
+			m.archiveIfTerminalPhase(context.Background(), cr)
+
+			got, err := m.client.Resource(tc.gvr).Namespace("solo").
+				Get(context.Background(), cr.GetName(), metav1.GetOptions{})
+			if err != nil {
+				t.Fatalf("get after archive: %v", err)
+			}
+			if got.GetLabels()[common.LabelLifecycle] != common.LifecycleArchived {
+				t.Errorf("lifecycle label = %q, want %q", got.GetLabels()[common.LabelLifecycle], common.LifecycleArchived)
+			}
+		})
+
+		t.Run(tc.kind+"/Failed", func(t *testing.T) {
+			m := newOutcomeMonitor(t, t.TempDir())
+			cr := newTestCR(tc.kind, "test-cr", "solo", "upgrade-0.75.0-20260413T120000Z", tc.step)
+			_ = unstructured.SetNestedField(cr.Object, string(operatorv1alpha1.PhaseFailed), "status", "phase")
+
+			_, err := m.client.Resource(tc.gvr).Namespace("solo").
+				Create(context.Background(), cr, metav1.CreateOptions{})
+			if err != nil {
+				t.Fatalf("pre-create: %v", err)
+			}
+
+			m.archiveIfTerminalPhase(context.Background(), cr)
+
+			got, err := m.client.Resource(tc.gvr).Namespace("solo").
+				Get(context.Background(), cr.GetName(), metav1.GetOptions{})
+			if err != nil {
+				t.Fatalf("get after archive: %v", err)
+			}
+			if got.GetLabels()[common.LabelLifecycle] != common.LifecycleArchived {
+				t.Errorf("lifecycle label = %q, want %q", got.GetLabels()[common.LabelLifecycle], common.LifecycleArchived)
+			}
+		})
+	}
+}
+
+func TestArchiveIfTerminalPhase_SkipsNonTerminal(t *testing.T) {
+	m := newOutcomeMonitor(t, t.TempDir())
+
+	cr := newTestExecuteCR("upgrade-0.75.0-20260413T120000Z", crCreatedAt)
+	_ = unstructured.SetNestedField(cr.Object, "Running", "status", "phase")
+
+	_, err := m.client.Resource(networkUpgradeExecuteGVR).Namespace("solo").
+		Create(context.Background(), cr, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("pre-create: %v", err)
+	}
+
+	m.archiveIfTerminalPhase(context.Background(), cr)
+
+	got, err := m.client.Resource(networkUpgradeExecuteGVR).Namespace("solo").
+		Get(context.Background(), cr.GetName(), metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("get after archive: %v", err)
+	}
+	if got.GetLabels()[common.LabelLifecycle] == common.LifecycleArchived {
+		t.Error("non-terminal CR should not be archived")
+	}
+}
+
+func TestArchiveIfTerminalPhase_IdempotentWhenAlreadyArchived(t *testing.T) {
+	m := newOutcomeMonitor(t, t.TempDir())
+
+	cr := newTestExecuteCR("upgrade-0.75.0-20260413T120000Z", crCreatedAt)
+	_ = unstructured.SetNestedField(cr.Object, string(operatorv1alpha1.PhaseSucceeded), "status", "phase")
+	labels := cr.GetLabels()
+	labels[common.LabelLifecycle] = common.LifecycleArchived
+	cr.SetLabels(labels)
+
+	_, err := m.client.Resource(networkUpgradeExecuteGVR).Namespace("solo").
+		Create(context.Background(), cr, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("pre-create: %v", err)
+	}
+
+	before := len(m.client.(*fake.FakeDynamicClient).Actions())
+	m.archiveIfTerminalPhase(context.Background(), cr)
+	after := len(m.client.(*fake.FakeDynamicClient).Actions())
+
+	if after != before {
+		t.Errorf("expected no API calls for already-archived CR, got %d new actions", after-before)
 	}
 }
