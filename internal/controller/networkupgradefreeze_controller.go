@@ -123,6 +123,36 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{Requeue: true}, nil
 	}
 
+	if _, prefetchOK := prefetchCompleted(prepare); prefetchOK {
+		// Prefetch succeeded — skip registry health check. The images are
+		// likely cached on nodes; the kubelet uses them via IfNotPresent.
+		common.Info(ctx, operatorv1alpha1.ReasonPrefetchCompleted).Msg("images prefetched; skipping registry health check")
+		now := metav1.Now()
+		freeze.Status.CompletionTime = &now
+		freeze.Status.Phase = operatorv1alpha1.PhaseSucceeded
+		freeze.Status.SelectedSources = prepare.Status.SelectedSources
+		freeze.Status.ObservedGeneration = freeze.Generation
+		setCondition(&freeze.Status.Conditions, metav1.Condition{
+			Type:    operatorv1alpha1.CondImagePrefetched,
+			Status:  metav1.ConditionTrue,
+			Reason:  operatorv1alpha1.ReasonPrefetchCompleted.String(),
+			Message: "images prefetched on nodes; registry health check skipped",
+		})
+		setCondition(&freeze.Status.Conditions, metav1.Condition{
+			Type:    operatorv1alpha1.CondReadyForFreeze,
+			Status:  metav1.ConditionTrue,
+			Reason:  operatorv1alpha1.ReasonPreFreezePassed.String(),
+			Message: "prefetch completed; ready for freeze",
+		})
+		if err := r.Status().Update(ctx, &freeze); err != nil {
+			if apierrors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
+			return ctrl.Result{}, wrapStatusUpdate(err, "updating status")
+		}
+		return ctrl.Result{}, nil
+	}
+
 	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 
 	updated, succeeded := registry.RevalidateComponents(

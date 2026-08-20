@@ -179,6 +179,12 @@ const (
 )
 
 const (
+	LabelPrefetchRole = "operator.solo.hiero.org/role"
+	RolePrefetch      = "prefetch"
+	LabelCapsule      = "operator.solo.hiero.org/capsule"
+)
+
+const (
 	StepPrepare = "prepare"
 	StepFreeze  = "freeze"
 	StepExecute = "execute"
@@ -203,6 +209,13 @@ const (
 	CondCapsulesOnline             = "CapsulesOnline"
 	CondNodesUpgraded              = "NodesUpgraded"
 	CondNodeActiveDeadlineExceeded = "NodeActiveDeadlineExceeded"
+
+	// Prepare — prefetch
+	CondImagePrefetchCreated   = "ImagePrefetchCreated"
+	CondImagePrefetchCompleted = "ImagePrefetchCompleted"
+
+	// Freeze — prefetch
+	CondImagePrefetched = "ImagePrefetched"
 
 	// Abort
 	CondAbortProcessed = "AbortProcessed"
@@ -235,6 +248,14 @@ const (
 	ReasonUpgradeSucceeded           errx.Reason = "UpgradeSucceeded"
 	ReasonUpgradeFailed              errx.Reason = "UpgradeFailed"
 	ReasonNodeActiveDeadlineExceeded errx.Reason = "NodeActiveDeadlineExceeded"
+
+	ReasonPrefetchCreated      errx.Reason = "PrefetchCreated"
+	ReasonPrefetchCompleted    errx.Reason = "PrefetchCompleted"
+	ReasonPrefetchFailed       errx.Reason = "PrefetchFailed"
+	ReasonPrefetchPending      errx.Reason = "PrefetchPending"
+	ReasonPrefetchSkipped      errx.Reason = "PrefetchSkipped"
+	ReasonPrefetchInconclusive errx.Reason = "PrefetchInconclusive"
+	ReasonPrefetchDisabled     errx.Reason = "PrefetchDisabled"
 
 	ReasonAbortSuccess     errx.Reason = "Success"
 	ReasonAbortAfterFreeze errx.Reason = "AbortAfterFreeze"
@@ -272,6 +293,10 @@ const (
 	EventUpgradeSucceeded           errx.Reason = "UpgradeSucceeded"
 	EventUpgradeFailed              errx.Reason = "UpgradeFailed"
 	EventNodeActiveDeadlineExceeded errx.Reason = "NodeActiveDeadlineExceeded"
+
+	EventPrefetchCreated   errx.Reason = "PrefetchCreated"
+	EventPrefetchCompleted errx.Reason = "PrefetchCompleted"
+	EventPrefetchFailed    errx.Reason = "PrefetchFailed"
 
 	EventAbortProcessed   errx.Reason = "AbortProcessed"
 	EventAbortAfterFreeze errx.Reason = "AbortAfterFreeze"
