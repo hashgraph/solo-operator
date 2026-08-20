@@ -255,6 +255,7 @@ const (
 	ReasonPrefetchPending      errx.Reason = "PrefetchPending"
 	ReasonPrefetchSkipped      errx.Reason = "PrefetchSkipped"
 	ReasonPrefetchInconclusive errx.Reason = "PrefetchInconclusive"
+	ReasonPrefetchDisabled     errx.Reason = "PrefetchDisabled"
 
 	ReasonAbortSuccess     errx.Reason = "Success"
 	ReasonAbortAfterFreeze errx.Reason = "AbortAfterFreeze"

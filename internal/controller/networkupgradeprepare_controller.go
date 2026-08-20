@@ -276,6 +276,29 @@ func (r *NetworkUpgradePrepareReconciler) createPrefetchJobs(ctx context.Context
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+
+	if !ucfg.PrefetchEnabled {
+		// Prefetch turned off via orbit.spec.upgrade.consensusNode.prefetch.enabled.
+		// Record it and let Freeze/Execute run normal registry validation.
+		common.Info(ctx, operatorv1alpha1.ReasonPrefetchDisabled).Msg("image prefetch disabled; skipping")
+		setCondition(&prepare.Status.Conditions, metav1.Condition{
+			Type:    operatorv1alpha1.CondImagePrefetchCreated,
+			Status:  metav1.ConditionFalse,
+			Reason:  operatorv1alpha1.ReasonPrefetchDisabled.String(),
+			Message: "image prefetch disabled",
+		})
+		setCondition(&prepare.Status.Conditions, metav1.Condition{
+			Type:    operatorv1alpha1.CondImagePrefetchCompleted,
+			Status:  metav1.ConditionFalse,
+			Reason:  operatorv1alpha1.ReasonPrefetchDisabled.String(),
+			Message: "image prefetch disabled",
+		})
+		if err := r.Status().Update(ctx, prepare); err != nil {
+			return ctrl.Result{}, wrapStatusUpdate(err, "updating prefetch status")
+		}
+		return ctrl.Result{}, nil
+	}
+
 	ttlSeconds := int32(ucfg.PrefetchJobTTL.Seconds())
 
 	var capsules operatorv1alpha1.ConsensusCapsuleList
@@ -335,40 +358,37 @@ func (r *NetworkUpgradePrepareReconciler) createPrefetchJobs(ctx context.Context
 		return ctrl.Result{}, nil
 	}
 
-	// Create one Job per (target, image) in a single pass. Concurrent registry
-	// pulls are already bounded without pacing: node-pinned mode is capped at
-	// MaxPrefetchNodes candidate nodes and pod-node mode by the (small) consensus
-	// node count, and kubelet serializes image pulls per node, so at most a few
-	// dozen distinct nodes ever pull at once. Job names are deterministic, so
-	// Create is idempotent (AlreadyExists is skipped) and a retry after a partial
-	// failure is safe.
+	// Create one Job per target node in a single pass — each Job pulls all images
+	// via init containers, so object count is bounded by node count (not
+	// nodes × images). Concurrent registry pulls stay bounded: node-pinned mode
+	// is capped at MaxPrefetchNodes and pod-node mode by the (small) consensus
+	// node count, and kubelet serializes image pulls per node. Job names are
+	// deterministic, so Create is idempotent (AlreadyExists is skipped) and a
+	// retry after a partial failure is safe.
 	for _, target := range targets {
-		for _, image := range images {
-			job, err := prefetch.BuildPrefetchJob(prepare, target.target, target.id, image, ttlSeconds, r.Scheme)
-			if err != nil {
-				return ctrl.Result{}, errx.WithReason(errReconcile.Wrap(err, "building prefetch Job"), ReasonPrefetchJobBuild)
+		job, err := prefetch.BuildPrefetchJob(prepare, target.target, target.id, images, ttlSeconds, r.Scheme)
+		if err != nil {
+			return ctrl.Result{}, errx.WithReason(errReconcile.Wrap(err, "building prefetch Job"), ReasonPrefetchJobBuild)
+		}
+		if err := r.Create(ctx, job); err != nil {
+			if apierrors.IsAlreadyExists(err) {
+				continue
 			}
-			if err := r.Create(ctx, job); err != nil {
-				if apierrors.IsAlreadyExists(err) {
-					continue
-				}
-				return ctrl.Result{}, errx.WithHints(
-					errx.WithReason(errK8sAPI.Wrap(err, "creating prefetch Job %s", job.Name), ReasonPrefetchJobCreate),
-					"Confirm the operator has create permission on batch/v1 Jobs")
-			}
+			return ctrl.Result{}, errx.WithHints(
+				errx.WithReason(errK8sAPI.Wrap(err, "creating prefetch Job %s", job.Name), ReasonPrefetchJobCreate),
+				"Confirm the operator has create permission on batch/v1 Jobs")
 		}
 	}
 
 	targetCount := len(targets)
-	totalJobs := targetCount * len(images)
 	r.eventf(ctx, prepare, corev1.EventTypeNormal, operatorv1alpha1.EventPrefetchCreated,
-		"created %d prefetch Jobs across %d targets for %d images", totalJobs, targetCount, len(images))
+		"created %d prefetch Jobs across %d nodes for %d images", targetCount, targetCount, len(images))
 
 	setCondition(&prepare.Status.Conditions, metav1.Condition{
 		Type:    operatorv1alpha1.CondImagePrefetchCreated,
 		Status:  metav1.ConditionTrue,
 		Reason:  operatorv1alpha1.ReasonPrefetchCreated.String(),
-		Message: fmt.Sprintf("created %d prefetch Jobs across %d targets for %d images", totalJobs, targetCount, len(images)),
+		Message: fmt.Sprintf("created %d prefetch Jobs across %d nodes for %d images", targetCount, targetCount, len(images)),
 	})
 	if err := r.Status().Update(ctx, prepare); err != nil {
 		return ctrl.Result{}, wrapStatusUpdate(err, "updating prefetch created status")

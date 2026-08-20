@@ -51,15 +51,24 @@ func TargetFromCapsule(capsule *operatorv1alpha1.ConsensusCapsule) PrefetchTarge
 	}
 }
 
+// perImageDeadlineSeconds bounds the time allowed to pull each image. A Job's
+// ActiveDeadlineSeconds is this multiplied by the image count, since one pod
+// pulls every image sequentially via init containers.
+const perImageDeadlineSeconds = int64(600)
+
 func BuildPrefetchJob(
 	prepare *operatorv1alpha1.NetworkUpgradePrepare,
 	target PrefetchTarget,
 	targetID string,
-	image string,
+	images []string,
 	ttlSeconds int32,
 	scheme *runtime.Scheme,
 ) (*batchv1.Job, error) {
-	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(prepare.Spec.OperationID+"\x00"+targetID+"\x00"+image)))[:8]
+	if len(images) == 0 {
+		return nil, fmt.Errorf("no images to prefetch")
+	}
+
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(prepare.Spec.OperationID+"\x00"+targetID+"\x00"+strings.Join(images, "\x00"))))[:8]
 	opID := dnsNormalize(prepare.Spec.OperationID, 20)
 	tgtName := dnsNormalize(targetID, 20)
 	// Each segment is bounded by dnsNormalize (<=20) plus an 8-char hash, so the
@@ -70,35 +79,45 @@ func BuildPrefetchJob(
 	name := fmt.Sprintf("prefetch-%s-%s-%s", opID, tgtName, hash)
 
 	backoffLimit := int32(3)
-	activeDeadlineSeconds := int64(600)
-	podSpec := corev1.PodSpec{
-		RestartPolicy: corev1.RestartPolicyNever,
-		Containers: []corev1.Container{
-			{
-				Name:    "prefetch",
-				Image:   image,
-				Command: []string{"/bin/sh", "-c", "exit 0"},
-				// Always pull: a mutable :tag already cached on the node would
-				// satisfy IfNotPresent and skip fetching the current layers,
-				// defeating the prefetch (and letting a stale image look
-				// "prefetched"). A pull failure then fails the Job so the upgrade
-				// falls back to the normal registry path.
-				ImagePullPolicy: corev1.PullAlways,
-				// The container does nothing (the pull happens at the kubelet
-				// level); keep requests tiny so the Job schedules anywhere, with
-				// modest limits as a safety cap.
-				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("10m"),
-						corev1.ResourceMemory: resource.MustParse("16Mi"),
-					},
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("100m"),
-						corev1.ResourceMemory: resource.MustParse("64Mi"),
-					},
+	activeDeadlineSeconds := perImageDeadlineSeconds * int64(len(images))
+
+	// A single Job pulls every image by starting a throwaway container per image
+	// (the pull happens at the kubelet level). images[0] is the main container;
+	// the rest are init containers, which run sequentially — so the images are
+	// pulled one at a time, keeping per-node pull load bounded. Always pull: a
+	// mutable :tag already cached on the node would satisfy IfNotPresent and skip
+	// fetching the current layers, defeating the prefetch; a pull failure then
+	// fails the Job so the upgrade falls back to the normal registry path.
+	prefetchContainer := func(name, image string) corev1.Container {
+		return corev1.Container{
+			Name:            name,
+			Image:           image,
+			Command:         []string{"/bin/sh", "-c", "exit 0"},
+			ImagePullPolicy: corev1.PullAlways,
+			// The container does nothing; keep requests tiny so the Job schedules
+			// anywhere, with modest limits as a safety cap.
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("10m"),
+					corev1.ResourceMemory: resource.MustParse("16Mi"),
+				},
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("100m"),
+					corev1.ResourceMemory: resource.MustParse("64Mi"),
 				},
 			},
-		},
+		}
+	}
+
+	var initContainers []corev1.Container
+	for i, image := range images[1:] {
+		initContainers = append(initContainers, prefetchContainer(fmt.Sprintf("prefetch-%d", i+1), image))
+	}
+
+	podSpec := corev1.PodSpec{
+		RestartPolicy:      corev1.RestartPolicyNever,
+		InitContainers:     initContainers,
+		Containers:         []corev1.Container{prefetchContainer("prefetch", images[0])},
 		ServiceAccountName: target.ServiceAccountName,
 	}
 

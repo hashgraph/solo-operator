@@ -950,3 +950,64 @@ func TestCheckPrefetchJobs_TerminalDetection(t *testing.T) {
 		})
 	}
 }
+
+// When prefetch is disabled via orbit config, createPrefetchJobs must create no
+// Jobs and mark the outcome disabled (not succeeded) so Freeze/Execute fall
+// through to normal registry validation.
+func TestReconcilePrefetch_Disabled(t *testing.T) {
+	scheme := newControllerTestScheme()
+	prepare := newPrepareForTest()
+	prepare.Finalizers = []string{FinalizerNetworkUpgradePrepare}
+	prepare.Status.Phase = operatorv1alpha1.PhaseSucceeded
+	prepare.Status.SelectedSources = &operatorv1alpha1.SelectedSources{}
+	prepare.Status.SelectedSources.Set(operatorv1alpha1.ComponentConsensusNode,
+		&operatorv1alpha1.SelectedSource{Image: "gcr.io/cn:v1", Digest: "sha256:abc"})
+
+	orbit := &operatorv1alpha1.Orbit{
+		ObjectMeta: metav1.ObjectMeta{Name: prepare.Spec.Orbit},
+		Spec: operatorv1alpha1.OrbitSpec{
+			Upgrade: &operatorv1alpha1.OrbitUpgrade{
+				ConsensusNode: &operatorv1alpha1.ConsensusNodeUpgrade{
+					Prefetch: &operatorv1alpha1.PrefetchConfig{Enabled: boolPtr(false)},
+				},
+			},
+		},
+	}
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(prepare, orbit).
+		WithStatusSubresource(prepare).
+		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, prepareIndexFunc).
+		WithIndex(&operatorv1alpha1.ConsensusCapsule{}, fieldCapsuleOrbit, capsuleOrbitIndexFunc).
+		Build()
+
+	r := NewNetworkUpgradePrepareReconciler(c, scheme)
+	r.Recorder = events.NewFakeRecorder(64)
+
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: client.ObjectKeyFromObject(prepare),
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var jobs batchv1.JobList
+	if err := c.List(context.Background(), &jobs, client.InNamespace(prepare.Namespace)); err != nil {
+		t.Fatalf("list jobs: %v", err)
+	}
+	if len(jobs.Items) != 0 {
+		t.Errorf("expected no prefetch Jobs when disabled, got %d", len(jobs.Items))
+	}
+
+	var got operatorv1alpha1.NetworkUpgradePrepare
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(prepare), &got); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	completed := findCondition(got.Status.Conditions, operatorv1alpha1.CondImagePrefetchCompleted)
+	if completed == nil || completed.Status != metav1.ConditionFalse ||
+		completed.Reason != operatorv1alpha1.ReasonPrefetchDisabled.String() {
+		t.Errorf("expected Completed=False/PrefetchDisabled, got %+v", completed)
+	}
+	if _, ok := prefetchCompleted(&got); ok {
+		t.Error("prefetchCompleted should report not-succeeded when prefetch is disabled")
+	}
+}

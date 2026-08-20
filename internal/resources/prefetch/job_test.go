@@ -46,7 +46,7 @@ func TestBuildPrefetchJob_NodePinned(t *testing.T) {
 	}}
 	target := TargetFromNode("node-3", "my-sa", tolerations)
 
-	job, err := BuildPrefetchJob(testPrepare(), target, "node-3", "ghcr.io/cn:0.62.0", 7776000, scheme)
+	job, err := BuildPrefetchJob(testPrepare(), target, "node-3", []string{"ghcr.io/cn:0.62.0"}, 7776000, scheme)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestBuildPrefetchJob_CapsuleBased(t *testing.T) {
 	}
 	target := TargetFromCapsule(capsule)
 
-	job, err := BuildPrefetchJob(testPrepare(), target, capsule.Name, "ghcr.io/cn:0.62.0", 7776000, scheme)
+	job, err := BuildPrefetchJob(testPrepare(), target, capsule.Name, []string{"ghcr.io/cn:0.62.0"}, 7776000, scheme)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestBuildPrefetchJob_NameBounded(t *testing.T) {
 	}
 	target := TargetFromNode("extremely-long-node-name-here-that-is-very-long", "", nil)
 
-	job, err := BuildPrefetchJob(prepare, target, "extremely-long-node-name-here-that-is-very-long", "ghcr.io/cn:0.62.0", 300, scheme)
+	job, err := BuildPrefetchJob(prepare, target, "extremely-long-node-name-here-that-is-very-long", []string{"ghcr.io/cn:0.62.0"}, 300, scheme)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestBuildPrefetchJob_LabelValueNormalized(t *testing.T) {
 	longName := "Node_" + strings.Repeat("x", 70) + "."
 	target := TargetFromNode(longName, "", nil)
 
-	job, err := BuildPrefetchJob(testPrepare(), target, longName, "img:v1", 300, scheme)
+	job, err := BuildPrefetchJob(testPrepare(), target, longName, []string{"img:v1"}, 300, scheme)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -187,11 +187,60 @@ func TestBuildPrefetchJob_ServiceAccountFromCapsule(t *testing.T) {
 	}
 	target := TargetFromCapsule(capsule)
 
-	job, err := BuildPrefetchJob(testPrepare(), target, capsule.Name, "img:v1", 300, scheme)
+	job, err := BuildPrefetchJob(testPrepare(), target, capsule.Name, []string{"img:v1"}, 300, scheme)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if job.Spec.Template.Spec.ServiceAccountName != "my-sa" {
 		t.Errorf("ServiceAccountName = %q, want my-sa", job.Spec.Template.Spec.ServiceAccountName)
+	}
+}
+
+// A single Job pulls all images: images[0] as the main container and the rest as
+// init containers (sequential pulls). The deadline scales per image.
+func TestBuildPrefetchJob_MultiImage(t *testing.T) {
+	scheme := testScheme()
+	images := []string{"reg/cn:1", "reg/uploader:1", "reg/uc:1"}
+
+	job, err := BuildPrefetchJob(testPrepare(), TargetFromNode("node-3", "my-sa", nil), "node-3", images, 300, scheme)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	spec := job.Spec.Template.Spec
+	if len(spec.Containers) != 1 || spec.Containers[0].Image != images[0] {
+		t.Fatalf("main container should be images[0]=%q, got %+v", images[0], spec.Containers)
+	}
+	if len(spec.InitContainers) != 2 {
+		t.Fatalf("expected 2 init containers for 3 images, got %d", len(spec.InitContainers))
+	}
+
+	pulled := map[string]bool{spec.Containers[0].Image: true}
+	names := map[string]bool{spec.Containers[0].Name: true}
+	for _, c := range spec.InitContainers {
+		if c.ImagePullPolicy != corev1.PullAlways {
+			t.Errorf("init container %s must use PullAlways", c.Name)
+		}
+		if names[c.Name] {
+			t.Errorf("duplicate container name %q", c.Name)
+		}
+		names[c.Name] = true
+		pulled[c.Image] = true
+	}
+	for _, img := range images {
+		if !pulled[img] {
+			t.Errorf("image %q is not pulled by any container", img)
+		}
+	}
+
+	if job.Spec.ActiveDeadlineSeconds == nil || *job.Spec.ActiveDeadlineSeconds != 1800 {
+		t.Errorf("ActiveDeadlineSeconds = %v, want 1800 (600*3)", job.Spec.ActiveDeadlineSeconds)
+	}
+}
+
+func TestBuildPrefetchJob_NoImages(t *testing.T) {
+	scheme := testScheme()
+	if _, err := BuildPrefetchJob(testPrepare(), TargetFromNode("n", "", nil), "n", nil, 300, scheme); err == nil {
+		t.Error("expected an error when no images are provided")
 	}
 }

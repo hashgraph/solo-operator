@@ -100,23 +100,9 @@ type ConsensusNodeUpgrade struct {
 	// +optional
 	NodeReadyRequeueInterval *metav1.Duration `json:"nodeReadyRequeueInterval,omitempty"`
 
-	// PrefetchJobTTL is how long completed prefetch Jobs linger before
-	// Kubernetes auto-deletes them via the TTL controller. Default: 90d.
-	// Caution: this TTL applies to both succeeded and failed Jobs. Setting
-	// a short duration causes failed Jobs to be deleted, losing debug info
-	// (logs, events) needed to diagnose prefetch failures.
-	// +kubebuilder:validation:Format=duration
+	// Prefetch configures best-effort image prefetch during the prepare phase.
 	// +optional
-	PrefetchJobTTL *metav1.Duration `json:"prefetchJobTTL,omitempty"`
-
-	// MaxPrefetchNodes is the maximum number of candidate nodes onto which the
-	// operator will create prefetch Jobs. When the number of nodes matching
-	// capsule nodeSelectors exceeds this threshold, the operator falls back to
-	// capsule-based scheduling (one Job per capsule) instead of per-node pinning.
-	// Default: 30. Set to 0 to disable node-based prefetch entirely.
-	// +kubebuilder:validation:Minimum=0
-	// +optional
-	MaxPrefetchNodes *int32 `json:"maxPrefetchNodes,omitempty"`
+	Prefetch *PrefetchConfig `json:"prefetch,omitempty"`
 
 	// SkipScaleDown controls how the execute phase restarts the consensus pod
 	// onto the new image. When true (default) the operator patches the
@@ -131,10 +117,36 @@ type ConsensusNodeUpgrade struct {
 	SkipScaleDown *bool `json:"skipScaleDown,omitempty"`
 }
 
+// PrefetchConfig configures best-effort image prefetch during the prepare phase.
+type PrefetchConfig struct {
+	// Enabled turns image prefetch on or off. Default: true.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// JobTTL is how long completed prefetch Jobs linger before Kubernetes
+	// auto-deletes them via the TTL controller. Default: 90d.
+	// Caution: this TTL applies to both succeeded and failed Jobs. Setting
+	// a short duration causes failed Jobs to be deleted, losing debug info
+	// (logs, events) needed to diagnose prefetch failures.
+	// +kubebuilder:validation:Format=duration
+	// +optional
+	JobTTL *metav1.Duration `json:"jobTTL,omitempty"`
+
+	// MaxNodes is the maximum number of nodes matching capsule nodeSelectors for
+	// which the operator creates node-pinned prefetch Jobs (selector coverage).
+	// When the matched pool exceeds this threshold, the operator falls back to
+	// pinning one Job per node currently running a consensus pod. Default: 30.
+	// Set to 0 to always use pod-node targeting.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	MaxNodes *int32 `json:"maxNodes,omitempty"`
+}
+
 const (
 	DefaultExecutePrereqRequeueInterval    = 30 * time.Second
 	DefaultExecuteDaemonRequeueInterval    = 10 * time.Second
 	DefaultExecuteNodeReadyRequeueInterval = 10 * time.Second
+	DefaultPrefetchEnabled                 = true
 	DefaultPrefetchJobTTL                  = 90 * 24 * time.Hour
 	DefaultMaxPrefetchNodes                = int32(30)
 	MinRequeueInterval                     = 1 * time.Second
@@ -146,6 +158,7 @@ type EffectiveUpgradeConfig struct {
 	PrereqRequeueInterval    time.Duration
 	DaemonRequeueInterval    time.Duration
 	NodeReadyRequeueInterval time.Duration
+	PrefetchEnabled          bool
 	PrefetchJobTTL           time.Duration
 	MaxPrefetchNodes         int32
 	SkipScaleDown            bool
@@ -158,6 +171,7 @@ func ResolveUpgradeConfig(orbit *Orbit) EffectiveUpgradeConfig {
 		PrereqRequeueInterval:    DefaultExecutePrereqRequeueInterval,
 		DaemonRequeueInterval:    DefaultExecuteDaemonRequeueInterval,
 		NodeReadyRequeueInterval: DefaultExecuteNodeReadyRequeueInterval,
+		PrefetchEnabled:          DefaultPrefetchEnabled,
 		PrefetchJobTTL:           DefaultPrefetchJobTTL,
 		MaxPrefetchNodes:         DefaultMaxPrefetchNodes,
 		SkipScaleDown:            true,
@@ -176,11 +190,16 @@ func ResolveUpgradeConfig(orbit *Orbit) EffectiveUpgradeConfig {
 	if u.NodeReadyRequeueInterval != nil && u.NodeReadyRequeueInterval.Duration >= MinRequeueInterval {
 		cfg.NodeReadyRequeueInterval = u.NodeReadyRequeueInterval.Duration
 	}
-	if u.PrefetchJobTTL != nil && u.PrefetchJobTTL.Duration >= 0 {
-		cfg.PrefetchJobTTL = u.PrefetchJobTTL.Duration
-	}
-	if u.MaxPrefetchNodes != nil && *u.MaxPrefetchNodes >= 0 {
-		cfg.MaxPrefetchNodes = *u.MaxPrefetchNodes
+	if u.Prefetch != nil {
+		if u.Prefetch.Enabled != nil {
+			cfg.PrefetchEnabled = *u.Prefetch.Enabled
+		}
+		if u.Prefetch.JobTTL != nil && u.Prefetch.JobTTL.Duration >= 0 {
+			cfg.PrefetchJobTTL = u.Prefetch.JobTTL.Duration
+		}
+		if u.Prefetch.MaxNodes != nil && *u.Prefetch.MaxNodes >= 0 {
+			cfg.MaxPrefetchNodes = *u.Prefetch.MaxNodes
+		}
 	}
 	if u.SkipScaleDown != nil {
 		cfg.SkipScaleDown = *u.SkipScaleDown

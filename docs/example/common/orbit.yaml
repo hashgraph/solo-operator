@@ -46,15 +46,18 @@ spec:
       prereqRequeueInterval: 2s
       daemonRequeueInterval: 2s
       nodeReadyRequeueInterval: 2s
-      # prefetchJobTTL: how long completed prefetch Jobs linger before
-      # Kubernetes auto-deletes them. Applies to both succeeded and failed Jobs;
-      # a short TTL deletes failed Jobs and loses debug info. Default: 2160h (90d).
-      # prefetchJobTTL: 2160h
-      # maxPrefetchNodes: max candidate nodes for node-pinned prefetch Jobs.
-      # When candidate nodes exceed this threshold the operator falls back to
-      # capsule-based scheduling to avoid prefetching onto hundreds of unrelated
-      # nodes. Default: 30.
-      # maxPrefetchNodes: 30
+      # prefetch: best-effort image prefetch during the prepare phase.
+      # prefetch:
+      #   # enabled: turn image prefetch on/off. Default: true.
+      #   enabled: true
+      #   # jobTTL: how long completed prefetch Jobs linger before Kubernetes
+      #   # auto-deletes them. Applies to both succeeded and failed Jobs; a short
+      #   # TTL deletes failed Jobs and loses debug info. Default: 2160h (90d).
+      #   jobTTL: 2160h
+      #   # maxNodes: max nodes matching capsule nodeSelectors for node-pinned
+      #   # coverage. Above this the operator pins one Job per node running a
+      #   # consensus pod instead. Default: 30. Set 0 to always use pod-node targeting.
+      #   maxNodes: 30
   consensus:
     genesis:
       addressBook:
