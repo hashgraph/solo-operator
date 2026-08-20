@@ -55,6 +55,7 @@ func (r *NetworkUpgradePrepareReconciler) WithStrategy(name string) *NetworkUpgr
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeprepares/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
+// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 
 func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var prepare operatorv1alpha1.NetworkUpgradePrepare
