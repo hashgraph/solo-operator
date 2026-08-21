@@ -112,7 +112,7 @@ jobs:
           password: ${{ secrets.JF_ACCESS_TOKEN }}
 
       - name: Build and Push Docker Image (GitHub)
-        uses: step-security/docker-build-push-action@9af9b5acc1751dcec2aa5375a068979fa526bc9a # v7.2.0
+        uses: step-security/docker-build-push-action@144392094f7fc3199dda455efe3b70dbea4b72a0 # v7.3.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -124,7 +124,7 @@ jobs:
 
       - name: Build and Push Docker Image (JFrog)
         if: ${{ inputs.jfrog-enabled }}
-        uses: step-security/docker-build-push-action@9af9b5acc1751dcec2aa5375a068979fa526bc9a # v7.2.0
+        uses: step-security/docker-build-push-action@144392094f7fc3199dda455efe3b70dbea4b72a0 # v7.3.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -135,7 +135,7 @@ jobs:
             ${{ env.JF_OCI_REGISTRY }}/${{ env.JF_OCI_GROUP }}/solo-operator:latest
 
       - name: Build and Push UC Image (GitHub)
-        uses: step-security/docker-build-push-action@9af9b5acc1751dcec2aa5375a068979fa526bc9a # v7.2.0
+        uses: step-security/docker-build-push-action@144392094f7fc3199dda455efe3b70dbea4b72a0 # v7.3.0
         with:
           context: .
           file: Dockerfile.uc
@@ -148,7 +148,7 @@ jobs:
 
       - name: Build and Push UC Image (JFrog)
         if: ${{ inputs.jfrog-enabled }}
-        uses: step-security/docker-build-push-action@9af9b5acc1751dcec2aa5375a068979fa526bc9a # v7.2.0
+        uses: step-security/docker-build-push-action@144392094f7fc3199dda455efe3b70dbea4b72a0 # v7.3.0
         with:
           context: .
           file: Dockerfile.uc
@@ -160,7 +160,7 @@ jobs:
             ${{ env.JF_OCI_REGISTRY }}/${{ env.JF_OCI_GROUP }}/solo-operator-uc:latest
 
       - name: Build and Push beacon Image (GitHub)
-        uses: step-security/docker-build-push-action@9af9b5acc1751dcec2aa5375a068979fa526bc9a # v7.2.0
+        uses: step-security/docker-build-push-action@144392094f7fc3199dda455efe3b70dbea4b72a0 # v7.3.0
         with:
           context: .
           file: Dockerfile.beacon
@@ -173,7 +173,7 @@ jobs:
 
       - name: Build and Push beacon Image (JFrog)
         if: ${{ inputs.jfrog-enabled }}
-        uses: step-security/docker-build-push-action@9af9b5acc1751dcec2aa5375a068979fa526bc9a # v7.2.0
+        uses: step-security/docker-build-push-action@144392094f7fc3199dda455efe3b70dbea4b72a0 # v7.3.0
         with:
           context: .
           file: Dockerfile.beacon
