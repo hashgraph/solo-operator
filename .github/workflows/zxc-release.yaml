@@ -26,6 +26,11 @@ on:
         type: string
         required: false
         default: "charts/solo-operator"
+      jfrog-enabled:
+        description: "Push artifacts to JFrog"
+        type: boolean
+        required: false
+        default: true
     secrets:
       GH_ACCESS_TOKEN:
         required: false
@@ -240,7 +245,7 @@ jobs:
               --password-stdin
 
       - name: Helm Registry Login (JFrog)
-        if: ${{ !inputs.dry-run }}
+        if: ${{ !inputs.dry-run && inputs.jfrog-enabled }}
         run: |
           echo "${{ secrets.JF_ACCESS_TOKEN }}" | \
             helm registry login ${{ vars.JF_HELM_REGISTRY }} \
@@ -255,7 +260,7 @@ jobs:
             "oci://ghcr.io/hashgraph/charts"
 
       - name: Helm Push (JFrog)
-        if: ${{ !inputs.dry-run }}
+        if: ${{ !inputs.dry-run && inputs.jfrog-enabled }}
         run: |
           set -euo pipefail
           helm push "${{ steps.package.outputs.path }}" \

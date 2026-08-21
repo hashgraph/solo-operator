@@ -10,6 +10,11 @@ on:
         type: boolean
         required: false
         default: false
+      jfrog-enabled:
+        description: "Push artifacts to JFrog"
+        type: boolean
+        required: false
+        default: true
 
 defaults:
   run:
@@ -33,6 +38,7 @@ jobs:
     uses: ./.github/workflows/zxc-release.yaml
     with:
       dry-run: ${{ inputs.dry-run-enabled }}
+      jfrog-enabled: ${{ inputs.jfrog-enabled }}
       helm-chart-path: charts/solo-operator
     secrets: inherit
 
@@ -98,6 +104,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Docker Login (JFrog)
+        if: ${{ inputs.jfrog-enabled }}
         uses: step-security/docker-login-action@164e21d7e52229904128e2f946001cb88278c33d # v4.2.0
         with:
           registry: ${{ env.JF_OCI_REGISTRY }}
@@ -116,6 +123,7 @@ jobs:
             ${{ env.GH_OCI_REGISTRY }}/${{ env.GH_OCI_GROUP }}:latest
 
       - name: Build and Push Docker Image (JFrog)
+        if: ${{ inputs.jfrog-enabled }}
         uses: step-security/docker-build-push-action@9af9b5acc1751dcec2aa5375a068979fa526bc9a # v7.2.0
         with:
           context: .
@@ -139,6 +147,7 @@ jobs:
             ${{ env.GH_OCI_REGISTRY }}/hashgraph/solo-operator-uc:latest
 
       - name: Build and Push UC Image (JFrog)
+        if: ${{ inputs.jfrog-enabled }}
         uses: step-security/docker-build-push-action@9af9b5acc1751dcec2aa5375a068979fa526bc9a # v7.2.0
         with:
           context: .
@@ -163,6 +172,7 @@ jobs:
             ${{ env.GH_OCI_REGISTRY }}/hashgraph/solo-operator-beacon:latest
 
       - name: Build and Push beacon Image (JFrog)
+        if: ${{ inputs.jfrog-enabled }}
         uses: step-security/docker-build-push-action@9af9b5acc1751dcec2aa5375a068979fa526bc9a # v7.2.0
         with:
           context: .
