@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/resources/consensus"
 )
 
 var _ = Describe("ConsensusCapsule Controller", func() {
@@ -530,6 +531,181 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}, timeout, interval).Should(BeTrue())
 
 			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, capsule)).Should(Succeed())
+		})
+	})
+
+	Context("When creating a ConsensusCapsule with StartPolicy and DesiredRunState", func() {
+		const (
+			capsuleName      = "node-desired-state"
+			capsuleNamespace = "consensus-desired-state-test"
+		)
+
+		ctx := context.Background()
+
+		BeforeEach(func() {
+			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: capsuleNamespace}}
+			err := k8sClient.Create(ctx, ns)
+			if err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
+
+			orbit := &operatorv1alpha1.Orbit{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
+				Spec: operatorv1alpha1.OrbitSpec{
+					Consensus: operatorv1alpha1.OrbitConsensus{
+						Genesis: operatorv1alpha1.OrbitGenesis{
+							AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x00"},
+						},
+					},
+				},
+			}
+			err = k8sClient.Create(ctx, orbit)
+			if err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
+
+			log4j2 := &operatorv1alpha1.Log4j2Config{
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-log4j2", Namespace: capsuleNamespace},
+				Spec:       operatorv1alpha1.Log4j2ConfigSpec{Scope: "node0", Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`},
+			}
+			err = k8sClient.Create(ctx, log4j2)
+			if err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
+
+			nodeSettings := &operatorv1alpha1.NodeSettings{
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-settings", Namespace: capsuleNamespace},
+				Spec:       operatorv1alpha1.NodeSettingsSpec{Scope: "node0", Content: "checkSignedStateFromDisk,              1"},
+			}
+			err = k8sClient.Create(ctx, nodeSettings)
+			if err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
+
+			appProps := &operatorv1alpha1.ApplicationProperties{
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-application-properties", Namespace: capsuleNamespace},
+				Spec:       operatorv1alpha1.ApplicationPropertiesSpec{Scope: "node0", Content: "hedera.config.version=0\nnetty.mode=TEST"},
+			}
+			err = k8sClient.Create(ctx, appProps)
+			if err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
+			}
+		})
+
+		It("Should configure AUTO_START_CONSENSUS_SERVICE=false for StartPolicy=Manual and converge Phase to Stopped", func() {
+			capsule := &operatorv1alpha1.ConsensusCapsule{
+				ObjectMeta: metav1.ObjectMeta{Name: capsuleName, Namespace: capsuleNamespace},
+				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+					Orbit:                    "test-orbit",
+					NodeId:                   4,
+					AccountId:                "0.0.7",
+					Weight:                   1,
+					StartPolicy:              operatorv1alpha1.StartPolicyManual,
+					DesiredRunState:          operatorv1alpha1.RunStateStopped,
+					Log4j2ConfigRef:          "node0-log4j2",
+					SettingsConfigRef:        "node0-settings",
+					ApplicationPropertiesRef: "node0-application-properties",
+					PodProperties: operatorv1alpha1.ConsensusPodProperties{
+						Containers: operatorv1alpha1.ConsensusContainers{
+							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
+								SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+									Repository: "gcr.io/hedera-registry",
+									ImageName:  "consensus-node",
+									ImageTag:   "0.65.1",
+								},
+							},
+							UC: &operatorv1alpha1.UcSidecar{
+								Enabled: true,
+								SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+									Repository: "gcr.io/hedera-registry",
+									ImageName:  "uc",
+									ImageTag:   "1.0.0",
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, capsule)).Should(Succeed())
+
+			By("Verifying StatefulSet has AUTO_START_CONSENSUS_SERVICE=false")
+			stsKey := types.NamespacedName{Name: capsuleName, Namespace: capsuleNamespace}
+			sts := &appsv1.StatefulSet{}
+			Eventually(func() bool {
+				return k8sClient.Get(ctx, stsKey, sts) == nil
+			}, timeout, interval).Should(BeTrue())
+
+			var nodeContainer *corev1.Container
+			for i := range sts.Spec.Template.Spec.Containers {
+				if sts.Spec.Template.Spec.Containers[i].Name == "consensus-node" {
+					nodeContainer = &sts.Spec.Template.Spec.Containers[i]
+					break
+				}
+			}
+			Expect(nodeContainer).NotTo(BeNil())
+			var autoStartEnv string
+			for _, env := range nodeContainer.Env {
+				if env.Name == "AUTO_START_CONSENSUS_SERVICE" {
+					autoStartEnv = env.Value
+				}
+			}
+			Expect(autoStartEnv).To(Equal("false"))
+
+			By("Simulating a Ready Pod with matching STS revision")
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      fmt.Sprintf("%s-0", capsuleName),
+					Namespace: capsuleNamespace,
+					Labels:    consensus.PodLabels(capsule),
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "consensus-node", Image: "gcr.io/hedera-registry/consensus-node:0.65.1"},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, pod)).Should(Succeed())
+
+			pod.Status = corev1.PodStatus{
+				Phase: corev1.PodRunning,
+				Conditions: []corev1.PodCondition{
+					{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+				},
+			}
+			Expect(k8sClient.Status().Update(ctx, pod)).Should(Succeed())
+
+			By("Verifying Capsule Phase rolls up to Stopped")
+			capsuleKey := types.NamespacedName{Name: capsuleName, Namespace: capsuleNamespace}
+			Eventually(func() operatorv1alpha1.Phase {
+				got := &operatorv1alpha1.ConsensusCapsule{}
+				if err := k8sClient.Get(ctx, capsuleKey, got); err != nil {
+					return ""
+				}
+				return got.Status.Phase
+			}, timeout, interval).Should(Equal(operatorv1alpha1.PhaseStopped))
+
+			By("Patching DesiredRunState to Running")
+			Eventually(func() error {
+				got := &operatorv1alpha1.ConsensusCapsule{}
+				if err := k8sClient.Get(ctx, capsuleKey, got); err != nil {
+					return err
+				}
+				got.Spec.DesiredRunState = operatorv1alpha1.RunStateRunning
+				return k8sClient.Update(ctx, got)
+			}, timeout, interval).Should(Succeed())
+
+			By("Verifying Capsule Phase transitions to Running")
+			Eventually(func() operatorv1alpha1.Phase {
+				got := &operatorv1alpha1.ConsensusCapsule{}
+				if err := k8sClient.Get(ctx, capsuleKey, got); err != nil {
+					return ""
+				}
+				return got.Status.Phase
+			}, timeout, interval).Should(Equal(operatorv1alpha1.PhaseRunning))
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, pod)).Should(Succeed())
 			Expect(k8sClient.Delete(ctx, capsule)).Should(Succeed())
 		})
 	})

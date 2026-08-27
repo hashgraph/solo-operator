@@ -157,6 +157,11 @@ type ConsensusCapsuleSpec struct {
 	// +optional
 	// +kubebuilder:default=Auto
 	StartPolicy StartPolicy `json:"startPolicy,omitempty"`
+
+	// DesiredRunState is the desired s6 process state (Running or Stopped).
+	// +optional
+	// +kubebuilder:validation:Enum=Running;Stopped
+	DesiredRunState RunState `json:"desiredRunState,omitempty"`
 }
 
 // ConsensusSecrets holds TLS and signing key references.

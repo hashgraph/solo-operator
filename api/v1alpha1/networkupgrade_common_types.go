@@ -310,8 +310,10 @@ const (
 	EventStepLabelInvalid        errx.Reason = "StepLabelInvalid"
 
 	// ConsensusCapsule phase-transition events (posted by the capsule controller).
-	EventConsensusNodeActive errx.Reason = "ConsensusNodeActive"
-	EventConsensusNodeFailed errx.Reason = "ConsensusNodeFailed"
+	EventConsensusNodeActive  errx.Reason = "ConsensusNodeActive"
+	EventConsensusNodeFailed  errx.Reason = "ConsensusNodeFailed"
+	EventConsensusNodeStarted errx.Reason = "ConsensusNodeStarted"
+	EventConsensusNodeStopped errx.Reason = "ConsensusNodeStopped"
 	// EventUCSidecarRequired is posted when a ConsensusCapsule is missing the
 	// mandatory UC sidecar (terminal configuration error).
 	EventUCSidecarRequired errx.Reason = "UCSidecarRequired"

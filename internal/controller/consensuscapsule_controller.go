@@ -60,6 +60,9 @@ type ConsensusCapsuleReconciler struct {
 	Recorder      events.EventRecorder
 	subreconciler *subreconciler.Chain[*operatorv1alpha1.ConsensusCapsule]
 
+	// S6 optionally overrides the s6 actuation runner (useful in tests).
+	S6 consensus.S6Runner
+
 	// clientset + restConfig back the s6 control interface: controller-runtime's
 	// client cannot exec into a pod.
 	clientset  kubernetes.Interface
@@ -536,6 +539,10 @@ func (r *ConsensusCapsuleReconciler) rollupRunningPhase(
 		// until the current pod actually reports ACTIVE again. Once the pod rolls to a
 		// new template (onUpdateRevision false) Active is likewise not sticky.
 		return operatorv1alpha1.PhaseActive
+	case platformStatus == operatorv1alpha1.PlatformStatusUnknown &&
+		(capsule.Spec.DesiredRunState == operatorv1alpha1.RunStateStopped ||
+			(capsule.Spec.StartPolicy == operatorv1alpha1.StartPolicyManual && capsule.Spec.DesiredRunState != operatorv1alpha1.RunStateRunning)):
+		return operatorv1alpha1.PhaseStopped
 	default:
 		return operatorv1alpha1.PhaseRunning
 	}
@@ -582,7 +589,11 @@ func (r *ConsensusCapsuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		r.Recorder = mgr.GetEventRecorder("consensuscapsule")
 	}
 	if r.subreconciler == nil {
-		r.subreconciler = consensus.NewSubReconcilers(r.Client, r.Scheme, r.Recorder)
+		if r.S6 != nil {
+			r.subreconciler = consensus.NewSubReconcilersWithS6(r.Client, r.Scheme, r.Recorder, r.S6)
+		} else {
+			r.subreconciler = consensus.NewSubReconcilers(r.Client, r.Scheme, r.Recorder, r.clientset, r.restConfig)
+		}
 	}
 	// Skip status-only updates (LoadBalancer IP, PVC binding, STS readyReplicas, etc.)
 	genChanged := builder.WithPredicates(predicate.GenerationChangedPredicate{})

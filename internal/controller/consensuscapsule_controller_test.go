@@ -187,7 +187,7 @@ func TestUpdateStatus_PodFailed_PhaseFailed(t *testing.T) {
 	}
 }
 
-// ── platform-status phase rollup ──────────────────────────────────────────────
+// ── platform-status phase rollup ─────────────────────────────────────────────
 
 const testRevision = "rev-abc123"
 
@@ -277,6 +277,63 @@ func TestUpdateStatus_AutoIdle_StaysRunning(t *testing.T) {
 	}
 	if capsule.Status.Phase != operatorv1alpha1.PhaseRunning {
 		t.Errorf("expected PhaseRunning for Auto+idle, got %s", capsule.Status.Phase)
+	}
+}
+
+// TestUpdateStatus_Manual_Idle_PhaseStopped verifies that a capsule with StartPolicy=Manual
+// and UNKNOWN platform status settles into PhaseStopped when DesiredRunState is not Running.
+func TestUpdateStatus_Manual_Idle_PhaseStopped(t *testing.T) {
+	t.Run("DesiredRunState is Stopped", func(t *testing.T) {
+		r, capsule, ctx := buildActiveScenario(t, "", operatorv1alpha1.PhasePending, testRevision, testRevision)
+		capsule.Spec.StartPolicy = operatorv1alpha1.StartPolicyManual
+		capsule.Spec.DesiredRunState = operatorv1alpha1.RunStateStopped
+		if _, err := r.updateStatus(ctx, capsule); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if capsule.Status.Phase != operatorv1alpha1.PhaseStopped {
+			t.Errorf("expected PhaseStopped, got %s", capsule.Status.Phase)
+		}
+	})
+
+	t.Run("DesiredRunState is empty", func(t *testing.T) {
+		r, capsule, ctx := buildActiveScenario(t, "", operatorv1alpha1.PhasePending, testRevision, testRevision)
+		capsule.Spec.StartPolicy = operatorv1alpha1.StartPolicyManual
+		capsule.Spec.DesiredRunState = ""
+		if _, err := r.updateStatus(ctx, capsule); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if capsule.Status.Phase != operatorv1alpha1.PhaseStopped {
+			t.Errorf("expected PhaseStopped, got %s", capsule.Status.Phase)
+		}
+	})
+}
+
+// TestUpdateStatus_Auto_DesiredStopped_PhaseStopped verifies that when StartPolicy=Auto
+// and DesiredRunState=Stopped, an idle pod (platformStatus=UNKNOWN) reports PhaseStopped.
+func TestUpdateStatus_Auto_DesiredStopped_PhaseStopped(t *testing.T) {
+	r, capsule, ctx := buildActiveScenario(t, "", operatorv1alpha1.PhasePending, testRevision, testRevision)
+	capsule.Spec.StartPolicy = operatorv1alpha1.StartPolicyAuto
+	capsule.Spec.DesiredRunState = operatorv1alpha1.RunStateStopped
+	if _, err := r.updateStatus(ctx, capsule); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capsule.Status.Phase != operatorv1alpha1.PhaseStopped {
+		t.Errorf("expected PhaseStopped on Auto policy with DesiredRunState=Stopped, got %s", capsule.Status.Phase)
+	}
+}
+
+// TestUpdateStatus_Manual_DesiredRunning_Idle_StaysRunning verifies that when
+// StartPolicy=Manual and DesiredRunState=Running, an idle pod (platformStatus=UNKNOWN)
+// reports PhaseRunning during startup rather than being misreported as PhaseStopped.
+func TestUpdateStatus_Manual_DesiredRunning_Idle_StaysRunning(t *testing.T) {
+	r, capsule, ctx := buildActiveScenario(t, "", operatorv1alpha1.PhasePending, testRevision, testRevision)
+	capsule.Spec.StartPolicy = operatorv1alpha1.StartPolicyManual
+	capsule.Spec.DesiredRunState = operatorv1alpha1.RunStateRunning
+	if _, err := r.updateStatus(ctx, capsule); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capsule.Status.Phase != operatorv1alpha1.PhaseRunning {
+		t.Errorf("expected PhaseRunning during Manual startup, got %s", capsule.Status.Phase)
 	}
 }
 
@@ -503,7 +560,7 @@ func TestUpdateStatus_PendingToActive_PatchesCheckpoint(t *testing.T) {
 	}
 }
 
-// ── pod-watch wake predicate + mapping ────────────────────────────────────────
+// ── pod-watch wake predicate + mapping ───────────────────────────────────────
 
 func TestPlatformStatusPodPredicate(t *testing.T) {
 	p := platformStatusPodPredicate()
@@ -583,7 +640,7 @@ func TestMapPodToCapsule(t *testing.T) {
 	}
 }
 
-// ── UC-mandatory terminal error ───────────────────────────────────────────────
+// ── UC-mandatory terminal error ─────────────────────────────────────────────
 
 func TestValidateUCMandatory(t *testing.T) {
 	capsule := newCapsuleForControllerTest() // no UC configured
@@ -635,7 +692,7 @@ func TestFailUCSidecarRequired_SetsPhaseFailed(t *testing.T) {
 	}
 }
 
-// ── markGenesisInitialized ────────────────────────────────────────────────────
+// ── markGenesisInitialized ──────────────────────────────────────────────────
 
 func newCheckpointCM(capsule *operatorv1alpha1.ConsensusCapsule, value string) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
