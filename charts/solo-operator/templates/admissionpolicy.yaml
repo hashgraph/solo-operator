@@ -1,16 +1,5 @@
 {{- if .Values.admissionPolicy.enabled -}}
 # ValidatingAdmissionPolicy enforcing the NetworkUpgrade* CR label invariants (#1133).
-# The UC stamps every NetworkUpgrade* CR with an operation-id and a step label; this
-# policy rejects any CREATE/UPDATE whose labels are missing or inconsistent, so a
-# malformed CR never lands in etcd. CRD x-kubernetes-validations cannot see
-# metadata.labels, so a ValidatingAdmissionPolicy is required (GA on the >=1.32
-# Kubernetes floor). The operator.solo.hiero.org/created-by annotation is provenance
-# only and is deliberately NOT enforced.
-#
-# The policy spec below (matchConstraints/variables/validations) and the binding's
-# validationActions are synced from config/admission/ by `task helm:sync-admission`
-# — edit those there, not here. The Helm boilerplate (names, labels, policyName,
-# failurePolicy) is maintained in this template.
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
@@ -81,5 +70,72 @@ metadata:
     {{- include "solo-operator.labels" . | nindent 4 }}
 spec:
   policyName: {{ include "solo-operator.fullname" . }}-networkupgrade-label-invariants
+  validationActions: ["Deny"]
+---
+# ValidatingAdmissionPolicy enforcing that a namespace-scoped CR's spec.orbit
+# (or spec.orbitRef.name for HelmCapsule) equals its metadata.namespace.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ include "solo-operator.fullname" . }}-orbit-namespace-invariants
+  labels:
+    {{- include "solo-operator.labels" . | nindent 4 }}
+spec:
+  # Fail closed: a CEL evaluation error denies the write rather than admitting an
+  # unvalidated CR.
+  failurePolicy: {{ .Values.admissionPolicy.failurePolicy }}
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["operator.solo.hiero.org"]
+        apiVersions: ["v1alpha1"]
+        operations: ["CREATE", "UPDATE"]
+        resources:
+          - apipermissionproperties
+          - applicationoverrideproperties
+          - applicationproperties
+          - blocknodesconfigs
+          - bootstrapproperties
+          - consensuscapsules
+          - envoyproxies
+          - feeschedules
+          - haproxycapsules
+          - helmcapsules
+          - log4j2configs
+          - networkgeneses
+          - networkupgradeexecutes
+          - networkupgradefreezeaborts
+          - networkupgradefreezes
+          - networkupgradeprepares
+          - nodepropertiesconfigs
+          - nodesettings
+          - simplefeesschedules
+          - throttlesconfigs
+  variables:
+    - name: effectiveOrbit
+      expression: >-
+        !has(object.spec) ? '' :
+        request.kind.kind == 'HelmCapsule' ? (
+          has(object.spec.orbitRef) && has(object.spec.orbitRef.name) ? object.spec.orbitRef.name : ''
+        ) : (
+          has(object.spec.orbit) ? object.spec.orbit : ''
+        )
+    - name: targetNamespace
+      expression: "has(object.metadata.namespace) && object.metadata.namespace != '' ? object.metadata.namespace : request.namespace"
+  validations:
+    - expression: "variables.effectiveOrbit == variables.targetNamespace"
+      reason: Invalid
+      messageExpression: >-
+        (request.kind.kind == 'HelmCapsule' ? 'spec.orbitRef.name ' : 'spec.orbit ') +
+        (variables.effectiveOrbit == '' ? '<unset>' : variables.effectiveOrbit) +
+        ' must match namespace ' + variables.targetNamespace
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ include "solo-operator.fullname" . }}-orbit-namespace-invariants-binding
+  labels:
+    {{- include "solo-operator.labels" . | nindent 4 }}
+spec:
+  policyName: {{ include "solo-operator.fullname" . }}-orbit-namespace-invariants
   validationActions: ["Deny"]
 {{- end }}

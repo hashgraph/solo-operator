@@ -41,7 +41,7 @@ var _ = Describe("ApplicationProperties Controller", func() {
 			By("Creating an ApplicationProperties")
 			cr := &operatorv1alpha1.ApplicationProperties{
 				ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: namespace},
-				Spec:       operatorv1alpha1.ApplicationPropertiesSpec{Scope: "node0", Content: validApplicationProperties},
+				Spec:       operatorv1alpha1.ApplicationPropertiesSpec{Orbit: namespace, Scope: "node0", Content: validApplicationProperties},
 			}
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 
@@ -88,7 +88,7 @@ var _ = Describe("ApplicationProperties Controller", func() {
 			By("Creating an ApplicationProperties")
 			cr := &operatorv1alpha1.ApplicationProperties{
 				ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: namespace},
-				Spec:       operatorv1alpha1.ApplicationPropertiesSpec{Scope: "node0", Content: validApplicationProperties},
+				Spec:       operatorv1alpha1.ApplicationPropertiesSpec{Orbit: namespace, Scope: "node0", Content: validApplicationProperties},
 			}
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 
@@ -145,7 +145,7 @@ staking.periodMins=1440`
 			By("Creating an ApplicationProperties with invalid content")
 			cr := &operatorv1alpha1.ApplicationProperties{
 				ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: namespace},
-				Spec:       operatorv1alpha1.ApplicationPropertiesSpec{Scope: "node0", Content: "badline without equals"},
+				Spec:       operatorv1alpha1.ApplicationPropertiesSpec{Orbit: namespace, Scope: "node0", Content: "badline without equals"},
 			}
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 
