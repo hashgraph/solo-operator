@@ -175,9 +175,6 @@ func (r *ActuationSubReconciler) ShouldReconcile(ctx context.Context, capsule *o
 	if r.s6 == nil {
 		return false
 	}
-	if capsule.Spec.DesiredRunState == "" && capsule.Spec.StartPolicy != operatorv1alpha1.StartPolicyManual {
-		return false
-	}
 
 	pod := &corev1.Pod{}
 	podName := PodName(capsule)
@@ -193,14 +190,20 @@ func (r *ActuationSubReconciler) Reconcile(ctx context.Context, capsule *operato
 		return ctrl.Result{}, nil
 	}
 
-	desired := capsule.Spec.DesiredRunState
-	if desired == "" {
-		return ctrl.Result{}, nil
-	}
-
 	isUp, err := r.s6.IsUp(ctx, capsule)
 	if err != nil {
 		return ctrl.Result{}, err
+	}
+
+	if isUp {
+		capsule.Status.RunState = operatorv1alpha1.RunStateRunning
+	} else {
+		capsule.Status.RunState = operatorv1alpha1.RunStateStopped
+	}
+
+	desired := capsule.Spec.DesiredRunState
+	if desired == "" {
+		return ctrl.Result{}, nil
 	}
 
 	switch {
@@ -208,6 +211,7 @@ func (r *ActuationSubReconciler) Reconcile(ctx context.Context, capsule *operato
 		if err := r.s6.Start(ctx, capsule); err != nil {
 			return ctrl.Result{}, err
 		}
+		capsule.Status.RunState = operatorv1alpha1.RunStateRunning
 		if r.recorder != nil {
 			r.recorder.Eventf(capsule, nil, corev1.EventTypeNormal,
 				operatorv1alpha1.EventConsensusNodeStarted.String(),
@@ -217,6 +221,7 @@ func (r *ActuationSubReconciler) Reconcile(ctx context.Context, capsule *operato
 		if err := r.s6.Stop(ctx, capsule); err != nil {
 			return ctrl.Result{}, err
 		}
+		capsule.Status.RunState = operatorv1alpha1.RunStateStopped
 		if r.recorder != nil {
 			r.recorder.Eventf(capsule, nil, corev1.EventTypeNormal,
 				operatorv1alpha1.EventConsensusNodeStopped.String(),

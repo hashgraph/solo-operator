@@ -615,6 +615,10 @@ type ConsensusCapsuleStatus struct {
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
+	// RunState is the consensus node's live s6 process state.
+	// +optional
+	RunState RunState `json:"runState,omitempty"`
+
 	// +optional
 	AddressBookEntry *AddressBookEntry `json:"addressBookEntry,omitempty"`
 }

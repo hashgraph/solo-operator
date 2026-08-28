@@ -21570,6 +21570,12 @@ spec:
                   exclusively by the operator, which derives it from the proxied name.
                 format: int32
                 type: integer
+              runState:
+                description: RunState is the consensus node's live s6 process state.
+                enum:
+                - Running
+                - Stopped
+                type: string
             type: object
         type: object
     served: true

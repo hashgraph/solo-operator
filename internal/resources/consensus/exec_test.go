@@ -10,10 +10,12 @@ import (
 
 	"github.com/joomcode/errorx"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/client-go/util/exec"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
@@ -120,4 +122,95 @@ func TestS6Controller_TransportError_Retryable(t *testing.T) {
 	if !errorx.HasTrait(err, errorx.Temporary()) {
 		t.Error("transport error must be temporary (retryable)")
 	}
+}
+
+type fakeS6Runner struct {
+	isUp     bool
+	startHit bool
+	stopHit  bool
+	err      error
+}
+
+func (f *fakeS6Runner) Start(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) error {
+	f.startHit = true
+	return f.err
+}
+
+func (f *fakeS6Runner) Stop(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) error {
+	f.stopHit = true
+	return f.err
+}
+
+func (f *fakeS6Runner) IsUp(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (bool, error) {
+	return f.isUp, f.err
+}
+
+func TestActuationSubReconciler_SetsStatusRunState(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = operatorv1alpha1.AddToScheme(scheme)
+	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	t.Run("sets_running_when_is_up", func(t *testing.T) {
+		runner := &fakeS6Runner{isUp: true}
+		rec := NewActuationSubReconciler(client, scheme, runner, nil)
+		capsule := testCapsule()
+
+		_, err := rec.Reconcile(context.Background(), capsule)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if capsule.Status.RunState != operatorv1alpha1.RunStateRunning {
+			t.Errorf("expected RunStateRunning, got %v", capsule.Status.RunState)
+		}
+	})
+
+	t.Run("sets_stopped_when_not_is_up", func(t *testing.T) {
+		runner := &fakeS6Runner{isUp: false}
+		rec := NewActuationSubReconciler(client, scheme, runner, nil)
+		capsule := testCapsule()
+
+		_, err := rec.Reconcile(context.Background(), capsule)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if capsule.Status.RunState != operatorv1alpha1.RunStateStopped {
+			t.Errorf("expected RunStateStopped, got %v", capsule.Status.RunState)
+		}
+	})
+
+	t.Run("starts_node_when_desired_running_and_not_up", func(t *testing.T) {
+		runner := &fakeS6Runner{isUp: false}
+		rec := NewActuationSubReconciler(client, scheme, runner, nil)
+		capsule := testCapsule()
+		capsule.Spec.DesiredRunState = operatorv1alpha1.RunStateRunning
+
+		_, err := rec.Reconcile(context.Background(), capsule)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !runner.startHit {
+			t.Error("expected Start to be called")
+		}
+		if capsule.Status.RunState != operatorv1alpha1.RunStateRunning {
+			t.Errorf("expected RunStateRunning after Start, got %v", capsule.Status.RunState)
+		}
+	})
+
+	t.Run("stops_node_when_desired_stopped_and_is_up", func(t *testing.T) {
+		runner := &fakeS6Runner{isUp: true}
+		rec := NewActuationSubReconciler(client, scheme, runner, nil)
+		capsule := testCapsule()
+		capsule.Spec.DesiredRunState = operatorv1alpha1.RunStateStopped
+
+		_, err := rec.Reconcile(context.Background(), capsule)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !runner.stopHit {
+			t.Error("expected Stop to be called")
+		}
+		if capsule.Status.RunState != operatorv1alpha1.RunStateStopped {
+			t.Errorf("expected RunStateStopped after Stop, got %v", capsule.Status.RunState)
+		}
+	})
 }
