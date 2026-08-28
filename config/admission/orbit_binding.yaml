@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Binds the orbit-namespace-invariants policy in Deny mode.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: orbit-namespace-invariants-binding
+spec:
+  policyName: orbit-namespace-invariants
+  validationActions: ["Deny"]

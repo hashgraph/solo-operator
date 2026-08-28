@@ -1,4 +1,4 @@
-{{- if .Values.uc.metrics.serviceMonitor.enabled }}
+{{- if and .Values.uc .Values.uc.metrics .Values.uc.metrics.serviceMonitor .Values.uc.metrics.serviceMonitor.enabled }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
