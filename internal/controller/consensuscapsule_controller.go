@@ -540,7 +540,8 @@ func (r *ConsensusCapsuleReconciler) rollupRunningPhase(
 		// new template (onUpdateRevision false) Active is likewise not sticky.
 		return operatorv1alpha1.PhaseActive
 	case platformStatus == operatorv1alpha1.PlatformStatusUnknown &&
-		(capsule.Spec.DesiredRunState == operatorv1alpha1.RunStateStopped ||
+		(capsule.Status.RunState == operatorv1alpha1.RunStateStopped ||
+			capsule.Spec.DesiredRunState == operatorv1alpha1.RunStateStopped ||
 			(capsule.Spec.StartPolicy == operatorv1alpha1.StartPolicyManual && capsule.Spec.DesiredRunState != operatorv1alpha1.RunStateRunning)):
 		return operatorv1alpha1.PhaseStopped
 	default:
