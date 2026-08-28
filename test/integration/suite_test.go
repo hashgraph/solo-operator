@@ -33,6 +33,7 @@ var (
 	testEnv   *envtest.Environment
 	ctx       context.Context
 	cancel    context.CancelFunc
+	s6Runner  *mockS6Runner
 )
 
 func TestIntegration(t *testing.T) {
@@ -85,7 +86,8 @@ var _ = BeforeSuite(func() {
 		k8sManager.GetConfig(),
 	)
 	Expect(err).ToNot(HaveOccurred())
-	consensusCapsuleReconciler.S6 = &mockS6Runner{status: make(map[string]bool)}
+	s6Runner = &mockS6Runner{status: make(map[string]bool)}
+	consensusCapsuleReconciler.S6 = s6Runner
 	err = consensusCapsuleReconciler.SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
