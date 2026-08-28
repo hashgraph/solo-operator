@@ -50,7 +50,7 @@ var _ = Describe("Log4j2Config Controller", func() {
 			By("Creating a Log4j2Config")
 			cr := &operatorv1alpha1.Log4j2Config{
 				ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: namespace},
-				Spec:       operatorv1alpha1.Log4j2ConfigSpec{Scope: "node0", Content: validLog4j2XML},
+				Spec:       operatorv1alpha1.Log4j2ConfigSpec{Orbit: namespace, Scope: "node0", Content: validLog4j2XML},
 			}
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 
@@ -97,7 +97,7 @@ var _ = Describe("Log4j2Config Controller", func() {
 			By("Creating a Log4j2Config")
 			cr := &operatorv1alpha1.Log4j2Config{
 				ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: namespace},
-				Spec:       operatorv1alpha1.Log4j2ConfigSpec{Scope: "node0", Content: validLog4j2XML},
+				Spec:       operatorv1alpha1.Log4j2ConfigSpec{Orbit: namespace, Scope: "node0", Content: validLog4j2XML},
 			}
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 
@@ -166,7 +166,7 @@ var _ = Describe("Log4j2Config Controller", func() {
 			By("Creating a Log4j2Config with malformed XML")
 			cr := &operatorv1alpha1.Log4j2Config{
 				ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: namespace},
-				Spec:       operatorv1alpha1.Log4j2ConfigSpec{Scope: "node0", Content: `<Configuration status="WARN"><Unclosed`},
+				Spec:       operatorv1alpha1.Log4j2ConfigSpec{Orbit: namespace, Scope: "node0", Content: `<Configuration status="WARN"><Unclosed`},
 			}
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 
@@ -185,7 +185,7 @@ var _ = Describe("Log4j2Config Controller", func() {
 			By("Creating a Log4j2Config with wrong root element")
 			cr := &operatorv1alpha1.Log4j2Config{
 				ObjectMeta: metav1.ObjectMeta{Name: crName + "-wrongroot", Namespace: namespace},
-				Spec:       operatorv1alpha1.Log4j2ConfigSpec{Scope: "node0", Content: `<?xml version="1.0"?><NotLog4j/>`},
+				Spec:       operatorv1alpha1.Log4j2ConfigSpec{Orbit: namespace, Scope: "node0", Content: `<?xml version="1.0"?><NotLog4j/>`},
 			}
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 

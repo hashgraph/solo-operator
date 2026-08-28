@@ -208,6 +208,7 @@ var _ = Describe("E2E Tests", func() {
 					},
 					Spec: operatorv1alpha1.HAProxyCapsuleSpec{
 						Image:       "haproxy:2.8.10-alpine3.20",
+						Orbit:       "test-orbit",
 						ServiceType: operatorv1alpha1.HAProxyServiceTypeClusterIP,
 					},
 				}
@@ -233,6 +234,7 @@ var _ = Describe("E2E Tests", func() {
 					},
 					Spec: operatorv1alpha1.HAProxyCapsuleSpec{
 						Image: "haproxy:2.8.10-alpine3.20",
+						Orbit: "test-orbit",
 					},
 				}
 
@@ -256,6 +258,7 @@ var _ = Describe("E2E Tests", func() {
 					},
 					Spec: operatorv1alpha1.HAProxyCapsuleSpec{
 						Image:           "haproxy:2.8.10-alpine3.20",
+						Orbit:           "test-orbit",
 						GrpcPort:        50311,
 						GrpcsPort:       50312,
 						MetricsPort:     9091,
@@ -300,6 +303,7 @@ var _ = Describe("E2E Tests", func() {
 					},
 					Spec: operatorv1alpha1.EnvoyProxySpec{
 						Image:     "envoyproxy/envoy-distroless:v1.21.6",
+						Orbit:     "test-orbit",
 						Replicas:  &replicas,
 						ProxyPort: 8080,
 						AdminPort: 9901,
@@ -328,6 +332,7 @@ var _ = Describe("E2E Tests", func() {
 					},
 					Spec: operatorv1alpha1.EnvoyProxySpec{
 						Image: "envoyproxy/envoy-distroless:v1.21.6",
+						Orbit: "test-orbit",
 					},
 				}
 
@@ -352,6 +357,7 @@ var _ = Describe("E2E Tests", func() {
 					},
 					Spec: operatorv1alpha1.EnvoyProxySpec{
 						Image:           "envoyproxy/envoy-distroless:v1.21.6",
+						Orbit:           "test-orbit",
 						ProxyPort:       8082,
 						MetricsPort:     9091,
 						UpstreamService: "my-consensus-node",

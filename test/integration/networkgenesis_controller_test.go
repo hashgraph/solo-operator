@@ -32,7 +32,7 @@ var _ = Describe("NetworkGenesis Controller", func() {
 	Context("Spec.Roster path (no ConsensusCapsules)", func() {
 		const (
 			ns      = "ng-spec-roster"
-			orbit   = "ng-spec-orbit"
+			orbit   = "ng-spec-roster"
 			ngName  = "genesis-1"
 			opID    = "genesis-spec-roster"
 			nodeKey = 0
@@ -81,7 +81,7 @@ var _ = Describe("NetworkGenesis Controller", func() {
 	Context("Discovery path with Orbit external addresses", func() {
 		const (
 			ns        = "ng-discovery"
-			orbitName = "ng-discovery-orbit"
+			orbitName = "ng-discovery"
 			ngName    = "genesis-2"
 		)
 
@@ -145,7 +145,7 @@ var _ = Describe("NetworkGenesis Controller", func() {
 	Context("Idempotency", func() {
 		const (
 			ns        = "ng-idempotent"
-			orbitName = "ng-idempotent-orbit"
+			orbitName = "ng-idempotent"
 			ngName    = "genesis-3"
 		)
 
@@ -197,7 +197,7 @@ var _ = Describe("NetworkGenesis Controller", func() {
 	Context("Missing Orbit recovers when Orbit is created", func() {
 		const (
 			ns        = "ng-missing-orbit"
-			orbitName = "ng-missing-orbit-orbit"
+			orbitName = "ng-missing-orbit"
 			ngName    = "genesis-4"
 		)
 
@@ -240,7 +240,7 @@ var _ = Describe("NetworkGenesis Controller", func() {
 	Context("Finalizer", func() {
 		const (
 			ns        = "ng-finalizer"
-			orbitName = "ng-finalizer-orbit"
+			orbitName = "ng-finalizer"
 			ngName    = "genesis-5"
 		)
 
@@ -332,6 +332,12 @@ func createSimpleOrbit(ctx context.Context, name string) {
 	}
 }
 
+func snapshotCM(ctx context.Context, ns, name string) string {
+	cm := &corev1.ConfigMap{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: ns}, cm)).To(Succeed())
+	return cm.Data[genesis.GenesisNetworkFileName]
+}
+
 func newRosterEntry(nodeID int64) operatorv1alpha1.NetworkGenesisRosterEntry {
 	sigPEM := selfSignedPEM()
 	grpcPEM := selfSignedPEM()
@@ -361,10 +367,4 @@ func selfSignedPEM() []byte {
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 	Expect(err).NotTo(HaveOccurred())
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
-}
-
-func snapshotCM(ctx context.Context, ns, name string) string {
-	cm := &corev1.ConfigMap{}
-	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: ns}, cm)).To(Succeed())
-	return cm.Data[genesis.GenesisNetworkFileName]
 }

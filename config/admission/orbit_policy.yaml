@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Enforce the invariant that a namespace-scoped CR's spec.orbit (or spec.orbitRef.name
+# for HelmCapsule) must equal its metadata.namespace.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: orbit-namespace-invariants
+spec:
+  # Fail closed: a CEL evaluation error denies the write rather than admitting an
+  # unvalidated CR.
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["operator.solo.hiero.org"]
+        apiVersions: ["v1alpha1"]
+        operations: ["CREATE", "UPDATE"]
+        resources:
+          - apipermissionproperties
+          - applicationoverrideproperties
+          - applicationproperties
+          - blocknodesconfigs
+          - bootstrapproperties
+          - consensuscapsules
+          - envoyproxies
+          - feeschedules
+          - haproxycapsules
+          - helmcapsules
+          - log4j2configs
+          - networkgeneses
+          - networkupgradeexecutes
+          - networkupgradefreezeaborts
+          - networkupgradefreezes
+          - networkupgradeprepares
+          - nodepropertiesconfigs
+          - nodesettings
+          - simplefeesschedules
+          - throttlesconfigs
+  variables:
+    - name: effectiveOrbit
+      expression: >-
+        !has(object.spec) ? '' :
+        request.kind.kind == 'HelmCapsule' ? (
+          has(object.spec.orbitRef) && has(object.spec.orbitRef.name) ? object.spec.orbitRef.name : ''
+        ) : (
+          has(object.spec.orbit) ? object.spec.orbit : ''
+        )
+    - name: targetNamespace
+      expression: "has(object.metadata.namespace) && object.metadata.namespace != '' ? object.metadata.namespace : request.namespace"
+  validations:
+    - expression: "variables.effectiveOrbit == variables.targetNamespace"
+      reason: Invalid
+      messageExpression: >-
+        (request.kind.kind == 'HelmCapsule' ? 'spec.orbitRef.name ' : 'spec.orbit ') +
+        (variables.effectiveOrbit == '' ? '<unset>' : variables.effectiveOrbit) +
+        ' must match namespace ' + variables.targetNamespace

@@ -40,7 +40,7 @@ var _ = Describe("NodeSettings Controller", func() {
 			By("Creating a NodeSettings CR")
 			cr := &operatorv1alpha1.NodeSettings{
 				ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: namespace},
-				Spec:       operatorv1alpha1.NodeSettingsSpec{Scope: "node0", Content: validSettingsTxt},
+				Spec:       operatorv1alpha1.NodeSettingsSpec{Orbit: namespace, Scope: "node0", Content: validSettingsTxt},
 			}
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 
@@ -87,7 +87,7 @@ var _ = Describe("NodeSettings Controller", func() {
 			By("Creating a NodeSettings CR")
 			cr := &operatorv1alpha1.NodeSettings{
 				ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: namespace},
-				Spec:       operatorv1alpha1.NodeSettingsSpec{Scope: "node0", Content: validSettingsTxt},
+				Spec:       operatorv1alpha1.NodeSettingsSpec{Orbit: namespace, Scope: "node0", Content: validSettingsTxt},
 			}
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 
@@ -144,7 +144,7 @@ var _ = Describe("NodeSettings Controller", func() {
 			By("Creating a NodeSettings with a line missing a comma")
 			cr := &operatorv1alpha1.NodeSettings{
 				ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: namespace},
-				Spec:       operatorv1alpha1.NodeSettingsSpec{Scope: "node0", Content: "badline without comma"},
+				Spec:       operatorv1alpha1.NodeSettingsSpec{Orbit: namespace, Scope: "node0", Content: "badline without comma"},
 			}
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 

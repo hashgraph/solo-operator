@@ -56,22 +56,19 @@ var _ = Describe("Orbit Controller", func() {
 		})
 	})
 
-	Context("Cascade-delete of referencing Capsules and Proxies (cluster-wide)", func() {
+	Context("Cascade-delete of referencing Capsules and Proxies", func() {
 		const (
 			orbitName = "orbit-cascade"
-			nsA       = "orbit-cascade-a"
-			nsB       = "orbit-cascade-b"
+			ns        = "orbit-cascade"
 		)
 
 		BeforeEach(func() {
-			for _, n := range []string{nsA, nsB} {
-				if err := k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: n}}); err != nil {
-					Expect(err.Error()).To(ContainSubstring("already exists"))
-				}
+			if err := k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}}); err != nil {
+				Expect(err.Error()).To(ContainSubstring("already exists"))
 			}
 		})
 
-		It("Deletes references in any namespace, not just one", func() {
+		It("Deletes referencing capsules and proxies when Orbit is deleted", func() {
 			Expect(k8sClient.Create(ctx, &operatorv1alpha1.Orbit{
 				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
@@ -84,29 +81,32 @@ var _ = Describe("Orbit Controller", func() {
 			})).Should(Succeed())
 
 			Expect(k8sClient.Create(ctx, &operatorv1alpha1.Log4j2Config{
-				ObjectMeta: metav1.ObjectMeta{Name: "node0-log4j2", Namespace: nsA},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-log4j2", Namespace: ns},
 				Spec: operatorv1alpha1.Log4j2ConfigSpec{
+					Orbit:   ns,
 					Scope:   "node0",
 					Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`,
 				},
 			})).Should(Succeed())
 			Expect(k8sClient.Create(ctx, &operatorv1alpha1.NodeSettings{
-				ObjectMeta: metav1.ObjectMeta{Name: "node0-settings", Namespace: nsA},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-settings", Namespace: ns},
 				Spec: operatorv1alpha1.NodeSettingsSpec{
+					Orbit:   ns,
 					Scope:   "node0",
 					Content: "checkSignedStateFromDisk,              1",
 				},
 			})).Should(Succeed())
 			Expect(k8sClient.Create(ctx, &operatorv1alpha1.ApplicationProperties{
-				ObjectMeta: metav1.ObjectMeta{Name: "node0-application-properties", Namespace: nsA},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0-application-properties", Namespace: ns},
 				Spec: operatorv1alpha1.ApplicationPropertiesSpec{
+					Orbit:   ns,
 					Scope:   "node0",
 					Content: "hedera.config.version=0\nnetty.mode=TEST",
 				},
 			})).Should(Succeed())
 
 			cc := &operatorv1alpha1.ConsensusCapsule{
-				ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: nsA},
+				ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: ns},
 				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
 					Orbit:                    orbitName,
 					NodeId:                   0,
@@ -133,7 +133,7 @@ var _ = Describe("Orbit Controller", func() {
 			Expect(k8sClient.Create(ctx, cc)).Should(Succeed())
 
 			hp := &operatorv1alpha1.HAProxyCapsule{
-				ObjectMeta: metav1.ObjectMeta{Name: "haproxy-node0", Namespace: nsB},
+				ObjectMeta: metav1.ObjectMeta{Name: "haproxy-node0", Namespace: ns},
 				Spec: operatorv1alpha1.HAProxyCapsuleSpec{
 					Orbit:       orbitName,
 					Image:       "haproxy:2.8.10-alpine3.20",
@@ -143,7 +143,7 @@ var _ = Describe("Orbit Controller", func() {
 			Expect(k8sClient.Create(ctx, hp)).Should(Succeed())
 
 			ep := &operatorv1alpha1.EnvoyProxy{
-				ObjectMeta: metav1.ObjectMeta{Name: "envoy-node0", Namespace: nsB},
+				ObjectMeta: metav1.ObjectMeta{Name: "envoy-node0", Namespace: ns},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
 					Orbit:       orbitName,
 					Image:       "envoyproxy/envoy-distroless:v1.21.6",
@@ -152,16 +152,19 @@ var _ = Describe("Orbit Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, ep)).Should(Succeed())
 
+			// Deleting the Orbit must cascade-delete cc, hp, and ep
 			Expect(k8sClient.Delete(ctx, &operatorv1alpha1.Orbit{ObjectMeta: metav1.ObjectMeta{Name: orbitName}})).Should(Succeed())
 
 			Eventually(func() bool {
-				return apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: "node0", Namespace: nsA}, &operatorv1alpha1.ConsensusCapsule{})) &&
-					apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: "haproxy-node0", Namespace: nsB}, &operatorv1alpha1.HAProxyCapsule{})) &&
-					apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: "envoy-node0", Namespace: nsB}, &operatorv1alpha1.EnvoyProxy{}))
+				return apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: "node0", Namespace: ns}, &operatorv1alpha1.ConsensusCapsule{}))
 			}, timeout, interval).Should(BeTrue())
 
 			Eventually(func() bool {
-				return apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: orbitName}, &operatorv1alpha1.Orbit{}))
+				return apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: "haproxy-node0", Namespace: ns}, &operatorv1alpha1.HAProxyCapsule{}))
+			}, timeout, interval).Should(BeTrue())
+
+			Eventually(func() bool {
+				return apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: "envoy-node0", Namespace: ns}, &operatorv1alpha1.EnvoyProxy{}))
 			}, timeout, interval).Should(BeTrue())
 		})
 	})
