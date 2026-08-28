@@ -113,6 +113,7 @@ func (r *ConsensusCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
+	originalRunState := capsule.Status.RunState
 	ctx = common.ReconcileContext(ctx, "consensuscapsule", "ConsensusCapsule", capsule)
 	common.Info(ctx, ReasonReconcileStart).Msg("Starting ConsensusCapsule reconciliation")
 	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished ConsensusCapsule reconciliation")
@@ -164,7 +165,7 @@ func (r *ConsensusCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return result, nil
 	}
 
-	result, err = r.updateStatus(ctx, capsule)
+	result, err = r.updateStatus(ctx, capsule, originalRunState)
 	if err != nil {
 		if apierrors.IsConflict(err) {
 			return ctrl.Result{Requeue: true}, nil
@@ -377,7 +378,7 @@ func isReadyPhase(phase operatorv1alpha1.Phase) bool {
 //
 // The operator reads the condition via the API only; it NEVER dials the pod or the
 // metrics endpoint, so it works whether it runs inside or outside the cluster.
-func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
+func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule, originalRunState operatorv1alpha1.RunState) (ctrl.Result, error) {
 	podList := &corev1.PodList{}
 	if err := r.List(ctx, podList,
 		client.InNamespace(capsule.Namespace),
@@ -400,7 +401,6 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 	}
 
 	oldPhase := capsule.Status.Phase
-	oldRunState := capsule.Status.RunState
 	phase := operatorv1alpha1.PhasePending
 	requeue := false
 
@@ -441,10 +441,11 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 	// The platform status is operator-written too, so a change to it (even while the
 	// phase is sticky-Active) must persist for the PLATFORM column — include it in
 	// the no-change short-circuit.
+
 	if capsule.Status.Phase == phase &&
 		capsule.Status.PlatformStatus == platformStatus &&
 		capsule.Status.PlatformStatusCode == platformStatusCode &&
-		capsule.Status.RunState == oldRunState &&
+		capsule.Status.RunState == originalRunState &&
 		capsule.Status.ObservedGeneration == capsule.Generation {
 		if requeue {
 			return ctrl.Result{RequeueAfter: podReadinessRequeueAfter}, nil
@@ -673,10 +674,7 @@ func platformStatusCondChanged(oldPod, newPod *corev1.Pod) bool {
 	}
 }
 
-// stopIntended reports whether the operator has asked this node NOT to run:
-// either an explicit DesiredRunState=Stopped, or a Manual node that has not been
-// explicitly told to run. A node that is merely down (crashed / still starting)
-// is deliberately excluded so an outage surfaces as Pending/Failed, not Stopped.
+// stopIntended returns true if the node was manually stopped or left inert without a run instruction.
 func stopIntended(c *operatorv1alpha1.ConsensusCapsule) bool {
 	if c.Spec.DesiredRunState == operatorv1alpha1.RunStateStopped {
 		return true
