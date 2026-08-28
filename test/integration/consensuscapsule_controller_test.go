@@ -574,7 +574,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 
 			log4j2 := &operatorv1alpha1.Log4j2Config{
 				ObjectMeta: metav1.ObjectMeta{Name: "node0-log4j2", Namespace: capsuleNamespace},
-				Spec:       operatorv1alpha1.Log4j2ConfigSpec{Scope: "node0", Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`},
+				Spec:       operatorv1alpha1.Log4j2ConfigSpec{Orbit: capsuleNamespace, Scope: "node0", Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`},
 			}
 			err = k8sClient.Create(ctx, log4j2)
 			if err != nil {
@@ -748,7 +748,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 
 			log4j2 := &operatorv1alpha1.Log4j2Config{
 				ObjectMeta: metav1.ObjectMeta{Name: "node0-log4j2", Namespace: capsuleNamespace},
-				Spec:       operatorv1alpha1.Log4j2ConfigSpec{Scope: "node0", Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`},
+				Spec:       operatorv1alpha1.Log4j2ConfigSpec{Orbit: capsuleNamespace, Scope: "node0", Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`},
 			}
 			err = k8sClient.Create(ctx, log4j2)
 			if err != nil {
@@ -922,7 +922,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 
 			log4j2 := &operatorv1alpha1.Log4j2Config{
 				ObjectMeta: metav1.ObjectMeta{Name: "node0-log4j2", Namespace: capsuleNamespace},
-				Spec:       operatorv1alpha1.Log4j2ConfigSpec{Scope: "node0", Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`},
+				Spec:       operatorv1alpha1.Log4j2ConfigSpec{Orbit: capsuleNamespace, Scope: "node0", Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`},
 			}
 			err = k8sClient.Create(ctx, log4j2)
 			if err != nil {
