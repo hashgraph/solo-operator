@@ -400,6 +400,7 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 	}
 
 	oldPhase := capsule.Status.Phase
+	oldRunState := capsule.Status.RunState
 	phase := operatorv1alpha1.PhasePending
 	requeue := false
 
@@ -443,6 +444,7 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 	if capsule.Status.Phase == phase &&
 		capsule.Status.PlatformStatus == platformStatus &&
 		capsule.Status.PlatformStatusCode == platformStatusCode &&
+		capsule.Status.RunState == oldRunState &&
 		capsule.Status.ObservedGeneration == capsule.Generation {
 		if requeue {
 			return ctrl.Result{RequeueAfter: podReadinessRequeueAfter}, nil
@@ -539,10 +541,7 @@ func (r *ConsensusCapsuleReconciler) rollupRunningPhase(
 		// until the current pod actually reports ACTIVE again. Once the pod rolls to a
 		// new template (onUpdateRevision false) Active is likewise not sticky.
 		return operatorv1alpha1.PhaseActive
-	case platformStatus == operatorv1alpha1.PlatformStatusUnknown &&
-		(capsule.Status.RunState == operatorv1alpha1.RunStateStopped ||
-			capsule.Spec.DesiredRunState == operatorv1alpha1.RunStateStopped ||
-			(capsule.Spec.StartPolicy == operatorv1alpha1.StartPolicyManual && capsule.Spec.DesiredRunState != operatorv1alpha1.RunStateRunning)):
+	case platformStatus == operatorv1alpha1.PlatformStatusUnknown && stopIntended(capsule):
 		return operatorv1alpha1.PhaseStopped
 	default:
 		return operatorv1alpha1.PhaseRunning
@@ -672,4 +671,16 @@ func platformStatusCondChanged(oldPod, newPod *corev1.Pod) bool {
 	default:
 		return o.Status != n.Status || o.Reason != n.Reason || o.Message != n.Message
 	}
+}
+
+// stopIntended reports whether the operator has asked this node NOT to run:
+// either an explicit DesiredRunState=Stopped, or a Manual node that has not been
+// explicitly told to run. A node that is merely down (crashed / still starting)
+// is deliberately excluded so an outage surfaces as Pending/Failed, not Stopped.
+func stopIntended(c *operatorv1alpha1.ConsensusCapsule) bool {
+	if c.Spec.DesiredRunState == operatorv1alpha1.RunStateStopped {
+		return true
+	}
+	return c.Spec.StartPolicy == operatorv1alpha1.StartPolicyManual &&
+		c.Spec.DesiredRunState != operatorv1alpha1.RunStateRunning
 }

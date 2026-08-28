@@ -117,7 +117,7 @@ var _ = Describe("E2E Tests", func() {
 						Namespace: testNamespace,
 					},
 					Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-						Orbit:                    "test-orbit",
+						Orbit:                    testNamespace,
 						NodeId:                   0,
 						AccountId:                "0.0.3",
 						Weight:                   1,
@@ -170,7 +170,7 @@ var _ = Describe("E2E Tests", func() {
 						Namespace: testNamespace,
 					},
 					Spec: operatorv1alpha1.NetworkGenesisSpec{
-						Orbit:       "test-orbit",
+						Orbit:       testNamespace,
 						OperationID: "genesis-e2e",
 					},
 				}
@@ -179,7 +179,7 @@ var _ = Describe("E2E Tests", func() {
 
 				created := &operatorv1alpha1.NetworkGenesis{}
 				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: "genesis-1", Namespace: testNamespace}, created)).To(Succeed())
-				Expect(created.Spec.Orbit).To(Equal("test-orbit"))
+				Expect(created.Spec.Orbit).To(Equal(testNamespace))
 				Expect(created.Spec.OperationID).To(Equal("genesis-e2e"))
 
 				Expect(k8sClient.Delete(ctx, ng)).To(Succeed())
@@ -208,7 +208,7 @@ var _ = Describe("E2E Tests", func() {
 					},
 					Spec: operatorv1alpha1.HAProxyCapsuleSpec{
 						Image:       "haproxy:2.8.10-alpine3.20",
-						Orbit:       "test-orbit",
+						Orbit:       testNamespace,
 						ServiceType: operatorv1alpha1.HAProxyServiceTypeClusterIP,
 					},
 				}
@@ -234,7 +234,7 @@ var _ = Describe("E2E Tests", func() {
 					},
 					Spec: operatorv1alpha1.HAProxyCapsuleSpec{
 						Image: "haproxy:2.8.10-alpine3.20",
-						Orbit: "test-orbit",
+						Orbit: testNamespace,
 					},
 				}
 
@@ -258,7 +258,7 @@ var _ = Describe("E2E Tests", func() {
 					},
 					Spec: operatorv1alpha1.HAProxyCapsuleSpec{
 						Image:           "haproxy:2.8.10-alpine3.20",
-						Orbit:           "test-orbit",
+						Orbit:           testNamespace,
 						GrpcPort:        50311,
 						GrpcsPort:       50312,
 						MetricsPort:     9091,
@@ -303,7 +303,7 @@ var _ = Describe("E2E Tests", func() {
 					},
 					Spec: operatorv1alpha1.EnvoyProxySpec{
 						Image:     "envoyproxy/envoy-distroless:v1.21.6",
-						Orbit:     "test-orbit",
+						Orbit:     testNamespace,
 						Replicas:  &replicas,
 						ProxyPort: 8080,
 						AdminPort: 9901,
@@ -332,7 +332,7 @@ var _ = Describe("E2E Tests", func() {
 					},
 					Spec: operatorv1alpha1.EnvoyProxySpec{
 						Image: "envoyproxy/envoy-distroless:v1.21.6",
-						Orbit: "test-orbit",
+						Orbit: testNamespace,
 					},
 				}
 
@@ -357,7 +357,7 @@ var _ = Describe("E2E Tests", func() {
 					},
 					Spec: operatorv1alpha1.EnvoyProxySpec{
 						Image:           "envoyproxy/envoy-distroless:v1.21.6",
-						Orbit:           "test-orbit",
+						Orbit:           testNamespace,
 						ProxyPort:       8082,
 						MetricsPort:     9091,
 						UpstreamService: "my-consensus-node",
@@ -385,7 +385,7 @@ var _ = Describe("E2E Tests", func() {
 		// It requires the operator to be running (set RUN_OPERATOR=true)
 
 		const (
-			orbitName     = "e2e-multi-node-orbit"
+			orbitName     = "e2e-multi-node"
 			testNamespace = "e2e-multi-node"
 		)
 
@@ -521,7 +521,7 @@ var _ = Describe("E2E Tests", func() {
 
 		Context("ConsensusCapsule references Orbit", func() {
 			const (
-				orbitName     = "e2e-ref-orbit"
+				orbitName     = "e2e-ref-test"
 				testNamespace = "e2e-ref-test"
 			)
 
@@ -614,7 +614,7 @@ var _ = Describe("Operator Reconciliation Tests", Label("operator-required"), fu
 	Context("When ConsensusCapsule is created", func() {
 		It("should create ServiceAccount, RoleBinding, ConfigMap, Service, and Deployment", func() {
 			const (
-				orbitName     = "capsule-reconcile-orbit"
+				orbitName     = "capsule-reconcile-ns"
 				testNamespace = "capsule-reconcile-ns"
 			)
 
