@@ -163,7 +163,7 @@ spec:
                 description: |-
                   OrbitRef references the cluster-scoped Orbit CR by name.
                   The Orbit and its ConsensusCapsules are the source of auto-injected values
-                  when Component is set. Required for mirror, relay, and block-node components.
+                  when Component is set.
                 properties:
                   name:
                     default: ""
@@ -235,11 +235,12 @@ spec:
                 type: boolean
             required:
             - chart
+            - orbitRef
             type: object
             x-kubernetes-validations:
-            - message: orbitRef is required when component is mirror, relay, relay-websocket,
-                or block-node
-              rule: '!has(self.component) || self.component == ''explorer'' || has(self.orbitRef)'
+            - message: orbitRef is required and its name must not be empty
+              rule: has(self.orbitRef) && has(self.orbitRef.name) && size(self.orbitRef.name)
+                > 0
           status:
             description: HelmCapsuleStatus defines the observed state of a HelmCapsule.
             properties:

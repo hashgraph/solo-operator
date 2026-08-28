@@ -4,6 +4,7 @@ package integration
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -12,6 +13,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -63,6 +66,19 @@ var _ = BeforeSuite(func() {
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
+
+	// Apply ValidatingAdmissionPolicy and Binding
+	policyBytes, err := os.ReadFile(filepath.Join("..", "..", "config", "admission", "orbit_policy.yaml"))
+	Expect(err).NotTo(HaveOccurred())
+	policy := &admissionregistrationv1.ValidatingAdmissionPolicy{}
+	Expect(yaml.Unmarshal(policyBytes, policy)).To(Succeed())
+	Expect(k8sClient.Create(ctx, policy)).To(Succeed())
+
+	bindingBytes, err := os.ReadFile(filepath.Join("..", "..", "config", "admission", "orbit_binding.yaml"))
+	Expect(err).NotTo(HaveOccurred())
+	binding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
+	Expect(yaml.Unmarshal(bindingBytes, binding)).To(Succeed())
+	Expect(k8sClient.Create(ctx, binding)).To(Succeed())
 
 	// Start manager
 	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{

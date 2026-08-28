@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# Kustomize component adding the NetworkUpgrade* label-invariant
-# ValidatingAdmissionPolicy + Binding (#1133). Referenced from config/default.
+# Kustomize component adding the ValidatingAdmissionPolicies + Bindings.
+# Referenced from config/default.
 apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
 resources:
   - policy.yaml
   - binding.yaml
+  - orbit_policy.yaml
+  - orbit_binding.yaml
 # Ensure namePrefix/nameSuffix rewrite the binding's policyName reference.
 configurations:
   - kustomizeconfig/namereference.yaml

@@ -45,6 +45,7 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 		log4j2 := &operatorv1alpha1.Log4j2Config{
 			ObjectMeta: metav1.ObjectMeta{Name: "node0-log4j2", Namespace: ns},
 			Spec: operatorv1alpha1.Log4j2ConfigSpec{
+				Orbit:   ns,
 				Scope:   "node0",
 				Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`,
 			},
@@ -55,7 +56,7 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 
 		nodeSettings := &operatorv1alpha1.NodeSettings{
 			ObjectMeta: metav1.ObjectMeta{Name: "node0-settings", Namespace: ns},
-			Spec:       operatorv1alpha1.NodeSettingsSpec{Scope: "node0", Content: "checkSignedStateFromDisk,              1"},
+			Spec:       operatorv1alpha1.NodeSettingsSpec{Orbit: ns, Scope: "node0", Content: "checkSignedStateFromDisk,              1"},
 		}
 		if err := k8sClient.Create(ctx, nodeSettings); err != nil {
 			Expect(err.Error()).To(ContainSubstring("already exists"))
@@ -64,6 +65,7 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 		appProps := &operatorv1alpha1.ApplicationProperties{
 			ObjectMeta: metav1.ObjectMeta{Name: "node0-application-properties", Namespace: ns},
 			Spec: operatorv1alpha1.ApplicationPropertiesSpec{
+				Orbit:   ns,
 				Scope:   "node0",
 				Content: "hedera.config.version=0\nnetty.mode=TEST",
 			},

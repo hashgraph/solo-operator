@@ -59,7 +59,7 @@ const (
 )
 
 // HelmCapsuleSpec defines the desired state of a HelmCapsule.
-// +kubebuilder:validation:XValidation:rule="!has(self.component) || self.component == 'explorer' || has(self.orbitRef)",message="orbitRef is required when component is mirror, relay, relay-websocket, or block-node"
+// +kubebuilder:validation:XValidation:rule="has(self.orbitRef) && has(self.orbitRef.name) && size(self.orbitRef.name) > 0",message="orbitRef is required and its name must not be empty"
 type HelmCapsuleSpec struct {
 	// Chart defines the Helm chart source to install.
 	Chart HelmChartSpec `json:"chart"`
@@ -80,9 +80,8 @@ type HelmCapsuleSpec struct {
 
 	// OrbitRef references the cluster-scoped Orbit CR by name.
 	// The Orbit and its ConsensusCapsules are the source of auto-injected values
-	// when Component is set. Required for mirror, relay, and block-node components.
-	// +optional
-	OrbitRef *corev1.LocalObjectReference `json:"orbitRef,omitempty"`
+	// when Component is set.
+	OrbitRef *corev1.LocalObjectReference `json:"orbitRef"`
 
 	// ValuesFrom loads Helm values from ConfigMaps or Secrets in the same namespace.
 	// Multiple sources are merged in the order listed. Values from later entries

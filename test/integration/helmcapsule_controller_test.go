@@ -40,6 +40,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 			hc := &operatorv1alpha1.HelmCapsule{
 				ObjectMeta: metav1.ObjectMeta{Name: hcName, Namespace: hcNS},
 				Spec: operatorv1alpha1.HelmCapsuleSpec{
+					OrbitRef: &corev1.LocalObjectReference{Name: hcNS},
 					Chart: operatorv1alpha1.HelmChartSpec{
 						Repo:    "oci://ghcr.io/hashgraph",
 						Chart:   "hedera-mirror",
@@ -124,6 +125,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 			hc := &operatorv1alpha1.HelmCapsule{
 				ObjectMeta: metav1.ObjectMeta{Name: hcName, Namespace: hcNS},
 				Spec: operatorv1alpha1.HelmCapsuleSpec{
+					OrbitRef: &corev1.LocalObjectReference{Name: hcNS},
 					Chart: operatorv1alpha1.HelmChartSpec{
 						Repo:    "oci://ghcr.io/hashgraph",
 						Chart:   "hedera-mirror",
@@ -152,10 +154,10 @@ var _ = Describe("HelmCapsule Controller", func() {
 
 	Context("When creating a mirror HelmCapsule with an Orbit and ConsensusCapsules", func() {
 		const (
-			orbitName = "mirror-test-orbit"
-			hcNS      = "helmcapsule-mirror"
-			hcName    = "mirror"
+			hcNS   = "helmcapsule-mirror"
+			hcName = "mirror"
 		)
+		orbitName := hcNS
 
 		ctx := context.Background()
 
@@ -183,7 +185,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 
 			nsSettings := &operatorv1alpha1.NodeSettings{
 				ObjectMeta: metav1.ObjectMeta{Name: "node0-settings", Namespace: hcNS},
-				Spec:       operatorv1alpha1.NodeSettingsSpec{Scope: "node0", Content: "checkSignedStateFromDisk,              1"},
+				Spec:       operatorv1alpha1.NodeSettingsSpec{Orbit: orbitName, Scope: "node0", Content: "checkSignedStateFromDisk,              1"},
 			}
 			err = k8sClient.Create(ctx, nsSettings)
 			if err != nil {
@@ -193,6 +195,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 			appPropsMirror := &operatorv1alpha1.ApplicationProperties{
 				ObjectMeta: metav1.ObjectMeta{Name: "node0-application-properties", Namespace: hcNS},
 				Spec: operatorv1alpha1.ApplicationPropertiesSpec{
+					Orbit: orbitName,
 					Scope: "node0", Content: "hedera.config.version=0\nnetty.mode=TEST",
 				},
 			}
@@ -273,7 +276,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 		})
 	})
 
-	// ─── ValuesFrom — Secret ─────────────────────────────────────────────────
+	// ─── ValuesFrom — Secret ──────────────────────────────────────────────────
 
 	Context("When a HelmCapsule references a Secret via ValuesFrom", func() {
 		const (
@@ -305,6 +308,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 			hc := &operatorv1alpha1.HelmCapsule{
 				ObjectMeta: metav1.ObjectMeta{Name: hcName, Namespace: hcNS},
 				Spec: operatorv1alpha1.HelmCapsuleSpec{
+					OrbitRef: &corev1.LocalObjectReference{Name: hcNS},
 					Chart: operatorv1alpha1.HelmChartSpec{
 						Repo:    "oci://ghcr.io/hashgraph",
 						Chart:   "hedera-mirror",
@@ -351,6 +355,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 			hc := &operatorv1alpha1.HelmCapsule{
 				ObjectMeta: metav1.ObjectMeta{Name: hcName, Namespace: hcNS},
 				Spec: operatorv1alpha1.HelmCapsuleSpec{
+					OrbitRef: &corev1.LocalObjectReference{Name: hcNS},
 					Chart: operatorv1alpha1.HelmChartSpec{
 						Repo:    "oci://ghcr.io/hashgraph",
 						Chart:   "hedera-mirror",
@@ -397,6 +402,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 			hc := &operatorv1alpha1.HelmCapsule{
 				ObjectMeta: metav1.ObjectMeta{Name: hcName, Namespace: hcNS},
 				Spec: operatorv1alpha1.HelmCapsuleSpec{
+					OrbitRef: &corev1.LocalObjectReference{Name: hcNS},
 					Chart: operatorv1alpha1.HelmChartSpec{
 						Repo:    "oci://ghcr.io/hashgraph",
 						Chart:   "hedera-mirror",
@@ -443,10 +449,10 @@ var _ = Describe("HelmCapsule Controller", func() {
 
 	Context("When creating a relay HelmCapsule with an Orbit", func() {
 		const (
-			orbitName = "relay-test-orbit"
-			hcNS      = "helmcapsule-relay"
-			hcName    = "relay"
+			hcNS   = "helmcapsule-relay"
+			hcName = "relay"
 		)
+		orbitName := hcNS
 
 		ctx := context.Background()
 
@@ -474,7 +480,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 
 			nsSettingsRelay := &operatorv1alpha1.NodeSettings{
 				ObjectMeta: metav1.ObjectMeta{Name: "node0-settings", Namespace: hcNS},
-				Spec:       operatorv1alpha1.NodeSettingsSpec{Scope: "node0", Content: "checkSignedStateFromDisk,              1"},
+				Spec:       operatorv1alpha1.NodeSettingsSpec{Orbit: orbitName, Scope: "node0", Content: "checkSignedStateFromDisk,              1"},
 			}
 			err = k8sClient.Create(ctx, nsSettingsRelay)
 			if err != nil {
@@ -484,6 +490,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 			appPropsRelay := &operatorv1alpha1.ApplicationProperties{
 				ObjectMeta: metav1.ObjectMeta{Name: "node0-application-properties", Namespace: hcNS},
 				Spec: operatorv1alpha1.ApplicationPropertiesSpec{
+					Orbit: orbitName,
 					Scope: "node0", Content: "hedera.config.version=0\nnetty.mode=TEST",
 				},
 			}
@@ -554,10 +561,10 @@ var _ = Describe("HelmCapsule Controller", func() {
 
 	Context("When creating an explorer HelmCapsule with an Orbit", func() {
 		const (
-			orbitName = "explorer-test-orbit"
-			hcNS      = "helmcapsule-explorer"
-			hcName    = "explorer"
+			hcNS   = "helmcapsule-explorer"
+			hcName = "explorer"
 		)
+		orbitName := hcNS
 
 		ctx := context.Background()
 
@@ -612,14 +619,14 @@ var _ = Describe("HelmCapsule Controller", func() {
 		})
 	})
 
-	// ─── Block-node component — auto-injection ────────────────────────────────
+	// ─── Block-node component — auto-injection ───────────────────────────────
 
 	Context("When creating a block-node HelmCapsule with an Orbit and ConsensusCapsules", func() {
 		const (
-			orbitName = "block-node-test-orbit"
-			hcNS      = "helmcapsule-block-node"
-			hcName    = "block-node"
+			hcNS   = "helmcapsule-block-node"
+			hcName = "block-node"
 		)
+		orbitName := hcNS
 
 		ctx := context.Background()
 
@@ -647,7 +654,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 
 			nsSettingsBN := &operatorv1alpha1.NodeSettings{
 				ObjectMeta: metav1.ObjectMeta{Name: "node0-settings", Namespace: hcNS},
-				Spec:       operatorv1alpha1.NodeSettingsSpec{Scope: "node0", Content: "checkSignedStateFromDisk,              1"},
+				Spec:       operatorv1alpha1.NodeSettingsSpec{Orbit: orbitName, Scope: "node0", Content: "checkSignedStateFromDisk,              1"},
 			}
 			err = k8sClient.Create(ctx, nsSettingsBN)
 			if err != nil {
@@ -657,6 +664,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 			appPropsBN := &operatorv1alpha1.ApplicationProperties{
 				ObjectMeta: metav1.ObjectMeta{Name: "node0-application-properties", Namespace: hcNS},
 				Spec: operatorv1alpha1.ApplicationPropertiesSpec{
+					Orbit: orbitName,
 					Scope: "node0", Content: "hedera.config.version=0\nnetty.mode=TEST",
 				},
 			}
@@ -723,7 +731,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 		})
 	})
 
-	// ─── Observed generation ─────────────────────────────────────────────────
+	// ─── Observed generation ──────────────────────────────────────────────────
 
 	Context("When a HelmCapsule is updated", func() {
 		const (
@@ -745,6 +753,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 			hc := &operatorv1alpha1.HelmCapsule{
 				ObjectMeta: metav1.ObjectMeta{Name: hcName, Namespace: hcNS},
 				Spec: operatorv1alpha1.HelmCapsuleSpec{
+					OrbitRef: &corev1.LocalObjectReference{Name: hcNS},
 					Chart: operatorv1alpha1.HelmChartSpec{
 						Repo:    "oci://ghcr.io/hashgraph",
 						Chart:   "hedera-mirror",

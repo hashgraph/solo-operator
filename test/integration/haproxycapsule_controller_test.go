@@ -48,6 +48,7 @@ var _ = Describe("HAProxyCapsule Controller", func() {
 					Namespace: haproxyNamespace,
 				},
 				Spec: operatorv1alpha1.HAProxyCapsuleSpec{
+					Orbit:       haproxyNamespace,
 					Image:       "haproxy:2.8.10-alpine3.20",
 					ServiceType: operatorv1alpha1.HAProxyServiceTypeClusterIP,
 				},
@@ -141,6 +142,7 @@ var _ = Describe("HAProxyCapsule Controller", func() {
 					Namespace: haproxyNamespace,
 				},
 				Spec: operatorv1alpha1.HAProxyCapsuleSpec{
+					Orbit:         haproxyNamespace,
 					Image:         "haproxy:2.8.10-alpine3.20",
 					ServiceType:   operatorv1alpha1.HAProxyServiceTypeClusterIP,
 					TLSSecretName: tlsSecretName,
@@ -196,6 +198,7 @@ var _ = Describe("HAProxyCapsule Controller", func() {
 					Namespace: haproxyNamespace,
 				},
 				Spec: operatorv1alpha1.HAProxyCapsuleSpec{
+					Orbit:       haproxyNamespace,
 					Image:       "haproxy:2.8.10-alpine3.20",
 					ServiceType: operatorv1alpha1.HAProxyServiceTypeClusterIP,
 				},
@@ -257,6 +260,7 @@ var _ = Describe("HAProxyCapsule Controller", func() {
 					Namespace: haproxyNamespace,
 				},
 				Spec: operatorv1alpha1.HAProxyCapsuleSpec{
+					Orbit:       haproxyNamespace,
 					Image:       "haproxy:2.8.10-alpine3.20",
 					ServiceType: operatorv1alpha1.HAProxyServiceTypeClusterIP,
 					NodeSelector: map[string]string{
@@ -320,6 +324,7 @@ var _ = Describe("HAProxyCapsule Controller", func() {
 					Namespace: haproxyNamespace,
 				},
 				Spec: operatorv1alpha1.HAProxyCapsuleSpec{
+					Orbit:       haproxyNamespace,
 					Image:       "haproxy:2.8.10-alpine3.20",
 					ServiceType: operatorv1alpha1.HAProxyServiceTypeClusterIP,
 					AdditionalLabels: map[string]string{
@@ -395,6 +400,7 @@ var _ = Describe("HAProxyCapsule Controller", func() {
 					Namespace: haproxyNamespace,
 				},
 				Spec: operatorv1alpha1.HAProxyCapsuleSpec{
+					Orbit:       haproxyNamespace,
 					Image:       "haproxy:2.8.10-alpine3.20",
 					ServiceType: operatorv1alpha1.HAProxyServiceTypeLoadBalancer,
 				},
@@ -423,6 +429,7 @@ var _ = Describe("HAProxyCapsule Controller", func() {
 					Namespace: haproxyNamespace,
 				},
 				Spec: operatorv1alpha1.HAProxyCapsuleSpec{
+					Orbit:       haproxyNamespace,
 					Image:       "haproxy:2.8.10-alpine3.20",
 					ServiceType: operatorv1alpha1.HAProxyServiceTypeLoadBalancer,
 					ServiceAnnotations: map[string]string{
@@ -454,6 +461,7 @@ var _ = Describe("HAProxyCapsule Controller", func() {
 					Namespace: haproxyNamespace,
 				},
 				Spec: operatorv1alpha1.HAProxyCapsuleSpec{
+					Orbit:       haproxyNamespace,
 					Image:       "haproxy:2.8.10-alpine3.20",
 					ServiceType: operatorv1alpha1.HAProxyServiceTypeClusterIP,
 				},
@@ -501,6 +509,7 @@ var _ = Describe("HAProxyCapsule Controller", func() {
 					Namespace: haproxyNamespace,
 				},
 				Spec: operatorv1alpha1.HAProxyCapsuleSpec{
+					Orbit:       haproxyNamespace,
 					Image:       "haproxy:2.8.10-alpine3.20",
 					ServiceType: operatorv1alpha1.HAProxyServiceTypeLoadBalancer,
 				},
@@ -516,10 +525,10 @@ var _ = Describe("HAProxyCapsule Controller", func() {
 			}, timeout, interval).Should(BeTrue())
 
 			By("Updating the HAProxyCapsule with service annotations")
-			haproxyLookupKey := types.NamespacedName{Name: haproxyName, Namespace: haproxyNamespace}
+			envoyLookupKey := types.NamespacedName{Name: haproxyName, Namespace: haproxyNamespace}
 			updatedHAProxy := &operatorv1alpha1.HAProxyCapsule{}
 			Eventually(func() error {
-				if err := k8sClient.Get(ctx, haproxyLookupKey, updatedHAProxy); err != nil {
+				if err := k8sClient.Get(ctx, envoyLookupKey, updatedHAProxy); err != nil {
 					return err
 				}
 				updatedHAProxy.Spec.ServiceAnnotations = map[string]string{

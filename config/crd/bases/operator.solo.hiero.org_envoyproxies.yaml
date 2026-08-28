@@ -1461,8 +1461,8 @@ spec:
                 description: NodeSelector pins pods to specific nodes.
                 type: object
               orbit:
-                description: Orbit is the owning Orbit's name. Set so the Orbit can
-                  cascade-delete this proxy.
+                description: Orbit is the owning Orbit's name.
+                minLength: 1
                 type: string
               proxyPort:
                 default: 8081
@@ -1897,6 +1897,8 @@ spec:
                   Defaults to the CR name with "envoy-" stripped (envoy-node1 → node1). Accepts any DNS name or FQDN.
                 pattern: ^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$
                 type: string
+            required:
+            - orbit
             type: object
             x-kubernetes-validations:
             - message: ingressSpec is required when serviceType is Ingress

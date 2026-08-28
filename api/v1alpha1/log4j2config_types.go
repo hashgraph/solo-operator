@@ -17,9 +17,9 @@ type Log4j2ConfigSpec struct {
 	// +kubebuilder:validation:MinLength=1
 	Content string `json:"content"`
 
-	// Set so the Orbit can cascade-delete this resource.
-	// +optional
-	Orbit string `json:"orbit,omitempty"`
+	// Orbit is the owning Orbit's name.
+	// +kubebuilder:validation:MinLength=1
+	Orbit string `json:"orbit"`
 }
 
 type Log4j2ConfigStatus struct {

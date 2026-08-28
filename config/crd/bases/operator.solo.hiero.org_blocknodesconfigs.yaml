@@ -56,7 +56,8 @@ spec:
                 minLength: 1
                 type: string
               orbit:
-                description: Set so the Orbit can cascade-delete this resource.
+                description: Orbit is the owning Orbit's name.
+                minLength: 1
                 type: string
               scope:
                 description: |-
@@ -68,6 +69,7 @@ spec:
                 type: string
             required:
             - content
+            - orbit
             - scope
             type: object
           status:

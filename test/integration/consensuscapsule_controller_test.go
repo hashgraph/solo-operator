@@ -23,7 +23,7 @@ import (
 var _ = Describe("ConsensusCapsule Controller", func() {
 	Context("When creating a ConsensusCapsule", func() {
 		const (
-			capsuleName      = "node0"
+			capsuleName      = "test-node"
 			capsuleNamespace = "consensus-test"
 		)
 
@@ -37,7 +37,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}
 
 			orbit := &operatorv1alpha1.Orbit{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
+				ObjectMeta: metav1.ObjectMeta{Name: capsuleNamespace},
 				Spec: operatorv1alpha1.OrbitSpec{
 					Consensus: operatorv1alpha1.OrbitConsensus{
 						Genesis: operatorv1alpha1.OrbitGenesis{
@@ -54,6 +54,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			log4j2 := &operatorv1alpha1.Log4j2Config{
 				ObjectMeta: metav1.ObjectMeta{Name: "node0-log4j2", Namespace: capsuleNamespace},
 				Spec: operatorv1alpha1.Log4j2ConfigSpec{
+					Orbit:   capsuleNamespace,
 					Scope:   "node0",
 					Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`,
 				},
@@ -66,6 +67,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			nodeSettings := &operatorv1alpha1.NodeSettings{
 				ObjectMeta: metav1.ObjectMeta{Name: "node0-settings", Namespace: capsuleNamespace},
 				Spec: operatorv1alpha1.NodeSettingsSpec{
+					Orbit:   capsuleNamespace,
 					Scope:   "node0",
 					Content: "checkSignedStateFromDisk,              1",
 				},
@@ -78,6 +80,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			appProps := &operatorv1alpha1.ApplicationProperties{
 				ObjectMeta: metav1.ObjectMeta{Name: "node0-application-properties", Namespace: capsuleNamespace},
 				Spec: operatorv1alpha1.ApplicationPropertiesSpec{
+					Orbit:   capsuleNamespace,
 					Scope:   "node0",
 					Content: "hedera.config.version=0\nnetty.mode=TEST",
 				},
@@ -96,7 +99,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 					Namespace: capsuleNamespace,
 				},
 				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-					Orbit:                    "test-orbit",
+					Orbit:                    capsuleNamespace,
 					NodeId:                   0,
 					AccountId:                "0.0.3",
 					Weight:                   1,
@@ -182,7 +185,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}
 
 			orbit := &operatorv1alpha1.Orbit{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
+				ObjectMeta: metav1.ObjectMeta{Name: capsuleNamespace},
 				Spec: operatorv1alpha1.OrbitSpec{
 					Consensus: operatorv1alpha1.OrbitConsensus{
 						Genesis: operatorv1alpha1.OrbitGenesis{
@@ -199,6 +202,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			log4j2 := &operatorv1alpha1.Log4j2Config{
 				ObjectMeta: metav1.ObjectMeta{Name: "node0-log4j2", Namespace: capsuleNamespace},
 				Spec: operatorv1alpha1.Log4j2ConfigSpec{
+					Orbit:   capsuleNamespace,
 					Scope:   "node0",
 					Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`,
 				},
@@ -211,6 +215,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			nodeSettings := &operatorv1alpha1.NodeSettings{
 				ObjectMeta: metav1.ObjectMeta{Name: "node0-settings", Namespace: capsuleNamespace},
 				Spec: operatorv1alpha1.NodeSettingsSpec{
+					Orbit:   capsuleNamespace,
 					Scope:   "node0",
 					Content: "checkSignedStateFromDisk,              1",
 				},
@@ -223,6 +228,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			appProps := &operatorv1alpha1.ApplicationProperties{
 				ObjectMeta: metav1.ObjectMeta{Name: "node0-application-properties", Namespace: capsuleNamespace},
 				Spec: operatorv1alpha1.ApplicationPropertiesSpec{
+					Orbit:   capsuleNamespace,
 					Scope:   "node0",
 					Content: "hedera.config.version=0\nnetty.mode=TEST",
 				},
@@ -242,7 +248,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 					Namespace: capsuleNamespace,
 				},
 				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-					Orbit:                    "test-orbit",
+					Orbit:                    capsuleNamespace,
 					NodeId:                   1,
 					AccountId:                "0.0.4",
 					Weight:                   1,
@@ -323,7 +329,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}
 
 			orbit := &operatorv1alpha1.Orbit{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
+				ObjectMeta: metav1.ObjectMeta{Name: capsuleNamespace},
 				Spec: operatorv1alpha1.OrbitSpec{
 					Consensus: operatorv1alpha1.OrbitConsensus{
 						Genesis: operatorv1alpha1.OrbitGenesis{
@@ -339,7 +345,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 
 			log4j2 := &operatorv1alpha1.Log4j2Config{
 				ObjectMeta: metav1.ObjectMeta{Name: "node0-log4j2", Namespace: capsuleNamespace},
-				Spec:       operatorv1alpha1.Log4j2ConfigSpec{Scope: "node0", Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`},
+				Spec:       operatorv1alpha1.Log4j2ConfigSpec{Orbit: capsuleNamespace, Scope: "node0", Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`},
 			}
 			err = k8sClient.Create(ctx, log4j2)
 			if err != nil {
@@ -348,7 +354,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 
 			nodeSettings := &operatorv1alpha1.NodeSettings{
 				ObjectMeta: metav1.ObjectMeta{Name: "node0-settings", Namespace: capsuleNamespace},
-				Spec:       operatorv1alpha1.NodeSettingsSpec{Scope: "node0", Content: "checkSignedStateFromDisk,              1"},
+				Spec:       operatorv1alpha1.NodeSettingsSpec{Orbit: capsuleNamespace, Scope: "node0", Content: "checkSignedStateFromDisk,              1"},
 			}
 			err = k8sClient.Create(ctx, nodeSettings)
 			if err != nil {
@@ -357,7 +363,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 
 			appProps := &operatorv1alpha1.ApplicationProperties{
 				ObjectMeta: metav1.ObjectMeta{Name: "node0-application-properties", Namespace: capsuleNamespace},
-				Spec:       operatorv1alpha1.ApplicationPropertiesSpec{Scope: "node0", Content: "hedera.config.version=0\nnetty.mode=TEST"},
+				Spec:       operatorv1alpha1.ApplicationPropertiesSpec{Orbit: capsuleNamespace, Scope: "node0", Content: "hedera.config.version=0\nnetty.mode=TEST"},
 			}
 			err = k8sClient.Create(ctx, appProps)
 			if err != nil {
@@ -369,7 +375,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			capsule := &operatorv1alpha1.ConsensusCapsule{
 				ObjectMeta: metav1.ObjectMeta{Name: capsuleName, Namespace: capsuleNamespace},
 				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-					Orbit:                    "test-orbit",
+					Orbit:                    capsuleNamespace,
 					NodeId:                   2,
 					AccountId:                "0.0.5",
 					Weight:                   1,
@@ -440,7 +446,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}
 
 			orbit := &operatorv1alpha1.Orbit{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
+				ObjectMeta: metav1.ObjectMeta{Name: capsuleNamespace},
 				Spec: operatorv1alpha1.OrbitSpec{
 					Consensus: operatorv1alpha1.OrbitConsensus{
 						Genesis: operatorv1alpha1.OrbitGenesis{
@@ -456,7 +462,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 
 			log4j2 := &operatorv1alpha1.Log4j2Config{
 				ObjectMeta: metav1.ObjectMeta{Name: "node0-log4j2", Namespace: capsuleNamespace},
-				Spec:       operatorv1alpha1.Log4j2ConfigSpec{Scope: "node0", Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`},
+				Spec:       operatorv1alpha1.Log4j2ConfigSpec{Orbit: capsuleNamespace, Scope: "node0", Content: `<?xml version="1.0" encoding="UTF-8"?><Configuration status="WARN"><Appenders/><Loggers><Root level="WARN"/></Loggers></Configuration>`},
 			}
 			err = k8sClient.Create(ctx, log4j2)
 			if err != nil {
@@ -465,7 +471,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 
 			nodeSettings := &operatorv1alpha1.NodeSettings{
 				ObjectMeta: metav1.ObjectMeta{Name: "node0-settings", Namespace: capsuleNamespace},
-				Spec:       operatorv1alpha1.NodeSettingsSpec{Scope: "node0", Content: "checkSignedStateFromDisk,              1"},
+				Spec:       operatorv1alpha1.NodeSettingsSpec{Orbit: capsuleNamespace, Scope: "node0", Content: "checkSignedStateFromDisk,              1"},
 			}
 			err = k8sClient.Create(ctx, nodeSettings)
 			if err != nil {
@@ -474,7 +480,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 
 			appProps := &operatorv1alpha1.ApplicationProperties{
 				ObjectMeta: metav1.ObjectMeta{Name: "node0-application-properties", Namespace: capsuleNamespace},
-				Spec:       operatorv1alpha1.ApplicationPropertiesSpec{Scope: "node0", Content: "hedera.config.version=0\nnetty.mode=TEST"},
+				Spec:       operatorv1alpha1.ApplicationPropertiesSpec{Orbit: capsuleNamespace, Scope: "node0", Content: "hedera.config.version=0\nnetty.mode=TEST"},
 			}
 			err = k8sClient.Create(ctx, appProps)
 			if err != nil {
@@ -486,7 +492,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			capsule := &operatorv1alpha1.ConsensusCapsule{
 				ObjectMeta: metav1.ObjectMeta{Name: capsuleName, Namespace: capsuleNamespace},
 				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-					Orbit:                    "test-orbit",
+					Orbit:                    capsuleNamespace,
 					NodeId:                   3,
 					AccountId:                "0.0.6",
 					Weight:                   1,
@@ -516,14 +522,15 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, capsule)).Should(Succeed())
 
-			capsuleKey := types.NamespacedName{Name: capsuleName, Namespace: capsuleNamespace}
+			key := types.NamespacedName{Name: capsuleName, Namespace: capsuleNamespace}
+			createdCapsule := &operatorv1alpha1.ConsensusCapsule{}
 			Eventually(func() bool {
-				got := &operatorv1alpha1.ConsensusCapsule{}
-				if err := k8sClient.Get(ctx, capsuleKey, got); err != nil {
+				err := k8sClient.Get(ctx, key, createdCapsule)
+				if err != nil {
 					return false
 				}
-				for _, c := range got.Status.Conditions {
-					if c.Type == operatorv1alpha1.CondUCSidecarReady && c.Status == metav1.ConditionFalse {
+				for _, condition := range createdCapsule.Status.Conditions {
+					if condition.Type == "UCSidecarReady" && condition.Status == metav1.ConditionFalse {
 						return true
 					}
 				}
