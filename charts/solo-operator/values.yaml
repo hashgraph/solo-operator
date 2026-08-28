@@ -110,14 +110,14 @@ rbac:
   # Create RBAC resources
   create: true
 
-# ValidatingAdmissionPolicies enforcing CR invariants at admission:
-# 1. NetworkUpgrade* CR label invariants (operation-id and step labels).
-# 2. Orbit namespace invariants (spec.orbit / spec.orbitRef.name must match metadata.namespace).
-# Requires Kubernetes >= 1.32 (VAP is GA), which the chart already floors via kubeVersion.
+# ValidatingAdmissionPolicy enforcing the NetworkUpgrade* CR label invariants
+# (operation-id and step labels). Rejects malformed NetworkUpgrade* writes at
+# admission. Requires Kubernetes >= 1.32 (VAP is GA), which the chart already
+# floors via kubeVersion.
 admissionPolicy:
-  # Install the ValidatingAdmissionPolicy + Binding resources.
+  # Install the ValidatingAdmissionPolicy + Binding.
   enabled: true
-  # failurePolicy for the policies: Fail (deny on CEL evaluation error, fail closed)
+  # failurePolicy for the policy: Fail (deny on CEL evaluation error, fail closed)
   # or Ignore (admit on evaluation error, fail open).
   failurePolicy: Fail
 
