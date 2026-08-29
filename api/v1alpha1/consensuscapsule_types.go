@@ -157,6 +157,11 @@ type ConsensusCapsuleSpec struct {
 	// +optional
 	// +kubebuilder:default=Auto
 	StartPolicy StartPolicy `json:"startPolicy,omitempty"`
+
+	// DesiredRunState is the desired s6 process state (Running or Stopped).
+	// +optional
+	// +kubebuilder:validation:Enum=Running;Stopped
+	DesiredRunState RunState `json:"desiredRunState,omitempty"`
 }
 
 // ConsensusSecrets holds TLS and signing key references.
@@ -609,6 +614,10 @@ type ConsensusCapsuleStatus struct {
 
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// RunState is the consensus node's live s6 process state.
+	// +optional
+	RunState RunState `json:"runState,omitempty"`
 
 	// +optional
 	AddressBookEntry *AddressBookEntry `json:"addressBookEntry,omitempty"`

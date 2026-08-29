@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/controller"
@@ -34,6 +36,7 @@ var (
 	testEnv   *envtest.Environment
 	ctx       context.Context
 	cancel    context.CancelFunc
+	s6Runner  *mockS6Runner
 )
 
 func TestIntegration(t *testing.T) {
@@ -80,6 +83,9 @@ var _ = BeforeSuite(func() {
 	// Start manager
 	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme.Scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: "0",
+		},
 	})
 	Expect(err).ToNot(HaveOccurred())
 
@@ -96,6 +102,8 @@ var _ = BeforeSuite(func() {
 		k8sManager.GetConfig(),
 	)
 	Expect(err).ToNot(HaveOccurred())
+	s6Runner = &mockS6Runner{status: make(map[string]bool)}
+	consensusCapsuleReconciler.S6 = s6Runner
 	err = consensusCapsuleReconciler.SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
@@ -194,3 +202,28 @@ const (
 	timeout  = time.Second * 30
 	interval = time.Millisecond * 250
 )
+
+type mockS6Runner struct {
+	mu     sync.Mutex
+	status map[string]bool
+}
+
+func (m *mockS6Runner) Start(_ context.Context, capsule *operatorv1alpha1.ConsensusCapsule) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.status[capsule.Name] = true
+	return nil
+}
+
+func (m *mockS6Runner) Stop(_ context.Context, capsule *operatorv1alpha1.ConsensusCapsule) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.status[capsule.Name] = false
+	return nil
+}
+
+func (m *mockS6Runner) IsUp(_ context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.status[capsule.Name], nil
+}

@@ -54,6 +54,15 @@ const (
 	StartPolicyManual StartPolicy = "Manual"
 )
 
+// RunState represents the desired s6-managed CN process state.
+// +kubebuilder:validation:Enum=Running;Stopped
+type RunState string
+
+const (
+	RunStateRunning RunState = "Running"
+	RunStateStopped RunState = "Stopped"
+)
+
 // ImagePullPolicy represents the image pull policy
 // +kubebuilder:validation:Enum=Always;Never;IfNotPresent
 type ImagePullPolicy string

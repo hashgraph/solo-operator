@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -267,8 +269,8 @@ func InternalHostname(capsule *operatorv1alpha1.ConsensusCapsule) string {
 	return common.InternalHostname(capsule)
 }
 
-// NewSubReconcilers creates all consensus capsule subreconcilers in execution order
-func NewSubReconcilers(c client.Client, scheme *runtime.Scheme, recorder events.EventRecorder) *subreconciler.Chain[*operatorv1alpha1.ConsensusCapsule] {
+// NewSubReconcilersWithS6 creates all consensus capsule subreconcilers with an explicit S6Runner.
+func NewSubReconcilersWithS6(c client.Client, scheme *runtime.Scheme, recorder events.EventRecorder, s6 S6Runner) *subreconciler.Chain[*operatorv1alpha1.ConsensusCapsule] {
 	return subreconciler.NewChain(
 		NewServiceAccountSubReconciler(c, scheme),
 		NewRoleSubReconciler(c, scheme),
@@ -281,5 +283,15 @@ func NewSubReconcilers(c client.Client, scheme *runtime.Scheme, recorder events.
 		// init container tries to resolve the GENESIS_INITIALIZED env var.
 		NewCheckpointSubReconciler(c, scheme),
 		NewStatefulSetSubReconciler(c, scheme, recorder),
+		NewActuationSubReconciler(c, scheme, s6, recorder),
 	)
+}
+
+// NewSubReconcilers creates all consensus capsule subreconcilers in execution order
+func NewSubReconcilers(c client.Client, scheme *runtime.Scheme, recorder events.EventRecorder, clientset kubernetes.Interface, restConfig *rest.Config) *subreconciler.Chain[*operatorv1alpha1.ConsensusCapsule] {
+	var s6 S6Runner
+	if clientset != nil && restConfig != nil {
+		s6 = NewS6Controller(clientset, restConfig)
+	}
+	return NewSubReconcilersWithS6(c, scheme, recorder, s6)
 }

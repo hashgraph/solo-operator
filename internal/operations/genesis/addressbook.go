@@ -45,7 +45,7 @@ func nodeAddressFromMaterial(m RosterMaterial) (*services.NodeAddress, error) {
 			{DomainName: m.ServiceHost, Port: m.ServicePort},
 		},
 		Description: m.Description,
-		Stake:       m.Weight, //nolint:staticcheck // Stake is deprecated in proto but required for address book serialization.
+		Stake:       m.Weight, //nolint:staticcheck // deprecated in proto
 	}, nil
 }
 

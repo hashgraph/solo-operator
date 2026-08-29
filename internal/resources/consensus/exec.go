@@ -17,7 +17,13 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/client-go/util/exec"
 
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/events"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
 // s6 control-interface commands, full paths per HIP-1494 (the image's consensus/run
@@ -51,8 +57,14 @@ func newWebSocketExecutor(cfg *rest.Config, method, url string) (remotecommand.E
 	return remotecommand.NewWebSocketExecutor(cfg, method, url)
 }
 
-// S6Controller starts, stops, and queries the consensus s6 service in a capsule's
-// pod (StatefulSet ordinal 0) via pods/exec.
+// S6Runner controls and inspects the s6-supervised consensus process.
+type S6Runner interface {
+	Start(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) error
+	Stop(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) error
+	IsUp(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (bool, error)
+}
+
+// S6Controller controls the s6 service via pods/exec.
 type S6Controller struct {
 	clientset   kubernetes.Interface
 	restConfig  *rest.Config
@@ -134,4 +146,88 @@ func (c *S6Controller) exec(ctx context.Context, capsule *operatorv1alpha1.Conse
 		)
 	}
 	return res, nil
+}
+
+type ActuationSubReconciler struct {
+	*subreconciler.BaseSubReconciler[*operatorv1alpha1.ConsensusCapsule]
+	s6       S6Runner
+	recorder events.EventRecorder
+}
+
+func NewActuationSubReconciler(c client.Client, s *runtime.Scheme, s6 S6Runner, recorder events.EventRecorder) *ActuationSubReconciler {
+	return &ActuationSubReconciler{
+		BaseSubReconciler: subreconciler.NewBaseSubReconciler[*operatorv1alpha1.ConsensusCapsule](c, s, "Actuation"),
+		s6:                s6,
+		recorder:          recorder,
+	}
+}
+
+func isPodReady(pod *corev1.Pod) bool {
+	for _, cond := range pod.Status.Conditions {
+		if cond.Type == corev1.PodReady {
+			return cond.Status == corev1.ConditionTrue
+		}
+	}
+	return false
+}
+
+func (r *ActuationSubReconciler) ShouldReconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) bool {
+	if r.s6 == nil {
+		return false
+	}
+
+	pod := &corev1.Pod{}
+	podName := PodName(capsule)
+	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: capsule.Namespace, Name: podName}, pod); err != nil {
+		return false
+	}
+
+	return isPodReady(pod)
+}
+
+func (r *ActuationSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
+	if r.s6 == nil {
+		return ctrl.Result{}, nil
+	}
+
+	isUp, err := r.s6.IsUp(ctx, capsule)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if isUp {
+		capsule.Status.RunState = operatorv1alpha1.RunStateRunning
+	} else {
+		capsule.Status.RunState = operatorv1alpha1.RunStateStopped
+	}
+
+	desired := capsule.Spec.DesiredRunState
+	if desired == "" {
+		return ctrl.Result{}, nil
+	}
+
+	switch {
+	case desired == operatorv1alpha1.RunStateRunning && !isUp:
+		if err := r.s6.Start(ctx, capsule); err != nil {
+			return ctrl.Result{}, err
+		}
+		capsule.Status.RunState = operatorv1alpha1.RunStateRunning
+		if r.recorder != nil {
+			r.recorder.Eventf(capsule, nil, corev1.EventTypeNormal,
+				operatorv1alpha1.EventConsensusNodeStarted.String(),
+				"Actuation", "Started s6 consensus service in pod %s", PodName(capsule))
+		}
+	case desired == operatorv1alpha1.RunStateStopped && isUp:
+		if err := r.s6.Stop(ctx, capsule); err != nil {
+			return ctrl.Result{}, err
+		}
+		capsule.Status.RunState = operatorv1alpha1.RunStateStopped
+		if r.recorder != nil {
+			r.recorder.Eventf(capsule, nil, corev1.EventTypeNormal,
+				operatorv1alpha1.EventConsensusNodeStopped.String(),
+				"Actuation", "Stopped s6 consensus service in pod %s", PodName(capsule))
+		}
+	}
+
+	return ctrl.Result{}, nil
 }

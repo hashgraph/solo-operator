@@ -88,7 +88,7 @@ func TestUpdateStatus_NoPods_PhasePending(t *testing.T) {
 
 	r := buildReconcilerForUpdateStatus(c)
 
-	result, err := r.updateStatus(ctx, capsule)
+	result, err := r.updateStatus(ctx, capsule, capsule.Status.RunState)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestUpdateStatus_PodRunning_Ready_PhaseRunning(t *testing.T) {
 
 	r := buildReconcilerForUpdateStatus(c)
 
-	result, err := r.updateStatus(ctx, capsule)
+	result, err := r.updateStatus(ctx, capsule, capsule.Status.RunState)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestUpdateStatus_PodRunning_NotReady_StaysPending(t *testing.T) {
 
 	r := buildReconcilerForUpdateStatus(c)
 
-	result, err := r.updateStatus(ctx, capsule)
+	result, err := r.updateStatus(ctx, capsule, capsule.Status.RunState)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -175,7 +175,7 @@ func TestUpdateStatus_PodFailed_PhaseFailed(t *testing.T) {
 
 	r := buildReconcilerForUpdateStatus(c)
 
-	result, err := r.updateStatus(ctx, capsule)
+	result, err := r.updateStatus(ctx, capsule, capsule.Status.RunState)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestUpdateStatus_PodFailed_PhaseFailed(t *testing.T) {
 	}
 }
 
-// ── platform-status phase rollup ──────────────────────────────────────────────
+// ── platform-status phase rollup ─────────────────────────────────────────────
 
 const testRevision = "rev-abc123"
 
@@ -258,7 +258,7 @@ func buildActiveScenario(t *testing.T, platformStatus string, priorPhase operato
 
 func TestUpdateStatus_ActiveWhenPlatformActiveOnCurrentRevision(t *testing.T) {
 	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusActive, operatorv1alpha1.PhaseRunning, testRevision, testRevision)
-	if _, err := r.updateStatus(ctx, capsule); err != nil {
+	if _, err := r.updateStatus(ctx, capsule, capsule.Status.RunState); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if capsule.Status.Phase != operatorv1alpha1.PhaseActive {
@@ -272,11 +272,68 @@ func TestUpdateStatus_ActiveWhenPlatformActiveOnCurrentRevision(t *testing.T) {
 func TestUpdateStatus_AutoIdle_StaysRunning(t *testing.T) {
 	r, capsule, ctx := buildActiveScenario(t, "", operatorv1alpha1.PhaseRunning, testRevision, testRevision)
 	capsule.Spec.StartPolicy = operatorv1alpha1.StartPolicyAuto
-	if _, err := r.updateStatus(ctx, capsule); err != nil {
+	if _, err := r.updateStatus(ctx, capsule, capsule.Status.RunState); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if capsule.Status.Phase != operatorv1alpha1.PhaseRunning {
 		t.Errorf("expected PhaseRunning for Auto+idle, got %s", capsule.Status.Phase)
+	}
+}
+
+// TestUpdateStatus_Manual_Idle_PhaseStopped verifies that a capsule with StartPolicy=Manual
+// and UNKNOWN platform status settles into PhaseStopped when DesiredRunState is not Running.
+func TestUpdateStatus_Manual_Idle_PhaseStopped(t *testing.T) {
+	t.Run("DesiredRunState is Stopped", func(t *testing.T) {
+		r, capsule, ctx := buildActiveScenario(t, "", operatorv1alpha1.PhasePending, testRevision, testRevision)
+		capsule.Spec.StartPolicy = operatorv1alpha1.StartPolicyManual
+		capsule.Spec.DesiredRunState = operatorv1alpha1.RunStateStopped
+		if _, err := r.updateStatus(ctx, capsule, capsule.Status.RunState); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if capsule.Status.Phase != operatorv1alpha1.PhaseStopped {
+			t.Errorf("expected PhaseStopped, got %s", capsule.Status.Phase)
+		}
+	})
+
+	t.Run("DesiredRunState is empty", func(t *testing.T) {
+		r, capsule, ctx := buildActiveScenario(t, "", operatorv1alpha1.PhasePending, testRevision, testRevision)
+		capsule.Spec.StartPolicy = operatorv1alpha1.StartPolicyManual
+		capsule.Spec.DesiredRunState = ""
+		if _, err := r.updateStatus(ctx, capsule, capsule.Status.RunState); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if capsule.Status.Phase != operatorv1alpha1.PhaseStopped {
+			t.Errorf("expected PhaseStopped, got %s", capsule.Status.Phase)
+		}
+	})
+}
+
+// TestUpdateStatus_Auto_DesiredStopped_PhaseStopped verifies that when StartPolicy=Auto
+// and DesiredRunState=Stopped, an idle pod (platformStatus=UNKNOWN) reports PhaseStopped.
+func TestUpdateStatus_Auto_DesiredStopped_PhaseStopped(t *testing.T) {
+	r, capsule, ctx := buildActiveScenario(t, "", operatorv1alpha1.PhasePending, testRevision, testRevision)
+	capsule.Spec.StartPolicy = operatorv1alpha1.StartPolicyAuto
+	capsule.Spec.DesiredRunState = operatorv1alpha1.RunStateStopped
+	if _, err := r.updateStatus(ctx, capsule, capsule.Status.RunState); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capsule.Status.Phase != operatorv1alpha1.PhaseStopped {
+		t.Errorf("expected PhaseStopped on Auto policy with DesiredRunState=Stopped, got %s", capsule.Status.Phase)
+	}
+}
+
+// TestUpdateStatus_Manual_DesiredRunning_Idle_StaysRunning verifies that when
+// StartPolicy=Manual and DesiredRunState=Running, an idle pod (platformStatus=UNKNOWN)
+// reports PhaseRunning during startup rather than being misreported as PhaseStopped.
+func TestUpdateStatus_Manual_DesiredRunning_Idle_StaysRunning(t *testing.T) {
+	r, capsule, ctx := buildActiveScenario(t, "", operatorv1alpha1.PhasePending, testRevision, testRevision)
+	capsule.Spec.StartPolicy = operatorv1alpha1.StartPolicyManual
+	capsule.Spec.DesiredRunState = operatorv1alpha1.RunStateRunning
+	if _, err := r.updateStatus(ctx, capsule, capsule.Status.RunState); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capsule.Status.Phase != operatorv1alpha1.PhaseRunning {
+		t.Errorf("expected PhaseRunning during Manual startup, got %s", capsule.Status.Phase)
 	}
 }
 
@@ -285,7 +342,7 @@ func TestUpdateStatus_AutoIdle_StaysRunning(t *testing.T) {
 // status.platformStatus and derives the numeric code.
 func TestUpdateStatus_ProxiesPlatformStatusFromCondition(t *testing.T) {
 	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusReplayingEvents, operatorv1alpha1.PhaseRunning, testRevision, testRevision)
-	if _, err := r.updateStatus(ctx, capsule); err != nil {
+	if _, err := r.updateStatus(ctx, capsule, capsule.Status.RunState); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if capsule.Status.PlatformStatus != operatorv1alpha1.PlatformStatusReplayingEvents {
@@ -299,7 +356,7 @@ func TestUpdateStatus_ProxiesPlatformStatusFromCondition(t *testing.T) {
 func TestUpdateStatus_RevisionGuard_NoPromoteOnOldRevision(t *testing.T) {
 	// Pod ACTIVE but on an old revision (image roll in progress) → stays Running.
 	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusActive, operatorv1alpha1.PhaseRunning, "old-rev", testRevision)
-	if _, err := r.updateStatus(ctx, capsule); err != nil {
+	if _, err := r.updateStatus(ctx, capsule, capsule.Status.RunState); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if capsule.Status.Phase != operatorv1alpha1.PhaseRunning {
@@ -319,7 +376,7 @@ func TestUpdateStatus_RevisionGuard_NoPromoteOnOldRevision(t *testing.T) {
 func TestUpdateStatus_StickyActive_TransientDipKeepsActive(t *testing.T) {
 	// Already Active; platform dips to BEHIND on the current revision → stays Active.
 	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusBehind, operatorv1alpha1.PhaseActive, testRevision, testRevision)
-	if _, err := r.updateStatus(ctx, capsule); err != nil {
+	if _, err := r.updateStatus(ctx, capsule, capsule.Status.RunState); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if capsule.Status.Phase != operatorv1alpha1.PhaseActive {
@@ -332,7 +389,7 @@ func TestUpdateStatus_StickyActive_OldRevision_DropsToRunning(t *testing.T) {
 	// exists and the pod hasn't rolled) → sticky must not hold Active off the current
 	// revision.
 	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusBehind, operatorv1alpha1.PhaseActive, "old-rev", testRevision)
-	if _, err := r.updateStatus(ctx, capsule); err != nil {
+	if _, err := r.updateStatus(ctx, capsule, capsule.Status.RunState); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if capsule.Status.Phase != operatorv1alpha1.PhaseRunning {
@@ -349,7 +406,7 @@ func TestUpdateStatus_StickyActive_OldRevision_DropsToRunning(t *testing.T) {
 func TestUpdateStatus_StickyActive_NoReading_DropsToRunning(t *testing.T) {
 	// Empty platformStatus omits the pod condition; prior phase is Active.
 	r, capsule, ctx := buildActiveScenario(t, "", operatorv1alpha1.PhaseActive, testRevision, testRevision)
-	if _, err := r.updateStatus(ctx, capsule); err != nil {
+	if _, err := r.updateStatus(ctx, capsule, capsule.Status.RunState); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if capsule.Status.Phase != operatorv1alpha1.PhaseRunning {
@@ -359,7 +416,7 @@ func TestUpdateStatus_StickyActive_NoReading_DropsToRunning(t *testing.T) {
 
 func TestUpdateStatus_CatastrophicFailure_PhaseFailed(t *testing.T) {
 	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusCatastrophicFailure, operatorv1alpha1.PhaseActive, testRevision, testRevision)
-	if _, err := r.updateStatus(ctx, capsule); err != nil {
+	if _, err := r.updateStatus(ctx, capsule, capsule.Status.RunState); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if capsule.Status.Phase != operatorv1alpha1.PhaseFailed {
@@ -371,7 +428,7 @@ func TestUpdateStatus_CatastrophicOnOldRevision_NoFail(t *testing.T) {
 	// CATASTROPHIC_FAILURE from a pod on an old revision (mid-roll) must not fast-fail
 	// the capsule — only a current-revision reading drives the phase. Pod is Ready.
 	r, capsule, ctx := buildActiveScenario(t, operatorv1alpha1.PlatformStatusCatastrophicFailure, operatorv1alpha1.PhaseRunning, "old-rev", testRevision)
-	if _, err := r.updateStatus(ctx, capsule); err != nil {
+	if _, err := r.updateStatus(ctx, capsule, capsule.Status.RunState); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if capsule.Status.Phase != operatorv1alpha1.PhaseRunning {
@@ -386,7 +443,7 @@ func TestUpdateStatus_CatastrophicOnOldRevision_NoFail(t *testing.T) {
 func TestUpdateStatus_NoConditionYet_ReflectsUnknown(t *testing.T) {
 	// Empty platformStatus omits the pod condition.
 	r, capsule, ctx := buildActiveScenario(t, "", operatorv1alpha1.PhaseRunning, testRevision, testRevision)
-	if _, err := r.updateStatus(ctx, capsule); err != nil {
+	if _, err := r.updateStatus(ctx, capsule, capsule.Status.RunState); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if capsule.Status.Phase != operatorv1alpha1.PhaseRunning {
@@ -424,7 +481,7 @@ func TestUpdateStatus_TerminatingPod_ReflectsUnknown(t *testing.T) {
 	capsule.Status.Phase = operatorv1alpha1.PhaseActive
 
 	r := buildReconcilerForUpdateStatus(c)
-	if _, err := r.updateStatus(ctx, capsule); err != nil {
+	if _, err := r.updateStatus(ctx, capsule, capsule.Status.RunState); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if capsule.Status.PlatformStatus != operatorv1alpha1.PlatformStatusUnknown {
@@ -456,7 +513,7 @@ func TestUpdateStatus_PlatformActiveButNotReady_StaysPending(t *testing.T) {
 	}
 
 	r := buildReconcilerForUpdateStatus(c)
-	result, err := r.updateStatus(ctx, capsule)
+	result, err := r.updateStatus(ctx, capsule, capsule.Status.RunState)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -488,7 +545,7 @@ func TestUpdateStatus_PendingToActive_PatchesCheckpoint(t *testing.T) {
 	}
 
 	r := buildReconcilerForUpdateStatus(c)
-	if _, err := r.updateStatus(ctx, capsule); err != nil {
+	if _, err := r.updateStatus(ctx, capsule, capsule.Status.RunState); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if capsule.Status.Phase != operatorv1alpha1.PhaseActive {
@@ -503,7 +560,7 @@ func TestUpdateStatus_PendingToActive_PatchesCheckpoint(t *testing.T) {
 	}
 }
 
-// ── pod-watch wake predicate + mapping ────────────────────────────────────────
+// ── pod-watch wake predicate + mapping ───────────────────────────────────────
 
 func TestPlatformStatusPodPredicate(t *testing.T) {
 	p := platformStatusPodPredicate()
@@ -583,7 +640,7 @@ func TestMapPodToCapsule(t *testing.T) {
 	}
 }
 
-// ── UC-mandatory terminal error ───────────────────────────────────────────────
+// ── UC-mandatory terminal error ─────────────────────────────────────────────
 
 func TestValidateUCMandatory(t *testing.T) {
 	capsule := newCapsuleForControllerTest() // no UC configured
@@ -635,7 +692,7 @@ func TestFailUCSidecarRequired_SetsPhaseFailed(t *testing.T) {
 	}
 }
 
-// ── markGenesisInitialized ────────────────────────────────────────────────────
+// ── markGenesisInitialized ──────────────────────────────────────────────────
 
 func newCheckpointCM(capsule *operatorv1alpha1.ConsensusCapsule, value string) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
@@ -712,7 +769,7 @@ func TestUpdateStatus_PodRunning_PatchesCheckpoint(t *testing.T) {
 	}
 
 	r := buildReconcilerForUpdateStatus(c)
-	if _, err := r.updateStatus(ctx, capsule); err != nil {
+	if _, err := r.updateStatus(ctx, capsule, capsule.Status.RunState); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -745,7 +802,7 @@ func TestUpdateStatus_PodRunning_GenChange_DoesNotOverwriteCheckpoint(t *testing
 	}
 
 	r := buildReconcilerForUpdateStatus(c)
-	if _, err := r.updateStatus(ctx, capsule); err != nil {
+	if _, err := r.updateStatus(ctx, capsule, capsule.Status.RunState); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -776,7 +833,7 @@ func TestUpdateStatus_NoChangeWhenPhaseUnchanged(t *testing.T) {
 	r := buildReconcilerForUpdateStatus(c)
 
 	// No pods → phase stays Pending; ObservedGeneration matches → early return, no Status().Update()
-	result, err := r.updateStatus(ctx, capsule)
+	result, err := r.updateStatus(ctx, capsule, capsule.Status.RunState)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

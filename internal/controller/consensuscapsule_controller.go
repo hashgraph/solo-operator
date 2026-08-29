@@ -60,6 +60,9 @@ type ConsensusCapsuleReconciler struct {
 	Recorder      events.EventRecorder
 	subreconciler *subreconciler.Chain[*operatorv1alpha1.ConsensusCapsule]
 
+	// S6 optionally overrides the s6 actuation runner (useful in tests).
+	S6 consensus.S6Runner
+
 	// clientset + restConfig back the s6 control interface: controller-runtime's
 	// client cannot exec into a pod.
 	clientset  kubernetes.Interface
@@ -110,6 +113,7 @@ func (r *ConsensusCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
+	originalRunState := capsule.Status.RunState
 	ctx = common.ReconcileContext(ctx, "consensuscapsule", "ConsensusCapsule", capsule)
 	common.Info(ctx, ReasonReconcileStart).Msg("Starting ConsensusCapsule reconciliation")
 	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished ConsensusCapsule reconciliation")
@@ -161,7 +165,7 @@ func (r *ConsensusCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return result, nil
 	}
 
-	result, err = r.updateStatus(ctx, capsule)
+	result, err = r.updateStatus(ctx, capsule, originalRunState)
 	if err != nil {
 		if apierrors.IsConflict(err) {
 			return ctrl.Result{Requeue: true}, nil
@@ -374,7 +378,7 @@ func isReadyPhase(phase operatorv1alpha1.Phase) bool {
 //
 // The operator reads the condition via the API only; it NEVER dials the pod or the
 // metrics endpoint, so it works whether it runs inside or outside the cluster.
-func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (ctrl.Result, error) {
+func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule, originalRunState operatorv1alpha1.RunState) (ctrl.Result, error) {
 	podList := &corev1.PodList{}
 	if err := r.List(ctx, podList,
 		client.InNamespace(capsule.Namespace),
@@ -437,9 +441,11 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 	// The platform status is operator-written too, so a change to it (even while the
 	// phase is sticky-Active) must persist for the PLATFORM column — include it in
 	// the no-change short-circuit.
+
 	if capsule.Status.Phase == phase &&
 		capsule.Status.PlatformStatus == platformStatus &&
 		capsule.Status.PlatformStatusCode == platformStatusCode &&
+		capsule.Status.RunState == originalRunState &&
 		capsule.Status.ObservedGeneration == capsule.Generation {
 		if requeue {
 			return ctrl.Result{RequeueAfter: podReadinessRequeueAfter}, nil
@@ -536,6 +542,8 @@ func (r *ConsensusCapsuleReconciler) rollupRunningPhase(
 		// until the current pod actually reports ACTIVE again. Once the pod rolls to a
 		// new template (onUpdateRevision false) Active is likewise not sticky.
 		return operatorv1alpha1.PhaseActive
+	case platformStatus == operatorv1alpha1.PlatformStatusUnknown && stopIntended(capsule):
+		return operatorv1alpha1.PhaseStopped
 	default:
 		return operatorv1alpha1.PhaseRunning
 	}
@@ -582,7 +590,11 @@ func (r *ConsensusCapsuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		r.Recorder = mgr.GetEventRecorder("consensuscapsule")
 	}
 	if r.subreconciler == nil {
-		r.subreconciler = consensus.NewSubReconcilers(r.Client, r.Scheme, r.Recorder)
+		if r.S6 != nil {
+			r.subreconciler = consensus.NewSubReconcilersWithS6(r.Client, r.Scheme, r.Recorder, r.S6)
+		} else {
+			r.subreconciler = consensus.NewSubReconcilers(r.Client, r.Scheme, r.Recorder, r.clientset, r.restConfig)
+		}
 	}
 	// Skip status-only updates (LoadBalancer IP, PVC binding, STS readyReplicas, etc.)
 	genChanged := builder.WithPredicates(predicate.GenerationChangedPredicate{})
@@ -660,4 +672,13 @@ func platformStatusCondChanged(oldPod, newPod *corev1.Pod) bool {
 	default:
 		return o.Status != n.Status || o.Reason != n.Reason || o.Message != n.Message
 	}
+}
+
+// stopIntended returns true if the node was manually stopped or left inert without a run instruction.
+func stopIntended(c *operatorv1alpha1.ConsensusCapsule) bool {
+	if c.Spec.DesiredRunState == operatorv1alpha1.RunStateStopped {
+		return true
+	}
+	return c.Spec.StartPolicy == operatorv1alpha1.StartPolicyManual &&
+		c.Spec.DesiredRunState != operatorv1alpha1.RunStateRunning
 }

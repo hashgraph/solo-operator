@@ -235,7 +235,7 @@ func newTestCapsule() *operatorv1alpha1.ConsensusCapsule {
 	}
 }
 
-// ── ServiceAccount ────────────────────────────────────────────────────────────
+// ── ServiceAccount ───────────────────────────────────────────────────────────
 
 func TestServiceAccountSubReconciler(t *testing.T) {
 	ctx := context.Background()
@@ -343,7 +343,7 @@ func TestServiceAccountSubReconciler_UpdateAnnotations(t *testing.T) {
 	}
 }
 
-// ── Service ───────────────────────────────────────────────────────────────────
+// ── Service ──────────────────────────────────────────────────────────────────
 
 func TestServiceSubReconciler(t *testing.T) {
 	ctx := context.Background()
@@ -398,7 +398,7 @@ func TestServiceSubReconciler(t *testing.T) {
 	}
 }
 
-// ── PVC ───────────────────────────────────────────────────────────────────────
+// ── PVC ──────────────────────────────────────────────────────────────────────
 
 func TestPVCSubReconciler(t *testing.T) {
 	ctx := context.Background()
@@ -472,7 +472,7 @@ func TestPVCSubReconciler_NoPVCs(t *testing.T) {
 	}
 }
 
-// ── RoleBinding ───────────────────────────────────────────────────────────────
+// ── RoleBinding ──────────────────────────────────────────────────────────────
 
 func TestRoleBindingSubReconciler(t *testing.T) {
 	ctx := context.Background()
@@ -491,7 +491,7 @@ func TestRoleBindingSubReconciler(t *testing.T) {
 	}
 }
 
-// ── StatefulSet ───────────────────────────────────────────────────────────────
+// ── StatefulSet ──────────────────────────────────────────────────────────────
 
 func TestStatefulSetSubReconciler(t *testing.T) {
 	ctx := context.Background()
@@ -860,7 +860,7 @@ func TestGenesisInitContainer(t *testing.T) {
 	}
 }
 
-// ── Checkpoint ────────────────────────────────────────────────────────────────
+// ── Checkpoint ───────────────────────────────────────────────────────────────
 
 func TestCheckpointSubReconciler_Creates(t *testing.T) {
 	ctx := context.Background()
@@ -988,7 +988,7 @@ func TestStatefulSetEnvVars(t *testing.T) {
 	}
 }
 
-// ── GetPVCNames ───────────────────────────────────────────────────────────────
+// ── GetPVCNames ──────────────────────────────────────────────────────────────
 
 func TestGetPVCNames(t *testing.T) {
 	capsule := newTestCapsule()
@@ -1014,7 +1014,7 @@ func TestGetPVCNames(t *testing.T) {
 	}
 }
 
-// ── Service needsUpdate ───────────────────────────────────────────────────────
+// ── Service needsUpdate ──────────────────────────────────────────────────────
 
 func TestServiceSubReconciler_NeedsUpdate(t *testing.T) {
 	r := &ServiceSubReconciler{}
@@ -1074,13 +1074,13 @@ func TestServiceSubReconciler_NeedsUpdate(t *testing.T) {
 	})
 }
 
-// ── Chain ─────────────────────────────────────────────────────────────────────
+// ── Chain ────────────────────────────────────────────────────────────────────
 
 func TestNewSubReconcilers(t *testing.T) {
 	scheme := newTestScheme()
 	c := newTestClient(scheme)
 
-	chain := NewSubReconcilers(c, scheme, nil)
+	chain := NewSubReconcilers(c, scheme, nil, nil, nil)
 
 	if chain == nil {
 		t.Fatal("expected non-nil chain")
