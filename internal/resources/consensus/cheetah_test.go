@@ -442,7 +442,7 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 			}
 
 			// Check image
-			expectedImage := common.BuildImageOrDefault(tt.uploader.SoftwareVersion, CheetahDefaultImage)
+			expectedImage := common.BuildImage(tt.uploader.SoftwareVersion)
 			if container.Image != expectedImage {
 				t.Errorf("expected image %s, got %s", expectedImage, container.Image)
 			}

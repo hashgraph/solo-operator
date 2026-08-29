@@ -80,11 +80,17 @@ func TestBuildImage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := BuildImage(tt.sv)
+			sv := tt.sv
+			result := BuildImage(&sv)
 			if result != tt.expected {
 				t.Errorf("BuildImage() = %v, want %v", result, tt.expected)
 			}
 		})
+	}
+
+	// The operator ships no default images, so a nil SoftwareVersion yields "".
+	if got := BuildImage(nil); got != "" {
+		t.Errorf("BuildImage(nil) = %q, want \"\"", got)
 	}
 }
 
@@ -114,47 +120,6 @@ func TestPinnedRef(t *testing.T) {
 			result := PinnedRef(&tt.src)
 			if result != tt.expected {
 				t.Errorf("PinnedRef() = %v, want %v", result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestBuildImageOrDefault(t *testing.T) {
-	tests := []struct {
-		name         string
-		sv           *operatorv1alpha1.SoftwareVersion
-		defaultImage string
-		expected     string
-	}{
-		{
-			name: "with software version",
-			sv: &operatorv1alpha1.SoftwareVersion{
-				Repository: "gcr.io/hedera-registry",
-				ImageName:  "consensus-node",
-				ImageTag:   "0.54.0",
-			},
-			defaultImage: "default:latest",
-			expected:     "gcr.io/hedera-registry/consensus-node:0.54.0",
-		},
-		{
-			name:         "nil software version",
-			sv:           nil,
-			defaultImage: "default:latest",
-			expected:     "default:latest",
-		},
-		{
-			name:         "empty image name falls back to default",
-			sv:           &operatorv1alpha1.SoftwareVersion{Repository: "gcr.io"},
-			defaultImage: "default:latest",
-			expected:     "default:latest",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := BuildImageOrDefault(tt.sv, tt.defaultImage)
-			if result != tt.expected {
-				t.Errorf("BuildImageOrDefault() = %v, want %v", result, tt.expected)
 			}
 		})
 	}

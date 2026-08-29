@@ -138,6 +138,15 @@ spec:
       uc:
         enabled: true
         platformPollInterval: "1s"
+        # The UC sidecar is the operator's own image; the operator provides no built-in
+        # default, so it must be declared explicitly. The local dev flow builds and loads
+        # it into kind (task kind:load:uc, tag :latest); for production pin to the operator
+        # version and a digest.
+        softwareVersion:
+          repository: "ghcr.io/hashgraph"
+          imageName: "solo-operator-uc"
+          imageTag: "latest"
+          imagePullPolicy: IfNotPresent
 
       # Alloy enabled — scrapes Prometheus metrics at :9999.
       # Loki log shipping is disabled by default; enable via exporters.loki in common/orbit.yaml.

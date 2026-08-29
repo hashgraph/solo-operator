@@ -140,6 +140,69 @@ func TestValidateDigestPolicy(t *testing.T) {
 	}
 }
 
+func TestValidateImagesDeclared(t *testing.T) {
+	scheme := newControllerTestScheme()
+	cnImage := &operatorv1alpha1.SoftwareVersion{Repository: "gcr.io", ImageName: "cn", ImageTag: "v1"}
+	capsule := func() *operatorv1alpha1.ConsensusCapsule {
+		c := newCapsuleForControllerTest()
+		c.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersion = cnImage
+		return c
+	}
+	run := func(objs ...client.Object) func(*operatorv1alpha1.ConsensusCapsule) (bool, error) {
+		return func(c *operatorv1alpha1.ConsensusCapsule) (bool, error) {
+			r := &ConsensusCapsuleReconciler{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build(),
+				Scheme: scheme,
+			}
+			return r.validateImagesDeclared(context.Background(), c)
+		}
+	}
+
+	// Consensus node declared, no sidecars → ok.
+	if terminal, err := run()(capsule()); err != nil || terminal {
+		t.Errorf("baseline: want ok, got terminal=%v err=%v", terminal, err)
+	}
+
+	// Consensus node missing image → terminal.
+	noCN := capsule()
+	noCN.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersion = nil
+	if terminal, err := run()(noCN); err == nil || !terminal {
+		t.Errorf("no consensus image: want terminal error, got terminal=%v err=%v", terminal, err)
+	}
+
+	// Enabled uploader with no image → terminal.
+	upNoImg := capsule()
+	upNoImg.Spec.PodProperties.Containers.RecordsUploader = &operatorv1alpha1.CheetahUploader{Enabled: true}
+	if terminal, err := run()(upNoImg); err == nil || !terminal {
+		t.Errorf("uploader without image: want terminal error, got terminal=%v err=%v", terminal, err)
+	}
+
+	// Enabled Alloy whose image comes from the orbit-level telemetry default → ok.
+	orbitWithAlloy := &operatorv1alpha1.Orbit{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
+		Spec: operatorv1alpha1.OrbitSpec{
+			Telemetry: &operatorv1alpha1.OrbitTelemetry{
+				Alloy: &operatorv1alpha1.OrbitAlloyDefaults{
+					SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "grafana", ImageName: "alloy", ImageTag: "v1.14.2"},
+				},
+			},
+		},
+	}
+	alloyFromOrbit := capsule()
+	alloyFromOrbit.Spec.PodProperties.Containers.Alloy = &operatorv1alpha1.AlloyConfig{Enabled: true} // no capsule image
+	if terminal, err := run(orbitWithAlloy)(alloyFromOrbit); err != nil || terminal {
+		t.Errorf("alloy image from orbit default: want ok, got terminal=%v err=%v", terminal, err)
+	}
+
+	// Enabled Alloy with no image anywhere (orbit has no alloy default) → terminal.
+	orbitNoAlloy := &operatorv1alpha1.Orbit{ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"}}
+	alloyNoImg := capsule()
+	alloyNoImg.Spec.PodProperties.Containers.Alloy = &operatorv1alpha1.AlloyConfig{Enabled: true}
+	if terminal, err := run(orbitNoAlloy)(alloyNoImg); err == nil || !terminal {
+		t.Errorf("alloy without image: want terminal error, got terminal=%v err=%v", terminal, err)
+	}
+}
+
 func TestUpdateStatus_NoPods_PhasePending(t *testing.T) {
 	ctx := context.Background()
 	scheme := newControllerTestScheme()

@@ -250,7 +250,7 @@ func (r *StatefulSetSubReconciler) buildConsensusNodeContainer(capsule *operator
 
 	containerName := ConsensusContainerName(capsule)
 
-	image := common.BuildImageOrDefault(cn.SoftwareVersion, "")
+	image := common.BuildImage(cn.SoftwareVersion)
 	if image == "" {
 		return corev1.Container{}, errx.WithHints(
 			errx.WithReason(errConfigInvalid.New("consensus node image is required"), ReasonImageRequired),
@@ -766,7 +766,7 @@ func (r *StatefulSetSubReconciler) buildCheetahUploaderContainer(uploader *opera
 		)
 	}
 
-	image := common.BuildImageOrDefault(uploader.SoftwareVersion, CheetahDefaultImage)
+	image := common.BuildImage(uploader.SoftwareVersion)
 
 	name := uploader.Name
 	if name == "" {
@@ -884,7 +884,7 @@ func (r *StatefulSetSubReconciler) buildCheetahUploaderContainer(uploader *opera
 }
 
 func (r *StatefulSetSubReconciler) buildUcContainer(capsule *operatorv1alpha1.ConsensusCapsule, config *operatorv1alpha1.UcSidecar, mode uc.Mode) corev1.Container {
-	image := common.BuildImageOrDefault(config.SoftwareVersion, UCDefaultImage())
+	image := common.BuildImage(config.SoftwareVersion)
 
 	name := config.Name
 	if name == "" {
@@ -1012,7 +1012,7 @@ func getVolumeNameForPath(path string) string {
 // e.g. "backups:my-bucket") and RCLONE_CONFIG_BACKUPS_* env vars that configure the
 // rclone "backups" remote. Credentials are injected from config.Config.EnvFromSecret.
 func (r *StatefulSetSubReconciler) buildBackupUploaderContainer(config *operatorv1alpha1.StreamUploader) corev1.Container {
-	image := common.BuildImageOrDefault(config.SoftwareVersion, "gcr.io/hedera-registry/hedera-backups:latest")
+	image := common.BuildImage(config.SoftwareVersion)
 
 	name := config.Name
 	if name == "" {
@@ -1079,7 +1079,7 @@ func (r *StatefulSetSubReconciler) buildAlloyContainer(capsule *operatorv1alpha1
 		containerName = "alloy"
 	}
 
-	image := common.BuildImageOrDefault(config.SoftwareVersion, AlloyDefaultImage)
+	image := common.BuildImage(config.SoftwareVersion)
 
 	container := corev1.Container{
 		Name:  containerName,

@@ -1673,7 +1673,7 @@ func TestApplyImagePatch_ConsensusNodeUpgrade(t *testing.T) {
 	if sv.Digest != executeDigest {
 		t.Errorf("expected digest %q carried to SoftwareVersion, got %q", executeDigest, sv.Digest)
 	}
-	if got, want := common.BuildImage(*sv), "reg-a/cn:0.75.0@"+string(executeDigest); got != want {
+	if got, want := common.BuildImage(sv), "reg-a/cn:0.75.0@"+string(executeDigest); got != want {
 		t.Errorf("expected pinned image ref %q, got %q", want, got)
 	}
 }

@@ -354,4 +354,8 @@ const (
 	// more of the ConsensusCapsule's running images (the consensus node or an enabled
 	// sidecar/uploader) is not digest-pinned (terminal config error).
 	EventImageDigestRequired errx.Reason = "ImageDigestRequired"
+	// EventImageRequired is posted when a ConsensusCapsule has a running container (the
+	// consensus node or an enabled sidecar/uploader) with no declared image; the operator
+	// provides no built-in defaults (terminal config error).
+	EventImageRequired errx.Reason = "ImageRequired"
 )

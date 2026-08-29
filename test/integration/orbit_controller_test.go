@@ -125,7 +125,7 @@ var _ = Describe("Orbit Controller", func() {
 									ImageTag:   "0.65.1",
 								},
 							},
-							UC: &operatorv1alpha1.UcSidecar{Enabled: true},
+							UC: &operatorv1alpha1.UcSidecar{Enabled: true, SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "ghcr.io/hashgraph", ImageName: "solo-operator-uc", ImageTag: "latest"}},
 						},
 					},
 				},
