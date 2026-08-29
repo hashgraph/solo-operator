@@ -31,6 +31,7 @@ const (
 	ReasonPatchFailed        errx.Reason = "PatchFailed"
 	ReasonScaleFailed        errx.Reason = "ScaleFailed"
 	ReasonNoValidRegistry    errx.Reason = "NoValidRegistry"
+	ReasonSourceUnpinned     errx.Reason = "SelectedSourceUnpinned"
 	ReasonManifestInvalid    errx.Reason = "ManifestInvalid"
 	ReasonDuplicateSibling   errx.Reason = "DuplicateSibling"
 	ReasonOrbitNotFound      errx.Reason = "OrbitNotFound"

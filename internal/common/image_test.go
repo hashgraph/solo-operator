@@ -33,6 +33,25 @@ func TestBuildImage(t *testing.T) {
 			expected: "docker.io/hashgraph/hedera-node:latest",
 		},
 		{
+			name: "digest pins the reference alongside the tag",
+			sv: operatorv1alpha1.SoftwareVersion{
+				Repository: "gcr.io/hedera-registry",
+				ImageName:  "consensus-node",
+				ImageTag:   "0.54.0",
+				Digest:     "sha256:abc123",
+			},
+			expected: "gcr.io/hedera-registry/consensus-node:0.54.0@sha256:abc123",
+		},
+		{
+			name: "digest without repository",
+			sv: operatorv1alpha1.SoftwareVersion{
+				ImageName: "node",
+				ImageTag:  "v1",
+				Digest:    "sha256:deadbeef",
+			},
+			expected: "node:v1@sha256:deadbeef",
+		},
+		{
 			name:     "without repository",
 			sv:       operatorv1alpha1.SoftwareVersion{ImageName: "node", ImageTag: "v1"},
 			expected: "node:v1",

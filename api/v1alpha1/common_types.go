@@ -84,6 +84,13 @@ type SoftwareVersion struct {
 	// ImageTag is the tag of the image (e.g., focal)
 	ImageTag string `json:"imageTag"`
 
+	// Digest, when set, pins the image to an immutable content digest ("sha256:...").
+	// On the upgrade path it is populated from the verified SelectedSource.Digest so the
+	// kubelet runs exactly the image that was verified during the Prepare phase, closing
+	// the tag-mutation (TOCTOU) window. When empty, the image is referenced by tag only.
+	// +optional
+	Digest Sha256Digest `json:"digest,omitempty"`
+
 	// ManifestHash is the optional manifest hash for verification
 	// +optional
 	ManifestHash string `json:"manifestHash,omitempty"`

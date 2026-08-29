@@ -10,8 +10,11 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
-// BuildImage constructs a full image reference from a SoftwareVersion
-// Format: repository/imageName:imageTag, repository/imageName, or imageName:imageTag
+// BuildImage constructs a full image reference from a SoftwareVersion.
+// Format: repository/imageName:imageTag[@digest], repository/imageName, or imageName:imageTag.
+// When Digest is set, it is appended as "@sha256:..." so the reference is pinned to an
+// immutable content digest (the tag is retained for readability); an unset Digest yields
+// a tag-only reference, preserving the prior behaviour.
 func BuildImage(sv operatorv1alpha1.SoftwareVersion) string {
 	if sv.ImageName == "" {
 		return ""
@@ -23,6 +26,9 @@ func BuildImage(sv operatorv1alpha1.SoftwareVersion) string {
 	}
 	if sv.ImageTag != "" {
 		image = image + ":" + sv.ImageTag
+	}
+	if sv.Digest != "" {
+		image = image + "@" + string(sv.Digest)
 	}
 	return image
 }
