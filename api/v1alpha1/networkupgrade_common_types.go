@@ -317,4 +317,8 @@ const (
 	// EventUCSidecarRequired is posted when a ConsensusCapsule is missing the
 	// mandatory UC sidecar (terminal configuration error).
 	EventUCSidecarRequired errx.Reason = "UCSidecarRequired"
+	// EventImageDigestRequired is posted when the Orbit sets requireDigestOnDeploy but one or
+	// more of the ConsensusCapsule's running images (the consensus node or an enabled
+	// sidecar/uploader) is not digest-pinned (terminal config error).
+	EventImageDigestRequired errx.Reason = "ImageDigestRequired"
 )

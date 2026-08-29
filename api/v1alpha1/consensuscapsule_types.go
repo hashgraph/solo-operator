@@ -584,6 +584,11 @@ const (
 // CondUCSidecarReady is the condition type for the UC sidecar health gate on ConsensusCapsule.
 const CondUCSidecarReady = "UCSidecarReady"
 
+// CondImageDigestPinned is the condition type for the orbit.spec.requireDigestOnDeploy gate:
+// it is False when the Orbit requires digest-pinned images on deploy but a running image
+// (the consensus node or an enabled sidecar/uploader) is not digest-pinned.
+const CondImageDigestPinned = "ImageDigestPinned"
+
 // ConsensusCapsuleStatus defines the observed state of ConsensusCapsule
 type ConsensusCapsuleStatus struct {
 	// Phase is the ConsensusCapsule lifecycle phase. Active (see PhaseActive) is a
