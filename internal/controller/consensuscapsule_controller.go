@@ -695,41 +695,32 @@ func (r *ConsensusCapsuleReconciler) finalizeManualStopped(ctx context.Context, 
 	}
 
 	var unknownSince time.Time
-	cond := findPlatformStatusCondition(pod)
-	if cond != nil {
+	if cond := findPlatformStatusCondition(pod); cond != nil {
 		unknownSince = cond.LastTransitionTime.Time
 	}
 
 	wasLive := oldPhase == operatorv1alpha1.PhaseActive || oldPhase == operatorv1alpha1.PhaseRunning
-
 	if wasLive && time.Since(unknownSince) < manualStoppedDebounce {
 		*requeue = true
-		if oldPhase == operatorv1alpha1.PhaseActive {
-			return operatorv1alpha1.PhaseActive
-		}
-		return operatorv1alpha1.PhaseRunning
+		return oldPhase
 	}
 
 	if r.S6 == nil {
 		return operatorv1alpha1.PhaseStopped
 	}
+
 	up, err := r.S6.IsUp(ctx, capsule)
-	switch {
-	case err != nil:
+	if err != nil {
 		*requeue = true
-		if wasLive {
-			if oldPhase == operatorv1alpha1.PhaseActive {
-				return operatorv1alpha1.PhaseActive
-			}
-			return operatorv1alpha1.PhaseRunning
-		}
 		return oldPhase
-	case up:
+	}
+
+	if up {
 		if r.Recorder != nil {
 			r.Recorder.Eventf(capsule, nil, corev1.EventTypeNormal, operatorv1alpha1.EventConsensusNodeActive.String(), "UpdateStatus", "platform metrics unavailable but consensus process running")
 		}
 		return operatorv1alpha1.PhaseRunning
-	default:
-		return operatorv1alpha1.PhaseStopped
 	}
+
+	return operatorv1alpha1.PhaseStopped
 }
