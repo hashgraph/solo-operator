@@ -53,6 +53,25 @@ This repository builds and releases several artifacts, all at the **same version
 The CRD type definitions live in [`api/v1alpha1/`](api/v1alpha1/), and the generated
 CRD schemas (with field-level documentation) are in [`config/crd/bases/`](config/crd/bases/).
 
+### ConsensusCapsule Lifecycle & Actuation
+
+The `ConsensusCapsule` resource defines how a Hedera consensus node starts and operates. This models the actuation definitions set out in HIP-1495.
+
+**`spec.offline` vs `spec.desiredRunState`:**
+- **`spec.offline`: `true`** - The node is fully offline. The StatefulSet is scaled to `0`. There is no pod, no resources consumed, and no background processes running.
+- **`spec.desiredRunState`: `Stopped`** - The pod is running, but the main Java consensus node process is stopped (idle). Background services, sidecars, and logging utilities remain active via the s6-overlay init system. This is an active administrative state.
+- **`spec.desiredRunState`: `Running`** - The pod is up and the full Java consensus node process is actively managed (started and supervised) by s6.
+
+**Start Policy & Lifecycle Phases:**
+- **`spec.startPolicy: Auto`** (Default) - The operator ensures the capsule rolls out and the Java process starts automatically upon pod boot.
+- **`spec.startPolicy: Manual`** - The consensus node process will not start automatically. On creation (or restart), the capsule enters the **`Stopped`** phase holding the Java process idle until a manual actuation changes `spec.desiredRunState` to `Running`.
+
+To transition a starting node that is held back via a manual policy, patch the CR:
+```shell
+kubectl patch consensuscapsule <name> -p '{"spec":{"desiredRunState":"Running"}}' --type=merge
+```
+
+
 ## Operator Installation
 
 The Solo Operator provides several different methods for installation into a Kubernetes cluster.

@@ -716,6 +716,79 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			Expect(k8sClient.Delete(ctx, capsule)).Should(Succeed())
 		})
 	})
+	It("Should reject actuation (precondition) if pod is not Ready", func() {
+		capsuleName := "precondition-test"
+		capsuleNamespace := "consensus-precondition"
+
+		By("Creating namespace and dependent resources")
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: capsuleNamespace}}
+		_ = k8sClient.Create(ctx, ns)
+
+		orbit := &operatorv1alpha1.Orbit{
+			ObjectMeta: metav1.ObjectMeta{Name: capsuleNamespace},
+			Spec: operatorv1alpha1.OrbitSpec{
+				Consensus: operatorv1alpha1.OrbitConsensus{
+					Genesis: operatorv1alpha1.OrbitGenesis{AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x00"}},
+				},
+			},
+		}
+		_ = k8sClient.Create(ctx, orbit)
+
+		capsule := &operatorv1alpha1.ConsensusCapsule{
+			ObjectMeta: metav1.ObjectMeta{Name: capsuleName, Namespace: capsuleNamespace},
+			Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+				Orbit:                    capsuleNamespace,
+				NodeId:                   5,
+				AccountId:                "0.0.8",
+				Weight:                   1,
+				StartPolicy:              operatorv1alpha1.StartPolicyManual,
+				DesiredRunState:          operatorv1alpha1.RunStateRunning,
+				Log4j2ConfigRef:          "dummy",
+				SettingsConfigRef:        "dummy",
+				ApplicationPropertiesRef: "dummy",
+				PodProperties: operatorv1alpha1.ConsensusPodProperties{
+					Containers: operatorv1alpha1.ConsensusContainers{
+						ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
+							SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+								Repository: "gcr.io/test", ImageName: "node", ImageTag: "1.0",
+							},
+						},
+					},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, capsule)).Should(Succeed())
+
+		By("Simulating a non-Ready Pod")
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("%s-0", capsuleName),
+				Namespace: capsuleNamespace,
+				Labels:    consensus.PodLabels(capsule),
+			},
+			Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "consensus-node", Image: "gcr.io/test/node:1.0"}}},
+		}
+		Expect(k8sClient.Create(ctx, pod)).Should(Succeed())
+
+		pod.Status = corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.PodReady, Status: corev1.ConditionFalse},
+			},
+		}
+		Expect(k8sClient.Status().Update(ctx, pod)).Should(Succeed())
+
+		By("Verifying no actuation occurs (s6 is not started because condition fails)")
+		Consistently(func() bool {
+			s6Runner.mu.Lock()
+			defer s6Runner.mu.Unlock()
+			return s6Runner.status[capsuleName]
+		}, "3s", "500ms").Should(BeFalse(), "s6 runner should not be triggered when pod is not ready")
+
+		By("Cleaning up")
+		Expect(k8sClient.Delete(ctx, pod)).Should(Succeed())
+		Expect(k8sClient.Delete(ctx, capsule)).Should(Succeed())
+	})
 	Context("When s6 process crashes manually with DesiredRunState empty", func() {
 		const (
 			capsuleName      = "node-crash-test"
