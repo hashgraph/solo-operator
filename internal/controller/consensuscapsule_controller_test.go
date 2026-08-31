@@ -4,10 +4,9 @@ package controller
 
 import (
 	"context"
-	"testing"
 	"fmt"
+	"testing"
 	"time"
-
 
 	"github.com/automa-saga/errx"
 	"github.com/joomcode/errorx"
@@ -850,8 +849,12 @@ type fakeS6 struct {
 	err error
 }
 
-func (f *fakeS6) Start(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) error { return nil }
-func (f *fakeS6) Stop(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) error { return nil }
+func (f *fakeS6) Start(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) error {
+	return nil
+}
+func (f *fakeS6) Stop(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) error {
+	return nil
+}
 func (f *fakeS6) IsUp(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (bool, error) {
 	return f.up, f.err
 }
