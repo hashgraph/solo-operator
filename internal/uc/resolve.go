@@ -246,15 +246,18 @@ const versionFile = "VERSION"
 // Returns ("", zero, false, nil) when the file is absent.
 func parseVersionFile(upgradePath string) (version string, mtime time.Time, found bool, err error) {
 	path := filepath.Join(upgradePath, versionFile)
-	info, err := os.Stat(path)
+	info, err := os.Lstat(path) // not Stat: don't follow a symlink
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "", time.Time{}, false, nil
 		}
 		return "", time.Time{}, false, errx.WithReason(errPersist.Wrap(err, "stat VERSION file"), ReasonUpgradePathUnreadable)
 	}
-	data, err := os.ReadFile(path)
+	data, err := readFileNoFollow(path)
 	if err != nil {
+		if isDecorated(err) {
+			return "", time.Time{}, false, err
+		}
 		return "", time.Time{}, false, errx.WithReason(errPersist.Wrap(err, "read VERSION file"), ReasonUpgradePathUnreadable)
 	}
 	for _, line := range strings.Split(string(data), "\n") {

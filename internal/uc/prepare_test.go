@@ -116,6 +116,29 @@ func TestParseComponentsManifestValid(t *testing.T) {
 	}
 }
 
+func TestParseComponentsManifestSymlinkRejected(t *testing.T) {
+	root := writePackage(t, validComponentsYAML)
+	path := filepath.Join(root, manifestsSubdir, componentsManifestFile)
+	target := filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(target, []byte("top-secret"), 0o600); err != nil {
+		t.Fatalf("write symlink target: %v", err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatalf("remove original: %v", err)
+	}
+	if err := os.Symlink(target, path); err != nil {
+		t.Fatalf("create symlink: %v", err)
+	}
+
+	_, err := parseComponentsManifest(path)
+	if err == nil {
+		t.Fatal("expected error for symlinked manifest, got nil")
+	}
+	if reason, _ := errx.ReasonOf(err); reason != ReasonConfigFileSymlink {
+		t.Fatalf("reason: got %q, want %q", reason, ReasonConfigFileSymlink)
+	}
+}
+
 func TestParseComponentsManifestLenientUnknownField(t *testing.T) {
 	// An additive unknown field within a known schemaVersion must be ignored, not
 	// rejected (HIP-1494 backwards-compatibility).
