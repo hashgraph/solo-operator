@@ -195,6 +195,107 @@ func TestBuildStatefulSet_ServiceName(t *testing.T) {
 	}
 }
 
+// ── imagePullSecrets ───────────────────────────────────────────────────────────
+
+func hasPullSecret(secrets []corev1.LocalObjectReference, name string) bool {
+	for _, s := range secrets {
+		if s.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// TestBuildStatefulSet_ImagePullSecretsFromResolvedAlloy is a regression test for the
+// case where Alloy is configured only via Orbit defaults (the capsule declares no alloy
+// block). The Alloy container is built from the *resolved* config, so its pull secret must
+// be collected from the resolved Alloy SoftwareVersion rather than the raw capsule spec —
+// otherwise the Alloy sidecar pulls a private image with no credential (ImagePullBackOff).
+func TestBuildStatefulSet_ImagePullSecretsFromResolvedAlloy(t *testing.T) {
+	scheme := newStsTestScheme()
+	orbit := &operatorv1alpha1.Orbit{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
+		Spec: operatorv1alpha1.OrbitSpec{
+			Telemetry: &operatorv1alpha1.OrbitTelemetry{
+				Alloy: &operatorv1alpha1.OrbitAlloyDefaults{
+					Enabled: true,
+					SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+						Repository:       "private.registry.io",
+						ImageName:        "alloy",
+						ImageTag:         "v1.14.2",
+						ImagePullSecrets: []corev1.LocalObjectReference{{Name: "orbit-alloy-creds"}},
+					},
+				},
+			},
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(orbit).Build()
+	r := NewStatefulSetSubReconciler(c, scheme, nil)
+
+	// Capsule references the orbit but defines NO alloy block of its own, so the Alloy
+	// SoftwareVersion (and its pull secret) comes entirely from the orbit defaults.
+	capsule := capsuleWithImage("v0.50.0")
+
+	sts, err := r.buildStatefulSet(context.Background(), capsule)
+	if err != nil {
+		t.Fatalf("buildStatefulSet: %v", err)
+	}
+
+	if !hasPullSecret(sts.Spec.Template.Spec.ImagePullSecrets, "orbit-alloy-creds") {
+		t.Errorf("expected pod imagePullSecrets to include orbit-resolved Alloy secret %q, got %v",
+			"orbit-alloy-creds", sts.Spec.Template.Spec.ImagePullSecrets)
+	}
+}
+
+// TestBuildStatefulSet_ImagePullSecretsMergedAndDeduped verifies that pull secrets from
+// multiple enabled containers are merged onto the pod template and deduplicated by name.
+func TestBuildStatefulSet_ImagePullSecretsMergedAndDeduped(t *testing.T) {
+	r := newStsReconciler()
+	capsule := capsuleWithImage("v0.50.0")
+	capsule.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersion.ImagePullSecrets =
+		[]corev1.LocalObjectReference{{Name: "shared-creds"}, {Name: "cn-creds"}}
+	capsule.Spec.PodProperties.Containers.BackupUploader = &operatorv1alpha1.StreamUploader{
+		Enabled: true,
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+			Repository:       "private.registry.io",
+			ImageName:        "backup",
+			ImageTag:         "v1",
+			ImagePullSecrets: []corev1.LocalObjectReference{{Name: "shared-creds"}, {Name: "backup-creds"}},
+		},
+	}
+
+	sts, err := r.buildStatefulSet(context.Background(), capsule)
+	if err != nil {
+		t.Fatalf("buildStatefulSet: %v", err)
+	}
+
+	got := sts.Spec.Template.Spec.ImagePullSecrets
+	for _, name := range []string{"shared-creds", "cn-creds", "backup-creds"} {
+		if !hasPullSecret(got, name) {
+			t.Errorf("expected merged imagePullSecrets to include %q, got %v", name, got)
+		}
+	}
+	if len(got) != 3 {
+		t.Errorf("expected 3 deduplicated imagePullSecrets, got %d: %v", len(got), got)
+	}
+}
+
+// TestBuildStatefulSet_NoImagePullSecrets verifies the pod template leaves imagePullSecrets
+// unset when no container declares any.
+func TestBuildStatefulSet_NoImagePullSecrets(t *testing.T) {
+	r := newStsReconciler()
+	capsule := capsuleWithImage("v0.50.0")
+
+	sts, err := r.buildStatefulSet(context.Background(), capsule)
+	if err != nil {
+		t.Fatalf("buildStatefulSet: %v", err)
+	}
+
+	if len(sts.Spec.Template.Spec.ImagePullSecrets) != 0 {
+		t.Errorf("expected no imagePullSecrets, got %v", sts.Spec.Template.Spec.ImagePullSecrets)
+	}
+}
+
 // ── keys volume ──────────────────────────────────────────────────────────────
 
 func capsuleWithSecretResources(signingSecretName, signingKeyName string) *operatorv1alpha1.ConsensusCapsule {

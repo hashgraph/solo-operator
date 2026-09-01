@@ -166,6 +166,7 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 
 	r.applyPodProperties(sts, capsule)
 	r.applyCheetahFSGroup(sts, capsule)
+	r.applyImagePullSecrets(sts, capsule, resolvedAlloy)
 	// DeprecatedServiceAccount must mirror ServiceAccountName (set after applyPodProperties
 	// which may override ServiceAccountName).
 	sts.Spec.Template.Spec.DeprecatedServiceAccount = sts.Spec.Template.Spec.ServiceAccountName
@@ -956,6 +957,39 @@ func (r *StatefulSetSubReconciler) applyCheetahFSGroup(sts *appsv1.StatefulSet, 
 	if sts.Spec.Template.Spec.SecurityContext.FSGroup == nil {
 		fsGroup := HederaUID
 		sts.Spec.Template.Spec.SecurityContext.FSGroup = &fsGroup
+	}
+}
+
+// applyImagePullSecrets collects ImagePullSecrets from every container's SoftwareVersion
+// and applies the deduplicated set to the pod template, so private-registry images can be pulled.
+// The Alloy secret is sourced from resolvedAlloy (Orbit defaults merged with capsule overrides)
+// rather than the raw capsule spec, since that is the SoftwareVersion the Alloy container is built from.
+func (r *StatefulSetSubReconciler) applyImagePullSecrets(sts *appsv1.StatefulSet, capsule *operatorv1alpha1.ConsensusCapsule, resolvedAlloy *operatorv1alpha1.AlloyConfig) {
+	containers := capsule.Spec.PodProperties.Containers
+
+	var sources [][]corev1.LocalObjectReference
+	sources = append(sources, common.ImagePullSecretsFromVersion(containers.ConsensusNode.SoftwareVersion))
+	if containers.UC != nil && containers.UC.Enabled {
+		sources = append(sources, common.ImagePullSecretsFromVersion(containers.UC.SoftwareVersion))
+	}
+	if containers.BlocksUploader != nil && containers.BlocksUploader.Enabled {
+		sources = append(sources, common.ImagePullSecretsFromVersion(containers.BlocksUploader.SoftwareVersion))
+	}
+	if containers.RecordsUploader != nil && containers.RecordsUploader.Enabled {
+		sources = append(sources, common.ImagePullSecretsFromVersion(containers.RecordsUploader.SoftwareVersion))
+	}
+	if containers.EventsUploader != nil && containers.EventsUploader.Enabled {
+		sources = append(sources, common.ImagePullSecretsFromVersion(containers.EventsUploader.SoftwareVersion))
+	}
+	if containers.BackupUploader != nil && containers.BackupUploader.Enabled {
+		sources = append(sources, common.ImagePullSecretsFromVersion(containers.BackupUploader.SoftwareVersion))
+	}
+	if resolvedAlloy != nil && resolvedAlloy.Enabled {
+		sources = append(sources, common.ImagePullSecretsFromVersion(resolvedAlloy.SoftwareVersion))
+	}
+
+	if merged := common.MergeImagePullSecrets(sources...); len(merged) > 0 {
+		sts.Spec.Template.Spec.ImagePullSecrets = merged
 	}
 }
 

@@ -5,6 +5,8 @@ package common
 import (
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
+
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
@@ -123,4 +125,62 @@ func TestPinnedRef(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestImagePullSecretsFromVersion(t *testing.T) {
+	t.Run("nil version", func(t *testing.T) {
+		if got := ImagePullSecretsFromVersion(nil); got != nil {
+			t.Errorf("expected nil, got %v", got)
+		}
+	})
+	t.Run("no secrets", func(t *testing.T) {
+		sv := &operatorv1alpha1.SoftwareVersion{ImageName: "img"}
+		if got := ImagePullSecretsFromVersion(sv); got != nil {
+			t.Errorf("expected nil, got %v", got)
+		}
+	})
+	t.Run("with secrets", func(t *testing.T) {
+		sv := &operatorv1alpha1.SoftwareVersion{
+			ImageName:        "img",
+			ImagePullSecrets: []corev1.LocalObjectReference{{Name: "ghcr-creds"}},
+		}
+		got := ImagePullSecretsFromVersion(sv)
+		if len(got) != 1 || got[0].Name != "ghcr-creds" {
+			t.Errorf("expected [ghcr-creds], got %v", got)
+		}
+	})
+}
+
+func TestMergeImagePullSecrets(t *testing.T) {
+	ref := func(name string) corev1.LocalObjectReference { return corev1.LocalObjectReference{Name: name} }
+
+	t.Run("empty", func(t *testing.T) {
+		if got := MergeImagePullSecrets(); got != nil {
+			t.Errorf("expected nil, got %v", got)
+		}
+	})
+	t.Run("deduplicates", func(t *testing.T) {
+		got := MergeImagePullSecrets(
+			[]corev1.LocalObjectReference{ref("a"), ref("b")},
+			[]corev1.LocalObjectReference{ref("b"), ref("c")},
+		)
+		if len(got) != 3 {
+			t.Fatalf("expected 3 entries, got %d: %v", len(got), got)
+		}
+		names := map[string]bool{}
+		for _, r := range got {
+			names[r.Name] = true
+		}
+		for _, n := range []string{"a", "b", "c"} {
+			if !names[n] {
+				t.Errorf("missing %q in merged result", n)
+			}
+		}
+	})
+	t.Run("nil slices ignored", func(t *testing.T) {
+		got := MergeImagePullSecrets(nil, []corev1.LocalObjectReference{ref("x")}, nil)
+		if len(got) != 1 || got[0].Name != "x" {
+			t.Errorf("expected [x], got %v", got)
+		}
+	})
 }
