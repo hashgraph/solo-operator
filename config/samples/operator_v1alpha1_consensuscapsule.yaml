@@ -1,0 +1,27 @@
+apiVersion: operator.solo.hiero.org/v1alpha1
+kind: ConsensusCapsule
+metadata:
+  labels:
+    app.kubernetes.io/name: solo-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: capsule-manual-start
+  namespace: default
+spec:
+  orbit: demo-orbit
+  nodeId: 0
+  accountId: 0.0.3
+  weight: 500
+  log4j2ConfigRef: log4j2-sample
+  settingsConfigRef: settings-sample
+  applicationPropertiesRef: app-props-sample
+  podProperties:
+    containers:
+      consensusNode:
+        image: hashgraph/services-node:0.51.0
+  # Start capsule in Stopped state (Manual StartPolicy overrides default Auto),
+  # meaning pod comes up with s6-rc but the full java CN process will be down.
+  startPolicy: Manual
+  desiredRunState: Stopped
+  
+  # For starting the consensus node process, patch the existing capsule object:
+  # kubectl patch consensuscapsule capsule-manual-start -p '{"spec":{"desiredRunState":"Running"}}' --type=merge

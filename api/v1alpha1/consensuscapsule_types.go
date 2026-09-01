@@ -148,17 +148,21 @@ type ConsensusCapsuleSpec struct {
 	// +optional
 	PersistentVolumeClaims *ConsensusPVCConfig `json:"persistentVolumeClaims,omitempty"`
 
-	// Offline keeps the consensus pod scaled to zero when true.
+	// Offline explicitly scales the consensus StatefulSet to 0 when true, meaning no pod exists, no resources are consumed, and no background processes run.
+	// This is distinct from DesiredRunState=Stopped, where the pod remains up but the Java process is idle.
 	// +optional
 	// +kubebuilder:default=false
 	Offline bool `json:"offline,omitempty"`
 
-	// StartPolicy selects who starts the consensus process. See HIP-1494/1495.
+	// StartPolicy selects who starts the consensus process upon pod boot (HIP-1494/1495).
+	// 'Auto' (default) starts the Java process automatically.
+	// 'Manual' holds the Java process idle in the Stopped phase until you manually patch DesiredRunState to 'Running'.
 	// +optional
 	// +kubebuilder:default=Auto
 	StartPolicy StartPolicy `json:"startPolicy,omitempty"`
 
 	// DesiredRunState is the desired s6 process state (Running or Stopped).
+	// When 'Stopped', the pod is running and sidecars are active, but the main Java process is idle.
 	// +optional
 	// +kubebuilder:validation:Enum=Running;Stopped
 	DesiredRunState RunState `json:"desiredRunState,omitempty"`
@@ -593,7 +597,7 @@ const CondImageDigestPinned = "ImageDigestPinned"
 type ConsensusCapsuleStatus struct {
 	// Phase is the ConsensusCapsule lifecycle phase. Active (see PhaseActive) is a
 	// consensus-only value: it is permitted here but excluded from every other CRD's
-	// phase enum.
+	// phase enum. The Stopped phase indicates the pod is up but the main consensus Java process is idle.
 	// +optional
 	// +kubebuilder:validation:Enum=Pending;Running;Active;Succeeded;Failed;Unknown;Stopped
 	Phase Phase `json:"phase,omitempty"`

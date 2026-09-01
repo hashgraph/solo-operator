@@ -555,6 +555,11 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 		default:
 			phase = operatorv1alpha1.PhaseUnknown
 		}
+
+		if phase == operatorv1alpha1.PhaseStopped {
+			phase = r.finalizeManualStopped(ctx, capsule, &pod, oldPhase, &requeue)
+		}
+
 	}
 
 	// The platform status is operator-written too, so a change to it (even while the
@@ -709,11 +714,10 @@ func (r *ConsensusCapsuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		r.Recorder = mgr.GetEventRecorder("consensuscapsule")
 	}
 	if r.subreconciler == nil {
-		if r.S6 != nil {
-			r.subreconciler = consensus.NewSubReconcilersWithS6(r.Client, r.Scheme, r.Recorder, r.S6)
-		} else {
-			r.subreconciler = consensus.NewSubReconcilers(r.Client, r.Scheme, r.Recorder, r.clientset, r.restConfig)
+		if r.S6 == nil && r.clientset != nil && r.restConfig != nil {
+			r.S6 = consensus.NewS6Controller(r.clientset, r.restConfig)
 		}
+		r.subreconciler = consensus.NewSubReconcilersWithS6(r.Client, r.Scheme, r.Recorder, r.S6)
 	}
 	// Skip status-only updates (LoadBalancer IP, PVC binding, STS readyReplicas, etc.)
 	genChanged := builder.WithPredicates(predicate.GenerationChangedPredicate{})
@@ -800,4 +804,43 @@ func stopIntended(c *operatorv1alpha1.ConsensusCapsule) bool {
 	}
 	return c.Spec.StartPolicy == operatorv1alpha1.StartPolicyManual &&
 		c.Spec.DesiredRunState != operatorv1alpha1.RunStateRunning
+}
+
+const manualStoppedDebounce = 15 * time.Second
+
+func (r *ConsensusCapsuleReconciler) finalizeManualStopped(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule, pod *corev1.Pod, oldPhase operatorv1alpha1.Phase, requeue *bool) operatorv1alpha1.Phase {
+	if oldPhase == operatorv1alpha1.PhaseStopped {
+		return operatorv1alpha1.PhaseStopped
+	}
+
+	var unknownSince time.Time
+	if cond := findPlatformStatusCondition(pod); cond != nil {
+		unknownSince = cond.LastTransitionTime.Time
+	}
+
+	wasLive := oldPhase == operatorv1alpha1.PhaseActive || oldPhase == operatorv1alpha1.PhaseRunning
+	if wasLive && time.Since(unknownSince) < manualStoppedDebounce {
+		*requeue = true
+		return oldPhase
+	}
+
+	if r.S6 == nil {
+		return operatorv1alpha1.PhaseStopped
+	}
+
+	up, err := r.S6.IsUp(ctx, capsule)
+	if err != nil {
+		*requeue = true
+		common.Warn(ctx, ReasonS6ProbeFailed).Err(err).Msg("s6 probe error during finalization")
+		return oldPhase
+	}
+
+	if up {
+		if r.Recorder != nil && oldPhase != operatorv1alpha1.PhaseRunning {
+			r.Recorder.Eventf(capsule, nil, corev1.EventTypeNormal, operatorv1alpha1.EventConsensusNodeRunning.String(), "UpdateStatus", "platform metrics unavailable but consensus process running")
+		}
+		return operatorv1alpha1.PhaseRunning
+	}
+
+	return operatorv1alpha1.PhaseStopped
 }

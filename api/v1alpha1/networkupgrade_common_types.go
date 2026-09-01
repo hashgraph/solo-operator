@@ -343,6 +343,7 @@ const (
 
 	// ConsensusCapsule phase-transition events (posted by the capsule controller).
 	EventConsensusNodeActive  errx.Reason = "ConsensusNodeActive"
+	EventConsensusNodeRunning errx.Reason = "ConsensusNodeRunning"
 	EventConsensusNodeFailed  errx.Reason = "ConsensusNodeFailed"
 	EventConsensusNodeStarted errx.Reason = "ConsensusNodeStarted"
 	EventConsensusNodeStopped errx.Reason = "ConsensusNodeStopped"

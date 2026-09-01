@@ -8,8 +8,6 @@ import (
 	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -285,13 +283,4 @@ func NewSubReconcilersWithS6(c client.Client, scheme *runtime.Scheme, recorder e
 		NewStatefulSetSubReconciler(c, scheme, recorder),
 		NewActuationSubReconciler(c, scheme, s6, recorder),
 	)
-}
-
-// NewSubReconcilers creates all consensus capsule subreconcilers in execution order
-func NewSubReconcilers(c client.Client, scheme *runtime.Scheme, recorder events.EventRecorder, clientset kubernetes.Interface, restConfig *rest.Config) *subreconciler.Chain[*operatorv1alpha1.ConsensusCapsule] {
-	var s6 S6Runner
-	if clientset != nil && restConfig != nil {
-		s6 = NewS6Controller(clientset, restConfig)
-	}
-	return NewSubReconcilersWithS6(c, scheme, recorder, s6)
 }
