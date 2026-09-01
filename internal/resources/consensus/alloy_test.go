@@ -23,6 +23,12 @@ func TestBuildAlloyContainer_Defaults(t *testing.T) {
 	}
 	config := &operatorv1alpha1.AlloyConfig{
 		Enabled: true,
+		// No built-in default image; the Alloy image must be declared explicitly.
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+			Repository: "grafana",
+			ImageName:  "alloy",
+			ImageTag:   "v1.14.2",
+		},
 	}
 
 	container := reconciler.buildAlloyContainer(capsule, config)
@@ -30,8 +36,8 @@ func TestBuildAlloyContainer_Defaults(t *testing.T) {
 	if container.Name != "alloy" {
 		t.Errorf("expected container name 'alloy', got %q", container.Name)
 	}
-	if container.Image != AlloyDefaultImage {
-		t.Errorf("expected image %q, got %q", AlloyDefaultImage, container.Image)
+	if want := "grafana/alloy:v1.14.2"; container.Image != want {
+		t.Errorf("expected image %q, got %q", want, container.Image)
 	}
 	// Should have args to run the config
 	if len(container.Args) != 2 || container.Args[0] != "run" {

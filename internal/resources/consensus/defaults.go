@@ -2,21 +2,12 @@
 
 package consensus
 
-import "github.com/automa-saga/version"
-
 const (
-	UCDefaultImageRepo = "ghcr.io/hashgraph/solo-operator-uc"
-
 	// UCDataPath is the root directory for all UC runtime state (crs/, events/, backup/, uc.sock).
 	// Backed by the "uc-data" volume, which is an emptyDir by default or a PVC when
 	// spec.persistentVolumeClaims.ucData is set. The UC binary creates subdirs as needed.
 	UCDataPath = "/opt/solo/weaver/uc"
 )
-
-// UCDefaultImage returns the uc sidecar image at the operator's build version.
-func UCDefaultImage() string {
-	return UCDefaultImageRepo + ":" + version.Version
-}
 
 const (
 	// DefaultConsensusContainerName is the consensus-node container name used when
@@ -43,9 +34,6 @@ const (
 
 // Alloy telemetry sidecar defaults.
 const (
-	// AlloyDefaultImage is the fallback Grafana Alloy sidecar container image.
-	AlloyDefaultImage = "grafana/alloy:v1.14.2"
-
 	// AlloyDefaultAppName is the default application name label.
 	AlloyDefaultAppName = "hedera-node"
 
@@ -59,9 +47,6 @@ const (
 // Cheetah uploader defaults — kept in one place so that ConfigMap generation,
 // container building, and tests all share the same values.
 const (
-	// CheetahDefaultImage is the fallback cheetah container image.
-	CheetahDefaultImage = "ghcr.io/hashgraph/cheetah:latest"
-
 	// CheetahDefaultLogLevel is the default pipeline log level.
 	CheetahDefaultLogLevel = "Debug"
 

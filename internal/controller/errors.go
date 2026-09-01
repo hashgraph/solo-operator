@@ -26,6 +26,11 @@ var (
 	// is not digest-pinned. Terminal — the operator must set an explicit
 	// softwareVersion.digest on each (or clear the Orbit policy).
 	errImageDigestRequired = errNS.NewType("image_digest_required")
+
+	// errImageRequired: a ConsensusCapsule has a running container (the consensus node or an
+	// enabled sidecar/uploader) with no declared image. The operator provides no built-in
+	// default images. Terminal — the operator must set softwareVersion on each container.
+	errImageRequired = errNS.NewType("image_required")
 )
 
 const (
@@ -39,6 +44,7 @@ const (
 	ReasonNoValidRegistry     errx.Reason = "NoValidRegistry"
 	ReasonSourceUnpinned      errx.Reason = "SelectedSourceUnpinned"
 	ReasonImageDigestRequired errx.Reason = "ImageDigestRequired"
+	ReasonImageRequired       errx.Reason = "ImageRequired"
 	ReasonManifestInvalid     errx.Reason = "ManifestInvalid"
 	ReasonDuplicateSibling    errx.Reason = "DuplicateSibling"
 	ReasonOrbitNotFound       errx.Reason = "OrbitNotFound"

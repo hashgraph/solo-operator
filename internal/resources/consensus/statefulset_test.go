@@ -673,13 +673,21 @@ func TestBuildUcContainer_PollIntervals_Custom(t *testing.T) {
 	}
 }
 
-func TestBuildUcContainer_NoSoftwareVersion_UsesDefault(t *testing.T) {
+func TestBuildUcContainer_UsesExplicitImage(t *testing.T) {
 	r := newStsReconciler()
 	capsule := capsuleWithImage("v0.50.0")
-	config := &operatorv1alpha1.UcSidecar{Enabled: true}
+	// The operator has no built-in UC default; the image must be declared explicitly.
+	config := &operatorv1alpha1.UcSidecar{
+		Enabled: true,
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+			Repository: "ghcr.io/hashgraph",
+			ImageName:  "solo-operator-uc",
+			ImageTag:   "0.5.0",
+		},
+	}
 	c := r.buildUcContainer(capsule, config, uc.ModeClusterOnly)
-	if c.Image != UCDefaultImage() {
-		t.Errorf("image: got %q, want default %q", c.Image, UCDefaultImage())
+	if want := "ghcr.io/hashgraph/solo-operator-uc:0.5.0"; c.Image != want {
+		t.Errorf("image: got %q, want %q", c.Image, want)
 	}
 }
 

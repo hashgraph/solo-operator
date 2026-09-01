@@ -10,13 +10,15 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
-// BuildImage constructs a full image reference from a SoftwareVersion.
+// BuildImage constructs a full image reference from a SoftwareVersion, or "" when sv is nil
+// or has no ImageName. The operator ships no built-in default images, so callers treat an
+// empty result as "no image declared".
 // Format: repository/imageName:imageTag[@digest], repository/imageName, or imageName:imageTag.
 // When Digest is set, it is appended as "@sha256:..." so the reference is pinned to an
 // immutable content digest (the tag is retained for readability); an unset Digest yields
-// a tag-only reference, preserving the prior behaviour.
-func BuildImage(sv operatorv1alpha1.SoftwareVersion) string {
-	if sv.ImageName == "" {
+// a tag-only reference.
+func BuildImage(sv *operatorv1alpha1.SoftwareVersion) string {
+	if sv == nil || sv.ImageName == "" {
 		return ""
 	}
 
@@ -47,17 +49,6 @@ func pinDigest(ref string, digest operatorv1alpha1.Sha256Digest) string {
 // should not occur for a resolved source, since selection always resolves a digest.
 func PinnedRef(src *operatorv1alpha1.SelectedSource) string {
 	return pinDigest(src.Image, src.Digest)
-}
-
-// BuildImageOrDefault constructs an image reference from SoftwareVersion or returns the default
-func BuildImageOrDefault(sv *operatorv1alpha1.SoftwareVersion, defaultImage string) string {
-	if sv == nil {
-		return defaultImage
-	}
-	if image := BuildImage(*sv); image != "" {
-		return image
-	}
-	return defaultImage
 }
 
 // PullPolicyOrDefault returns the pull policy from a SoftwareVersion, or def if unset.
