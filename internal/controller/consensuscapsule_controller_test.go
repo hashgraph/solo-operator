@@ -93,7 +93,11 @@ func TestValidateDigestPolicy(t *testing.T) {
 			b = b.WithObjects(o)
 		}
 		r := &ConsensusCapsuleReconciler{Client: b.Build(), Scheme: scheme}
-		return r.validateDigestPolicy(context.Background(), c)
+		imgs, err := r.configuredCapsuleImages(context.Background(), c)
+		if err != nil {
+			return false, err
+		}
+		return r.validateDigestPolicy(context.Background(), c, imgs)
 	}
 
 	tagOnly := &operatorv1alpha1.SoftwareVersion{ImageName: "cn", ImageTag: "v1"}
@@ -173,7 +177,11 @@ func TestValidateImagesDeclared(t *testing.T) {
 				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build(),
 				Scheme: scheme,
 			}
-			return r.validateImagesDeclared(context.Background(), c)
+			imgs, err := r.configuredCapsuleImages(context.Background(), c)
+			if err != nil {
+				return false, err
+			}
+			return r.validateImagesDeclared(c, imgs)
 		}
 	}
 
