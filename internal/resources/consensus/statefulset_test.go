@@ -159,44 +159,6 @@ func TestBuildStatefulSet_AutoStartEnvVar(t *testing.T) {
 	}
 }
 
-func TestBuildStatefulSet_HapiAppSecretsMount(t *testing.T) {
-	r := newStsReconciler()
-	capsule := capsuleWithImage("v0.50.0")
-	capsule.Spec.HapiAppSecretsName = "my-tls-secret"
-
-	sts, err := r.buildStatefulSet(context.Background(), capsule)
-	if err != nil {
-		t.Fatalf("buildStatefulSet: %v", err)
-	}
-
-	found := false
-	for _, v := range sts.Spec.Template.Spec.Volumes {
-		if v.Name == "hapi-app-secrets" && v.Secret != nil && v.Secret.SecretName == "my-tls-secret" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("expected hapi-app-secrets volume backed by my-tls-secret")
-	}
-
-	certMount, keyMount := false, false
-	for _, m := range sts.Spec.Template.Spec.Containers[0].VolumeMounts {
-		if m.Name == "hapi-app-secrets" && m.SubPath == "hedera.crt" {
-			certMount = true
-		}
-		if m.Name == "hapi-app-secrets" && m.SubPath == "hedera.key" {
-			keyMount = true
-		}
-	}
-	if !certMount {
-		t.Error("expected hedera.crt volume mount")
-	}
-	if !keyMount {
-		t.Error("expected hedera.key volume mount")
-	}
-}
-
 func TestBuildStatefulSet_BlockNodesMount(t *testing.T) {
 	r := newStsReconciler()
 	capsule := capsuleWithImage("v0.50.0")

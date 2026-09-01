@@ -466,31 +466,6 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 
 	// ── Secret volumes ───────────────────────────────────────────────────────
 
-	// TLS cert + key (hedera.crt, hedera.key)
-	if capsule.Spec.HapiAppSecretsName != "" {
-		volumes = append(volumes, corev1.Volume{
-			Name: "hapi-app-secrets",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  capsule.Spec.HapiAppSecretsName,
-					DefaultMode: &defaultMode,
-				},
-			},
-		})
-		volumeMounts = append(volumeMounts,
-			corev1.VolumeMount{
-				Name:      "hapi-app-secrets",
-				MountPath: HapiBase + "/hedera.crt",
-				SubPath:   "hedera.crt",
-			},
-			corev1.VolumeMount{
-				Name:      "hapi-app-secrets",
-				MountPath: HapiBase + "/hedera.key",
-				SubPath:   "hedera.key",
-			},
-		)
-	}
-
 	// Node signing keys
 	if capsule.Spec.Secrets != nil {
 		if capsule.Spec.Secrets.HostPath != nil {
