@@ -458,20 +458,19 @@ func (r *ConsensusCapsuleReconciler) configuredCapsuleImages(ctx context.Context
 	if uc := ct.UC; uc != nil && uc.Enabled {
 		imgs = append(imgs, namedSoftwareVersion{"uc", uc.SoftwareVersion})
 	}
-	// Alloy's effective image may come from orbit-level telemetry defaults, so resolve the
-	// merged (orbit + capsule) config rather than reading the capsule field directly. The
+	// Alloy's effective image and enabled-state may come from orbit-level telemetry defaults,
+	// so resolve the merged (orbit + capsule) config unconditionally and gate on the resolved
+	// Enabled — matching what the deployment path actually runs (see deployment.go). Gating on
+	// the capsule-level field instead would miss an Alloy container enabled purely by orbit
+	// defaults, letting it deploy with an empty/unpinned image while bypassing validation. The
 	// orbit default is user-declared config (not an operator built-in), so an Alloy image
 	// supplied there satisfies both the explicit-image and digest-pin checks.
-	if a := ct.Alloy; a != nil && a.Enabled {
-		resolved, err := consensus.ResolveAlloyConfig(ctx, r.Client, capsule)
-		if err != nil {
-			return nil, errx.WithReason(errK8sAPI.Wrap(err, "resolve alloy config for %s", capsule.Name), ReasonGetFailed)
-		}
-		var sv *operatorv1alpha1.SoftwareVersion
-		if resolved != nil {
-			sv = resolved.SoftwareVersion
-		}
-		imgs = append(imgs, namedSoftwareVersion{"alloy", sv})
+	resolved, err := consensus.ResolveAlloyConfig(ctx, r.Client, capsule)
+	if err != nil {
+		return nil, errx.WithReason(errK8sAPI.Wrap(err, "resolve alloy config for %s", capsule.Name), ReasonGetFailed)
+	}
+	if resolved != nil && resolved.Enabled {
+		imgs = append(imgs, namedSoftwareVersion{"alloy", resolved.SoftwareVersion})
 	}
 	return imgs, nil
 }

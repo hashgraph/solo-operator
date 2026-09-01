@@ -138,6 +138,25 @@ func TestValidateDigestPolicy(t *testing.T) {
 	if terminal, err := run(orbit(true), withDisabled); err != nil || terminal {
 		t.Errorf("policy on disabled sidecar: want ok, got terminal=%v err=%v", terminal, err)
 	}
+
+	// Policy on + Alloy enabled purely by the orbit default (capsule has no alloy block) with
+	// a tag-only image → terminal. The merged config drives what deploys, so the digest policy
+	// must resolve it rather than skip Alloy because the capsule field is unset.
+	orbitAlloyTagOnly := &operatorv1alpha1.Orbit{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
+		Spec: operatorv1alpha1.OrbitSpec{
+			RequireDigestOnDeploy: true,
+			Telemetry: &operatorv1alpha1.OrbitTelemetry{
+				Alloy: &operatorv1alpha1.OrbitAlloyDefaults{
+					Enabled:         true,
+					SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "grafana", ImageName: "alloy", ImageTag: "v1.14.2"},
+				},
+			},
+		},
+	}
+	if terminal, err := run(orbitAlloyTagOnly, capsule(pinned)); err == nil || !terminal {
+		t.Errorf("policy on orbit-default alloy tag-only: want terminal error, got terminal=%v err=%v", terminal, err)
+	}
 }
 
 func TestValidateImagesDeclared(t *testing.T) {
@@ -200,6 +219,40 @@ func TestValidateImagesDeclared(t *testing.T) {
 	alloyNoImg.Spec.PodProperties.Containers.Alloy = &operatorv1alpha1.AlloyConfig{Enabled: true}
 	if terminal, err := run(orbitNoAlloy)(alloyNoImg); err == nil || !terminal {
 		t.Errorf("alloy without image: want terminal error, got terminal=%v err=%v", terminal, err)
+	}
+
+	// Orbit enables Alloy by default WITH an image; the capsule has no alloy block at all.
+	// The container is still deployed from the orbit default, so validation must resolve the
+	// merged config (not read the capsule field) and accept the orbit-supplied image → ok.
+	orbitEnablesAlloyWithImg := &operatorv1alpha1.Orbit{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
+		Spec: operatorv1alpha1.OrbitSpec{
+			Telemetry: &operatorv1alpha1.OrbitTelemetry{
+				Alloy: &operatorv1alpha1.OrbitAlloyDefaults{
+					Enabled:         true,
+					SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "grafana", ImageName: "alloy", ImageTag: "v1.14.2"},
+				},
+			},
+		},
+	}
+	if terminal, err := run(orbitEnablesAlloyWithImg)(capsule()); err != nil || terminal {
+		t.Errorf("alloy enabled+imaged by orbit, no capsule block: want ok, got terminal=%v err=%v", terminal, err)
+	}
+
+	// Orbit enables Alloy by default with NO image, and the capsule has no alloy block at all.
+	// The old capsule-field gate skipped validation here even though the deployment would still
+	// add the container from the orbit default, deploying an empty image. Validation must catch
+	// the missing image → terminal.
+	orbitEnablesAlloyNoImg := &operatorv1alpha1.Orbit{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
+		Spec: operatorv1alpha1.OrbitSpec{
+			Telemetry: &operatorv1alpha1.OrbitTelemetry{
+				Alloy: &operatorv1alpha1.OrbitAlloyDefaults{Enabled: true},
+			},
+		},
+	}
+	if terminal, err := run(orbitEnablesAlloyNoImg)(capsule()); err == nil || !terminal {
+		t.Errorf("alloy enabled by orbit default, no image, no capsule block: want terminal error, got terminal=%v err=%v", terminal, err)
 	}
 }
 
