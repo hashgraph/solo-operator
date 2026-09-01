@@ -705,6 +705,11 @@ func jobHasCondition(j *batchv1.Job, condType batchv1.JobConditionType) bool {
 	return false
 }
 
+// collectUniqueImages returns the deduplicated set of references to prefetch, each pinned
+// to its verified content digest (repo/name:tag@sha256:...) via common.PinnedRef so the
+// kubelet caches the exact image verified during selection. Deduplication and pinning both
+// key on the digest-pinned ref, so two components that share a tag but resolved to
+// different digests are prefetched separately.
 func collectUniqueImages(sources *operatorv1alpha1.SelectedSources) []string {
 	if sources == nil {
 		return nil
@@ -713,11 +718,15 @@ func collectUniqueImages(sources *operatorv1alpha1.SelectedSources) []string {
 	var images []string
 	for _, name := range operatorv1alpha1.AllUpgradeComponents {
 		src := sources.Get(name)
-		if src == nil || seen[src.Image] {
+		if src == nil {
 			continue
 		}
-		seen[src.Image] = true
-		images = append(images, src.Image)
+		ref := common.PinnedRef(src)
+		if seen[ref] {
+			continue
+		}
+		seen[ref] = true
+		images = append(images, ref)
 	}
 	return images
 }

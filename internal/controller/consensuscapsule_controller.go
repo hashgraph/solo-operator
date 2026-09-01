@@ -5,6 +5,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/automa-saga/errx"
@@ -139,6 +140,19 @@ func (r *ConsensusCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return r.failUCSidecarRequired(ctx, capsule, err)
 	}
 	apimeta.RemoveStatusCondition(&capsule.Status.Conditions, operatorv1alpha1.CondUCSidecarReady)
+
+	// Opt-in policy: when the Orbit sets requireDigestOnDeploy, every image that will run —
+	// the consensus node and each enabled sidecar/uploader — must be digest-pinned before we
+	// deploy (the fresh-deploy counterpart to the always-on upgrade digest enforcement). A
+	// transient Orbit lookup error requeues; a policy violation is terminal (surfaced via
+	// condition + event, no requeue).
+	if terminal, err := r.validateDigestPolicy(ctx, capsule); err != nil {
+		if terminal {
+			return r.failImageDigestRequired(ctx, capsule, err)
+		}
+		return ctrl.Result{}, err
+	}
+	apimeta.RemoveStatusCondition(&capsule.Status.Conditions, operatorv1alpha1.CondImageDigestPinned)
 
 	ready, err := r.checkConfigRefs(ctx, capsule)
 	if err != nil {
@@ -291,6 +305,111 @@ func (r *ConsensusCapsuleReconciler) failUCSidecarRequired(ctx context.Context, 
 		Status:             metav1.ConditionFalse,
 		ObservedGeneration: capsule.Generation,
 		Reason:             ReasonUCSidecarRequired.String(),
+		Message:            err.Error(),
+	})
+	if uerr := r.Status().Update(ctx, capsule); uerr != nil {
+		if apierrors.IsConflict(uerr) {
+			return ctrl.Result{Requeue: true}, nil
+		}
+		return ctrl.Result{}, uerr
+	}
+	return ctrl.Result{}, nil
+}
+
+// validateDigestPolicy enforces orbit.spec.requireDigestOnDeploy. It returns
+// (terminal=true, err) when the Orbit requires digest-pinned images but the consensus-node
+// image has no digest (a spec error the caller records without requeuing), and
+// (terminal=false, err) for a transient Orbit lookup failure (requeue). A missing Orbit or
+// a policy set to false is not an error.
+func (r *ConsensusCapsuleReconciler) validateDigestPolicy(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (bool, error) {
+	if capsule.Spec.Orbit == "" {
+		return false, nil
+	}
+	orbit := &operatorv1alpha1.Orbit{}
+	if err := r.Get(ctx, client.ObjectKey{Name: capsule.Spec.Orbit}, orbit); err != nil {
+		if apierrors.IsNotFound(err) {
+			// The Orbit is resolved (and its absence handled) elsewhere in the deploy
+			// path; don't block the policy check on it here.
+			return false, nil
+		}
+		return false, errx.WithReason(errK8sAPI.Wrap(err, "get Orbit %s for digest policy", capsule.Spec.Orbit), ReasonGetFailed)
+	}
+	if !orbit.Spec.RequireDigestOnDeploy {
+		return false, nil
+	}
+	// Every image that will run — the consensus node and each enabled sidecar/uploader —
+	// must carry an explicit, digest-pinned softwareVersion. Both a nil softwareVersion
+	// (which would fall back to an operator-managed default tag) and an empty digest
+	// (tag-only) violate the policy: under requireDigestOnDeploy the operator never runs an
+	// unpinned image, so relying on a default is not permitted.
+	var unpinned []string
+	for _, img := range configuredCapsuleImages(capsule) {
+		if img.sv == nil || img.sv.Digest == "" {
+			unpinned = append(unpinned, img.name)
+		}
+	}
+	if len(unpinned) > 0 {
+		return true, errx.WithHints(
+			errx.WithReason(
+				errImageDigestRequired.New("Orbit %q requires digest-pinned images on deploy, but ConsensusCapsule %q has unpinned image(s): %s", capsule.Spec.Orbit, capsule.Name, strings.Join(unpinned, ", ")),
+				ReasonImageDigestRequired),
+			"Set an explicit softwareVersion.digest (a sha256 digest) on each listed container — operator-default images are not allowed under this policy — or set the Orbit's spec.requireDigestOnDeploy=false.",
+		)
+	}
+	return false, nil
+}
+
+// namedSoftwareVersion pairs a container label with its image spec for the digest policy.
+type namedSoftwareVersion struct {
+	name string
+	sv   *operatorv1alpha1.SoftwareVersion
+}
+
+// configuredCapsuleImages returns every container that will run and its SoftwareVersion:
+// the consensus node (always) plus each enabled uploader/sidecar. A nil sv means the
+// container has no explicit image and would fall back to its operator-managed default
+// (which requireDigestOnDeploy rejects — see validateDigestPolicy).
+func configuredCapsuleImages(capsule *operatorv1alpha1.ConsensusCapsule) []namedSoftwareVersion {
+	ct := capsule.Spec.PodProperties.Containers
+	imgs := []namedSoftwareVersion{{"consensusNode", ct.ConsensusNode.SoftwareVersion}}
+	if u := ct.RecordsUploader; u != nil && u.Enabled {
+		imgs = append(imgs, namedSoftwareVersion{"recordsUploader", u.SoftwareVersion})
+	}
+	if u := ct.EventsUploader; u != nil && u.Enabled {
+		imgs = append(imgs, namedSoftwareVersion{"eventsUploader", u.SoftwareVersion})
+	}
+	if u := ct.BlocksUploader; u != nil && u.Enabled {
+		imgs = append(imgs, namedSoftwareVersion{"blocksUploader", u.SoftwareVersion})
+	}
+	if u := ct.BackupUploader; u != nil && u.Enabled {
+		imgs = append(imgs, namedSoftwareVersion{"backupUploader", u.SoftwareVersion})
+	}
+	if a := ct.Alloy; a != nil && a.Enabled {
+		imgs = append(imgs, namedSoftwareVersion{"alloy", a.SoftwareVersion})
+	}
+	if uc := ct.UC; uc != nil && uc.Enabled {
+		imgs = append(imgs, namedSoftwareVersion{"uc", uc.SoftwareVersion})
+	}
+	return imgs
+}
+
+// failImageDigestRequired records the terminal requireDigestOnDeploy violation as a status
+// condition and a warning event, then stops the reconcile without a requeue (a spec edit
+// triggers a fresh reconcile). Mirrors failUCSidecarRequired.
+func (r *ConsensusCapsuleReconciler) failImageDigestRequired(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule, err error) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	logger.Error(err, "consensus-node image must be digest-pinned", "reason", ReasonImageDigestRequired.String())
+	if r.Recorder != nil {
+		r.Recorder.Eventf(capsule, nil, corev1.EventTypeWarning, operatorv1alpha1.EventImageDigestRequired.String(),
+			"Reconcile", "%s", errx.Format(err))
+	}
+	capsule.Status.Phase = operatorv1alpha1.PhaseFailed
+	capsule.Status.ObservedGeneration = capsule.Generation
+	apimeta.SetStatusCondition(&capsule.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.CondImageDigestPinned,
+		Status:             metav1.ConditionFalse,
+		ObservedGeneration: capsule.Generation,
+		Reason:             ReasonImageDigestRequired.String(),
 		Message:            err.Error(),
 	})
 	if uerr := r.Status().Update(ctx, capsule); uerr != nil {

@@ -107,6 +107,33 @@ func assertNoExecute(t *testing.T, f *Factory) {
 	}
 }
 
+func TestEnsureDigestsPinned(t *testing.T) {
+	pinned := operatorv1alpha1.SelectedSources{
+		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "gcr.io/cn:v1", Digest: "sha256:abc"},
+	}
+	if err := ensureDigestsPinned(&pinned, "op", "NetworkUpgradePrepare"); err != nil {
+		t.Errorf("expected nil for a pinned source, got %v", err)
+	}
+
+	// A present source without a digest must be rejected — the operator would otherwise
+	// deploy an unpinned (mutable-tag) image.
+	unpinned := operatorv1alpha1.SelectedSources{
+		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "gcr.io/cn:v1"},
+	}
+	if err := ensureDigestsPinned(&unpinned, "op", "NetworkUpgradePrepare"); err == nil {
+		t.Error("expected an error for a present source without a digest")
+	}
+
+	// Empty / nil sources are the "not resolved yet, retry" race — not an error here.
+	empty := operatorv1alpha1.SelectedSources{}
+	if err := ensureDigestsPinned(&empty, "op", "NetworkUpgradePrepare"); err != nil {
+		t.Errorf("expected nil for empty sources, got %v", err)
+	}
+	if err := ensureDigestsPinned(nil, "op", "NetworkUpgradePrepare"); err != nil {
+		t.Errorf("expected nil for nil sources, got %v", err)
+	}
+}
+
 func TestBuildExecuteCR(t *testing.T) {
 	cfg := executeTestConfig(t.TempDir(), t.TempDir())
 	images := operatorv1alpha1.UpgradeImagesSpec{

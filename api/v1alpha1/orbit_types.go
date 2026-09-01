@@ -33,6 +33,18 @@ type OrbitSpec struct {
 	// +optional
 	Upgrade *OrbitUpgrade `json:"upgrade,omitempty"`
 
+	// RequireDigestOnDeploy, when true, requires every ConsensusCapsule in this Orbit to run
+	// only digest-pinned images on deploy: the consensus node and every enabled sidecar/
+	// uploader must set softwareVersion.digest (an immutable "sha256:..." content digest).
+	// Any image that is not explicitly digest-pinned is rejected — including a tag-only
+	// softwareVersion and an enabled container that would fall back to an operator-managed
+	// default image (relying on a default is not permitted under this policy). This is the
+	// opt-in, fresh-deploy counterpart to the always-on digest enforcement of the network
+	// upgrade flow; use it to guarantee digest-pinned images from day one rather than only
+	// after the first upgrade. Default false (tag-only images are allowed on deploy).
+	// +optional
+	RequireDigestOnDeploy bool `json:"requireDigestOnDeploy,omitempty"`
+
 	// Consensus contains shared configuration for all ConsensusCapsules
 	Consensus OrbitConsensus `json:"consensus"`
 }

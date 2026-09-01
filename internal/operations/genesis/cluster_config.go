@@ -148,12 +148,12 @@ func buildApiPermissionProperties(orbit *operatorv1alpha1.Orbit) string {
 
 func buildBootstrapProperties(orbit *operatorv1alpha1.Orbit) string {
 	props := map[string]string{
-		"ledger.id":                     orbitLedgerID(orbit),
-		"netty.mode":                    "DEV",
-		"contracts.chainId":             orbitChainID(orbit),
-		"hedera.recordStream.logPeriod": "1",
-		"balances.exportPeriodSecs":     "400",
-		"files.maxSizeKb":               "2048",
+		"ledger.id":                                   orbitLedgerID(orbit),
+		"netty.mode":                                  "DEV",
+		"contracts.chainId":                           orbitChainID(orbit),
+		"hedera.recordStream.logPeriod":               "1",
+		"balances.exportPeriodSecs":                   "400",
+		"files.maxSizeKb":                             "2048",
 		"hedera.recordStream.compressFilesOnCreation": "true",
 		"balances.compressOnCreation":                 "true",
 		"contracts.maxNumWithHapiSigsAccess":          "0",

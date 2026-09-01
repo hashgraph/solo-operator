@@ -72,6 +72,72 @@ func buildReconcilerForUpdateStatus(c client.Client) *ConsensusCapsuleReconciler
 	}
 }
 
+func TestValidateDigestPolicy(t *testing.T) {
+	scheme := newControllerTestScheme()
+	orbit := func(require bool) *operatorv1alpha1.Orbit {
+		return &operatorv1alpha1.Orbit{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
+			Spec:       operatorv1alpha1.OrbitSpec{RequireDigestOnDeploy: require},
+		}
+	}
+	capsule := func(sv *operatorv1alpha1.SoftwareVersion) *operatorv1alpha1.ConsensusCapsule {
+		c := newCapsuleForControllerTest()
+		c.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersion = sv
+		return c
+	}
+	run := func(o *operatorv1alpha1.Orbit, c *operatorv1alpha1.ConsensusCapsule) (bool, error) {
+		b := fake.NewClientBuilder().WithScheme(scheme)
+		if o != nil {
+			b = b.WithObjects(o)
+		}
+		r := &ConsensusCapsuleReconciler{Client: b.Build(), Scheme: scheme}
+		return r.validateDigestPolicy(context.Background(), c)
+	}
+
+	tagOnly := &operatorv1alpha1.SoftwareVersion{ImageName: "cn", ImageTag: "v1"}
+	pinned := &operatorv1alpha1.SoftwareVersion{ImageName: "cn", ImageTag: "v1", Digest: "sha256:abc"}
+
+	// Policy off → tag-only is allowed.
+	if terminal, err := run(orbit(false), capsule(tagOnly)); err != nil || terminal {
+		t.Errorf("policy off: want ok, got terminal=%v err=%v", terminal, err)
+	}
+	// Policy on + tag-only consensus node → terminal violation.
+	if terminal, err := run(orbit(true), capsule(tagOnly)); err == nil || !terminal {
+		t.Errorf("policy on tag-only: want terminal error, got terminal=%v err=%v", terminal, err)
+	}
+	// Policy on + digest-pinned consensus node → ok.
+	if terminal, err := run(orbit(true), capsule(pinned)); err != nil || terminal {
+		t.Errorf("policy on pinned: want ok, got terminal=%v err=%v", terminal, err)
+	}
+	// Orbit missing → not terminal, no error (resolved elsewhere).
+	if terminal, err := run(nil, capsule(tagOnly)); err != nil || terminal {
+		t.Errorf("orbit missing: want ok, got terminal=%v err=%v", terminal, err)
+	}
+	// Policy on + enabled sidecar with an explicit tag-only image → terminal violation.
+	withUploader := capsule(pinned)
+	withUploader.Spec.PodProperties.Containers.RecordsUploader = &operatorv1alpha1.CheetahUploader{
+		Enabled:         true,
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{ImageName: "rsu", ImageTag: "v1"},
+	}
+	if terminal, err := run(orbit(true), withUploader); err == nil || !terminal {
+		t.Errorf("policy on sidecar tag-only: want terminal error, got terminal=%v err=%v", terminal, err)
+	}
+	// Policy on + enabled sidecar with no softwareVersion (would run an operator default
+	// tag) → terminal violation: under the strict policy, defaults are not permitted.
+	withDefault := capsule(pinned)
+	withDefault.Spec.PodProperties.Containers.RecordsUploader = &operatorv1alpha1.CheetahUploader{Enabled: true}
+	if terminal, err := run(orbit(true), withDefault); err == nil || !terminal {
+		t.Errorf("policy on default sidecar: want terminal error, got terminal=%v err=%v", terminal, err)
+	}
+
+	// Policy on + a DISABLED sidecar with no image → not running, so not a violation.
+	withDisabled := capsule(pinned)
+	withDisabled.Spec.PodProperties.Containers.RecordsUploader = &operatorv1alpha1.CheetahUploader{Enabled: false}
+	if terminal, err := run(orbit(true), withDisabled); err != nil || terminal {
+		t.Errorf("policy on disabled sidecar: want ok, got terminal=%v err=%v", terminal, err)
+	}
+}
+
 func TestUpdateStatus_NoPods_PhasePending(t *testing.T) {
 	ctx := context.Background()
 	scheme := newControllerTestScheme()

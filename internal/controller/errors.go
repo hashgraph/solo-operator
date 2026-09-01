@@ -20,21 +20,29 @@ var (
 	// the capsule phase can never advance past Running. Terminal — the operator
 	// must enable the sidecar in the spec.
 	errUCSidecarRequired = errNS.NewType("uc_sidecar_required")
+
+	// errImageDigestRequired: the Orbit sets requireDigestOnDeploy but one or more of the
+	// ConsensusCapsule's running images (the consensus node or an enabled sidecar/uploader)
+	// is not digest-pinned. Terminal — the operator must set an explicit
+	// softwareVersion.digest on each (or clear the Orbit policy).
+	errImageDigestRequired = errNS.NewType("image_digest_required")
 )
 
 const (
-	ReasonStatusUpdateFailed errx.Reason = "StatusUpdateFailed"
-	ReasonStatusInitFailed   errx.Reason = "StatusInitFailed"
-	ReasonFinalizerFailed    errx.Reason = "FinalizerUpdateFailed"
-	ReasonListFailed         errx.Reason = "ListFailed"
-	ReasonGetFailed          errx.Reason = "GetFailed"
-	ReasonPatchFailed        errx.Reason = "PatchFailed"
-	ReasonScaleFailed        errx.Reason = "ScaleFailed"
-	ReasonNoValidRegistry    errx.Reason = "NoValidRegistry"
-	ReasonManifestInvalid    errx.Reason = "ManifestInvalid"
-	ReasonDuplicateSibling   errx.Reason = "DuplicateSibling"
-	ReasonOrbitNotFound      errx.Reason = "OrbitNotFound"
-	ReasonConfigMapUpsert    errx.Reason = "ConfigMapUpsertFailed"
+	ReasonStatusUpdateFailed  errx.Reason = "StatusUpdateFailed"
+	ReasonStatusInitFailed    errx.Reason = "StatusInitFailed"
+	ReasonFinalizerFailed     errx.Reason = "FinalizerUpdateFailed"
+	ReasonListFailed          errx.Reason = "ListFailed"
+	ReasonGetFailed           errx.Reason = "GetFailed"
+	ReasonPatchFailed         errx.Reason = "PatchFailed"
+	ReasonScaleFailed         errx.Reason = "ScaleFailed"
+	ReasonNoValidRegistry     errx.Reason = "NoValidRegistry"
+	ReasonSourceUnpinned      errx.Reason = "SelectedSourceUnpinned"
+	ReasonImageDigestRequired errx.Reason = "ImageDigestRequired"
+	ReasonManifestInvalid     errx.Reason = "ManifestInvalid"
+	ReasonDuplicateSibling    errx.Reason = "DuplicateSibling"
+	ReasonOrbitNotFound       errx.Reason = "OrbitNotFound"
+	ReasonConfigMapUpsert     errx.Reason = "ConfigMapUpsertFailed"
 
 	// Stray-literal condition reasons promoted from inline strings.
 	ReasonReconcileSuccess  errx.Reason = "ReconcileSuccess"

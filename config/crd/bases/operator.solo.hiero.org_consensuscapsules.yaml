@@ -3534,6 +3534,15 @@ spec:
                             description: SoftwareVersion defines the container image
                               version
                             properties:
+                              digest:
+                                description: |-
+                                  Digest, when set, pins the image to an immutable content digest
+                                  ("sha256:..."). On the upgrade path it is populated from the verified
+                                  SelectedSource.Digest so the kubelet runs exactly the image that was
+                                  verified during the Prepare phase, closing the tag-mutation (TOCTOU)
+                                  window. When empty, the image is referenced by tag only.
+                                pattern: ^sha256:[a-f0-9]{64}$
+                                type: string
                               imageName:
                                 description: ImageName is the name of the image (e.g.,
                                   ubuntu)
@@ -3859,6 +3868,15 @@ spec:
                             description: SoftwareVersion specifies the container image
                               repository and tag
                             properties:
+                              digest:
+                                description: |-
+                                  Digest, when set, pins the image to an immutable content digest
+                                  ("sha256:..."). On the upgrade path it is populated from the verified
+                                  SelectedSource.Digest so the kubelet runs exactly the image that was
+                                  verified during the Prepare phase, closing the tag-mutation (TOCTOU)
+                                  window. When empty, the image is referenced by tag only.
+                                pattern: ^sha256:[a-f0-9]{64}$
+                                type: string
                               imageName:
                                 description: ImageName is the name of the image (e.g.,
                                   ubuntu)
@@ -4104,6 +4122,15 @@ spec:
                             description: SoftwareVersion specifies the container image
                               repository and tag
                             properties:
+                              digest:
+                                description: |-
+                                  Digest, when set, pins the image to an immutable content digest
+                                  ("sha256:..."). On the upgrade path it is populated from the verified
+                                  SelectedSource.Digest so the kubelet runs exactly the image that was
+                                  verified during the Prepare phase, closing the tag-mutation (TOCTOU)
+                                  window. When empty, the image is referenced by tag only.
+                                pattern: ^sha256:[a-f0-9]{64}$
+                                type: string
                               imageName:
                                 description: ImageName is the name of the image (e.g.,
                                   ubuntu)
@@ -4524,6 +4551,15 @@ spec:
                           softwareVersion:
                             description: container image spec
                             properties:
+                              digest:
+                                description: |-
+                                  Digest, when set, pins the image to an immutable content digest
+                                  ("sha256:..."). On the upgrade path it is populated from the verified
+                                  SelectedSource.Digest so the kubelet runs exactly the image that was
+                                  verified during the Prepare phase, closing the tag-mutation (TOCTOU)
+                                  window. When empty, the image is referenced by tag only.
+                                pattern: ^sha256:[a-f0-9]{64}$
+                                type: string
                               imageName:
                                 description: ImageName is the name of the image (e.g.,
                                   ubuntu)
@@ -4771,6 +4807,15 @@ spec:
                             description: SoftwareVersion specifies the container image
                               repository and tag
                             properties:
+                              digest:
+                                description: |-
+                                  Digest, when set, pins the image to an immutable content digest
+                                  ("sha256:..."). On the upgrade path it is populated from the verified
+                                  SelectedSource.Digest so the kubelet runs exactly the image that was
+                                  verified during the Prepare phase, closing the tag-mutation (TOCTOU)
+                                  window. When empty, the image is referenced by tag only.
+                                pattern: ^sha256:[a-f0-9]{64}$
+                                type: string
                               imageName:
                                 description: ImageName is the name of the image (e.g.,
                                   ubuntu)
@@ -5022,6 +5067,15 @@ spec:
                             description: SoftwareVersion specifies the container image
                               repository and tag
                             properties:
+                              digest:
+                                description: |-
+                                  Digest, when set, pins the image to an immutable content digest
+                                  ("sha256:..."). On the upgrade path it is populated from the verified
+                                  SelectedSource.Digest so the kubelet runs exactly the image that was
+                                  verified during the Prepare phase, closing the tag-mutation (TOCTOU)
+                                  window. When empty, the image is referenced by tag only.
+                                pattern: ^sha256:[a-f0-9]{64}$
+                                type: string
                               imageName:
                                 description: ImageName is the name of the image (e.g.,
                                   ubuntu)
@@ -5268,6 +5322,15 @@ spec:
                             description: SoftwareVersion defines the container image
                               version
                             properties:
+                              digest:
+                                description: |-
+                                  Digest, when set, pins the image to an immutable content digest
+                                  ("sha256:..."). On the upgrade path it is populated from the verified
+                                  SelectedSource.Digest so the kubelet runs exactly the image that was
+                                  verified during the Prepare phase, closing the tag-mutation (TOCTOU)
+                                  window. When empty, the image is referenced by tag only.
+                                pattern: ^sha256:[a-f0-9]{64}$
+                                type: string
                               imageName:
                                 description: ImageName is the name of the image (e.g.,
                                   ubuntu)

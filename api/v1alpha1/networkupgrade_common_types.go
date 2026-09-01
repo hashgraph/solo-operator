@@ -147,6 +147,38 @@ func (s *SelectedSources) Set(name ComponentName, src *SelectedSource) {
 	}
 }
 
+// FirstUnpinned returns the name of the first present (non-nil) selected source that
+// lacks a verified content digest, scanning in AllUpgradeComponents order, and true when
+// one is found. It returns ("", false) when every present source is digest-pinned — which
+// includes the empty and nil cases, since there is then nothing unpinned. This is the
+// single predicate over the component set shared by the operator's Freeze prefetch-skip
+// gate (allSourcesPinned) and the UC's digest-pin refusal (ensureDigestsPinned), so adding
+// a component to AllUpgradeComponents extends both checks automatically.
+func (s *SelectedSources) FirstUnpinned() (ComponentName, bool) {
+	if s == nil {
+		return "", false
+	}
+	for _, name := range AllUpgradeComponents {
+		if src := s.Get(name); src != nil && src.Digest == "" {
+			return name, true
+		}
+	}
+	return "", false
+}
+
+// HasResolved reports whether at least one selected source is present (non-nil).
+func (s *SelectedSources) HasResolved() bool {
+	if s == nil {
+		return false
+	}
+	for _, name := range AllUpgradeComponents {
+		if s.Get(name) != nil {
+			return true
+		}
+	}
+	return false
+}
+
 // Sha256Digest is an OCI sha256 digest ("sha256:" + 64 lowercase hex chars).
 // +kubebuilder:validation:Pattern=`^sha256:[a-f0-9]{64}$`
 type Sha256Digest string
@@ -317,4 +349,8 @@ const (
 	// EventUCSidecarRequired is posted when a ConsensusCapsule is missing the
 	// mandatory UC sidecar (terminal configuration error).
 	EventUCSidecarRequired errx.Reason = "UCSidecarRequired"
+	// EventImageDigestRequired is posted when the Orbit sets requireDigestOnDeploy but one or
+	// more of the ConsensusCapsule's running images (the consensus node or an enabled
+	// sidecar/uploader) is not digest-pinned (terminal config error).
+	EventImageDigestRequired errx.Reason = "ImageDigestRequired"
 )

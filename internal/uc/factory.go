@@ -488,10 +488,41 @@ func (f *Factory) fetchPreparePayload(ctx context.Context, operationID string) (
 
 	var selectedSources operatorv1alpha1.SelectedSources
 	if raw, ok, _ := unstructured.NestedMap(prepare.Object, "status", "selectedSources"); ok && raw != nil {
-		_ = runtime.DefaultUnstructuredConverter.FromUnstructured(raw, &selectedSources)
+		if err2 := runtime.DefaultUnstructuredConverter.FromUnstructured(raw, &selectedSources); err2 != nil {
+			// selectedSources pins the registry selection made at prepare; a decode
+			// failure must surface, not silently yield an empty/partial pin.
+			return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil, false,
+				errx.WithReason(errCRBuild.Wrap(err2, "decode NetworkUpgradePrepare status.selectedSources for %s", operationID), ReasonCRBuildFailed)
+		}
+	}
+	// Every resolved source must carry a verified digest — the operator deploys the image
+	// by that digest, so an unpinned selection must not flow into the Freeze CR.
+	if err2 := ensureDigestsPinned(&selectedSources, operationID, "NetworkUpgradePrepare"); err2 != nil {
+		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil, false, err2
 	}
 
 	return images, selectedSources, prepare, true, nil
+}
+
+// ensureDigestsPinned verifies every resolved (present) SelectedSource carries a non-empty
+// content digest. The operator pins the deployed image to this digest
+// (repo/name:tag@sha256:...), so a present-but-digestless selection would silently fall
+// back to a mutable tag — the UC refuses to propagate it. An empty SelectedSources (no
+// component resolved yet) is not an error here; the upstream "not ready, retry" gates cover
+// that race. Digest well-formedness is enforced separately by the CRD pattern on write.
+//
+// The digest scan uses SelectedSources.FirstUnpinned, the same predicate as the operator's
+// allSourcesPinned, so both refuse an unpinned selection over an identical component set.
+func ensureDigestsPinned(sources *operatorv1alpha1.SelectedSources, operationID, crKind string) error {
+	if name, unpinned := sources.FirstUnpinned(); unpinned {
+		return errx.WithHints(
+			errx.WithReason(
+				errCRBuild.New("%s selectedSources[%s] for operationId %s has no content digest", crKind, name, operationID),
+				ReasonSelectedSourceUnpinned),
+			"Re-run the upgrade Prepare so the registry selection resolves a content digest for every component.",
+		)
+	}
+	return nil
 }
 
 // HandleNowFrozen creates a NetworkUpgradeExecute CR. The consensus node writes
@@ -703,6 +734,11 @@ func (f *Factory) fetchExecutePayload(ctx context.Context, operationID string) (
 			return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil, false,
 				errx.WithReason(errCRBuild.Wrap(err2, "decode NetworkUpgradeFreeze spec.selectedSources for %s", operationID), ReasonCRBuildFailed)
 		}
+	}
+	// Re-assert the digest pin at the freeze→execute boundary: the operator deploys the
+	// image by digest, so an unpinned selection must not flow into the Execute CR.
+	if err2 := ensureDigestsPinned(&selectedSources, operationID, "NetworkUpgradeFreeze"); err2 != nil {
+		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil, false, err2
 	}
 
 	return images, selectedSources, freeze, true, nil

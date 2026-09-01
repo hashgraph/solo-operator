@@ -416,7 +416,9 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 		}
 
 		patch := client.MergeFrom(capsule.DeepCopy())
-		r.applyImagePatch(execute, capsule)
+		if err := r.applyImagePatch(execute, capsule); err != nil {
+			return ctrl.Result{}, err
+		}
 		if err := r.Patch(ctx, capsule, patch); err != nil {
 			return ctrl.Result{}, errx.WithHints(
 				errx.WithReason(errK8sAPI.Wrap(err, "patching capsule %s", capsule.Name), ReasonPatchFailed),
@@ -709,59 +711,74 @@ func (r *NetworkUpgradeExecuteReconciler) ensureCapsuleOffline(
 func (r *NetworkUpgradeExecuteReconciler) applyImagePatch(
 	execute *operatorv1alpha1.NetworkUpgradeExecute,
 	capsule *operatorv1alpha1.ConsensusCapsule,
-) {
+) error {
 	images := execute.Spec.Images
 	selected := execute.Status.SelectedSources
 
-	applyComponent := func(name operatorv1alpha1.ComponentName) (image string, remove bool, upgrade bool) {
+	// pinErr captures the first component whose selected source lacks a content digest.
+	// The deployed image is pinned to that digest, so an unpinned source must abort the
+	// execute (terminal) rather than silently deploy a mutable tag. This is the last of
+	// the layered digest checks (CRD-required + UC-enforced upstream).
+	var pinErr error
+
+	// applyComponent returns the selected image tag and its verified content digest.
+	// The digest is threaded through to SoftwareVersion.Digest so the deployed reference
+	// is pinned to the exact image verified during Prepare (see setSoftwareVersion).
+	applyComponent := func(name operatorv1alpha1.ComponentName) (image string, digest operatorv1alpha1.Sha256Digest, remove bool, upgrade bool) {
 		comp, present := images.Component(name)
 		if !present {
-			return "", false, false
+			return "", "", false, false
 		}
 		if comp.Enabled != nil && !*comp.Enabled {
-			return "", true, false
+			return "", "", true, false
 		}
 		src := selected.Get(name)
 		if src == nil {
-			return "", false, false
+			return "", "", false, false
 		}
-		return src.Image, false, true
+		if src.Digest == "" && pinErr == nil {
+			pinErr = errx.WithReason(
+				errReconcile.New("selected source for component %q (operationId %s) has no content digest; refusing to deploy an unpinned (mutable-tag) image", name, execute.Spec.OperationID),
+				ReasonSourceUnpinned)
+		}
+		return src.Image, src.Digest, false, true
 	}
 
-	if img, _, upgrade := applyComponent(operatorv1alpha1.ComponentConsensusNode); upgrade {
-		setSoftwareVersion(&capsule.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersion, img)
+	if img, digest, _, upgrade := applyComponent(operatorv1alpha1.ComponentConsensusNode); upgrade {
+		setSoftwareVersion(&capsule.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersion, img, digest)
 	}
 
-	if img, remove, upgrade := applyComponent(operatorv1alpha1.ComponentRecordStreamUploader); remove {
+	if img, digest, remove, upgrade := applyComponent(operatorv1alpha1.ComponentRecordStreamUploader); remove {
 		capsule.Spec.PodProperties.Containers.RecordsUploader = nil
 	} else if upgrade {
-		ensureCheetah(&capsule.Spec.PodProperties.Containers.RecordsUploader, img)
+		ensureCheetah(&capsule.Spec.PodProperties.Containers.RecordsUploader, img, digest)
 	}
 
-	if img, remove, upgrade := applyComponent(operatorv1alpha1.ComponentEventStreamUploader); remove {
+	if img, digest, remove, upgrade := applyComponent(operatorv1alpha1.ComponentEventStreamUploader); remove {
 		capsule.Spec.PodProperties.Containers.EventsUploader = nil
 	} else if upgrade {
-		ensureCheetah(&capsule.Spec.PodProperties.Containers.EventsUploader, img)
+		ensureCheetah(&capsule.Spec.PodProperties.Containers.EventsUploader, img, digest)
 	}
 
-	if img, remove, upgrade := applyComponent(operatorv1alpha1.ComponentBlockStreamUploader); remove {
+	if img, digest, remove, upgrade := applyComponent(operatorv1alpha1.ComponentBlockStreamUploader); remove {
 		capsule.Spec.PodProperties.Containers.BlocksUploader = nil
 	} else if upgrade {
-		ensureCheetah(&capsule.Spec.PodProperties.Containers.BlocksUploader, img)
+		ensureCheetah(&capsule.Spec.PodProperties.Containers.BlocksUploader, img, digest)
 	}
 
-	if img, remove, upgrade := applyComponent(operatorv1alpha1.ComponentBackupUploader); remove {
+	if img, digest, remove, upgrade := applyComponent(operatorv1alpha1.ComponentBackupUploader); remove {
 		capsule.Spec.PodProperties.Containers.BackupUploader = nil
 	} else if upgrade {
-		ensureStream(&capsule.Spec.PodProperties.Containers.BackupUploader, img)
+		ensureStream(&capsule.Spec.PodProperties.Containers.BackupUploader, img, digest)
 	}
 
-	if img, remove, upgrade := applyComponent(operatorv1alpha1.ComponentUC); remove {
+	if img, digest, remove, upgrade := applyComponent(operatorv1alpha1.ComponentUC); remove {
 		capsule.Spec.PodProperties.Containers.UC = nil
 	} else if upgrade {
-		ensureUC(&capsule.Spec.PodProperties.Containers.UC, img)
+		ensureUC(&capsule.Spec.PodProperties.Containers.UC, img, digest)
 	}
 
+	return pinErr
 }
 
 // upgradeOutcome is the terminal-state evaluation of the post-upgrade consensus
@@ -891,30 +908,36 @@ func (r *NetworkUpgradeExecuteReconciler) SetupWithManager(mgr ctrl.Manager) err
 		Complete(r)
 }
 
-func ensureCheetah(ptr **operatorv1alpha1.CheetahUploader, image string) {
+func ensureCheetah(ptr **operatorv1alpha1.CheetahUploader, image string, digest operatorv1alpha1.Sha256Digest) {
 	if *ptr == nil {
 		*ptr = &operatorv1alpha1.CheetahUploader{}
 	}
-	setSoftwareVersion(&(*ptr).SoftwareVersion, image)
+	setSoftwareVersion(&(*ptr).SoftwareVersion, image, digest)
 }
 
-func ensureStream(ptr **operatorv1alpha1.StreamUploader, image string) {
+func ensureStream(ptr **operatorv1alpha1.StreamUploader, image string, digest operatorv1alpha1.Sha256Digest) {
 	if *ptr == nil {
 		*ptr = &operatorv1alpha1.StreamUploader{}
 	}
-	setSoftwareVersion(&(*ptr).SoftwareVersion, image)
+	setSoftwareVersion(&(*ptr).SoftwareVersion, image, digest)
 }
 
-func ensureUC(ptr **operatorv1alpha1.UcSidecar, image string) {
+func ensureUC(ptr **operatorv1alpha1.UcSidecar, image string, digest operatorv1alpha1.Sha256Digest) {
 	if *ptr == nil {
 		*ptr = &operatorv1alpha1.UcSidecar{}
 	}
-	setSoftwareVersion(&(*ptr).SoftwareVersion, image)
+	setSoftwareVersion(&(*ptr).SoftwareVersion, image, digest)
 }
 
-func setSoftwareVersion(sv **operatorv1alpha1.SoftwareVersion, image string) {
+// setSoftwareVersion decomposes the selected image tag into repo/name/tag and pins the
+// verified content digest onto the SoftwareVersion. common.BuildImage then emits a
+// digest-pinned reference (repo/name:tag@sha256:...), so the kubelet runs exactly the
+// image that was verified during Prepare. image is always the tag-only ref (ParseImage
+// never sees the digest); digest is carried separately.
+func setSoftwareVersion(sv **operatorv1alpha1.SoftwareVersion, image string, digest operatorv1alpha1.Sha256Digest) {
 	if *sv == nil {
 		*sv = &operatorv1alpha1.SoftwareVersion{}
 	}
 	(*sv).Repository, (*sv).ImageName, (*sv).ImageTag = common.ParseImage(image)
+	(*sv).Digest = digest
 }

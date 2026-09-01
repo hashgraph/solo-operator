@@ -123,10 +123,15 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	if _, prefetchOK := prefetchCompleted(prepare); prefetchOK {
-		// Prefetch succeeded — skip registry health check. The images are
-		// likely cached on nodes; the kubelet uses them via IfNotPresent.
-		common.Info(ctx, operatorv1alpha1.ReasonPrefetchCompleted).Msg("images prefetched; skipping registry health check")
+	if _, prefetchOK := prefetchCompleted(prepare); prefetchOK && allSourcesPinned(prepare.Status.SelectedSources) {
+		// Prefetch succeeded AND every selected source carries a verified digest, so
+		// prefetch pulled the images by their pinned digest (repo/name:tag@sha256:...)
+		// and Execute deploys the same pinned references. The node cache is therefore
+		// keyed by the verified digest and IfNotPresent reuses exactly the verified
+		// content — so skipping the registry health check here is sound, not
+		// trust-by-tag. If any digest is missing (should not happen for a selected
+		// source), we fall through to RevalidateComponents rather than skip.
+		common.Info(ctx, operatorv1alpha1.ReasonPrefetchCompleted).Msg("images prefetched by digest; skipping registry health check")
 		now := metav1.Now()
 		freeze.Status.CompletionTime = &now
 		freeze.Status.Phase = operatorv1alpha1.PhaseSucceeded

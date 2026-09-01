@@ -10,8 +10,11 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
-// BuildImage constructs a full image reference from a SoftwareVersion
-// Format: repository/imageName:imageTag, repository/imageName, or imageName:imageTag
+// BuildImage constructs a full image reference from a SoftwareVersion.
+// Format: repository/imageName:imageTag[@digest], repository/imageName, or imageName:imageTag.
+// When Digest is set, it is appended as "@sha256:..." so the reference is pinned to an
+// immutable content digest (the tag is retained for readability); an unset Digest yields
+// a tag-only reference, preserving the prior behaviour.
 func BuildImage(sv operatorv1alpha1.SoftwareVersion) string {
 	if sv.ImageName == "" {
 		return ""
@@ -24,7 +27,26 @@ func BuildImage(sv operatorv1alpha1.SoftwareVersion) string {
 	if sv.ImageTag != "" {
 		image = image + ":" + sv.ImageTag
 	}
-	return image
+	return pinDigest(image, sv.Digest)
+}
+
+// pinDigest appends an OCI content digest to an image reference, yielding an immutable
+// pinned reference (ref@sha256:...). An empty digest returns ref unchanged (a mutable,
+// tag-only reference). This is the single place that pins a reference to a digest, shared
+// by BuildImage and PinnedRef so every code path pins identically.
+func pinDigest(ref string, digest operatorv1alpha1.Sha256Digest) string {
+	if digest == "" {
+		return ref
+	}
+	return ref + "@" + string(digest)
+}
+
+// PinnedRef returns a SelectedSource's image pinned to its verified content digest
+// (repo/name:tag@sha256:...), so callers deploy or prefetch the exact image verified
+// during selection. It falls back to the tag alone when no digest is present — which
+// should not occur for a resolved source, since selection always resolves a digest.
+func PinnedRef(src *operatorv1alpha1.SelectedSource) string {
+	return pinDigest(src.Image, src.Digest)
 }
 
 // BuildImageOrDefault constructs an image reference from SoftwareVersion or returns the default

@@ -33,6 +33,25 @@ func TestBuildImage(t *testing.T) {
 			expected: "docker.io/hashgraph/hedera-node:latest",
 		},
 		{
+			name: "digest pins the reference alongside the tag",
+			sv: operatorv1alpha1.SoftwareVersion{
+				Repository: "gcr.io/hedera-registry",
+				ImageName:  "consensus-node",
+				ImageTag:   "0.54.0",
+				Digest:     "sha256:abc123",
+			},
+			expected: "gcr.io/hedera-registry/consensus-node:0.54.0@sha256:abc123",
+		},
+		{
+			name: "digest without repository",
+			sv: operatorv1alpha1.SoftwareVersion{
+				ImageName: "node",
+				ImageTag:  "v1",
+				Digest:    "sha256:deadbeef",
+			},
+			expected: "node:v1@sha256:deadbeef",
+		},
+		{
 			name:     "without repository",
 			sv:       operatorv1alpha1.SoftwareVersion{ImageName: "node", ImageTag: "v1"},
 			expected: "node:v1",
@@ -64,6 +83,37 @@ func TestBuildImage(t *testing.T) {
 			result := BuildImage(tt.sv)
 			if result != tt.expected {
 				t.Errorf("BuildImage() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestPinnedRef(t *testing.T) {
+	tests := []struct {
+		name     string
+		src      operatorv1alpha1.SelectedSource
+		expected string
+	}{
+		{
+			name: "digest pins the tagged reference",
+			src: operatorv1alpha1.SelectedSource{
+				Image:  "gcr.io/hedera-registry/consensus-node:0.54.0",
+				Digest: "sha256:abc123",
+			},
+			expected: "gcr.io/hedera-registry/consensus-node:0.54.0@sha256:abc123",
+		},
+		{
+			name:     "no digest falls back to the tag",
+			src:      operatorv1alpha1.SelectedSource{Image: "gcr.io/hedera-registry/consensus-node:0.54.0"},
+			expected: "gcr.io/hedera-registry/consensus-node:0.54.0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := PinnedRef(&tt.src)
+			if result != tt.expected {
+				t.Errorf("PinnedRef() = %v, want %v", result, tt.expected)
 			}
 		})
 	}

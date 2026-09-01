@@ -199,3 +199,17 @@ func prefetchCompleted(prepare *operatorv1alpha1.NetworkUpgradePrepare) (decided
 	}
 	return true, completed.Status == metav1.ConditionTrue
 }
+
+// allSourcesPinned reports whether every non-nil selected source carries a verified
+// content digest. It gates the Freeze prefetch-skip: the skip is only sound when the
+// images were prefetched (and will be deployed) by an immutable digest, so a missing
+// digest must force a fall-through to registry revalidation rather than trust-by-tag.
+// An empty set is treated as not-pinned (there is nothing whose digest was verified).
+// The digest scan is shared with the UC's ensureDigestsPinned via SelectedSources so both
+// stay in lockstep as components are added.
+func allSourcesPinned(sources *operatorv1alpha1.SelectedSources) bool {
+	if _, unpinned := sources.FirstUnpinned(); unpinned {
+		return false
+	}
+	return sources.HasResolved()
+}

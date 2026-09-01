@@ -44,6 +44,10 @@ const (
 	// CR construction.
 	ReasonCRBuildFailed errx.Reason = "CRBuildFailed"
 
+	// A resolved SelectedSource is missing its content digest — the operator pins the
+	// deployed image to this digest, so the UC refuses to propagate an unpinned selection.
+	ReasonSelectedSourceUnpinned errx.Reason = "SelectedSourceUnpinned"
+
 	// Persist-before-send (disk / --cr-persist-path).
 	ReasonMarkerStatFailed              errx.Reason = "MarkerStatFailed"
 	ReasonWorkDirCreateFailed           errx.Reason = "WorkDirCreateFailed"

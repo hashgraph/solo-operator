@@ -1668,6 +1668,46 @@ func TestApplyImagePatch_ConsensusNodeUpgrade(t *testing.T) {
 	if sv.Repository != "reg-a" || sv.ImageName != "cn" || sv.ImageTag != "0.75.0" {
 		t.Errorf("unexpected sv: %+v", sv)
 	}
+	// The verified digest must be carried onto the SoftwareVersion so the deployed
+	// reference is pinned (repo/name:tag@sha256:...), not the mutable tag alone.
+	if sv.Digest != executeDigest {
+		t.Errorf("expected digest %q carried to SoftwareVersion, got %q", executeDigest, sv.Digest)
+	}
+	if got, want := common.BuildImage(*sv), "reg-a/cn:0.75.0@"+string(executeDigest); got != want {
+		t.Errorf("expected pinned image ref %q, got %q", want, got)
+	}
+}
+
+func TestApplyImagePatch_UnpinnedSourceErrors(t *testing.T) {
+	// A selected source with no digest must abort the execute — the operator must never
+	// deploy an unpinned (mutable-tag) image. This is the operator-layer digest check.
+	execute := newExecuteWithImages(
+		operatorv1alpha1.UpgradeImagesSpec{
+			ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+				Version:    "0.75.0",
+				Registries: registriesFor("reg-a/cn:0.75.0"),
+			},
+		},
+		operatorv1alpha1.SelectedSources{
+			ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0"}, // no digest
+		},
+	)
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			PodProperties: operatorv1alpha1.ConsensusPodProperties{
+				Containers: operatorv1alpha1.ConsensusContainers{
+					ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
+						SoftwareVersion: &operatorv1alpha1.SoftwareVersion{ImageName: "cn", ImageTag: "0.74.0"},
+					},
+				},
+			},
+		},
+	}
+
+	r := &NetworkUpgradeExecuteReconciler{}
+	if err := r.applyImagePatch(execute, capsule); err == nil {
+		t.Fatal("expected applyImagePatch to error when the selected source has no digest")
+	}
 }
 
 func TestApplyImagePatch_CheetahSidecar_Upgrade(t *testing.T) {

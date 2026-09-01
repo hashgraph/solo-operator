@@ -612,6 +612,54 @@ func TestCollectUniqueImages(t *testing.T) {
 	}
 }
 
+func TestCollectUniqueImages_PinsDigest(t *testing.T) {
+	sources := &operatorv1alpha1.SelectedSources{}
+	// Two components share a tag but resolved to different digests: they must be
+	// prefetched as distinct pinned references, not collapsed by tag.
+	sources.Set(operatorv1alpha1.ComponentConsensusNode,
+		&operatorv1alpha1.SelectedSource{Image: "gcr.io/cn:v1", Digest: "sha256:aaa"})
+	sources.Set(operatorv1alpha1.ComponentRecordStreamUploader,
+		&operatorv1alpha1.SelectedSource{Image: "gcr.io/cn:v1", Digest: "sha256:bbb"})
+
+	images := collectUniqueImages(sources)
+	want := map[string]bool{"gcr.io/cn:v1@sha256:aaa": true, "gcr.io/cn:v1@sha256:bbb": true}
+	if len(images) != len(want) {
+		t.Fatalf("expected %d pinned images, got %d: %v", len(want), len(images), images)
+	}
+	for _, img := range images {
+		if !want[img] {
+			t.Errorf("unexpected image ref %q; want one of %v", img, want)
+		}
+	}
+}
+
+func TestAllSourcesPinned(t *testing.T) {
+	pinned := &operatorv1alpha1.SelectedSources{}
+	pinned.Set(operatorv1alpha1.ComponentConsensusNode,
+		&operatorv1alpha1.SelectedSource{Image: "gcr.io/cn:v1", Digest: "sha256:aaa"})
+	pinned.Set(operatorv1alpha1.ComponentUC,
+		&operatorv1alpha1.SelectedSource{Image: "gcr.io/uc:v1", Digest: "sha256:bbb"})
+	if !allSourcesPinned(pinned) {
+		t.Error("expected allSourcesPinned=true when every source carries a digest")
+	}
+
+	missing := &operatorv1alpha1.SelectedSources{}
+	missing.Set(operatorv1alpha1.ComponentConsensusNode,
+		&operatorv1alpha1.SelectedSource{Image: "gcr.io/cn:v1", Digest: "sha256:aaa"})
+	missing.Set(operatorv1alpha1.ComponentUC,
+		&operatorv1alpha1.SelectedSource{Image: "gcr.io/uc:v1"}) // no digest
+	if allSourcesPinned(missing) {
+		t.Error("expected allSourcesPinned=false when a source lacks a digest (must fall through to revalidation)")
+	}
+
+	if allSourcesPinned(nil) {
+		t.Error("expected allSourcesPinned=false for nil sources")
+	}
+	if allSourcesPinned(&operatorv1alpha1.SelectedSources{}) {
+		t.Error("expected allSourcesPinned=false for an empty source set")
+	}
+}
+
 func TestReconcilePrefetch_NoCapsules_SkipsPrefetch(t *testing.T) {
 	scheme := newControllerTestScheme()
 	prepare := newPrepareForTest()
