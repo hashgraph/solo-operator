@@ -685,43 +685,6 @@ func TestStatefulSetVolumes_BlockNodes(t *testing.T) {
 	}
 }
 
-func TestStatefulSetVolumes_HapiAppSecrets(t *testing.T) {
-	capsule := newTestCapsule()
-	capsule.Spec.HapiAppSecretsName = "node0-tls-secret"
-
-	r := &StatefulSetSubReconciler{}
-	volumes, mounts := r.buildVolumes(capsule)
-
-	volByName := make(map[string]corev1.Volume)
-	for _, v := range volumes {
-		volByName[v.Name] = v
-	}
-	mountByPath := make(map[string]corev1.VolumeMount)
-	for _, m := range mounts {
-		mountByPath[m.MountPath] = m
-	}
-
-	v, ok := volByName["hapi-app-secrets"]
-	if !ok {
-		t.Fatal("expected hapi-app-secrets volume when HapiAppSecretsName is set")
-	}
-	if v.Secret == nil || v.Secret.SecretName != "node0-tls-secret" {
-		t.Errorf("unexpected secret name: %+v", v.Secret)
-	}
-
-	const base = "/opt/hgcapp/services-hedera/HapiApp2.0"
-	for _, path := range []string{base + "/hedera.crt", base + "/hedera.key"} {
-		m, ok := mountByPath[path]
-		if !ok {
-			t.Errorf("expected mount at %s", path)
-			continue
-		}
-		if m.SubPath == "" {
-			t.Errorf("expected non-empty SubPath for %s", path)
-		}
-	}
-}
-
 func TestStatefulSetVolumes_DataConfigDir(t *testing.T) {
 	r := &StatefulSetSubReconciler{}
 	volumes, mounts := r.buildVolumes(newTestCapsule())

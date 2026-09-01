@@ -86,10 +86,6 @@ type ConsensusCapsuleSpec struct {
 	// +optional
 	NodeAlias string `json:"nodeAlias,omitempty"`
 
-	// secret containing hedera.crt and hedera.key; mounted via subPath into HapiApp2.0/
-	// +optional
-	HapiAppSecretsName string `json:"hapiAppSecretsName,omitempty"`
-
 	// references a BlockNodesConfig CR whose managed ConfigMap is subPath-mounted
 	// at data/config/block-nodes.json. Optional — CN falls back to defaults.
 	// The consensus-node deployment package delivers this per node under

@@ -136,10 +136,6 @@ spec:
                 maximum: 65535
                 minimum: 1
                 type: integer
-              hapiAppSecretsName:
-                description: secret containing hedera.crt and hedera.key; mounted
-                  via subPath into HapiApp2.0/
-                type: string
               internalAddress:
                 description: |-
                   overrides the auto-computed gossip hostname ({name}-0.consensus.{namespace}.svc.cluster.local).
