@@ -35,6 +35,8 @@ type imageSource interface {
 type OCIChecker struct {
 	Keychain authn.Keychain // defaults to authn.DefaultKeychain
 	src      imageSource    // defaults to a remote source
+
+	AllowedHosts []string // SSRF allow-list; empty denies only private/loopback hosts
 }
 
 func (c OCIChecker) source() imageSource {
@@ -50,6 +52,12 @@ func (c OCIChecker) source() imageSource {
 
 func (c OCIChecker) Check(ctx context.Context, spec operatorv1alpha1.UpgradeRegistrySpec, deterministic operatorv1alpha1.UpgradeDeterministicSpec) RegistryResult {
 	res := RegistryResult{Image: spec.Image}
+
+	if err := checkHostAllowed(spec.Image, c.AllowedHosts); err != nil {
+		res.State = StateDenied
+		res.Err = err
+		return res
+	}
 
 	// non-deterministic components carry per-registry overrides instead of the global block
 	expected := deterministic.LayerHashes

@@ -58,9 +58,7 @@ type Options struct {
 	// typically use plaintext; leave false.
 	TLS bool
 	// VerifyCertificate turns on node-certificate verification against the
-	// network's address book. It defaults to false so TLS works against a local
-	// network whose node certs are not in a published address book; enable it
-	// only for public networks (mainnet/testnet/previewnet).
+	// network's address book. beacon's --tls-verify flag defaults this to true.
 	VerifyCertificate bool
 	// MaxTransactionFee overrides the default flat fee cap when non-zero.
 	MaxTransactionFee hiero.Hbar

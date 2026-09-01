@@ -35,6 +35,9 @@ type Global struct {
 	// connectivity instead of failing on the first transaction. Zero disables the
 	// wait.
 	ConnectTimeout time.Duration
+	// TLSVerify mirrors --tls-verify. Defaults to true; false only for a local
+	// network with unpublished/self-signed certs.
+	TLSVerify bool
 }
 
 // Session is a resolved command context: the target the command acts on plus a
@@ -81,7 +84,7 @@ func (g Global) Resolve() (*Session, error) {
 	}
 
 	network := map[string]hiero.AccountID{target.Node.Endpoint(): target.NodeAccount}
-	c, err := client.New(network, target.Payer, key, client.Options{TLS: target.Node.TLS, LogLevel: g.LogLevel})
+	c, err := client.New(network, target.Payer, key, client.Options{TLS: target.Node.TLS, VerifyCertificate: g.TLSVerify, LogLevel: g.LogLevel})
 	if err != nil {
 		return nil, err
 	}

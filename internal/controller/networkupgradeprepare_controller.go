@@ -50,6 +50,13 @@ func (r *NetworkUpgradePrepareReconciler) WithStrategy(name string) *NetworkUpgr
 	return r
 }
 
+// WithAllowedRegistryHosts configures the SSRF allow-list enforced before any
+// registry is dialed. See registry.OCIChecker.AllowedHosts.
+func (r *NetworkUpgradePrepareReconciler) WithAllowedRegistryHosts(hosts []string) *NetworkUpgradePrepareReconciler {
+	r.Checker = registry.OCIChecker{AllowedHosts: hosts}
+	return r
+}
+
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeprepares,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeprepares/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeprepares/finalizers,verbs=update
@@ -163,6 +170,12 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 				common.Info(ctx, ReasonRegistryNoHashes).Str("component", string(name)).Str("image", res.Image).AnErr("error", res.Err).Msg("image has no layer hashes configured")
 				r.eventf(ctx, &prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
 					"%s: image %s has no layer hashes configured: %v", name, res.Image, res.Err)
+			case registry.StateDenied:
+				unreachable++
+				allHashesValid = false
+				common.Info(ctx, ReasonRegistryDenied).Str("component", string(name)).Str("image", res.Image).AnErr("error", res.Err).Msg("registry host denied by allow-list")
+				r.eventf(ctx, &prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryDenied,
+					"%s: registry %s is not a permitted host", name, res.Image)
 			default:
 				common.Info(ctx, ReasonRegistryUnexpectedState).Str("component", string(name)).Str("image", res.Image).Str("state", string(res.State)).Msg("unexpected registry state")
 			}

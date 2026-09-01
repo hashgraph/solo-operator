@@ -16,6 +16,7 @@ const (
 	StateUnreachable  RegistryState = "Unreachable"
 	StateHashMismatch RegistryState = "HashMismatch"
 	StateNoHashes     RegistryState = "NoHashes"
+	StateDenied       RegistryState = "Denied"
 )
 
 type RegistryResult struct {

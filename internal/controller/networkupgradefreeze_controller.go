@@ -46,6 +46,13 @@ func (r *NetworkUpgradeFreezeReconciler) WithStrategy(name string) *NetworkUpgra
 	return r
 }
 
+// WithAllowedRegistryHosts configures the SSRF allow-list enforced before any
+// registry is dialed. See registry.OCIChecker.AllowedHosts.
+func (r *NetworkUpgradeFreezeReconciler) WithAllowedRegistryHosts(hosts []string) *NetworkUpgradeFreezeReconciler {
+	r.Checker = registry.OCIChecker{AllowedHosts: hosts}
+	return r
+}
+
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradefreezes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradefreezes/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradefreezes/finalizers,verbs=update

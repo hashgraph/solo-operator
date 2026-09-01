@@ -62,6 +62,10 @@ type globalOptions struct {
 	// ConnectTimeout is --connect-timeout: how long to wait for the target node
 	// endpoint to become reachable before a command runs (0 disables the wait).
 	ConnectTimeout time.Duration
+
+	// TLSVerify is --tls-verify: verify the target node's TLS cert. Defaults
+	// to true; false only for a local network with unpublished/self-signed certs.
+	TLSVerify bool
 }
 
 var (
@@ -120,6 +124,8 @@ func newRootCmd() *cobra.Command {
 	f.StringVarP(&opts.Config, "config", "c", "config.yaml", "Path to the network's config.yaml; its directory holds keys/ and sysfiles/")
 	f.StringVarP(&opts.LogLevel, "log-level", "v", "info", "Log level: warn, info, or debug")
 	f.DurationVar(&opts.ConnectTimeout, "connect-timeout", 30*time.Second, "How long to wait for the target node endpoint to become reachable before running (0 disables the wait)")
+	f.BoolVar(&opts.TLSVerify, "tls-verify", true, "Verify the target node's TLS certificate when TLS is enabled. "+
+		"Set false only for a local/self-signed network whose node certs are not in a published address book.")
 
 	// --version is a plain root flag (no short: -v is --log-level); the `version`
 	// subcommand offers the same beacon build metadata with a text/json selector.
@@ -138,6 +144,7 @@ func newRootCmd() *cobra.Command {
 			NodeIP:         opts.NodeIP,
 			LogLevel:       opts.LogLevel,
 			ConnectTimeout: opts.ConnectTimeout,
+			TLSVerify:      opts.TLSVerify,
 		}.Resolve()
 	}
 	root.AddCommand(commands.FreezeCommands(resolve))

@@ -38,6 +38,7 @@ const (
 	ReasonRegistryUnreachable     errx.Reason = "RegistryUnreachable"
 	ReasonRegistryHashMismatch    errx.Reason = "RegistryHashMismatch"
 	ReasonRegistryNoHashes        errx.Reason = "RegistryNoHashes"
+	ReasonRegistryDenied          errx.Reason = "RegistryDenied"
 	ReasonRegistryUnexpectedState errx.Reason = "RegistryUnexpectedState"
 
 	// Orbit.

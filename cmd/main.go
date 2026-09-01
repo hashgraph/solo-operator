@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/automa-saga/logx"
@@ -48,6 +49,7 @@ func main() {
 	var secureMetrics bool
 	var enableHTTP2 bool
 	var registryOrder string
+	var allowedRegistryHosts string
 	var nodeActiveTimeout time.Duration
 	var nodeActiveAlertInterval time.Duration
 	var showVersion bool
@@ -72,6 +74,9 @@ func main() {
 		"If set, HTTP/2 will be enabled for the metrics server")
 	flag.StringVar(&registryOrder, "registry-order", registry.StrategyRandom,
 		"Order in which registries are checked during the upgrade Prepare phase: Random or Sequential.")
+	flag.StringVar(&allowedRegistryHosts, "allowed-registry-hosts", "",
+		"Comma-separated allow-list of registry hosts (or parent domains) permitted for image checks. "+
+			"Empty (default) permits any host except loopback/link-local/private-network addresses.")
 	flag.DurationVar(&nodeActiveTimeout, "node-active-timeout", 10*time.Minute,
 		"Backstop deadline for a consensus node to reach platform status ACTIVE after an upgrade "+
 			"(anchored to nodeUpgradeStartTime) before a NodeActiveDeadlineExceeded warning is emitted. "+
@@ -81,6 +86,13 @@ func main() {
 			"deadline fires. Shorter values give the node operator more frequent visibility.")
 
 	flag.Parse()
+
+	var allowedRegistryHostsList []string
+	for _, h := range strings.Split(allowedRegistryHosts, ",") {
+		if h = strings.TrimSpace(h); h != "" {
+			allowedRegistryHostsList = append(allowedRegistryHostsList, h)
+		}
+	}
 
 	if showVersion {
 		fmt.Println(version.Get().Text())
@@ -321,7 +333,7 @@ func main() {
 	prepareReconciler := controller.NewNetworkUpgradePrepareReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
-	).WithStrategy(registryOrder)
+	).WithStrategy(registryOrder).WithAllowedRegistryHosts(allowedRegistryHostsList)
 	if err = prepareReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkUpgradePrepare")
 		os.Exit(1)
@@ -330,7 +342,7 @@ func main() {
 	freezeReconciler := controller.NewNetworkUpgradeFreezeReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
-	).WithStrategy(registryOrder)
+	).WithStrategy(registryOrder).WithAllowedRegistryHosts(allowedRegistryHostsList)
 	if err = freezeReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkUpgradeFreeze")
 		os.Exit(1)
@@ -339,7 +351,8 @@ func main() {
 	executeReconciler := controller.NewNetworkUpgradeExecuteReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
-	).WithStrategy(registryOrder).WithNodeActiveTimeout(nodeActiveTimeout).WithNodeActiveAlertInterval(nodeActiveAlertInterval)
+	).WithStrategy(registryOrder).WithNodeActiveTimeout(nodeActiveTimeout).WithNodeActiveAlertInterval(nodeActiveAlertInterval).
+		WithAllowedRegistryHosts(allowedRegistryHostsList)
 	if err = executeReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkUpgradeExecute")
 		os.Exit(1)

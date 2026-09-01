@@ -66,6 +66,9 @@ logging:
 registry:
   # Order in which a component's registries are checked: Random or Sequential
   order: Random
+  # SSRF allow-list, e.g. ["ghcr.io", "registry.corp.internal"]. Empty denies
+  # only loopback/link-local/private-network hosts.
+  allowedHosts: []
 
 # Metrics configuration
 metrics:

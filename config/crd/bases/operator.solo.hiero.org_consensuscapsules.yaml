@@ -3539,11 +3539,10 @@ spec:
                             properties:
                               digest:
                                 description: |-
-                                  Digest, when set, pins the image to an immutable content digest
-                                  ("sha256:..."). On the upgrade path it is populated from the verified
-                                  SelectedSource.Digest so the kubelet runs exactly the image that was
-                                  verified during the Prepare phase, closing the tag-mutation (TOCTOU)
-                                  window. When empty, the image is referenced by tag only.
+                                  Digest, when set, pins the image to an immutable content digest ("sha256:...").
+                                  On the upgrade path it is populated from the verified SelectedSource.Digest so the
+                                  kubelet runs exactly the image that was verified during the Prepare phase, closing
+                                  the tag-mutation (TOCTOU) window. When empty, the image is referenced by tag only.
                                 pattern: ^sha256:[a-f0-9]{64}$
                                 type: string
                               imageName:
@@ -3873,11 +3872,10 @@ spec:
                             properties:
                               digest:
                                 description: |-
-                                  Digest, when set, pins the image to an immutable content digest
-                                  ("sha256:..."). On the upgrade path it is populated from the verified
-                                  SelectedSource.Digest so the kubelet runs exactly the image that was
-                                  verified during the Prepare phase, closing the tag-mutation (TOCTOU)
-                                  window. When empty, the image is referenced by tag only.
+                                  Digest, when set, pins the image to an immutable content digest ("sha256:...").
+                                  On the upgrade path it is populated from the verified SelectedSource.Digest so the
+                                  kubelet runs exactly the image that was verified during the Prepare phase, closing
+                                  the tag-mutation (TOCTOU) window. When empty, the image is referenced by tag only.
                                 pattern: ^sha256:[a-f0-9]{64}$
                                 type: string
                               imageName:
@@ -4127,11 +4125,10 @@ spec:
                             properties:
                               digest:
                                 description: |-
-                                  Digest, when set, pins the image to an immutable content digest
-                                  ("sha256:..."). On the upgrade path it is populated from the verified
-                                  SelectedSource.Digest so the kubelet runs exactly the image that was
-                                  verified during the Prepare phase, closing the tag-mutation (TOCTOU)
-                                  window. When empty, the image is referenced by tag only.
+                                  Digest, when set, pins the image to an immutable content digest ("sha256:...").
+                                  On the upgrade path it is populated from the verified SelectedSource.Digest so the
+                                  kubelet runs exactly the image that was verified during the Prepare phase, closing
+                                  the tag-mutation (TOCTOU) window. When empty, the image is referenced by tag only.
                                 pattern: ^sha256:[a-f0-9]{64}$
                                 type: string
                               imageName:
@@ -4556,11 +4553,10 @@ spec:
                             properties:
                               digest:
                                 description: |-
-                                  Digest, when set, pins the image to an immutable content digest
-                                  ("sha256:..."). On the upgrade path it is populated from the verified
-                                  SelectedSource.Digest so the kubelet runs exactly the image that was
-                                  verified during the Prepare phase, closing the tag-mutation (TOCTOU)
-                                  window. When empty, the image is referenced by tag only.
+                                  Digest, when set, pins the image to an immutable content digest ("sha256:...").
+                                  On the upgrade path it is populated from the verified SelectedSource.Digest so the
+                                  kubelet runs exactly the image that was verified during the Prepare phase, closing
+                                  the tag-mutation (TOCTOU) window. When empty, the image is referenced by tag only.
                                 pattern: ^sha256:[a-f0-9]{64}$
                                 type: string
                               imageName:
@@ -4812,11 +4808,10 @@ spec:
                             properties:
                               digest:
                                 description: |-
-                                  Digest, when set, pins the image to an immutable content digest
-                                  ("sha256:..."). On the upgrade path it is populated from the verified
-                                  SelectedSource.Digest so the kubelet runs exactly the image that was
-                                  verified during the Prepare phase, closing the tag-mutation (TOCTOU)
-                                  window. When empty, the image is referenced by tag only.
+                                  Digest, when set, pins the image to an immutable content digest ("sha256:...").
+                                  On the upgrade path it is populated from the verified SelectedSource.Digest so the
+                                  kubelet runs exactly the image that was verified during the Prepare phase, closing
+                                  the tag-mutation (TOCTOU) window. When empty, the image is referenced by tag only.
                                 pattern: ^sha256:[a-f0-9]{64}$
                                 type: string
                               imageName:
@@ -5072,11 +5067,10 @@ spec:
                             properties:
                               digest:
                                 description: |-
-                                  Digest, when set, pins the image to an immutable content digest
-                                  ("sha256:..."). On the upgrade path it is populated from the verified
-                                  SelectedSource.Digest so the kubelet runs exactly the image that was
-                                  verified during the Prepare phase, closing the tag-mutation (TOCTOU)
-                                  window. When empty, the image is referenced by tag only.
+                                  Digest, when set, pins the image to an immutable content digest ("sha256:...").
+                                  On the upgrade path it is populated from the verified SelectedSource.Digest so the
+                                  kubelet runs exactly the image that was verified during the Prepare phase, closing
+                                  the tag-mutation (TOCTOU) window. When empty, the image is referenced by tag only.
                                 pattern: ^sha256:[a-f0-9]{64}$
                                 type: string
                               imageName:
@@ -5327,11 +5321,10 @@ spec:
                             properties:
                               digest:
                                 description: |-
-                                  Digest, when set, pins the image to an immutable content digest
-                                  ("sha256:..."). On the upgrade path it is populated from the verified
-                                  SelectedSource.Digest so the kubelet runs exactly the image that was
-                                  verified during the Prepare phase, closing the tag-mutation (TOCTOU)
-                                  window. When empty, the image is referenced by tag only.
+                                  Digest, when set, pins the image to an immutable content digest ("sha256:...").
+                                  On the upgrade path it is populated from the verified SelectedSource.Digest so the
+                                  kubelet runs exactly the image that was verified during the Prepare phase, closing
+                                  the tag-mutation (TOCTOU) window. When empty, the image is referenced by tag only.
                                 pattern: ^sha256:[a-f0-9]{64}$
                                 type: string
                               imageName:
