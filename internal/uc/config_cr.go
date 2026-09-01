@@ -4,12 +4,15 @@ package uc
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/automa-saga/errx"
@@ -51,6 +54,37 @@ func rejectOversized(path string, size int64) error {
 		errx.WithReason(errPersist.New("config file %q is %d bytes, exceeds the %d byte limit", path, size, maxConfigFileSize), ReasonConfigFileTooLarge),
 		"Reduce the file size or split it before including it in the upgrade package",
 	)
+}
+
+// readConfigFile uses O_NOFOLLOW so a symlink swapped in after scanConfigFiles'
+// Lstat check is rejected atomically, closing the TOCTOU window.
+func readConfigFile(path string) ([]byte, error) {
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		if errors.Is(err, syscall.ELOOP) {
+			return nil, errx.WithHints(
+				errx.WithReason(errPersist.New("config file %q is a symlink — refusing to read", path), ReasonConfigFileSymlink),
+				"Remove symlinks from the upgrade package; only regular files are accepted under data/config/",
+			)
+		}
+		return nil, errx.WithHints(
+			errx.WithReason(errPersist.Wrap(err, "open config file %s", path), ReasonUpgradePathUnreadable),
+			"Confirm the upgrade package was extracted correctly and the file is readable",
+		)
+	}
+	defer func() { _ = f.Close() }()
+
+	info, err := f.Stat()
+	if err != nil {
+		return nil, errx.WithHints(
+			errx.WithReason(errPersist.Wrap(err, "stat config file %s", path), ReasonUpgradePathUnreadable),
+			"Confirm the upgrade package was extracted correctly and the file is readable",
+		)
+	}
+	if err := rejectOversized(path, info.Size()); err != nil {
+		return nil, err
+	}
+	return io.ReadAll(f)
 }
 
 // kindEntry binds a package filename to its Kubernetes CR kind, GVR, and a
@@ -229,12 +263,9 @@ func configCRName(operationID string, entry kindEntry) string {
 // for cascade deletion. The file is read here, one CR at a time, so content is
 // never buffered across multiple files simultaneously.
 func buildConfigCR(cfg ProvisionerProxyConfig, operationID string, sf scannedFile) (*unstructured.Unstructured, error) {
-	data, err := os.ReadFile(sf.absPath)
+	data, err := readConfigFile(sf.absPath)
 	if err != nil {
-		return nil, errx.WithHints(
-			errx.WithReason(errPersist.Wrap(err, "read config file %s", sf.absPath), ReasonUpgradePathUnreadable),
-			"Confirm the upgrade package was extracted correctly and the file is readable",
-		)
+		return nil, err
 	}
 
 	name := configCRName(operationID, sf.entry)
@@ -372,12 +403,9 @@ func (p *ProvisionerProxy) deployBlockNodesConfigCR(ctx context.Context, operati
 	if err := rejectOversized(path, info.Size()); err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(path)
+	data, err := readConfigFile(path)
 	if err != nil {
-		return nil, errx.WithHints(
-			errx.WithReason(errPersist.Wrap(err, "read block-node config %s", path), ReasonUpgradePathUnreadable),
-			"Confirm the upgrade package was extracted correctly and block-nodes/config/ is readable",
-		)
+		return nil, err
 	}
 
 	name := p.cfg.CapsuleName + "-block-nodes"

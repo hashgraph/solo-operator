@@ -213,6 +213,33 @@ func waitForCR(t *testing.T, client *fake.FakeDynamicClient, resGVR schema.Group
 	t.Fatalf("timed out waiting for %s/%s to be created", resGVR.Resource, name)
 }
 
+// ── readConfigFile ─────────────────────────────────────────────────────────────
+
+func TestReadConfigFile_RejectsSymlinkSwappedInAfterScan(t *testing.T) {
+	root := t.TempDir()
+	writeConfigFile(t, root, "application.properties", "[hedera]")
+	path := filepath.Join(root, configSubdir, "application.properties")
+
+	target := filepath.Join(t.TempDir(), "secret") // swapped in after the scan's Lstat check
+	if err := os.WriteFile(target, []byte("top-secret"), 0o600); err != nil {
+		t.Fatalf("write symlink target: %v", err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatalf("remove original: %v", err)
+	}
+	if err := os.Symlink(target, path); err != nil {
+		t.Fatalf("swap in symlink: %v", err)
+	}
+
+	_, err := readConfigFile(path)
+	if err == nil {
+		t.Fatal("expected error for symlink swapped in after scan, got nil")
+	}
+	if reason, _ := errx.ReasonOf(err); reason != ReasonConfigFileSymlink {
+		t.Fatalf("reason: got %q, want %q", reason, ReasonConfigFileSymlink)
+	}
+}
+
 // ── scanConfigFiles ────────────────────────────────────────────────────────────
 
 func TestScanConfigFiles_empty(t *testing.T) {
