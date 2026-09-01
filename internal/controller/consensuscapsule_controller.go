@@ -712,12 +712,13 @@ func (r *ConsensusCapsuleReconciler) finalizeManualStopped(ctx context.Context, 
 	up, err := r.S6.IsUp(ctx, capsule)
 	if err != nil {
 		*requeue = true
+		common.Warn(ctx, ReasonS6ProbeFailed).Err(err).Msg("s6 probe error during finalization")
 		return oldPhase
 	}
 
 	if up {
-		if r.Recorder != nil {
-			r.Recorder.Eventf(capsule, nil, corev1.EventTypeNormal, operatorv1alpha1.EventConsensusNodeActive.String(), "UpdateStatus", "platform metrics unavailable but consensus process running")
+		if r.Recorder != nil && oldPhase != operatorv1alpha1.PhaseRunning {
+			r.Recorder.Eventf(capsule, nil, corev1.EventTypeNormal, operatorv1alpha1.EventConsensusNodeRunning.String(), "UpdateStatus", "platform metrics unavailable but consensus process running")
 		}
 		return operatorv1alpha1.PhaseRunning
 	}

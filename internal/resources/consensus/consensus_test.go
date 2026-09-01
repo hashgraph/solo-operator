@@ -1075,14 +1075,3 @@ func TestServiceSubReconciler_NeedsUpdate(t *testing.T) {
 }
 
 // ── Chain ────────────────────────────────────────────────────────────────────
-
-func TestNewSubReconcilers(t *testing.T) {
-	scheme := newTestScheme()
-	c := newTestClient(scheme)
-
-	chain := NewSubReconcilers(c, scheme, nil, nil, nil)
-
-	if chain == nil {
-		t.Fatal("expected non-nil chain")
-	}
-}

@@ -15,6 +15,7 @@ const (
 
 	// ConsensusCapsule.
 	ReasonCheckpointUpdateFailed errx.Reason = "CheckpointUpdateFailed"
+	ReasonS6ProbeFailed          errx.Reason = "S6ProbeFailed"
 
 	// HelmCapsule.
 	ReasonSkippingUninstall            errx.Reason = "SkippingUninstall"
