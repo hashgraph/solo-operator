@@ -205,20 +205,11 @@ func prefetchCompleted(prepare *operatorv1alpha1.NetworkUpgradePrepare) (decided
 // images were prefetched (and will be deployed) by an immutable digest, so a missing
 // digest must force a fall-through to registry revalidation rather than trust-by-tag.
 // An empty set is treated as not-pinned (there is nothing whose digest was verified).
+// The digest scan is shared with the UC's ensureDigestsPinned via SelectedSources so both
+// stay in lockstep as components are added.
 func allSourcesPinned(sources *operatorv1alpha1.SelectedSources) bool {
-	if sources == nil {
+	if _, unpinned := sources.FirstUnpinned(); unpinned {
 		return false
 	}
-	pinnedAny := false
-	for _, name := range operatorv1alpha1.AllUpgradeComponents {
-		src := sources.Get(name)
-		if src == nil {
-			continue
-		}
-		if src.Digest == "" {
-			return false
-		}
-		pinnedAny = true
-	}
-	return pinnedAny
+	return sources.HasResolved()
 }

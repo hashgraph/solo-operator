@@ -510,20 +510,17 @@ func (f *Factory) fetchPreparePayload(ctx context.Context, operationID string) (
 // back to a mutable tag — the UC refuses to propagate it. An empty SelectedSources (no
 // component resolved yet) is not an error here; the upstream "not ready, retry" gates cover
 // that race. Digest well-formedness is enforced separately by the CRD pattern on write.
+//
+// The digest scan uses SelectedSources.FirstUnpinned, the same predicate as the operator's
+// allSourcesPinned, so both refuse an unpinned selection over an identical component set.
 func ensureDigestsPinned(sources *operatorv1alpha1.SelectedSources, operationID, crKind string) error {
-	if sources == nil {
-		return nil
-	}
-	for _, name := range operatorv1alpha1.AllUpgradeComponents {
-		src := sources.Get(name)
-		if src != nil && src.Digest == "" {
-			return errx.WithHints(
-				errx.WithReason(
-					errCRBuild.New("%s selectedSources[%s] for operationId %s has no content digest", crKind, name, operationID),
-					ReasonSelectedSourceUnpinned),
-				"Re-run the upgrade Prepare so the registry selection resolves a content digest for every component.",
-			)
-		}
+	if name, unpinned := sources.FirstUnpinned(); unpinned {
+		return errx.WithHints(
+			errx.WithReason(
+				errCRBuild.New("%s selectedSources[%s] for operationId %s has no content digest", crKind, name, operationID),
+				ReasonSelectedSourceUnpinned),
+			"Re-run the upgrade Prepare so the registry selection resolves a content digest for every component.",
+		)
 	}
 	return nil
 }

@@ -706,11 +706,10 @@ func jobHasCondition(j *batchv1.Job, condType batchv1.JobConditionType) bool {
 }
 
 // collectUniqueImages returns the deduplicated set of references to prefetch, each pinned
-// to its verified content digest (repo/name:tag@sha256:...) so the kubelet caches the
-// exact image verified during selection. Deduplication and pinning both key on the
-// digest-pinned ref, so two components that share a tag but resolved to different digests
-// are prefetched separately. A source without a digest falls back to its tag (should not
-// occur for a selected source — selection always resolves a digest).
+// to its verified content digest (repo/name:tag@sha256:...) via common.PinnedRef so the
+// kubelet caches the exact image verified during selection. Deduplication and pinning both
+// key on the digest-pinned ref, so two components that share a tag but resolved to
+// different digests are prefetched separately.
 func collectUniqueImages(sources *operatorv1alpha1.SelectedSources) []string {
 	if sources == nil {
 		return nil
@@ -722,7 +721,7 @@ func collectUniqueImages(sources *operatorv1alpha1.SelectedSources) []string {
 		if src == nil {
 			continue
 		}
-		ref := pinnedRef(src)
+		ref := common.PinnedRef(src)
 		if seen[ref] {
 			continue
 		}
@@ -730,15 +729,6 @@ func collectUniqueImages(sources *operatorv1alpha1.SelectedSources) []string {
 		images = append(images, ref)
 	}
 	return images
-}
-
-// pinnedRef appends the verified content digest to the selected image tag, yielding an
-// immutable reference. Falls back to the tag alone when no digest is present.
-func pinnedRef(src *operatorv1alpha1.SelectedSource) string {
-	if src.Digest == "" {
-		return src.Image
-	}
-	return src.Image + "@" + string(src.Digest)
 }
 
 func (r *NetworkUpgradePrepareReconciler) eventf(ctx context.Context, obj *operatorv1alpha1.NetworkUpgradePrepare, eventtype string, reason errx.Reason, format string, args ...any) {
