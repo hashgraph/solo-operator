@@ -10,9 +10,14 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 )
 
-// checkHostAllowed guards against SSRF via a user-controlled Image string.
-// Empty allowedHosts denies only private/loopback hosts; non-empty requires
-// an exact or subdomain match, denying everything else too.
+// checkHostAllowed is the pre-flight SSRF gate on a user-controlled Image string:
+// a fast, well-messaged reject before any network call. Empty allowedHosts denies
+// only statically-private hosts (IP literals); non-empty requires an exact or
+// subdomain match, denying everything else too.
+//
+// It is not the whole boundary: a DNS name that resolves to a private address is
+// caught authoritatively at connect time by guardedTransport (dialguard.go), which
+// closes the DNS-rebinding window this pre-flight check cannot.
 func checkHostAllowed(image string, allowedHosts []string) error {
 	ref, err := name.ParseReference(image)
 	if err != nil {
@@ -56,22 +61,14 @@ func hostAllowListed(hostname string, allowedHosts []string) bool {
 	return false
 }
 
-// isPrivateHost resolves hostname (DNS names too, so in-cluster Service DNS
-// is caught, not just IP literals) and reports whether it lands private.
+// isPrivateHost reports whether hostname is a statically-private IP literal.
+// DNS names are deliberately not resolved here: doing so is racy (the dial
+// re-resolves independently) and would add a blocking, context-less lookup to
+// the reconcile path. guardedTransport (dialguard.go) validates resolved hosts
+// authoritatively at connect time instead.
 func isPrivateHost(hostname string) bool {
-	if ip := net.ParseIP(hostname); ip != nil {
-		return isPrivateIP(ip)
-	}
-	ips, err := net.LookupIP(hostname)
-	if err != nil {
-		return false // unresolvable now will just fail Unreachable later
-	}
-	for _, ip := range ips {
-		if isPrivateIP(ip) {
-			return true
-		}
-	}
-	return false
+	ip := net.ParseIP(hostname)
+	return ip != nil && isPrivateIP(ip)
 }
 
 func isPrivateIP(ip net.IP) bool {
