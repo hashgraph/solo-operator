@@ -67,7 +67,12 @@ registry:
   # Order in which a component's registries are checked: Random or Sequential
   order: Random
   # SSRF allow-list, e.g. ["ghcr.io", "registry.corp.internal"]. Empty denies
-  # only loopback/link-local/private-network hosts.
+  # only loopback/link-local/private-network hosts. The policy is enforced at
+  # connect time on the resolved IP (not just a pre-flight name lookup), so it
+  # holds against DNS rebinding and applies to registry redirects too.
+  # Caveat: if the operator pod has HTTP(S)_PROXY set, connections go through the
+  # proxy and this guard validates the proxy, not the registry — egress control
+  # then rests with the proxy.
   allowedHosts: []
 
 # Metrics configuration
