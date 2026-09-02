@@ -166,6 +166,7 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 
 	r.applyPodProperties(sts, capsule)
 	r.applyCheetahFSGroup(sts, capsule)
+	r.applyImagePullSecrets(sts, capsule, resolvedAlloy)
 	// DeprecatedServiceAccount must mirror ServiceAccountName (set after applyPodProperties
 	// which may override ServiceAccountName).
 	sts.Spec.Template.Spec.DeprecatedServiceAccount = sts.Spec.Template.Spec.ServiceAccountName
@@ -250,7 +251,7 @@ func (r *StatefulSetSubReconciler) buildConsensusNodeContainer(capsule *operator
 
 	containerName := ConsensusContainerName(capsule)
 
-	image := common.BuildImageOrDefault(cn.SoftwareVersion, "")
+	image := common.BuildImage(cn.SoftwareVersion)
 	if image == "" {
 		return corev1.Container{}, errx.WithHints(
 			errx.WithReason(errConfigInvalid.New("consensus node image is required"), ReasonImageRequired),
@@ -465,31 +466,6 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 	}
 
 	// ── Secret volumes ───────────────────────────────────────────────────────
-
-	// TLS cert + key (hedera.crt, hedera.key)
-	if capsule.Spec.HapiAppSecretsName != "" {
-		volumes = append(volumes, corev1.Volume{
-			Name: "hapi-app-secrets",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  capsule.Spec.HapiAppSecretsName,
-					DefaultMode: &defaultMode,
-				},
-			},
-		})
-		volumeMounts = append(volumeMounts,
-			corev1.VolumeMount{
-				Name:      "hapi-app-secrets",
-				MountPath: HapiBase + "/hedera.crt",
-				SubPath:   "hedera.crt",
-			},
-			corev1.VolumeMount{
-				Name:      "hapi-app-secrets",
-				MountPath: HapiBase + "/hedera.key",
-				SubPath:   "hedera.key",
-			},
-		)
-	}
 
 	// Node signing keys
 	if capsule.Spec.Secrets != nil {
@@ -766,7 +742,7 @@ func (r *StatefulSetSubReconciler) buildCheetahUploaderContainer(uploader *opera
 		)
 	}
 
-	image := common.BuildImageOrDefault(uploader.SoftwareVersion, CheetahDefaultImage)
+	image := common.BuildImage(uploader.SoftwareVersion)
 
 	name := uploader.Name
 	if name == "" {
@@ -884,7 +860,7 @@ func (r *StatefulSetSubReconciler) buildCheetahUploaderContainer(uploader *opera
 }
 
 func (r *StatefulSetSubReconciler) buildUcContainer(capsule *operatorv1alpha1.ConsensusCapsule, config *operatorv1alpha1.UcSidecar, mode uc.Mode) corev1.Container {
-	image := common.BuildImageOrDefault(config.SoftwareVersion, UCDefaultImage())
+	image := common.BuildImage(config.SoftwareVersion)
 
 	name := config.Name
 	if name == "" {
@@ -984,6 +960,39 @@ func (r *StatefulSetSubReconciler) applyCheetahFSGroup(sts *appsv1.StatefulSet, 
 	}
 }
 
+// applyImagePullSecrets collects ImagePullSecrets from every container's SoftwareVersion
+// and applies the deduplicated set to the pod template, so private-registry images can be pulled.
+// The Alloy secret is sourced from resolvedAlloy (Orbit defaults merged with capsule overrides)
+// rather than the raw capsule spec, since that is the SoftwareVersion the Alloy container is built from.
+func (r *StatefulSetSubReconciler) applyImagePullSecrets(sts *appsv1.StatefulSet, capsule *operatorv1alpha1.ConsensusCapsule, resolvedAlloy *operatorv1alpha1.AlloyConfig) {
+	containers := capsule.Spec.PodProperties.Containers
+
+	var sources [][]corev1.LocalObjectReference
+	sources = append(sources, common.ImagePullSecretsFromVersion(containers.ConsensusNode.SoftwareVersion))
+	if containers.UC != nil && containers.UC.Enabled {
+		sources = append(sources, common.ImagePullSecretsFromVersion(containers.UC.SoftwareVersion))
+	}
+	if containers.BlocksUploader != nil && containers.BlocksUploader.Enabled {
+		sources = append(sources, common.ImagePullSecretsFromVersion(containers.BlocksUploader.SoftwareVersion))
+	}
+	if containers.RecordsUploader != nil && containers.RecordsUploader.Enabled {
+		sources = append(sources, common.ImagePullSecretsFromVersion(containers.RecordsUploader.SoftwareVersion))
+	}
+	if containers.EventsUploader != nil && containers.EventsUploader.Enabled {
+		sources = append(sources, common.ImagePullSecretsFromVersion(containers.EventsUploader.SoftwareVersion))
+	}
+	if containers.BackupUploader != nil && containers.BackupUploader.Enabled {
+		sources = append(sources, common.ImagePullSecretsFromVersion(containers.BackupUploader.SoftwareVersion))
+	}
+	if resolvedAlloy != nil && resolvedAlloy.Enabled {
+		sources = append(sources, common.ImagePullSecretsFromVersion(resolvedAlloy.SoftwareVersion))
+	}
+
+	if merged := common.MergeImagePullSecrets(sources...); len(merged) > 0 {
+		sts.Spec.Template.Spec.ImagePullSecrets = merged
+	}
+}
+
 // cheetahBucketPath returns the full bucket object prefix for a stream.
 func cheetahBucketPath(bucketPrefix, streamPath string) string {
 	if bucketPrefix != "" {
@@ -1012,7 +1021,7 @@ func getVolumeNameForPath(path string) string {
 // e.g. "backups:my-bucket") and RCLONE_CONFIG_BACKUPS_* env vars that configure the
 // rclone "backups" remote. Credentials are injected from config.Config.EnvFromSecret.
 func (r *StatefulSetSubReconciler) buildBackupUploaderContainer(config *operatorv1alpha1.StreamUploader) corev1.Container {
-	image := common.BuildImageOrDefault(config.SoftwareVersion, "gcr.io/hedera-registry/hedera-backups:latest")
+	image := common.BuildImage(config.SoftwareVersion)
 
 	name := config.Name
 	if name == "" {
@@ -1079,7 +1088,7 @@ func (r *StatefulSetSubReconciler) buildAlloyContainer(capsule *operatorv1alpha1
 		containerName = "alloy"
 	}
 
-	image := common.BuildImageOrDefault(config.SoftwareVersion, AlloyDefaultImage)
+	image := common.BuildImage(config.SoftwareVersion)
 
 	container := corev1.Container{
 		Name:  containerName,

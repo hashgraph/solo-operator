@@ -10,13 +10,15 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
-// BuildImage constructs a full image reference from a SoftwareVersion.
+// BuildImage constructs a full image reference from a SoftwareVersion, or "" when sv is nil
+// or has no ImageName. The operator ships no built-in default images, so callers treat an
+// empty result as "no image declared".
 // Format: repository/imageName:imageTag[@digest], repository/imageName, or imageName:imageTag.
 // When Digest is set, it is appended as "@sha256:..." so the reference is pinned to an
 // immutable content digest (the tag is retained for readability); an unset Digest yields
-// a tag-only reference, preserving the prior behaviour.
-func BuildImage(sv operatorv1alpha1.SoftwareVersion) string {
-	if sv.ImageName == "" {
+// a tag-only reference.
+func BuildImage(sv *operatorv1alpha1.SoftwareVersion) string {
+	if sv == nil || sv.ImageName == "" {
 		return ""
 	}
 
@@ -49,23 +51,36 @@ func PinnedRef(src *operatorv1alpha1.SelectedSource) string {
 	return pinDigest(src.Image, src.Digest)
 }
 
-// BuildImageOrDefault constructs an image reference from SoftwareVersion or returns the default
-func BuildImageOrDefault(sv *operatorv1alpha1.SoftwareVersion, defaultImage string) string {
-	if sv == nil {
-		return defaultImage
-	}
-	if image := BuildImage(*sv); image != "" {
-		return image
-	}
-	return defaultImage
-}
-
 // PullPolicyOrDefault returns the pull policy from a SoftwareVersion, or def if unset.
 func PullPolicyOrDefault(sv *operatorv1alpha1.SoftwareVersion, def corev1.PullPolicy) corev1.PullPolicy {
 	if sv != nil && sv.ImagePullPolicy != "" {
 		return corev1.PullPolicy(sv.ImagePullPolicy)
 	}
 	return def
+}
+
+// ImagePullSecretsFromVersion returns the ImagePullSecrets from a SoftwareVersion, or nil.
+func ImagePullSecretsFromVersion(sv *operatorv1alpha1.SoftwareVersion) []corev1.LocalObjectReference {
+	if sv == nil {
+		return nil
+	}
+	return sv.ImagePullSecrets
+}
+
+// MergeImagePullSecrets deduplicates LocalObjectReferences by name across multiple slices.
+func MergeImagePullSecrets(sources ...[]corev1.LocalObjectReference) []corev1.LocalObjectReference {
+	seen := map[string]struct{}{}
+	var merged []corev1.LocalObjectReference
+	for _, refs := range sources {
+		for _, ref := range refs {
+			if _, ok := seen[ref.Name]; ok {
+				continue
+			}
+			seen[ref.Name] = struct{}{}
+			merged = append(merged, ref)
+		}
+	}
+	return merged
 }
 
 // ParseImage splits a full OCI image reference "[[repo/]name[:tag]]" into its three components.

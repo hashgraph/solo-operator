@@ -86,10 +86,6 @@ type ConsensusCapsuleSpec struct {
 	// +optional
 	NodeAlias string `json:"nodeAlias,omitempty"`
 
-	// secret containing hedera.crt and hedera.key; mounted via subPath into HapiApp2.0/
-	// +optional
-	HapiAppSecretsName string `json:"hapiAppSecretsName,omitempty"`
-
 	// references a BlockNodesConfig CR whose managed ConfigMap is subPath-mounted
 	// at data/config/block-nodes.json. Optional — CN falls back to defaults.
 	// The consensus-node deployment package delivers this per node under
@@ -592,6 +588,11 @@ const CondUCSidecarReady = "UCSidecarReady"
 // it is False when the Orbit requires digest-pinned images on deploy but a running image
 // (the consensus node or an enabled sidecar/uploader) is not digest-pinned.
 const CondImageDigestPinned = "ImageDigestPinned"
+
+// CondImagesDeclared is the condition type for the explicit-image requirement: it is False
+// when a running container (the consensus node or an enabled sidecar/uploader) has no
+// declared image. The operator provides no built-in default images.
+const CondImagesDeclared = "ImagesDeclared"
 
 // ConsensusCapsuleStatus defines the observed state of ConsensusCapsule
 type ConsensusCapsuleStatus struct {

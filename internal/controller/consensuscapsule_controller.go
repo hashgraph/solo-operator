@@ -141,12 +141,31 @@ func (r *ConsensusCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 	apimeta.RemoveStatusCondition(&capsule.Status.Conditions, operatorv1alpha1.CondUCSidecarReady)
 
+	// Resolve every container image once. This reads the merged Alloy config (which fetches the
+	// Orbit), so computing it here — rather than inside each check below — keeps both the
+	// explicit-image and digest-pin checks working off a single resolution instead of fetching
+	// the Orbit once per check. A transient resolve error (e.g. the Orbit lookup) requeues.
+	imgs, err := r.configuredCapsuleImages(ctx, capsule)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Every container that will run must declare an explicit image — the operator provides no
+	// built-in default images. A missing image is terminal (condition + event, no requeue).
+	if terminal, err := r.validateImagesDeclared(capsule, imgs); err != nil {
+		if terminal {
+			return r.failImageRequired(ctx, capsule, err)
+		}
+		return ctrl.Result{}, err
+	}
+	apimeta.RemoveStatusCondition(&capsule.Status.Conditions, operatorv1alpha1.CondImagesDeclared)
+
 	// Opt-in policy: when the Orbit sets requireDigestOnDeploy, every image that will run —
 	// the consensus node and each enabled sidecar/uploader — must be digest-pinned before we
 	// deploy (the fresh-deploy counterpart to the always-on upgrade digest enforcement). A
 	// transient Orbit lookup error requeues; a policy violation is terminal (surfaced via
 	// condition + event, no requeue).
-	if terminal, err := r.validateDigestPolicy(ctx, capsule); err != nil {
+	if terminal, err := r.validateDigestPolicy(ctx, capsule, imgs); err != nil {
 		if terminal {
 			return r.failImageDigestRequired(ctx, capsule, err)
 		}
@@ -316,12 +335,12 @@ func (r *ConsensusCapsuleReconciler) failUCSidecarRequired(ctx context.Context, 
 	return ctrl.Result{}, nil
 }
 
-// validateDigestPolicy enforces orbit.spec.requireDigestOnDeploy. It returns
-// (terminal=true, err) when the Orbit requires digest-pinned images but the consensus-node
-// image has no digest (a spec error the caller records without requeuing), and
-// (terminal=false, err) for a transient Orbit lookup failure (requeue). A missing Orbit or
-// a policy set to false is not an error.
-func (r *ConsensusCapsuleReconciler) validateDigestPolicy(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (bool, error) {
+// validateDigestPolicy enforces orbit.spec.requireDigestOnDeploy over the already-resolved
+// container images. It returns (terminal=true, err) when the Orbit requires digest-pinned
+// images but one or more will-run images has no digest (a spec error the caller records
+// without requeuing), and (terminal=false, err) for a transient Orbit lookup failure
+// (requeue). A missing Orbit or a policy set to false is not an error.
+func (r *ConsensusCapsuleReconciler) validateDigestPolicy(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule, imgs []namedSoftwareVersion) (bool, error) {
 	if capsule.Spec.Orbit == "" {
 		return false, nil
 	}
@@ -343,7 +362,7 @@ func (r *ConsensusCapsuleReconciler) validateDigestPolicy(ctx context.Context, c
 	// (tag-only) violate the policy: under requireDigestOnDeploy the operator never runs an
 	// unpinned image, so relying on a default is not permitted.
 	var unpinned []string
-	for _, img := range configuredCapsuleImages(capsule) {
+	for _, img := range imgs {
 		if img.sv == nil || img.sv.Digest == "" {
 			unpinned = append(unpinned, img.name)
 		}
@@ -359,6 +378,58 @@ func (r *ConsensusCapsuleReconciler) validateDigestPolicy(ctx context.Context, c
 	return false, nil
 }
 
+// validateImagesDeclared requires every container that will run — the consensus node and
+// each enabled sidecar/uploader — to resolve to an explicit image. The operator ships no
+// built-in default images, so a container with no declared image (capsule-level, or, for
+// Alloy, the orbit-level telemetry default) is a terminal configuration error. It returns
+// (terminal=true, err) for a missing image. It operates on the already-resolved image list
+// (see configuredCapsuleImages) so the Orbit is not re-fetched per check.
+func (r *ConsensusCapsuleReconciler) validateImagesDeclared(capsule *operatorv1alpha1.ConsensusCapsule, imgs []namedSoftwareVersion) (bool, error) {
+	var missing []string
+	for _, img := range imgs {
+		if common.BuildImage(img.sv) == "" {
+			missing = append(missing, img.name)
+		}
+	}
+	if len(missing) > 0 {
+		return true, errx.WithHints(
+			errx.WithReason(
+				errImageRequired.New("ConsensusCapsule %q has container(s) with no declared image: %s", capsule.Name, strings.Join(missing, ", ")),
+				ReasonImageRequired),
+			"Set softwareVersion (repository/imageName/imageTag) on each listed container — the operator provides no built-in default images.",
+		)
+	}
+	return false, nil
+}
+
+// failImageRequired records the terminal missing-image configuration error as a status
+// condition and a warning event, then stops the reconcile without a requeue (a spec edit
+// triggers a fresh reconcile). Mirrors failUCSidecarRequired.
+func (r *ConsensusCapsuleReconciler) failImageRequired(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule, err error) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	logger.Error(err, "container image must be declared explicitly", "reason", ReasonImageRequired.String())
+	if r.Recorder != nil {
+		r.Recorder.Eventf(capsule, nil, corev1.EventTypeWarning, operatorv1alpha1.EventImageRequired.String(),
+			"Reconcile", "%s", errx.Format(err))
+	}
+	capsule.Status.Phase = operatorv1alpha1.PhaseFailed
+	capsule.Status.ObservedGeneration = capsule.Generation
+	apimeta.SetStatusCondition(&capsule.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.CondImagesDeclared,
+		Status:             metav1.ConditionFalse,
+		ObservedGeneration: capsule.Generation,
+		Reason:             ReasonImageRequired.String(),
+		Message:            err.Error(),
+	})
+	if uerr := r.Status().Update(ctx, capsule); uerr != nil {
+		if apierrors.IsConflict(uerr) {
+			return ctrl.Result{Requeue: true}, nil
+		}
+		return ctrl.Result{}, uerr
+	}
+	return ctrl.Result{}, nil
+}
+
 // namedSoftwareVersion pairs a container label with its image spec for the digest policy.
 type namedSoftwareVersion struct {
 	name string
@@ -369,7 +440,7 @@ type namedSoftwareVersion struct {
 // the consensus node (always) plus each enabled uploader/sidecar. A nil sv means the
 // container has no explicit image and would fall back to its operator-managed default
 // (which requireDigestOnDeploy rejects — see validateDigestPolicy).
-func configuredCapsuleImages(capsule *operatorv1alpha1.ConsensusCapsule) []namedSoftwareVersion {
+func (r *ConsensusCapsuleReconciler) configuredCapsuleImages(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) ([]namedSoftwareVersion, error) {
 	ct := capsule.Spec.PodProperties.Containers
 	imgs := []namedSoftwareVersion{{"consensusNode", ct.ConsensusNode.SoftwareVersion}}
 	if u := ct.RecordsUploader; u != nil && u.Enabled {
@@ -384,13 +455,24 @@ func configuredCapsuleImages(capsule *operatorv1alpha1.ConsensusCapsule) []named
 	if u := ct.BackupUploader; u != nil && u.Enabled {
 		imgs = append(imgs, namedSoftwareVersion{"backupUploader", u.SoftwareVersion})
 	}
-	if a := ct.Alloy; a != nil && a.Enabled {
-		imgs = append(imgs, namedSoftwareVersion{"alloy", a.SoftwareVersion})
-	}
 	if uc := ct.UC; uc != nil && uc.Enabled {
 		imgs = append(imgs, namedSoftwareVersion{"uc", uc.SoftwareVersion})
 	}
-	return imgs
+	// Alloy's effective image and enabled-state may come from orbit-level telemetry defaults,
+	// so resolve the merged (orbit + capsule) config unconditionally and gate on the resolved
+	// Enabled — matching what the deployment path actually runs (see deployment.go). Gating on
+	// the capsule-level field instead would miss an Alloy container enabled purely by orbit
+	// defaults, letting it deploy with an empty/unpinned image while bypassing validation. The
+	// orbit default is user-declared config (not an operator built-in), so an Alloy image
+	// supplied there satisfies both the explicit-image and digest-pin checks.
+	resolved, err := consensus.ResolveAlloyConfig(ctx, r.Client, capsule)
+	if err != nil {
+		return nil, errx.WithReason(errK8sAPI.Wrap(err, "resolve alloy config for %s", capsule.Name), ReasonGetFailed)
+	}
+	if resolved != nil && resolved.Enabled {
+		imgs = append(imgs, namedSoftwareVersion{"alloy", resolved.SoftwareVersion})
+	}
+	return imgs, nil
 }
 
 // failImageDigestRequired records the terminal requireDigestOnDeploy violation as a status
