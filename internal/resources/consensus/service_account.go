@@ -6,6 +6,7 @@ import (
 	"context"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -59,6 +60,7 @@ func (r *ServiceAccountSubReconciler) Reconcile(ctx context.Context, capsule *op
 		common.Debug(ctx, common.ReasonServiceAccountUpdated).Str("serviceAccount", desired.Name).Msg("Updating service account")
 		existing.Labels = desired.Labels
 		existing.Annotations = desired.Annotations
+		existing.ImagePullSecrets = desired.ImagePullSecrets
 		return ctrl.Result{}, common.WarnOnConflict(ctx, r.Client.Update(ctx, existing))
 	}
 
@@ -81,7 +83,7 @@ func (r *ServiceAccountSubReconciler) buildServiceAccount(capsule *operatorv1alp
 		}
 	}
 
-	return &corev1.ServiceAccount{
+	sa := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        ServiceAccountName(capsule),
 			Namespace:   capsule.Namespace,
@@ -89,6 +91,17 @@ func (r *ServiceAccountSubReconciler) buildServiceAccount(capsule *operatorv1alp
 			Annotations: annotations,
 		},
 	}
+
+	// The ServiceAccount carries only the consensus-node (primary) pull secret as a
+	// default for any auxiliary pod running under this identity. The pod template
+	// (applyImagePullSecrets) is authoritative for the managed StatefulSet pods and
+	// already merges secrets from every enabled container (incl. Orbit-resolved Alloy),
+	// so there is no need to duplicate that resolution here.
+	if secrets := common.ImagePullSecretsFromVersion(capsule.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersion); len(secrets) > 0 {
+		sa.ImagePullSecrets = secrets
+	}
+
+	return sa
 }
 
 func (r *ServiceAccountSubReconciler) needsUpdate(existing, desired *corev1.ServiceAccount) bool {
@@ -108,5 +121,5 @@ func (r *ServiceAccountSubReconciler) needsUpdate(existing, desired *corev1.Serv
 			return true
 		}
 	}
-	return false
+	return !equality.Semantic.DeepEqual(existing.ImagePullSecrets, desired.ImagePullSecrets)
 }

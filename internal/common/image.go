@@ -59,6 +59,30 @@ func PullPolicyOrDefault(sv *operatorv1alpha1.SoftwareVersion, def corev1.PullPo
 	return def
 }
 
+// ImagePullSecretsFromVersion returns the ImagePullSecrets from a SoftwareVersion, or nil.
+func ImagePullSecretsFromVersion(sv *operatorv1alpha1.SoftwareVersion) []corev1.LocalObjectReference {
+	if sv == nil {
+		return nil
+	}
+	return sv.ImagePullSecrets
+}
+
+// MergeImagePullSecrets deduplicates LocalObjectReferences by name across multiple slices.
+func MergeImagePullSecrets(sources ...[]corev1.LocalObjectReference) []corev1.LocalObjectReference {
+	seen := map[string]struct{}{}
+	var merged []corev1.LocalObjectReference
+	for _, refs := range sources {
+		for _, ref := range refs {
+			if _, ok := seen[ref.Name]; ok {
+				continue
+			}
+			seen[ref.Name] = struct{}{}
+			merged = append(merged, ref)
+		}
+	}
+	return merged
+}
+
 // ParseImage splits a full OCI image reference "[[repo/]name[:tag]]" into its three components.
 // The last colon is only the tag separator if no slash follows (distinguishes tag from port).
 func ParseImage(image string) (repository, name, tag string) {
