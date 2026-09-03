@@ -34,10 +34,10 @@ This repository builds and releases several artifacts, all at the **same version
 
 | Artifact | Source | Published to | Description |
 |----------|--------|--------------|-------------|
-| **Operator** image | `cmd/main.go` | `ghcr.io/hashgraph/solo-operator` | The controller manager that reconciles the CRDs |
-| **UC sidecar** image | `cmd/uc/` | `ghcr.io/hashgraph/solo-operator-uc` | Upgrade-controller sidecar for the network upgrade flow ([docs](docs/uc/)) |
-| **beacon** image | `cmd/beacon/` | `ghcr.io/hashgraph/solo-operator-beacon` | HAPI control-plane CLI for privileged consensus-node upgrade transactions ([docs](docs/beacon/README.md)) |
-| **Helm chart** | `charts/solo-operator/` | `oci://ghcr.io/hashgraph/charts/solo-operator` | Deploys the operator (see [Installation](#operator-installation)) |
+| **Operator** image | `cmd/main.go` | `ghcr.io/hashgraph/solo-operator/solo-operator` | The controller manager that reconciles the CRDs |
+| **UC sidecar** image | `cmd/uc/` | `ghcr.io/hashgraph/solo-operator/uc` | Upgrade-controller sidecar for the network upgrade flow ([docs](docs/uc/)) |
+| **beacon** image | `cmd/beacon/` | `ghcr.io/hashgraph/solo-operator/beacon` | HAPI control-plane CLI for privileged consensus-node upgrade transactions ([docs](docs/beacon/README.md)) |
+| **Helm chart** | `charts/solo-operator/` | `oci://ghcr.io/hashgraph/solo-operator/solo-operator-chart` | Deploys the operator (see [Installation](#operator-installation)) |
 | **CRDs** subchart | `charts/solo-operator/charts/crds/` | bundled in the Helm chart | Generated CRD manifests, installed with the chart |
 
 ## Custom Resources
@@ -82,12 +82,12 @@ The Helm chart is published to two OCI registries on each release:
 
 | Registry | Chart URL |
 |----------|-----------|
-| GitHub Container Registry (GHCR, public) | `oci://ghcr.io/hashgraph/charts/solo-operator` |
-| JFrog Artifactory | `oci://artifacts.hashgraph.io/solo-operator-helm-release/solo-operator` |
+| GitHub Container Registry (GHCR, public) | `oci://ghcr.io/hashgraph/solo-operator/solo-operator-chart` |
+| JFrog Artifactory | `oci://artifacts.hashgraph.io/solo-operator-helm-release/solo-operator-chart` |
 
 ```shell
 # Install latest (add --version <x.y.z> to pin a release)
-helm install solo-operator oci://ghcr.io/hashgraph/charts/solo-operator \
+helm install solo-operator oci://ghcr.io/hashgraph/solo-operator/solo-operator-chart \
   --namespace solo-operator --create-namespace
 
 # Uninstall
@@ -128,9 +128,9 @@ versioning and release processes. Version increments are determined by the
 3. The workflow will:
    - Determine the next version using semantic-release
    - Create a release tag and GitHub release
-   - Build and publish container images to `ghcr.io/hashgraph/solo-operator` and `artifacts.hashgraph.io/solo-operator-docker-release/solo-operator`
-   - Build and publish the UC sidecar image to `ghcr.io/hashgraph/solo-operator-uc` (and the JFrog mirror) at the **same** version — the operator, Helm chart, and UC sidecar are released in lockstep
-   - Publish Helm chart to `oci://ghcr.io/hashgraph/charts/solo-operator` and `oci://artifacts.hashgraph.io/solo-operator-helm-release/solo-operator`
+   - Build and publish container images to `ghcr.io/hashgraph/solo-operator/solo-operator` and `artifacts.hashgraph.io/solo-operator-docker-release/solo-operator`
+   - Build and publish the UC sidecar image to `ghcr.io/hashgraph/solo-operator/uc` (and the JFrog mirror) at the **same** version — the operator, Helm chart, and UC sidecar are released in lockstep
+   - Publish Helm chart to `oci://ghcr.io/hashgraph/solo-operator/solo-operator-chart` and `oci://artifacts.hashgraph.io/solo-operator-helm-release/solo-operator-chart`
 
 ## Support
 

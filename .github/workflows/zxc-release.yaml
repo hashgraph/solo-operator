@@ -257,7 +257,7 @@ jobs:
         run: |
           set -euo pipefail
           helm push "${{ steps.package.outputs.path }}" \
-            "oci://ghcr.io/hashgraph/charts"
+            "oci://ghcr.io/hashgraph/solo-operator"
 
       - name: Helm Push (JFrog)
         if: ${{ !inputs.dry-run && inputs.jfrog-enabled }}
