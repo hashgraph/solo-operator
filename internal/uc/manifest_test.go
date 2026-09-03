@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/automa-saga/errx"
 )
 
 func TestParseInfraVersionsManifest(t *testing.T) {
@@ -65,6 +67,29 @@ provisioner:
 		_, err := parseInfraVersionsManifest(dir)
 		if err == nil {
 			t.Fatal("expected error for invalid YAML")
+		}
+	})
+
+	t.Run("symlink rejected", func(t *testing.T) {
+		dir := t.TempDir()
+		manifestDir := filepath.Join(dir, manifestsSubdir)
+		if err := os.MkdirAll(manifestDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		target := filepath.Join(t.TempDir(), "secret")
+		if err := os.WriteFile(target, []byte("top-secret"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, filepath.Join(manifestDir, infraVersionsFile)); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := parseInfraVersionsManifest(dir)
+		if err == nil {
+			t.Fatal("expected error for symlinked manifest, got nil")
+		}
+		if reason, _ := errx.ReasonOf(err); reason != ReasonConfigFileSymlink {
+			t.Fatalf("reason: got %q, want %q", reason, ReasonConfigFileSymlink)
 		}
 	})
 }

@@ -128,6 +128,8 @@ const (
 	ReasonConfigDirAbsent        errx.Reason = "ConfigDirAbsent"
 	ReasonConfigFileUnrecognised errx.Reason = "ConfigFileUnrecognised"
 	ReasonConfigFileIgnored      errx.Reason = "ConfigFileIgnored"
+	ReasonConfigFileSymlink      errx.Reason = "ConfigFileSymlink"
+	ReasonConfigFileTooLarge     errx.Reason = "ConfigFileTooLarge"
 	ReasonConfigCRCreateFailed   errx.Reason = "ConfigCRCreateFailed"
 	ReasonConfigCRGetFailed      errx.Reason = "ConfigCRGetFailed"
 	ReasonConfigCRFailed         errx.Reason = "ConfigCRFailed"

@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/automa-saga/errx"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -109,6 +111,32 @@ func TestDeployBlockNodesConfigCR_SelectsNodeVerbatim(t *testing.T) {
 	}
 }
 
+func TestDeployBlockNodesConfigCR_SymlinkRejected(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(target, []byte("top-secret"), 0o600); err != nil {
+		t.Fatalf("write symlink target: %v", err)
+	}
+	dir := filepath.Join(root, blockNodesSubdir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Symlink(target, filepath.Join(dir, "block-nodes-0.json")); err != nil {
+		t.Fatalf("create symlink: %v", err)
+	}
+
+	proxy := newProxyWithFakeClient(t, root)
+	proxy.cfg.CapsuleName = "node0"
+
+	_, err := proxy.deployBlockNodesConfigCR(context.Background(), testOperationID)
+	if err == nil {
+		t.Fatal("expected error for symlinked block-node config, got nil")
+	}
+	if reason, _ := errx.ReasonOf(err); reason != ReasonConfigFileSymlink {
+		t.Fatalf("reason: got %q, want %q", reason, ReasonConfigFileSymlink)
+	}
+}
+
 func TestDeployBlockNodesConfigCR_AbsentIsNoop(t *testing.T) {
 	proxy := newProxyWithFakeClient(t, t.TempDir()) // no block-nodes/ dir
 	proxy.cfg.CapsuleName = "node0"
@@ -183,6 +211,33 @@ func waitForCR(t *testing.T, client *fake.FakeDynamicClient, resGVR schema.Group
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for %s/%s to be created", resGVR.Resource, name)
+}
+
+// ── readFileNoFollow ───────────────────────────────────────────────────────────
+
+func TestReadFileNoFollow_RejectsSymlinkSwappedInAfterScan(t *testing.T) {
+	root := t.TempDir()
+	writeConfigFile(t, root, "application.properties", "[hedera]")
+	path := filepath.Join(root, configSubdir, "application.properties")
+
+	target := filepath.Join(t.TempDir(), "secret") // swapped in after the scan's Lstat check
+	if err := os.WriteFile(target, []byte("top-secret"), 0o600); err != nil {
+		t.Fatalf("write symlink target: %v", err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatalf("remove original: %v", err)
+	}
+	if err := os.Symlink(target, path); err != nil {
+		t.Fatalf("swap in symlink: %v", err)
+	}
+
+	_, err := readFileNoFollow(path)
+	if err == nil {
+		t.Fatal("expected error for symlink swapped in after scan, got nil")
+	}
+	if reason, _ := errx.ReasonOf(err); reason != ReasonConfigFileSymlink {
+		t.Fatalf("reason: got %q, want %q", reason, ReasonConfigFileSymlink)
+	}
 }
 
 // ── scanConfigFiles ────────────────────────────────────────────────────────────
@@ -274,6 +329,62 @@ func TestScanConfigFiles_ignoredFileSkipped(t *testing.T) {
 	}
 	if got[0].entry.kind != "ApplicationProperties" {
 		t.Errorf("kind: got %q, want ApplicationProperties", got[0].entry.kind)
+	}
+}
+
+func TestScanConfigFiles_symlinkRejected(t *testing.T) {
+	root := t.TempDir()
+	writeConfigFile(t, root, "application.properties", "[hedera]")
+
+	target := filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(target, []byte("top-secret"), 0o600); err != nil {
+		t.Fatalf("write symlink target: %v", err)
+	}
+	link := filepath.Join(root, configSubdir, "throttles.json")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("create symlink: %v", err)
+	}
+
+	_, err := scanConfigFiles(root)
+	if err == nil {
+		t.Fatal("expected error for symlinked config file, got nil")
+	}
+	if reason, _ := errx.ReasonOf(err); reason != ReasonConfigFileSymlink {
+		t.Fatalf("reason: got %q, want %q", reason, ReasonConfigFileSymlink)
+	}
+}
+
+func TestScanConfigFiles_rootFileSymlinkRejected(t *testing.T) {
+	root := t.TempDir()
+
+	target := filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(target, []byte("top-secret"), 0o600); err != nil {
+		t.Fatalf("write symlink target: %v", err)
+	}
+	link := filepath.Join(root, "settings.txt")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("create symlink: %v", err)
+	}
+
+	_, err := scanConfigFiles(root)
+	if err == nil {
+		t.Fatal("expected error for symlinked root file, got nil")
+	}
+	if reason, _ := errx.ReasonOf(err); reason != ReasonConfigFileSymlink {
+		t.Fatalf("reason: got %q, want %q", reason, ReasonConfigFileSymlink)
+	}
+}
+
+func TestScanConfigFiles_oversizedRejected(t *testing.T) {
+	root := t.TempDir()
+	writeConfigFile(t, root, "throttles.json", strings.Repeat("a", maxConfigFileSize+1))
+
+	_, err := scanConfigFiles(root)
+	if err == nil {
+		t.Fatal("expected error for oversized config file, got nil")
+	}
+	if reason, _ := errx.ReasonOf(err); reason != ReasonConfigFileTooLarge {
+		t.Fatalf("reason: got %q, want %q", reason, ReasonConfigFileTooLarge)
 	}
 }
 

@@ -96,6 +96,25 @@ func TestParseVersionFileIOError(t *testing.T) {
 	}
 }
 
+func TestParseVersionFileSymlinkRejected(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(target, []byte("VERSION=0.0.0\n"), 0o600); err != nil {
+		t.Fatalf("write symlink target: %v", err)
+	}
+	if err := os.Symlink(target, filepath.Join(root, versionFile)); err != nil {
+		t.Fatalf("create symlink: %v", err)
+	}
+
+	_, _, _, err := parseVersionFile(root)
+	if err == nil {
+		t.Fatal("expected error for symlinked VERSION file, got nil")
+	}
+	if reason, _ := errx.ReasonOf(err); reason != ReasonConfigFileSymlink {
+		t.Fatalf("reason: got %q, want %q", reason, ReasonConfigFileSymlink)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // versionFromOperationID
 // ---------------------------------------------------------------------------

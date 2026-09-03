@@ -96,6 +96,13 @@ func (r *NetworkUpgradeExecuteReconciler) WithNodeActiveAlertInterval(d time.Dur
 	return r
 }
 
+// WithAllowedRegistryHosts configures the SSRF allow-list enforced before any
+// registry is dialed. See registry.OCIChecker.AllowedHosts.
+func (r *NetworkUpgradeExecuteReconciler) WithAllowedRegistryHosts(hosts []string) *NetworkUpgradeExecuteReconciler {
+	r.Checker = registry.OCIChecker{AllowedHosts: hosts}
+	return r
+}
+
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeexecutes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeexecutes/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeexecutes/finalizers,verbs=update

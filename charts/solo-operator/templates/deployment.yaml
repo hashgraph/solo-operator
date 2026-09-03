@@ -49,6 +49,9 @@ spec:
             {{- with .Values.registry.order }}
             - --registry-order={{ . }}
             {{- end }}
+            {{- if .Values.registry.allowedHosts }}
+            - --allowed-registry-hosts={{ join "," .Values.registry.allowedHosts }}
+            {{- end }}
             {{- with .Values.controller.nodeActiveTimeout }}
             - --node-active-timeout={{ . }}
             {{- end }}

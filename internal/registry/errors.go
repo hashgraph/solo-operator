@@ -15,14 +15,17 @@ var (
 	// Transient: worth a retry / failover to another registry.
 	errRegistryAPI = errNS.NewType("registry_api_failed", errorx.Temporary())
 	errNoRegistry  = errNS.NewType("no_valid_registry")
+	// Terminal: the operator refuses to dial this host at all (SSRF guard).
+	errHostDenied = errNS.NewType("registry_host_denied")
 )
 
 const (
-	ReasonNoLayerHashes     errx.Reason = "NoLayerHashes"
-	ReasonLayerHashMismatch errx.Reason = "LayerHashMismatch"
-	ReasonImageRefInvalid   errx.Reason = "ImageRefInvalid"
-	ReasonDigestResolve     errx.Reason = "DigestResolveFailed"
-	ReasonImageRead         errx.Reason = "ImageReadFailed"
-	ReasonConfigRead        errx.Reason = "ConfigReadFailed"
-	ReasonNoValidRegistry   errx.Reason = "NoValidRegistry"
+	ReasonNoLayerHashes      errx.Reason = "NoLayerHashes"
+	ReasonLayerHashMismatch  errx.Reason = "LayerHashMismatch"
+	ReasonImageRefInvalid    errx.Reason = "ImageRefInvalid"
+	ReasonDigestResolve      errx.Reason = "DigestResolveFailed"
+	ReasonImageRead          errx.Reason = "ImageReadFailed"
+	ReasonConfigRead         errx.Reason = "ConfigReadFailed"
+	ReasonNoValidRegistry    errx.Reason = "NoValidRegistry"
+	ReasonRegistryHostDenied errx.Reason = "RegistryHostDenied"
 )

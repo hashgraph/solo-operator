@@ -4,11 +4,15 @@ package uc
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/automa-saga/errx"
@@ -25,6 +29,63 @@ import (
 // configSubdir is the subdirectory within the upgrade package that holds the
 // ConsensusConfig files (HIP-1496 §§ Package Directory Structure).
 const configSubdir = "data/config"
+
+const maxConfigFileSize = 1 << 20 // 1 MiB; CRs are stored in etcd, capped ~1.5MiB per object
+
+// rejectSymlink rejects path if mode (from Lstat, not Stat) is a symlink —
+// the upgrade package is untrusted, and following one could copy an arbitrary
+// file (e.g. the pod's ServiceAccount token) into a ConsensusConfig CR.
+func rejectSymlink(path string, mode fs.FileMode) error {
+	if mode&fs.ModeSymlink == 0 {
+		return nil
+	}
+	return errx.WithHints(
+		errx.WithReason(errPersist.New("config file %q is a symlink — refusing to read", path), ReasonConfigFileSymlink),
+		"Remove symlinks from the upgrade package; only regular files are accepted under data/config/",
+	)
+}
+
+// rejectOversized returns a terminal error if size exceeds maxConfigFileSize.
+func rejectOversized(path string, size int64) error {
+	if size <= maxConfigFileSize {
+		return nil
+	}
+	return errx.WithHints(
+		errx.WithReason(errPersist.New("config file %q is %d bytes, exceeds the %d byte limit", path, size, maxConfigFileSize), ReasonConfigFileTooLarge),
+		"Reduce the file size or split it before including it in the upgrade package",
+	)
+}
+
+// readFileNoFollow is os.ReadFile but O_NOFOLLOW, so a symlink is rejected
+// instead of silently followed; non-symlink errors are returned unwrapped.
+func readFileNoFollow(path string) ([]byte, error) {
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		if errors.Is(err, syscall.ELOOP) {
+			return nil, errx.WithHints(
+				errx.WithReason(errPersist.New("%q is a symlink — refusing to read", path), ReasonConfigFileSymlink),
+				"Remove symlinks from the upgrade package; only regular files are accepted",
+			)
+		}
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if err := rejectOversized(path, info.Size()); err != nil {
+		return nil, err
+	}
+	return io.ReadAll(f)
+}
+
+// isDecorated reports whether err already carries an errx reason.
+func isDecorated(err error) bool {
+	_, ok := errx.ReasonOf(err)
+	return ok
+}
 
 // kindEntry binds a package filename to its Kubernetes CR kind, GVR, and a
 // short name suffix used to derive the CR metadata.name.
@@ -129,6 +190,20 @@ func scanConfigFiles(upgradePath string) ([]scannedFile, error) {
 			continue
 		}
 		name := de.Name()
+		absPath := filepath.Join(configDir, name)
+		info, err := de.Info() // Lstat semantics: never follows a symlink
+		if err != nil {
+			return nil, errx.WithHints(
+				errx.WithReason(errPersist.Wrap(err, "stat %s", absPath), ReasonUpgradePathUnreadable),
+				"Confirm the upgrade package was extracted correctly and data/config/ is readable",
+			)
+		}
+		if err := rejectSymlink(absPath, info.Mode()); err != nil {
+			return nil, err
+		}
+		if err := rejectOversized(absPath, info.Size()); err != nil {
+			return nil, err
+		}
 		if _, skip := ignoredConfigFilenames[name]; skip {
 			logx.As().Info().Str("reason", ReasonConfigFileIgnored.String()).
 				Str("filename", name).Str("dir", configDir).
@@ -147,13 +222,14 @@ func scanConfigFiles(upgradePath string) ([]scannedFile, error) {
 				"Recognised filenames: "+strings.Join(knownConfigFilenames(), ", "),
 			)
 		}
-		files = append(files, scannedFile{absPath: filepath.Join(configDir, name), entry: entry})
+		files = append(files, scannedFile{absPath: absPath, entry: entry})
 	}
 
 	// Scan package-root files (log4j2.xml, settings.txt).
 	for _, name := range packageRootFiles {
 		path := filepath.Join(upgradePath, name)
-		if _, err := os.Stat(path); err != nil {
+		info, err := os.Lstat(path) // not Stat: don't follow a symlink
+		if err != nil {
 			if os.IsNotExist(err) {
 				continue // optional — not all packages include these files
 			}
@@ -161,6 +237,12 @@ func scanConfigFiles(upgradePath string) ([]scannedFile, error) {
 				errx.WithReason(errPersist.Wrap(err, "stat %s", path), ReasonUpgradePathUnreadable),
 				"Confirm the upgrade package was extracted correctly",
 			)
+		}
+		if err := rejectSymlink(path, info.Mode()); err != nil {
+			return nil, err
+		}
+		if err := rejectOversized(path, info.Size()); err != nil {
+			return nil, err
 		}
 		files = append(files, scannedFile{absPath: path, entry: configFileKinds[name]})
 	}
@@ -181,8 +263,11 @@ func configCRName(operationID string, entry kindEntry) string {
 // for cascade deletion. The file is read here, one CR at a time, so content is
 // never buffered across multiple files simultaneously.
 func buildConfigCR(cfg ProvisionerProxyConfig, operationID string, sf scannedFile) (*unstructured.Unstructured, error) {
-	data, err := os.ReadFile(sf.absPath)
+	data, err := readFileNoFollow(sf.absPath)
 	if err != nil {
+		if isDecorated(err) {
+			return nil, err
+		}
 		return nil, errx.WithHints(
 			errx.WithReason(errPersist.Wrap(err, "read config file %s", sf.absPath), ReasonUpgradePathUnreadable),
 			"Confirm the upgrade package was extracted correctly and the file is readable",
@@ -305,13 +390,29 @@ func (p *ProvisionerProxy) deployBlockNodesConfigCR(ctx context.Context, operati
 		return nil, nil
 	}
 	path := filepath.Join(p.cfg.UpgradePath, blockNodesSubdir, fmt.Sprintf("block-nodes-%d.json", p.cfg.NodeID))
-	data, err := os.ReadFile(path)
+	info, err := os.Lstat(path) // not Stat: don't follow a symlink
 	if err != nil {
 		if os.IsNotExist(err) {
 			logx.As().Info().Str("reason", ReasonConfigDirAbsent.String()).
 				Str("operation_id", operationID).Str("path", path).
 				Msg("no per-node block-node config in upgrade package — skipping")
 			return nil, nil
+		}
+		return nil, errx.WithHints(
+			errx.WithReason(errPersist.Wrap(err, "read block-node config %s", path), ReasonUpgradePathUnreadable),
+			"Confirm the upgrade package was extracted correctly and block-nodes/config/ is readable",
+		)
+	}
+	if err := rejectSymlink(path, info.Mode()); err != nil {
+		return nil, err
+	}
+	if err := rejectOversized(path, info.Size()); err != nil {
+		return nil, err
+	}
+	data, err := readFileNoFollow(path)
+	if err != nil {
+		if isDecorated(err) {
+			return nil, err
 		}
 		return nil, errx.WithHints(
 			errx.WithReason(errPersist.Wrap(err, "read block-node config %s", path), ReasonUpgradePathUnreadable),

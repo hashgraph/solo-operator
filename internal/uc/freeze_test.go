@@ -11,11 +11,31 @@ import (
 	"testing"
 	"time"
 
+	"github.com/automa-saga/errx"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
+
+func TestParseFreezeScheduledTimeSymlinkRejected(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(target, []byte("1234567890"), 0o600); err != nil {
+		t.Fatalf("write symlink target: %v", err)
+	}
+	if err := os.Symlink(target, filepath.Join(root, MarkerFreezeScheduled)); err != nil {
+		t.Fatalf("create symlink: %v", err)
+	}
+
+	_, err := parseFreezeScheduledTime(root)
+	if err == nil {
+		t.Fatal("expected error for symlinked freeze marker, got nil")
+	}
+	if reason, _ := errx.ReasonOf(err); reason != ReasonConfigFileSymlink {
+		t.Fatalf("reason: got %q, want %q", reason, ReasonConfigFileSymlink)
+	}
+}
 
 const wantFreezeName = wantConsensusNode + "-upgrade-0.75.0-20260413t120000z-freeze"
 

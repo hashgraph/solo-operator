@@ -49,10 +49,13 @@ type infraVersionEntry struct {
 // absence means no infra upgrade is declared.
 func parseInfraVersionsManifest(upgradePath string) (*infraVersionsManifest, error) {
 	path := filepath.Join(upgradePath, manifestsSubdir, infraVersionsFile)
-	data, err := os.ReadFile(path)
+	data, err := readFileNoFollow(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
+		}
+		if isDecorated(err) {
+			return nil, err
 		}
 		return nil, errx.WithHints(
 			errx.WithReason(errPersist.Wrap(err, "read infra-versions manifest %s", path), ReasonManifestReadFailed),
@@ -108,10 +111,11 @@ type componentsManifest struct {
 // known schemaVersion are silently ignored (sigs.k8s.io/yaml does not reject
 // them), per HIP-1494's backwards-compatibility rule.
 func parseComponentsManifest(path string) (*componentsManifest, error) {
-	data, err := os.ReadFile(path)
+	data, err := readFileNoFollow(path)
 	if err != nil {
-		// A read failure is transient — the file may not be fully written yet, or
-		// the volume may be briefly unavailable; the caller may retry next tick.
+		if isDecorated(err) {
+			return nil, err
+		}
 		return nil, errx.WithHints(
 			errx.WithReason(errPersist.Wrap(err, "read components manifest %s", path), ReasonManifestReadFailed),
 			"Confirm the consensus node extracted the package into --upgrade-path",

@@ -5,6 +5,7 @@ package registry
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http/httptest"
 	"net/url"
 	"testing"
@@ -188,7 +189,7 @@ func TestRemoteSource_DiffIDsAgainstInMemoryRegistry(t *testing.T) {
 		want[i] = operatorv1alpha1.Sha256Digest(h.String())
 	}
 
-	checker := OCIChecker{}
+	checker := OCIChecker{AllowedHosts: []string{mustHostname(t, host)}} // 127.0.0.1 is denied by default
 	det := operatorv1alpha1.UpgradeDeterministicSpec{
 		Supported:   true,
 		LayerHashes: map[string][]operatorv1alpha1.Sha256Digest{PlatformAMD64: want},
@@ -207,4 +208,13 @@ func mustHost(t *testing.T, raw string) string {
 		t.Fatalf("parse server url: %v", err)
 	}
 	return u.Host
+}
+
+func mustHostname(t *testing.T, hostPort string) string {
+	t.Helper()
+	h, _, err := net.SplitHostPort(hostPort)
+	if err != nil {
+		t.Fatalf("split host:port %q: %v", hostPort, err)
+	}
+	return h
 }

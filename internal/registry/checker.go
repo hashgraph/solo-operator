@@ -4,6 +4,7 @@ package registry
 
 import (
 	"context"
+	"net/http"
 	"slices"
 	"sync"
 
@@ -35,6 +36,8 @@ type imageSource interface {
 type OCIChecker struct {
 	Keychain authn.Keychain // defaults to authn.DefaultKeychain
 	src      imageSource    // defaults to a remote source
+
+	AllowedHosts []string // SSRF allow-list; empty denies only private/loopback hosts
 }
 
 func (c OCIChecker) source() imageSource {
@@ -45,11 +48,19 @@ func (c OCIChecker) source() imageSource {
 	if kc == nil {
 		kc = authn.DefaultKeychain
 	}
-	return remoteSource{keychain: kc}
+	// guardedTransport enforces the SSRF policy at connect time (see dialguard.go),
+	// authoritatively for DNS-resolved hosts and registry redirects alike.
+	return remoteSource{keychain: kc, transport: guardedTransport(c.AllowedHosts)}
 }
 
 func (c OCIChecker) Check(ctx context.Context, spec operatorv1alpha1.UpgradeRegistrySpec, deterministic operatorv1alpha1.UpgradeDeterministicSpec) RegistryResult {
 	res := RegistryResult{Image: spec.Image}
+
+	if err := checkHostAllowed(spec.Image, c.AllowedHosts); err != nil {
+		res.State = StateDenied
+		res.Err = err
+		return res
+	}
 
 	// non-deterministic components carry per-registry overrides instead of the global block
 	expected := deterministic.LayerHashes
@@ -95,7 +106,18 @@ func (c OCIChecker) Check(ctx context.Context, spec operatorv1alpha1.UpgradeRegi
 }
 
 type remoteSource struct {
-	keychain authn.Keychain
+	keychain  authn.Keychain
+	transport http.RoundTripper
+}
+
+// opts assembles the remote options shared by every registry call, including the
+// connect-time SSRF guard transport when one is configured.
+func (s remoteSource) opts(ctx context.Context) []remote.Option {
+	o := []remote.Option{remote.WithContext(ctx), remote.WithAuthFromKeychain(s.keychain)}
+	if s.transport != nil {
+		o = append(o, remote.WithTransport(s.transport))
+	}
+	return o
 }
 
 func (s remoteSource) Inspect(ctx context.Context, image string, platforms []string) (operatorv1alpha1.Sha256Digest, map[string][]operatorv1alpha1.Sha256Digest, error) {
@@ -106,7 +128,7 @@ func (s remoteSource) Inspect(ctx context.Context, image string, platforms []str
 			"Confirm the image reference is a valid registry/repository:tag",
 		)
 	}
-	opts := []remote.Option{remote.WithContext(ctx), remote.WithAuthFromKeychain(s.keychain)}
+	opts := s.opts(ctx)
 
 	desc, err := remote.Get(ref, opts...)
 	if err != nil {
@@ -145,7 +167,7 @@ func (s remoteSource) platformDiffIDs(ctx context.Context, ref name.Reference, p
 	if err != nil {
 		return nil, err
 	}
-	img, err := remote.Image(ref, remote.WithContext(ctx), remote.WithAuthFromKeychain(s.keychain), remote.WithPlatform(*plat))
+	img, err := remote.Image(ref, append(s.opts(ctx), remote.WithPlatform(*plat))...)
 	if err != nil {
 		return nil, errx.WithHints(
 			errx.WithReason(errRegistryAPI.Wrap(err, "reading %s image", platform), ReasonImageRead),
