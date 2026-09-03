@@ -108,7 +108,7 @@ jobs:
 
       - name: Install setup-envtest
         if: ${{ inputs.enable-integration-tests && !cancelled() && !failure() }}
-        run: go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+        run: go install sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.24.1
 
       - name: Integration Tests
         if: ${{ inputs.enable-integration-tests && !cancelled() && !failure() }}
@@ -169,7 +169,7 @@ jobs:
 
       - name: Install yq
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
-        run: go install github.com/mikefarah/yq/v4@latest
+        run: go install github.com/mikefarah/yq/v4@v4.53.6
 
       - name: Sync CRD Templates into Subchart
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}

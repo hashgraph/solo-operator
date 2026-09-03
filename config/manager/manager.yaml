@@ -23,7 +23,9 @@ spec:
           type: RuntimeDefault
       containers:
       - name: manager
-        image: controller:latest
+        # Placeholder name; config/manager/kustomization.yaml rewrites both the
+        # name and tag (images: -> newName/newTag) at build time.
+        image: controller
         imagePullPolicy: IfNotPresent
         args:
         - --leader-elect

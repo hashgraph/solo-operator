@@ -193,7 +193,7 @@ jobs:
           cache: true
 
       - name: Install yq
-        run: go install github.com/mikefarah/yq/v4@latest
+        run: go install github.com/mikefarah/yq/v4@v4.53.6
 
       - name: Setup Task
         uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0

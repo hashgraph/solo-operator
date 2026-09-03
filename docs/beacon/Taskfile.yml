@@ -60,7 +60,7 @@ vars:
       | awk '{print $1}'
   # kind cluster name (matches root Taskfile kind:* tasks).
   CLUSTER: solo-operator
-  UC_IMG_DEV: ghcr.io/hashgraph/solo-operator-uc:dev
+  UC_IMG_DEV: ghcr.io/hashgraph/solo-operator/uc:dev
   # beacon's network context: config.yaml + keys/ live here.
   BEACON_HOME: /tmp/beacon-solo
   BEACON: "{{.ROOT}}/bin/beacon"
@@ -132,7 +132,6 @@ tasks:
     desc: "Build the UC sidecar image, tag it :dev, and load it into kind (PullIfNotPresent needs it local)"
     cmds:
       - task: root:docker:build:uc
-      - docker tag ghcr.io/hashgraph/solo-operator-uc:latest {{.UC_IMG_DEV}}
       - kind load docker-image {{.UC_IMG_DEV}} --name {{.CLUSTER}}
   
   operator:

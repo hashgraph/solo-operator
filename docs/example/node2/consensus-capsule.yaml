@@ -140,12 +140,12 @@ spec:
         platformPollInterval: "1s"
         # The UC sidecar is the operator's own image; the operator provides no built-in
         # default, so it must be declared explicitly. The local dev flow builds and loads
-        # it into kind (task kind:load:uc, tag :latest); for production pin to the operator
+        # it into kind (task kind:load:uc, tag :dev); for production pin to the operator
         # version and a digest.
         softwareVersion:
-          repository: "ghcr.io/hashgraph"
-          imageName: "solo-operator-uc"
-          imageTag: "latest"
+          repository: "ghcr.io/hashgraph/solo-operator"
+          imageName: "uc"
+          imageTag: "dev"
           imagePullPolicy: IfNotPresent
 
       # Alloy enabled — scrapes Prometheus metrics at :9999.

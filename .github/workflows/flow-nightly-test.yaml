@@ -93,7 +93,7 @@ jobs:
           tags: localhost:5000/solo-operator:${{ env.VERSION }}
 
       - name: Install yq
-        run: go install github.com/mikefarah/yq/v4@latest
+        run: go install github.com/mikefarah/yq/v4@v4.53.6
 
       - name: Sync CRD Templates into Subchart
         run: task helm:sync-crds

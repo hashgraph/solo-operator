@@ -4,13 +4,16 @@ version: '3'
 
 vars:
   BINARY_NAME: manager
-  IMG: ghcr.io/hashgraph/solo-operator:latest
-  UC_IMG: ghcr.io/hashgraph/solo-operator-uc:latest
-  BEACON_IMG: ghcr.io/hashgraph/solo-operator-beacon:latest
+  # Local/dev images use the immutable-by-convention :dev tag (never :latest);
+  # they are built and kind-loaded, not consumed from a registry.
+  IMG: ghcr.io/hashgraph/solo-operator/solo-operator:dev
+  UC_IMG: ghcr.io/hashgraph/solo-operator/uc:dev
+  BEACON_IMG: ghcr.io/hashgraph/solo-operator/beacon:dev
   DEV_IMG: us-central1-docker.pkg.dev/hashsphere-development/solo-operator/solo-operator
   DEV_TAG: dev
   ENVTEST_K8S_VERSION: "1.32.0"
-  SETUP_ENVTEST_CMD: "go run sigs.k8s.io/controller-runtime/tools/setup-envtest@latest"
+  # Pinned to match sigs.k8s.io/controller-runtime in go.mod (v0.24.1).
+  SETUP_ENVTEST_CMD: "go run sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.24.1"
   COVERAGE_FILE: coverage.out
   COVERAGE_HTML: coverage.html
   # Build metadata injected into the shared github.com/automa-saga/version
@@ -339,11 +342,9 @@ tasks:
       - task helm:sync-rbac
       - task docker:build
       - task docker:build:uc
-      - docker tag {{.UC_IMG}} ghcr.io/hashgraph/solo-operator-uc:{{.VERSION}}
       - kind load docker-image {{.IMG}} --name {{.LOCAL_CLUSTER}}
       - kind load docker-image {{.UC_IMG}} --name {{.LOCAL_CLUSTER}}
-      - kind load docker-image ghcr.io/hashgraph/solo-operator-uc:{{.VERSION}} --name {{.LOCAL_CLUSTER}}
-      - helm upgrade --install solo-operator charts/solo-operator --namespace solo-operator --create-namespace --wait --timeout 120s --set image.tag=latest --set image.pullPolicy=Never
+      - helm upgrade --install solo-operator charts/solo-operator --namespace solo-operator --create-namespace --wait --timeout 120s --set image.tag=dev --set image.pullPolicy=Never
       - kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=solo-operator -n solo-operator --timeout=120s
       - echo ">> All done"
 
@@ -521,7 +522,7 @@ tasks:
       - task: kind:metallb
       - task: docker:build
       - kind load docker-image {{.IMG}} --name {{.NIGHTLY_CLUSTER}}
-      - helm upgrade --install solo-operator charts/solo-operator --namespace solo-operator --create-namespace --wait --timeout 120s --set image.tag=latest --set image.pullPolicy=Never
+      - helm upgrade --install solo-operator charts/solo-operator --namespace solo-operator --create-namespace --wait --timeout 120s --set image.tag=dev --set image.pullPolicy=Never
       - kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=solo-operator -n solo-operator --timeout=120s
       - task -d test/nightly deploy
       - echo "Nightly test passed"
@@ -529,7 +530,11 @@ tasks:
   tools:
     desc: Install required tools
     cmds:
-      - go install sigs.k8s.io/controller-tools/cmd/controller-gen@latest
-      - go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+      # Pinned (not @latest): controller-gen output must be deterministic so
+      # generated CRDs don't churn across Go toolchains / machines. v0.21.0
+      # matches the controller-gen.kubebuilder.io/version stamped in config/crd/bases
+      # and runs on Go 1.26.x. Bump deliberately, then re-run `task generate`.
+      - go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.21.0
+      - go install sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.24.1
       - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1
-      - go install github.com/mikefarah/yq/v4@latest
+      - go install github.com/mikefarah/yq/v4@v4.53.6

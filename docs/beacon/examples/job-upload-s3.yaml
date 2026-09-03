@@ -39,7 +39,7 @@ spec:
             - { name: work, mountPath: /work }
       containers:
         - name: beacon
-          image: ghcr.io/hashgraph/solo-operator-beacon:latest
+          image: ghcr.io/hashgraph/solo-operator/beacon:dev
           args:
             - "file"
             - "upload"

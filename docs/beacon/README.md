@@ -258,8 +258,7 @@ locally so the `PullIfNotPresent` sidecar finds it:
 ```bash
 cd "$ROOT"
 task docker:build:uc
-docker tag ghcr.io/hashgraph/solo-operator-uc:latest ghcr.io/hashgraph/solo-operator-uc:dev
-kind load docker-image ghcr.io/hashgraph/solo-operator-uc:dev --name solo-operator
+kind load docker-image ghcr.io/hashgraph/solo-operator/uc:dev --name solo-operator
 ```
 
 Deploy the network into namespace `solo-orbit`. For local beacon testing prefer
