@@ -119,8 +119,7 @@ jobs:
           push: true
           provenance: false
           tags: |
-            ${{ env.GH_OCI_REGISTRY }}/${{ env.GH_OCI_GROUP }}:${{ needs.release.outputs.version }}
-            ${{ env.GH_OCI_REGISTRY }}/${{ env.GH_OCI_GROUP }}:latest
+            ${{ env.GH_OCI_REGISTRY }}/${{ env.GH_OCI_GROUP }}/solo-operator:${{ needs.release.outputs.version }}
 
       - name: Build and Push Docker Image (JFrog)
         if: ${{ inputs.jfrog-enabled }}
@@ -132,7 +131,6 @@ jobs:
           provenance: false
           tags: |
             ${{ env.JF_OCI_REGISTRY }}/${{ env.JF_OCI_GROUP }}/solo-operator:${{ needs.release.outputs.version }}
-            ${{ env.JF_OCI_REGISTRY }}/${{ env.JF_OCI_GROUP }}/solo-operator:latest
 
       - name: Build and Push UC Image (GitHub)
         uses: step-security/docker-build-push-action@144392094f7fc3199dda455efe3b70dbea4b72a0 # v7.3.0
@@ -143,8 +141,7 @@ jobs:
           push: true
           provenance: false
           tags: |
-            ${{ env.GH_OCI_REGISTRY }}/hashgraph/solo-operator-uc:${{ needs.release.outputs.version }}
-            ${{ env.GH_OCI_REGISTRY }}/hashgraph/solo-operator-uc:latest
+            ${{ env.GH_OCI_REGISTRY }}/${{ env.GH_OCI_GROUP }}/uc:${{ needs.release.outputs.version }}
 
       - name: Build and Push UC Image (JFrog)
         if: ${{ inputs.jfrog-enabled }}
@@ -156,8 +153,7 @@ jobs:
           push: true
           provenance: false
           tags: |
-            ${{ env.JF_OCI_REGISTRY }}/${{ env.JF_OCI_GROUP }}/solo-operator-uc:${{ needs.release.outputs.version }}
-            ${{ env.JF_OCI_REGISTRY }}/${{ env.JF_OCI_GROUP }}/solo-operator-uc:latest
+            ${{ env.JF_OCI_REGISTRY }}/${{ env.JF_OCI_GROUP }}/uc:${{ needs.release.outputs.version }}
 
       - name: Build and Push beacon Image (GitHub)
         uses: step-security/docker-build-push-action@144392094f7fc3199dda455efe3b70dbea4b72a0 # v7.3.0
@@ -168,8 +164,7 @@ jobs:
           push: true
           provenance: false
           tags: |
-            ${{ env.GH_OCI_REGISTRY }}/hashgraph/solo-operator-beacon:${{ needs.release.outputs.version }}
-            ${{ env.GH_OCI_REGISTRY }}/hashgraph/solo-operator-beacon:latest
+            ${{ env.GH_OCI_REGISTRY }}/${{ env.GH_OCI_GROUP }}/beacon:${{ needs.release.outputs.version }}
 
       - name: Build and Push beacon Image (JFrog)
         if: ${{ inputs.jfrog-enabled }}
@@ -181,5 +176,4 @@ jobs:
           push: true
           provenance: false
           tags: |
-            ${{ env.JF_OCI_REGISTRY }}/${{ env.JF_OCI_GROUP }}/solo-operator-beacon:${{ needs.release.outputs.version }}
-            ${{ env.JF_OCI_REGISTRY }}/${{ env.JF_OCI_GROUP }}/solo-operator-beacon:latest
+            ${{ env.JF_OCI_REGISTRY }}/${{ env.JF_OCI_GROUP }}/beacon:${{ needs.release.outputs.version }}

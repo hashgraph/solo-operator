@@ -127,7 +127,7 @@ Reconciler implementations. Each CRD has a corresponding reconciler. Uses the su
 | `charts/solo-operator/templates/` | Deployment, Service, ServiceAccount, RBAC, ServiceMonitor |
 | `charts/solo-operator/charts/crds/` | CRD subchart — templates are generated, not hand-written |
 
-The chart is published to `oci://ghcr.io/hashgraph/charts/solo-operator` on every release.
+The chart is published to `oci://ghcr.io/hashgraph/solo-operator/solo-operator-chart` on every release.
 
 ### CI/CD
 

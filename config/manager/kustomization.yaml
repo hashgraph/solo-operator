@@ -6,5 +6,7 @@ resources:
 
 images:
 - name: controller
-  newName: ghcr.io/hashgraph/solo-operator
-  newTag: latest
+  newName: ghcr.io/hashgraph/solo-operator/solo-operator
+  # Releases are immutable and version-tagged (no :latest). Bump to the desired
+  # released version, or override with `kustomize edit set image` before deploy.
+  newTag: 0.5.0

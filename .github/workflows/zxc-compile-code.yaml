@@ -184,9 +184,10 @@ jobs:
         env:
           VERSION: 0.0.0-${{ github.sha }}
         run: |
-          # Package and install Helm chart
+          # Package and install Helm chart. helm package names the archive after
+          # the chart (name: solo-operator-chart), not the directory.
           helm package charts/solo-operator --version ${VERSION} --app-version ${VERSION}
-          helm upgrade solo-operator solo-operator-${VERSION}.tgz \
+          helm upgrade solo-operator solo-operator-chart-${VERSION}.tgz \
             -i -n solo-operator --create-namespace \
             --set image.repository=kind-registry:5000/solo-operator \
             --set image.tag=${VERSION}
