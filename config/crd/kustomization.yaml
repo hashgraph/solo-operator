@@ -4,6 +4,5 @@ kind: Kustomization
 resources:
 - bases/operator.solo.hiero.org_orbits.yaml
 - bases/operator.solo.hiero.org_consensuscapsules.yaml
-- bases/operator.solo.hiero.org_networkoperations.yaml
 - bases/operator.solo.hiero.org_haproxycapsules.yaml
 - bases/operator.solo.hiero.org_envoyproxies.yaml

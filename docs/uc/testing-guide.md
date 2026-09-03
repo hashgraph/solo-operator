@@ -1024,8 +1024,8 @@ spec:
     uc:
       enabled: true
       softwareVersion:
-        repository: ghcr.io/hashgraph
-        imageName:  solo-operator-uc
+        repository: ghcr.io/hashgraph/solo-operator
+        imageName:  uc
         imageTag:   "0.1.0"    # pin or omit to use the operator's own build version
 ```
 

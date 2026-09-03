@@ -18,7 +18,7 @@ spec:
         fsGroup: 65532
       containers:
         - name: beacon
-          image: ghcr.io/hashgraph/solo-operator-beacon:latest
+          image: ghcr.io/hashgraph/solo-operator/beacon:dev
           args:
             - "file"
             - "upload"

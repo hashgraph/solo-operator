@@ -76,8 +76,8 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       # Stamp the release version into both binaries so the operator's
-      # version.Version (and thus UCDefaultImage() -> solo-operator-uc:<version>)
-      # matches the UC image published below, keeping operator + UC in lockstep.
+      # version.Version matches the UC image (solo-operator/uc:<version>)
+      # published below, keeping operator + UC in lockstep.
       - name: Build Operator Binaries & Checksums
         run: task hash VERSION="${{ needs.release.outputs.version }}"
 

@@ -7,7 +7,7 @@ cluster-only mode it also advances the `Execute` CR from
 `ReadyForProvisionerDaemon` to `PendingNodeUpgrade`.
 
 It is released in lockstep with the operator as the
-`ghcr.io/hashgraph/solo-operator-uc` image (see the repository
+`ghcr.io/hashgraph/solo-operator/uc` image (see the repository
 [README](../../README.md#components)).
 
 ## Commands

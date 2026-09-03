@@ -20,7 +20,7 @@ version: '3'
 #   task build     # produce staging/build-v<base>.zip and staging/build-v<upgrade>.zip
 #
 # Tooling required for the UC manifest step: `crane` and `jq`.
-#   go install github.com/google/go-containerregistry/cmd/crane@latest
+#   go install github.com/google/go-containerregistry/cmd/crane@v0.22.0
 # -----------------------------------------------------------------------------
 
 vars:
@@ -133,7 +133,7 @@ tasks:
         OUT_DIR="{{ .OUT_DIR }}"
         MANIFEST="$OUT_DIR/consensus-node-components.yaml"
 
-        command -v crane >/dev/null 2>&1 || { err "crane not found — install: go install github.com/google/go-containerregistry/cmd/crane@latest"; exit 1; }
+        command -v crane >/dev/null 2>&1 || { err "crane not found — install: go install github.com/google/go-containerregistry/cmd/crane@v0.22.0"; exit 1; }
         command -v jq    >/dev/null 2>&1 || { err "jq not found — install jq"; exit 1; }
 
         info "Computing deterministic layer hashes for $IMAGE"
