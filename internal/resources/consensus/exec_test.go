@@ -6,8 +6,10 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 
+	"github.com/automa-saga/errx"
 	"github.com/joomcode/errorx"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -121,6 +123,32 @@ func TestS6Controller_TransportError_Retryable(t *testing.T) {
 	}
 	if !errorx.HasTrait(err, errorx.Temporary()) {
 		t.Error("transport error must be temporary (retryable)")
+	}
+}
+
+func TestS6Controller_Forbidden_RBACHint(t *testing.T) {
+	// The API server's 403 body as it arrives wrapped in a WebSocket upgrade error.
+	forbidden := errors.New(`unable to upgrade streaming request: pods "n-0" is forbidden: ` +
+		`User "system:serviceaccount:solo-operator:solo-operator" cannot get resource "pods/exec" in API group ""`)
+	c := newTestController(t, &fakeExecutor{streamErr: forbidden})
+	_, err := c.exec(context.Background(), testCapsule(), s6QueryCmd)
+	if err == nil {
+		t.Fatal("expected error on forbidden exec")
+	}
+	if reason, ok := errx.ReasonOf(err); !ok || reason != ReasonExecForbidden {
+		t.Errorf("expected reason %s, got %q (ok=%v)", ReasonExecForbidden, reason, ok)
+	}
+	hints, ok := errx.Hints(err)
+	if !ok || len(hints) == 0 {
+		t.Fatal("expected RBAC remediation hints")
+	}
+	if !strings.Contains(strings.Join(hints, " "), "pods/exec") {
+		t.Errorf("expected a pods/exec RBAC hint, got %v", hints)
+	}
+	// Forbidden is a config problem the controller recovers from once RBAC is
+	// fixed, so it stays retryable like the other transport failures.
+	if !errorx.HasTrait(err, errorx.Temporary()) {
+		t.Error("forbidden error must be temporary (retryable)")
 	}
 }
 

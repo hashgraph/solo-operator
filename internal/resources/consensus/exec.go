@@ -11,6 +11,7 @@ import (
 
 	"github.com/automa-saga/errx"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -121,7 +122,7 @@ func (c *S6Controller) exec(ctx context.Context, capsule *operatorv1alpha1.Conse
 	if err != nil {
 		return ExecResult{}, errx.WithHints(
 			errx.WithReason(errExecTransport.Wrap(err, "build exec stream for %s/%s", capsule.Namespace, podName), ReasonExecTransportFailed),
-			"Confirm the operator ServiceAccount has create on pods/exec",
+			"Verify the operator's in-cluster REST config is valid",
 		)
 	}
 
@@ -131,7 +132,8 @@ func (c *S6Controller) exec(ctx context.Context, capsule *operatorv1alpha1.Conse
 
 	if streamErr != nil {
 		// A non-zero command exit surfaces as exec.ExitError; anything else is a
-		// transport/stream failure (pod not ready, connection reset, rescheduling).
+		// transport/stream failure (RBAC forbidden, pod not ready, connection
+		// reset, rescheduling).
 		var exitErr exec.ExitError
 		if errors.As(streamErr, &exitErr) {
 			res.ExitCode = exitErr.ExitStatus()
@@ -140,12 +142,36 @@ func (c *S6Controller) exec(ctx context.Context, capsule *operatorv1alpha1.Conse
 				ReasonExecCommandFailed,
 			)
 		}
+		// The WebSocket exec transport upgrades via an HTTP GET, so the API server
+		// authorizes it against pods/exec with the `get` verb. A 403 here means the
+		// operator ServiceAccount is missing that rule — a distinct, RBAC-specific
+		// remediation from a pod that is merely not ready yet.
+		if isForbidden(streamErr) {
+			return res, errx.WithHints(
+				errx.WithReason(errExecTransport.Wrap(streamErr, "exec into %s/%s", capsule.Namespace, podName), ReasonExecForbidden),
+				"Grant the operator ServiceAccount the `get` verb on pods/exec "+
+					`(ClusterRole rule apiGroups:[""] resources:["pods/exec"] verbs:["get"])`,
+				"If installed via Helm, upgrade to a solo-operator chart whose RBAC includes the pods/exec get rule",
+			)
+		}
 		return res, errx.WithHints(
 			errx.WithReason(errExecTransport.Wrap(streamErr, "exec into %s/%s", capsule.Namespace, podName), ReasonExecTransportFailed),
 			"Verify the pod is Running and the consensus-node container is ready",
 		)
 	}
 	return res, nil
+}
+
+// isForbidden reports whether err is an API-server 403. The WebSocket exec
+// transport does not always surface a typed *apierrors.StatusError — an upgrade
+// failure arrives as a plain error whose message wraps the 403 body ("... is
+// forbidden: ... cannot get resource \"pods/exec\" ...") — so fall back to a
+// string check when the typed matcher misses.
+func isForbidden(err error) bool {
+	if apierrors.IsForbidden(err) {
+		return true
+	}
+	return strings.Contains(err.Error(), "forbidden")
 }
 
 type ActuationSubReconciler struct {
