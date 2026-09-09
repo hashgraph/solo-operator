@@ -8,10 +8,11 @@ import (
 
 // Reason codes for logx log events emitted by the subreconciler chain.
 const (
-	ReasonSubreconcilerSkipped errx.Reason = "SubreconcilerSkipped"
-	ReasonSubreconcilerRunning errx.Reason = "SubreconcilerRunning"
-	ReasonSubreconcilerFailed  errx.Reason = "SubreconcilerFailed"
-	ReasonSubreconcilerRequeue errx.Reason = "SubreconcilerRequeue"
-	ReasonResourceCreating     errx.Reason = "ResourceCreating"
-	ReasonResourceUpdating     errx.Reason = "ResourceUpdating"
+	ReasonSubreconcilerSkipped  errx.Reason = "SubreconcilerSkipped"
+	ReasonSubreconcilerRunning  errx.Reason = "SubreconcilerRunning"
+	ReasonSubreconcilerFailed   errx.Reason = "SubreconcilerFailed"
+	ReasonSubreconcilerConflict errx.Reason = "SubreconcilerConflict"
+	ReasonSubreconcilerRequeue  errx.Reason = "SubreconcilerRequeue"
+	ReasonResourceCreating      errx.Reason = "ResourceCreating"
+	ReasonResourceUpdating      errx.Reason = "ResourceUpdating"
 )
