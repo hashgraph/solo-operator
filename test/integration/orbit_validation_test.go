@@ -138,7 +138,7 @@ var _ = Describe("Orbit Invariants Validation", func() {
 					return ""
 				}
 				return err.Error()
-			}, timeout, interval).Should(ContainSubstring("must match namespace"))
+			}, timeout, interval).Should(ContainSubstring("must equal the target namespace"))
 		})
 
 		It("Admits ConsensusCapsule when spec.orbit matches metadata.namespace", func() {
@@ -193,7 +193,12 @@ var _ = Describe("Orbit Invariants Validation", func() {
 					return ""
 				}
 				return err.Error()
-			}, timeout, interval).Should(ContainSubstring("must match namespace"))
+			}, timeout, interval).Should(And(
+				ContainSubstring("spec.orbitRef.name (%s) must equal the target namespace (%s)", testNS2, testNS1),
+				// Regression guard: the remediation must reference spec.orbitRef.name,
+				// not spec.orbit, for a HelmCapsule (#1309 review).
+				ContainSubstring("set spec.orbitRef.name to the namespace"),
+			))
 		})
 
 		It("Admits HelmCapsule when spec.orbitRef.name matches metadata.namespace", func() {
@@ -229,7 +234,7 @@ var _ = Describe("Orbit Invariants Validation", func() {
 					return ""
 				}
 				return err.Error()
-			}, timeout, interval).Should(ContainSubstring("must match namespace"))
+			}, timeout, interval).Should(ContainSubstring("must equal the target namespace"))
 		})
 	})
 })
