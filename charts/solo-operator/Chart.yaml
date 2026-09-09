@@ -2,8 +2,8 @@ apiVersion: v2
 name: solo-operator-chart
 description: A Helm chart for the Hedera Solo Operator
 type: application
-version: 0.6.0
-appVersion: "0.6.0"
+version: 0.6.1
+appVersion: "0.6.1"
 kubeVersion: ">=1.32.0-0"
 keywords:
   - hedera
