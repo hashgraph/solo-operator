@@ -30,5 +30,5 @@ type RegistryResult struct {
 }
 
 type ImageChecker interface {
-	Check(ctx context.Context, spec operatorv1alpha1.UpgradeRegistrySpec, deterministic operatorv1alpha1.UpgradeDeterministicSpec) RegistryResult
+	Check(ctx context.Context, spec operatorv1alpha1.ImageRegistrySpec, deterministic operatorv1alpha1.ImageDeterministicSpec) RegistryResult
 }

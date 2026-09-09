@@ -260,9 +260,9 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 
 		BeforeEach(func() {
 			images := operatorv1alpha1.UpgradeImagesSpec{
-				ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+				ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 					Version:    "0.75.0",
-					Registries: []operatorv1alpha1.UpgradeRegistrySpec{{Image: "gcr.io/a/cn:0.75.0"}},
+					Registries: []operatorv1alpha1.ImageRegistrySpec{{Image: "gcr.io/a/cn:0.75.0"}},
 				},
 			}
 			selected = buildPrereqs(opID, nupName, nufName, images)
@@ -284,9 +284,9 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 					ConsensusNode:   "node0-happy",
 					SelectedSources: selected,
 					Images: operatorv1alpha1.UpgradeImagesSpec{
-						ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+						ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 							Version:    "0.75.0",
-							Registries: []operatorv1alpha1.UpgradeRegistrySpec{{Image: "gcr.io/a/cn:0.75.0"}},
+							Registries: []operatorv1alpha1.ImageRegistrySpec{{Image: "gcr.io/a/cn:0.75.0"}},
 						},
 					},
 				},
@@ -417,9 +417,9 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 
 		BeforeEach(func() {
 			images := operatorv1alpha1.UpgradeImagesSpec{
-				ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+				ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 					Version:    "0.75.0",
-					Registries: []operatorv1alpha1.UpgradeRegistrySpec{{Image: "gcr.io/a/cn:0.75.0"}},
+					Registries: []operatorv1alpha1.ImageRegistrySpec{{Image: "gcr.io/a/cn:0.75.0"}},
 				},
 			}
 			selected := buildPrereqs(opID, nupName, nufName, images)
@@ -441,9 +441,9 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 					ConsensusNode:   "node0-daemon-fail",
 					SelectedSources: selected,
 					Images: operatorv1alpha1.UpgradeImagesSpec{
-						ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+						ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 							Version:    "0.75.0",
-							Registries: []operatorv1alpha1.UpgradeRegistrySpec{{Image: "gcr.io/a/cn:0.75.0"}},
+							Registries: []operatorv1alpha1.ImageRegistrySpec{{Image: "gcr.io/a/cn:0.75.0"}},
 						},
 					},
 				},
@@ -513,9 +513,9 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 					OperationID:   opID,
 					ConsensusNode: "node0-no-prereqs",
 					Images: operatorv1alpha1.UpgradeImagesSpec{
-						ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+						ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 							Version:    "0.75.0",
-							Registries: []operatorv1alpha1.UpgradeRegistrySpec{{Image: "gcr.io/a/cn:0.75.0"}},
+							Registries: []operatorv1alpha1.ImageRegistrySpec{{Image: "gcr.io/a/cn:0.75.0"}},
 						},
 					},
 					SelectedSources: operatorv1alpha1.SelectedSources{
@@ -554,9 +554,9 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 
 		BeforeEach(func() {
 			images := operatorv1alpha1.UpgradeImagesSpec{
-				ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+				ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 					Version: "0.75.0",
-					Registries: []operatorv1alpha1.UpgradeRegistrySpec{
+					Registries: []operatorv1alpha1.ImageRegistrySpec{
 						{Image: "gcr.io/unreachable/cn:0.75.0"},
 						{Image: "gcr.io/valid/cn:0.75.0"},
 					},
@@ -660,9 +660,9 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 
 		BeforeEach(func() {
 			images := operatorv1alpha1.UpgradeImagesSpec{
-				ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+				ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 					Version:    "0.75.0",
-					Registries: []operatorv1alpha1.UpgradeRegistrySpec{{Image: "gcr.io/a/cn:0.75.0"}},
+					Registries: []operatorv1alpha1.ImageRegistrySpec{{Image: "gcr.io/a/cn:0.75.0"}},
 				},
 			}
 			selected := buildPrereqs(opID, nupName, nufName, images)
@@ -760,9 +760,9 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 
 		BeforeEach(func() {
 			images := operatorv1alpha1.UpgradeImagesSpec{
-				ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+				ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 					Version:    "0.75.0",
-					Registries: []operatorv1alpha1.UpgradeRegistrySpec{{Image: "gcr.io/a/cn:0.75.0"}},
+					Registries: []operatorv1alpha1.ImageRegistrySpec{{Image: "gcr.io/a/cn:0.75.0"}},
 				},
 			}
 			selected := buildPrereqs(opID, nupName, nufName, images)

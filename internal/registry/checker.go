@@ -53,7 +53,7 @@ func (c OCIChecker) source() imageSource {
 	return remoteSource{keychain: kc, transport: guardedTransport(c.AllowedHosts)}
 }
 
-func (c OCIChecker) Check(ctx context.Context, spec operatorv1alpha1.UpgradeRegistrySpec, deterministic operatorv1alpha1.UpgradeDeterministicSpec) RegistryResult {
+func (c OCIChecker) Check(ctx context.Context, spec operatorv1alpha1.ImageRegistrySpec, deterministic operatorv1alpha1.ImageDeterministicSpec) RegistryResult {
 	res := RegistryResult{Image: spec.Image}
 
 	if err := checkHostAllowed(spec.Image, c.AllowedHosts); err != nil {

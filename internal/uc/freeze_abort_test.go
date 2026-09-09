@@ -39,7 +39,7 @@ func writeAbortMarker(t *testing.T, root string) {
 func seedPrepareCR(t *testing.T, f *Factory, operationID, phase string) {
 	t.Helper()
 	cr, err := buildPrepareCR(f.cfg, operationID, operatorv1alpha1.UpgradeImagesSpec{
-		ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{Version: "0.75.0"},
+		ConsensusNode: operatorv1alpha1.ImageComponentSpec{Version: "0.75.0"},
 	})
 	if err != nil {
 		t.Fatalf("build prepare: %v", err)
@@ -97,7 +97,7 @@ func TestResolveOperationIDDiskFallback(t *testing.T) {
 	// No CR in-cluster, but a Prepare persisted on disk (crash window before its
 	// Create was acknowledged).
 	cr, err := buildPrepareCR(f.cfg, wantOperationID, operatorv1alpha1.UpgradeImagesSpec{
-		ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{Version: "0.75.0"},
+		ConsensusNode: operatorv1alpha1.ImageComponentSpec{Version: "0.75.0"},
 	})
 	if err != nil {
 		t.Fatalf("build: %v", err)
@@ -126,7 +126,7 @@ func TestResolveOperationIDDiskFallbackPicksMostRecentByTimestamp(t *testing.T) 
 	newer := wantConsensusNode + "-upgrade-0.75.0-20260413T120000Z" // lexically smaller, chronologically newer
 	for _, id := range []string{older, newer} {
 		cr, err := buildPrepareCR(f.cfg, id, operatorv1alpha1.UpgradeImagesSpec{
-			ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{Version: "x"},
+			ConsensusNode: operatorv1alpha1.ImageComponentSpec{Version: "x"},
 		})
 		if err != nil {
 			t.Fatalf("build %s: %v", id, err)

@@ -131,8 +131,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
-	strategy := registry.NewStrategy(r.StrategyName, rng)
-	common.Debug(ctx, ReasonRegistryStrategy).Str("strategy", strategy.Name()).Msg("registry iteration strategy")
+	common.Debug(ctx, ReasonRegistryStrategy).Str("defaultStrategy", r.StrategyName).Msg("registry iteration strategy default (per-component selectionStrategy overrides)")
 
 	selected := &operatorv1alpha1.SelectedSources{}
 	succeeded := true
@@ -151,7 +150,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 			continue
 		}
 
-		results := registry.CheckAll(ctx, r.Checker, comp, checkTimeout, strategy)
+		results, winner, ok := registry.SelectComponent(ctx, r.Checker, comp, checkTimeout, rng, r.StrategyName)
 
 		unreachable := 0
 		for _, res := range results {
@@ -189,20 +188,14 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 				"%s: %d/%d registries unreachable", name, unreachable, len(results))
 		}
 
-		winner, ok := registry.SelectValid(results, rng)
 		if !ok {
 			r.eventf(ctx, &prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
 				"%s: no valid registry available", name)
 			succeeded = false
 			continue
 		}
-		winnerSpec := registry.SpecForImage(comp, winner.Image)
-		selected.Set(name, &operatorv1alpha1.SelectedSource{
-			Image:               winner.Image,
-			Digest:              winner.Digest,
-			LayerHashesVerified: winner.LayerHashesVerified,
-			LayerHashes:         winnerSpec.LayerHashes,
-		})
+		src := registry.SelectedSourceFromWinner(comp, winner)
+		selected.Set(name, &src)
 		r.eventf(ctx, &prepare, corev1.EventTypeNormal, operatorv1alpha1.EventRegistrySelected,
 			"%s: selected %s (digest: %s, layerHashesVerified: %v)", name, winner.Image, winner.Digest, winner.LayerHashesVerified)
 	}

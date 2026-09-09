@@ -111,9 +111,9 @@ var _ = Describe("NetworkUpgradeFreezeAbort Controller", func() {
 					OperationID:   opID,
 					ConsensusNode: "node0-abort",
 					Images: operatorv1alpha1.UpgradeImagesSpec{
-						ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+						ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 							Version:    "0.75.0",
-							Registries: []operatorv1alpha1.UpgradeRegistrySpec{{Image: "gcr.io/a/cn:0.75.0"}},
+							Registries: []operatorv1alpha1.ImageRegistrySpec{{Image: "gcr.io/a/cn:0.75.0"}},
 						},
 					},
 					SelectedSources: operatorv1alpha1.SelectedSources{

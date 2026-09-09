@@ -17,7 +17,7 @@ const maxConcurrentChecks = 4
 func CheckAll(
 	ctx context.Context,
 	checker ImageChecker,
-	comp operatorv1alpha1.UpgradeComponentSpec,
+	comp operatorv1alpha1.ImageComponentSpec,
 	timeout time.Duration,
 	strategy IterationStrategy,
 ) []RegistryResult {
@@ -31,7 +31,7 @@ func CheckAll(
 
 	for i := range registries {
 		wg.Add(1)
-		go func(idx int, spec operatorv1alpha1.UpgradeRegistrySpec) {
+		go func(idx int, spec operatorv1alpha1.ImageRegistrySpec) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()

@@ -18,7 +18,7 @@ type fakeUpgradeChecker struct {
 	defaultDigest operatorv1alpha1.Sha256Digest
 }
 
-func (c fakeUpgradeChecker) Check(_ context.Context, spec operatorv1alpha1.UpgradeRegistrySpec, _ operatorv1alpha1.UpgradeDeterministicSpec) registry.RegistryResult {
+func (c fakeUpgradeChecker) Check(_ context.Context, spec operatorv1alpha1.ImageRegistrySpec, _ operatorv1alpha1.ImageDeterministicSpec) registry.RegistryResult {
 	d := c.digest
 	if d == "" {
 		d = c.defaultDigest

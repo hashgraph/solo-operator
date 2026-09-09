@@ -20,10 +20,10 @@ import (
 type fakeChecker struct {
 	mu   sync.Mutex
 	seen []string
-	fn   func(ctx context.Context, spec operatorv1alpha1.UpgradeRegistrySpec) RegistryResult
+	fn   func(ctx context.Context, spec operatorv1alpha1.ImageRegistrySpec) RegistryResult
 }
 
-func (c *fakeChecker) Check(ctx context.Context, spec operatorv1alpha1.UpgradeRegistrySpec, _ operatorv1alpha1.UpgradeDeterministicSpec) RegistryResult {
+func (c *fakeChecker) Check(ctx context.Context, spec operatorv1alpha1.ImageRegistrySpec, _ operatorv1alpha1.ImageDeterministicSpec) RegistryResult {
 	c.mu.Lock()
 	c.seen = append(c.seen, spec.Image)
 	c.mu.Unlock()
@@ -33,12 +33,12 @@ func (c *fakeChecker) Check(ctx context.Context, spec operatorv1alpha1.UpgradeRe
 	return RegistryResult{Image: spec.Image, State: StateValid}
 }
 
-func componentWith(n int) operatorv1alpha1.UpgradeComponentSpec {
-	regs := make([]operatorv1alpha1.UpgradeRegistrySpec, n)
+func componentWith(n int) operatorv1alpha1.ImageComponentSpec {
+	regs := make([]operatorv1alpha1.ImageRegistrySpec, n)
 	for i := range regs {
-		regs[i] = operatorv1alpha1.UpgradeRegistrySpec{Image: fmt.Sprintf("img-%d", i)}
+		regs[i] = operatorv1alpha1.ImageRegistrySpec{Image: fmt.Sprintf("img-%d", i)}
 	}
-	return operatorv1alpha1.UpgradeComponentSpec{Registries: regs}
+	return operatorv1alpha1.ImageComponentSpec{Registries: regs}
 }
 
 func newRNG(seed uint64) *rand.Rand {
@@ -60,7 +60,7 @@ func resultImages(results []RegistryResult) []string {
 // The first registry succeeding must not stop the rest from being checked.
 func TestCheckAll_NoEarlyExit(t *testing.T) {
 	checker := &fakeChecker{
-		fn: func(_ context.Context, spec operatorv1alpha1.UpgradeRegistrySpec) RegistryResult {
+		fn: func(_ context.Context, spec operatorv1alpha1.ImageRegistrySpec) RegistryResult {
 			// Everything "succeeds" — a naive early-exit impl would stop after one.
 			return RegistryResult{Image: spec.Image, State: StateValid}
 		},
@@ -91,7 +91,7 @@ func TestCheckAll_NoEarlyExit(t *testing.T) {
 func TestCheckAll_RecordsFailuresWithoutAborting(t *testing.T) {
 	boom := fmt.Errorf("unreachable")
 	checker := &fakeChecker{
-		fn: func(_ context.Context, spec operatorv1alpha1.UpgradeRegistrySpec) RegistryResult {
+		fn: func(_ context.Context, spec operatorv1alpha1.ImageRegistrySpec) RegistryResult {
 			if spec.Image == "img-2" {
 				return RegistryResult{Image: spec.Image, State: StateUnreachable, Err: boom}
 			}
@@ -147,7 +147,7 @@ func TestCheckAll_RandomisedOrder(t *testing.T) {
 // while fast siblings still succeed.
 func TestCheckAll_PerCheckTimeout(t *testing.T) {
 	checker := &fakeChecker{
-		fn: func(ctx context.Context, spec operatorv1alpha1.UpgradeRegistrySpec) RegistryResult {
+		fn: func(ctx context.Context, spec operatorv1alpha1.ImageRegistrySpec) RegistryResult {
 			if spec.Image == "img-1" {
 				<-ctx.Done() // never returns until the timeout fires
 				return RegistryResult{Image: spec.Image, State: StateUnreachable, Err: ctx.Err()}
@@ -179,7 +179,7 @@ func TestCheckAll_PerCheckTimeout(t *testing.T) {
 func TestCheckAll_RunsConcurrently(t *testing.T) {
 	const per = 80 * time.Millisecond
 	checker := &fakeChecker{
-		fn: func(ctx context.Context, spec operatorv1alpha1.UpgradeRegistrySpec) RegistryResult {
+		fn: func(ctx context.Context, spec operatorv1alpha1.ImageRegistrySpec) RegistryResult {
 			select {
 			case <-time.After(per):
 			case <-ctx.Done():

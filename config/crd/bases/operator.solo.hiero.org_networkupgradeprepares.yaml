@@ -61,11 +61,17 @@ spec:
                   Embedded in Prepare, Freeze and Execute specs so each CR is self-contained.
                 properties:
                   backupUploader:
+                    description: |-
+                      ImageComponentSpec is the registry-selection input for one component's image:
+                      the candidate registries, their expected layer hashes, and the iteration
+                      strategy. It is the shared model used by both first-time capsule deployment
+                      (converted from SoftwareVersionSource) and network upgrades, so the same
+                      selection + verification + digest-pinning engine serves both paths.
                     properties:
                       deterministic:
                         description: |-
-                          UpgradeDeterministicSpec carries layer hashes when Supported=true.
-                          When Supported=false, hashes live per-registry on UpgradeRegistrySpec instead.
+                          ImageDeterministicSpec carries layer hashes when Supported=true.
+                          When Supported=false, hashes live per-registry on ImageRegistrySpec instead.
                         properties:
                           layerHashes:
                             additionalProperties:
@@ -113,6 +119,16 @@ spec:
                           type: object
                         minItems: 1
                         type: array
+                      selectionStrategy:
+                        description: |-
+                          SelectionStrategy chooses the order this component's registries are probed
+                          in: "Sequential" honors the listed order (primary first, the rest as
+                          fallbacks); "Random" spreads pull traffic across registries. When unset it
+                          falls back to the operator's --registry-order default.
+                        enum:
+                        - Random
+                        - Sequential
+                        type: string
                       version:
                         type: string
                     required:
@@ -121,11 +137,17 @@ spec:
                     - version
                     type: object
                   blockStreamUploader:
+                    description: |-
+                      ImageComponentSpec is the registry-selection input for one component's image:
+                      the candidate registries, their expected layer hashes, and the iteration
+                      strategy. It is the shared model used by both first-time capsule deployment
+                      (converted from SoftwareVersionSource) and network upgrades, so the same
+                      selection + verification + digest-pinning engine serves both paths.
                     properties:
                       deterministic:
                         description: |-
-                          UpgradeDeterministicSpec carries layer hashes when Supported=true.
-                          When Supported=false, hashes live per-registry on UpgradeRegistrySpec instead.
+                          ImageDeterministicSpec carries layer hashes when Supported=true.
+                          When Supported=false, hashes live per-registry on ImageRegistrySpec instead.
                         properties:
                           layerHashes:
                             additionalProperties:
@@ -173,6 +195,16 @@ spec:
                           type: object
                         minItems: 1
                         type: array
+                      selectionStrategy:
+                        description: |-
+                          SelectionStrategy chooses the order this component's registries are probed
+                          in: "Sequential" honors the listed order (primary first, the rest as
+                          fallbacks); "Random" spreads pull traffic across registries. When unset it
+                          falls back to the operator's --registry-order default.
+                        enum:
+                        - Random
+                        - Sequential
+                        type: string
                       version:
                         type: string
                     required:
@@ -181,11 +213,17 @@ spec:
                     - version
                     type: object
                   consensusNode:
+                    description: |-
+                      ImageComponentSpec is the registry-selection input for one component's image:
+                      the candidate registries, their expected layer hashes, and the iteration
+                      strategy. It is the shared model used by both first-time capsule deployment
+                      (converted from SoftwareVersionSource) and network upgrades, so the same
+                      selection + verification + digest-pinning engine serves both paths.
                     properties:
                       deterministic:
                         description: |-
-                          UpgradeDeterministicSpec carries layer hashes when Supported=true.
-                          When Supported=false, hashes live per-registry on UpgradeRegistrySpec instead.
+                          ImageDeterministicSpec carries layer hashes when Supported=true.
+                          When Supported=false, hashes live per-registry on ImageRegistrySpec instead.
                         properties:
                           layerHashes:
                             additionalProperties:
@@ -233,6 +271,16 @@ spec:
                           type: object
                         minItems: 1
                         type: array
+                      selectionStrategy:
+                        description: |-
+                          SelectionStrategy chooses the order this component's registries are probed
+                          in: "Sequential" honors the listed order (primary first, the rest as
+                          fallbacks); "Random" spreads pull traffic across registries. When unset it
+                          falls back to the operator's --registry-order default.
+                        enum:
+                        - Random
+                        - Sequential
+                        type: string
                       version:
                         type: string
                     required:
@@ -241,11 +289,17 @@ spec:
                     - version
                     type: object
                   eventStreamUploader:
+                    description: |-
+                      ImageComponentSpec is the registry-selection input for one component's image:
+                      the candidate registries, their expected layer hashes, and the iteration
+                      strategy. It is the shared model used by both first-time capsule deployment
+                      (converted from SoftwareVersionSource) and network upgrades, so the same
+                      selection + verification + digest-pinning engine serves both paths.
                     properties:
                       deterministic:
                         description: |-
-                          UpgradeDeterministicSpec carries layer hashes when Supported=true.
-                          When Supported=false, hashes live per-registry on UpgradeRegistrySpec instead.
+                          ImageDeterministicSpec carries layer hashes when Supported=true.
+                          When Supported=false, hashes live per-registry on ImageRegistrySpec instead.
                         properties:
                           layerHashes:
                             additionalProperties:
@@ -293,6 +347,16 @@ spec:
                           type: object
                         minItems: 1
                         type: array
+                      selectionStrategy:
+                        description: |-
+                          SelectionStrategy chooses the order this component's registries are probed
+                          in: "Sequential" honors the listed order (primary first, the rest as
+                          fallbacks); "Random" spreads pull traffic across registries. When unset it
+                          falls back to the operator's --registry-order default.
+                        enum:
+                        - Random
+                        - Sequential
+                        type: string
                       version:
                         type: string
                     required:
@@ -301,11 +365,17 @@ spec:
                     - version
                     type: object
                   recordStreamUploader:
+                    description: |-
+                      ImageComponentSpec is the registry-selection input for one component's image:
+                      the candidate registries, their expected layer hashes, and the iteration
+                      strategy. It is the shared model used by both first-time capsule deployment
+                      (converted from SoftwareVersionSource) and network upgrades, so the same
+                      selection + verification + digest-pinning engine serves both paths.
                     properties:
                       deterministic:
                         description: |-
-                          UpgradeDeterministicSpec carries layer hashes when Supported=true.
-                          When Supported=false, hashes live per-registry on UpgradeRegistrySpec instead.
+                          ImageDeterministicSpec carries layer hashes when Supported=true.
+                          When Supported=false, hashes live per-registry on ImageRegistrySpec instead.
                         properties:
                           layerHashes:
                             additionalProperties:
@@ -353,6 +423,16 @@ spec:
                           type: object
                         minItems: 1
                         type: array
+                      selectionStrategy:
+                        description: |-
+                          SelectionStrategy chooses the order this component's registries are probed
+                          in: "Sequential" honors the listed order (primary first, the rest as
+                          fallbacks); "Random" spreads pull traffic across registries. When unset it
+                          falls back to the operator's --registry-order default.
+                        enum:
+                        - Random
+                        - Sequential
+                        type: string
                       version:
                         type: string
                     required:
@@ -361,11 +441,17 @@ spec:
                     - version
                     type: object
                   uc:
+                    description: |-
+                      ImageComponentSpec is the registry-selection input for one component's image:
+                      the candidate registries, their expected layer hashes, and the iteration
+                      strategy. It is the shared model used by both first-time capsule deployment
+                      (converted from SoftwareVersionSource) and network upgrades, so the same
+                      selection + verification + digest-pinning engine serves both paths.
                     properties:
                       deterministic:
                         description: |-
-                          UpgradeDeterministicSpec carries layer hashes when Supported=true.
-                          When Supported=false, hashes live per-registry on UpgradeRegistrySpec instead.
+                          ImageDeterministicSpec carries layer hashes when Supported=true.
+                          When Supported=false, hashes live per-registry on ImageRegistrySpec instead.
                         properties:
                           layerHashes:
                             additionalProperties:
@@ -413,6 +499,16 @@ spec:
                           type: object
                         minItems: 1
                         type: array
+                      selectionStrategy:
+                        description: |-
+                          SelectionStrategy chooses the order this component's registries are probed
+                          in: "Sequential" honors the listed order (primary first, the rest as
+                          fallbacks); "Random" spreads pull traffic across registries. When unset it
+                          falls back to the operator's --registry-order default.
+                        enum:
+                        - Random
+                        - Sequential
+                        type: string
                       version:
                         type: string
                     required:

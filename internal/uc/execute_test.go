@@ -68,7 +68,7 @@ func writeNowFrozenPackage(t *testing.T, componentsYAML string) string {
 func seedFreezeCR(t *testing.T, f *Factory, operationID string, phase operatorv1alpha1.Phase, selectedSources operatorv1alpha1.SelectedSources) {
 	t.Helper()
 	images := operatorv1alpha1.UpgradeImagesSpec{
-		ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{Version: "0.75.0"},
+		ConsensusNode: operatorv1alpha1.ImageComponentSpec{Version: "0.75.0"},
 	}
 	cr, err := buildFreezeCR(f.cfg, operationID, wantScheduledTime, images, selectedSources)
 	if err != nil {
@@ -137,7 +137,7 @@ func TestEnsureDigestsPinned(t *testing.T) {
 func TestBuildExecuteCR(t *testing.T) {
 	cfg := executeTestConfig(t.TempDir(), t.TempDir())
 	images := operatorv1alpha1.UpgradeImagesSpec{
-		ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{Version: "0.75.0"},
+		ConsensusNode: operatorv1alpha1.ImageComponentSpec{Version: "0.75.0"},
 	}
 	ss := operatorv1alpha1.SelectedSources{
 		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: pinnedImage, Digest: "sha256:pinned"},

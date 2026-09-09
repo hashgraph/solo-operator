@@ -27,22 +27,22 @@ var AllUpgradeComponents = []ComponentName{
 // UpgradeImagesSpec is the verbatim "images:" section of consensus-node-components.yaml.
 // Embedded in Prepare, Freeze and Execute specs so each CR is self-contained.
 type UpgradeImagesSpec struct {
-	ConsensusNode UpgradeComponentSpec `json:"consensusNode"`
+	ConsensusNode ImageComponentSpec `json:"consensusNode"`
 	// +optional
-	RecordStreamUploader *UpgradeComponentSpec `json:"recordStreamUploader,omitempty"`
+	RecordStreamUploader *ImageComponentSpec `json:"recordStreamUploader,omitempty"`
 	// +optional
-	EventStreamUploader *UpgradeComponentSpec `json:"eventStreamUploader,omitempty"`
+	EventStreamUploader *ImageComponentSpec `json:"eventStreamUploader,omitempty"`
 	// +optional
-	BlockStreamUploader *UpgradeComponentSpec `json:"blockStreamUploader,omitempty"`
+	BlockStreamUploader *ImageComponentSpec `json:"blockStreamUploader,omitempty"`
 	// +optional
-	BackupUploader *UpgradeComponentSpec `json:"backupUploader,omitempty"`
+	BackupUploader *ImageComponentSpec `json:"backupUploader,omitempty"`
 	// +optional
-	UC *UpgradeComponentSpec `json:"uc,omitempty"`
+	UC *ImageComponentSpec `json:"uc,omitempty"`
 }
 
 // Component returns the named component's spec and whether it is present. The
 // optional sidecar components report false when unset.
-func (s UpgradeImagesSpec) Component(name ComponentName) (UpgradeComponentSpec, bool) {
+func (s UpgradeImagesSpec) Component(name ComponentName) (ImageComponentSpec, bool) {
 	switch name {
 	case ComponentConsensusNode:
 		return s.ConsensusNode, true
@@ -57,18 +57,23 @@ func (s UpgradeImagesSpec) Component(name ComponentName) (UpgradeComponentSpec, 
 	case ComponentUC:
 		return derefComponent(s.UC)
 	default:
-		return UpgradeComponentSpec{}, false
+		return ImageComponentSpec{}, false
 	}
 }
 
-func derefComponent(c *UpgradeComponentSpec) (UpgradeComponentSpec, bool) {
+func derefComponent(c *ImageComponentSpec) (ImageComponentSpec, bool) {
 	if c == nil {
-		return UpgradeComponentSpec{}, false
+		return ImageComponentSpec{}, false
 	}
 	return *c, true
 }
 
-type UpgradeComponentSpec struct {
+// ImageComponentSpec is the registry-selection input for one component's image:
+// the candidate registries, their expected layer hashes, and the iteration
+// strategy. It is the shared model used by both first-time capsule deployment
+// (converted from SoftwareVersionSource) and network upgrades, so the same
+// selection + verification + digest-pinning engine serves both paths.
+type ImageComponentSpec struct {
 	Version string `json:"version"`
 
 	// Enabled=false means present-but-remove the sidecar from the consensus pod on execute.
@@ -76,22 +81,30 @@ type UpgradeComponentSpec struct {
 	// +kubebuilder:default=true
 	Enabled *bool `json:"enabled,omitempty"`
 
-	Deterministic UpgradeDeterministicSpec `json:"deterministic"`
+	Deterministic ImageDeterministicSpec `json:"deterministic"`
 
 	// +kubebuilder:validation:MinItems=1
-	Registries []UpgradeRegistrySpec `json:"registries"`
+	Registries []ImageRegistrySpec `json:"registries"`
+
+	// SelectionStrategy chooses the order this component's registries are probed
+	// in: "Sequential" honors the listed order (primary first, the rest as
+	// fallbacks); "Random" spreads pull traffic across registries. When unset it
+	// falls back to the operator's --registry-order default.
+	// +kubebuilder:validation:Enum=Random;Sequential
+	// +optional
+	SelectionStrategy string `json:"selectionStrategy,omitempty"`
 }
 
-// UpgradeDeterministicSpec carries layer hashes when Supported=true.
-// When Supported=false, hashes live per-registry on UpgradeRegistrySpec instead.
-type UpgradeDeterministicSpec struct {
+// ImageDeterministicSpec carries layer hashes when Supported=true.
+// When Supported=false, hashes live per-registry on ImageRegistrySpec instead.
+type ImageDeterministicSpec struct {
 	Supported bool `json:"supported"`
 	// Keyed by platform ("linux/amd64", "linux/arm64").
 	// +optional
 	LayerHashes map[string][]Sha256Digest `json:"layerHashes,omitempty"`
 }
 
-type UpgradeRegistrySpec struct {
+type ImageRegistrySpec struct {
 	// Image is a "registry[:port]/repository[:tag][@sha256:digest]" reference,
 	// e.g. "ghcr.io/hashgraph/consensus-node:0.75.0" or
 	// "registry.example.com:5000/consensus-node@sha256:<64 hex chars>".

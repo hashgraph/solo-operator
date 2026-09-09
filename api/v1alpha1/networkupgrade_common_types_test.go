@@ -4,13 +4,13 @@ package v1alpha1
 
 import "testing"
 
-func sidecar(version string) *UpgradeComponentSpec {
-	return &UpgradeComponentSpec{Version: version}
+func sidecar(version string) *ImageComponentSpec {
+	return &ImageComponentSpec{Version: version}
 }
 
 func TestUpgradeImagesSpec_Component(t *testing.T) {
 	images := UpgradeImagesSpec{
-		ConsensusNode:        UpgradeComponentSpec{Version: "cn"},
+		ConsensusNode:        ImageComponentSpec{Version: "cn"},
 		RecordStreamUploader: sidecar("rsu"),
 		EventStreamUploader:  sidecar("esu"),
 		BlockStreamUploader:  sidecar("bsu"),
@@ -44,7 +44,7 @@ func TestUpgradeImagesSpec_Component(t *testing.T) {
 
 func TestUpgradeImagesSpec_Component_AbsentSidecars(t *testing.T) {
 	// Only the required ConsensusNode is set; every optional sidecar is nil.
-	images := UpgradeImagesSpec{ConsensusNode: UpgradeComponentSpec{Version: "cn"}}
+	images := UpgradeImagesSpec{ConsensusNode: ImageComponentSpec{Version: "cn"}}
 
 	if _, present := images.Component(ComponentConsensusNode); !present {
 		t.Error("consensusNode should always be present")

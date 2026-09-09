@@ -69,7 +69,7 @@ func writeFreezePackage(t *testing.T, componentsYAML string, scheduledTime time.
 func seedSucceededPrepare(t *testing.T, f *Factory, operationID string, selectedSources *operatorv1alpha1.SelectedSources) {
 	t.Helper()
 	images := operatorv1alpha1.UpgradeImagesSpec{
-		ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{Version: "0.75.0"},
+		ConsensusNode: operatorv1alpha1.ImageComponentSpec{Version: "0.75.0"},
 	}
 	cr, err := buildPrepareCR(f.cfg, operationID, images)
 	if err != nil {
@@ -204,7 +204,7 @@ func TestHandleFreezeScheduledPrepareFailed(t *testing.T) {
 	f := newFakeFactory(t, testConfig(root, t.TempDir()))
 
 	images := operatorv1alpha1.UpgradeImagesSpec{
-		ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{Version: "0.75.0"},
+		ConsensusNode: operatorv1alpha1.ImageComponentSpec{Version: "0.75.0"},
 	}
 	cr, err := buildPrepareCR(f.cfg, wantOperationID, images)
 	if err != nil {

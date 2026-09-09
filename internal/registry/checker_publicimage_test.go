@@ -29,9 +29,9 @@ func skipIfUnreachable(t *testing.T, res RegistryResult) {
 
 // Verifies a real public image's layer hashes; skips when offline.
 func TestOCIChecker_PublicImage_Verifies(t *testing.T) {
-	det := operatorv1alpha1.UpgradeDeterministicSpec{Supported: true, LayerHashes: pauseHashes()}
+	det := operatorv1alpha1.ImageDeterministicSpec{Supported: true, LayerHashes: pauseHashes()}
 
-	res := OCIChecker{}.Check(context.Background(), operatorv1alpha1.UpgradeRegistrySpec{Image: publicImage}, det)
+	res := OCIChecker{}.Check(context.Background(), operatorv1alpha1.ImageRegistrySpec{Image: publicImage}, det)
 
 	skipIfUnreachable(t, res)
 	if res.State != StateValid || !res.LayerHashesVerified {
@@ -42,9 +42,9 @@ func TestOCIChecker_PublicImage_Verifies(t *testing.T) {
 func TestOCIChecker_PublicImage_DetectsTamper(t *testing.T) {
 	bad := pauseHashes()
 	bad[PlatformAMD64] = []operatorv1alpha1.Sha256Digest{"sha256:0000000000000000000000000000000000000000000000000000000000000000"}
-	det := operatorv1alpha1.UpgradeDeterministicSpec{Supported: true, LayerHashes: bad}
+	det := operatorv1alpha1.ImageDeterministicSpec{Supported: true, LayerHashes: bad}
 
-	res := OCIChecker{}.Check(context.Background(), operatorv1alpha1.UpgradeRegistrySpec{Image: publicImage}, det)
+	res := OCIChecker{}.Check(context.Background(), operatorv1alpha1.ImageRegistrySpec{Image: publicImage}, det)
 
 	skipIfUnreachable(t, res)
 	if res.State != StateHashMismatch {

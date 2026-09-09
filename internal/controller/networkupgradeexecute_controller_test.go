@@ -44,7 +44,7 @@ func newExecuteForTest() *operatorv1alpha1.NetworkUpgradeExecute {
 			OperationID:   "op-001",
 			ConsensusNode: "node0",
 			Images: operatorv1alpha1.UpgradeImagesSpec{
-				ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+				ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 					Version:    "0.75.0",
 					Registries: registriesFor("reg-a/cn:0.75.0", "reg-b/cn:0.75.0"),
 				},
@@ -294,7 +294,7 @@ func TestExecuteReconcile_InitializesStatus(t *testing.T) {
 		},
 		Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
 			Orbit: "test-orbit", OperationID: "op-001", ConsensusNode: "node0",
-			Images:          operatorv1alpha1.UpgradeImagesSpec{ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{Version: "0.75.0", Registries: registriesFor("reg-a/cn:0.75.0")}},
+			Images:          operatorv1alpha1.UpgradeImagesSpec{ConsensusNode: operatorv1alpha1.ImageComponentSpec{Version: "0.75.0", Registries: registriesFor("reg-a/cn:0.75.0")}},
 			SelectedSources: operatorv1alpha1.SelectedSources{ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest}},
 		},
 	}
@@ -1637,7 +1637,7 @@ func newExecuteWithImages(images operatorv1alpha1.UpgradeImagesSpec, selected op
 func TestApplyImagePatch_ConsensusNodeUpgrade(t *testing.T) {
 	execute := newExecuteWithImages(
 		operatorv1alpha1.UpgradeImagesSpec{
-			ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+			ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 				Version:    "0.75.0",
 				Registries: registriesFor("reg-a/cn:0.75.0"),
 			},
@@ -1683,7 +1683,7 @@ func TestApplyImagePatch_UnpinnedSourceErrors(t *testing.T) {
 	// deploy an unpinned (mutable-tag) image. This is the operator-layer digest check.
 	execute := newExecuteWithImages(
 		operatorv1alpha1.UpgradeImagesSpec{
-			ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+			ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 				Version:    "0.75.0",
 				Registries: registriesFor("reg-a/cn:0.75.0"),
 			},
@@ -1713,8 +1713,8 @@ func TestApplyImagePatch_UnpinnedSourceErrors(t *testing.T) {
 func TestApplyImagePatch_CheetahSidecar_Upgrade(t *testing.T) {
 	execute := newExecuteWithImages(
 		operatorv1alpha1.UpgradeImagesSpec{
-			ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{Version: "0.75.0", Registries: registriesFor("reg-a/cn:0.75.0")},
-			RecordStreamUploader: &operatorv1alpha1.UpgradeComponentSpec{
+			ConsensusNode: operatorv1alpha1.ImageComponentSpec{Version: "0.75.0", Registries: registriesFor("reg-a/cn:0.75.0")},
+			RecordStreamUploader: &operatorv1alpha1.ImageComponentSpec{
 				Version:    "1.0.0",
 				Enabled:    boolPtr(true),
 				Registries: registriesFor("reg-a/rsu:1.0.0"),
@@ -1753,8 +1753,8 @@ func TestApplyImagePatch_CheetahSidecar_Upgrade(t *testing.T) {
 func TestApplyImagePatch_CheetahSidecar_Remove(t *testing.T) {
 	execute := newExecuteWithImages(
 		operatorv1alpha1.UpgradeImagesSpec{
-			ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{Version: "0.75.0", Registries: registriesFor("reg-a/cn:0.75.0")},
-			RecordStreamUploader: &operatorv1alpha1.UpgradeComponentSpec{
+			ConsensusNode: operatorv1alpha1.ImageComponentSpec{Version: "0.75.0", Registries: registriesFor("reg-a/cn:0.75.0")},
+			RecordStreamUploader: &operatorv1alpha1.ImageComponentSpec{
 				Version: "1.0.0",
 				Enabled: boolPtr(false),
 			},
@@ -1786,8 +1786,8 @@ func TestApplyImagePatch_CheetahSidecar_Remove(t *testing.T) {
 func TestApplyImagePatch_StreamSidecar_Upgrade(t *testing.T) {
 	execute := newExecuteWithImages(
 		operatorv1alpha1.UpgradeImagesSpec{
-			ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{Version: "0.75.0", Registries: registriesFor("reg-a/cn:0.75.0")},
-			BackupUploader: &operatorv1alpha1.UpgradeComponentSpec{
+			ConsensusNode: operatorv1alpha1.ImageComponentSpec{Version: "0.75.0", Registries: registriesFor("reg-a/cn:0.75.0")},
+			BackupUploader: &operatorv1alpha1.ImageComponentSpec{
 				Version:    "2.0.0",
 				Enabled:    boolPtr(true),
 				Registries: registriesFor("reg-a/bu:2.0.0"),
@@ -1826,8 +1826,8 @@ func TestApplyImagePatch_StreamSidecar_Upgrade(t *testing.T) {
 func TestApplyImagePatch_StreamSidecar_Remove(t *testing.T) {
 	execute := newExecuteWithImages(
 		operatorv1alpha1.UpgradeImagesSpec{
-			ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{Version: "0.75.0", Registries: registriesFor("reg-a/cn:0.75.0")},
-			BackupUploader: &operatorv1alpha1.UpgradeComponentSpec{
+			ConsensusNode: operatorv1alpha1.ImageComponentSpec{Version: "0.75.0", Registries: registriesFor("reg-a/cn:0.75.0")},
+			BackupUploader: &operatorv1alpha1.ImageComponentSpec{
 				Version: "2.0.0",
 				Enabled: boolPtr(false),
 			},
@@ -1859,7 +1859,7 @@ func TestApplyImagePatch_StreamSidecar_Remove(t *testing.T) {
 func TestApplyImagePatch_OmittedSidecar_NoChange(t *testing.T) {
 	execute := newExecuteWithImages(
 		operatorv1alpha1.UpgradeImagesSpec{
-			ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{Version: "0.75.0", Registries: registriesFor("reg-a/cn:0.75.0")},
+			ConsensusNode: operatorv1alpha1.ImageComponentSpec{Version: "0.75.0", Registries: registriesFor("reg-a/cn:0.75.0")},
 			// RecordStreamUploader deliberately omitted
 		},
 		operatorv1alpha1.SelectedSources{

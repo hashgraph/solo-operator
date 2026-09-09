@@ -46,9 +46,9 @@ var _ = Describe("NetworkUpgradeFreeze Controller", func() {
 				Orbit:       ns,
 				OperationID: opID,
 				Images: operatorv1alpha1.UpgradeImagesSpec{
-					ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+					ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 						Version: "0.75.0",
-						Registries: []operatorv1alpha1.UpgradeRegistrySpec{
+						Registries: []operatorv1alpha1.ImageRegistrySpec{
 							{Image: "gcr.io/a/cn:0.75.0"},
 							{Image: "ghcr.io/b/cn:0.75.0"},
 						},
@@ -160,9 +160,9 @@ var _ = Describe("NetworkUpgradeFreeze Controller", func() {
 				Orbit:       ns,
 				OperationID: opID,
 				Images: operatorv1alpha1.UpgradeImagesSpec{
-					ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+					ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 						Version: "0.75.0",
-						Registries: []operatorv1alpha1.UpgradeRegistrySpec{
+						Registries: []operatorv1alpha1.ImageRegistrySpec{
 							{Image: "gcr.io/unreachable/cn:0.75.0"},
 							{Image: "ghcr.io/valid/cn:0.75.0"},
 						},
@@ -269,9 +269,9 @@ var _ = Describe("NetworkUpgradeFreeze Controller", func() {
 				Orbit:       ns,
 				OperationID: opID,
 				Images: operatorv1alpha1.UpgradeImagesSpec{
-					ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+					ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 						Version: "0.75.0",
-						Registries: []operatorv1alpha1.UpgradeRegistrySpec{
+						Registries: []operatorv1alpha1.ImageRegistrySpec{
 							{Image: "gcr.io/valid/cn:0.75.0"},
 						},
 					},
@@ -303,9 +303,9 @@ var _ = Describe("NetworkUpgradeFreeze Controller", func() {
 					OperationID:   opID,
 					ScheduledTime: metav1.Now(),
 					Images: operatorv1alpha1.UpgradeImagesSpec{
-						ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+						ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 							Version: "0.75.0",
-							Registries: []operatorv1alpha1.UpgradeRegistrySpec{
+							Registries: []operatorv1alpha1.ImageRegistrySpec{
 								{Image: "gcr.io/unreachable/cn:0.75.0"},
 							},
 						},
@@ -377,9 +377,9 @@ var _ = Describe("NetworkUpgradeFreeze Controller", func() {
 					Orbit:       ns,
 					OperationID: opID,
 					Images: operatorv1alpha1.UpgradeImagesSpec{
-						ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+						ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 							Version:    "0.75.0",
-							Registries: []operatorv1alpha1.UpgradeRegistrySpec{{Image: "gcr.io/a/cn:0.75.0"}},
+							Registries: []operatorv1alpha1.ImageRegistrySpec{{Image: "gcr.io/a/cn:0.75.0"}},
 						},
 					},
 				},
@@ -400,9 +400,9 @@ var _ = Describe("NetworkUpgradeFreeze Controller", func() {
 					OperationID:   opID,
 					ScheduledTime: metav1.Now(),
 					Images: operatorv1alpha1.UpgradeImagesSpec{
-						ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+						ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 							Version:    "0.75.0",
-							Registries: []operatorv1alpha1.UpgradeRegistrySpec{{Image: "gcr.io/a/cn:0.75.0"}},
+							Registries: []operatorv1alpha1.ImageRegistrySpec{{Image: "gcr.io/a/cn:0.75.0"}},
 						},
 					},
 					SelectedSources: operatorv1alpha1.SelectedSources{

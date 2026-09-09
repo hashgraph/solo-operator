@@ -21,7 +21,7 @@ type FailoverResult struct {
 func RevalidateAndFailover(
 	ctx context.Context,
 	checker ImageChecker,
-	comp operatorv1alpha1.UpgradeComponentSpec,
+	comp operatorv1alpha1.ImageComponentSpec,
 	current operatorv1alpha1.SelectedSource,
 	timeout time.Duration,
 	rng *rand.Rand,
@@ -37,10 +37,7 @@ func RevalidateAndFailover(
 		return FailoverResult{Selected: current}, nil
 	}
 
-	strategy := NewStrategy(strategyName, rng)
-	results := CheckAll(ctx, checker, comp, timeout, strategy)
-
-	winner, ok := SelectValid(results, rng)
+	_, winner, ok := SelectComponent(ctx, checker, comp, timeout, rng, strategyName)
 	if !ok {
 		return FailoverResult{}, errx.WithHints(
 			errx.WithReason(
@@ -52,32 +49,26 @@ func RevalidateAndFailover(
 		)
 	}
 
-	winnerSpec := SpecForImage(comp, winner.Image)
 	return FailoverResult{
-		Selected: operatorv1alpha1.SelectedSource{
-			Image:               winner.Image,
-			Digest:              winner.Digest,
-			LayerHashesVerified: winner.LayerHashesVerified,
-			LayerHashes:         winnerSpec.LayerHashes,
-		},
+		Selected:    SelectedSourceFromWinner(comp, winner),
 		DidFailover: true,
 		FailedImage: current.Image,
 	}, nil
 }
 
-func specForSource(comp operatorv1alpha1.UpgradeComponentSpec, current operatorv1alpha1.SelectedSource) operatorv1alpha1.UpgradeRegistrySpec {
+func specForSource(comp operatorv1alpha1.ImageComponentSpec, current operatorv1alpha1.SelectedSource) operatorv1alpha1.ImageRegistrySpec {
 	if len(current.LayerHashes) > 0 {
-		return operatorv1alpha1.UpgradeRegistrySpec{Image: current.Image, LayerHashes: current.LayerHashes}
+		return operatorv1alpha1.ImageRegistrySpec{Image: current.Image, LayerHashes: current.LayerHashes}
 	}
 	return SpecForImage(comp, current.Image)
 }
 
 // SpecForImage returns the registry spec for image, or a bare spec if not found.
-func SpecForImage(comp operatorv1alpha1.UpgradeComponentSpec, image string) operatorv1alpha1.UpgradeRegistrySpec {
+func SpecForImage(comp operatorv1alpha1.ImageComponentSpec, image string) operatorv1alpha1.ImageRegistrySpec {
 	for _, r := range comp.Registries {
 		if r.Image == image {
 			return r
 		}
 	}
-	return operatorv1alpha1.UpgradeRegistrySpec{Image: image}
+	return operatorv1alpha1.ImageRegistrySpec{Image: image}
 }
