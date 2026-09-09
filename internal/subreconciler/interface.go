@@ -5,6 +5,7 @@ package subreconciler
 import (
 	"context"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -92,6 +93,14 @@ func (c *Chain[T]) Reconcile(ctx context.Context, primary T) (ctrl.Result, error
 		common.Debug(ctx, ReasonSubreconcilerRunning).Str("subreconciler", sr.Name()).Msg("Running subreconciler")
 		result, err := sr.Reconcile(ctx, primary)
 		if err != nil {
+			// An optimistic-concurrency conflict (409) is expected and self-heals: the
+			// caller requeues and re-applies against the fresh object. WarnOnConflict
+			// already logged a WRN at the source, so don't escalate the same event to ERR
+			// here — that would trip error-rate alerting on a benign, routine outcome.
+			if apierrors.IsConflict(err) {
+				common.Debug(ctx, ReasonSubreconcilerConflict).Str("subreconciler", sr.Name()).Msg("Subreconciler hit update conflict; will requeue")
+				return result, err
+			}
 			common.Err(ctx, err, ReasonSubreconcilerFailed).Str("subreconciler", sr.Name()).Msg("Subreconciler failed")
 			return result, err
 		}
