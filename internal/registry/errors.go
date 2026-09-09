@@ -17,6 +17,10 @@ var (
 	errNoRegistry  = errNS.NewType("no_valid_registry")
 	// Terminal: the operator refuses to dial this host at all (SSRF guard).
 	errHostDenied = errNS.NewType("registry_host_denied")
+	// Transient: reading a pull secret from the API server may be retried.
+	errPullSecret = errNS.NewType("pull_secret_read_failed", errorx.Temporary())
+	// Terminal: a pull secret is present but its dockerconfigjson cannot be parsed.
+	errPullSecretParse = errNS.NewType("pull_secret_parse_failed")
 )
 
 const (
@@ -28,4 +32,6 @@ const (
 	ReasonConfigRead         errx.Reason = "ConfigReadFailed"
 	ReasonNoValidRegistry    errx.Reason = "NoValidRegistry"
 	ReasonRegistryHostDenied errx.Reason = "RegistryHostDenied"
+	ReasonPullSecretRead     errx.Reason = "PullSecretReadFailed"
+	ReasonPullSecretParse    errx.Reason = "PullSecretParseFailed"
 )
