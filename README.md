@@ -40,6 +40,17 @@ This repository builds and releases several artifacts, all at the **same version
 | **Helm chart** | `charts/solo-operator/` | `oci://ghcr.io/hashgraph/solo-operator/solo-operator-chart` | Deploys the operator (see [Installation](#operator-installation)) |
 | **CRDs** subchart | `charts/solo-operator/charts/crds/` | bundled in the Helm chart | Generated CRD manifests, installed with the chart |
 
+Notes on how artifacts are published:
+
+- **JFrog mirror.** The three images and the Helm chart are also published to JFrog
+  Artifactory: images to `artifacts.hashgraph.io/solo-operator-docker-release/{solo-operator,uc,beacon}`
+  and the chart to `oci://artifacts.hashgraph.io/solo-operator-helm-release/solo-operator-chart`.
+- **Immutable, version-tagged.** Every image and chart is tagged only by its release
+  version (e.g. `:0.6.0`) — there is **no `:latest`** tag. Always pin an explicit version.
+- **CRD manifests as release assets.** The generated CRD schemas (`config/crd/bases/*.yaml`)
+  are attached to each [GitHub release](https://github.com/hashgraph/solo-operator/releases)
+  in addition to being bundled in the Helm chart.
+
 ## Custom Resources
 
 | Resource | Scope | Description |
@@ -94,14 +105,16 @@ helm install solo-operator oci://ghcr.io/hashgraph/solo-operator/solo-operator-c
 helm uninstall solo-operator --namespace solo-operator
 ```
 
-### Kubernetes Manifest
+### CRD manifests (release assets)
+
+The operator itself is installed via the Helm chart above — no standalone operator
+Deployment manifest is published. Each [GitHub release](https://github.com/hashgraph/solo-operator/releases)
+does attach the generated **CRD schemas** (`config/crd/bases/*.yaml`) as individual assets,
+which you can apply directly if you manage CRDs out-of-band from the chart (`crds.install=false`):
 
 ```shell
-# Install latest (swap `latest/download` for `download/vX.Y.Z` to pin a release)
-kubectl apply -f https://github.com/hashgraph/solo-operator/releases/latest/download/deployment.yml
-
-# Uninstall
-kubectl delete -f https://github.com/hashgraph/solo-operator/releases/latest/download/deployment.yml
+# Apply a specific CRD from a pinned release (repeat per CRD, or loop the release assets)
+kubectl apply -f https://github.com/hashgraph/solo-operator/releases/download/vX.Y.Z/operator.solo.hiero.org_orbits.yaml
 ```
 
 ## Getting Started
@@ -127,10 +140,10 @@ versioning and release processes. Version increments are determined by the
 2. Execute the [Release: Deploy Artifact](https://github.com/hashgraph/solo-operator/actions/workflows/flow-release-deploy-artifact.yaml) workflow.
 3. The workflow will:
    - Determine the next version using semantic-release
-   - Create a release tag and GitHub release
-   - Build and publish container images to `ghcr.io/hashgraph/solo-operator/solo-operator` and `artifacts.hashgraph.io/solo-operator-docker-release/solo-operator`
-   - Build and publish the UC sidecar image to `ghcr.io/hashgraph/solo-operator/uc` (and the JFrog mirror) at the **same** version — the operator, Helm chart, and UC sidecar are released in lockstep
-   - Publish Helm chart to `oci://ghcr.io/hashgraph/solo-operator/solo-operator-chart` and `oci://artifacts.hashgraph.io/solo-operator-helm-release/solo-operator-chart`
+   - Create a release tag and GitHub release, attaching the CRD manifests (`config/crd/bases/*.yaml`) as assets
+   - Build and publish the **operator**, **UC sidecar**, and **beacon** images — to `ghcr.io/hashgraph/solo-operator/{solo-operator,uc,beacon}` and mirrored to `artifacts.hashgraph.io/solo-operator-docker-release/{solo-operator,uc,beacon}`
+   - Publish the Helm chart to `oci://ghcr.io/hashgraph/solo-operator/solo-operator-chart` and `oci://artifacts.hashgraph.io/solo-operator-helm-release/solo-operator-chart`
+   - All images and the chart are tagged with the **same release version** (no `:latest`) — operator, UC sidecar, beacon, and chart are released in lockstep
 
 ## Support
 
