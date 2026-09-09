@@ -13,6 +13,11 @@ const (
 	// (pod not found/ready, or transport error).
 	ReasonExecTransportFailed errx.Reason = "ExecTransportFailed"
 
+	// ReasonExecForbidden: the API server rejected the pods/exec request with a
+	// 403. The WebSocket exec transport authorizes against pods/exec with the
+	// `get` verb; a forbidden here means the operator ServiceAccount lacks it.
+	ReasonExecForbidden errx.Reason = "ExecForbidden"
+
 	// ReasonExecCommandFailed: the s6 command exited non-zero.
 	ReasonExecCommandFailed errx.Reason = "ExecCommandFailed"
 )
