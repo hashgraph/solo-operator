@@ -121,13 +121,18 @@ spec:
         )
     - name: targetNamespace
       expression: "has(object.metadata.namespace) && object.metadata.namespace != '' ? object.metadata.namespace : request.namespace"
+    - name: fieldName
+      expression: "request.kind.kind == 'HelmCapsule' ? 'spec.orbitRef.name' : 'spec.orbit'"
   validations:
     - expression: "variables.effectiveOrbit == variables.targetNamespace"
       reason: Invalid
       messageExpression: >-
-        (request.kind.kind == 'HelmCapsule' ? 'spec.orbitRef.name ' : 'spec.orbit ') +
-        (variables.effectiveOrbit == '' ? '<unset>' : variables.effectiveOrbit) +
-        ' must match namespace ' + variables.targetNamespace
+        variables.fieldName + ' ' +
+        (variables.effectiveOrbit == '' ? 'is unset but must' : '(' + variables.effectiveOrbit + ') must') +
+        ' equal the target namespace (' + variables.targetNamespace + '); ' +
+        (variables.effectiveOrbit == '' ?
+          'both are derived from the target namespace — this usually means --namespace was empty or omitted' :
+          'set ' + variables.fieldName + ' to the namespace or move the resource to namespace ' + variables.effectiveOrbit)
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
