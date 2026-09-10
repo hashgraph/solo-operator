@@ -35,13 +35,17 @@ type NetworkUpgradePrepareReconciler struct {
 
 	// StrategyName is the --registry-order flag value; "" or unknown → Random.
 	StrategyName string
+
+	// AllowedRegistryHosts is the --allowed-registry-hosts SSRF allow-list. It is
+	// applied to the per-reconcile OCIChecker built with a namespace-derived keychain
+	// (see namespaceRegistryChecker), so verification pulls can reach private registries.
+	AllowedRegistryHosts []string
 }
 
 func NewNetworkUpgradePrepareReconciler(c client.Client, scheme *runtime.Scheme) *NetworkUpgradePrepareReconciler {
 	return &NetworkUpgradePrepareReconciler{
-		Client:  c,
-		Scheme:  scheme,
-		Checker: registry.OCIChecker{},
+		Client: c,
+		Scheme: scheme,
 	}
 }
 
@@ -53,7 +57,7 @@ func (r *NetworkUpgradePrepareReconciler) WithStrategy(name string) *NetworkUpgr
 // WithAllowedRegistryHosts configures the SSRF allow-list enforced before any
 // registry is dialed. See registry.OCIChecker.AllowedHosts.
 func (r *NetworkUpgradePrepareReconciler) WithAllowedRegistryHosts(hosts []string) *NetworkUpgradePrepareReconciler {
-	r.Checker = registry.OCIChecker{AllowedHosts: hosts}
+	r.AllowedRegistryHosts = hosts
 	return r
 }
 
@@ -63,6 +67,8 @@ func (r *NetworkUpgradePrepareReconciler) WithAllowedRegistryHosts(hosts []strin
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=consensuscapsules,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 
 func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var prepare operatorv1alpha1.NetworkUpgradePrepare
@@ -133,6 +139,13 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	common.Debug(ctx, ReasonRegistryStrategy).Str("defaultStrategy", r.StrategyName).Msg("registry iteration strategy default (per-component selectionStrategy overrides)")
 
+	// Build the image checker with a keychain derived from the namespace's ConsensusCapsule
+	// pull secrets, so verification pulls can reach private/authenticated registries.
+	checker, err := namespaceRegistryChecker(ctx, r.Client, r.Checker, prepare.Namespace, r.AllowedRegistryHosts)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	selected := &operatorv1alpha1.SelectedSources{}
 	succeeded := true
 	allHashesValid := true
@@ -150,7 +163,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 			continue
 		}
 
-		results, winner, ok := registry.SelectComponent(ctx, r.Checker, comp, checkTimeout, rng, r.StrategyName)
+		results, winner, ok := registry.SelectComponent(ctx, checker, comp, checkTimeout, rng, r.StrategyName)
 
 		unreachable := 0
 		for _, res := range results {
@@ -777,9 +790,9 @@ func (r *NetworkUpgradePrepareReconciler) SetupWithManager(mgr ctrl.Manager) err
 	if r.Recorder == nil {
 		r.Recorder = mgr.GetEventRecorder("networkupgradeprepare")
 	}
-	if r.Checker == nil {
-		r.Checker = registry.OCIChecker{}
-	}
+	// r.Checker is left nil in production: the reconcile builds a checker per namespace
+	// with a keychain from the ConsensusCapsule pull secrets (namespaceRegistryChecker).
+	// Tests inject a non-nil r.Checker to bypass that.
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.NetworkUpgradePrepare{}).
 		Owns(&batchv1.Job{}).
