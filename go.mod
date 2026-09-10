@@ -10,7 +10,7 @@ require (
 	github.com/automa-saga/logx v0.5.1
 	github.com/automa-saga/version v1.0.1
 	github.com/go-logr/logr v1.4.4
-	github.com/google/go-containerregistry v0.22.0
+	github.com/google/go-containerregistry v0.22.1
 	github.com/hiero-ledger/hiero-sdk-go/v2 v2.84.0
 	github.com/joomcode/errorx v1.2.0
 	github.com/onsi/ginkgo/v2 v2.32.1
@@ -22,7 +22,7 @@ require (
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.12.1
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78
-	golang.org/x/sync v0.22.0
+	golang.org/x/sync v0.23.0
 	golang.org/x/term v0.45.0
 	google.golang.org/protobuf v1.36.12
 	helm.sh/helm/v3 v3.21.4
@@ -30,7 +30,7 @@ require (
 	k8s.io/apiextensions-apiserver v0.37.0
 	k8s.io/apimachinery v0.37.0
 	k8s.io/client-go v0.37.0
-	sigs.k8s.io/controller-runtime v0.24.1
+	sigs.k8s.io/controller-runtime v0.25.0
 	sigs.k8s.io/yaml v1.6.0
 )
 
