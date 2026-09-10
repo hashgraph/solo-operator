@@ -288,18 +288,21 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 		return ctrl.Result{}, nil
 	}
 
-	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingInfraUpgrade
+	// DaemonResult=True is a positive handoff, but the phase advance is the
+	// daemon's to make (HIP-1496): only the host-side provisioner daemon exists
+	// across the infra teardown/reinstall window, so it — not the operator —
+	// writes PendingInfraUpgrade (the durable pre-teardown checkpoint) and
+	// PendingNodeUpgrade (post-reinstall). The operator must not race it. We only
+	// record observedGeneration and wait for the daemon to advance status.phase,
+	// at which point the top-level switch dispatches to the matching handler.
 	execute.Status.ObservedGeneration = execute.Generation
 	if err := r.Status().Update(ctx, execute); err != nil {
 		if apierrors.IsConflict(err) {
 			return ctrl.Result{Requeue: true}, nil
 		}
-		return ctrl.Result{}, wrapStatusUpdate(err, "advancing to PendingInfraUpgrade")
+		return ctrl.Result{}, wrapStatusUpdate(err, "updating status")
 	}
-	r.logPhaseElapsed(ctx, execute, string(operatorv1alpha1.ExecutePhasePendingInfraUpgrade))
-	r.eventf(ctx, execute, corev1.EventTypeNormal, operatorv1alpha1.EventPendingInfraUpgrade,
-		"provisioner daemon succeeded; advancing to PendingInfraUpgrade for operationId %q", execute.Spec.OperationID)
-	return ctrl.Result{Requeue: true}, nil
+	return ctrl.Result{RequeueAfter: ucfg.DaemonRequeueInterval}, nil
 }
 
 func (r *NetworkUpgradeExecuteReconciler) reconcilePendingInfraUpgrade(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (ctrl.Result, error) {
@@ -312,26 +315,16 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingInfraUpgrade(ctx conte
 		return ctrl.Result{}, err
 	}
 
+	// The daemon owns the PendingInfraUpgrade → PendingNodeUpgrade transition
+	// (HIP-1496): after reinstalling the cluster it sets ConfigCRsApplied=True and
+	// advances status.phase to PendingNodeUpgrade itself. The operator only waits
+	// here — it must not write the phase and race the daemon across the teardown
+	// window. CondConfigCRsApplied is surfaced for observability while we wait.
 	cond := findCondition(execute.Status.Conditions, operatorv1alpha1.CondConfigCRsApplied)
 	if cond == nil || cond.Status != metav1.ConditionTrue {
 		common.Info(ctx, ReasonWaitingForConfigCRsApplied).Msg("waiting for daemon to set CondConfigCRsApplied=True")
-		return ctrl.Result{RequeueAfter: ucfg.PrereqRequeueInterval}, nil
 	}
-
-	now := metav1.Now()
-	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
-	execute.Status.NodeUpgradeStartTime = &now
-	execute.Status.ObservedGeneration = execute.Generation
-	if err := r.Status().Update(ctx, execute); err != nil {
-		if apierrors.IsConflict(err) {
-			return ctrl.Result{Requeue: true}, nil
-		}
-		return ctrl.Result{}, wrapStatusUpdate(err, "advancing to PendingNodeUpgrade")
-	}
-	r.logPhaseElapsed(ctx, execute, string(operatorv1alpha1.ExecutePhasePendingNodeUpgrade))
-	r.eventf(ctx, execute, corev1.EventTypeNormal, operatorv1alpha1.EventPendingNodeUpgrade,
-		"daemon applied config CRs; advancing to PendingNodeUpgrade for operationId %q", execute.Spec.OperationID)
-	return ctrl.Result{Requeue: true}, nil
+	return ctrl.Result{RequeueAfter: ucfg.PrereqRequeueInterval}, nil
 }
 
 func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (ctrl.Result, error) {
@@ -345,6 +338,23 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 	}
 	if capsule == nil {
 		return ctrl.Result{RequeueAfter: ucfg.NodeReadyRequeueInterval}, nil
+	}
+
+	// The daemon (not the operator) advances status.phase to PendingNodeUpgrade,
+	// so record the node-upgrade start on first observation of this phase — it is
+	// an operator-side metric the daemon does not write.
+	if execute.Status.NodeUpgradeStartTime == nil {
+		now := metav1.Now()
+		execute.Status.NodeUpgradeStartTime = &now
+		execute.Status.ObservedGeneration = execute.Generation
+		if err := r.Status().Update(ctx, execute); err != nil {
+			if apierrors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
+			return ctrl.Result{}, wrapStatusUpdate(err, "recording node upgrade start time")
+		}
+		r.logPhaseElapsed(ctx, execute, string(operatorv1alpha1.ExecutePhasePendingNodeUpgrade))
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	infraAccess, err := r.requiresInfraAccess(ctx, execute, capsule)

@@ -106,6 +106,14 @@ const (
 	// ProvisionerProxyConfig.ConfigCRPollInterval is zero (unset). Prefer
 	// setting ConfigCRPollInterval via --config-cr-poll-interval / UC_CONFIG_CR_POLL_INTERVAL.
 	configCRPollInterval = 1 * time.Second
+
+	// provisionerHandoffDeadline is the total wall-clock budget for the provisioner
+	// handoff, measured from when the CR entered ReadyForProvisionerDaemon (its
+	// status.startTime), across all retries. When it is exceeded the proxy writes
+	// DaemonResult=False (reason DeadlineExceeded) so a stuck-transient operation
+	// terminates rather than hanging — HIP-1496 termination guarantee. It must
+	// exceed configCRDeployTimeout so at least one full attempt fits inside it.
+	provisionerHandoffDeadline = 60 * time.Minute
 )
 
 func gvr(resource string) schema.GroupVersionResource {

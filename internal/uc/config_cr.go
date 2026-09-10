@@ -40,7 +40,7 @@ func rejectSymlink(path string, mode fs.FileMode) error {
 		return nil
 	}
 	return errx.WithHints(
-		errx.WithReason(errPersist.New("config file %q is a symlink — refusing to read", path), ReasonConfigFileSymlink),
+		errx.WithReason(errConfigFileInvalid.New("config file %q is a symlink — refusing to read", path), ReasonConfigFileSymlink),
 		"Remove symlinks from the upgrade package; only regular files are accepted under data/config/",
 	)
 }
@@ -51,7 +51,7 @@ func rejectOversized(path string, size int64) error {
 		return nil
 	}
 	return errx.WithHints(
-		errx.WithReason(errPersist.New("config file %q is %d bytes, exceeds the %d byte limit", path, size, maxConfigFileSize), ReasonConfigFileTooLarge),
+		errx.WithReason(errConfigFileInvalid.New("config file %q is %d bytes, exceeds the %d byte limit", path, size, maxConfigFileSize), ReasonConfigFileTooLarge),
 		"Reduce the file size or split it before including it in the upgrade package",
 	)
 }
@@ -63,7 +63,7 @@ func readFileNoFollow(path string) ([]byte, error) {
 	if err != nil {
 		if errors.Is(err, syscall.ELOOP) {
 			return nil, errx.WithHints(
-				errx.WithReason(errPersist.New("%q is a symlink — refusing to read", path), ReasonConfigFileSymlink),
+				errx.WithReason(errConfigFileInvalid.New("%q is a symlink — refusing to read", path), ReasonConfigFileSymlink),
 				"Remove symlinks from the upgrade package; only regular files are accepted",
 			)
 		}
@@ -217,7 +217,7 @@ func scanConfigFiles(upgradePath string) ([]scannedFile, error) {
 				Strs("recognised", knownConfigFilenames()).
 				Msg("unrecognised config filename — aborting execute phase")
 			return nil, errx.WithHints(
-				errx.WithReason(errPersist.New("unrecognised config filename %q in %s", name, configDir), ReasonConfigFileUnrecognised),
+				errx.WithReason(errConfigFileInvalid.New("unrecognised config filename %q in %s", name, configDir), ReasonConfigFileUnrecognised),
 				"Remove or rename the unrecognised file from data/config/ in the upgrade package",
 				"Recognised filenames: "+strings.Join(knownConfigFilenames(), ", "),
 			)

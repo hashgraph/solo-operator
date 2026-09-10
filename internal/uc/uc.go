@@ -82,6 +82,7 @@ func New(cfg Config) (*UC, error) {
 				Orbit:                 cfg.Orbit,
 				ConfigCRPollInterval:  cfg.ConfigCRPollInterval,
 				ConfigCRDeployTimeout: cfg.ConfigCRDeployTimeout,
+				HandoffDeadline:       cfg.HandoffDeadline,
 			},
 			client)
 		outcomeMonitor.mu.Lock()

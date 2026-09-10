@@ -320,6 +320,11 @@ const (
 	ReasonDaemonFileHashMismatch   errx.Reason = "FileHashMismatch"
 	ReasonDaemonInfraUpgradeFailed errx.Reason = "InfraUpgradeFailed"
 	ReasonDaemonSelfUpgradeFailed  errx.Reason = "SelfUpgradeFailed"
+	// ReasonDaemonDeadlineExceeded is written as the DaemonResult=False reason when
+	// the provisioner's retry budget (anchored to when the CR entered
+	// ReadyForProvisionerDaemon) is exhausted — HIP-1496 Provisioner Failure
+	// Semantics termination guarantee.
+	ReasonDaemonDeadlineExceeded errx.Reason = "DeadlineExceeded"
 )
 
 // Event reasons posted on NetworkUpgrade* CRs.
