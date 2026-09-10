@@ -342,6 +342,9 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 					LastTransitionTime: metav1.Now(),
 				},
 			)
+			// Per HIP-1496 the provisioner (not the operator) advances the phase on
+			// a successful handoff; simulate that alongside the conditions.
+			got.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
 			Expect(k8sClient.Status().Update(ctx, got)).To(Succeed())
 
 			By("expecting PendingNodeUpgrade or beyond")
@@ -380,6 +383,9 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 					LastTransitionTime: metav1.Now(),
 				},
 			)
+			// Per HIP-1496 the provisioner (not the operator) advances the phase on
+			// a successful handoff; simulate that alongside the conditions.
+			got.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
 			Expect(k8sClient.Status().Update(ctx, got)).To(Succeed())
 
 			By("driving the consensus node to ACTIVE on the post-upgrade revision")
@@ -627,6 +633,9 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 					LastTransitionTime: metav1.Now(),
 				},
 			)
+			// Per HIP-1496 the provisioner (not the operator) advances the phase on
+			// a successful handoff; simulate that alongside the conditions.
+			got.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
 			Expect(k8sClient.Status().Update(ctx, got)).To(Succeed())
 
 			By("waiting for RegistrySelected=True after failover")
@@ -724,6 +733,9 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 					LastTransitionTime: metav1.Now(),
 				},
 			)
+			// Per HIP-1496 the provisioner (not the operator) advances the phase on
+			// a successful handoff; simulate that alongside the conditions.
+			got.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
 			Expect(k8sClient.Status().Update(ctx, got)).To(Succeed())
 
 			By("waiting for ConsensusCapsulePatched condition")
@@ -813,6 +825,9 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 					LastTransitionTime: metav1.Now(),
 				},
 			)
+			// Per HIP-1496 the provisioner (not the operator) advances the phase on
+			// a successful handoff; simulate that alongside the conditions.
+			got.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
 			Expect(k8sClient.Status().Update(ctx, got)).To(Succeed())
 
 			By("driving the consensus node to ACTIVE on the post-upgrade revision")
