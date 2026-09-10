@@ -61,9 +61,8 @@ type ProvisionerProxyConfig struct {
 	// per-node block-node config file (block-nodes/config/block-nodes-<NodeID>.json).
 	NodeID int
 	// CapsuleName is the owning ConsensusCapsule name (derived from the pod name).
-	// The per-node BlockNodesConfig CR is created at the stable name
-	// "<CapsuleName>-block-nodes" so the capsule can reference it via a static
-	// spec.blockNodesConfigRef (config refs are not patched during upgrade).
+	// When empty, this UC instance is not bound to a node and per-node
+	// BlockNodesConfig deployment is skipped.
 	CapsuleName string
 	// UpgradePath is the root of the extracted upgrade package
 	// (data/upgrade/current). The proxy scans <UpgradePath>/data/config/ and
