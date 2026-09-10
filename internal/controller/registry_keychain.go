@@ -4,6 +4,7 @@ package controller
 
 import (
 	"context"
+	"sort"
 
 	"github.com/automa-saga/errx"
 	corev1 "k8s.io/api/core/v1"
@@ -46,6 +47,13 @@ func namespacePullSecretRefs(ctx context.Context, c client.Client, namespace str
 			"Confirm the operator has list permission on ConsensusCapsules",
 		)
 	}
+	// c.List does not guarantee an order, so sort capsules by name before collecting.
+	// MergeImagePullSecrets dedupes "first ref for a name wins" and the keychain applies
+	// refs in order ("first secret for a host wins"); a stable input order makes both
+	// deterministic across reconciles.
+	sort.Slice(capsules.Items, func(i, j int) bool {
+		return capsules.Items[i].GetName() < capsules.Items[j].GetName()
+	})
 	var groups [][]corev1.LocalObjectReference
 	for i := range capsules.Items {
 		groups = append(groups, capsulePullSecretGroups(&capsules.Items[i])...)
