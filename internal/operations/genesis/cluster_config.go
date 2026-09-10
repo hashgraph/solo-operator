@@ -5,6 +5,7 @@ package genesis
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -49,6 +50,9 @@ func CollectPodIPs(ctx context.Context, c client.Client, namespace string) ([]st
 			ips = append(ips, pod.Status.PodIP)
 		}
 	}
+	// c.List does not guarantee an order; sort so the derived pod-ips ConfigMap content
+	// is deterministic for the same set of pods (avoids spurious rewrites).
+	sort.Strings(ips)
 	return ips, nil
 }
 

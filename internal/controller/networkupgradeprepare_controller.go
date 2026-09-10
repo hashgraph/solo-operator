@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand/v2"
+	"sort"
 	"time"
 
 	"github.com/automa-saga/errx"
@@ -427,6 +428,10 @@ func (r *NetworkUpgradePrepareReconciler) resolvePrefetchTargets(
 	capsules []operatorv1alpha1.ConsensusCapsule,
 	maxNodes int32,
 ) []prefetchTargetEntry {
+	// c.List does not guarantee an order; sort by name so the derived prefetch targets —
+	// and the union of tolerations placed on each Job pod spec (unionTolerations) — are
+	// deterministic for the same set of capsules.
+	sort.Slice(capsules, func(i, j int) bool { return capsules[i].GetName() < capsules[j].GetName() })
 	if t, ok := r.targetsBySelector(ctx, capsules, maxNodes); ok {
 		return t
 	}

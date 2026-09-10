@@ -902,6 +902,42 @@ func TestResolvePrefetchTargets_FallbackDedupsAndSkipsUnscheduled(t *testing.T) 
 	}
 }
 
+// resolvePrefetchTargets sorts capsules by name so the union of tolerations placed on
+// each Job pod spec is deterministic regardless of the (unstable) List/input order.
+func TestResolvePrefetchTargets_DeterministicTolerationOrder(t *testing.T) {
+	scheme := newControllerTestScheme()
+	sel := map[string]string{"role": "consensus"}
+	capA := capsuleForPrefetch("cap-a", "test", "test-orbit", 0, sel, "sa-cn")
+	capB := capsuleForPrefetch("cap-b", "test", "test-orbit", 1, sel, "sa-cn")
+	capA.Spec.PodProperties.Tolerations = []corev1.Toleration{{Key: "A", Operator: corev1.TolerationOpExists}}
+	capB.Spec.PodProperties.Tolerations = []corev1.Toleration{{Key: "B", Operator: corev1.TolerationOpExists}}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(&capA, &capB, labeledNode("node-1", sel)).Build()
+	r := NewNetworkUpgradePrepareReconciler(c, scheme)
+
+	tolKeys := func(caps []operatorv1alpha1.ConsensusCapsule) []string {
+		targets := r.resolvePrefetchTargets(context.Background(), caps, 30)
+		if len(targets) == 0 {
+			t.Fatalf("expected at least one node-pinned target")
+		}
+		var out []string
+		for _, tol := range targets[0].target.Tolerations {
+			out = append(out, tol.Key)
+		}
+		return out
+	}
+
+	// Both input orders must yield the sorted-capsule union order [A, B].
+	want := []string{"A", "B"}
+	for _, in := range [][]operatorv1alpha1.ConsensusCapsule{{capA, capB}, {capB, capA}} {
+		got := tolKeys(in)
+		if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+			t.Fatalf("non-deterministic toleration order: got %v, want %v", got, want)
+		}
+	}
+}
+
 // checkPrefetchJobs must derive terminal state from Job conditions: all complete
 // → success; any failed → failed (upgrade falls back to registry pull); any
 // still running → requeue without deciding.

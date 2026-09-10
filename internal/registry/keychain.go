@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"sort"
 	"strings"
 
 	"github.com/automa-saga/errx"
@@ -99,7 +100,16 @@ func mergeDockerConfig(secret *corev1.Secret, auths map[string]authn.AuthConfig)
 		)
 	}
 
-	for registry, entry := range cfg.Auths {
+	// Iterate raw registry keys in sorted order so first-wins dedup (when two keys
+	// normalize to the same host) is deterministic rather than map-iteration dependent.
+	rawKeys := make([]string, 0, len(cfg.Auths))
+	for registry := range cfg.Auths {
+		rawKeys = append(rawKeys, registry)
+	}
+	sort.Strings(rawKeys)
+
+	for _, registry := range rawKeys {
+		entry := cfg.Auths[registry]
 		key := normalizeRegistryHost(registry)
 		if _, exists := auths[key]; exists {
 			continue

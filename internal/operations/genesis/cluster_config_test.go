@@ -3,11 +3,54 @@
 package genesis
 
 import (
+	"context"
 	"strings"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
+
+func TestCollectPodIPs_DeterministicallySorted(t *testing.T) {
+	readyPod := func(name, ip string) *corev1.Pod {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "ns"},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodRunning,
+				PodIP: ip,
+				Conditions: []corev1.PodCondition{
+					{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+				},
+			},
+		}
+	}
+	scheme := runtime.NewScheme()
+	_ = clientgoscheme.AddToScheme(scheme)
+	// Pod name order (a,b,c) deliberately differs from IP order, so a sorted result
+	// proves IPs are sorted rather than incidentally name/list-ordered.
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		readyPod("a", "10.0.0.3"), readyPod("b", "10.0.0.1"), readyPod("c", "10.0.0.2"),
+	).Build()
+
+	ips, err := CollectPodIPs(context.Background(), c, "ns")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"}
+	if len(ips) != len(want) {
+		t.Fatalf("ips = %v, want %v", ips, want)
+	}
+	for i := range want {
+		if ips[i] != want[i] {
+			t.Fatalf("pod IPs not deterministically sorted: got %v, want %v", ips, want)
+		}
+	}
+}
 
 func TestBuildClusterConfig_ContainsExpectedKeys(t *testing.T) {
 	orbit := &operatorv1alpha1.Orbit{}
