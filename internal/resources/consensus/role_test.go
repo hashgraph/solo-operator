@@ -96,6 +96,13 @@ func TestBuildRole_UCConfigCRGrants(t *testing.T) {
 				t.Errorf("resource %q: missing verb %q (got %v)", res, v, rule.Verbs)
 			}
 		}
+		// Exactly create+get — no list/watch/update/patch. UC only creates config
+		// CRs and polls them (Get); anything more is over-privilege.
+		for v := range got {
+			if !wantVerbs[v] {
+				t.Errorf("resource %q: unexpected verb %q (got %v)", res, v, rule.Verbs)
+			}
+		}
 	}
 }
 

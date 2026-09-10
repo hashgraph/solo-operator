@@ -143,7 +143,7 @@ func (r *RoleSubReconciler) buildRole(capsule *operatorv1alpha1.ConsensusCapsule
 			rules = append(rules, rbacv1.PolicyRule{
 				APIGroups: []string{"operator.solo.hiero.org"},
 				Resources: configResources,
-				Verbs:     []string{"create", "get", "list", "watch", "patch"},
+				Verbs:     []string{"create", "get"},
 			})
 		}
 	}
