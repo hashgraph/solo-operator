@@ -72,6 +72,122 @@ func TestBuildProvisionerHandoffPatch(t *testing.T) {
 	}
 }
 
+// waitSlotReleased blocks until the proxy's in-flight transition finishes (its
+// activeOpID slot is cleared), so a Handle-dispatched goroutine has completed.
+func waitSlotReleased(t *testing.T, p *ProvisionerProxy) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		p.mu.Lock()
+		cleared := p.activeOpID == ""
+		p.mu.Unlock()
+		if cleared {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("transition slot not released")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// daemonResultCond fetches the DaemonResult condition (status, reason) from the
+// live CR in the fake client, or found=false if absent.
+func daemonResultCond(t *testing.T, p *ProvisionerProxy, name string) (status, reason string, found bool) {
+	t.Helper()
+	got, err := p.client.Resource(networkUpgradeExecuteGVR).Namespace(p.cfg.Namespace).
+		Get(context.Background(), name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("get CR: %v", err)
+	}
+	conds, _, _ := unstructured.NestedSlice(got.Object, "status", "conditions")
+	for _, raw := range conds {
+		c, _ := raw.(map[string]interface{})
+		if ct, _, _ := unstructured.NestedString(c, "type"); ct == operatorv1alpha1.CondDaemonResult {
+			s, _, _ := unstructured.NestedString(c, "status")
+			r, _, _ := unstructured.NestedString(c, "reason")
+			return s, r, true
+		}
+	}
+	return "", "", false
+}
+
+// TestHandle_FatalError_WritesDaemonResultFalse verifies a terminal config-file
+// error drives Handle → reportFailure, patching DaemonResult=False (no phase
+// change) so the operator marks the CR Failed.
+func TestHandle_FatalError_WritesDaemonResultFalse(t *testing.T) {
+	root := t.TempDir()
+	writeConfigFile(t, root, "not-a-known-config.json", "{}") // unrecognised → terminal
+
+	cr := newTestExecuteCR("op-fatal", crCreatedAt)
+	_ = unstructured.SetNestedField(cr.Object, string(operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon), "status", "phase")
+	proxy := newProxyWithFakeClient(t, root, cr)
+
+	proxy.Handle(context.Background(), cr)
+	waitSlotReleased(t, proxy)
+
+	status, reason, found := daemonResultCond(t, proxy, cr.GetName())
+	if !found {
+		t.Fatal("expected DaemonResult condition to be written for a fatal failure")
+	}
+	if status != string(metav1.ConditionFalse) {
+		t.Errorf("DaemonResult status = %q, want False", status)
+	}
+	if reason != ReasonConfigFileUnrecognised.String() {
+		t.Errorf("DaemonResult reason = %q, want %q", reason, ReasonConfigFileUnrecognised)
+	}
+	// A fatal failure must NOT be recorded as completed — it advanced to a terminal
+	// via the operator, not a success.
+	proxy.mu.Lock()
+	_, done := proxy.completedOpIDs["op-fatal"]
+	proxy.mu.Unlock()
+	if done {
+		t.Error("fatal failure must not be marked completed")
+	}
+}
+
+// TestHandle_TransientWithinBudget_SilentRetry verifies a transient failure
+// inside the handoff deadline is left unreported (no DaemonResult) so the CR is
+// retried on a later tick.
+func TestHandle_TransientWithinBudget_SilentRetry(t *testing.T) {
+	cr := newTestExecuteCR("op-transient", crCreatedAt)
+	// Recent startTime → within the (default 60m) budget.
+	_ = unstructured.SetNestedField(cr.Object, time.Now().UTC().Format(time.RFC3339), "status", "startTime")
+	// Empty UpgradePath makes deployConfigCRs return a Temporary error.
+	proxy := newProxyWithFakeClient(t, "", cr)
+
+	proxy.Handle(context.Background(), cr)
+	waitSlotReleased(t, proxy)
+
+	if _, _, found := daemonResultCond(t, proxy, cr.GetName()); found {
+		t.Error("a transient failure within budget must not write DaemonResult")
+	}
+}
+
+// TestHandle_TransientPastDeadline_WritesDeadlineExceeded verifies a transient
+// failure past the handoff deadline is reported as DaemonResult=False with reason
+// DeadlineExceeded, so a stuck operation still terminates.
+func TestHandle_TransientPastDeadline_WritesDeadlineExceeded(t *testing.T) {
+	cr := newTestExecuteCR("op-stuck", crCreatedAt)
+	// startTime 2h ago exceeds the default 60m budget.
+	_ = unstructured.SetNestedField(cr.Object, time.Now().Add(-2*time.Hour).UTC().Format(time.RFC3339), "status", "startTime")
+	proxy := newProxyWithFakeClient(t, "", cr) // empty UpgradePath → Temporary error
+
+	proxy.Handle(context.Background(), cr)
+	waitSlotReleased(t, proxy)
+
+	status, reason, found := daemonResultCond(t, proxy, cr.GetName())
+	if !found {
+		t.Fatal("expected DaemonResult=False once the handoff deadline is exceeded")
+	}
+	if status != string(metav1.ConditionFalse) {
+		t.Errorf("DaemonResult status = %q, want False", status)
+	}
+	if reason != operatorv1alpha1.ReasonDaemonDeadlineExceeded.String() {
+		t.Errorf("DaemonResult reason = %q, want %q", reason, operatorv1alpha1.ReasonDaemonDeadlineExceeded)
+	}
+}
+
 // TestHandoffDeadlineExceeded verifies the deadline is measured from the CR's
 // status.startTime, and that a missing/unparseable anchor is treated as NOT
 // exceeded (stays retryable rather than forcing a premature terminal).
