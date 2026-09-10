@@ -183,6 +183,10 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ConsensusCapsule")
 		os.Exit(1)
 	}
+	// Multi-registry SoftwareVersionSource resolution reuses the same registry iteration
+	// strategy and SSRF allow-list as the network-upgrade path.
+	consensusCapsuleReconciler.StrategyName = registryOrder
+	consensusCapsuleReconciler.AllowedRegistryHosts = allowedRegistryHostsList
 	if err = consensusCapsuleReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ConsensusCapsule")
 		os.Exit(1)
