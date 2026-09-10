@@ -23,10 +23,11 @@ func componentStrategy(comp operatorv1alpha1.ImageComponentSpec, fallback string
 }
 
 // SelectComponent probes all of a component's registries (in the component's
-// strategy order) and picks one valid winner at random. It is the shared core of
-// image selection: the same routine backs first-time capsule deployment and the
-// network-upgrade Prepare phase, so install-time and upgrade-time select and
-// verify identically.
+// strategy order) and picks the winner per that strategy: Sequential selects the
+// first valid registry in the declared order (deterministic preference), Random
+// picks a valid one at random. It is the shared core of image selection: the same
+// routine backs first-time capsule deployment and the network-upgrade Prepare
+// phase, so install-time and upgrade-time select and verify identically.
 //
 // It returns every registry's result (so callers can emit their own audit
 // events/metrics over the full set), the selected winner, and whether any valid
@@ -39,8 +40,17 @@ func SelectComponent(
 	rng *rand.Rand,
 	fallbackStrategy string,
 ) (results []RegistryResult, winner RegistryResult, ok bool) {
-	results = CheckAll(ctx, checker, comp, timeout, componentStrategy(comp, fallbackStrategy, rng))
-	winner, ok = SelectValid(results, rng)
+	strategy := componentStrategy(comp, fallbackStrategy, rng)
+	results = CheckAll(ctx, checker, comp, timeout, strategy)
+
+	// The strategy governs the winner, not just the probe order: Sequential picks the
+	// first valid registry in the declared order (deterministic preference); Random
+	// spreads across the valid ones. CheckAll already ordered results per the strategy.
+	if strategy.Name() == StrategySequential {
+		winner, ok = SelectFirstValid(results)
+	} else {
+		winner, ok = SelectRandomValid(results, rng)
+	}
 	return results, winner, ok
 }
 

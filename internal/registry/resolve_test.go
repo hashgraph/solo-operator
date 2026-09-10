@@ -57,6 +57,42 @@ func TestSelectComponent_SequentialHonorsOrder(t *testing.T) {
 	}
 }
 
+func TestSelectComponent_SequentialPicksFirstAmongMultipleValid(t *testing.T) {
+	// Both registries verify; Sequential must always pick the first-declared one,
+	// regardless of rng seed. (Regression: SelectRandomValid ignored declared order.)
+	allValid := func(_ context.Context, spec operatorv1alpha1.ImageRegistrySpec) RegistryResult {
+		return RegistryResult{Image: spec.Image, State: StateValid, Digest: testDigest, LayerHashesVerified: true}
+	}
+	for seed := uint64(1); seed <= 20; seed++ {
+		comp := compWithRegistries("img-primary", "img-mirror")
+		comp.SelectionStrategy = StrategySequential
+		_, winner, ok := SelectComponent(context.Background(), &fakeChecker{fn: allValid}, comp, time.Second, newRNG(seed), StrategyRandom)
+		if !ok || winner.Image != "img-primary" {
+			t.Fatalf("seed %d: Sequential winner = %q (ok=%v), want img-primary", seed, winner.Image, ok)
+		}
+	}
+}
+
+func TestSelectComponent_RandomSpreadsAmongValid(t *testing.T) {
+	// With Random, both valid registries should win across seeds (not pinned to one).
+	allValid := func(_ context.Context, spec operatorv1alpha1.ImageRegistrySpec) RegistryResult {
+		return RegistryResult{Image: spec.Image, State: StateValid, Digest: testDigest, LayerHashesVerified: true}
+	}
+	seen := map[string]int{}
+	for seed := uint64(1); seed <= 40; seed++ {
+		comp := compWithRegistries("img-a", "img-b")
+		comp.SelectionStrategy = StrategyRandom
+		_, winner, ok := SelectComponent(context.Background(), &fakeChecker{fn: allValid}, comp, time.Second, newRNG(seed), StrategySequential)
+		if !ok {
+			t.Fatalf("seed %d: expected a winner", seed)
+		}
+		seen[winner.Image]++
+	}
+	if seen["img-a"] == 0 || seen["img-b"] == 0 {
+		t.Errorf("Random did not spread across valid registries: %v", seen)
+	}
+}
+
 func TestSelectComponent_NoValidRegistry(t *testing.T) {
 	checker := &fakeChecker{
 		fn: func(_ context.Context, spec operatorv1alpha1.ImageRegistrySpec) RegistryResult {
