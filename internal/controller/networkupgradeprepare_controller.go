@@ -141,7 +141,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 
 	// Build the image checker with a keychain derived from the namespace's ConsensusCapsule
 	// pull secrets, so verification pulls can reach private/authenticated registries.
-	checker, err := namespaceRegistryChecker(ctx, r.Client, r.Checker, prepare.Namespace, r.AllowedRegistryHosts)
+	checker, err := capsuleRegistryChecker(ctx, r.Client, r.Checker, prepare.Namespace, prepare.Spec.ConsensusNode, r.AllowedRegistryHosts)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

@@ -15,6 +15,12 @@ type NetworkUpgradePrepareSpec struct {
 	// +kubebuilder:validation:MaxLength=63
 	OperationID string `json:"operationId"`
 
+	// ConsensusNode is the ConsensusCapsule (this node) whose UC created this CR. The
+	// operator scopes the image-verification pull-secret keychain to this capsule so
+	// verification uses the same credentials the node's pod pulls with.
+	// +kubebuilder:validation:MinLength=1
+	ConsensusNode string `json:"consensusNode"`
+
 	Images UpgradeImagesSpec `json:"images"`
 }
 

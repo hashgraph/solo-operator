@@ -4,10 +4,11 @@ package controller
 
 import (
 	"context"
-	"sort"
 
 	"github.com/automa-saga/errx"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
@@ -15,66 +16,50 @@ import (
 	"github.com/hashgraph/solo-operator/internal/registry"
 )
 
-// namespaceRegistryChecker returns override when set (test seam), otherwise an OCIChecker
-// whose keychain is built from the docker-registry pull secrets referenced by the enabled
-// containers of the ConsensusCapsules in namespace. This lets the operator's verification
-// pulls inspect images in private/authenticated registries — the same credentials the
-// kubelet uses to pull them — so candidates in those registries can be selected and
-// verified. When no usable pull secrets are present it falls back to authn.DefaultKeychain,
-// preserving public-registry behavior.
+// capsuleRegistryChecker returns override when set (test seam), otherwise an OCIChecker
+// whose keychain is built from the pull secrets of the single ConsensusCapsule named
+// capsuleName — the node whose UC created the upgrade CR. Scoping to that one capsule means
+// the operator's verification pulls use exactly the credentials the node's pod pulls with,
+// so an image can't verify-pass then ImagePullBackOff on that node, and no unrelated
+// capsule's (possibly stale) credential pollutes verification.
 //
-// Known limitations (keychain-by-convention model): the verification keychain is the union
-// of the namespace's enabled-container pull secrets, which may be broader than the secrets
-// any single pod carries. So (A) a present-but-stale credential for a host is used for that
-// host even for a public image (verification can 401 where anonymous access would have
-// worked), and (B) if capsules genuinely use different secrets for the same image, an image
-// can verify here yet still ImagePullBackOff on a pod lacking that secret. Building the
-// keychain from enabled containers only (below) keeps verification aligned with what pods
-// actually pull in the common case; fully closing A/B (e.g. retry-anonymous on auth failure,
-// or per-pod-scoped verification) is tracked separately.
-func namespaceRegistryChecker(ctx context.Context, c client.Client, override registry.ImageChecker, namespace string, allowedHosts []string) (registry.ImageChecker, error) {
+// It is best-effort: a missing capsule (e.g. scaled down mid-upgrade) or a malformed pull
+// secret must not block verification — least of all for public images — so it falls back to
+// authn.DefaultKeychain rather than failing the reconcile.
+func capsuleRegistryChecker(ctx context.Context, c client.Client, override registry.ImageChecker, namespace, capsuleName string, allowedHosts []string) (registry.ImageChecker, error) {
 	if override != nil {
 		return override, nil
 	}
-	refs, err := namespacePullSecretRefs(ctx, c, namespace)
+	refs, err := capsulePullSecretRefs(ctx, c, namespace, capsuleName)
 	if err != nil {
 		return nil, err
 	}
 	kc, err := registry.KeychainFromPullSecrets(ctx, c, namespace, refs)
 	if err != nil {
-		// A single malformed pull secret in the namespace must not block verification —
-		// least of all for public images. Log it and fall back to the ambient/default
-		// keychain rather than returning an error that would infinite-backoff the
-		// reconcile and block even purely-public upgrades.
+		// A malformed pull secret must not fail the reconcile (which would infinite-backoff
+		// and block even public upgrades). Log it and fall back to the default keychain.
 		common.Warn(ctx, ReasonKeychainBuildFailed).AnErr("error", err).
-			Msg("building registry keychain from namespace pull secrets failed; falling back to default keychain")
+			Msg("building registry keychain from capsule pull secrets failed; falling back to default keychain")
 		return registry.OCIChecker{AllowedHosts: allowedHosts}, nil
 	}
 	return registry.OCIChecker{Keychain: kc, AllowedHosts: allowedHosts}, nil
 }
 
-// namespacePullSecretRefs is the deduplicated union of every ConsensusCapsule container's
-// image-pull secrets in namespace (from both SoftwareVersion and SoftwareVersionSource).
-func namespacePullSecretRefs(ctx context.Context, c client.Client, namespace string) ([]corev1.LocalObjectReference, error) {
-	var capsules operatorv1alpha1.ConsensusCapsuleList
-	if err := c.List(ctx, &capsules, client.InNamespace(namespace)); err != nil {
+// capsulePullSecretRefs is the deduplicated union of the named ConsensusCapsule's
+// enabled-container image-pull secrets. A missing capsule yields nil (KeychainFromPullSecrets
+// then falls back to the default keychain); other Get errors are returned to requeue.
+func capsulePullSecretRefs(ctx context.Context, c client.Client, namespace, capsuleName string) ([]corev1.LocalObjectReference, error) {
+	var capsule operatorv1alpha1.ConsensusCapsule
+	if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: capsuleName}, &capsule); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
 		return nil, errx.WithHints(
-			errx.WithReason(errK8sAPI.Wrap(err, "listing ConsensusCapsules for registry pull secrets"), ReasonListFailed),
-			"Confirm the operator has list permission on ConsensusCapsules",
+			errx.WithReason(errK8sAPI.Wrap(err, "getting ConsensusCapsule %s for registry pull secrets", capsuleName), ReasonGetFailed),
+			"Confirm the operator has get permission on ConsensusCapsules",
 		)
 	}
-	// c.List does not guarantee an order, so sort capsules by name before collecting.
-	// MergeImagePullSecrets dedupes "first ref for a name wins" and the keychain applies
-	// refs in order ("first secret for a host wins"); a stable input order makes both
-	// deterministic across reconciles.
-	sort.Slice(capsules.Items, func(i, j int) bool {
-		return capsules.Items[i].GetName() < capsules.Items[j].GetName()
-	})
-	var groups [][]corev1.LocalObjectReference
-	for i := range capsules.Items {
-		groups = append(groups, capsulePullSecretGroups(&capsules.Items[i])...)
-	}
-	return common.MergeImagePullSecrets(groups...), nil
+	return common.MergeImagePullSecrets(capsulePullSecretGroups(&capsule)...), nil
 }
 
 // capsulePullSecretGroups collects the image-pull secret refs of every container that will

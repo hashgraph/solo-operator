@@ -380,7 +380,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 			})
 		} else {
 			rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
-			checker, err := namespaceRegistryChecker(ctx, r.Client, r.Checker, execute.Namespace, r.AllowedRegistryHosts)
+			checker, err := capsuleRegistryChecker(ctx, r.Client, r.Checker, execute.Namespace, execute.Spec.ConsensusNode, r.AllowedRegistryHosts)
 			if err != nil {
 				return ctrl.Result{}, err
 			}

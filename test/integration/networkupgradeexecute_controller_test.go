@@ -86,9 +86,10 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 				},
 			},
 			Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
-				Orbit:       ns,
-				OperationID: opID,
-				Images:      images,
+				Orbit:         ns,
+				OperationID:   opID,
+				ConsensusNode: "node0",
+				Images:        images,
 			},
 		}
 		Expect(k8sClient.Create(ctx, nup)).To(Succeed())
@@ -116,6 +117,7 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 			Spec: operatorv1alpha1.NetworkUpgradeFreezeSpec{
 				Orbit:           ns,
 				OperationID:     opID,
+				ConsensusNode:   "node0",
 				ScheduledTime:   metav1.Now(),
 				Images:          prepare.Spec.Images,
 				SelectedSources: *prepare.Status.SelectedSources,

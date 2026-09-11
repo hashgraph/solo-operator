@@ -63,8 +63,9 @@ var _ = Describe("NetworkUpgradePrepare Controller", func() {
 				Labels:    map[string]string{operatorv1alpha1.LabelOperationID: opID, operatorv1alpha1.LabelStep: operatorv1alpha1.StepPrepare},
 			},
 			Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
-				Orbit:       ns,
-				OperationID: opID,
+				Orbit:         ns,
+				OperationID:   opID,
+				ConsensusNode: "node0",
 				Images: operatorv1alpha1.UpgradeImagesSpec{
 					ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 						Version: "0.75.0",
@@ -164,8 +165,9 @@ var _ = Describe("NetworkUpgradePrepare Controller", func() {
 				Labels:    map[string]string{operatorv1alpha1.LabelOperationID: opID, operatorv1alpha1.LabelStep: operatorv1alpha1.StepPrepare},
 			},
 			Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
-				Orbit:       ns,
-				OperationID: opID,
+				Orbit:         ns,
+				OperationID:   opID,
+				ConsensusNode: "node0",
 				Images: operatorv1alpha1.UpgradeImagesSpec{
 					ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 						Version: "0.75.0",
@@ -225,8 +227,9 @@ var _ = Describe("NetworkUpgradePrepare Controller", func() {
 				Labels:    map[string]string{operatorv1alpha1.LabelOperationID: opID, operatorv1alpha1.LabelStep: operatorv1alpha1.StepPrepare},
 			},
 			Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
-				Orbit:       ns,
-				OperationID: opID,
+				Orbit:         ns,
+				OperationID:   opID,
+				ConsensusNode: "node0",
 				Images: operatorv1alpha1.UpgradeImagesSpec{
 					ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 						Version: "0.75.0",
