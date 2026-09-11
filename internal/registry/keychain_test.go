@@ -109,6 +109,33 @@ func TestKeychainFromPullSecrets_ExplicitUsernamePassword(t *testing.T) {
 	}
 }
 
+func TestKeychainFromPullSecrets_AuthFillsOnlyMissingFields(t *testing.T) {
+	// Entry sets an explicit username but no password, plus an "auth" blob whose
+	// decoded username differs. The decode must fill only the missing password and
+	// must NOT clobber the explicitly-set username.
+	authBlob := base64.StdEncoding.EncodeToString([]byte("authuser:authpass"))
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "mixed", Namespace: "ns"},
+		Type:       corev1.SecretTypeDockerConfigJson,
+		Data: map[string][]byte{
+			corev1.DockerConfigJsonKey: []byte(fmt.Sprintf(`{"auths":{"registry.example.com":{"username":"explicit","auth":%q}}}`, authBlob)),
+		},
+	}
+	c := keychainTestClient(secret)
+
+	kc, err := KeychainFromPullSecrets(context.Background(), c, "ns", []corev1.LocalObjectReference{{Name: "mixed"}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := resolveConfig(t, kc, "registry.example.com")
+	if got.Username != "explicit" {
+		t.Errorf("explicit username was clobbered: got %q, want explicit", got.Username)
+	}
+	if got.Password != "authpass" {
+		t.Errorf("missing password not filled from auth: got %q, want authpass", got.Password)
+	}
+}
+
 func TestKeychainFromPullSecrets_DockerHubAlias(t *testing.T) {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "dh", Namespace: "ns"},

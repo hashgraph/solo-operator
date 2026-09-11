@@ -109,12 +109,17 @@ func mergeDockerConfig(secret *corev1.Secret, auths map[string]authn.AuthConfig)
 			Password:      entry.Password,
 			IdentityToken: entry.IdentityToken,
 		}
-		// The "auth" field is base64("username:password"). When present, it is the
-		// authoritative source (docker stores credentials there), so decode it to
-		// fill any missing username/password.
+		// The "auth" field is base64("username:password"). When present, decode it to
+		// fill only the missing username/password — never clobber a value the entry
+		// already set explicitly.
 		if entry.Auth != "" && (ac.Username == "" || ac.Password == "") {
 			if u, p, ok := decodeDockerAuth(entry.Auth); ok {
-				ac.Username, ac.Password = u, p
+				if ac.Username == "" {
+					ac.Username = u
+				}
+				if ac.Password == "" {
+					ac.Password = p
+				}
 			}
 		}
 		if ac.Username == "" && ac.Password == "" && ac.IdentityToken == "" {
