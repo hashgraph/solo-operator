@@ -43,9 +43,9 @@ var _ = Describe("NetworkUpgradeFreeze Controller", func() {
 				},
 			},
 			Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
-				Orbit:         ns,
-				OperationID:   opID,
-				ConsensusNode: "node0",
+				Orbit:            ns,
+				OperationID:      opID,
+				ConsensusCapsule: "node0",
 				Images: operatorv1alpha1.UpgradeImagesSpec{
 					ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 						Version: "0.75.0",
@@ -81,12 +81,12 @@ var _ = Describe("NetworkUpgradeFreeze Controller", func() {
 					},
 				},
 				Spec: operatorv1alpha1.NetworkUpgradeFreezeSpec{
-					Orbit:           ns,
-					OperationID:     opID,
-					ConsensusNode:   "node0",
-					ScheduledTime:   metav1.Now(),
-					Images:          prepare.Spec.Images,
-					SelectedSources: *prepare.Status.SelectedSources,
+					Orbit:            ns,
+					OperationID:      opID,
+					ConsensusCapsule: "node0",
+					ScheduledTime:    metav1.Now(),
+					Images:           prepare.Spec.Images,
+					SelectedSources:  *prepare.Status.SelectedSources,
 				},
 			}
 			Expect(k8sClient.Create(ctx, nuf)).To(Succeed())
@@ -159,9 +159,9 @@ var _ = Describe("NetworkUpgradeFreeze Controller", func() {
 				},
 			},
 			Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
-				Orbit:         ns,
-				OperationID:   opID,
-				ConsensusNode: "node0",
+				Orbit:            ns,
+				OperationID:      opID,
+				ConsensusCapsule: "node0",
 				Images: operatorv1alpha1.UpgradeImagesSpec{
 					ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 						Version: "0.75.0",
@@ -200,11 +200,11 @@ var _ = Describe("NetworkUpgradeFreeze Controller", func() {
 					},
 				},
 				Spec: operatorv1alpha1.NetworkUpgradeFreezeSpec{
-					Orbit:         ns,
-					OperationID:   opID,
-					ConsensusNode: "node0",
-					ScheduledTime: metav1.Now(),
-					Images:        prepare.Spec.Images,
+					Orbit:            ns,
+					OperationID:      opID,
+					ConsensusCapsule: "node0",
+					ScheduledTime:    metav1.Now(),
+					Images:           prepare.Spec.Images,
 					SelectedSources: operatorv1alpha1.SelectedSources{
 						ConsensusNode: &operatorv1alpha1.SelectedSource{
 							Image:               "gcr.io/unreachable/cn:0.75.0",
@@ -270,9 +270,9 @@ var _ = Describe("NetworkUpgradeFreeze Controller", func() {
 				},
 			},
 			Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
-				Orbit:         ns,
-				OperationID:   opID,
-				ConsensusNode: "node0",
+				Orbit:            ns,
+				OperationID:      opID,
+				ConsensusCapsule: "node0",
 				Images: operatorv1alpha1.UpgradeImagesSpec{
 					ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 						Version: "0.75.0",
@@ -304,10 +304,10 @@ var _ = Describe("NetworkUpgradeFreeze Controller", func() {
 					},
 				},
 				Spec: operatorv1alpha1.NetworkUpgradeFreezeSpec{
-					Orbit:         ns,
-					OperationID:   opID,
-					ConsensusNode: "node0",
-					ScheduledTime: metav1.Now(),
+					Orbit:            ns,
+					OperationID:      opID,
+					ConsensusCapsule: "node0",
+					ScheduledTime:    metav1.Now(),
 					Images: operatorv1alpha1.UpgradeImagesSpec{
 						ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 							Version: "0.75.0",
@@ -380,9 +380,9 @@ var _ = Describe("NetworkUpgradeFreeze Controller", func() {
 					},
 				},
 				Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
-					Orbit:         ns,
-					OperationID:   opID,
-					ConsensusNode: "node0",
+					Orbit:            ns,
+					OperationID:      opID,
+					ConsensusCapsule: "node0",
 					Images: operatorv1alpha1.UpgradeImagesSpec{
 						ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 							Version:    "0.75.0",
@@ -403,10 +403,10 @@ var _ = Describe("NetworkUpgradeFreeze Controller", func() {
 					},
 				},
 				Spec: operatorv1alpha1.NetworkUpgradeFreezeSpec{
-					Orbit:         ns,
-					OperationID:   opID,
-					ConsensusNode: "node0",
-					ScheduledTime: metav1.Now(),
+					Orbit:            ns,
+					OperationID:      opID,
+					ConsensusCapsule: "node0",
+					ScheduledTime:    metav1.Now(),
 					Images: operatorv1alpha1.UpgradeImagesSpec{
 						ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 							Version:    "0.75.0",

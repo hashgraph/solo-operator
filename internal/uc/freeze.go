@@ -80,12 +80,12 @@ func buildFreezeCR(
 			},
 		},
 		Spec: operatorv1alpha1.NetworkUpgradeFreezeSpec{
-			Orbit:           cfg.Orbit,
-			OperationID:     operationID,
-			ConsensusNode:   cfg.CapsuleName(),
-			ScheduledTime:   metav1.NewTime(scheduledTime),
-			Images:          images,
-			SelectedSources: selectedSources,
+			Orbit:            cfg.Orbit,
+			OperationID:      operationID,
+			ConsensusCapsule: cfg.CapsuleName(),
+			ScheduledTime:    metav1.NewTime(scheduledTime),
+			Images:           images,
+			SelectedSources:  selectedSources,
 		},
 	}
 

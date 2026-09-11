@@ -147,12 +147,12 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	if execute.Status.Phase == "" || execute.Status.Phase == operatorv1alpha1.ExecutePhasePending {
-		sibling, err := executeSiblingExists(ctx, r.Client, execute.Namespace, string(execute.UID), execute.Spec.ConsensusNode, execute.Spec.OperationID)
+		sibling, err := executeSiblingExists(ctx, r.Client, execute.Namespace, string(execute.UID), execute.Spec.ConsensusCapsule, execute.Spec.OperationID)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 		if sibling {
-			msg := fmt.Sprintf("operationId %q + consensusNode %q already used by another NetworkUpgradeExecute", execute.Spec.OperationID, execute.Spec.ConsensusNode)
+			msg := fmt.Sprintf("operationId %q + consensusCapsule %q already used by another NetworkUpgradeExecute", execute.Spec.OperationID, execute.Spec.ConsensusCapsule)
 			r.eventf(ctx, &execute, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
 			execute.Status.Phase = operatorv1alpha1.ExecutePhaseFailed
 			execute.Status.ObservedGeneration = execute.Generation
@@ -380,7 +380,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 			})
 		} else {
 			rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
-			checker, err := capsuleRegistryChecker(ctx, r.Client, r.Checker, execute.Namespace, execute.Spec.ConsensusNode, r.AllowedRegistryHosts)
+			checker, err := capsuleRegistryChecker(ctx, r.Client, r.Checker, execute.Namespace, execute.Spec.ConsensusCapsule, r.AllowedRegistryHosts)
 			if err != nil {
 				return ctrl.Result{}, err
 			}
@@ -637,13 +637,13 @@ func (r *NetworkUpgradeExecuteReconciler) nodeActiveAlertInterval() time.Duratio
 
 func (r *NetworkUpgradeExecuteReconciler) getCapsule(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (*operatorv1alpha1.ConsensusCapsule, error) {
 	var capsule operatorv1alpha1.ConsensusCapsule
-	err := r.Get(ctx, types.NamespacedName{Name: execute.Spec.ConsensusNode, Namespace: execute.Namespace}, &capsule)
+	err := r.Get(ctx, types.NamespacedName{Name: execute.Spec.ConsensusCapsule, Namespace: execute.Namespace}, &capsule)
 	if apierrors.IsNotFound(err) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, errx.WithHints(
-			errx.WithReason(errK8sAPI.Wrap(err, "getting ConsensusCapsule %s", execute.Spec.ConsensusNode), ReasonGetFailed),
+			errx.WithReason(errK8sAPI.Wrap(err, "getting ConsensusCapsule %s", execute.Spec.ConsensusCapsule), ReasonGetFailed),
 			"Confirm the operator has get permission on consensuscapsules")
 	}
 	return &capsule, nil

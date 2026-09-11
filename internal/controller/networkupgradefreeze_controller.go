@@ -172,7 +172,7 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 
 	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 
-	checker, err := capsuleRegistryChecker(ctx, r.Client, r.Checker, freeze.Namespace, freeze.Spec.ConsensusNode, r.AllowedRegistryHosts)
+	checker, err := capsuleRegistryChecker(ctx, r.Client, r.Checker, freeze.Namespace, freeze.Spec.ConsensusCapsule, r.AllowedRegistryHosts)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

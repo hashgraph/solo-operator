@@ -107,9 +107,9 @@ var _ = Describe("NetworkUpgradeFreezeAbort Controller", func() {
 					},
 				},
 				Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
-					Orbit:         ns,
-					OperationID:   opID,
-					ConsensusNode: "node0-abort",
+					Orbit:            ns,
+					OperationID:      opID,
+					ConsensusCapsule: "node0-abort",
 					Images: operatorv1alpha1.UpgradeImagesSpec{
 						ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 							Version:    "0.75.0",

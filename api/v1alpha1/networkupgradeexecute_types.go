@@ -28,8 +28,11 @@ type NetworkUpgradeExecuteSpec struct {
 	// +kubebuilder:validation:MaxLength=63
 	OperationID string `json:"operationId"`
 
+	// ConsensusCapsule is the name of the ConsensusCapsule (this node) this CR targets.
+	// The operator scopes the image-verification pull-secret keychain to this capsule so
+	// verification uses the same credentials the node's pod pulls with.
 	// +kubebuilder:validation:MinLength=1
-	ConsensusNode string `json:"consensusNode"`
+	ConsensusCapsule string `json:"consensusCapsule"`
 
 	Images UpgradeImagesSpec `json:"images"`
 

@@ -38,7 +38,7 @@ type NetworkUpgradePrepareReconciler struct {
 
 	// AllowedRegistryHosts is the --allowed-registry-hosts SSRF allow-list. It is
 	// applied to the per-reconcile OCIChecker built with a namespace-derived keychain
-	// (see namespaceRegistryChecker), so verification pulls can reach private registries.
+	// (see capsuleRegistryChecker), so verification pulls can reach private registries.
 	AllowedRegistryHosts []string
 }
 
@@ -141,7 +141,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 
 	// Build the image checker with a keychain derived from the namespace's ConsensusCapsule
 	// pull secrets, so verification pulls can reach private/authenticated registries.
-	checker, err := capsuleRegistryChecker(ctx, r.Client, r.Checker, prepare.Namespace, prepare.Spec.ConsensusNode, r.AllowedRegistryHosts)
+	checker, err := capsuleRegistryChecker(ctx, r.Client, r.Checker, prepare.Namespace, prepare.Spec.ConsensusCapsule, r.AllowedRegistryHosts)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -791,7 +791,7 @@ func (r *NetworkUpgradePrepareReconciler) SetupWithManager(mgr ctrl.Manager) err
 		r.Recorder = mgr.GetEventRecorder("networkupgradeprepare")
 	}
 	// r.Checker is left nil in production: the reconcile builds a checker per namespace
-	// with a keychain from the ConsensusCapsule pull secrets (namespaceRegistryChecker).
+	// with a keychain from the ConsensusCapsule pull secrets (capsuleRegistryChecker).
 	// Tests inject a non-nil r.Checker to bypass that.
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.NetworkUpgradePrepare{}).

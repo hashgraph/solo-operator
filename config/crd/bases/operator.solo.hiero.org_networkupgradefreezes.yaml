@@ -58,11 +58,11 @@ spec:
               NetworkUpgradeFreezeSpec is immutable after creation; the CEL rule below
               rejects any spec mutation at admission time.
             properties:
-              consensusNode:
+              consensusCapsule:
                 description: |-
-                  ConsensusNode is the ConsensusCapsule (this node) whose UC created this CR. The
-                  operator scopes the image-verification pull-secret keychain to this capsule so
-                  verification uses the same credentials the node's pod pulls with.
+                  ConsensusCapsule is the name of the ConsensusCapsule (this node) whose UC created
+                  this CR. The operator scopes the image-verification pull-secret keychain to this
+                  capsule so verification uses the same credentials the node's pod pulls with.
                 minLength: 1
                 type: string
               images:
@@ -732,7 +732,7 @@ spec:
                     type: object
                 type: object
             required:
-            - consensusNode
+            - consensusCapsule
             - images
             - operationId
             - orbit

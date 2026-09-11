@@ -116,10 +116,10 @@ func buildPrepareCR(cfg Config, operationID string, images operatorv1alpha1.Upgr
 			},
 		},
 		Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
-			Orbit:         cfg.Orbit,
-			OperationID:   operationID,
-			ConsensusNode: cfg.CapsuleName(),
-			Images:        images,
+			Orbit:            cfg.Orbit,
+			OperationID:      operationID,
+			ConsensusCapsule: cfg.CapsuleName(),
+			Images:           images,
 		},
 	}
 
