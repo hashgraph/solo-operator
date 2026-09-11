@@ -54,6 +54,7 @@ const (
 	ReasonImageSourceInvalid  errx.Reason = "ImageSourceInvalid"
 	ReasonImageSourceResolved errx.Reason = "ImageSourceResolved"
 	ReasonSourceHashFailed    errx.Reason = "SourceHashFailed"
+	ReasonKeychainBuildFailed errx.Reason = "KeychainBuildFailed"
 	ReasonManifestInvalid     errx.Reason = "ManifestInvalid"
 	ReasonDuplicateSibling    errx.Reason = "DuplicateSibling"
 	ReasonOrbitNotFound       errx.Reason = "OrbitNotFound"

@@ -58,6 +58,7 @@ func TestNamespacePullSecretRefs_DeterministicOrder(t *testing.T) {
 			ImagePullSecrets: []corev1.LocalObjectReference{{Name: "shared"}, {Name: "cn-" + name}},
 		}
 		ct.UC = &operatorv1alpha1.UcSidecar{
+			Enabled: true,
 			SoftwareVersionSource: &operatorv1alpha1.SoftwareVersionSource{
 				ImageRepositories: []operatorv1alpha1.ImageRepository{
 					{Repository: "r", ImageName: "n", ImageTag: "t", ImagePullSecrets: []corev1.LocalObjectReference{{Name: "uc-" + name}}},
@@ -92,6 +93,67 @@ func TestNamespacePullSecretRefs_DeterministicOrder(t *testing.T) {
 	}
 }
 
+func TestNamespacePullSecretRefs_SkipsDisabledContainers(t *testing.T) {
+	// The consensus node's secret is always harvested; a DISABLED UC sidecar's secret
+	// must not be — the kubelet never runs it, so its cred would only pollute the keychain.
+	capsule := &operatorv1alpha1.ConsensusCapsule{ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "test"}}
+	ct := &capsule.Spec.PodProperties.Containers
+	ct.ConsensusNode.SoftwareVersion = &operatorv1alpha1.SoftwareVersion{
+		ImagePullSecrets: []corev1.LocalObjectReference{{Name: "cn-cred"}},
+	}
+	ct.UC = &operatorv1alpha1.UcSidecar{ // Enabled defaults to false
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
+			ImagePullSecrets: []corev1.LocalObjectReference{{Name: "disabled-uc-cred"}},
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(newControllerTestScheme()).WithObjects(capsule).Build()
+
+	refs, err := namespacePullSecretRefs(context.Background(), c, "test")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, r := range refs {
+		if r.Name == "disabled-uc-cred" {
+			t.Fatalf("harvested a disabled container's pull secret: %v", refs)
+		}
+	}
+	if len(refs) != 1 || refs[0].Name != "cn-cred" {
+		t.Fatalf("refs = %v, want only [cn-cred]", refs)
+	}
+}
+
+func TestNamespaceRegistryChecker_MalformedSecretFallsBackNoError(t *testing.T) {
+	// A capsule references a malformed dockerconfigjson secret. Keychain construction
+	// fails, but namespaceRegistryChecker must NOT return an error (which would
+	// infinite-backoff and block even public upgrades); it falls back to the default
+	// keychain so verification of public images still proceeds.
+	capsule := &operatorv1alpha1.ConsensusCapsule{ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "test"}}
+	capsule.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersion = &operatorv1alpha1.SoftwareVersion{
+		ImagePullSecrets: []corev1.LocalObjectReference{{Name: "bad"}},
+	}
+	badSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "bad", Namespace: "test"},
+		Type:       corev1.SecretTypeDockerConfigJson,
+		Data:       map[string][]byte{corev1.DockerConfigJsonKey: []byte(`{not json`)},
+	}
+	c := fake.NewClientBuilder().WithScheme(newControllerTestScheme()).WithObjects(capsule, badSecret).Build()
+
+	got, err := namespaceRegistryChecker(context.Background(), c, nil, "test", []string{"ghcr.io"})
+	if err != nil {
+		t.Fatalf("expected no error on a malformed secret (best-effort fallback), got %v", err)
+	}
+	oci, ok := got.(registry.OCIChecker)
+	if !ok {
+		t.Fatalf("expected an OCIChecker, got %T", got)
+	}
+	if oci.Keychain != nil {
+		t.Errorf("expected fallback to default keychain (nil Keychain field), got %#v", oci.Keychain)
+	}
+	if len(oci.AllowedHosts) != 1 || oci.AllowedHosts[0] != "ghcr.io" {
+		t.Errorf("AllowedHosts not preserved on fallback: %v", oci.AllowedHosts)
+	}
+}
+
 func TestNamespacePullSecretRefs_UnionAcrossCapsules(t *testing.T) {
 	mk := func(name string, cnSecret, ucSecret string) *operatorv1alpha1.ConsensusCapsule {
 		cap := &operatorv1alpha1.ConsensusCapsule{
@@ -102,6 +164,7 @@ func TestNamespacePullSecretRefs_UnionAcrossCapsules(t *testing.T) {
 			ImagePullSecrets: []corev1.LocalObjectReference{{Name: cnSecret}},
 		}
 		ct.UC = &operatorv1alpha1.UcSidecar{
+			Enabled: true,
 			SoftwareVersionSource: &operatorv1alpha1.SoftwareVersionSource{
 				ImageRepositories: []operatorv1alpha1.ImageRepository{
 					{Repository: "r", ImageName: "n", ImageTag: "t", ImagePullSecrets: []corev1.LocalObjectReference{{Name: ucSecret}}},
