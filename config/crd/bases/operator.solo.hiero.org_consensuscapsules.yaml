@@ -23294,6 +23294,13 @@ spec:
                         Image is the resolved reference pinned to its content digest
                         (repository/imageName:imageTag@sha256:...).
                       type: string
+                    lastProbeTime:
+                      description: |-
+                        LastProbeTime is when this entry was last (re)resolved against the registries.
+                        It shows how stale the result is — most useful for an Invalid entry that is being
+                        retried each reconcile.
+                      format: date-time
+                      type: string
                     layerHashesVerified:
                       description: LayerHashesVerified is true when the candidate's
                         layer hashes matched.

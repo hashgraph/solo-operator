@@ -53,6 +53,7 @@ const (
 	ReasonImageRequired       errx.Reason = "ImageRequired"
 	ReasonImageSourceInvalid  errx.Reason = "ImageSourceInvalid"
 	ReasonImageSourceResolved errx.Reason = "ImageSourceResolved"
+	ReasonSourceHashFailed    errx.Reason = "SourceHashFailed"
 	ReasonManifestInvalid     errx.Reason = "ManifestInvalid"
 	ReasonDuplicateSibling    errx.Reason = "DuplicateSibling"
 	ReasonOrbitNotFound       errx.Reason = "OrbitNotFound"

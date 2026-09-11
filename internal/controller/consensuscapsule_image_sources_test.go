@@ -77,9 +77,13 @@ func TestResolveImageSources_ResolvesAndPins(t *testing.T) {
 func TestResolveImageSources_CacheHitSkipsChecker(t *testing.T) {
 	capsule := capsuleWithConsensusSource()
 	src := capsule.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersionSource
+	hash, err := sourceHash(src)
+	if err != nil {
+		t.Fatalf("sourceHash: %v", err)
+	}
 	capsule.Status.ResolvedImages = []operatorv1alpha1.ResolvedImageStatus{{
 		Container:  "consensusNode",
-		SourceHash: sourceHash(src),
+		SourceHash: hash,
 		Image:      "ghcr.io/hashgraph/consensus-node:0.75.0@" + string(testResolvedDigest),
 		Digest:     testResolvedDigest,
 		Repository: "ghcr.io/hashgraph",

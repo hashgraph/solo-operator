@@ -687,6 +687,12 @@ type ResolvedImageStatus struct {
 
 	// Validity is the selection outcome for this container.
 	Validity ImageValidity `json:"validity"`
+
+	// LastProbeTime is when this entry was last (re)resolved against the registries.
+	// It shows how stale the result is — most useful for an Invalid entry that is being
+	// retried each reconcile.
+	// +optional
+	LastProbeTime metav1.Time `json:"lastProbeTime,omitempty"`
 }
 
 // +kubebuilder:object:root=true

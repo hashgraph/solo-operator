@@ -105,7 +105,10 @@ func (r *ConsensusCapsuleReconciler) resolveImageSources(ctx context.Context, ca
 			))
 		}
 
-		hash := sourceHash(sc.source)
+		hash, err := sourceHash(sc.source)
+		if err != nil {
+			return &ctrl.Result{}, err
+		}
 
 		// Cache hit: reuse the pinned image, skip registry inspection. This is steady
 		// state (the source is unchanged), so it is logged at debug rather than emitting
@@ -115,10 +118,13 @@ func (r *ConsensusCapsuleReconciler) resolveImageSources(ctx context.Context, ca
 			cached.SourceHash == hash &&
 			cached.Validity == operatorv1alpha1.ImageValidityValid &&
 			cached.Digest != "" {
-			pins = append(pins, pendingPin{target: sc.target, resolved: softwareVersionFromCache(sc.source, cached)})
-			common.Debug(ctx, ReasonImageSourceResolved).
-				Str("container", sc.name).Str("image", cached.Image).Msg("reusing cached resolved image")
-			continue
+			if resolved, ok := softwareVersionFromCache(sc.source, cached); ok {
+				pins = append(pins, pendingPin{target: sc.target, resolved: resolved})
+				common.Debug(ctx, ReasonImageSourceResolved).
+					Str("container", sc.name).Str("image", cached.Image).Msg("reusing cached resolved image")
+				continue
+			}
+			// Cache reference no longer maps to a candidate — fall through and re-resolve.
 		}
 
 		// Build the checker lazily (once per reconcile) with a keychain derived from the
@@ -234,41 +240,41 @@ func repoByRef(src *operatorv1alpha1.SoftwareVersionSource, ref string) *operato
 	return nil
 }
 
-// softwareVersionFromCache reconstructs a pinned SoftwareVersion from a cached selection.
-// The winning candidate is still present (the cache is only reused while the source hash
-// is unchanged), so pull secrets and pull policy come from the source; the digest comes
-// from the cache.
-func softwareVersionFromCache(src *operatorv1alpha1.SoftwareVersionSource, cached *operatorv1alpha1.ResolvedImageStatus) *operatorv1alpha1.SoftwareVersion {
+// softwareVersionFromCache reconstructs a pinned SoftwareVersion from a cached selection,
+// mapping the cached reference back to its candidate repository so pull secrets and pull
+// policy come from the source and the digest comes from the cache. It returns ok=false when
+// the cached reference no longer maps to any candidate — the caller must then treat it as a
+// cache miss and re-resolve, rather than deploy a reference stripped of its pull secrets
+// (which would fail to pull from a private registry).
+func softwareVersionFromCache(src *operatorv1alpha1.SoftwareVersionSource, cached *operatorv1alpha1.ResolvedImageStatus) (*operatorv1alpha1.SoftwareVersion, bool) {
 	ref := strings.SplitN(cached.Image, "@", 2)[0]
-	if repo := repoByRef(src, ref); repo != nil {
-		return &operatorv1alpha1.SoftwareVersion{
-			Repository:       repo.Repository,
-			ImageName:        repo.ImageName,
-			ImageTag:         repo.ImageTag,
-			Digest:           cached.Digest,
-			ImagePullPolicy:  src.ImagePullPolicy,
-			ImagePullSecrets: repo.ImagePullSecrets,
-		}
+	repo := repoByRef(src, ref)
+	if repo == nil {
+		return nil, false
 	}
-	// Fallback: reconstruct from the cached reference alone.
-	repo, name, tag := common.ParseImage(ref)
 	return &operatorv1alpha1.SoftwareVersion{
-		Repository:      repo,
-		ImageName:       name,
-		ImageTag:        tag,
-		Digest:          cached.Digest,
-		ImagePullPolicy: src.ImagePullPolicy,
-	}
+		Repository:       repo.Repository,
+		ImageName:        repo.ImageName,
+		ImageTag:         repo.ImageTag,
+		Digest:           cached.Digest,
+		ImagePullPolicy:  src.ImagePullPolicy,
+		ImagePullSecrets: repo.ImagePullSecrets,
+	}, true
 }
 
 // sourceHash fingerprints a SoftwareVersionSource so a spec change invalidates the cache.
-func sourceHash(src *operatorv1alpha1.SoftwareVersionSource) string {
+// It returns an error rather than an empty key on marshal failure: an empty key would
+// silently disable the cache and re-probe every registry on every reconcile.
+func sourceHash(src *operatorv1alpha1.SoftwareVersionSource) (string, error) {
 	b, err := json.Marshal(src)
 	if err != nil {
-		return ""
+		return "", errx.WithHints(
+			errx.WithReason(errReconcile.Wrap(err, "marshalling softwareVersionSource for cache key"), ReasonSourceHashFailed),
+			"Confirm the container's softwareVersionSource is well-formed",
+		)
 	}
 	sum := sha256.Sum256(b)
-	return hex.EncodeToString(sum[:])
+	return hex.EncodeToString(sum[:]), nil
 }
 
 func findResolvedImage(capsule *operatorv1alpha1.ConsensusCapsule, container string) *operatorv1alpha1.ResolvedImageStatus {
@@ -280,8 +286,10 @@ func findResolvedImage(capsule *operatorv1alpha1.ConsensusCapsule, container str
 	return nil
 }
 
-// setResolvedImage upserts a resolved-image status entry by container name.
+// setResolvedImage upserts a resolved-image status entry by container name, stamping the
+// probe time so callers don't have to.
 func setResolvedImage(capsule *operatorv1alpha1.ConsensusCapsule, entry operatorv1alpha1.ResolvedImageStatus) {
+	entry.LastProbeTime = metav1.Now()
 	if existing := findResolvedImage(capsule, entry.Container); existing != nil {
 		*existing = entry
 		return
@@ -299,16 +307,16 @@ func pruneResolvedImages(capsule *operatorv1alpha1.ConsensusCapsule, sourced []s
 	for _, sc := range sourced {
 		keep[sc.name] = true
 	}
-	out := capsule.Status.ResolvedImages[:0]
+	kept := make([]operatorv1alpha1.ResolvedImageStatus, 0, len(capsule.Status.ResolvedImages))
 	changed := false
 	for _, entry := range capsule.Status.ResolvedImages {
 		if keep[entry.Container] {
-			out = append(out, entry)
+			kept = append(kept, entry)
 		} else {
 			changed = true
 		}
 	}
-	capsule.Status.ResolvedImages = out
+	capsule.Status.ResolvedImages = kept
 	return changed
 }
 
@@ -330,7 +338,7 @@ func (r *ConsensusCapsuleReconciler) persistResolvedImages(ctx context.Context, 
 func (r *ConsensusCapsuleReconciler) failImageSourceInvalid(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule, err error) (*ctrl.Result, error) {
 	log.FromContext(ctx).Error(err, "softwareVersionSource is invalid", "reason", ReasonImageSourceInvalid.String())
 	if r.Recorder != nil {
-		r.Recorder.Eventf(capsule, nil, corev1.EventTypeWarning, operatorv1alpha1.EventImageRequired.String(),
+		r.Recorder.Eventf(capsule, nil, corev1.EventTypeWarning, operatorv1alpha1.EventImageSourceInvalid.String(),
 			"Reconcile", "%s", errx.Format(err))
 	}
 	capsule.Status.Phase = operatorv1alpha1.PhaseFailed
