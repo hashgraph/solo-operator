@@ -55,6 +55,13 @@ spec:
               NetworkUpgradePrepareSpec is immutable after creation; the CEL rule below
               rejects any spec mutation at admission time.
             properties:
+              consensusCapsule:
+                description: |-
+                  ConsensusCapsule is the name of the ConsensusCapsule (this node) whose UC created
+                  this CR. The operator scopes the image-verification pull-secret keychain to this
+                  capsule so verification uses the same credentials the node's pod pulls with.
+                minLength: 1
+                type: string
               images:
                 description: |-
                   UpgradeImagesSpec is the verbatim "images:" section of consensus-node-components.yaml.
@@ -527,6 +534,7 @@ spec:
               orbit:
                 type: string
             required:
+            - consensusCapsule
             - images
             - operationId
             - orbit

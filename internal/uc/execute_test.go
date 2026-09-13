@@ -164,7 +164,7 @@ func TestBuildExecuteCR(t *testing.T) {
 	if cr.GetAnnotations()[annotationCreatedBy] != createdByUC {
 		t.Fatalf("created-by annotation = %q", cr.GetAnnotations()[annotationCreatedBy])
 	}
-	node, _, _ := unstructured.NestedString(cr.Object, "spec", "consensusNode")
+	node, _, _ := unstructured.NestedString(cr.Object, "spec", "consensusCapsule")
 	if node != wantConsensusNode {
 		t.Fatalf("spec.consensusNode = %q, want %q", node, wantConsensusNode)
 	}
@@ -205,7 +205,7 @@ func TestHandleNowFrozenCreatesExecuteCR(t *testing.T) {
 	if cr.GetAnnotations()[annotationCreatedBy] != createdByUC {
 		t.Fatalf("created-by annotation = %q", cr.GetAnnotations()[annotationCreatedBy])
 	}
-	node, _, _ := unstructured.NestedString(cr.Object, "spec", "consensusNode")
+	node, _, _ := unstructured.NestedString(cr.Object, "spec", "consensusCapsule")
 	if node != wantConsensusNode {
 		t.Fatalf("spec.consensusNode = %q, want %q", node, wantConsensusNode)
 	}

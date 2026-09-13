@@ -112,7 +112,7 @@ func freezeSiblingExists(ctx context.Context, c client.Client, namespace, selfUI
 	)
 }
 
-func executeSiblingExists(ctx context.Context, c client.Client, namespace, selfUID, selfConsensusNode, operationID string) (bool, error) {
+func executeSiblingExists(ctx context.Context, c client.Client, namespace, selfUID, selfConsensusCapsule, operationID string) (bool, error) {
 	var list operatorv1alpha1.NetworkUpgradeExecuteList
 	if err := c.List(ctx, &list,
 		client.InNamespace(namespace),
@@ -124,7 +124,7 @@ func executeSiblingExists(ctx context.Context, c client.Client, namespace, selfU
 	}
 	for i := range list.Items {
 		item := &list.Items[i]
-		if string(item.UID) != selfUID && item.Spec.ConsensusNode == selfConsensusNode {
+		if string(item.UID) != selfUID && item.Spec.ConsensusCapsule == selfConsensusCapsule {
 			return true, nil
 		}
 	}

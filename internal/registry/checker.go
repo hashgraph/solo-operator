@@ -4,6 +4,7 @@ package registry
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"slices"
 	"sync"
@@ -13,9 +14,11 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	"golang.org/x/sync/errgroup"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 )
 
 const (
@@ -40,17 +43,74 @@ type OCIChecker struct {
 	AllowedHosts []string // SSRF allow-list; empty denies only private/loopback hosts
 }
 
-func (c OCIChecker) source() imageSource {
+func (c OCIChecker) sourceWith(kc authn.Keychain) imageSource {
 	if c.src != nil {
 		return c.src
-	}
-	kc := c.Keychain
-	if kc == nil {
-		kc = authn.DefaultKeychain
 	}
 	// guardedTransport enforces the SSRF policy at connect time (see dialguard.go),
 	// authoritatively for DNS-resolved hosts and registry redirects alike.
 	return remoteSource{keychain: kc, transport: guardedTransport(c.AllowedHosts)}
+}
+
+func (c OCIChecker) source() imageSource {
+	kc := c.Keychain
+	if kc == nil {
+		kc = authn.DefaultKeychain
+	}
+	return c.sourceWith(kc)
+}
+
+// anonymousSource inspects with no credential. It is the retry path when a configured
+// pull secret is rejected (401/403) but the image may be public and pullable anonymously.
+func (c OCIChecker) anonymousSource() imageSource {
+	return c.sourceWith(anonymousKeychain{})
+}
+
+// anonymousKeychain resolves every registry to anonymous access.
+type anonymousKeychain struct{}
+
+func (anonymousKeychain) Resolve(authn.Resource) (authn.Authenticator, error) {
+	return authn.Anonymous, nil
+}
+
+// authError marks a registry authentication/authorization failure (HTTP 401/403) so the
+// checker can trigger an anonymous retry. It is needed because Inspect decorates errors
+// with errorx's opaque wrapping, which hides the underlying transport.Error from
+// errors.As — so the classification is done at the raw level (isRawAuthError) and carried
+// out on this marker. It preserves the decorated error for message/reason/hints.
+type authError struct{ error }
+
+func (e authError) Unwrap() error { return e.error }
+
+// markAuth tags decorated with the auth marker when the raw error is a 401/403, so the
+// checker retries anonymously; otherwise it returns decorated unchanged.
+func markAuth(raw, decorated error) error {
+	if isRawAuthError(raw) {
+		return authError{decorated}
+	}
+	return decorated
+}
+
+// isAuthError reports whether err carries the auth marker (a rejected credential).
+func isAuthError(err error) bool {
+	var ae authError
+	return errors.As(err, &ae)
+}
+
+// unwrapAuth strips the auth marker, returning the underlying decorated error so callers
+// surface the usual reason/hints.
+func unwrapAuth(err error) error {
+	var ae authError
+	if errors.As(err, &ae) {
+		return ae.error
+	}
+	return err
+}
+
+// isRawAuthError classifies a raw go-containerregistry error as a 401/403.
+func isRawAuthError(err error) bool {
+	var terr *transport.Error
+	return errors.As(err, &terr) && (terr.StatusCode == http.StatusUnauthorized || terr.StatusCode == http.StatusForbidden)
 }
 
 func (c OCIChecker) Check(ctx context.Context, spec operatorv1alpha1.ImageRegistrySpec, deterministic operatorv1alpha1.ImageDeterministicSpec) RegistryResult {
@@ -73,9 +133,18 @@ func (c OCIChecker) Check(ctx context.Context, spec operatorv1alpha1.ImageRegist
 	}
 
 	digest, diffIDs, err := c.source().Inspect(ctx, spec.Image, platforms)
+	if err != nil && isAuthError(err) {
+		// A configured pull secret was rejected (401/403). The image may be public and
+		// pullable anonymously — the kubelet falls back to anonymous too — so retry
+		// without the credential before declaring the registry unreachable. Warn so a
+		// stale/misscoped credential is still visible even when the retry succeeds.
+		common.Warn(ctx, ReasonCredentialRejected).Str("image", spec.Image).AnErr("error", err).
+			Msg("configured pull secret was rejected (401/403); retrying anonymously")
+		digest, diffIDs, err = c.anonymousSource().Inspect(ctx, spec.Image, platforms)
+	}
 	if err != nil {
 		res.State = StateUnreachable
-		res.Err = err
+		res.Err = unwrapAuth(err)
 		return res
 	}
 	res.Digest = digest
@@ -132,11 +201,11 @@ func (s remoteSource) Inspect(ctx context.Context, image string, platforms []str
 
 	desc, err := remote.Get(ref, opts...)
 	if err != nil {
-		return "", nil, errx.WithHints(
+		return "", nil, markAuth(err, errx.WithHints(
 			errx.WithReason(errRegistryAPI.Wrap(err, "resolving digest"), ReasonDigestResolve),
 			"Confirm the registry is reachable and the image exists",
 			"Check pull credentials for the registry",
-		)
+		))
 	}
 	digest := operatorv1alpha1.Sha256Digest(desc.Digest.String())
 
@@ -169,17 +238,17 @@ func (s remoteSource) platformDiffIDs(ctx context.Context, ref name.Reference, p
 	}
 	img, err := remote.Image(ref, append(s.opts(ctx), remote.WithPlatform(*plat))...)
 	if err != nil {
-		return nil, errx.WithHints(
+		return nil, markAuth(err, errx.WithHints(
 			errx.WithReason(errRegistryAPI.Wrap(err, "reading %s image", platform), ReasonImageRead),
 			"Confirm the registry is reachable and the image provides the requested platform",
-		)
+		))
 	}
 	cfg, err := img.ConfigFile()
 	if err != nil {
-		return nil, errx.WithHints(
+		return nil, markAuth(err, errx.WithHints(
 			errx.WithReason(errRegistryAPI.Wrap(err, "reading %s config", platform), ReasonConfigRead),
 			"Confirm the registry is reachable and the image config is readable",
-		)
+		))
 	}
 	hashes := make([]operatorv1alpha1.Sha256Digest, len(cfg.RootFS.DiffIDs))
 	for i, h := range cfg.RootFS.DiffIDs {

@@ -86,9 +86,10 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 				},
 			},
 			Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
-				Orbit:       ns,
-				OperationID: opID,
-				Images:      images,
+				Orbit:            ns,
+				OperationID:      opID,
+				ConsensusCapsule: "node0",
+				Images:           images,
 			},
 		}
 		Expect(k8sClient.Create(ctx, nup)).To(Succeed())
@@ -114,11 +115,12 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 				},
 			},
 			Spec: operatorv1alpha1.NetworkUpgradeFreezeSpec{
-				Orbit:           ns,
-				OperationID:     opID,
-				ScheduledTime:   metav1.Now(),
-				Images:          prepare.Spec.Images,
-				SelectedSources: *prepare.Status.SelectedSources,
+				Orbit:            ns,
+				OperationID:      opID,
+				ConsensusCapsule: "node0",
+				ScheduledTime:    metav1.Now(),
+				Images:           prepare.Spec.Images,
+				SelectedSources:  *prepare.Status.SelectedSources,
 			},
 		}
 		Expect(k8sClient.Create(ctx, nuf)).To(Succeed())
@@ -279,10 +281,10 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 					},
 				},
 				Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
-					Orbit:           ns,
-					OperationID:     opID,
-					ConsensusNode:   "node0-happy",
-					SelectedSources: selected,
+					Orbit:            ns,
+					OperationID:      opID,
+					ConsensusCapsule: "node0-happy",
+					SelectedSources:  selected,
 					Images: operatorv1alpha1.UpgradeImagesSpec{
 						ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 							Version:    "0.75.0",
@@ -436,10 +438,10 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 					},
 				},
 				Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
-					Orbit:           ns,
-					OperationID:     opID,
-					ConsensusNode:   "node0-daemon-fail",
-					SelectedSources: selected,
+					Orbit:            ns,
+					OperationID:      opID,
+					ConsensusCapsule: "node0-daemon-fail",
+					SelectedSources:  selected,
 					Images: operatorv1alpha1.UpgradeImagesSpec{
 						ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 							Version:    "0.75.0",
@@ -509,9 +511,9 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 					},
 				},
 				Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
-					Orbit:         ns,
-					OperationID:   opID,
-					ConsensusNode: "node0-no-prereqs",
+					Orbit:            ns,
+					OperationID:      opID,
+					ConsensusCapsule: "node0-no-prereqs",
 					Images: operatorv1alpha1.UpgradeImagesSpec{
 						ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 							Version:    "0.75.0",
@@ -575,10 +577,10 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 					},
 				},
 				Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
-					Orbit:         ns,
-					OperationID:   opID,
-					ConsensusNode: "node0-failover",
-					Images:        images,
+					Orbit:            ns,
+					OperationID:      opID,
+					ConsensusCapsule: "node0-failover",
+					Images:           images,
 					SelectedSources: operatorv1alpha1.SelectedSources{
 						ConsensusNode: &operatorv1alpha1.SelectedSource{
 							Image:  "gcr.io/unreachable/cn:0.75.0",
@@ -679,11 +681,11 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 					},
 				},
 				Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
-					Orbit:           ns,
-					OperationID:     opID,
-					ConsensusNode:   capsName,
-					Images:          images,
-					SelectedSources: selected,
+					Orbit:            ns,
+					OperationID:      opID,
+					ConsensusCapsule: capsName,
+					Images:           images,
+					SelectedSources:  selected,
 				},
 			}
 			Expect(k8sClient.Create(ctx, nux)).To(Succeed())
@@ -778,11 +780,11 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 					},
 				},
 				Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
-					Orbit:           ns,
-					OperationID:     opID,
-					ConsensusNode:   capsName,
-					Images:          images,
-					SelectedSources: selected,
+					Orbit:            ns,
+					OperationID:      opID,
+					ConsensusCapsule: capsName,
+					Images:           images,
+					SelectedSources:  selected,
 				},
 			}
 			Expect(k8sClient.Create(ctx, nux)).To(Succeed())

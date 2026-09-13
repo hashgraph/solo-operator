@@ -29,7 +29,7 @@ func executeCRName(operationID string) string {
 // NetworkUpgradeFreeze CR, which in turn carried them verbatim from the Prepare
 // CR — so the Execute CR is self-contained and pins the registry selection made
 // once at prepare (the operator's ExecuteReconciler re-validates it into
-// status.selectedSources). spec.consensusNode scopes the CR to this UC's owning
+// status.selectedSources). spec.consensusCapsule scopes the CR to this UC's owning
 // ConsensusCapsule (HIP-1496 "NetworkUpgradeExecute" — one CR per capsule); the
 // operator resolves the ConsensusCapsule by that name. Config.Validate guarantees
 // it is non-empty.
@@ -57,12 +57,12 @@ func buildExecuteCR(
 			},
 		},
 		Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
-			Orbit:           cfg.Orbit,
-			OperationID:     operationID,
-			ConsensusNode:   cfg.CapsuleName(),
-			Images:          images,
-			SelectedSources: selectedSources,
-			Provisioner:     provisioner,
+			Orbit:            cfg.Orbit,
+			OperationID:      operationID,
+			ConsensusCapsule: cfg.CapsuleName(),
+			Images:           images,
+			SelectedSources:  selectedSources,
+			Provisioner:      provisioner,
 		},
 	}
 

@@ -31,13 +31,16 @@ type NetworkUpgradeFreezeReconciler struct {
 	Checker  registry.ImageChecker
 
 	StrategyName string
+
+	// AllowedRegistryHosts is the --allowed-registry-hosts SSRF allow-list, applied to the
+	// per-reconcile OCIChecker built with a namespace-derived keychain.
+	AllowedRegistryHosts []string
 }
 
 func NewNetworkUpgradeFreezeReconciler(c client.Client, scheme *runtime.Scheme) *NetworkUpgradeFreezeReconciler {
 	return &NetworkUpgradeFreezeReconciler{
-		Client:  c,
-		Scheme:  scheme,
-		Checker: registry.OCIChecker{},
+		Client: c,
+		Scheme: scheme,
 	}
 }
 
@@ -49,7 +52,7 @@ func (r *NetworkUpgradeFreezeReconciler) WithStrategy(name string) *NetworkUpgra
 // WithAllowedRegistryHosts configures the SSRF allow-list enforced before any
 // registry is dialed. See registry.OCIChecker.AllowedHosts.
 func (r *NetworkUpgradeFreezeReconciler) WithAllowedRegistryHosts(hosts []string) *NetworkUpgradeFreezeReconciler {
-	r.Checker = registry.OCIChecker{AllowedHosts: hosts}
+	r.AllowedRegistryHosts = hosts
 	return r
 }
 
@@ -57,6 +60,8 @@ func (r *NetworkUpgradeFreezeReconciler) WithAllowedRegistryHosts(hosts []string
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradefreezes/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradefreezes/finalizers,verbs=update
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeprepares,verbs=get;list;watch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=consensuscapsules,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 
 func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var freeze operatorv1alpha1.NetworkUpgradeFreeze
@@ -167,8 +172,13 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 
 	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 
+	checker, err := capsuleRegistryChecker(ctx, r.Client, r.Checker, freeze.Namespace, freeze.Spec.ConsensusCapsule, r.AllowedRegistryHosts)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	updated, succeeded := registry.RevalidateComponents(
-		ctx, r.Checker,
+		ctx, checker,
 		freeze.Spec.Images, freeze.Spec.SelectedSources,
 		checkTimeout, rng, r.StrategyName,
 		nil,
@@ -242,9 +252,8 @@ func (r *NetworkUpgradeFreezeReconciler) SetupWithManager(mgr ctrl.Manager) erro
 	if r.Recorder == nil {
 		r.Recorder = mgr.GetEventRecorder("networkupgradefreeze")
 	}
-	if r.Checker == nil {
-		r.Checker = registry.OCIChecker{}
-	}
+	// r.Checker is left nil in production: the reconcile builds a checker per namespace
+	// with a keychain from the ConsensusCapsule pull secrets. Tests inject a non-nil one.
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.NetworkUpgradeFreeze{}).
 		Named("networkupgradefreeze").

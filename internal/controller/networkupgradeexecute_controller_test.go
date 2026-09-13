@@ -40,9 +40,9 @@ func newExecuteForTest() *operatorv1alpha1.NetworkUpgradeExecute {
 			Finalizers: []string{FinalizerNetworkUpgradeExecute},
 		},
 		Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
-			Orbit:         "test-orbit",
-			OperationID:   "op-001",
-			ConsensusNode: "node0",
+			Orbit:            "test-orbit",
+			OperationID:      "op-001",
+			ConsensusCapsule: "node0",
 			Images: operatorv1alpha1.UpgradeImagesSpec{
 				ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 					Version:    "0.75.0",
@@ -293,7 +293,7 @@ func TestExecuteReconcile_InitializesStatus(t *testing.T) {
 			Finalizers: []string{FinalizerNetworkUpgradeExecute},
 		},
 		Spec: operatorv1alpha1.NetworkUpgradeExecuteSpec{
-			Orbit: "test-orbit", OperationID: "op-001", ConsensusNode: "node0",
+			Orbit: "test-orbit", OperationID: "op-001", ConsensusCapsule: "node0",
 			Images:          operatorv1alpha1.UpgradeImagesSpec{ConsensusNode: operatorv1alpha1.ImageComponentSpec{Version: "0.75.0", Registries: registriesFor("reg-a/cn:0.75.0")}},
 			SelectedSources: operatorv1alpha1.SelectedSources{ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest}},
 		},
@@ -777,7 +777,7 @@ func TestExecuteReconcile_PatchesIndependentlyOfPeers(t *testing.T) {
 		Name: "upgrade-op-001-node1", Namespace: "default", UID: "sibling-uid",
 		Labels: map[string]string{operatorv1alpha1.LabelOperationID: "op-001", operatorv1alpha1.LabelStep: operatorv1alpha1.StepExecute},
 	}
-	sibling.Spec.ConsensusNode = "node1"
+	sibling.Spec.ConsensusCapsule = "node1"
 	siblingCapsule := newOnlineCapsule("node1")
 	siblingCapsule.Spec.NodeId = 1
 
@@ -890,13 +890,13 @@ func TestExecuteReconcile_SameOperationID_DifferentNode_NotDuplicate(t *testing.
 	existing := newExecuteForTest()
 	existing.Name = "execute-node0"
 	existing.UID = "uid-node0"
-	existing.Spec.ConsensusNode = "node0"
+	existing.Spec.ConsensusCapsule = "node0"
 	existing.Status = operatorv1alpha1.NetworkUpgradeExecuteStatus{}
 
 	execute := newExecuteForTest()
 	execute.Name = "execute-node1"
 	execute.UID = "uid-node1"
-	execute.Spec.ConsensusNode = "node1"
+	execute.Spec.ConsensusCapsule = "node1"
 	execute.Status = operatorv1alpha1.NetworkUpgradeExecuteStatus{}
 
 	scheme := newControllerTestScheme()

@@ -44,6 +44,9 @@ type NetworkUpgradeExecuteReconciler struct {
 	Checker  registry.ImageChecker
 
 	StrategyName string
+	// AllowedRegistryHosts is the --allowed-registry-hosts SSRF allow-list, applied to the
+	// per-reconcile OCIChecker built with a namespace-derived keychain.
+	AllowedRegistryHosts []string
 	// NodeActiveTimeout bounds how long to wait for the consensus node to reach
 	// platform status ACTIVE after an upgrade before emitting the first warning.
 	NodeActiveTimeout time.Duration
@@ -56,7 +59,6 @@ func NewNetworkUpgradeExecuteReconciler(c client.Client, scheme *runtime.Scheme)
 	return &NetworkUpgradeExecuteReconciler{
 		Client:                  c,
 		Scheme:                  scheme,
-		Checker:                 registry.OCIChecker{},
 		NodeActiveTimeout:       executeDefaultNodeActiveTimeout,
 		NodeActiveAlertInterval: executeDefaultNodeActiveAlertEvery,
 	}
@@ -99,7 +101,7 @@ func (r *NetworkUpgradeExecuteReconciler) WithNodeActiveAlertInterval(d time.Dur
 // WithAllowedRegistryHosts configures the SSRF allow-list enforced before any
 // registry is dialed. See registry.OCIChecker.AllowedHosts.
 func (r *NetworkUpgradeExecuteReconciler) WithAllowedRegistryHosts(hosts []string) *NetworkUpgradeExecuteReconciler {
-	r.Checker = registry.OCIChecker{AllowedHosts: hosts}
+	r.AllowedRegistryHosts = hosts
 	return r
 }
 
@@ -109,6 +111,7 @@ func (r *NetworkUpgradeExecuteReconciler) WithAllowedRegistryHosts(hosts []strin
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeprepares,verbs=get;list;watch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradefreezes,verbs=get;list;watch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=consensuscapsules,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch
 
@@ -144,12 +147,12 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	if execute.Status.Phase == "" || execute.Status.Phase == operatorv1alpha1.ExecutePhasePending {
-		sibling, err := executeSiblingExists(ctx, r.Client, execute.Namespace, string(execute.UID), execute.Spec.ConsensusNode, execute.Spec.OperationID)
+		sibling, err := executeSiblingExists(ctx, r.Client, execute.Namespace, string(execute.UID), execute.Spec.ConsensusCapsule, execute.Spec.OperationID)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 		if sibling {
-			msg := fmt.Sprintf("operationId %q + consensusNode %q already used by another NetworkUpgradeExecute", execute.Spec.OperationID, execute.Spec.ConsensusNode)
+			msg := fmt.Sprintf("operationId %q + consensusCapsule %q already used by another NetworkUpgradeExecute", execute.Spec.OperationID, execute.Spec.ConsensusCapsule)
 			r.eventf(ctx, &execute, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
 			execute.Status.Phase = operatorv1alpha1.ExecutePhaseFailed
 			execute.Status.ObservedGeneration = execute.Generation
@@ -377,9 +380,13 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 			})
 		} else {
 			rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
+			checker, err := capsuleRegistryChecker(ctx, r.Client, r.Checker, execute.Namespace, execute.Spec.ConsensusCapsule, r.AllowedRegistryHosts)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
 			skipUC := map[operatorv1alpha1.ComponentName]bool{operatorv1alpha1.ComponentUC: true}
 			updated, registryOK := registry.RevalidateComponents(
-				ctx, r.Checker,
+				ctx, checker,
 				execute.Spec.Images, execute.Spec.SelectedSources,
 				checkTimeout, rng, r.StrategyName,
 				skipUC,
@@ -630,13 +637,13 @@ func (r *NetworkUpgradeExecuteReconciler) nodeActiveAlertInterval() time.Duratio
 
 func (r *NetworkUpgradeExecuteReconciler) getCapsule(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (*operatorv1alpha1.ConsensusCapsule, error) {
 	var capsule operatorv1alpha1.ConsensusCapsule
-	err := r.Get(ctx, types.NamespacedName{Name: execute.Spec.ConsensusNode, Namespace: execute.Namespace}, &capsule)
+	err := r.Get(ctx, types.NamespacedName{Name: execute.Spec.ConsensusCapsule, Namespace: execute.Namespace}, &capsule)
 	if apierrors.IsNotFound(err) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, errx.WithHints(
-			errx.WithReason(errK8sAPI.Wrap(err, "getting ConsensusCapsule %s", execute.Spec.ConsensusNode), ReasonGetFailed),
+			errx.WithReason(errK8sAPI.Wrap(err, "getting ConsensusCapsule %s", execute.Spec.ConsensusCapsule), ReasonGetFailed),
 			"Confirm the operator has get permission on consensuscapsules")
 	}
 	return &capsule, nil
@@ -906,9 +913,8 @@ func (r *NetworkUpgradeExecuteReconciler) SetupWithManager(mgr ctrl.Manager) err
 	if r.Recorder == nil {
 		r.Recorder = mgr.GetEventRecorder("networkupgradeexecute")
 	}
-	if r.Checker == nil {
-		r.Checker = registry.OCIChecker{}
-	}
+	// r.Checker is left nil in production: the reconcile builds a checker per namespace
+	// with a keychain from the ConsensusCapsule pull secrets. Tests inject a non-nil one.
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.NetworkUpgradeExecute{}).
 		Named("networkupgradeexecute").
