@@ -122,6 +122,7 @@ type ImageVerificationSpec struct {
 	Architecture string `json:"architecture,omitempty"`
 
 	// LayerHashes are the expected layer digest hashes
+	// +kubebuilder:validation:MinItems=1
 	LayerHashes []string `json:"layerHashes"`
 }
 
@@ -141,13 +142,29 @@ type ImageRepository struct {
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 }
 
-// SoftwareVersionSource defines multiple sources for software versions
+// SoftwareVersionSource defines multiple candidate registries for a container image,
+// together with the layer hashes used to verify them. When set on a container it
+// replaces the single SoftwareVersion: the operator probes the registries, verifies
+// each candidate's layer hashes, and deploys the resolved image pinned to its content
+// digest. Layer hashes are mandatory (ImageVerificationSpec is required and non-empty)
+// so a source is never deployed unverified — a container that needs no verification
+// should use the single SoftwareVersion instead.
 type SoftwareVersionSource struct {
-	// ImageRepositories is a list of possible image repositories
+	// ImageRepositories is the ordered list of candidate image repositories.
+	// +kubebuilder:validation:MinItems=1
 	ImageRepositories []ImageRepository `json:"imageRepositories"`
 
-	// ImageVerificationSpec contains verification specifications
+	// ImageVerificationSpec is the per-platform expected layer hashes every candidate
+	// must match. Required and non-empty: a SoftwareVersionSource must carry layer hashes.
+	// +kubebuilder:validation:MinItems=1
 	ImageVerificationSpec []ImageVerificationSpec `json:"imageVerificationSpec"`
+
+	// SelectionStrategy chooses the order candidate registries are probed in:
+	// "Sequential" honors the listed order (primary first); "Random" spreads pull
+	// traffic. Unset falls back to the operator's --registry-order default.
+	// +kubebuilder:validation:Enum=Random;Sequential
+	// +optional
+	SelectionStrategy string `json:"selectionStrategy,omitempty"`
 
 	// ImagePullPolicy specifies when to pull images
 	// +kubebuilder:default=IfNotPresent
@@ -405,6 +422,12 @@ type CheetahUploader struct {
 	// +optional
 	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
 
+	// SoftwareVersionSource declares multiple candidate registries (with layer hashes)
+	// for this container's image; when set it takes precedence over SoftwareVersion and
+	// the operator selects, verifies, and digest-pins the deployed image.
+	// +optional
+	SoftwareVersionSource *SoftwareVersionSource `json:"softwareVersionSource,omitempty"`
+
 	// Resources specifies resource requirements
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
@@ -635,6 +658,12 @@ type StreamUploader struct {
 	// SoftwareVersion specifies the container image repository and tag
 	// +optional
 	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
+
+	// SoftwareVersionSource declares multiple candidate registries (with layer hashes)
+	// for this container's image; when set it takes precedence over SoftwareVersion and
+	// the operator selects, verifies, and digest-pins the deployed image.
+	// +optional
+	SoftwareVersionSource *SoftwareVersionSource `json:"softwareVersionSource,omitempty"`
 
 	// Resources specifies resource requirements
 	// +optional

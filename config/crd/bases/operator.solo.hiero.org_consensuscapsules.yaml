@@ -3646,6 +3646,7 @@ spec:
                                       digest hashes
                                     items:
                                       type: string
+                                    minItems: 1
                                     type: array
                                   os:
                                     description: OS is the target operating system
@@ -3669,6 +3670,111 @@ spec:
                             - imageName
                             - imageTag
                             - repository
+                            type: object
+                          softwareVersionSource:
+                            description: |-
+                              SoftwareVersionSource declares multiple candidate registries (with layer hashes)
+                              for this container's image; when set it takes precedence over SoftwareVersion and
+                              the operator selects, verifies, and digest-pins the deployed image.
+                            properties:
+                              imagePullPolicy:
+                                default: IfNotPresent
+                                description: ImagePullPolicy specifies when to pull
+                                  images
+                                enum:
+                                - Always
+                                - Never
+                                - IfNotPresent
+                                type: string
+                              imageRepositories:
+                                description: ImageRepositories is the ordered list
+                                  of candidate image repositories.
+                                items:
+                                  description: ImageRepository defines a container
+                                    image repository
+                                  properties:
+                                    imageName:
+                                      description: ImageName is the image name
+                                      type: string
+                                    imagePullSecrets:
+                                      description: ImagePullSecrets for accessing
+                                        private registries
+                                      items:
+                                        description: |-
+                                          LocalObjectReference contains enough information to let you locate the
+                                          referenced object inside the same namespace.
+                                        properties:
+                                          name:
+                                            default: ""
+                                            description: |-
+                                              Name of the referent.
+                                              This field is effectively required, but due to backwards compatibility is
+                                              allowed to be empty. Instances of this type with an empty value here are
+                                              almost certainly wrong.
+                                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                            type: string
+                                        type: object
+                                        x-kubernetes-map-type: atomic
+                                      type: array
+                                    imageTag:
+                                      description: ImageTag is the image tag
+                                      type: string
+                                    repository:
+                                      description: Repository is the registry URL
+                                      type: string
+                                  required:
+                                  - imageName
+                                  - imageTag
+                                  - repository
+                                  type: object
+                                minItems: 1
+                                type: array
+                              imageVerificationSpec:
+                                description: |-
+                                  ImageVerificationSpec is the per-platform expected layer hashes every candidate
+                                  must match. Required and non-empty: a SoftwareVersionSource must carry layer hashes.
+                                items:
+                                  description: ImageVerificationSpec defines verification
+                                    parameters for container images
+                                  properties:
+                                    architecture:
+                                      description: Architecture is the target CPU
+                                        architecture
+                                      enum:
+                                      - amd64
+                                      - arm64
+                                      type: string
+                                    layerHashes:
+                                      description: LayerHashes are the expected layer
+                                        digest hashes
+                                      items:
+                                        type: string
+                                      minItems: 1
+                                      type: array
+                                    os:
+                                      description: OS is the target operating system
+                                      enum:
+                                      - darwin
+                                      - linux
+                                      - windows
+                                      type: string
+                                  required:
+                                  - layerHashes
+                                  type: object
+                                minItems: 1
+                                type: array
+                              selectionStrategy:
+                                description: |-
+                                  SelectionStrategy chooses the order candidate registries are probed in:
+                                  "Sequential" honors the listed order (primary first); "Random" spreads pull
+                                  traffic. Unset falls back to the operator's --registry-order default.
+                                enum:
+                                - Random
+                                - Sequential
+                                type: string
+                            required:
+                            - imageRepositories
+                            - imageVerificationSpec
                             type: object
                         type: object
                       backupUploader:
@@ -3990,6 +4096,7 @@ spec:
                                       digest hashes
                                     items:
                                       type: string
+                                    minItems: 1
                                     type: array
                                   os:
                                     description: OS is the target operating system
@@ -4013,6 +4120,111 @@ spec:
                             - imageName
                             - imageTag
                             - repository
+                            type: object
+                          softwareVersionSource:
+                            description: |-
+                              SoftwareVersionSource declares multiple candidate registries (with layer hashes)
+                              for this container's image; when set it takes precedence over SoftwareVersion and
+                              the operator selects, verifies, and digest-pins the deployed image.
+                            properties:
+                              imagePullPolicy:
+                                default: IfNotPresent
+                                description: ImagePullPolicy specifies when to pull
+                                  images
+                                enum:
+                                - Always
+                                - Never
+                                - IfNotPresent
+                                type: string
+                              imageRepositories:
+                                description: ImageRepositories is the ordered list
+                                  of candidate image repositories.
+                                items:
+                                  description: ImageRepository defines a container
+                                    image repository
+                                  properties:
+                                    imageName:
+                                      description: ImageName is the image name
+                                      type: string
+                                    imagePullSecrets:
+                                      description: ImagePullSecrets for accessing
+                                        private registries
+                                      items:
+                                        description: |-
+                                          LocalObjectReference contains enough information to let you locate the
+                                          referenced object inside the same namespace.
+                                        properties:
+                                          name:
+                                            default: ""
+                                            description: |-
+                                              Name of the referent.
+                                              This field is effectively required, but due to backwards compatibility is
+                                              allowed to be empty. Instances of this type with an empty value here are
+                                              almost certainly wrong.
+                                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                            type: string
+                                        type: object
+                                        x-kubernetes-map-type: atomic
+                                      type: array
+                                    imageTag:
+                                      description: ImageTag is the image tag
+                                      type: string
+                                    repository:
+                                      description: Repository is the registry URL
+                                      type: string
+                                  required:
+                                  - imageName
+                                  - imageTag
+                                  - repository
+                                  type: object
+                                minItems: 1
+                                type: array
+                              imageVerificationSpec:
+                                description: |-
+                                  ImageVerificationSpec is the per-platform expected layer hashes every candidate
+                                  must match. Required and non-empty: a SoftwareVersionSource must carry layer hashes.
+                                items:
+                                  description: ImageVerificationSpec defines verification
+                                    parameters for container images
+                                  properties:
+                                    architecture:
+                                      description: Architecture is the target CPU
+                                        architecture
+                                      enum:
+                                      - amd64
+                                      - arm64
+                                      type: string
+                                    layerHashes:
+                                      description: LayerHashes are the expected layer
+                                        digest hashes
+                                      items:
+                                        type: string
+                                      minItems: 1
+                                      type: array
+                                    os:
+                                      description: OS is the target operating system
+                                      enum:
+                                      - darwin
+                                      - linux
+                                      - windows
+                                      type: string
+                                  required:
+                                  - layerHashes
+                                  type: object
+                                minItems: 1
+                                type: array
+                              selectionStrategy:
+                                description: |-
+                                  SelectionStrategy chooses the order candidate registries are probed in:
+                                  "Sequential" honors the listed order (primary first); "Random" spreads pull
+                                  traffic. Unset falls back to the operator's --registry-order default.
+                                enum:
+                                - Random
+                                - Sequential
+                                type: string
+                            required:
+                            - imageRepositories
+                            - imageVerificationSpec
                             type: object
                         type: object
                       blocksUploader:
@@ -4243,6 +4455,7 @@ spec:
                                       digest hashes
                                     items:
                                       type: string
+                                    minItems: 1
                                     type: array
                                   os:
                                     description: OS is the target operating system
@@ -4266,6 +4479,111 @@ spec:
                             - imageName
                             - imageTag
                             - repository
+                            type: object
+                          softwareVersionSource:
+                            description: |-
+                              SoftwareVersionSource declares multiple candidate registries (with layer hashes)
+                              for this container's image; when set it takes precedence over SoftwareVersion and
+                              the operator selects, verifies, and digest-pins the deployed image.
+                            properties:
+                              imagePullPolicy:
+                                default: IfNotPresent
+                                description: ImagePullPolicy specifies when to pull
+                                  images
+                                enum:
+                                - Always
+                                - Never
+                                - IfNotPresent
+                                type: string
+                              imageRepositories:
+                                description: ImageRepositories is the ordered list
+                                  of candidate image repositories.
+                                items:
+                                  description: ImageRepository defines a container
+                                    image repository
+                                  properties:
+                                    imageName:
+                                      description: ImageName is the image name
+                                      type: string
+                                    imagePullSecrets:
+                                      description: ImagePullSecrets for accessing
+                                        private registries
+                                      items:
+                                        description: |-
+                                          LocalObjectReference contains enough information to let you locate the
+                                          referenced object inside the same namespace.
+                                        properties:
+                                          name:
+                                            default: ""
+                                            description: |-
+                                              Name of the referent.
+                                              This field is effectively required, but due to backwards compatibility is
+                                              allowed to be empty. Instances of this type with an empty value here are
+                                              almost certainly wrong.
+                                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                            type: string
+                                        type: object
+                                        x-kubernetes-map-type: atomic
+                                      type: array
+                                    imageTag:
+                                      description: ImageTag is the image tag
+                                      type: string
+                                    repository:
+                                      description: Repository is the registry URL
+                                      type: string
+                                  required:
+                                  - imageName
+                                  - imageTag
+                                  - repository
+                                  type: object
+                                minItems: 1
+                                type: array
+                              imageVerificationSpec:
+                                description: |-
+                                  ImageVerificationSpec is the per-platform expected layer hashes every candidate
+                                  must match. Required and non-empty: a SoftwareVersionSource must carry layer hashes.
+                                items:
+                                  description: ImageVerificationSpec defines verification
+                                    parameters for container images
+                                  properties:
+                                    architecture:
+                                      description: Architecture is the target CPU
+                                        architecture
+                                      enum:
+                                      - amd64
+                                      - arm64
+                                      type: string
+                                    layerHashes:
+                                      description: LayerHashes are the expected layer
+                                        digest hashes
+                                      items:
+                                        type: string
+                                      minItems: 1
+                                      type: array
+                                    os:
+                                      description: OS is the target operating system
+                                      enum:
+                                      - darwin
+                                      - linux
+                                      - windows
+                                      type: string
+                                  required:
+                                  - layerHashes
+                                  type: object
+                                minItems: 1
+                                type: array
+                              selectionStrategy:
+                                description: |-
+                                  SelectionStrategy chooses the order candidate registries are probed in:
+                                  "Sequential" honors the listed order (primary first); "Random" spreads pull
+                                  traffic. Unset falls back to the operator's --registry-order default.
+                                enum:
+                                - Random
+                                - Sequential
+                                type: string
+                            required:
+                            - imageRepositories
+                            - imageVerificationSpec
                             type: object
                           stopOnError:
                             default: false
@@ -4682,6 +5000,7 @@ spec:
                                       digest hashes
                                     items:
                                       type: string
+                                    minItems: 1
                                     type: array
                                   os:
                                     description: OS is the target operating system
@@ -4705,6 +5024,111 @@ spec:
                             - imageName
                             - imageTag
                             - repository
+                            type: object
+                          softwareVersionSource:
+                            description: |-
+                              SoftwareVersionSource declares multiple candidate registries (with layer hashes)
+                              for this container's image; when set it takes precedence over SoftwareVersion and
+                              the operator selects, verifies, and digest-pins the deployed image.
+                            properties:
+                              imagePullPolicy:
+                                default: IfNotPresent
+                                description: ImagePullPolicy specifies when to pull
+                                  images
+                                enum:
+                                - Always
+                                - Never
+                                - IfNotPresent
+                                type: string
+                              imageRepositories:
+                                description: ImageRepositories is the ordered list
+                                  of candidate image repositories.
+                                items:
+                                  description: ImageRepository defines a container
+                                    image repository
+                                  properties:
+                                    imageName:
+                                      description: ImageName is the image name
+                                      type: string
+                                    imagePullSecrets:
+                                      description: ImagePullSecrets for accessing
+                                        private registries
+                                      items:
+                                        description: |-
+                                          LocalObjectReference contains enough information to let you locate the
+                                          referenced object inside the same namespace.
+                                        properties:
+                                          name:
+                                            default: ""
+                                            description: |-
+                                              Name of the referent.
+                                              This field is effectively required, but due to backwards compatibility is
+                                              allowed to be empty. Instances of this type with an empty value here are
+                                              almost certainly wrong.
+                                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                            type: string
+                                        type: object
+                                        x-kubernetes-map-type: atomic
+                                      type: array
+                                    imageTag:
+                                      description: ImageTag is the image tag
+                                      type: string
+                                    repository:
+                                      description: Repository is the registry URL
+                                      type: string
+                                  required:
+                                  - imageName
+                                  - imageTag
+                                  - repository
+                                  type: object
+                                minItems: 1
+                                type: array
+                              imageVerificationSpec:
+                                description: |-
+                                  ImageVerificationSpec is the per-platform expected layer hashes every candidate
+                                  must match. Required and non-empty: a SoftwareVersionSource must carry layer hashes.
+                                items:
+                                  description: ImageVerificationSpec defines verification
+                                    parameters for container images
+                                  properties:
+                                    architecture:
+                                      description: Architecture is the target CPU
+                                        architecture
+                                      enum:
+                                      - amd64
+                                      - arm64
+                                      type: string
+                                    layerHashes:
+                                      description: LayerHashes are the expected layer
+                                        digest hashes
+                                      items:
+                                        type: string
+                                      minItems: 1
+                                      type: array
+                                    os:
+                                      description: OS is the target operating system
+                                      enum:
+                                      - darwin
+                                      - linux
+                                      - windows
+                                      type: string
+                                  required:
+                                  - layerHashes
+                                  type: object
+                                minItems: 1
+                                type: array
+                              selectionStrategy:
+                                description: |-
+                                  SelectionStrategy chooses the order candidate registries are probed in:
+                                  "Sequential" honors the listed order (primary first); "Random" spreads pull
+                                  traffic. Unset falls back to the operator's --registry-order default.
+                                enum:
+                                - Random
+                                - Sequential
+                                type: string
+                            required:
+                            - imageRepositories
+                            - imageVerificationSpec
                             type: object
                         required:
                         - softwareVersion
@@ -4937,6 +5361,7 @@ spec:
                                       digest hashes
                                     items:
                                       type: string
+                                    minItems: 1
                                     type: array
                                   os:
                                     description: OS is the target operating system
@@ -4960,6 +5385,111 @@ spec:
                             - imageName
                             - imageTag
                             - repository
+                            type: object
+                          softwareVersionSource:
+                            description: |-
+                              SoftwareVersionSource declares multiple candidate registries (with layer hashes)
+                              for this container's image; when set it takes precedence over SoftwareVersion and
+                              the operator selects, verifies, and digest-pins the deployed image.
+                            properties:
+                              imagePullPolicy:
+                                default: IfNotPresent
+                                description: ImagePullPolicy specifies when to pull
+                                  images
+                                enum:
+                                - Always
+                                - Never
+                                - IfNotPresent
+                                type: string
+                              imageRepositories:
+                                description: ImageRepositories is the ordered list
+                                  of candidate image repositories.
+                                items:
+                                  description: ImageRepository defines a container
+                                    image repository
+                                  properties:
+                                    imageName:
+                                      description: ImageName is the image name
+                                      type: string
+                                    imagePullSecrets:
+                                      description: ImagePullSecrets for accessing
+                                        private registries
+                                      items:
+                                        description: |-
+                                          LocalObjectReference contains enough information to let you locate the
+                                          referenced object inside the same namespace.
+                                        properties:
+                                          name:
+                                            default: ""
+                                            description: |-
+                                              Name of the referent.
+                                              This field is effectively required, but due to backwards compatibility is
+                                              allowed to be empty. Instances of this type with an empty value here are
+                                              almost certainly wrong.
+                                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                            type: string
+                                        type: object
+                                        x-kubernetes-map-type: atomic
+                                      type: array
+                                    imageTag:
+                                      description: ImageTag is the image tag
+                                      type: string
+                                    repository:
+                                      description: Repository is the registry URL
+                                      type: string
+                                  required:
+                                  - imageName
+                                  - imageTag
+                                  - repository
+                                  type: object
+                                minItems: 1
+                                type: array
+                              imageVerificationSpec:
+                                description: |-
+                                  ImageVerificationSpec is the per-platform expected layer hashes every candidate
+                                  must match. Required and non-empty: a SoftwareVersionSource must carry layer hashes.
+                                items:
+                                  description: ImageVerificationSpec defines verification
+                                    parameters for container images
+                                  properties:
+                                    architecture:
+                                      description: Architecture is the target CPU
+                                        architecture
+                                      enum:
+                                      - amd64
+                                      - arm64
+                                      type: string
+                                    layerHashes:
+                                      description: LayerHashes are the expected layer
+                                        digest hashes
+                                      items:
+                                        type: string
+                                      minItems: 1
+                                      type: array
+                                    os:
+                                      description: OS is the target operating system
+                                      enum:
+                                      - darwin
+                                      - linux
+                                      - windows
+                                      type: string
+                                  required:
+                                  - layerHashes
+                                  type: object
+                                minItems: 1
+                                type: array
+                              selectionStrategy:
+                                description: |-
+                                  SelectionStrategy chooses the order candidate registries are probed in:
+                                  "Sequential" honors the listed order (primary first); "Random" spreads pull
+                                  traffic. Unset falls back to the operator's --registry-order default.
+                                enum:
+                                - Random
+                                - Sequential
+                                type: string
+                            required:
+                            - imageRepositories
+                            - imageVerificationSpec
                             type: object
                           stopOnError:
                             default: false
@@ -5196,6 +5726,7 @@ spec:
                                       digest hashes
                                     items:
                                       type: string
+                                    minItems: 1
                                     type: array
                                   os:
                                     description: OS is the target operating system
@@ -5219,6 +5750,111 @@ spec:
                             - imageName
                             - imageTag
                             - repository
+                            type: object
+                          softwareVersionSource:
+                            description: |-
+                              SoftwareVersionSource declares multiple candidate registries (with layer hashes)
+                              for this container's image; when set it takes precedence over SoftwareVersion and
+                              the operator selects, verifies, and digest-pins the deployed image.
+                            properties:
+                              imagePullPolicy:
+                                default: IfNotPresent
+                                description: ImagePullPolicy specifies when to pull
+                                  images
+                                enum:
+                                - Always
+                                - Never
+                                - IfNotPresent
+                                type: string
+                              imageRepositories:
+                                description: ImageRepositories is the ordered list
+                                  of candidate image repositories.
+                                items:
+                                  description: ImageRepository defines a container
+                                    image repository
+                                  properties:
+                                    imageName:
+                                      description: ImageName is the image name
+                                      type: string
+                                    imagePullSecrets:
+                                      description: ImagePullSecrets for accessing
+                                        private registries
+                                      items:
+                                        description: |-
+                                          LocalObjectReference contains enough information to let you locate the
+                                          referenced object inside the same namespace.
+                                        properties:
+                                          name:
+                                            default: ""
+                                            description: |-
+                                              Name of the referent.
+                                              This field is effectively required, but due to backwards compatibility is
+                                              allowed to be empty. Instances of this type with an empty value here are
+                                              almost certainly wrong.
+                                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                            type: string
+                                        type: object
+                                        x-kubernetes-map-type: atomic
+                                      type: array
+                                    imageTag:
+                                      description: ImageTag is the image tag
+                                      type: string
+                                    repository:
+                                      description: Repository is the registry URL
+                                      type: string
+                                  required:
+                                  - imageName
+                                  - imageTag
+                                  - repository
+                                  type: object
+                                minItems: 1
+                                type: array
+                              imageVerificationSpec:
+                                description: |-
+                                  ImageVerificationSpec is the per-platform expected layer hashes every candidate
+                                  must match. Required and non-empty: a SoftwareVersionSource must carry layer hashes.
+                                items:
+                                  description: ImageVerificationSpec defines verification
+                                    parameters for container images
+                                  properties:
+                                    architecture:
+                                      description: Architecture is the target CPU
+                                        architecture
+                                      enum:
+                                      - amd64
+                                      - arm64
+                                      type: string
+                                    layerHashes:
+                                      description: LayerHashes are the expected layer
+                                        digest hashes
+                                      items:
+                                        type: string
+                                      minItems: 1
+                                      type: array
+                                    os:
+                                      description: OS is the target operating system
+                                      enum:
+                                      - darwin
+                                      - linux
+                                      - windows
+                                      type: string
+                                  required:
+                                  - layerHashes
+                                  type: object
+                                minItems: 1
+                                type: array
+                              selectionStrategy:
+                                description: |-
+                                  SelectionStrategy chooses the order candidate registries are probed in:
+                                  "Sequential" honors the listed order (primary first); "Random" spreads pull
+                                  traffic. Unset falls back to the operator's --registry-order default.
+                                enum:
+                                - Random
+                                - Sequential
+                                type: string
+                            required:
+                            - imageRepositories
+                            - imageVerificationSpec
                             type: object
                           stopOnError:
                             default: false
@@ -5461,6 +6097,7 @@ spec:
                                       digest hashes
                                     items:
                                       type: string
+                                    minItems: 1
                                     type: array
                                   os:
                                     description: OS is the target operating system
@@ -5484,6 +6121,111 @@ spec:
                             - imageName
                             - imageTag
                             - repository
+                            type: object
+                          softwareVersionSource:
+                            description: |-
+                              SoftwareVersionSource declares multiple candidate registries (with layer hashes)
+                              for this container's image; when set it takes precedence over SoftwareVersion and
+                              the operator selects, verifies, and digest-pins the deployed image.
+                            properties:
+                              imagePullPolicy:
+                                default: IfNotPresent
+                                description: ImagePullPolicy specifies when to pull
+                                  images
+                                enum:
+                                - Always
+                                - Never
+                                - IfNotPresent
+                                type: string
+                              imageRepositories:
+                                description: ImageRepositories is the ordered list
+                                  of candidate image repositories.
+                                items:
+                                  description: ImageRepository defines a container
+                                    image repository
+                                  properties:
+                                    imageName:
+                                      description: ImageName is the image name
+                                      type: string
+                                    imagePullSecrets:
+                                      description: ImagePullSecrets for accessing
+                                        private registries
+                                      items:
+                                        description: |-
+                                          LocalObjectReference contains enough information to let you locate the
+                                          referenced object inside the same namespace.
+                                        properties:
+                                          name:
+                                            default: ""
+                                            description: |-
+                                              Name of the referent.
+                                              This field is effectively required, but due to backwards compatibility is
+                                              allowed to be empty. Instances of this type with an empty value here are
+                                              almost certainly wrong.
+                                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                            type: string
+                                        type: object
+                                        x-kubernetes-map-type: atomic
+                                      type: array
+                                    imageTag:
+                                      description: ImageTag is the image tag
+                                      type: string
+                                    repository:
+                                      description: Repository is the registry URL
+                                      type: string
+                                  required:
+                                  - imageName
+                                  - imageTag
+                                  - repository
+                                  type: object
+                                minItems: 1
+                                type: array
+                              imageVerificationSpec:
+                                description: |-
+                                  ImageVerificationSpec is the per-platform expected layer hashes every candidate
+                                  must match. Required and non-empty: a SoftwareVersionSource must carry layer hashes.
+                                items:
+                                  description: ImageVerificationSpec defines verification
+                                    parameters for container images
+                                  properties:
+                                    architecture:
+                                      description: Architecture is the target CPU
+                                        architecture
+                                      enum:
+                                      - amd64
+                                      - arm64
+                                      type: string
+                                    layerHashes:
+                                      description: LayerHashes are the expected layer
+                                        digest hashes
+                                      items:
+                                        type: string
+                                      minItems: 1
+                                      type: array
+                                    os:
+                                      description: OS is the target operating system
+                                      enum:
+                                      - darwin
+                                      - linux
+                                      - windows
+                                      type: string
+                                  required:
+                                  - layerHashes
+                                  type: object
+                                minItems: 1
+                                type: array
+                              selectionStrategy:
+                                description: |-
+                                  SelectionStrategy chooses the order candidate registries are probed in:
+                                  "Sequential" honors the listed order (primary first); "Random" spreads pull
+                                  traffic. Unset falls back to the operator's --registry-order default.
+                                enum:
+                                - Random
+                                - Sequential
+                                type: string
+                            required:
+                            - imageRepositories
+                            - imageVerificationSpec
                             type: object
                         type: object
                     required:
@@ -22526,6 +23268,71 @@ spec:
                   exclusively by the operator, which derives it from the proxied name.
                 format: int32
                 type: integer
+              resolvedImages:
+                description: |-
+                  ResolvedImages records the outcome of multi-registry image selection for each
+                  container that declares a SoftwareVersionSource. The operator caches the resolved
+                  pinned image here and reuses it while the source is unchanged (keyed by SourceHash),
+                  re-inspecting registries only when the source spec changes. Written solely by the
+                  operator. Containers using a single SoftwareVersion have no entry.
+                items:
+                  description: |-
+                    ResolvedImageStatus is the cached result of resolving one container's
+                    SoftwareVersionSource to a verified, digest-pinned image.
+                  properties:
+                    container:
+                      description: Container is the container this entry resolves
+                        (e.g. "consensusNode", "uc").
+                      type: string
+                    digest:
+                      description: Digest is the verified content digest the image
+                        is pinned to.
+                      pattern: ^sha256:[a-f0-9]{64}$
+                      type: string
+                    image:
+                      description: |-
+                        Image is the resolved reference pinned to its content digest
+                        (repository/imageName:imageTag@sha256:...).
+                      type: string
+                    lastProbeTime:
+                      description: |-
+                        LastProbeTime is when this entry was last (re)resolved against the registries.
+                        It shows how stale the result is — most useful for an Invalid entry that is being
+                        retried each reconcile.
+                      format: date-time
+                      type: string
+                    layerHashesVerified:
+                      description: LayerHashesVerified is true when the candidate's
+                        layer hashes matched.
+                      type: boolean
+                    repository:
+                      description: Repository is the winning candidate repository.
+                      type: string
+                    sourceHash:
+                      description: |-
+                        SourceHash fingerprints the SoftwareVersionSource that produced this selection;
+                        a mismatch on reconcile triggers re-resolution.
+                      type: string
+                    validity:
+                      description: Validity is the selection outcome for this container.
+                      enum:
+                      - Unknown
+                      - Valid
+                      - Invalid
+                      - NotFound
+                      type: string
+                  required:
+                  - container
+                  - image
+                  - layerHashesVerified
+                  - repository
+                  - sourceHash
+                  - validity
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - container
+                x-kubernetes-list-type: map
               runState:
                 description: RunState is the consensus node's live s6 process state.
                 enum:

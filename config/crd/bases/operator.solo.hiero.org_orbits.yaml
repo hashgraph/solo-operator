@@ -455,6 +455,7 @@ spec:
                                   hashes
                                 items:
                                   type: string
+                                minItems: 1
                                 type: array
                               os:
                                 description: OS is the target operating system

@@ -280,6 +280,12 @@ type UcSidecar struct {
 	// +optional
 	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
 
+	// SoftwareVersionSource declares multiple candidate registries (with layer hashes)
+	// for this container's image; when set it takes precedence over SoftwareVersion and
+	// the operator selects, verifies, and digest-pins the deployed image.
+	// +optional
+	SoftwareVersionSource *SoftwareVersionSource `json:"softwareVersionSource,omitempty"`
+
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
@@ -318,6 +324,12 @@ type ConsensusNodeContainer struct {
 	// +kubebuilder:validation:Required
 	SoftwareVersion *SoftwareVersion `json:"softwareVersion"`
 
+	// SoftwareVersionSource declares multiple candidate registries (with layer hashes)
+	// for this container's image; when set it takes precedence over SoftwareVersion and
+	// the operator selects, verifies, and digest-pins the deployed image.
+	// +optional
+	SoftwareVersionSource *SoftwareVersionSource `json:"softwareVersionSource,omitempty"`
+
 	// sets JAVA_HEAP_MIN (e.g. "256m" → -Xms256m)
 	// +optional
 	JavaHeapMin string `json:"javaHeapMin,omitempty"`
@@ -348,6 +360,12 @@ type AlloyConfig struct {
 
 	// +optional
 	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
+
+	// SoftwareVersionSource declares multiple candidate registries (with layer hashes)
+	// for this container's image; when set it takes precedence over SoftwareVersion and
+	// the operator selects, verifies, and digest-pins the deployed image.
+	// +optional
+	SoftwareVersionSource *SoftwareVersionSource `json:"softwareVersionSource,omitempty"`
 
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
@@ -631,6 +649,50 @@ type ConsensusCapsuleStatus struct {
 
 	// +optional
 	AddressBookEntry *AddressBookEntry `json:"addressBookEntry,omitempty"`
+
+	// ResolvedImages records the outcome of multi-registry image selection for each
+	// container that declares a SoftwareVersionSource. The operator caches the resolved
+	// pinned image here and reuses it while the source is unchanged (keyed by SourceHash),
+	// re-inspecting registries only when the source spec changes. Written solely by the
+	// operator. Containers using a single SoftwareVersion have no entry.
+	// +optional
+	// +listType=map
+	// +listMapKey=container
+	ResolvedImages []ResolvedImageStatus `json:"resolvedImages,omitempty"`
+}
+
+// ResolvedImageStatus is the cached result of resolving one container's
+// SoftwareVersionSource to a verified, digest-pinned image.
+type ResolvedImageStatus struct {
+	// Container is the container this entry resolves (e.g. "consensusNode", "uc").
+	Container string `json:"container"`
+
+	// SourceHash fingerprints the SoftwareVersionSource that produced this selection;
+	// a mismatch on reconcile triggers re-resolution.
+	SourceHash string `json:"sourceHash"`
+
+	// Image is the resolved reference pinned to its content digest
+	// (repository/imageName:imageTag@sha256:...).
+	Image string `json:"image"`
+
+	// Digest is the verified content digest the image is pinned to.
+	// +optional
+	Digest Sha256Digest `json:"digest,omitempty"`
+
+	// Repository is the winning candidate repository.
+	Repository string `json:"repository"`
+
+	// LayerHashesVerified is true when the candidate's layer hashes matched.
+	LayerHashesVerified bool `json:"layerHashesVerified"`
+
+	// Validity is the selection outcome for this container.
+	Validity ImageValidity `json:"validity"`
+
+	// LastProbeTime is when this entry was last (re)resolved against the registries.
+	// It shows how stale the result is — most useful for an Invalid entry that is being
+	// retried each reconcile.
+	// +optional
+	LastProbeTime metav1.Time `json:"lastProbeTime,omitempty"`
 }
 
 // +kubebuilder:object:root=true

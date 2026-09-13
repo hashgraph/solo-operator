@@ -32,6 +32,7 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
+	"github.com/hashgraph/solo-operator/internal/registry"
 	"github.com/hashgraph/solo-operator/internal/resources/apipermissionproperties"
 	"github.com/hashgraph/solo-operator/internal/resources/applicationoverrideproperties"
 	"github.com/hashgraph/solo-operator/internal/resources/applicationproperties"
@@ -64,6 +65,19 @@ type ConsensusCapsuleReconciler struct {
 	// S6 optionally overrides the s6 actuation runner (useful in tests).
 	S6 consensus.S6Runner
 
+	// StrategyName is the --registry-order flag value used as the fallback registry
+	// iteration strategy when a SoftwareVersionSource sets no selectionStrategy.
+	StrategyName string
+
+	// AllowedRegistryHosts is the --allowed-registry-hosts SSRF allow-list applied when
+	// inspecting candidate registries for SoftwareVersionSource resolution.
+	AllowedRegistryHosts []string
+
+	// Checker optionally overrides the registry image checker (useful in tests). When
+	// nil, resolveImageSources builds an OCIChecker per capsule with a keychain derived
+	// from the capsule's image-pull secrets.
+	Checker registry.ImageChecker
+
 	// clientset + restConfig back the s6 control interface: controller-runtime's
 	// client cannot exec into a pod.
 	clientset  kubernetes.Interface
@@ -91,6 +105,7 @@ func NewConsensusCapsuleReconciler(c client.Client, scheme *runtime.Scheme, rest
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=consensuscapsules/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
@@ -140,6 +155,15 @@ func (r *ConsensusCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return r.failUCSidecarRequired(ctx, capsule, err)
 	}
 	apimeta.RemoveStatusCondition(&capsule.Status.Conditions, operatorv1alpha1.CondUCSidecarReady)
+
+	// Resolve any multi-registry SoftwareVersionSource to a verified, digest-pinned
+	// SoftwareVersion before the image validations below, so a source-configured container
+	// satisfies the explicit-image and digest-pin checks exactly like a single softwareVersion.
+	// Containers without a source are untouched. A malformed source is terminal; a transient
+	// registry failure requeues.
+	if res, err := r.resolveImageSources(ctx, capsule); res != nil {
+		return *res, err
+	}
 
 	// Resolve every container image once. This reads the merged Alloy config (which fetches the
 	// Orbit), so computing it here — rather than inside each check below — keeps both the

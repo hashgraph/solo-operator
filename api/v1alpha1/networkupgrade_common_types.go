@@ -376,4 +376,7 @@ const (
 	// consensus node or an enabled sidecar/uploader) with no declared image; the operator
 	// provides no built-in defaults (terminal config error).
 	EventImageRequired errx.Reason = "ImageRequired"
+	// EventImageSourceInvalid is posted when a container's SoftwareVersionSource is malformed
+	// — no candidate repositories or no usable per-platform layer hashes (terminal config error).
+	EventImageSourceInvalid errx.Reason = "ImageSourceInvalid"
 )

@@ -31,6 +31,12 @@ var (
 	// enabled sidecar/uploader) with no declared image. The operator provides no built-in
 	// default images. Terminal — the operator must set softwareVersion on each container.
 	errImageRequired = errNS.NewType("image_required")
+
+	// errImageSourceInvalid: a container's SoftwareVersionSource is malformed — no
+	// candidate repositories, or no usable per-platform layer hashes. A source must
+	// carry layer hashes (verification is mandatory). Terminal — the operator must fix
+	// the source or use a single softwareVersion instead.
+	errImageSourceInvalid = errNS.NewType("image_source_invalid")
 )
 
 const (
@@ -45,6 +51,9 @@ const (
 	ReasonSourceUnpinned      errx.Reason = "SelectedSourceUnpinned"
 	ReasonImageDigestRequired errx.Reason = "ImageDigestRequired"
 	ReasonImageRequired       errx.Reason = "ImageRequired"
+	ReasonImageSourceInvalid  errx.Reason = "ImageSourceInvalid"
+	ReasonImageSourceResolved errx.Reason = "ImageSourceResolved"
+	ReasonSourceHashFailed    errx.Reason = "SourceHashFailed"
 	ReasonManifestInvalid     errx.Reason = "ManifestInvalid"
 	ReasonDuplicateSibling    errx.Reason = "DuplicateSibling"
 	ReasonOrbitNotFound       errx.Reason = "OrbitNotFound"
