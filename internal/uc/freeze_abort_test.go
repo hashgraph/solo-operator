@@ -145,6 +145,60 @@ func TestResolveOperationIDDiskFallbackPicksMostRecentByTimestamp(t *testing.T) 
 	}
 }
 
+func TestResolveOperationIDBreaksTimestampTieDeterministically(t *testing.T) {
+	f := newFakeFactory(t, testConfig(t.TempDir(), t.TempDir()))
+	// Two non-terminal Prepares for this node with equal creationTimestamp (the fake
+	// client leaves it zero). The winner must be a deterministic tie-break on the
+	// operationId, not whichever the List happens to return first.
+	a := wantConsensusNode + "-upgrade-0.75.0-20260413T120000Z-a"
+	b := wantConsensusNode + "-upgrade-0.75.0-20260413T120000Z-b"
+	seedPrepareCR(t, f, a, "")
+	seedPrepareCR(t, f, b, "")
+
+	got, err := f.resolveOperationID(context.Background())
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if got != b {
+		t.Fatalf("operationId = %q, want %q (highest operationId wins on timestamp tie)", got, b)
+	}
+}
+
+func TestFetchPreparePayload_DeterministicPickOnDuplicate(t *testing.T) {
+	f := newFakeFactory(t, testConfig(t.TempDir(), t.TempDir()))
+	mk := func(name, version string) {
+		cr, err := buildPrepareCR(f.cfg, wantOperationID, operatorv1alpha1.UpgradeImagesSpec{
+			ConsensusNode: operatorv1alpha1.ImageComponentSpec{Version: version},
+		})
+		if err != nil {
+			t.Fatalf("build %s: %v", name, err)
+		}
+		cr.SetName(name)
+		if err := unstructured.SetNestedField(cr.Object, string(operatorv1alpha1.PhaseSucceeded), "status", "phase"); err != nil {
+			t.Fatalf("set phase: %v", err)
+		}
+		if _, err := f.client.Resource(networkUpgradePrepareGVR).Namespace(f.cfg.Namespace).
+			Create(context.Background(), cr, metav1.CreateOptions{}); err != nil {
+			t.Fatalf("create %s: %v", name, err)
+		}
+	}
+	// Two CRs share an operationId but differ by name (a defensive duplicate). Sorting
+	// by name before picking Items[0] makes the selection deterministic: "aaa" wins.
+	mk("zzz-dup", "0.75.0")
+	mk("aaa-dup", "0.75.1")
+
+	images, _, cr, ready, err := f.fetchPreparePayload(context.Background(), wantOperationID)
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	if !ready {
+		t.Fatalf("expected ready=true for a Succeeded Prepare")
+	}
+	if cr.GetName() != "aaa-dup" || images.ConsensusNode.Version != "0.75.1" {
+		t.Fatalf("non-deterministic pick: name=%q version=%q, want aaa-dup/0.75.1", cr.GetName(), images.ConsensusNode.Version)
+	}
+}
+
 func TestResolveOperationIDNoneReturnsEmpty(t *testing.T) {
 	f := newFakeFactory(t, testConfig(t.TempDir(), t.TempDir()))
 	got, err := f.resolveOperationID(context.Background())

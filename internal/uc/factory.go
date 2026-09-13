@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -460,6 +461,9 @@ func (f *Factory) fetchPreparePayload(ctx context.Context, operationID string) (
 		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil, false, nil
 	}
 
+	// operationId is expected to be unique, but if multiple CRs match, sort by name so
+	// the selected one is deterministic rather than list-order dependent.
+	sort.Slice(list.Items, func(i, j int) bool { return list.Items[i].GetName() < list.Items[j].GetName() })
 	prepare := &list.Items[0]
 	phase, _, _ := unstructured.NestedString(prepare.Object, "status", "phase")
 	switch operatorv1alpha1.Phase(phase) {
@@ -700,6 +704,9 @@ func (f *Factory) fetchExecutePayload(ctx context.Context, operationID string) (
 		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil, false, nil
 	}
 
+	// operationId is expected to be unique, but if multiple CRs match, sort by name so
+	// the selected one is deterministic rather than list-order dependent.
+	sort.Slice(list.Items, func(i, j int) bool { return list.Items[i].GetName() < list.Items[j].GetName() })
 	freeze := &list.Items[0]
 	phase, _, _ := unstructured.NestedString(freeze.Object, "status", "phase")
 	switch operatorv1alpha1.Phase(phase) {

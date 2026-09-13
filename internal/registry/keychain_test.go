@@ -156,6 +156,30 @@ func TestKeychainFromPullSecrets_DockerHubAlias(t *testing.T) {
 	}
 }
 
+func TestKeychainFromPullSecrets_DeterministicHostWinner(t *testing.T) {
+	// Two raw keys ("docker.io" and "index.docker.io") normalize to the same host with
+	// different credentials. Iterating sorted keys makes the first-wins outcome
+	// deterministic: "docker.io" sorts first, so its credential must always win —
+	// regardless of Go's randomized map iteration order.
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "dup", Namespace: "ns"},
+		Type:       corev1.SecretTypeDockerConfigJson,
+		Data: map[string][]byte{
+			corev1.DockerConfigJsonKey: []byte(`{"auths":{"index.docker.io":{"username":"loser","password":"x"},"docker.io":{"username":"winner","password":"w"}}}`),
+		},
+	}
+	c := keychainTestClient(secret)
+
+	kc, err := KeychainFromPullSecrets(context.Background(), c, "ns", []corev1.LocalObjectReference{{Name: "dup"}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := resolveConfig(t, kc, name.DefaultRegistry)
+	if got.Username != "winner" {
+		t.Fatalf("non-deterministic host winner: got %+v, want username=winner (docker.io sorts first)", got)
+	}
+}
+
 func TestKeychainFromPullSecrets_MissingSecretSkipped(t *testing.T) {
 	// No secret objects exist; the reference is skipped and, with no usable
 	// credentials, the builder falls back to the default keychain.

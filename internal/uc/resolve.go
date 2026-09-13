@@ -81,7 +81,9 @@ func (f *Factory) resolveOperationIDWith(ctx context.Context, skipPhases map[str
 		if !operationIDForNode(opID, f.cfg.NodeID) {
 			continue
 		}
-		if ts := item.GetCreationTimestamp().Time; !found || ts.After(bestTS) {
+		// On equal creationTimestamp (second-granularity ties are realistic), break the
+		// tie on the operationId so the winner is deterministic regardless of list order.
+		if ts := item.GetCreationTimestamp().Time; !found || ts.After(bestTS) || (ts.Equal(bestTS) && opID > best) {
 			best, bestTS, found = opID, ts, true
 		}
 	}
@@ -208,7 +210,9 @@ func (f *Factory) resolveByVersion(ctx context.Context, version string, skipPhas
 		if !strings.HasPrefix(opID, prefix) {
 			continue
 		}
-		if ts := item.GetCreationTimestamp().Time; !found || ts.After(bestTS) {
+		// On equal creationTimestamp (second-granularity ties are realistic), break the
+		// tie on the operationId so the winner is deterministic regardless of list order.
+		if ts := item.GetCreationTimestamp().Time; !found || ts.After(bestTS) || (ts.Equal(bestTS) && opID > best) {
 			best, bestTS, found = opID, ts, true
 		}
 	}

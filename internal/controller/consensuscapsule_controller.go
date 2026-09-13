@@ -53,6 +53,18 @@ const (
 
 	// podReadinessRequeueAfter is how long to wait before rechecking when the pod is not yet ready.
 	podReadinessRequeueAfter = 10 * time.Second
+
+	condLog4j2ConfigReady                  = "Log4j2ConfigReady"
+	condNodeSettingsReady                  = "NodeSettingsReady"
+	condApplicationPropertiesReady         = "ApplicationPropertiesReady"
+	condAPIPermissionPropertiesReady       = "ApiPermissionPropertiesReady"
+	condNodePropertiesReady                = "NodePropertiesReady"
+	condThrottlesConfigReady               = "ThrottlesConfigReady"
+	condFeeSchedulesReady                  = "FeeSchedulesReady"
+	condSimpleFeesSchedulesReady           = "SimpleFeesSchedulesReady"
+	condApplicationOverridePropertiesReady = "ApplicationOverridePropertiesReady"
+	condBootstrapPropertiesReady           = "BootstrapPropertiesReady"
+	condBlockNodesConfigReady              = "BlockNodesConfigReady"
 )
 
 // ConsensusCapsuleReconciler reconciles a ConsensusCapsule object
@@ -116,7 +128,21 @@ func NewConsensusCapsuleReconciler(c client.Client, scheme *runtime.Scheme, rest
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=get;list;watch;create;update;patch;delete
 
-// Reconcile is the main reconciliation loop for ConsensusCapsule resources
+// Reconcile drives the full ConsensusCapsule reconciliation flow.
+//
+// The reconcile steps are:
+//  1. Load the capsule and ignore not-found deletes.
+//  2. Handle deletion and ensure the finalizer is present.
+//  3. Enforce the mandatory UC sidecar requirement.
+//  4. Resolve any SoftwareVersionSource entries to verified, digest-pinned SoftwareVersions.
+//  5. Resolve the effective container images and validate image declaration and digest policy.
+//  6. Verify referenced ConfigMaps exist and update their readiness conditions.
+//  7. Reconcile owned child resources through the subreconciler chain.
+//  8. Refresh capsule status.
+//
+// A non-nil result from resolveImageSources means "stop here": it may report a
+// terminal source configuration error, request a requeue for transient registry
+// failures, or stop after persisting resolved-image status.
 func (r *ConsensusCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	ctx = common.RequestContext(ctx, req)
 	capsule := &operatorv1alpha1.ConsensusCapsule{}
@@ -242,9 +268,9 @@ type configRef struct {
 func (r *ConsensusCapsuleReconciler) configRefs(c *operatorv1alpha1.ConsensusCapsule) []configRef {
 	// Required refs — always checked regardless of whether they are set.
 	refs := []configRef{
-		{"Log4j2ConfigReady", c.Spec.Log4j2ConfigRef, log4j2config.ConfigMapNameForRef(c.Spec.Log4j2ConfigRef)},
-		{"NodeSettingsReady", c.Spec.SettingsConfigRef, nodesettings.ConfigMapNameForRef(c.Spec.SettingsConfigRef)},
-		{"ApplicationPropertiesReady", c.Spec.ApplicationPropertiesRef, applicationproperties.ConfigMapNameForRef(c.Spec.ApplicationPropertiesRef)},
+		{condLog4j2ConfigReady, c.Spec.Log4j2ConfigRef, log4j2config.ConfigMapNameForRef(c.Spec.Log4j2ConfigRef)},
+		{condNodeSettingsReady, c.Spec.SettingsConfigRef, nodesettings.ConfigMapNameForRef(c.Spec.SettingsConfigRef)},
+		{condApplicationPropertiesReady, c.Spec.ApplicationPropertiesRef, applicationproperties.ConfigMapNameForRef(c.Spec.ApplicationPropertiesRef)},
 	}
 	// Optional refs — only checked when the ref field is non-empty; no condition is
 	// set when unset so the capsule is never blocked by an absent optional config.
@@ -253,14 +279,14 @@ func (r *ConsensusCapsuleReconciler) configRefs(c *operatorv1alpha1.ConsensusCap
 		ref      string
 		fn       func(string) string
 	}{
-		{"ApiPermissionPropertiesReady", c.Spec.ApiPermissionPropertiesRef, apipermissionproperties.ConfigMapNameForRef},
-		{"NodePropertiesReady", c.Spec.NodePropertiesRef, nodeproperties.ConfigMapNameForRef},
-		{"ThrottlesConfigReady", c.Spec.ThrottlesConfigRef, throttlesconfig.ConfigMapNameForRef},
-		{"FeeSchedulesReady", c.Spec.FeeSchedulesRef, feeschedules.ConfigMapNameForRef},
-		{"SimpleFeesSchedulesReady", c.Spec.SimpleFeesSchedulesRef, simplefeesschedules.ConfigMapNameForRef},
-		{"ApplicationOverridePropertiesReady", c.Spec.ApplicationOverridePropertiesRef, applicationoverrideproperties.ConfigMapNameForRef},
-		{"BootstrapPropertiesReady", c.Spec.BootstrapPropertiesRef, bootstrapproperties.ConfigMapNameForRef},
-		{"BlockNodesConfigReady", c.Spec.BlockNodesConfigRef, blocknodesconfig.ConfigMapNameForRef},
+		{condAPIPermissionPropertiesReady, c.Spec.ApiPermissionPropertiesRef, apipermissionproperties.ConfigMapNameForRef},
+		{condNodePropertiesReady, c.Spec.NodePropertiesRef, nodeproperties.ConfigMapNameForRef},
+		{condThrottlesConfigReady, c.Spec.ThrottlesConfigRef, throttlesconfig.ConfigMapNameForRef},
+		{condFeeSchedulesReady, c.Spec.FeeSchedulesRef, feeschedules.ConfigMapNameForRef},
+		{condSimpleFeesSchedulesReady, c.Spec.SimpleFeesSchedulesRef, simplefeesschedules.ConfigMapNameForRef},
+		{condApplicationOverridePropertiesReady, c.Spec.ApplicationOverridePropertiesRef, applicationoverrideproperties.ConfigMapNameForRef},
+		{condBootstrapPropertiesReady, c.Spec.BootstrapPropertiesRef, bootstrapproperties.ConfigMapNameForRef},
+		{condBlockNodesConfigReady, c.Spec.BlockNodesConfigRef, blocknodesconfig.ConfigMapNameForRef},
 	} {
 		if opt.ref != "" {
 			refs = append(refs, configRef{opt.condType, opt.ref, opt.fn(opt.ref)})
