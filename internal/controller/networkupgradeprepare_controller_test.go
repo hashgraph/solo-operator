@@ -25,10 +25,10 @@ import (
 
 func boolPtr(b bool) *bool { return &b }
 
-func registriesFor(images ...string) []operatorv1alpha1.UpgradeRegistrySpec {
-	out := make([]operatorv1alpha1.UpgradeRegistrySpec, len(images))
+func registriesFor(images ...string) []operatorv1alpha1.ImageRegistrySpec {
+	out := make([]operatorv1alpha1.ImageRegistrySpec, len(images))
 	for i, img := range images {
-		out[i] = operatorv1alpha1.UpgradeRegistrySpec{Image: img}
+		out[i] = operatorv1alpha1.ImageRegistrySpec{Image: img}
 	}
 	return out
 }
@@ -44,12 +44,12 @@ func newPrepareForTest() *operatorv1alpha1.NetworkUpgradePrepare {
 			Orbit:       "test-orbit",
 			OperationID: "op-001",
 			Images: operatorv1alpha1.UpgradeImagesSpec{
-				ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+				ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 					Version:    "0.62.0",
 					Registries: registriesFor("gcr.io/a/cn:0.62.0", "ghcr.io/b/cn:0.62.0", "reg.c.io/cn:0.62.0"),
 				},
 				// present but disabled — must be skipped entirely
-				RecordStreamUploader: &operatorv1alpha1.UpgradeComponentSpec{
+				RecordStreamUploader: &operatorv1alpha1.ImageComponentSpec{
 					Version:    "0.62.0",
 					Enabled:    boolPtr(false),
 					Registries: registriesFor("gcr.io/a/rsu:0.62.0", "ghcr.io/b/rsu:0.62.0"),

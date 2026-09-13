@@ -22,7 +22,7 @@ import (
 // contains "unreachable" are reported as StateUnreachable; all others as StateValid.
 type selectiveImageChecker struct{}
 
-func (selectiveImageChecker) Check(_ context.Context, spec operatorv1alpha1.UpgradeRegistrySpec, _ operatorv1alpha1.UpgradeDeterministicSpec) registry.RegistryResult {
+func (selectiveImageChecker) Check(_ context.Context, spec operatorv1alpha1.ImageRegistrySpec, _ operatorv1alpha1.ImageDeterministicSpec) registry.RegistryResult {
 	if strings.Contains(spec.Image, "unreachable") {
 		return registry.RegistryResult{Image: spec.Image, State: registry.StateUnreachable}
 	}
@@ -66,18 +66,18 @@ var _ = Describe("NetworkUpgradePrepare Controller", func() {
 				Orbit:       ns,
 				OperationID: opID,
 				Images: operatorv1alpha1.UpgradeImagesSpec{
-					ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+					ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 						Version: "0.75.0",
 						Enabled: &enabled,
-						Registries: []operatorv1alpha1.UpgradeRegistrySpec{
+						Registries: []operatorv1alpha1.ImageRegistrySpec{
 							{Image: "gcr.io/a/cn:0.75.0"},
 							{Image: "ghcr.io/b/cn:0.75.0"},
 						},
 					},
-					RecordStreamUploader: &operatorv1alpha1.UpgradeComponentSpec{
+					RecordStreamUploader: &operatorv1alpha1.ImageComponentSpec{
 						Version: "0.43.0",
 						Enabled: &disabled,
-						Registries: []operatorv1alpha1.UpgradeRegistrySpec{
+						Registries: []operatorv1alpha1.ImageRegistrySpec{
 							{Image: "gcr.io/a/rsu:0.43.0"},
 						},
 					},
@@ -167,9 +167,9 @@ var _ = Describe("NetworkUpgradePrepare Controller", func() {
 				Orbit:       ns,
 				OperationID: opID,
 				Images: operatorv1alpha1.UpgradeImagesSpec{
-					ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+					ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 						Version: "0.75.0",
-						Registries: []operatorv1alpha1.UpgradeRegistrySpec{
+						Registries: []operatorv1alpha1.ImageRegistrySpec{
 							{Image: "gcr.io/unreachable/cn:0.75.0"},
 							{Image: "ghcr.io/valid/cn:0.75.0"},
 						},
@@ -228,9 +228,9 @@ var _ = Describe("NetworkUpgradePrepare Controller", func() {
 				Orbit:       ns,
 				OperationID: opID,
 				Images: operatorv1alpha1.UpgradeImagesSpec{
-					ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+					ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 						Version: "0.75.0",
-						Registries: []operatorv1alpha1.UpgradeRegistrySpec{
+						Registries: []operatorv1alpha1.ImageRegistrySpec{
 							{Image: "gcr.io/unreachable/cn:0.75.0"},
 							{Image: "ghcr.io/unreachable/cn:0.75.0"},
 						},

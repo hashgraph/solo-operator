@@ -50,9 +50,9 @@ func bothPlatforms() map[string][]operatorv1alpha1.Sha256Digest {
 
 func TestOCIChecker_Deterministic_Valid(t *testing.T) {
 	src := fakeSource{digest: "sha256:abc", diffIDs: bothPlatforms()}
-	det := operatorv1alpha1.UpgradeDeterministicSpec{Supported: true, LayerHashes: bothPlatforms()}
+	det := operatorv1alpha1.ImageDeterministicSpec{Supported: true, LayerHashes: bothPlatforms()}
 
-	res := checkerWith(src).Check(context.Background(), operatorv1alpha1.UpgradeRegistrySpec{Image: "gcr.io/a/cn:1"}, det)
+	res := checkerWith(src).Check(context.Background(), operatorv1alpha1.ImageRegistrySpec{Image: "gcr.io/a/cn:1"}, det)
 
 	if res.State != StateValid || !res.LayerHashesVerified {
 		t.Fatalf("expected valid+verified, got %+v", res)
@@ -66,9 +66,9 @@ func TestOCIChecker_Deterministic_HashMismatch(t *testing.T) {
 	served := bothPlatforms()
 	served[PlatformARM64] = []operatorv1alpha1.Sha256Digest{"sha256:deadbeef"} // tampered
 	src := fakeSource{digest: "sha256:abc", diffIDs: served}
-	det := operatorv1alpha1.UpgradeDeterministicSpec{Supported: true, LayerHashes: bothPlatforms()}
+	det := operatorv1alpha1.ImageDeterministicSpec{Supported: true, LayerHashes: bothPlatforms()}
 
-	res := checkerWith(src).Check(context.Background(), operatorv1alpha1.UpgradeRegistrySpec{Image: "gcr.io/a/cn:1"}, det)
+	res := checkerWith(src).Check(context.Background(), operatorv1alpha1.ImageRegistrySpec{Image: "gcr.io/a/cn:1"}, det)
 
 	if res.State != StateHashMismatch || res.Err == nil {
 		t.Fatalf("expected hash mismatch, got %+v", res)
@@ -82,8 +82,8 @@ func TestOCIChecker_Deterministic_HashMismatch(t *testing.T) {
 // the (empty) global deterministic block.
 func TestOCIChecker_NonDeterministic_UsesPerRegistryHashes(t *testing.T) {
 	src := fakeSource{digest: "sha256:abc", diffIDs: bothPlatforms()}
-	spec := operatorv1alpha1.UpgradeRegistrySpec{Image: "gcr.io/a/cn:1", LayerHashes: bothPlatforms()}
-	det := operatorv1alpha1.UpgradeDeterministicSpec{Supported: false}
+	spec := operatorv1alpha1.ImageRegistrySpec{Image: "gcr.io/a/cn:1", LayerHashes: bothPlatforms()}
+	det := operatorv1alpha1.ImageDeterministicSpec{Supported: false}
 
 	res := checkerWith(src).Check(context.Background(), spec, det)
 
@@ -96,9 +96,9 @@ func TestOCIChecker_NonDeterministic_MismatchAgainstOverride(t *testing.T) {
 	served := bothPlatforms()
 	served[PlatformAMD64] = []operatorv1alpha1.Sha256Digest{"sha256:deadbeef"}
 	src := fakeSource{digest: "sha256:abc", diffIDs: served}
-	spec := operatorv1alpha1.UpgradeRegistrySpec{Image: "gcr.io/a/cn:1", LayerHashes: bothPlatforms()}
+	spec := operatorv1alpha1.ImageRegistrySpec{Image: "gcr.io/a/cn:1", LayerHashes: bothPlatforms()}
 
-	res := checkerWith(src).Check(context.Background(), spec, operatorv1alpha1.UpgradeDeterministicSpec{Supported: false})
+	res := checkerWith(src).Check(context.Background(), spec, operatorv1alpha1.ImageDeterministicSpec{Supported: false})
 
 	if res.State != StateHashMismatch {
 		t.Fatalf("expected hash mismatch against override, got %+v", res)
@@ -109,8 +109,8 @@ func TestOCIChecker_NonDeterministic_MismatchAgainstOverride(t *testing.T) {
 // overrides, even when a global deterministic block is also present.
 func TestOCIChecker_NonDeterministic_IgnoresGlobalHashes(t *testing.T) {
 	src := fakeSource{digest: "sha256:abc", diffIDs: bothPlatforms()}
-	spec := operatorv1alpha1.UpgradeRegistrySpec{Image: "gcr.io/a/cn:1", LayerHashes: bothPlatforms()}
-	det := operatorv1alpha1.UpgradeDeterministicSpec{
+	spec := operatorv1alpha1.ImageRegistrySpec{Image: "gcr.io/a/cn:1", LayerHashes: bothPlatforms()}
+	det := operatorv1alpha1.ImageDeterministicSpec{
 		Supported:   false,
 		LayerHashes: map[string][]operatorv1alpha1.Sha256Digest{PlatformAMD64: {"sha256:deadbeef"}}, // would fail if wrongly used
 	}
@@ -124,8 +124,8 @@ func TestOCIChecker_NonDeterministic_IgnoresGlobalHashes(t *testing.T) {
 
 func TestOCIChecker_NoExpectedHashes_Error(t *testing.T) {
 	src := fakeSource{digest: "sha256:abc"}
-	res := checkerWith(src).Check(context.Background(), operatorv1alpha1.UpgradeRegistrySpec{Image: "gcr.io/a/cn:1"},
-		operatorv1alpha1.UpgradeDeterministicSpec{Supported: true})
+	res := checkerWith(src).Check(context.Background(), operatorv1alpha1.ImageRegistrySpec{Image: "gcr.io/a/cn:1"},
+		operatorv1alpha1.ImageDeterministicSpec{Supported: true})
 
 	if res.State != StateNoHashes || res.Err == nil {
 		t.Fatalf("expected StateNoHashes with error when no hashes configured, got %+v", res)
@@ -137,8 +137,8 @@ func TestOCIChecker_NoExpectedHashes_Error(t *testing.T) {
 
 func TestOCIChecker_Unreachable(t *testing.T) {
 	src := fakeSource{err: fmt.Errorf("connection refused")}
-	res := checkerWith(src).Check(context.Background(), operatorv1alpha1.UpgradeRegistrySpec{Image: "gcr.io/a/cn:1"},
-		operatorv1alpha1.UpgradeDeterministicSpec{Supported: true, LayerHashes: bothPlatforms()})
+	res := checkerWith(src).Check(context.Background(), operatorv1alpha1.ImageRegistrySpec{Image: "gcr.io/a/cn:1"},
+		operatorv1alpha1.ImageDeterministicSpec{Supported: true, LayerHashes: bothPlatforms()})
 
 	if res.State != StateUnreachable || res.Err == nil {
 		t.Fatalf("expected unreachable, got %+v", res)
@@ -146,8 +146,8 @@ func TestOCIChecker_Unreachable(t *testing.T) {
 }
 
 func TestOCIChecker_BadReference(t *testing.T) {
-	res := OCIChecker{}.Check(context.Background(), operatorv1alpha1.UpgradeRegistrySpec{Image: "::not a ref::"},
-		operatorv1alpha1.UpgradeDeterministicSpec{})
+	res := OCIChecker{}.Check(context.Background(), operatorv1alpha1.ImageRegistrySpec{Image: "::not a ref::"},
+		operatorv1alpha1.ImageDeterministicSpec{})
 
 	if res.State != StateUnreachable {
 		t.Fatalf("expected unreachable for bad reference, got %+v", res)
@@ -190,11 +190,11 @@ func TestRemoteSource_DiffIDsAgainstInMemoryRegistry(t *testing.T) {
 	}
 
 	checker := OCIChecker{AllowedHosts: []string{mustHostname(t, host)}} // 127.0.0.1 is denied by default
-	det := operatorv1alpha1.UpgradeDeterministicSpec{
+	det := operatorv1alpha1.ImageDeterministicSpec{
 		Supported:   true,
 		LayerHashes: map[string][]operatorv1alpha1.Sha256Digest{PlatformAMD64: want},
 	}
-	res := checker.Check(context.Background(), operatorv1alpha1.UpgradeRegistrySpec{Image: ref.Name()}, det)
+	res := checker.Check(context.Background(), operatorv1alpha1.ImageRegistrySpec{Image: ref.Name()}, det)
 
 	if res.State != StateValid || !res.LayerHashesVerified {
 		t.Fatalf("expected valid+verified from in-memory registry, got %+v (err: %v)", res, res.Err)

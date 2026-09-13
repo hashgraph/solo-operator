@@ -14,9 +14,9 @@ import (
 
 func makeImages(cnImage string) operatorv1alpha1.UpgradeImagesSpec {
 	return operatorv1alpha1.UpgradeImagesSpec{
-		ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+		ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 			Version:    "0.75.0",
-			Registries: []operatorv1alpha1.UpgradeRegistrySpec{{Image: cnImage}, {Image: "reg-b/cn:0.75.0"}},
+			Registries: []operatorv1alpha1.ImageRegistrySpec{{Image: cnImage}, {Image: "reg-b/cn:0.75.0"}},
 		},
 	}
 }
@@ -51,7 +51,7 @@ func TestRevalidateComponents_AllValid(t *testing.T) {
 }
 
 func TestRevalidateComponents_Failover(t *testing.T) {
-	checker := &fakeChecker{fn: func(_ context.Context, spec operatorv1alpha1.UpgradeRegistrySpec) RegistryResult {
+	checker := &fakeChecker{fn: func(_ context.Context, spec operatorv1alpha1.ImageRegistrySpec) RegistryResult {
 		if spec.Image == "reg-a/cn:0.75.0" {
 			return RegistryResult{Image: spec.Image, State: StateUnreachable}
 		}
@@ -87,7 +87,7 @@ func TestRevalidateComponents_Failover(t *testing.T) {
 }
 
 func TestRevalidateComponents_NoValidRegistry(t *testing.T) {
-	checker := &fakeChecker{fn: func(_ context.Context, spec operatorv1alpha1.UpgradeRegistrySpec) RegistryResult {
+	checker := &fakeChecker{fn: func(_ context.Context, spec operatorv1alpha1.ImageRegistrySpec) RegistryResult {
 		return RegistryResult{Image: spec.Image, State: StateUnreachable}
 	}}
 	images := makeImages("reg-a/cn:0.75.0")
@@ -120,7 +120,7 @@ func TestRevalidateComponents_NoValidRegistry(t *testing.T) {
 
 func TestRevalidateComponents_SkipComponent(t *testing.T) {
 	called := false
-	checker := &fakeChecker{fn: func(_ context.Context, spec operatorv1alpha1.UpgradeRegistrySpec) RegistryResult {
+	checker := &fakeChecker{fn: func(_ context.Context, spec operatorv1alpha1.ImageRegistrySpec) RegistryResult {
 		called = true
 		return RegistryResult{Image: spec.Image, State: StateValid, Digest: testDigest}
 	}}
@@ -154,7 +154,7 @@ func TestRevalidateComponents_OmittedComponentIsNoOp(t *testing.T) {
 }
 
 func TestRevalidateComponents_NilCallbacksDoNotPanic(t *testing.T) {
-	checker := &fakeChecker{fn: func(_ context.Context, spec operatorv1alpha1.UpgradeRegistrySpec) RegistryResult {
+	checker := &fakeChecker{fn: func(_ context.Context, spec operatorv1alpha1.ImageRegistrySpec) RegistryResult {
 		return RegistryResult{Image: spec.Image, State: StateUnreachable}
 	}}
 	images := makeImages("reg-a/cn:0.75.0")

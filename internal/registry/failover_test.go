@@ -13,18 +13,18 @@ import (
 const testDigest = operatorv1alpha1.Sha256Digest("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 const altDigest = operatorv1alpha1.Sha256Digest("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
 
-func compWithRegistries(images ...string) operatorv1alpha1.UpgradeComponentSpec {
-	regs := make([]operatorv1alpha1.UpgradeRegistrySpec, len(images))
+func compWithRegistries(images ...string) operatorv1alpha1.ImageComponentSpec {
+	regs := make([]operatorv1alpha1.ImageRegistrySpec, len(images))
 	for i, img := range images {
-		regs[i] = operatorv1alpha1.UpgradeRegistrySpec{Image: img}
+		regs[i] = operatorv1alpha1.ImageRegistrySpec{Image: img}
 	}
-	return operatorv1alpha1.UpgradeComponentSpec{Registries: regs}
+	return operatorv1alpha1.ImageComponentSpec{Registries: regs}
 }
 
-func compNonDeterministicWithHashes(image string, hashes map[string][]operatorv1alpha1.Sha256Digest) operatorv1alpha1.UpgradeComponentSpec {
-	return operatorv1alpha1.UpgradeComponentSpec{
-		Deterministic: operatorv1alpha1.UpgradeDeterministicSpec{Supported: false},
-		Registries: []operatorv1alpha1.UpgradeRegistrySpec{
+func compNonDeterministicWithHashes(image string, hashes map[string][]operatorv1alpha1.Sha256Digest) operatorv1alpha1.ImageComponentSpec {
+	return operatorv1alpha1.ImageComponentSpec{
+		Deterministic: operatorv1alpha1.ImageDeterministicSpec{Supported: false},
+		Registries: []operatorv1alpha1.ImageRegistrySpec{
 			{Image: image, LayerHashes: hashes},
 		},
 	}
@@ -53,7 +53,7 @@ func TestRevalidateAndFailover_StillValid(t *testing.T) {
 
 func TestRevalidateAndFailover_FailoverToAlternate(t *testing.T) {
 	checker := &fakeChecker{
-		fn: func(_ context.Context, spec operatorv1alpha1.UpgradeRegistrySpec) RegistryResult {
+		fn: func(_ context.Context, spec operatorv1alpha1.ImageRegistrySpec) RegistryResult {
 			if spec.Image == "img-a" {
 				return RegistryResult{Image: spec.Image, State: StateUnreachable}
 			}
@@ -83,7 +83,7 @@ func TestRevalidateAndFailover_FailoverToAlternate(t *testing.T) {
 
 func TestRevalidateAndFailover_NoAlternateAvailable(t *testing.T) {
 	checker := &fakeChecker{
-		fn: func(_ context.Context, spec operatorv1alpha1.UpgradeRegistrySpec) RegistryResult {
+		fn: func(_ context.Context, spec operatorv1alpha1.ImageRegistrySpec) RegistryResult {
 			return RegistryResult{Image: spec.Image, State: StateUnreachable}
 		},
 	}
@@ -98,7 +98,7 @@ func TestRevalidateAndFailover_NoAlternateAvailable(t *testing.T) {
 
 func TestRevalidateAndFailover_HashMismatchTreatedAsInvalid(t *testing.T) {
 	checker := &fakeChecker{
-		fn: func(_ context.Context, spec operatorv1alpha1.UpgradeRegistrySpec) RegistryResult {
+		fn: func(_ context.Context, spec operatorv1alpha1.ImageRegistrySpec) RegistryResult {
 			if spec.Image == "img-a" {
 				return RegistryResult{Image: spec.Image, State: StateHashMismatch}
 			}
@@ -138,7 +138,7 @@ func TestRevalidateAndFailover_NonDeterministicNoSpuriousFailover(t *testing.T) 
 
 	// Mirrors real OCIChecker: empty LayerHashes → StateNoHashes.
 	checker := &fakeChecker{
-		fn: func(_ context.Context, spec operatorv1alpha1.UpgradeRegistrySpec) RegistryResult {
+		fn: func(_ context.Context, spec operatorv1alpha1.ImageRegistrySpec) RegistryResult {
 			if len(spec.LayerHashes) == 0 {
 				return RegistryResult{Image: spec.Image, State: StateNoHashes}
 			}

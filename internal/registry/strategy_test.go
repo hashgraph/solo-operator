@@ -65,7 +65,7 @@ func TestCheckAll_SequentialStrategyKeepsListedOrder(t *testing.T) {
 	}
 }
 
-func resultImagesFromSpecs(specs []operatorv1alpha1.UpgradeRegistrySpec) []string {
+func resultImagesFromSpecs(specs []operatorv1alpha1.ImageRegistrySpec) []string {
 	out := make([]string, len(specs))
 	for i, s := range specs {
 		out[i] = s.Image

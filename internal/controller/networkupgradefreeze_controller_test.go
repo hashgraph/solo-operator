@@ -37,7 +37,7 @@ func newFreezeForTest() *operatorv1alpha1.NetworkUpgradeFreeze {
 			OperationID:   "op-001",
 			ScheduledTime: metav1.Now(),
 			Images: operatorv1alpha1.UpgradeImagesSpec{
-				ConsensusNode: operatorv1alpha1.UpgradeComponentSpec{
+				ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 					Version:    "0.75.0",
 					Registries: registriesFor("reg-a/cn:0.75.0", "reg-b/cn:0.75.0"),
 				},

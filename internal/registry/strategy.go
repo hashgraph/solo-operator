@@ -18,15 +18,15 @@ const (
 type IterationStrategy interface {
 	Name() string
 	// Order returns a new slice; the input is never mutated.
-	Order(in []operatorv1alpha1.UpgradeRegistrySpec) []operatorv1alpha1.UpgradeRegistrySpec
+	Order(in []operatorv1alpha1.ImageRegistrySpec) []operatorv1alpha1.ImageRegistrySpec
 }
 
 type SequentialStrategy struct{}
 
 func (SequentialStrategy) Name() string { return StrategySequential }
 
-func (SequentialStrategy) Order(in []operatorv1alpha1.UpgradeRegistrySpec) []operatorv1alpha1.UpgradeRegistrySpec {
-	out := make([]operatorv1alpha1.UpgradeRegistrySpec, len(in))
+func (SequentialStrategy) Order(in []operatorv1alpha1.ImageRegistrySpec) []operatorv1alpha1.ImageRegistrySpec {
+	out := make([]operatorv1alpha1.ImageRegistrySpec, len(in))
 	copy(out, in)
 	return out
 }
@@ -38,8 +38,8 @@ type RandomStrategy struct {
 
 func (RandomStrategy) Name() string { return StrategyRandom }
 
-func (s RandomStrategy) Order(in []operatorv1alpha1.UpgradeRegistrySpec) []operatorv1alpha1.UpgradeRegistrySpec {
-	out := make([]operatorv1alpha1.UpgradeRegistrySpec, len(in))
+func (s RandomStrategy) Order(in []operatorv1alpha1.ImageRegistrySpec) []operatorv1alpha1.ImageRegistrySpec {
+	out := make([]operatorv1alpha1.ImageRegistrySpec, len(in))
 	copy(out, in)
 	s.Rand.Shuffle(len(out), func(i, j int) { out[i], out[j] = out[j], out[i] })
 	return out
