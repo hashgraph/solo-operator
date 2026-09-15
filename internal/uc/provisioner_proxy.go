@@ -76,14 +76,14 @@ type ProvisionerProxyConfig struct {
 	// so the Orbit controller can cascade-delete them.
 	Orbit string
 	// ConfigCRPollInterval overrides the default poll cadence when waiting for
-	// config CRs to reach Valid=True. Zero falls back to configCRPollInterval.
+	// config CRs to reach Valid=True. Zero falls back to DefaultConfigCRPollInterval.
 	ConfigCRPollInterval time.Duration
 	// ConfigCRDeployTimeout overrides the default total budget for the config-CR
-	// deployment step. Zero falls back to configCRDeployTimeout.
+	// deployment step. Zero falls back to DefaultConfigCRDeployTimeout.
 	ConfigCRDeployTimeout time.Duration
 	// HandoffDeadline overrides the total budget for the provisioner handoff,
 	// measured from status.startTime across all retries. Zero falls back to
-	// provisionerHandoffDeadline. When exceeded, a transient failure is reported
+	// DefaultHandoffDeadline. When exceeded, a transient failure is reported
 	// as DaemonResult=False (reason DeadlineExceeded) instead of retried.
 	HandoffDeadline time.Duration
 }
@@ -285,6 +285,14 @@ func upsertCondition(conds []interface{}, condType string, status metav1.Conditi
 			continue
 		}
 		if t, _, _ := unstructured.NestedString(c, "type"); t == condType {
+			// Per Kubernetes convention lastTransitionTime marks the last status
+			// flip, not the last write: preserve the prior timestamp when the status
+			// value is unchanged (mirrors the operator-side setCondition).
+			if s, _, _ := unstructured.NestedString(c, "status"); s == string(status) {
+				if prev, _, _ := unstructured.NestedString(c, "lastTransitionTime"); prev != "" {
+					next["lastTransitionTime"] = prev
+				}
+			}
 			conds[i] = next
 			return conds
 		}
@@ -374,19 +382,19 @@ func (c ProvisionerProxyConfig) handoffDeadline() time.Duration {
 	if c.HandoffDeadline > 0 {
 		return c.HandoffDeadline
 	}
-	return provisionerHandoffDeadline
+	return DefaultHandoffDeadline
 }
 
 func (c ProvisionerProxyConfig) pollInterval() time.Duration {
 	if c.ConfigCRPollInterval > 0 {
 		return c.ConfigCRPollInterval
 	}
-	return configCRPollInterval
+	return DefaultConfigCRPollInterval
 }
 
 func (c ProvisionerProxyConfig) deployTimeout() time.Duration {
 	if c.ConfigCRDeployTimeout > 0 {
 		return c.ConfigCRDeployTimeout
 	}
-	return configCRDeployTimeout
+	return DefaultConfigCRDeployTimeout
 }

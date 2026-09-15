@@ -248,6 +248,32 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 		}
 	}
 
+	// setProvisionerSuccessStatus simulates the provisioner (host daemon or in-pod
+	// proxy) success handoff on the Execute CR named by key: it writes
+	// DaemonResult=True and ConfigCRsApplied=True and advances status.phase to
+	// PendingNodeUpgrade in one status update — the contract the operator waits on
+	// per HIP-1496 (the provisioner, not the operator, advances the phase).
+	setProvisionerSuccessStatus := func(key types.NamespacedName) {
+		got := &operatorv1alpha1.NetworkUpgradeExecute{}
+		Expect(k8sClient.Get(ctx, key, got)).To(Succeed())
+		got.Status.Conditions = append(got.Status.Conditions,
+			operatorv1alpha1.Condition{
+				Type:               operatorv1alpha1.CondDaemonResult,
+				Status:             metav1.ConditionTrue,
+				Reason:             operatorv1alpha1.ReasonDaemonSucceeded.String(),
+				LastTransitionTime: metav1.Now(),
+			},
+			operatorv1alpha1.Condition{
+				Type:               operatorv1alpha1.CondConfigCRsApplied,
+				Status:             metav1.ConditionTrue,
+				Reason:             operatorv1alpha1.ReasonDaemonSucceeded.String(),
+				LastTransitionTime: metav1.Now(),
+			},
+		)
+		got.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+		Expect(k8sClient.Status().Update(ctx, got)).To(Succeed())
+	}
+
 	Context("prereqs succeeded, all registries reachable, daemon reports success", func() {
 		const (
 			nupName = "execute-prepare-happy"
@@ -326,26 +352,7 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 			}, timeout, interval).Should(Equal(operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon))
 
 			By("simulating daemon writing DaemonResult=True and CondConfigCRsApplied=True")
-			got := &operatorv1alpha1.NetworkUpgradeExecute{}
-			Expect(k8sClient.Get(ctx, nuxKey, got)).To(Succeed())
-			got.Status.Conditions = append(got.Status.Conditions,
-				operatorv1alpha1.Condition{
-					Type:               operatorv1alpha1.CondDaemonResult,
-					Status:             metav1.ConditionTrue,
-					Reason:             operatorv1alpha1.ReasonDaemonSucceeded.String(),
-					LastTransitionTime: metav1.Now(),
-				},
-				operatorv1alpha1.Condition{
-					Type:               operatorv1alpha1.CondConfigCRsApplied,
-					Status:             metav1.ConditionTrue,
-					Reason:             operatorv1alpha1.ReasonDaemonSucceeded.String(),
-					LastTransitionTime: metav1.Now(),
-				},
-			)
-			// Per HIP-1496 the provisioner (not the operator) advances the phase on
-			// a successful handoff; simulate that alongside the conditions.
-			got.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
-			Expect(k8sClient.Status().Update(ctx, got)).To(Succeed())
+			setProvisionerSuccessStatus(nuxKey)
 
 			By("expecting PendingNodeUpgrade or beyond")
 			Eventually(func() operatorv1alpha1.ExecutePhase {
@@ -367,26 +374,7 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 			}, timeout, interval).Should(Equal(operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon))
 
 			By("writing DaemonResult=True and CondConfigCRsApplied=True")
-			got := &operatorv1alpha1.NetworkUpgradeExecute{}
-			Expect(k8sClient.Get(ctx, nuxKey, got)).To(Succeed())
-			got.Status.Conditions = append(got.Status.Conditions,
-				operatorv1alpha1.Condition{
-					Type:               operatorv1alpha1.CondDaemonResult,
-					Status:             metav1.ConditionTrue,
-					Reason:             operatorv1alpha1.ReasonDaemonSucceeded.String(),
-					LastTransitionTime: metav1.Now(),
-				},
-				operatorv1alpha1.Condition{
-					Type:               operatorv1alpha1.CondConfigCRsApplied,
-					Status:             metav1.ConditionTrue,
-					Reason:             operatorv1alpha1.ReasonDaemonSucceeded.String(),
-					LastTransitionTime: metav1.Now(),
-				},
-			)
-			// Per HIP-1496 the provisioner (not the operator) advances the phase on
-			// a successful handoff; simulate that alongside the conditions.
-			got.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
-			Expect(k8sClient.Status().Update(ctx, got)).To(Succeed())
+			setProvisionerSuccessStatus(nuxKey)
 
 			By("driving the consensus node to ACTIVE on the post-upgrade revision")
 			Eventually(func() operatorv1alpha1.ExecutePhase {
@@ -617,26 +605,7 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 			}, timeout, interval).Should(Equal(operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon))
 
 			By("writing DaemonResult=True and CondConfigCRsApplied=True")
-			got := &operatorv1alpha1.NetworkUpgradeExecute{}
-			Expect(k8sClient.Get(ctx, nuxKey, got)).To(Succeed())
-			got.Status.Conditions = append(got.Status.Conditions,
-				operatorv1alpha1.Condition{
-					Type:               operatorv1alpha1.CondDaemonResult,
-					Status:             metav1.ConditionTrue,
-					Reason:             operatorv1alpha1.ReasonDaemonSucceeded.String(),
-					LastTransitionTime: metav1.Now(),
-				},
-				operatorv1alpha1.Condition{
-					Type:               operatorv1alpha1.CondConfigCRsApplied,
-					Status:             metav1.ConditionTrue,
-					Reason:             operatorv1alpha1.ReasonDaemonSucceeded.String(),
-					LastTransitionTime: metav1.Now(),
-				},
-			)
-			// Per HIP-1496 the provisioner (not the operator) advances the phase on
-			// a successful handoff; simulate that alongside the conditions.
-			got.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
-			Expect(k8sClient.Status().Update(ctx, got)).To(Succeed())
+			setProvisionerSuccessStatus(nuxKey)
 
 			By("waiting for RegistrySelected=True after failover")
 			Eventually(func() bool {
@@ -717,26 +686,7 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 			}, timeout, interval).Should(Equal(operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon))
 
 			By("writing DaemonResult=True and CondConfigCRsApplied=True")
-			got := &operatorv1alpha1.NetworkUpgradeExecute{}
-			Expect(k8sClient.Get(ctx, nuxKey, got)).To(Succeed())
-			got.Status.Conditions = append(got.Status.Conditions,
-				operatorv1alpha1.Condition{
-					Type:               operatorv1alpha1.CondDaemonResult,
-					Status:             metav1.ConditionTrue,
-					Reason:             operatorv1alpha1.ReasonDaemonSucceeded.String(),
-					LastTransitionTime: metav1.Now(),
-				},
-				operatorv1alpha1.Condition{
-					Type:               operatorv1alpha1.CondConfigCRsApplied,
-					Status:             metav1.ConditionTrue,
-					Reason:             operatorv1alpha1.ReasonDaemonSucceeded.String(),
-					LastTransitionTime: metav1.Now(),
-				},
-			)
-			// Per HIP-1496 the provisioner (not the operator) advances the phase on
-			// a successful handoff; simulate that alongside the conditions.
-			got.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
-			Expect(k8sClient.Status().Update(ctx, got)).To(Succeed())
+			setProvisionerSuccessStatus(nuxKey)
 
 			By("waiting for ConsensusCapsulePatched condition")
 			Eventually(func() bool {
@@ -809,26 +759,7 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 			}, timeout, interval).Should(Equal(operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon))
 
 			By("writing DaemonResult=True and CondConfigCRsApplied=True to drive to Succeeded")
-			got := &operatorv1alpha1.NetworkUpgradeExecute{}
-			Expect(k8sClient.Get(ctx, nuxKey, got)).To(Succeed())
-			got.Status.Conditions = append(got.Status.Conditions,
-				operatorv1alpha1.Condition{
-					Type:               operatorv1alpha1.CondDaemonResult,
-					Status:             metav1.ConditionTrue,
-					Reason:             operatorv1alpha1.ReasonDaemonSucceeded.String(),
-					LastTransitionTime: metav1.Now(),
-				},
-				operatorv1alpha1.Condition{
-					Type:               operatorv1alpha1.CondConfigCRsApplied,
-					Status:             metav1.ConditionTrue,
-					Reason:             operatorv1alpha1.ReasonDaemonSucceeded.String(),
-					LastTransitionTime: metav1.Now(),
-				},
-			)
-			// Per HIP-1496 the provisioner (not the operator) advances the phase on
-			// a successful handoff; simulate that alongside the conditions.
-			got.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
-			Expect(k8sClient.Status().Update(ctx, got)).To(Succeed())
+			setProvisionerSuccessStatus(nuxKey)
 
 			By("driving the consensus node to ACTIVE on the post-upgrade revision")
 			Eventually(func() operatorv1alpha1.ExecutePhase {

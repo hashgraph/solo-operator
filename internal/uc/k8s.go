@@ -94,26 +94,6 @@ const (
 	// context.WithTimeout so a stalled API server cannot block the marker poll
 	// loop indefinitely — the handler fails fast and retries on the next tick.
 	createTimeout = 30 * time.Second
-
-	// configCRDeployTimeout is the wall-clock budget for the entire config-CR
-	// deployment step inside handleExecute (cluster-only). It covers scanning,
-	// creating all config CRs, and waiting for the operator to reconcile each
-	// one to Valid=True. 20 minutes is generous; the operator reconciles
-	// ConfigMap-backed CRs within seconds under normal conditions.
-	configCRDeployTimeout = 20 * time.Minute
-
-	// configCRPollInterval is the fallback poll cadence used when
-	// ProvisionerProxyConfig.ConfigCRPollInterval is zero (unset). Prefer
-	// setting ConfigCRPollInterval via --config-cr-poll-interval / UC_CONFIG_CR_POLL_INTERVAL.
-	configCRPollInterval = 1 * time.Second
-
-	// provisionerHandoffDeadline is the total wall-clock budget for the provisioner
-	// handoff, measured from when the CR entered ReadyForProvisionerDaemon (its
-	// status.startTime), across all retries. When it is exceeded the proxy writes
-	// DaemonResult=False (reason DeadlineExceeded) so a stuck-transient operation
-	// terminates rather than hanging — HIP-1496 termination guarantee. It must
-	// exceed configCRDeployTimeout so at least one full attempt fits inside it.
-	provisionerHandoffDeadline = 60 * time.Minute
 )
 
 func gvr(resource string) schema.GroupVersionResource {

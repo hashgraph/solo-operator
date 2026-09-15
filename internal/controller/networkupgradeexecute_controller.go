@@ -265,12 +265,8 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 	daemonCond := findCondition(execute.Status.Conditions, operatorv1alpha1.CondDaemonResult)
 
 	if daemonCond == nil {
-		execute.Status.ObservedGeneration = execute.Generation
-		if err := r.Status().Update(ctx, execute); err != nil {
-			if apierrors.IsConflict(err) {
-				return ctrl.Result{Requeue: true}, nil
-			}
-			return ctrl.Result{}, wrapStatusUpdate(err, "updating status")
+		if res, err := r.syncObservedGeneration(ctx, execute); res != nil {
+			return *res, err
 		}
 		return ctrl.Result{RequeueAfter: ucfg.DaemonRequeueInterval}, nil
 	}
@@ -295,14 +291,31 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 	// PendingNodeUpgrade (post-reinstall). The operator must not race it. We only
 	// record observedGeneration and wait for the daemon to advance status.phase,
 	// at which point the top-level switch dispatches to the matching handler.
+	if res, err := r.syncObservedGeneration(ctx, execute); res != nil {
+		return *res, err
+	}
+	return ctrl.Result{RequeueAfter: ucfg.DaemonRequeueInterval}, nil
+}
+
+// syncObservedGeneration persists status.observedGeneration when it has drifted
+// from the object's generation, and reports whether the caller should return early
+// (non-nil result). While waiting on the provisioner daemon the reconciler is
+// otherwise a no-op, so skipping the Status().Update when nothing changed avoids
+// rewriting identical status — and the resourceVersion churn / watch events it
+// triggers — on every DaemonRequeueInterval tick. The daemon's eventual phase
+// advance still re-enqueues via the watch, with RequeueAfter as the backstop.
+func (r *NetworkUpgradeExecuteReconciler) syncObservedGeneration(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (*ctrl.Result, error) {
+	if execute.Status.ObservedGeneration == execute.Generation {
+		return nil, nil
+	}
 	execute.Status.ObservedGeneration = execute.Generation
 	if err := r.Status().Update(ctx, execute); err != nil {
 		if apierrors.IsConflict(err) {
-			return ctrl.Result{Requeue: true}, nil
+			return &ctrl.Result{Requeue: true}, nil
 		}
-		return ctrl.Result{}, wrapStatusUpdate(err, "updating status")
+		return &ctrl.Result{}, wrapStatusUpdate(err, "updating status")
 	}
-	return ctrl.Result{RequeueAfter: ucfg.DaemonRequeueInterval}, nil
+	return nil, nil
 }
 
 func (r *NetworkUpgradeExecuteReconciler) reconcilePendingInfraUpgrade(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (ctrl.Result, error) {
@@ -323,6 +336,12 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingInfraUpgrade(ctx conte
 	cond := findCondition(execute.Status.Conditions, operatorv1alpha1.CondConfigCRsApplied)
 	if cond == nil || cond.Status != metav1.ConditionTrue {
 		common.Info(ctx, ReasonWaitingForConfigCRsApplied).Msg("waiting for daemon to set CondConfigCRsApplied=True")
+	} else {
+		// ConfigCRsApplied=True but still in PendingInfraUpgrade: the daemon set the
+		// condition without advancing the phase (a non-atomic handoff). Log each tick
+		// so a stall here leaves a forensic trail instead of a silent poll.
+		common.Info(ctx, ReasonWaitingForDaemonPhaseAdvance).
+			Msg("config CRs applied; waiting for daemon to advance phase to PendingNodeUpgrade")
 	}
 	return ctrl.Result{RequeueAfter: ucfg.PrereqRequeueInterval}, nil
 }

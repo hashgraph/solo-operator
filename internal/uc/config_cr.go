@@ -334,8 +334,8 @@ func (p *ProvisionerProxy) createConfigCR(ctx context.Context, operationID strin
 // the corresponding CRs (idempotent — AlreadyExists is success), and waits for
 // the operator to reconcile each one to Valid=True before returning.
 //
-// The caller provides a context already scoped to configCRDeployTimeout. If no
-// config files are found the function returns nil immediately.
+// The caller provides a context already scoped to the config-CR deploy timeout
+// (deployTimeout). If no config files are found the function returns nil immediately.
 func (p *ProvisionerProxy) deployConfigCRs(ctx context.Context, operationID string) error {
 	if p.cfg.UpgradePath == "" {
 		return errx.WithHints(
@@ -468,8 +468,8 @@ func (p *ProvisionerProxy) deployBlockNodesConfigCR(ctx context.Context, operati
 // rejected the file content. The function logs ERROR and returns an error so the
 // caller does NOT advance to PendingNodeUpgrade.
 //
-// Context cancellation (including configCRDeployTimeout) causes a timeout error,
-// leaving the Execute CR at ReadyForProvisionerDaemon for operator intervention.
+// Context cancellation (including the config-CR deploy timeout) causes a timeout
+// error, leaving the Execute CR at ReadyForProvisionerDaemon for operator intervention.
 func waitForConfigCRsValid(ctx context.Context, client dynamic.Interface, namespace, operationID string, refs []configCRRef, pollInterval time.Duration) error {
 	pending := make(map[string]configCRRef, len(refs))
 	for _, r := range refs {

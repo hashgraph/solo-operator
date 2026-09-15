@@ -25,13 +25,14 @@ const (
 	ReasonStatusUpdateAfterErrorFailed errx.Reason = "StatusUpdateAfterErrorFailed"
 
 	// NetworkUpgrade (execute/freeze/prepare/abort).
-	ReasonWaitingForPrepare          errx.Reason = "WaitingForPrepare"
-	ReasonWaitingForFreeze           errx.Reason = "WaitingForFreeze"
-	ReasonCapsuleNotFound            errx.Reason = "CapsuleNotFound"
-	ReasonUnhandledPhase             errx.Reason = "UnhandledPhase"
-	ReasonWaitingForConfigCRsApplied errx.Reason = "WaitingForConfigCRsApplied"
-	ReasonAbortAfterFreeze           errx.Reason = "AbortAfterFreeze"
-	ReasonPhaseTransition            errx.Reason = "PhaseTransition"
+	ReasonWaitingForPrepare            errx.Reason = "WaitingForPrepare"
+	ReasonWaitingForFreeze             errx.Reason = "WaitingForFreeze"
+	ReasonCapsuleNotFound              errx.Reason = "CapsuleNotFound"
+	ReasonUnhandledPhase               errx.Reason = "UnhandledPhase"
+	ReasonWaitingForConfigCRsApplied   errx.Reason = "WaitingForConfigCRsApplied"
+	ReasonWaitingForDaemonPhaseAdvance errx.Reason = "WaitingForDaemonPhaseAdvance"
+	ReasonAbortAfterFreeze             errx.Reason = "AbortAfterFreeze"
+	ReasonPhaseTransition              errx.Reason = "PhaseTransition"
 
 	// NetworkUpgradePrepare registry audit.
 	ReasonRegistryStrategy        errx.Reason = "RegistryStrategy"
