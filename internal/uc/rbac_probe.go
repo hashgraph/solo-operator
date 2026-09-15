@@ -31,12 +31,13 @@ var configCRGVRs = []schema.GroupVersionResource{
 	blockNodesConfigGVR,
 }
 
-// configCRVerbs are the verbs checked by the RBAC probe, matching what
-// upsertConfigCR actually uses.
-var configCRVerbs = []string{"create", "get", "update"}
+// configCRVerbs are the verbs checked by the RBAC probe. UC creates config CRs
+// (create) and polls them for Valid=True (get); config CRs are per-operation and
+// immutable, so UC never updates them.
+var configCRVerbs = []string{"create", "get"}
 
 // RBACProbe implements daemonkit.Probe by issuing SelfSubjectAccessReview
-// requests to verify the ServiceAccount can create/get/update every config-CR.
+// requests to verify the ServiceAccount can create/get every config-CR.
 type RBACProbe struct {
 	Client    dynamic.Interface
 	Namespace string

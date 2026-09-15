@@ -54,8 +54,8 @@ func TestBuildRole_NoUCNoPodStatus(t *testing.T) {
 	}
 }
 
-// TestBuildRole_UCConfigCRGrants verifies the UC sidecar is granted create+get+update on
-// every ConsensusConfig CR kind it upserts during the execute phase, in cluster-only mode.
+// TestBuildRole_UCConfigCRGrants verifies the UC sidecar is granted create+get on
+// every ConsensusConfig CR kind it stages during the execute phase, in cluster-only mode.
 // Without these the provisioner-proxy's config-CR staging is forbidden (see
 // internal/uc/config_cr.go). The resource plurals here must stay in lockstep with the CRD
 // spec.names.plural and the GVRs in internal/uc/k8s.go.
@@ -65,7 +65,7 @@ func TestBuildRole_UCConfigCRGrants(t *testing.T) {
 
 	role := (&RoleSubReconciler{}).buildRole(capsule, true) // cluster-only
 
-	// Every config CR kind the UC creates/gets/updates via upsertConfigCR.
+	// Every config CR kind the UC creates and polls (Get) via createConfigCR.
 	wantResources := []string{
 		"log4j2configs",
 		"nodesettings",
@@ -79,7 +79,7 @@ func TestBuildRole_UCConfigCRGrants(t *testing.T) {
 		"apipermissionproperties",
 		"blocknodesconfigs",
 	}
-	wantVerbs := map[string]bool{"create": true, "get": true, "update": true}
+	wantVerbs := map[string]bool{"create": true, "get": true}
 
 	for _, res := range wantResources {
 		rule := findRule(role.Rules, res)
@@ -94,6 +94,13 @@ func TestBuildRole_UCConfigCRGrants(t *testing.T) {
 		for v := range wantVerbs {
 			if !got[v] {
 				t.Errorf("resource %q: missing verb %q (got %v)", res, v, rule.Verbs)
+			}
+		}
+		// Exactly create+get — no list/watch/update/patch. UC only creates config
+		// CRs and polls them (Get); anything more is over-privilege.
+		for v := range got {
+			if !wantVerbs[v] {
+				t.Errorf("resource %q: unexpected verb %q (got %v)", res, v, rule.Verbs)
 			}
 		}
 	}

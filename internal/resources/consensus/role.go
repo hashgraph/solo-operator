@@ -113,11 +113,13 @@ func (r *RoleSubReconciler) buildRole(capsule *operatorv1alpha1.ConsensusCapsule
 		)
 
 		// Config-CR grant — cluster-only mode ONLY. In this mode the UC's
-		// provisioner-proxy upserts the ConsensusConfig CR family from the deployment
-		// package's data/config/ files (internal/uc/config_cr.go upsertConfigCR:
-		// Create, then Get+Update on conflict). In mainnet mode the host provisioner
-		// daemon owns config delivery and the UC never creates these, so the grant is
-		// withheld to keep the ServiceAccount least-privilege.
+		// provisioner-proxy creates the ConsensusConfig CR family from the deployment
+		// package's data/config/ files (internal/uc/config_cr.go createConfigCR: Create,
+		// with AlreadyExists treated as success), then polls each for Valid=True (Get).
+		// The CRs are per-operation and immutable, so the UC never updates them. In
+		// mainnet mode the host provisioner daemon owns config delivery and the UC never
+		// creates these, so the grant is withheld to keep the ServiceAccount
+		// least-privilege.
 		//
 		// Resource plurals must match the CRD spec.names.plural (and internal/uc/k8s.go
 		// GVRs) verbatim, so an RBAC allow actually matches the API server's registered
@@ -141,7 +143,7 @@ func (r *RoleSubReconciler) buildRole(capsule *operatorv1alpha1.ConsensusCapsule
 			rules = append(rules, rbacv1.PolicyRule{
 				APIGroups: []string{"operator.solo.hiero.org"},
 				Resources: configResources,
-				Verbs:     []string{"create", "get", "list", "watch", "update", "patch"},
+				Verbs:     []string{"create", "get"},
 			})
 		}
 	}

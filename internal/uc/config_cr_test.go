@@ -93,12 +93,13 @@ func TestDeployBlockNodesConfigCR_SelectsNodeVerbatim(t *testing.T) {
 	if ref == nil {
 		t.Fatal("expected a ref, got nil")
 	}
-	if ref.name != "node1-block-nodes" {
-		t.Errorf("cr name = %q, want node1-block-nodes", ref.name)
+	wantName := configCRName(testOperationID, blockNodesKindEntry)
+	if ref.name != wantName {
+		t.Errorf("cr name = %q, want %q", ref.name, wantName)
 	}
 
 	fc := proxy.client.(*fake.FakeDynamicClient)
-	obj, err := fc.Resource(blockNodesConfigGVR).Namespace("solo").Get(context.Background(), "node1-block-nodes", metav1.GetOptions{})
+	obj, err := fc.Resource(blockNodesConfigGVR).Namespace("solo").Get(context.Background(), wantName, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("get CR: %v", err)
 	}
@@ -150,31 +151,45 @@ func TestDeployBlockNodesConfigCR_AbsentIsNoop(t *testing.T) {
 	}
 }
 
-func TestDeployBlockNodesConfigCR_UpsertsOnReUpgrade(t *testing.T) {
+func TestDeployBlockNodesConfigCR_PerOperationDistinctCRs(t *testing.T) {
 	root := t.TempDir()
-	writeBlockNodesFile(t, root, 0, `{"nodes":[{"address":"old","port":8080}],"blockItemBatchSize":256}`)
+	first := `{"nodes":[{"address":"old","port":8080}],"blockItemBatchSize":256}`
+	writeBlockNodesFile(t, root, 0, first)
 	proxy := newProxyWithFakeClient(t, root)
 	proxy.cfg.CapsuleName = "node0"
 
-	if _, err := proxy.deployBlockNodesConfigCR(context.Background(), testOperationID); err != nil {
+	ref1, err := proxy.deployBlockNodesConfigCR(context.Background(), testOperationID)
+	if err != nil {
 		t.Fatalf("first deploy: %v", err)
 	}
 
-	// A later upgrade ships new content at the same stable CR name.
+	// A later upgrade ships new content under a new operationId: like every other
+	// config CR, it must create a distinct, immutable CR (audit trail) rather than
+	// overwriting the first.
 	updated := `{"nodes":[{"address":"new","port":9090}],"blockItemBatchSize":512}`
 	writeBlockNodesFile(t, root, 0, updated)
-	if _, err := proxy.deployBlockNodesConfigCR(context.Background(), "upgrade-0.76.0-20260501t120000z"); err != nil {
+	ref2, err := proxy.deployBlockNodesConfigCR(context.Background(), "upgrade-0.76.0-20260501t120000z")
+	if err != nil {
 		t.Fatalf("second deploy: %v", err)
 	}
+	if ref1.name == ref2.name {
+		t.Fatalf("expected distinct per-operation CR names, both were %q", ref1.name)
+	}
 
+	// Both CRs coexist, each carrying its own operation's content verbatim.
 	fc := proxy.client.(*fake.FakeDynamicClient)
-	obj, err := fc.Resource(blockNodesConfigGVR).Namespace("solo").Get(context.Background(), "node0-block-nodes", metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("get CR: %v", err)
+	assertContent := func(name, want string) {
+		t.Helper()
+		obj, err := fc.Resource(blockNodesConfigGVR).Namespace("solo").Get(context.Background(), name, metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("get CR %s: %v", name, err)
+		}
+		if got, _, _ := unstructured.NestedString(obj.Object, "spec", "content"); got != want {
+			t.Errorf("spec.content of %s = %q, want %q", name, got, want)
+		}
 	}
-	if got, _, _ := unstructured.NestedString(obj.Object, "spec", "content"); got != updated {
-		t.Errorf("spec.content = %q, want upserted %q", got, updated)
-	}
+	assertContent(ref1.name, first)
+	assertContent(ref2.name, updated)
 }
 
 // setValidCondition stamps a Valid condition on an unstructured object and

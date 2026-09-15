@@ -301,6 +301,35 @@ type configCRRef struct {
 	kind string
 }
 
+// createConfigCR creates cr and returns a configCRRef to wait on. AlreadyExists
+// is treated as success: config CRs are per-operation and immutable, so a retry
+// of the same operationId is a no-op rather than an overwrite. gvr and kind
+// identify the CR for log context and RBAC hints.
+func (p *ProvisionerProxy) createConfigCR(ctx context.Context, operationID string, gvr schema.GroupVersionResource, kind string, cr *unstructured.Unstructured) (configCRRef, error) {
+	createCtx, cancel := context.WithTimeout(ctx, createTimeout)
+	_, createErr := p.client.Resource(gvr).Namespace(p.cfg.Namespace).Create(createCtx, cr, metav1.CreateOptions{})
+	cancel()
+
+	switch {
+	case createErr == nil:
+		logx.As().Info().Str("reason", ReasonCRDelivered.String()).
+			Str("operation_id", operationID).Str("cr_kind", kind).
+			Str("cr_name", cr.GetName()).Msg("created config CR")
+	case k8serrors.IsAlreadyExists(createErr):
+		logx.As().Debug().Str("reason", ReasonCRExists.String()).
+			Str("operation_id", operationID).Str("cr_kind", kind).
+			Str("cr_name", cr.GetName()).Msg("config CR already exists — skipping create")
+	default:
+		return configCRRef{}, errx.WithHints(
+			errx.WithReason(errK8sAPI.Wrap(createErr, "create %s %s", kind, cr.GetName()), ReasonConfigCRCreateFailed),
+			"Confirm the UC ServiceAccount has create permission on "+gvr.Resource+"."+gvr.Group,
+			"Check API server connectivity and that the CRD is installed",
+		)
+	}
+
+	return configCRRef{name: cr.GetName(), gvr: gvr, kind: kind}, nil
+}
+
 // deployConfigCRs scans the upgrade package for recognised config files, creates
 // the corresponding CRs (idempotent — AlreadyExists is success), and waits for
 // the operator to reconcile each one to Valid=True before returning.
@@ -326,31 +355,11 @@ func (p *ProvisionerProxy) deployConfigCRs(ctx context.Context, operationID stri
 		if err != nil {
 			return err
 		}
-
-		createCtx, cancel := context.WithTimeout(ctx, createTimeout)
-		_, createErr := p.client.Resource(sf.entry.gvr).Namespace(p.cfg.Namespace).
-			Create(createCtx, cr, metav1.CreateOptions{})
-		cancel()
-
-		if createErr != nil {
-			if k8serrors.IsAlreadyExists(createErr) {
-				logx.As().Debug().Str("reason", ReasonCRExists.String()).
-					Str("operation_id", operationID).Str("cr_kind", sf.entry.kind).
-					Str("cr_name", cr.GetName()).Msg("config CR already exists — skipping create")
-			} else {
-				return errx.WithHints(
-					errx.WithReason(errK8sAPI.Wrap(createErr, "create %s %s", sf.entry.kind, cr.GetName()), ReasonConfigCRCreateFailed),
-					"Confirm the UC ServiceAccount has create permission on "+sf.entry.gvr.Resource+"."+sf.entry.gvr.Group,
-					"Check API server connectivity and that the CRD is installed",
-				)
-			}
-		} else {
-			logx.As().Info().Str("reason", ReasonCRDelivered.String()).
-				Str("operation_id", operationID).Str("cr_kind", sf.entry.kind).
-				Str("cr_name", cr.GetName()).Msg("created config CR")
+		ref, err := p.createConfigCR(ctx, operationID, sf.entry.gvr, sf.entry.kind, cr)
+		if err != nil {
+			return err
 		}
-
-		refs = append(refs, configCRRef{name: cr.GetName(), gvr: sf.entry.gvr, kind: sf.entry.kind})
+		refs = append(refs, ref)
 	}
 
 	// Per-node block-node config lives outside data/config/ (block-nodes/config/)
@@ -377,14 +386,20 @@ func (p *ProvisionerProxy) deployConfigCRs(ctx context.Context, operationID stri
 // files (block-nodes-<NODE_ID>.json), separate from data/config/ (HIP-1494).
 const blockNodesSubdir = "block-nodes/config"
 
+// blockNodesKindEntry names the per-node BlockNodesConfig CR. Block-node config
+// lives outside data/config/ (see blockNodesSubdir), so it is not part of
+// configFileKinds, but it is named and delivered exactly like every other config
+// CR: configCRName(operationID, …), immutable, Create-only.
+var blockNodesKindEntry = kindEntry{gvr: blockNodesConfigGVR, kind: "BlockNodesConfig", nameSuffix: "block-nodes"}
+
 // deployBlockNodesConfigCR selects this node's block-node config from the upgrade
-// package (block-nodes/config/block-nodes-<NODE_ID>.json) and upserts it verbatim
-// into a BlockNodesConfig CR named "<capsule>-block-nodes". That name is stable
-// across upgrades so the ConsensusCapsule can reference it via a static
-// spec.blockNodesConfigRef (config refs are not patched during upgrade); a
-// re-upgrade therefore overwrites the content rather than being a no-op. Returns
-// (nil, nil) when the package carries no block-node config for this node, or when
-// the capsule name is unknown (nothing to reference).
+// package (block-nodes/config/block-nodes-<NODE_ID>.json) and creates it verbatim
+// into a per-operation BlockNodesConfig CR, exactly like every other config CR:
+// immutable, Create-only, never deleted — so each upgrade leaves an audit trail.
+// The ConsensusCapsule's static spec.blockNodesConfigRef keeps resolving because
+// it points at the spec.scope-derived ConfigMap name (<scope>-block-nodes), not at
+// the CR object name. Returns (nil, nil) when the package carries no block-node
+// config for this node, or when this UC instance is not bound to a capsule.
 func (p *ProvisionerProxy) deployBlockNodesConfigCR(ctx context.Context, operationID string) (*configCRRef, error) {
 	if p.cfg.CapsuleName == "" {
 		return nil, nil
@@ -420,10 +435,10 @@ func (p *ProvisionerProxy) deployBlockNodesConfigCR(ctx context.Context, operati
 		)
 	}
 
-	name := p.cfg.CapsuleName + "-block-nodes"
+	name := configCRName(operationID, blockNodesKindEntry)
 	cr := &unstructured.Unstructured{}
 	cr.SetAPIVersion(operatorv1alpha1.GroupVersion.String())
-	cr.SetKind("BlockNodesConfig")
+	cr.SetKind(blockNodesKindEntry.kind)
 	cr.SetName(name)
 	cr.SetNamespace(p.cfg.Namespace)
 	cr.SetLabels(map[string]string{
@@ -438,48 +453,11 @@ func (p *ProvisionerProxy) deployBlockNodesConfigCR(ctx context.Context, operati
 		_ = unstructured.SetNestedField(cr.Object, p.cfg.Orbit, "spec", "orbit")
 	}
 
-	if err := p.upsertConfigCR(ctx, blockNodesConfigGVR, cr); err != nil {
-		return nil, errx.WithHints(
-			errx.WithReason(errK8sAPI.Wrap(err, "apply BlockNodesConfig %s", name), ReasonConfigCRCreateFailed),
-			"Confirm the UC ServiceAccount has create/update permission on blocknodesconfigs.operator.solo.hiero.org",
-		)
+	ref, err := p.createConfigCR(ctx, operationID, blockNodesConfigGVR, blockNodesKindEntry.kind, cr)
+	if err != nil {
+		return nil, err
 	}
-	logx.As().Info().Str("reason", ReasonCRDelivered.String()).
-		Str("operation_id", operationID).Str("cr_kind", "BlockNodesConfig").
-		Str("cr_name", name).Int("node_id", p.cfg.NodeID).
-		Msg("staged per-node block-node config CR")
-	return &configCRRef{name: name, gvr: blockNodesConfigGVR, kind: "BlockNodesConfig"}, nil
-}
-
-// upsertConfigCR creates cr, or updates the existing object's spec when it already
-// exists. Used for the stable-named block-node CR whose content must track the
-// latest upgrade package.
-func (p *ProvisionerProxy) upsertConfigCR(ctx context.Context, gvr schema.GroupVersionResource, cr *unstructured.Unstructured) error {
-	createCtx, cancel := context.WithTimeout(ctx, createTimeout)
-	_, err := p.client.Resource(gvr).Namespace(p.cfg.Namespace).Create(createCtx, cr, metav1.CreateOptions{})
-	cancel()
-	if err == nil {
-		return nil
-	}
-	if !k8serrors.IsAlreadyExists(err) {
-		return err
-	}
-
-	getCtx, cancel := context.WithTimeout(ctx, listTimeout)
-	existing, getErr := p.client.Resource(gvr).Namespace(p.cfg.Namespace).Get(getCtx, cr.GetName(), metav1.GetOptions{})
-	cancel()
-	if getErr != nil {
-		return getErr
-	}
-	spec, _, _ := unstructured.NestedMap(cr.Object, "spec")
-	if err := unstructured.SetNestedMap(existing.Object, spec, "spec"); err != nil {
-		return err
-	}
-	existing.SetLabels(cr.GetLabels())
-	updateCtx, cancel := context.WithTimeout(ctx, createTimeout)
-	_, updErr := p.client.Resource(gvr).Namespace(p.cfg.Namespace).Update(updateCtx, existing, metav1.UpdateOptions{})
-	cancel()
-	return updErr
+	return &ref, nil
 }
 
 // waitForConfigCRsValid polls each config CR's status.conditions until all have
