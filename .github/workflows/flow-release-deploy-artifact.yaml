@@ -97,7 +97,7 @@ jobs:
           driver-opts: network=host,image=ghcr.io/hashgraph/runner-images/buildkit:buildx-stable-1
 
       - name: Docker Login (GitHub)
-        uses: step-security/docker-login-action@bd6978fd4ef9a5f78130095b298b8a721afcb0d8 # v4.5.1
+        uses: step-security/docker-login-action@8c7b695d8738c5699a679ff5254baf0f19f20a94 # v4.6.0
         with:
           registry: ${{ env.GH_OCI_REGISTRY }}
           username: ${{ github.actor }}
@@ -105,7 +105,7 @@ jobs:
 
       - name: Docker Login (JFrog)
         if: ${{ inputs.jfrog-enabled }}
-        uses: step-security/docker-login-action@bd6978fd4ef9a5f78130095b298b8a721afcb0d8 # v4.5.1
+        uses: step-security/docker-login-action@8c7b695d8738c5699a679ff5254baf0f19f20a94 # v4.6.0
         with:
           registry: ${{ env.JF_OCI_REGISTRY }}
           username: ${{ vars.JF_USERNAME }}
