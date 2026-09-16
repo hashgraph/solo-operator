@@ -40,7 +40,7 @@ func rejectSymlink(path string, mode fs.FileMode) error {
 		return nil
 	}
 	return errx.WithHints(
-		errx.WithReason(errPersist.New("config file %q is a symlink — refusing to read", path), ReasonConfigFileSymlink),
+		errx.WithReason(errConfigFileInvalid.New("config file %q is a symlink — refusing to read", path), ReasonConfigFileSymlink),
 		"Remove symlinks from the upgrade package; only regular files are accepted under data/config/",
 	)
 }
@@ -51,7 +51,7 @@ func rejectOversized(path string, size int64) error {
 		return nil
 	}
 	return errx.WithHints(
-		errx.WithReason(errPersist.New("config file %q is %d bytes, exceeds the %d byte limit", path, size, maxConfigFileSize), ReasonConfigFileTooLarge),
+		errx.WithReason(errConfigFileInvalid.New("config file %q is %d bytes, exceeds the %d byte limit", path, size, maxConfigFileSize), ReasonConfigFileTooLarge),
 		"Reduce the file size or split it before including it in the upgrade package",
 	)
 }
@@ -63,7 +63,7 @@ func readFileNoFollow(path string) ([]byte, error) {
 	if err != nil {
 		if errors.Is(err, syscall.ELOOP) {
 			return nil, errx.WithHints(
-				errx.WithReason(errPersist.New("%q is a symlink — refusing to read", path), ReasonConfigFileSymlink),
+				errx.WithReason(errConfigFileInvalid.New("%q is a symlink — refusing to read", path), ReasonConfigFileSymlink),
 				"Remove symlinks from the upgrade package; only regular files are accepted",
 			)
 		}
@@ -217,7 +217,7 @@ func scanConfigFiles(upgradePath string) ([]scannedFile, error) {
 				Strs("recognised", knownConfigFilenames()).
 				Msg("unrecognised config filename — aborting execute phase")
 			return nil, errx.WithHints(
-				errx.WithReason(errPersist.New("unrecognised config filename %q in %s", name, configDir), ReasonConfigFileUnrecognised),
+				errx.WithReason(errConfigFileInvalid.New("unrecognised config filename %q in %s", name, configDir), ReasonConfigFileUnrecognised),
 				"Remove or rename the unrecognised file from data/config/ in the upgrade package",
 				"Recognised filenames: "+strings.Join(knownConfigFilenames(), ", "),
 			)
@@ -334,8 +334,8 @@ func (p *ProvisionerProxy) createConfigCR(ctx context.Context, operationID strin
 // the corresponding CRs (idempotent — AlreadyExists is success), and waits for
 // the operator to reconcile each one to Valid=True before returning.
 //
-// The caller provides a context already scoped to configCRDeployTimeout. If no
-// config files are found the function returns nil immediately.
+// The caller provides a context already scoped to the config-CR deploy timeout
+// (deployTimeout). If no config files are found the function returns nil immediately.
 func (p *ProvisionerProxy) deployConfigCRs(ctx context.Context, operationID string) error {
 	if p.cfg.UpgradePath == "" {
 		return errx.WithHints(
@@ -468,8 +468,8 @@ func (p *ProvisionerProxy) deployBlockNodesConfigCR(ctx context.Context, operati
 // rejected the file content. The function logs ERROR and returns an error so the
 // caller does NOT advance to PendingNodeUpgrade.
 //
-// Context cancellation (including configCRDeployTimeout) causes a timeout error,
-// leaving the Execute CR at ReadyForProvisionerDaemon for operator intervention.
+// Context cancellation (including the config-CR deploy timeout) causes a timeout
+// error, leaving the Execute CR at ReadyForProvisionerDaemon for operator intervention.
 func waitForConfigCRsValid(ctx context.Context, client dynamic.Interface, namespace, operationID string, refs []configCRRef, pollInterval time.Duration) error {
 	pending := make(map[string]configCRRef, len(refs))
 	for _, r := range refs {

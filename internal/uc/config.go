@@ -63,6 +63,15 @@ const (
 	// creating, and waiting for all config CRs to reach Valid=True. 20 minutes is
 	// generous; a healthy operator reconciles ConfigMap-backed CRs within seconds.
 	DefaultConfigCRDeployTimeout = 20 * time.Minute
+	// DefaultHandoffDeadline is the total budget for the provisioner handoff,
+	// measured from when the CR entered ReadyForProvisionerDaemon across all
+	// retries. When exceeded, a transient failure is reported as DaemonResult=False
+	// (reason DeadlineExceeded) so a stuck operation terminates rather than hangs
+	// (HIP-1496). Must exceed DefaultConfigCRDeployTimeout so at least one full
+	// attempt fits inside it. 60 minutes is the absolute maximum handoff we tolerate
+	// before declaring the operation stuck; raise it only for exceptionally slow
+	// reconciliation or large config sets.
+	DefaultHandoffDeadline = 60 * time.Minute
 )
 
 // Config holds the runtime configuration for the UC sidecar.
@@ -138,6 +147,11 @@ type Config struct {
 	// ConfigCRDeployTimeout is the total budget for the config-CR deployment step
 	// (scan + create + wait for Valid=True). Env: UC_CONFIG_CR_DEPLOY_TIMEOUT.
 	ConfigCRDeployTimeout time.Duration
+	// HandoffDeadline is the total budget for the provisioner handoff, measured
+	// from when the CR entered ReadyForProvisionerDaemon across all retries; when
+	// exceeded, a transient failure is reported as DaemonResult=False (reason
+	// DeadlineExceeded) instead of retried (HIP-1496). Env: UC_HANDOFF_DEADLINE.
+	HandoffDeadline time.Duration
 }
 
 // DefaultConfig returns a Config pre-populated with the documented defaults.
@@ -161,6 +175,7 @@ func DefaultConfig() Config {
 		FreezePollInterval:    FreezePollInterval,
 		ConfigCRPollInterval:  DefaultConfigCRPollInterval,
 		ConfigCRDeployTimeout: DefaultConfigCRDeployTimeout,
+		HandoffDeadline:       DefaultHandoffDeadline,
 	}
 }
 
@@ -282,6 +297,12 @@ func (c Config) Validate() error {
 		return errx.WithHints(
 			errx.WithReason(errConfigInvalid.New("config-cr-deploy-timeout %s must be positive", c.ConfigCRDeployTimeout), ReasonConfigInvalid),
 			"Set --config-cr-deploy-timeout to a positive duration (e.g. 20m)",
+		)
+	}
+	if c.HandoffDeadline <= c.ConfigCRDeployTimeout {
+		return errx.WithHints(
+			errx.WithReason(errConfigInvalid.New("handoff-deadline %s must exceed config-cr-deploy-timeout %s", c.HandoffDeadline, c.ConfigCRDeployTimeout), ReasonConfigInvalid),
+			"Set --handoff-deadline greater than --config-cr-deploy-timeout so at least one full attempt fits inside it (e.g. 60m)",
 		)
 	}
 	return nil

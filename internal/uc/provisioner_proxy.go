@@ -4,6 +4,7 @@ package uc
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"github.com/automa-saga/daemonkit"
 	"github.com/automa-saga/errx"
 	"github.com/automa-saga/logx"
+	"github.com/joomcode/errorx"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
@@ -74,11 +76,16 @@ type ProvisionerProxyConfig struct {
 	// so the Orbit controller can cascade-delete them.
 	Orbit string
 	// ConfigCRPollInterval overrides the default poll cadence when waiting for
-	// config CRs to reach Valid=True. Zero falls back to configCRPollInterval.
+	// config CRs to reach Valid=True. Zero falls back to DefaultConfigCRPollInterval.
 	ConfigCRPollInterval time.Duration
 	// ConfigCRDeployTimeout overrides the default total budget for the config-CR
-	// deployment step. Zero falls back to configCRDeployTimeout.
+	// deployment step. Zero falls back to DefaultConfigCRDeployTimeout.
 	ConfigCRDeployTimeout time.Duration
+	// HandoffDeadline overrides the total budget for the provisioner handoff,
+	// measured from status.startTime across all retries. Zero falls back to
+	// DefaultHandoffDeadline. When exceeded, a transient failure is reported
+	// as DaemonResult=False (reason DeadlineExceeded) instead of retried.
+	HandoffDeadline time.Duration
 }
 
 // NewProvisionerProxy constructs the proxy with an in-cluster or
@@ -187,6 +194,22 @@ func (p *ProvisionerProxy) Handle(ctx context.Context, cr *unstructured.Unstruct
 		if err := p.handleExecute(ctx, cr); err != nil {
 			logx.As().Error().Err(err).Str("reason", ReasonProvisionerProxyTransitionFailed.String()).
 				Str("operation_id", operationID).Msg("transition to PendingNodeUpgrade failed")
+			// HIP-1496 termination guarantee: fatal failures are reported as
+			// DaemonResult=False immediately so the operator marks the CR Failed.
+			// Transient failures are retried on the next watch tick (op-id left out
+			// of completedOpIDs) — but only until the handoff deadline, after which
+			// they too are reported so a stuck operation terminates rather than hangs.
+			switch {
+			case !errorx.IsTemporary(err):
+				reason := operatorv1alpha1.ReasonDaemonInfraUpgradeFailed.String()
+				if r, ok := errx.ReasonOf(err); ok && r != "" {
+					reason = r.String()
+				}
+				p.reportFailure(ctx, cr, reason, err.Error())
+			case p.handoffDeadlineExceeded(cr):
+				p.reportFailure(ctx, cr, operatorv1alpha1.ReasonDaemonDeadlineExceeded.String(),
+					fmt.Sprintf("provisioner retry budget exceeded before handoff: %v", err))
+			}
 			return
 		}
 		succeeded = true
@@ -202,7 +225,10 @@ func (p *ProvisionerProxy) Handle(ctx context.Context, cr *unstructured.Unstruct
 //
 //  1. Deploy config CRs from the upgrade package (data/config/ + package root).
 //  2. Wait for all config CRs to reach Valid=True.
-//  3. Patch Execute CR status.phase to PendingNodeUpgrade.
+//  3. Write ConfigCRsApplied=True + DaemonResult=True and advance status.phase to
+//     PendingNodeUpgrade — the same handoff the host-side provisioner daemon makes
+//     (see the daemon's reportOutcome), so both provisioner paths present an
+//     identical contract to the operator.
 func (p *ProvisionerProxy) handleExecute(ctx context.Context, cr *unstructured.Unstructured) error {
 	operationID := operationIDOf(cr)
 	if p.onTransition != nil {
@@ -216,17 +242,20 @@ func (p *ProvisionerProxy) handleExecute(ctx context.Context, cr *unstructured.U
 		return err
 	}
 
-	// Step 3: advance Execute CR to PendingNodeUpgrade.
-	patch := []byte(fmt.Sprintf(
-		`{"status":{"phase":%q}}`, operatorv1alpha1.ExecutePhasePendingNodeUpgrade))
+	// Step 3: write the success conditions and advance the phase in one status
+	// patch. The provisioner (daemon or this proxy) owns the ConfigCRsApplied →
+	// DaemonResult → PendingNodeUpgrade handoff; the operator only reads it.
+	patch, err := buildProvisionerHandoffPatch(cr)
+	if err != nil {
+		return errx.WithReason(errManifestInvalid.Wrap(err, "build handoff patch for %s", cr.GetName()), ReasonExecutePatchFailed)
+	}
 
 	patchCtx, cancel := context.WithTimeout(ctx, createTimeout)
 	defer cancel()
 
 	resource := p.client.Resource(networkUpgradeExecuteGVR).Namespace(p.cfg.Namespace)
-	_, err := resource.Patch(patchCtx, cr.GetName(), types.MergePatchType, patch,
-		metav1.PatchOptions{}, "status")
-	if err != nil {
+	if _, err := resource.Patch(patchCtx, cr.GetName(), types.MergePatchType, patch,
+		metav1.PatchOptions{}, "status"); err != nil {
 		return errx.WithHints(
 			errx.WithReason(errK8sAPI.Wrap(err, "patch %s status to PendingNodeUpgrade", cr.GetName()), ReasonExecutePatchFailed),
 			"Confirm the UC ServiceAccount has patch permission on networkupgradeexecutes/status."+operatorv1alpha1.GroupVersion.Group,
@@ -238,16 +267,134 @@ func (p *ProvisionerProxy) handleExecute(ctx context.Context, cr *unstructured.U
 	return nil
 }
 
+// upsertCondition returns conds with a condition of condType set to the given
+// status/reason/message (replacing any existing entry of that type, else
+// appending). A JSON merge patch replaces the whole conditions array, so callers
+// must merge onto the CR's existing conditions rather than patch a bare list.
+func upsertCondition(conds []interface{}, condType string, status metav1.ConditionStatus, reason, message, now string) []interface{} {
+	next := map[string]interface{}{
+		"type":               condType,
+		"status":             string(status),
+		"reason":             reason,
+		"message":            message,
+		"lastTransitionTime": now,
+	}
+	for i, raw := range conds {
+		c, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if t, _, _ := unstructured.NestedString(c, "type"); t == condType {
+			// Per Kubernetes convention lastTransitionTime marks the last status
+			// flip, not the last write: preserve the prior timestamp when the status
+			// value is unchanged (mirrors the operator-side setCondition).
+			if s, _, _ := unstructured.NestedString(c, "status"); s == string(status) {
+				if prev, _, _ := unstructured.NestedString(c, "lastTransitionTime"); prev != "" {
+					next["lastTransitionTime"] = prev
+				}
+			}
+			conds[i] = next
+			return conds
+		}
+	}
+	return append(conds, next)
+}
+
+// buildProvisionerHandoffPatch builds the JSON merge patch that mirrors the
+// host-side daemon's reportOutcome success path: it upserts ConfigCRsApplied=True
+// and DaemonResult=True (reason Succeeded) into the CR's existing
+// status.conditions and sets status.phase to PendingNodeUpgrade.
+func buildProvisionerHandoffPatch(cr *unstructured.Unstructured) ([]byte, error) {
+	now := metav1.Now().Format(time.RFC3339)
+	conds, _, _ := unstructured.NestedSlice(cr.Object, "status", "conditions")
+	conds = upsertCondition(conds, operatorv1alpha1.CondConfigCRsApplied, metav1.ConditionTrue,
+		operatorv1alpha1.ReasonDaemonSucceeded.String(), "config CRs applied and reconciled to Valid", now)
+	conds = upsertCondition(conds, operatorv1alpha1.CondDaemonResult, metav1.ConditionTrue,
+		operatorv1alpha1.ReasonDaemonSucceeded.String(), "provisioner completed config deployment", now)
+
+	return json.Marshal(map[string]interface{}{
+		"status": map[string]interface{}{
+			"phase":      string(operatorv1alpha1.ExecutePhasePendingNodeUpgrade),
+			"conditions": conds,
+		},
+	})
+}
+
+// buildProvisionerFailurePatch builds the JSON merge patch that mirrors the
+// daemon's reportOutcome failure path: it upserts DaemonResult=False (carrying
+// the error's reason code) into the CR's existing status.conditions and does NOT
+// touch status.phase — the operator reads DaemonResult=False and marks the CR
+// Failed, terminal. reason is the error's PascalCase reason code.
+func buildProvisionerFailurePatch(cr *unstructured.Unstructured, reason, message string) ([]byte, error) {
+	now := metav1.Now().Format(time.RFC3339)
+	conds, _, _ := unstructured.NestedSlice(cr.Object, "status", "conditions")
+	conds = upsertCondition(conds, operatorv1alpha1.CondDaemonResult, metav1.ConditionFalse, reason, message, now)
+
+	return json.Marshal(map[string]interface{}{
+		"status": map[string]interface{}{
+			"conditions": conds,
+		},
+	})
+}
+
+// reportFailure writes DaemonResult=False (with the given reason and message)
+// without advancing status.phase, so the operator marks the CR Failed. Called for
+// fatal failures and for transient failures that outlast the handoff deadline.
+func (p *ProvisionerProxy) reportFailure(ctx context.Context, cr *unstructured.Unstructured, reason, message string) {
+	patch, err := buildProvisionerFailurePatch(cr, reason, message)
+	if err != nil {
+		logx.As().Error().Err(err).Str("reason", ReasonExecutePatchFailed.String()).
+			Str("cr_name", cr.GetName()).Msg("build DaemonResult=False patch failed")
+		return
+	}
+
+	patchCtx, cancel := context.WithTimeout(ctx, createTimeout)
+	defer cancel()
+	resource := p.client.Resource(networkUpgradeExecuteGVR).Namespace(p.cfg.Namespace)
+	if _, err := resource.Patch(patchCtx, cr.GetName(), types.MergePatchType, patch,
+		metav1.PatchOptions{}, "status"); err != nil {
+		logx.As().Error().Err(err).Str("reason", ReasonExecutePatchFailed.String()).
+			Str("cr_name", cr.GetName()).Msg("patch DaemonResult=False failed")
+		return
+	}
+	logx.As().Warn().Str("reason", reason).Str("cr_name", cr.GetName()).
+		Msg("wrote DaemonResult=False — operator will mark Execute CR Failed")
+}
+
+// handoffDeadlineExceeded reports whether the handoff budget, measured from when
+// the CR entered ReadyForProvisionerDaemon (status.startTime), has elapsed. If
+// status.startTime is absent or unparseable the deadline is treated as NOT
+// exceeded — a missing anchor must not force a premature terminal failure; the
+// operation stays retryable until the anchor appears.
+func (p *ProvisionerProxy) handoffDeadlineExceeded(cr *unstructured.Unstructured) bool {
+	startStr, ok, _ := unstructured.NestedString(cr.Object, "status", "startTime")
+	if !ok || startStr == "" {
+		return false
+	}
+	started, err := time.Parse(time.RFC3339, startStr)
+	if err != nil {
+		return false
+	}
+	return time.Since(started) > p.cfg.handoffDeadline()
+}
+
+func (c ProvisionerProxyConfig) handoffDeadline() time.Duration {
+	if c.HandoffDeadline > 0 {
+		return c.HandoffDeadline
+	}
+	return DefaultHandoffDeadline
+}
+
 func (c ProvisionerProxyConfig) pollInterval() time.Duration {
 	if c.ConfigCRPollInterval > 0 {
 		return c.ConfigCRPollInterval
 	}
-	return configCRPollInterval
+	return DefaultConfigCRPollInterval
 }
 
 func (c ProvisionerProxyConfig) deployTimeout() time.Duration {
 	if c.ConfigCRDeployTimeout > 0 {
 		return c.ConfigCRDeployTimeout
 	}
-	return configCRDeployTimeout
+	return DefaultConfigCRDeployTimeout
 }

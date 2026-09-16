@@ -22,6 +22,13 @@ var (
 	// creating a CR rather than retrying.
 	errManifestInvalid = errNS.NewType("manifest_invalid")
 
+	// errConfigFileInvalid: a config file in the upgrade package is fundamentally
+	// unusable (a symlink, oversized, or an unrecognised filename). Terminal —
+	// re-reading the same bytes cannot fix it, so the provisioner reports
+	// DaemonResult=False rather than retrying (see HIP-1496 Provisioner Failure
+	// Semantics). Distinct from errPersist, which is a transient disk/IO problem.
+	errConfigFileInvalid = errNS.NewType("config_file_invalid")
+
 	// errPersist: persisting or reading a CR under --cr-persist-path failed (a
 	// disk/IO problem). Transient — the persist-before-send step is retried on the
 	// next poll tick.

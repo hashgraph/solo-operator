@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/automa-saga/errx"
+	"github.com/joomcode/errorx"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -135,6 +136,10 @@ func TestDeployBlockNodesConfigCR_SymlinkRejected(t *testing.T) {
 	}
 	if reason, _ := errx.ReasonOf(err); reason != ReasonConfigFileSymlink {
 		t.Fatalf("reason: got %q, want %q", reason, ReasonConfigFileSymlink)
+	}
+	// HIP-1496: a symlinked config file is fatal, not retryable.
+	if errorx.IsTemporary(err) {
+		t.Error("symlinked config file error must be terminal (non-Temporary)")
 	}
 }
 
@@ -400,6 +405,27 @@ func TestScanConfigFiles_oversizedRejected(t *testing.T) {
 	}
 	if reason, _ := errx.ReasonOf(err); reason != ReasonConfigFileTooLarge {
 		t.Fatalf("reason: got %q, want %q", reason, ReasonConfigFileTooLarge)
+	}
+	// HIP-1496: a bad config file is fatal — the provisioner reports
+	// DaemonResult=False rather than retrying, so it must NOT be Temporary.
+	if errorx.IsTemporary(err) {
+		t.Error("oversized config file error must be terminal (non-Temporary)")
+	}
+}
+
+func TestScanConfigFiles_unrecognisedIsFatal(t *testing.T) {
+	root := t.TempDir()
+	writeConfigFile(t, root, "not-a-known-config.json", "{}")
+
+	_, err := scanConfigFiles(root)
+	if err == nil {
+		t.Fatal("expected error for unrecognised config filename, got nil")
+	}
+	if reason, _ := errx.ReasonOf(err); reason != ReasonConfigFileUnrecognised {
+		t.Fatalf("reason: got %q, want %q", reason, ReasonConfigFileUnrecognised)
+	}
+	if errorx.IsTemporary(err) {
+		t.Error("unrecognised config filename error must be terminal (non-Temporary)")
 	}
 }
 

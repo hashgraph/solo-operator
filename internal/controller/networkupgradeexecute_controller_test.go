@@ -641,6 +641,10 @@ func TestExecuteReconcile_ScalesDownCapsule(t *testing.T) {
 	// Scale-down now happens at PendingNodeUpgrade (after UC advances the phase),
 	// not at Pending. DaemonResult=True is required to reach PendingNodeUpgrade.
 	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	// NodeUpgradeStartTime is pre-set: the daemon advances the phase and the
+	// operator records this timestamp on first observation, then requeues. Setting
+	// it here exercises the capsule-patching work in a single reconcile tick.
+	execute.Status.NodeUpgradeStartTime = &metav1.Time{Time: time.Now()}
 	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
 		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
 	}
@@ -697,6 +701,10 @@ func TestExecuteReconcile_SkipScaleDown_PatchesInPlace(t *testing.T) {
 	execute := newExecuteForTest()
 	// No Provisioner versions declared → rolling restart path is used
 	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	// NodeUpgradeStartTime is pre-set: the daemon advances the phase and the
+	// operator records this timestamp on first observation, then requeues. Setting
+	// it here exercises the capsule-patching work in a single reconcile tick.
+	execute.Status.NodeUpgradeStartTime = &metav1.Time{Time: time.Now()}
 	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
 		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
 	}
@@ -759,6 +767,10 @@ func TestExecuteReconcile_PatchesIndependentlyOfPeers(t *testing.T) {
 	execute := newExecuteForTest()
 	execute.Spec.Provisioner = &operatorv1alpha1.DeclaredProvisionerVersions{DaemonVersion: "0.33.0"}
 	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	// NodeUpgradeStartTime is pre-set: the daemon advances the phase and the
+	// operator records this timestamp on first observation, then requeues. Setting
+	// it here exercises the capsule-patching work in a single reconcile tick.
+	execute.Status.NodeUpgradeStartTime = &metav1.Time{Time: time.Now()}
 	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
 		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
 	}
@@ -927,7 +939,7 @@ func TestExecuteReconcile_SameOperationID_DifferentNode_NotDuplicate(t *testing.
 	}
 }
 
-func TestExecuteReconcile_DaemonResultTrue_AdvancesToPendingInfraUpgrade(t *testing.T) {
+func TestExecuteReconcile_DaemonResultTrue_WaitsForDaemonToAdvancePhase(t *testing.T) {
 	execute := newExecuteForTest()
 	execute.Status.Conditions = []operatorv1alpha1.Condition{
 		{
@@ -943,14 +955,12 @@ func TestExecuteReconcile_DaemonResultTrue_AdvancesToPendingInfraUpgrade(t *test
 	if res.err != nil {
 		t.Fatalf("unexpected error: %v", res.err)
 	}
-	// Daemon success transitions to PendingInfraUpgrade on this tick; the next
-	// tick (via Requeue) will run reconcilePendingInfraUpgrade and advance to
-	// PendingNodeUpgrade.
-	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhasePendingInfraUpgrade {
-		t.Errorf("expected PendingInfraUpgrade, got %s", res.execute.Status.Phase)
-	}
-	if !res.result.Requeue {
-		t.Error("expected Requeue=true after advancing phase")
+	// Per HIP-1496 the provisioner (daemon / provisioner-proxy) — not the operator —
+	// owns the PendingInfraUpgrade / PendingNodeUpgrade phase transitions. On a
+	// positive DaemonResult the operator only waits for the phase to advance; it
+	// must not write it and race the provisioner.
+	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon {
+		t.Errorf("expected phase to stay ReadyForProvisionerDaemon, got %s", res.execute.Status.Phase)
 	}
 }
 
@@ -969,10 +979,12 @@ func TestExecuteReconcile_PendingInfraUpgrade_WaitsForDaemon(t *testing.T) {
 	}
 }
 
-func TestExecuteReconcile_PendingInfraUpgrade_AdvancesToPendingNodeUpgrade(t *testing.T) {
+func TestExecuteReconcile_PendingInfraUpgrade_DoesNotAdvancePhase(t *testing.T) {
 	execute := newExecuteForTest()
 	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingInfraUpgrade
-	// Simulate daemon having written CondConfigCRsApplied=True.
+	// Even with CondConfigCRsApplied=True, the operator must NOT advance to
+	// PendingNodeUpgrade — the provisioner (daemon / provisioner-proxy) owns that
+	// transition per HIP-1496. The operator only waits.
 	setCondition(&execute.Status.Conditions, metav1.Condition{
 		Type:   operatorv1alpha1.CondConfigCRsApplied,
 		Status: metav1.ConditionTrue,
@@ -984,14 +996,18 @@ func TestExecuteReconcile_PendingInfraUpgrade_AdvancesToPendingNodeUpgrade(t *te
 	if res.err != nil {
 		t.Fatalf("unexpected error: %v", res.err)
 	}
-	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhasePendingNodeUpgrade {
-		t.Errorf("expected PendingNodeUpgrade, got %s", res.execute.Status.Phase)
+	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhasePendingInfraUpgrade {
+		t.Errorf("expected phase to stay PendingInfraUpgrade (daemon owns the advance), got %s", res.execute.Status.Phase)
 	}
 }
 
 func TestExecuteReconcile_PendingNodeUpgrade_PatchesCapsule(t *testing.T) {
 	execute := newExecuteForTest()
 	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	// NodeUpgradeStartTime is pre-set: the daemon advances the phase and the
+	// operator records this timestamp on first observation, then requeues. Setting
+	// it here exercises the capsule-patching work in a single reconcile tick.
+	execute.Status.NodeUpgradeStartTime = &metav1.Time{Time: time.Now()}
 	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
 		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
 	}
@@ -1061,6 +1077,10 @@ func TestExecuteReconcile_PendingNodeUpgrade_BringsCapsuleOnline(t *testing.T) {
 	execute := newExecuteForTest()
 	execute.Spec.Provisioner = &operatorv1alpha1.DeclaredProvisionerVersions{DaemonVersion: "0.33.0"}
 	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	// NodeUpgradeStartTime is pre-set: the daemon advances the phase and the
+	// operator records this timestamp on first observation, then requeues. Setting
+	// it here exercises the capsule-patching work in a single reconcile tick.
+	execute.Status.NodeUpgradeStartTime = &metav1.Time{Time: time.Now()}
 	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
 		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
 	}
@@ -1336,6 +1356,10 @@ func TestExecuteReconcile_PendingNodeUpgrade_SucceedsWhenActiveOnNewRevision(t *
 func TestExecuteReconcile_NodeActiveDeadlineExceeded(t *testing.T) {
 	execute := newExecuteForTest()
 	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	// NodeUpgradeStartTime is pre-set: the daemon advances the phase and the
+	// operator records this timestamp on first observation, then requeues. Setting
+	// it here exercises the capsule-patching work in a single reconcile tick.
+	execute.Status.NodeUpgradeStartTime = &metav1.Time{Time: time.Now()}
 	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
 		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
 	}
@@ -1420,6 +1444,10 @@ func TestExecuteReconcile_NodeActiveDeadlineExceeded(t *testing.T) {
 func TestExecuteReconcile_NodeActiveDeadlineExceeded_PeriodicAlert(t *testing.T) {
 	execute := newExecuteForTest()
 	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	// NodeUpgradeStartTime is pre-set: the daemon advances the phase and the
+	// operator records this timestamp on first observation, then requeues. Setting
+	// it here exercises the capsule-patching work in a single reconcile tick.
+	execute.Status.NodeUpgradeStartTime = &metav1.Time{Time: time.Now()}
 	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
 		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
 	}
@@ -1502,6 +1530,10 @@ func TestExecuteReconcile_NodeActiveDeadlineExceeded_PeriodicAlert(t *testing.T)
 func TestExecuteReconcile_NodeActiveDeadlineExceeded_ShortCircuitWithinInterval(t *testing.T) {
 	execute := newExecuteForTest()
 	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	// NodeUpgradeStartTime is pre-set: the daemon advances the phase and the
+	// operator records this timestamp on first observation, then requeues. Setting
+	// it here exercises the capsule-patching work in a single reconcile tick.
+	execute.Status.NodeUpgradeStartTime = &metav1.Time{Time: time.Now()}
 	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
 		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
 	}
