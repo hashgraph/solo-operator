@@ -1,0 +1,8 @@
+schemaVersion: 1
+images:
+  consensusNode:
+    version: "0.1.0"
+    deterministic:
+      supported: false
+    registries:
+      - image: "ghcr.io/hashgraph/solo-operator/consensus-mock:0.2.0"

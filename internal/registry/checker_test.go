@@ -135,6 +135,32 @@ func TestOCIChecker_NoExpectedHashes_Error(t *testing.T) {
 	}
 }
 
+func TestOCIChecker_NonDeterministic_NoHashes_SkipsVerification(t *testing.T) {
+	// src is never called: the whole point is that this path skips the registry round-trip.
+	src := fakeSource{err: fmt.Errorf("should not be called")}
+	res := checkerWith(src).Check(context.Background(), operatorv1alpha1.ImageRegistrySpec{Image: "gcr.io/a/cn:1"},
+		operatorv1alpha1.ImageDeterministicSpec{Supported: false})
+
+	if res.State != StateValid || res.Err != nil {
+		t.Fatalf("expected valid with no error, got %+v", res)
+	}
+	if res.LayerHashesVerified {
+		t.Error("LayerHashesVerified must be false when verification was skipped")
+	}
+	if res.Digest != "" {
+		t.Errorf("expected no digest when verification was skipped, got %q", res.Digest)
+	}
+}
+
+func TestOCIChecker_NonDeterministic_NoHashes_BadReferenceStillFails(t *testing.T) {
+	res := OCIChecker{}.Check(context.Background(), operatorv1alpha1.ImageRegistrySpec{Image: "::not a ref::"},
+		operatorv1alpha1.ImageDeterministicSpec{Supported: false})
+
+	if res.State != StateUnreachable || res.Err == nil {
+		t.Fatalf("expected unreachable for a malformed reference even when verification is skipped, got %+v", res)
+	}
+}
+
 func TestOCIChecker_Unreachable(t *testing.T) {
 	src := fakeSource{err: fmt.Errorf("connection refused")}
 	res := checkerWith(src).Check(context.Background(), operatorv1alpha1.ImageRegistrySpec{Image: "gcr.io/a/cn:1"},

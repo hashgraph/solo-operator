@@ -142,16 +142,13 @@ func (c *S6Controller) exec(ctx context.Context, capsule *operatorv1alpha1.Conse
 				ReasonExecCommandFailed,
 			)
 		}
-		// The WebSocket exec transport upgrades via an HTTP GET, so the API server
-		// authorizes it against pods/exec with the `get` verb. A 403 here means the
-		// operator ServiceAccount is missing that rule — a distinct, RBAC-specific
-		// remediation from a pod that is merely not ready yet.
+		// The WebSocket exec transport is authorized against `create`, not `get`, despite upgrading via HTTP GET.
 		if isForbidden(streamErr) {
 			return res, errx.WithHints(
 				errx.WithReason(errExecTransport.Wrap(streamErr, "exec into %s/%s", capsule.Namespace, podName), ReasonExecForbidden),
-				"Grant the operator ServiceAccount the `get` verb on pods/exec "+
-					`(ClusterRole rule apiGroups:[""] resources:["pods/exec"] verbs:["get"])`,
-				"If installed via Helm, upgrade to a solo-operator chart whose RBAC includes the pods/exec get rule",
+				"Grant the operator ServiceAccount the `get` and `create` verbs on pods/exec "+
+					`(ClusterRole rule apiGroups:[""] resources:["pods/exec"] verbs:["get","create"])`,
+				"If installed via Helm, upgrade to a solo-operator chart whose RBAC includes the pods/exec get+create rule",
 			)
 		}
 		return res, errx.WithHints(

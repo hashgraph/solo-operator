@@ -1,11 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# Dockerfile for consensus-mock, a fast fake stand-in for the consensus-node
-# container used to time the UC-driven upgrade flow in tests. Mirrors
-# Dockerfile.uc: a selector stage picks the pre-compiled arch binary, then the
-# final stage runs it as the same hedera 2000:2000 user the real consensus
-# node and the UC sidecar use, since consensus-mock shares the upgrade/ and
-# output/ volumes with both.
+# Fast fake stand-in for the consensus-node container.
 
 FROM debian:bookworm-slim AS selector
 
@@ -20,8 +15,7 @@ RUN cd /tmp && \
 
 FROM debian:bookworm-slim
 
-# Real s6 (Debian's `s6` package), not stubs — internal/resources/consensus/exec.go
-# execs s6-svc/s6-svstat here on every reconcile.
+# Real s6 (Debian's `s6` package) — internal/resources/consensus/exec.go execs s6-svc/s6-svstat here.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends s6 && \
     rm -rf /var/lib/apt/lists/* && \
@@ -36,8 +30,7 @@ WORKDIR /
 
 COPY --from=selector /consensus-mock .
 
-# s6-svscan (PID 1) supervises this one service so s6-svc/s6-svstat control a
-# real process instead of a stand-in.
+# s6-svscan (PID 1) supervises this service so s6-svc/s6-svstat control a real process.
 RUN mkdir -p /run/service/consensus && \
     printf '#!/bin/sh\nexec /consensus-mock\n' > /run/service/consensus/run && \
     chmod +x /run/service/consensus/run && \

@@ -1,7 +1,6 @@
 version: '3'
 
-# Standalone Taskfile for consensus-mock (see README.md). Not wired into the
-# root Taskfile — invoke as `task -d test/consensus-mock <task>`.
+# Standalone Taskfile for consensus-mock (see README.md); invoke as `task -d test/consensus-mock <task>`.
 
 includes:
   root:
@@ -204,8 +203,14 @@ tasks:
   kind:load:genesis-init:
     desc: "Pull and load the genesis-init image ({{.GENESIS_INIT_IMG}}) into kind"
     cmds:
-      - docker pull {{.GENESIS_INIT_IMG}}
-      - kind load docker-image {{.GENESIS_INIT_IMG}} --name {{.CLUSTER}}
+      - |
+        # kind load docker-image chokes on multi-arch manifest lists; pull+save one platform instead.
+        PLATFORM="linux/$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
+        TAR="$(mktemp -t genesis-init.XXXX.tar)"
+        docker pull --platform "$PLATFORM" {{.GENESIS_INIT_IMG}}
+        docker save --platform "$PLATFORM" -o "$TAR" {{.GENESIS_INIT_IMG}}
+        kind load image-archive "$TAR" --name {{.CLUSTER}}
+        rm -f "$TAR"
 
   cluster:
     desc: "Reset the kind cluster ({{.CLUSTER}}) and install CRDs"
@@ -269,9 +274,19 @@ tasks:
       - kubectl wait --for=condition=complete --timeout={{.TIMEOUT}} job/{{.JOB}} -n {{.NS}}
       - kubectl logs -n {{.NS}} job/{{.JOB}}
 
+  beacon:stage-manifest:
+    internal: true
+    desc: "Stage a placeholder manifest so the UC can build a NetworkUpgradePrepare CR"
+    vars:
+      UPGRADE_PATH: /opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade/current
+    cmds:
+      - kubectl exec node0-0 -c consensus-node -n {{.NS}} -- mkdir -p {{.UPGRADE_PATH}}/manifests
+      - kubectl cp kind/placeholder-manifest.yaml {{.NS}}/node0-0:{{.UPGRADE_PATH}}/manifests/consensus-node-components.yaml -c consensus-node
+
   beacon:prepare:
     desc: "Run a beacon Job: freeze prepare (PREPARE_UPGRADE) against node0"
     cmds:
+      - task: beacon:stage-manifest
       - task: beacon:delete-job
         vars: { JOB: beacon-freeze-prepare }
       - kubectl apply -f kind/job-freeze-prepare.yaml
