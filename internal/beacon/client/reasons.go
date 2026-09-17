@@ -17,4 +17,5 @@ const (
 	reasonTxSubmitted     errx.Reason = "TransactionSubmitted"
 	reasonNodeUnreachable errx.Reason = "NodeUnreachable"
 	reasonNodeReachable   errx.Reason = "NodeReachable"
+	reasonSDKPanic        errx.Reason = "SDKPanic"
 )

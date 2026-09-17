@@ -10,6 +10,7 @@ import (
 
 	"github.com/automa-saga/errx"
 	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
+	"github.com/joomcode/errorx"
 )
 
 // TestWaitReachable_DisabledReturnsNil verifies a non-positive timeout disables
@@ -243,4 +244,35 @@ func TestSubmit_VerifyErrorPropagates(t *testing.T) {
 		return sentinel
 	})
 	wantReason(t, err, errx.Reason("VerifyFailed"))
+}
+
+// TestGuardSDKPanic_RecoversToRetryableError verifies a panic inside the SDK
+// submit is converted into a decorated SDKPanic error instead of crashing the
+// process, so a mid-upload SDK panic exits cleanly and the upload can resume.
+func TestGuardSDKPanic_RecoversToRetryableError(t *testing.T) {
+	_, err := guardSDKPanic(func() (hiero.TransactionResponse, error) {
+		panic("index out of range [0] with length 0")
+	})
+	if err == nil {
+		t.Fatal("expected an error from a panicking submit, got nil")
+	}
+	wantReason(t, err, reasonSDKPanic)
+	if !errorx.IsTemporary(err) {
+		t.Fatalf("expected a retryable (temporary) error, got %v", err)
+	}
+}
+
+// TestGuardSDKPanic_PassesThroughSuccess verifies the guard is transparent when
+// the submit returns normally.
+func TestGuardSDKPanic_PassesThroughSuccess(t *testing.T) {
+	want := hiero.TransactionResponse{NodeID: hiero.AccountID{Account: 3}}
+	got, err := guardSDKPanic(func() (hiero.TransactionResponse, error) {
+		return want, nil
+	})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if got.NodeID != want.NodeID {
+		t.Fatalf("response not passed through: got %+v want %+v", got, want)
+	}
 }

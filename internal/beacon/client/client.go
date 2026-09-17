@@ -15,6 +15,7 @@ package client
 import (
 	"fmt"
 	"net"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -256,17 +257,45 @@ func (c *Client) probeHAPI() error {
 // Transaction.Execute (precheck only, no receipt). All other transactions keep
 // the standard path.
 func submitTransaction(tx hiero.TransactionInterface, hc *hiero.Client) (hiero.TransactionResponse, error) {
-	if fa, ok := tx.(*hiero.FileAppendTransaction); ok {
-		if !fa.IsFrozen() {
-			if _, err := fa.FreezeWith(hc); err != nil {
-				return hiero.TransactionResponse{}, err
+	return guardSDKPanic(func() (hiero.TransactionResponse, error) {
+		if fa, ok := tx.(*hiero.FileAppendTransaction); ok {
+			if !fa.IsFrozen() {
+				if _, err := fa.FreezeWith(hc); err != nil {
+					return hiero.TransactionResponse{}, err
+				}
 			}
+			// fa.Transaction is the embedded base *Transaction; its Execute submits
+			// without the chunked executor's per-chunk GetReceipt.
+			return fa.Transaction.Execute(hc)
 		}
-		// fa.Transaction is the embedded base *Transaction; its Execute submits
-		// without the chunked executor's per-chunk GetReceipt.
-		return fa.Transaction.Execute(hc)
-	}
-	return hiero.TransactionExecute(tx, hc)
+		return hiero.TransactionExecute(tx, hc)
+	})
+}
+
+// guardSDKPanic runs a single SDK submit and converts a panic into a retryable
+// error. The SDK can panic instead of returning an error on some internal states
+// (observed: an index-out-of-range in _BuildTransaction when its node list is
+// momentarily empty after a network hiccup mid-upload). beacon must never take
+// the process down over a third-party panic, so the panic becomes an error: the
+// upload is resumable, so the caller exits cleanly and the next run continues
+// from the last verified checkpoint.
+func guardSDKPanic(submit func() (hiero.TransactionResponse, error)) (resp hiero.TransactionResponse, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			logx.As().Error().
+				Str("reason", reasonSDKPanic.String()).
+				Str("panic", fmt.Sprintf("%v", r)).
+				Bytes("stack", debug.Stack()).
+				Msg("recovered from hiero-sdk panic while submitting transaction")
+			resp = hiero.TransactionResponse{}
+			err = errx.Decorate(
+				errNetworkOp.New("hiero-sdk panic during submit: %v", r),
+				reasonSDKPanic,
+				"The transaction was not submitted; re-run the command to resume from the last verified checkpoint",
+			)
+		}
+	}()
+	return submit()
 }
 
 // Hiero returns the underlying SDK client so operations can build transactions
