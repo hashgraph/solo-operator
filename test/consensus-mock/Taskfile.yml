@@ -243,7 +243,7 @@ tasks:
       - kubectl apply -f ../../docs/example/network-genesis/network-genesis.yaml
       - echo ">> Waiting for genesis to complete..."
       - kubectl wait --for=jsonpath='{.status.phase}'=Succeeded networkgenesis/network-genesis -n {{.NS}} --timeout=300s
-      - echo ">> Waiting for node0 pod to be ready (consensus-mock starts in seconds, not minutes)..."
+      - echo ">> Waiting for node0 pod to be ready ..."
       - kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=consensus-node -n {{.NS}} --timeout=60s
       - echo ">> node0 ready on consensus-mock:{{.MOCK_TAG}}"
 
