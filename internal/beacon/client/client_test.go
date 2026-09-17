@@ -250,7 +250,7 @@ func TestSubmit_VerifyErrorPropagates(t *testing.T) {
 // submit is converted into a decorated SDKPanic error instead of crashing the
 // process, so a mid-upload SDK panic exits cleanly and the upload can resume.
 func TestGuardSDKPanic_RecoversToRetryableError(t *testing.T) {
-	_, err := guardSDKPanic(func() (hiero.TransactionResponse, error) {
+	_, err := guardSDKPanic("submit", func() (hiero.TransactionResponse, error) {
 		panic("index out of range [0] with length 0")
 	})
 	if err == nil {
@@ -266,7 +266,7 @@ func TestGuardSDKPanic_RecoversToRetryableError(t *testing.T) {
 // the submit returns normally.
 func TestGuardSDKPanic_PassesThroughSuccess(t *testing.T) {
 	want := hiero.TransactionResponse{NodeID: hiero.AccountID{Account: 3}}
-	got, err := guardSDKPanic(func() (hiero.TransactionResponse, error) {
+	got, err := guardSDKPanic("submit", func() (hiero.TransactionResponse, error) {
 		return want, nil
 	})
 	if err != nil {
