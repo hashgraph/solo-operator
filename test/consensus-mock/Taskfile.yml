@@ -286,31 +286,72 @@ tasks:
       - kubectl cp kind/placeholder-manifest.yaml {{.NS}}/node0-0:{{.UPGRADE_PATH}}/manifests/consensus-node-components.yaml -c consensus-node
 
   beacon:prepare:
-    desc: "Run a beacon Job: freeze prepare (PREPARE_UPGRADE) against node0"
+    desc: "Run a beacon Job: freeze prepare (PREPARE_UPGRADE) against node0, and wait for its Prepare CR to succeed"
     cmds:
       - task: beacon:stage-manifest
-      - task: beacon:delete-job
-        vars: { JOB: beacon-freeze-prepare }
-      - kubectl apply -f kind/job-freeze-prepare.yaml
-      - task: beacon:wait-job
-        vars: { JOB: beacon-freeze-prepare }
+      - |
+        bash -lc '
+        set -euo pipefail
+        BASELINE="$(kubectl get networkupgradeprepares -n {{.NS}} -o jsonpath="{.items[*].metadata.name}" 2>/dev/null)"
+
+        kubectl delete job beacon-freeze-prepare -n {{.NS}} --ignore-not-found >/dev/null
+        kubectl apply -f kind/job-freeze-prepare.yaml
+        kubectl wait --for=condition=complete --timeout=60s job/beacon-freeze-prepare -n {{.NS}}
+        kubectl logs -n {{.NS}} job/beacon-freeze-prepare
+
+        echo ">> waiting for a new NetworkUpgradePrepare CR..."
+        NAME=""
+        for i in $(seq 1 90); do
+          for n in $(kubectl get networkupgradeprepares -n {{.NS}} -o jsonpath="{.items[*].metadata.name}" 2>/dev/null); do
+            case " $BASELINE " in *" $n "*) ;; *) NAME="$n" ;; esac
+          done
+          [ -n "$NAME" ] && break
+          sleep 1
+        done
+        [ -n "$NAME" ] || { echo "!! no new NetworkUpgradePrepare CR appeared" >&2; exit 1; }
+
+        echo ">>   NetworkUpgradePrepare/$NAME — waiting for Succeeded..."
+        kubectl wait --for=jsonpath="{.status.phase}"=Succeeded networkupgradeprepares/"$NAME" -n {{.NS}} --timeout=60s
+        '
 
   beacon:freeze:
-    desc: "Run a beacon Job: freeze upgrade (FREEZE_UPGRADE), scheduled {{.FREEZE_DELAY_MIN | default \"2\"}} min out"
+    desc: "Run a beacon Job: freeze upgrade (FREEZE_UPGRADE), scheduled {{.FREEZE_DELAY_MIN | default \"2\"}} min out; waits for its Freeze CR to succeed"
     vars:
       FREEZE_DELAY_MIN: '{{.FREEZE_DELAY_MIN | default "2"}}'
-      TIMEOUT:
-        sh: echo "$(( {{.FREEZE_DELAY_MIN}} * 60 + 60 ))s"
+      WAIT_SECS:
+        sh: echo "$(( {{.FREEZE_DELAY_MIN}} * 60 + 60 ))"
     cmds:
-      - task: beacon:delete-job
-        vars: { JOB: beacon-freeze-upgrade }
       - |
-        START=$(date -u -v+{{.FREEZE_DELAY_MIN}}M '+%Y-%m-%d.%H:%M:%S' 2>/dev/null \
-          || date -u -d '+{{.FREEZE_DELAY_MIN}} min' '+%Y-%m-%d.%H:%M:%S')
+        bash -lc '
+        set -euo pipefail
+        BASELINE="$(kubectl get networkupgradefreezes -n {{.NS}} -o jsonpath="{.items[*].metadata.name}" 2>/dev/null)"
+
+        kubectl delete job beacon-freeze-upgrade -n {{.NS}} --ignore-not-found >/dev/null
+        START=$(date -u -v+{{.FREEZE_DELAY_MIN}}M "+%Y-%m-%d.%H:%M:%S" 2>/dev/null \
+          || date -u -d "+{{.FREEZE_DELAY_MIN}} min" "+%Y-%m-%d.%H:%M:%S")
         echo ">> freeze start-time (UTC): $START"
         START_TIME="$START" envsubst < kind/job-freeze-upgrade.yaml | kubectl apply -f -
-      - task: beacon:wait-job
-        vars: { JOB: beacon-freeze-upgrade, TIMEOUT: '{{.TIMEOUT}}' }
+        kubectl wait --for=condition=complete --timeout={{.WAIT_SECS}}s job/beacon-freeze-upgrade -n {{.NS}}
+        kubectl logs -n {{.NS}} job/beacon-freeze-upgrade
+
+        echo ">> waiting for a new NetworkUpgradeFreeze CR..."
+        NAME=""
+        for i in $(seq 1 {{.WAIT_SECS}}); do
+          for n in $(kubectl get networkupgradefreezes -n {{.NS}} -o jsonpath="{.items[*].metadata.name}" 2>/dev/null); do
+            case " $BASELINE " in *" $n "*) ;; *) NAME="$n" ;; esac
+          done
+          [ -n "$NAME" ] && break
+          sleep 1
+        done
+        [ -n "$NAME" ] || { echo "!! no new NetworkUpgradeFreeze CR appeared" >&2; exit 1; }
+
+        echo ">>   NetworkUpgradeFreeze/$NAME — waiting for Succeeded..."
+        kubectl wait --for=jsonpath="{.status.phase}"=Succeeded networkupgradefreezes/"$NAME" -n {{.NS}} --timeout={{.WAIT_SECS}}s
+        '
+      - task: cr:wait-new
+        vars: { KIND: networkupgradefreezes, SINCE: '{{.SINCE}}', TIMEOUT: '{{.TIMEOUT}}' }
+      - task: cr:wait-new
+        vars: { KIND: networkupgradefreezes, FIND_TIMEOUT: '{{.WAIT_SECS}}' }
 
   beacon:abort:
     desc: "Run a beacon Job: freeze abort (FREEZE_ABORT) against node0"
