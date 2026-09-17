@@ -348,10 +348,6 @@ tasks:
         echo ">>   NetworkUpgradeFreeze/$NAME — waiting for Succeeded..."
         kubectl wait --for=jsonpath="{.status.phase}"=Succeeded networkupgradefreezes/"$NAME" -n {{.NS}} --timeout={{.WAIT_SECS}}s
         '
-      - task: cr:wait-new
-        vars: { KIND: networkupgradefreezes, SINCE: '{{.SINCE}}', TIMEOUT: '{{.TIMEOUT}}' }
-      - task: cr:wait-new
-        vars: { KIND: networkupgradefreezes, FIND_TIMEOUT: '{{.WAIT_SECS}}' }
 
   beacon:abort:
     desc: "Run a beacon Job: freeze abort (FREEZE_ABORT) against node0"
