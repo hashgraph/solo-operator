@@ -36,7 +36,7 @@ tasks:
       - task --list
 
   e2e:
-    desc: "Full pipeline: build+load mock/beacon/operator images, kind cluster, Helm install, deploy, prepare+freeze"
+    desc: "Full pipeline: build+load mock/beacon/operator images, kind cluster, Helm install, deploy, prepare+freeze+execute"
     cmds:
       - task: cluster
       - task: docker:build:versions
@@ -49,6 +49,7 @@ tasks:
       - task: beacon:config
       - task: beacon:prepare
       - task: beacon:freeze
+      - task: wait:execute
 
   build:
     desc: "Build the consensus-mock binary for the current platform"
@@ -234,8 +235,7 @@ tasks:
       # MOCK_TAG (not VERSION) avoids colliding with root Taskfile's own VERSION var.
       MOCK_TAG: '{{.MOCK_TAG | default .V1}}'
     cmds:
-      # example:deploy:common depends on example:deploy:orbit (the shared
-      # common/orbit.yaml) — apply kind/orbit.yaml last so ours wins.
+      # apply kind/orbit.yaml last so it wins over example:deploy:common's own orbit.yaml
       - task: example:deploy:common
       - kubectl apply -f kind/orbit.yaml
       - IMAGE_TAG={{.MOCK_TAG}} envsubst < kind/consensus-capsule.yaml | kubectl apply -f -
@@ -315,24 +315,29 @@ tasks:
         '
 
   beacon:freeze:
-    desc: "Run a beacon Job: freeze upgrade (FREEZE_UPGRADE), scheduled {{.FREEZE_DELAY_MIN | default \"2\"}} min out; waits for its Freeze CR to succeed"
+    desc: "Run a beacon Job: freeze upgrade (FREEZE_UPGRADE), scheduled {{.FREEZE_DELAY_SECS | default \"10\"}}s out; waits for its Freeze CR to succeed"
     vars:
-      FREEZE_DELAY_MIN: '{{.FREEZE_DELAY_MIN | default "2"}}'
+      FREEZE_DELAY_SECS: '{{.FREEZE_DELAY_SECS | default "10"}}'
       WAIT_SECS:
-        sh: echo "$(( {{.FREEZE_DELAY_MIN}} * 60 + 60 ))"
+        sh: echo "$(( {{.FREEZE_DELAY_SECS}} + 60 ))"
     cmds:
       - |
         bash -lc '
         set -euo pipefail
         BASELINE="$(kubectl get networkupgradefreezes -n {{.NS}} -o jsonpath="{.items[*].metadata.name}" 2>/dev/null)"
 
+        # node0-0 gets deleted+recreated by Execute; capture its logs live so they survive that
+        rm -f /tmp/consensus-mock-freeze-window-*.log
+        nohup kubectl logs -f node0-0 -c consensus-node -n {{.NS}} > /tmp/consensus-mock-freeze-window-consensus-node.log 2>&1 &
+        nohup kubectl logs -f node0-0 -c uc -n {{.NS}} > /tmp/consensus-mock-freeze-window-uc.log 2>&1 &
+
         kubectl delete job beacon-freeze-upgrade -n {{.NS}} --ignore-not-found >/dev/null
-        START=$(date -u -v+{{.FREEZE_DELAY_MIN}}M "+%Y-%m-%d.%H:%M:%S" 2>/dev/null \
-          || date -u -d "+{{.FREEZE_DELAY_MIN}} min" "+%Y-%m-%d.%H:%M:%S")
+        START=$(date -u -v+{{.FREEZE_DELAY_SECS}}S "+%Y-%m-%d.%H:%M:%S" 2>/dev/null \
+          || date -u -d "+{{.FREEZE_DELAY_SECS}} sec" "+%Y-%m-%d.%H:%M:%S")
         echo ">> freeze start-time (UTC): $START"
         START_TIME="$START" envsubst < kind/job-freeze-upgrade.yaml | kubectl apply -f -
         kubectl wait --for=condition=complete --timeout={{.WAIT_SECS}}s job/beacon-freeze-upgrade -n {{.NS}}
-        kubectl logs -n {{.NS}} job/beacon-freeze-upgrade
+        kubectl logs -n {{.NS}} job/beacon-freeze-upgrade | tee /tmp/consensus-mock-freeze-window-beacon.log
 
         echo ">> waiting for a new NetworkUpgradeFreeze CR..."
         NAME=""
@@ -347,6 +352,54 @@ tasks:
 
         echo ">>   NetworkUpgradeFreeze/$NAME — waiting for Succeeded..."
         kubectl wait --for=jsonpath="{.status.phase}"=Succeeded networkupgradefreezes/"$NAME" -n {{.NS}} --timeout={{.WAIT_SECS}}s
+        '
+
+  wait:execute:
+    desc: "Wait for the UC-created NetworkUpgradeExecute CR to succeed, then print the freeze-window marker/detection logs and pod-restart timing"
+    vars:
+      FREEZE_DELAY_SECS: '{{.FREEZE_DELAY_SECS | default "10"}}'
+      WAIT_SECS:
+        sh: echo "$(( {{.FREEZE_DELAY_SECS}} + 90 ))"
+    cmds:
+      - |
+        bash -lc '
+        set -euo pipefail
+        BASELINE="$(kubectl get networkupgradeexecutes -n {{.NS}} -o jsonpath="{.items[*].metadata.name}" 2>/dev/null)"
+
+        echo ">> waiting for a new NetworkUpgradeExecute CR (scheduled freeze is up to {{.FREEZE_DELAY_SECS}}s out)..."
+        NAME=""
+        for i in $(seq 1 {{.WAIT_SECS}}); do
+          for n in $(kubectl get networkupgradeexecutes -n {{.NS}} -o jsonpath="{.items[*].metadata.name}" 2>/dev/null); do
+            case " $BASELINE " in *" $n "*) ;; *) NAME="$n" ;; esac
+          done
+          [ -n "$NAME" ] && break
+          sleep 1
+        done
+        [ -n "$NAME" ] || { echo "!! no new NetworkUpgradeExecute CR appeared" >&2; exit 1; }
+
+        echo ">>   NetworkUpgradeExecute/$NAME — waiting for Succeeded..."
+        kubectl wait --for=jsonpath="{.status.phase}"=Succeeded networkupgradeexecutes/"$NAME" -n {{.NS}} --timeout={{.WAIT_SECS}}s
+
+        echo
+        echo "── beacon: freeze upgrade tx ──"
+        cat /tmp/consensus-mock-freeze-window-beacon.log 2>/dev/null || echo "(no beacon capture found)"
+
+        echo
+        echo "── consensus-node: freeze_scheduled.mf / now_frozen.mf ──"
+        grep -E "freeze_scheduled|now_frozen|freeze:" /tmp/consensus-mock-freeze-window-consensus-node.log 2>/dev/null || echo "(no consensus-node capture found)"
+
+        echo
+        echo "── uc: MarkerDetected / CRDelivered ──"
+        grep -E "MarkerDetected|CRDelivered" /tmp/consensus-mock-freeze-window-uc.log 2>/dev/null || echo "(no uc capture found)"
+
+        echo
+        echo "── NetworkUpgradeExecute CR timing ──"
+        kubectl get networkupgradeexecutes/"$NAME" -n {{.NS}} -o jsonpath="created={.metadata.creationTimestamp}{\"\n\"}"
+        kubectl get networkupgradeexecutes/"$NAME" -n {{.NS}} -o jsonpath="{range .status.conditions[*]}{.type}={.status} {.reason} {.lastTransitionTime}{\"\n\"}{end}"
+
+        echo
+        echo "── StatefulSet / pod restart events (most recent) ──"
+        kubectl get events -n {{.NS}} --sort-by=.lastTimestamp -o custom-columns=TIME:.lastTimestamp,OBJ:.involvedObject.name,REASON:.reason | tail -15
         '
 
   beacon:abort:

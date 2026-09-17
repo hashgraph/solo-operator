@@ -107,7 +107,7 @@ task -d test/consensus-mock kind:load:beacon
 task -d test/consensus-mock deploy                  # orbit+common+node0(mock:0.1.0)+genesis, ready in seconds
 task -d test/consensus-mock beacon:config
 task -d test/consensus-mock beacon:prepare          # PREPARE_UPGRADE Job; execute_immediate.mf appears
-task -d test/consensus-mock beacon:freeze           # FREEZE_UPGRADE Job (2 min out by default; FREEZE_DELAY_MIN=1 to override)
+task -d test/consensus-mock beacon:freeze           # FREEZE_UPGRADE Job (10s out by default; FREEZE_DELAY_SECS=30 to override)
 task -d test/consensus-mock beacon:abort            # FREEZE_ABORT Job — alternate path
 task -d test/consensus-mock beacon:watch            # poll NetworkUpgrade* CRs (leave running in its own terminal)
 task -d test/consensus-mock uc:logs                 # tail the UC sidecar
