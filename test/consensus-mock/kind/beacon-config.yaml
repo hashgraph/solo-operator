@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# beacon's network config, pointed at the consensus-mock ConsensusCapsule's
+# own Service (internal/resources/consensus/service.go names it after the
+# capsule — "node0" — with a ClusterIP grpc port 50211). No HAProxy is
+# deployed in this trimmed single-node harness, so beacon talks to the node
+# directly. Mirrors docs/beacon/examples/configmap-config.yaml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: beacon-config
+  namespace: solo-orbit
+data:
+  config.yaml: |
+    name: solo-local
+    shard: 0
+    realm: 0
+    defaultPayer: 2
+    defaultNodeAccount: 3
+    nodes:
+      - id: 0
+        account: 3
+        host: node0.solo-orbit.svc.cluster.local
+        port: 50211
+        tls: false

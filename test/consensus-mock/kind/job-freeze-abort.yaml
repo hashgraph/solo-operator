@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Submits FREEZE_ABORT against consensus-mock as a Kubernetes Job — cancels a
+# scheduled freeze before it fires. Mirrors docs/beacon/examples/job-freeze.yaml.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: beacon-freeze-abort
+  namespace: solo-orbit
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 65532
+      containers:
+        - name: beacon
+          image: ghcr.io/hashgraph/solo-operator/beacon:dev
+          imagePullPolicy: IfNotPresent
+          args:
+            - "freeze"
+            - "abort"
+            - "-c"
+            - "/etc/beacon/config.yaml"
+            - "--yes"
+          volumeMounts:
+            - { name: config, mountPath: /etc/beacon/config.yaml, subPath: config.yaml, readOnly: true }
+            - { name: keys, mountPath: /etc/beacon/keys, readOnly: true }
+      volumes:
+        - name: config
+          configMap: { name: beacon-config }
+        - name: keys
+          secret: { secretName: beacon-keys }
