@@ -38,7 +38,9 @@ spec:
 
       uc:
         enabled: true
-        platformPollInterval: "1s"
+        pollInterval: "100ms"
+        freezePollInterval: "100ms"
+        platformPollInterval: "100ms"
         softwareVersion:
           repository: "ghcr.io/hashgraph/solo-operator"
           imageName: "uc"
