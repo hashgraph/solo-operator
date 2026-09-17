@@ -1,10 +1,7 @@
 version: '3'
 
-# -----------------------------------------------------------------------------
-# Standalone Taskfile for consensus-mock, a fast fake consensus-node used to
-# time the UC-driven upgrade flow (see README.md). Not wired into the root
-# Taskfile — invoke as `task -d test/consensus-mock <task>`.
-# -----------------------------------------------------------------------------
+# Standalone Taskfile for consensus-mock (see README.md). Not wired into the
+# root Taskfile — invoke as `task -d test/consensus-mock <task>`.
 
 includes:
   root:
@@ -15,29 +12,17 @@ includes:
     dir: ../../docs/example
 
 vars:
-  # Named MOCK_IMG, not IMG — the root Taskfile (included below as `root:`)
-  # also defines a top-level IMG var, and go-task merges included taskfiles'
-  # top-level vars into one global namespace, so a same-named var here would
-  # pick up root's (non-empty) value instead of this default.
+  # MOCK_IMG (not IMG) avoids colliding with root Taskfile's own IMG var.
   MOCK_IMG: '{{.MOCK_IMG | default "ghcr.io/hashgraph/solo-operator/consensus-mock:dev"}}'
   CN_PLATFORMS: "linux/amd64 linux/arm64"
-  # kind cluster name (matches root Taskfile's kind:* tasks).
   CLUSTER: solo-operator
-  # Namespace all the kind/*.yaml manifests hardcode — not templated, so not a
-  # var either (a var here would look configurable without actually being so).
   NS: solo-orbit
   V1: "0.1.0"
   V2: "0.2.0"
-  # softwareVersion.repository is a required CRD field (BuildImage always
-  # joins repository + "/" + imageName), so the local/kind tag must be
-  # repository-qualified too, matching the existing IMG default above.
   IMG_REPO: ghcr.io/hashgraph/solo-operator/consensus-mock
   IMG_V1: '{{.IMG_REPO}}:{{.V1}}'
   IMG_V2: '{{.IMG_REPO}}:{{.V2}}'
-  # Well-known 0.0.2 genesis payer key — same value docs/beacon/Taskfile.yml
-  # derives its PEM from (ACCOUNT2_KEY_HEX) and docs/example/network-genesis
-  # bootstraps against; public, dev-only. Kept as one hex source of truth
-  # here too, rather than committing its pre-rendered PEM as a static Secret.
+  # Well-known 0.0.2 genesis payer key, also used by docs/beacon/Taskfile.yml.
   ACCOUNT2_KEY_HEX: "302e020100300506032b65700422042091132178e72057a1d7528025956fe39b0b847f200ab59b2fdd367017f3087137"
 
 silent: true
@@ -191,11 +176,21 @@ tasks:
     cmds:
       - task: root:kind:reset
 
+  operator:deploy:
+    desc: "Build solo-operator from local source, load it into kind, and deploy via Helm — never pulls from a registry"
+    cmds:
+      - task: root:docker:build
+      - task: root:kind:load
+      - |
+        helm upgrade --install solo-operator ../../charts/solo-operator \
+          --namespace solo-operator --create-namespace --wait --timeout 120s \
+          --set image.tag=dev --set image.pullPolicy=Never --set crds.install=false
+      - kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=solo-operator -n solo-operator --timeout=120s
+
   deploy:
     desc: "Deploy a single-node network (node0) running consensus-mock:MOCK_TAG (default {{.V1}}) + genesis"
     vars:
-      # Named MOCK_TAG, not VERSION — see the MOCK_IMG comment above; the root
-      # Taskfile's own (non-empty) VERSION var would otherwise win over `default`.
+      # MOCK_TAG (not VERSION) avoids colliding with root Taskfile's own VERSION var.
       MOCK_TAG: '{{.MOCK_TAG | default .V1}}'
     cmds:
       - task: example:deploy:orbit
@@ -277,10 +272,7 @@ tasks:
     desc: "Watch the NetworkUpgrade* CRs advance (UC -> operator) — leave running in its own terminal"
     cmds:
       - |
-        # kubectl's -w only supports a single resource type per invocation
-        # (docs/beacon/Taskfile.yml's own `watch` task hits the same
-        # "you may only specify a single resource type" error on kubectl
-        # v1.37), so poll all four kinds in a loop instead.
+        # kubectl -w only supports one resource type at a time, so poll instead.
         while true; do
           echo "──── $(date -u) ────"
           kubectl -n {{.NS}} get networkupgradeprepares,networkupgradefreezes,networkupgradeexecutes,networkupgradefreezeaborts

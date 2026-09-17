@@ -10,9 +10,7 @@ import (
 	services "github.com/hiero-ledger/hiero-sdk-go/v2/proto/services"
 )
 
-// networkServer answers just enough of NetworkService for beacon's
-// reachability preflight (internal/beacon/client/client.go:probeHAPI issues a
-// NetworkVersionQuery before every command).
+// networkServer answers beacon's reachability preflight (NetworkVersionQuery).
 type networkServer struct {
 	services.UnimplementedNetworkServiceServer
 }
@@ -29,10 +27,7 @@ func (networkServer) GetVersionInfo(context.Context, *services.Query) (*services
 	}, nil
 }
 
-// cryptoServer answers just enough of CryptoService for
-// internal/beacon/client/submit.go:Submit's post-execute receipt poll.
-// consensus-mock has no real consensus to poll for, so every receipt is an
-// immediate SUCCESS.
+// cryptoServer answers beacon's receipt poll; every receipt is an immediate SUCCESS.
 type cryptoServer struct {
 	services.UnimplementedCryptoServiceServer
 }

@@ -12,9 +12,7 @@ import (
 	"github.com/hashgraph/solo-operator/internal/uc"
 )
 
-// mockConfig is consensus-mock's runtime configuration. Every value has a
-// MOCK_-prefixed env var fallback so it can be tuned from a pod spec env
-// list, with a CLI flag able to override it.
+// mockConfig fields each have a MOCK_-prefixed env var fallback, flag-overridable.
 type mockConfig struct {
 	grpcAddr            string
 	upgradePath         string

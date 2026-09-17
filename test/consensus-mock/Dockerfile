@@ -20,6 +20,15 @@ RUN cd /tmp && \
 
 FROM debian:bookworm-slim
 
+# Real s6 (Debian's `s6` package), not stubs — internal/resources/consensus/exec.go
+# execs s6-svc/s6-svstat here on every reconcile.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends s6 && \
+    rm -rf /var/lib/apt/lists/* && \
+    mkdir -p /package/admin/s6/command && \
+    ln -s /usr/bin/s6-svc /package/admin/s6/command/s6-svc && \
+    ln -s /usr/bin/s6-svstat /package/admin/s6/command/s6-svstat
+
 RUN groupadd --gid 2000 hedera && \
     useradd --uid 2000 --gid 2000 --create-home --shell /bin/bash hedera
 
@@ -27,17 +36,13 @@ WORKDIR /
 
 COPY --from=selector /consensus-mock .
 
-# internal/resources/consensus/exec.go's ActuationSubReconciler execs these on
-# EVERY ConsensusCapsule reconcile (Auto or Manual) to query/actuate the real
-# image's s6-supervised process — without them the reconciler errors on every
-# pass. consensus-mock has no supervision tree (its one process is always
-# "up" for as long as the container runs), so these are trivial stubs: -o up
-# always reports "true", and start/stop are no-ops.
-RUN mkdir -p /package/admin/s6/command && \
-    printf '#!/bin/sh\necho true\n' > /package/admin/s6/command/s6-svstat && \
-    printf '#!/bin/sh\nexit 0\n' > /package/admin/s6/command/s6-svc && \
-    chmod +x /package/admin/s6/command/s6-svstat /package/admin/s6/command/s6-svc
+# s6-svscan (PID 1) supervises this one service so s6-svc/s6-svstat control a
+# real process instead of a stand-in.
+RUN mkdir -p /run/service/consensus && \
+    printf '#!/bin/sh\nexec /consensus-mock\n' > /run/service/consensus/run && \
+    chmod +x /run/service/consensus/run && \
+    chown -R hedera:hedera /run/service
 
 USER 2000:2000
 
-ENTRYPOINT ["/consensus-mock"]
+ENTRYPOINT ["s6-svscan", "/run/service"]

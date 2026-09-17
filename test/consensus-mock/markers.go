@@ -12,8 +12,6 @@ import (
 	"github.com/hashgraph/solo-operator/internal/uc"
 )
 
-// ensureUpgradePath creates upgradePath if absent, shared by every marker
-// write below.
 func ensureUpgradePath(upgradePath string) error {
 	if err := os.MkdirAll(upgradePath, 0o755); err != nil {
 		return fmt.Errorf("create upgrade path %s: %w", upgradePath, err)
@@ -21,9 +19,7 @@ func ensureUpgradePath(upgradePath string) error {
 	return nil
 }
 
-// touchMarker creates name in upgradePath if absent and always bumps its
-// mtime, mirroring `touch` — the UC's staleness guards compare marker mtimes
-// against each other.
+// touchMarker mirrors `touch`: always bumps mtime, since UC's staleness guards compare it.
 func touchMarker(upgradePath, name string) error {
 	if err := ensureUpgradePath(upgradePath); err != nil {
 		return err
@@ -45,9 +41,7 @@ func touchMarker(upgradePath, name string) error {
 	return nil
 }
 
-// writeFreezeScheduled writes freeze_scheduled.mf with its required content:
-// the scheduled freeze time as decimal Unix epoch seconds
-// (internal/uc/freeze.go:parseFreezeScheduledTime).
+// Content is decimal Unix epoch seconds (internal/uc/freeze.go:parseFreezeScheduledTime).
 func writeFreezeScheduled(upgradePath string, seconds int64) error {
 	if err := ensureUpgradePath(upgradePath); err != nil {
 		return err

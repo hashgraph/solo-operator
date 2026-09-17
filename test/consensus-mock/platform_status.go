@@ -13,10 +13,7 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
-// platformStatusWriter appends PLATFORM_STATUS transition lines to the
-// consensus log file the UC's LogMonitor tails (internal/uc/log_monitor.go:
-// parsePlatformStatusLog only requires the literal "PLATFORM_STATUS" token
-// plus a {"oldStatus":...,"newStatus":...} JSON object anywhere in the line).
+// platformStatusWriter appends PLATFORM_STATUS lines the UC's LogMonitor tails.
 type platformStatusWriter struct {
 	path string
 
@@ -53,9 +50,6 @@ func (w *platformStatusWriter) transition(next string) {
 	w.cur = next
 }
 
-// transitionAfter transitions to first immediately, then to second after
-// delay — the shape of both the boot sequence (STARTING_UP -> ACTIVE) and the
-// freeze halt (FREEZING -> FREEZE_COMPLETE).
 func (w *platformStatusWriter) transitionAfter(first, second string, delay time.Duration) {
 	w.transition(first)
 	time.AfterFunc(delay, func() {
@@ -63,15 +57,10 @@ func (w *platformStatusWriter) transitionAfter(first, second string, delay time.
 	})
 }
 
-// startupSequence reproduces a real node's boot sequence: STARTING_UP
-// immediately, then ACTIVE after activeDelay — the signal
-// ConsensusCapsule.status.phase needs to reach Active.
 func (w *platformStatusWriter) startupSequence(activeDelay time.Duration) {
 	w.transitionAfter(operatorv1alpha1.PlatformStatusStartingUp, operatorv1alpha1.PlatformStatusActive, activeDelay)
 }
 
-// freezeSequence reproduces the freeze halt: FREEZING immediately, then
-// FREEZE_COMPLETE after completeDelay. Triggered once now_frozen.mf is written.
 func (w *platformStatusWriter) freezeSequence(completeDelay time.Duration) {
 	w.transitionAfter(operatorv1alpha1.PlatformStatusFreezing, operatorv1alpha1.PlatformStatusFreezeComplete, completeDelay)
 }

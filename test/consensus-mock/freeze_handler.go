@@ -15,10 +15,7 @@ import (
 	"github.com/hashgraph/solo-operator/internal/uc"
 )
 
-// freezeServer implements just the FreezeService RPC beacon uses
-// (internal/beacon/ops/freeze.go builds every freeze variant — Prepare,
-// FreezeUpgrade, TelemetryUpgrade, FreezeOnly, FreezeAbort — as a single
-// FreezeTransaction distinguished only by freeze_type).
+// freezeServer implements the one FreezeService RPC every freeze variant uses.
 type freezeServer struct {
 	services.UnimplementedFreezeServiceServer
 
@@ -41,9 +38,7 @@ func (s *freezeServer) Freeze(_ context.Context, tx *services.Transaction) (*ser
 
 	switch fz.GetFreezeType() {
 	case services.FreezeType_PREPARE_UPGRADE:
-		// The manifest itself is staged into the upgrade path out of band
-		// (test/consensus-mock/Taskfile.yml build:manifest + kubectl cp) —
-		// consensus-mock only signals that a prepare was requested.
+		// Manifest is staged separately (Taskfile build:manifest + kubectl cp).
 		s.touchMarkerLogged(uc.MarkerExecuteImmediate, "PREPARE_UPGRADE")
 
 	case services.FreezeType_FREEZE_ABORT:
@@ -65,9 +60,7 @@ func (s *freezeServer) Freeze(_ context.Context, tx *services.Transaction) (*ser
 	return &services.TransactionResponse{NodeTransactionPrecheckCode: services.ResponseCodeEnum_OK}, nil
 }
 
-// scheduleNowFrozen fires at the scheduled freeze time (or immediately if
-// already past), touches now_frozen.mf, and drives the ACTIVE -> FREEZING ->
-// FREEZE_COMPLETE platform-status transition.
+// scheduleNowFrozen fires immediately if startSeconds is already past.
 func (s *freezeServer) scheduleNowFrozen(startSeconds int64) {
 	delay := time.Until(time.Unix(startSeconds, 0))
 	if delay < 0 {
@@ -83,8 +76,6 @@ func (s *freezeServer) scheduleNowFrozen(startSeconds int64) {
 	})
 }
 
-// touchMarkerLogged touches marker and logs the outcome under label,
-// shared by the presence-only freeze variants (PREPARE_UPGRADE, FREEZE_ABORT).
 func (s *freezeServer) touchMarkerLogged(marker, label string) {
 	if err := touchMarker(s.upgradePath, marker); err != nil {
 		log.Printf("consensus-mock: freeze %s: %v", label, err)
@@ -93,10 +84,7 @@ func (s *freezeServer) touchMarkerLogged(marker, label string) {
 	log.Printf("consensus-mock: freeze %s -> %s", label, marker)
 }
 
-// decodeTransactionBody unwraps a HAPI Transaction into its TransactionBody.
-// The hiero-sdk-go client beacon uses always populates SignedTransactionBytes
-// (a marshalled SignedTransaction wrapping the body bytes); the deprecated
-// bare Body/Sigs fields are not used by any client this mock needs to serve.
+// decodeTransactionBody unwraps SignedTransactionBytes into a TransactionBody.
 func decodeTransactionBody(tx *services.Transaction) (*services.TransactionBody, error) {
 	raw := tx.GetSignedTransactionBytes()
 	if len(raw) == 0 {

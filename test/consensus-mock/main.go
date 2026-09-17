@@ -1,14 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Command consensus-mock is a fast, fake stand-in for the Hedera
-// consensus-node container, used to time the UC-driven upgrade flow
-// (NetworkUpgradePrepare -> NetworkUpgradeFreeze -> NetworkUpgradeExecute)
-// without paying the cost of a real JVM node. It speaks just enough HAPI gRPC
-// to accept a real `beacon freeze` submission, writes the same marker files
-// the real consensus node would into the shared upgrade volume, and emulates
-// PLATFORM_STATUS transitions in the consensus log so the operator's normal
-// phase-gated reconcile logic advances for real. See README.md in this
-// directory for usage.
+// Command consensus-mock is a fast fake stand-in for the consensus-node
+// container, used to time the UC-driven upgrade flow. See README.md.
 package main
 
 import (
