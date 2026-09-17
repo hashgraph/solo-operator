@@ -7,9 +7,11 @@ includes:
   root:
     taskfile: ../../Taskfile.yml
     dir: ../..
+    internal: true
   example:
     taskfile: ../../docs/example/Taskfile.yml
     dir: ../../docs/example
+    internal: true
 
 vars:
   # MOCK_IMG (not IMG) avoids colliding with root Taskfile's own IMG var.
@@ -22,11 +24,33 @@ vars:
   IMG_REPO: ghcr.io/hashgraph/solo-operator/consensus-mock
   IMG_V1: '{{.IMG_REPO}}:{{.V1}}'
   IMG_V2: '{{.IMG_REPO}}:{{.V2}}'
+  # internal/resources/consensus/defaults.go: GenesisInitImage (hardcoded, not per-capsule configurable).
+  GENESIS_INIT_IMG: "busybox:1.36.1"
   # Well-known 0.0.2 genesis payer key, also used by docs/beacon/Taskfile.yml.
   ACCOUNT2_KEY_HEX: "302e020100300506032b65700422042091132178e72057a1d7528025956fe39b0b847f200ab59b2fdd367017f3087137"
 
 silent: true
 tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+
+  e2e:
+    desc: "Full pipeline: build+load mock/beacon/operator images, kind cluster, Helm install, deploy, prepare+freeze"
+    cmds:
+      - task: cluster
+      - task: docker:build:versions
+      - task: kind:load:versions
+      - task: kind:load:beacon
+      - task: kind:load:uc
+      - task: kind:load:genesis-init
+      - task: operator:deploy
+      - task: deploy
+      - task: beacon:config
+      - task: beacon:prepare
+      - task: beacon:freeze
+
   build:
     desc: "Build the consensus-mock binary for the current platform"
     cmds:
@@ -170,6 +194,18 @@ tasks:
     cmds:
       - task: root:docker:build:beacon
       - task: root:kind:load:beacon
+
+  kind:load:uc:
+    desc: "Build the UC sidecar image, tag :dev, and load it into kind"
+    cmds:
+      - task: root:docker:build:uc
+      - task: root:kind:load:uc
+
+  kind:load:genesis-init:
+    desc: "Pull and load the genesis-init image ({{.GENESIS_INIT_IMG}}) into kind"
+    cmds:
+      - docker pull {{.GENESIS_INIT_IMG}}
+      - kind load docker-image {{.GENESIS_INIT_IMG}} --name {{.CLUSTER}}
 
   cluster:
     desc: "Reset the kind cluster ({{.CLUSTER}}) and install CRDs"

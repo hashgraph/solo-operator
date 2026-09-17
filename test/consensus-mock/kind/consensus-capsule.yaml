@@ -1,15 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Trimmed single-node ConsensusCapsule for local kind testing with
-# consensus-mock instead of a real consensus-node. Same nodeId/accountId/
-# weight/secrets/configRefs as docs/example/node0/consensus-capsule.yaml
-# (those CRs/Secrets are image-agnostic and supplied by
-# docs/example/common/*.yaml + node0/secrets.yaml); the cheetah uploaders and
-# alloy are omitted since they add nothing to the upgrade-CR mechanics this
-# harness exercises.
-#
-# ${IMAGE_TAG} is substituted by the Taskfile (envsubst) — 0.1.0 for the
-# initial deploy, 0.2.0 to redeploy straight onto the "upgraded" tag.
+# consensus-mock instead of a real consensus-node. alloy/uploaders disabled —
+# they'd otherwise pull remote images and add nothing to this harness.
+# ${IMAGE_TAG} is substituted by the Taskfile (envsubst).
 apiVersion: operator.solo.hiero.org/v1alpha1
 kind: ConsensusCapsule
 metadata:
@@ -50,6 +44,9 @@ spec:
           imageName: "uc"
           imageTag: "dev"
           imagePullPolicy: IfNotPresent
+
+      alloy:
+        enabled: false
 
   persistentVolumeClaims:
     logs:
