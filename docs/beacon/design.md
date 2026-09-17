@@ -228,15 +228,61 @@ This is the only genuinely involved piece. Special files (`0.0.150`, `0.0.159`) 
 
 yahcli batches appends into concurrent "bursts" (default 256/burst) purely for throughput; for the MVP, **sequential appends are acceptable** and simpler. Burst concurrency can be a later optimization.
 
+#### 8.1.1 Throughput optimizations (as implemented)
+
+The naive loop above pays one **consensus receipt** per chunk, which pins a
+multi-thousand-chunk upload to one consensus round-trip × N — the dominant cost.
+The implemented driver (`internal/beacon/ops/files.go`,
+`internal/beacon/client/client.go`) removes that cost while keeping the upload
+verifiable:
+
+1. **Fire-and-forget appends (the main win).** `hiero.TransactionExecute`
+   special-cases `FileAppendTransaction` into the SDK's chunked executor, which
+   calls `GetReceipt` — a full consensus poll — after *every* chunk. We bypass
+   it: for an append we `FreezeWith` the tx and call the embedded base
+   `Transaction.Execute`, which returns at the node's **precheck ACK** with no
+   receipt wait (the `Fire` seam). The bulk of chunks are fired this way, so the
+   upload runs at the node's *ingest* rate instead of at consensus latency.
+   Appends are submitted **in order to a single node**, so consensus applies them
+   in order and the running hash stays correct.
+
+2. **Periodic checkpoints bound the blast radius.** Firing blindly means a
+   silently-rejected chunk would only surface at the end. So every
+   `CheckpointEvery` chunks (default **128**), plus the initial `FileUpdate` and
+   the final chunk, we switch to the `Verify` seam — submit **and** await a
+   SUCCESS receipt. By consensus ordering, a receipt on a checkpoint append
+   proves it and every earlier fired chunk landed, so a bad chunk is caught
+   within `CheckpointEvery` chunks (≈512 KiB of potential rework) instead of at
+   the end.
+
+3. **Running-hash verification at each checkpoint.** The driver mirrors the
+   network's incremental SHA-384 locally as it fires. At each checkpoint it reads
+   the on-chain memo (`ReadMemo`) and compares it to the local running hash — so a
+   fired chunk that *silently* failed (not merely rejected at precheck) is also
+   caught within the checkpoint window.
+
+4. **Final read-back.** After the last chunk, `VerifyUploadedHash` re-reads the
+   memo and asserts it equals the local package's SHA-384, so "success" means the
+   staged file is observably correct, not merely that writes were accepted.
+
+**Choosing the interval.** `CheckpointEvery` is a static default (128), operator-
+overridable via `--checkpoint-every` (validated ≥ 1). It is *not* auto-tuned on
+file size: the proportional checkpoint overhead is `RTT / (N × t_fire)`, in which
+the chunk count cancels — a fixed `N` already yields size-invariant overhead, and
+tiny files (`chunks ≤ N`) are covered by the always-verified first/last chunks.
+The axis that actually matters is **network latency** (higher `N` amortizes more
+receipt waits on high-latency links; lower `N` tightens failure detection on fast
+ones), which is exactly what the flag exposes.
+
 ### 8.2 `--restart-from-failure` (resumable upload)
 
 A multi-thousand-append upload must be resumable. The design ports yahcli's hash-prefix logic:
 
 1. `FileInfoQuery(0.0.150)` → read the file **memo** = the running SHA-384 the network has committed so far.
 2. Walk **only the append/chunk boundaries** — i.e. the exact positions the upload commits at (`min(bytesPerOp, len)`, then `2·bytesPerOp`, `3·bytesPerOp`, …), computing `sha384(zip[0:boundary])` at each until one matches the on-chain memo. Constraining the search to these boundaries makes it **O(#chunks)**, not O(file size); hashing arbitrary prefix lengths would be needlessly expensive on a multi-MB zip.
-3. Skip exactly the appends up to the matched boundary and resume from there.
+3. Skip exactly the appends up to the matched boundary and resume from there, seeding the local running hash (§8.1.1) with the already-staged prefix so subsequent checkpoints stay valid.
 
-This makes an interrupted upload cheap to continue and is the trickiest logic to get byte-exact; it warrants dedicated unit tests with a known-vector zip.
+Resume is the default: a fresh file simply uploads from chunk 0, and if no boundary matches (empty/unreadable memo, or a mismatch) it safely falls back to a full upload — the initial `FileUpdate` *replaces* the file's contents, so restarting from zero never leaves a truncated remnant. `--from-scratch` forces that full re-upload. This makes an interrupted upload cheap to continue and is the trickiest logic to get byte-exact; it warrants dedicated unit tests with a known-vector zip.
 
 ### 8.3 Time & hash parsing
 
@@ -260,7 +306,7 @@ All required types already exist in `hiero-sdk-go/v2` (a direct `solo-operator` 
 
 ### Gaps requiring application logic (no SDK equivalent)
 
-1. **Append defaults differ.** `FileAppendTransaction` defaults to `chunkSize: 2048, maxChunks: 20`. A deployment-package zip is tens of MB → thousands of appends. We must `SetChunkSize(4096)` and raise `SetMaxChunks` well beyond 20, or drive the update/append loop manually for full control over progress and resume.
+1. **Append defaults differ.** `FileAppendTransaction` defaults to `chunkSize: 2048, maxChunks: 20`. A deployment-package zip is tens of MB → thousands of appends. We drive the update/append loop manually (single-chunk `FileAppend` with `SetMaxChunkSize(4096)`/`SetMaxChunks(1)`) for full control over progress, resume, and the fire-and-forget/checkpoint scheme in §8.1.1.
 2. **Initial-update-then-append split.** The SDK appends to an existing file; yahcli's pattern is *`FileUpdate`(chunk 0) then append the rest*. We replicate that split explicitly.
 3. **Restart-from-failure.** No SDK support; port the memo hash-prefix logic (§8.2).
 4. **Sysfile serdes** (JSON⇄proto for `0.0.121/122`, fee schedules, throttles) live in the Java services code, not the SDK. Only needed for Phase 2 non-special sysfiles — **not required for the software-upgrade path**, since `0.0.150`/`0.0.159` are raw bytes.
