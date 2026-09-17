@@ -234,8 +234,10 @@ tasks:
       # MOCK_TAG (not VERSION) avoids colliding with root Taskfile's own VERSION var.
       MOCK_TAG: '{{.MOCK_TAG | default .V1}}'
     cmds:
-      - task: example:deploy:orbit
+      # example:deploy:common depends on example:deploy:orbit (the shared
+      # common/orbit.yaml) — apply kind/orbit.yaml last so ours wins.
       - task: example:deploy:common
+      - kubectl apply -f kind/orbit.yaml
       - IMAGE_TAG={{.MOCK_TAG}} envsubst < kind/consensus-capsule.yaml | kubectl apply -f -
       - kubectl apply -f ../../docs/example/node0/secrets.yaml
       - kubectl apply -f ../../docs/example/network-genesis/network-genesis.yaml

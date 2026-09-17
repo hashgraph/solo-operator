@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Trimmed Orbit for local kind testing: prefetch disabled (its Job hardcodes
+# ImagePullPolicy: Always, which can never succeed for a kind-loaded-only
+# image); alloy omitted since it's disabled on every capsule here too.
+apiVersion: operator.solo.hiero.org/v1alpha1
+kind: Orbit
+metadata:
+  name: solo-orbit
+spec:
+  upgrade:
+    consensusNode:
+      skipScaleDown: true
+      prereqRequeueInterval: 2s
+      daemonRequeueInterval: 2s
+      nodeReadyRequeueInterval: 2s
+      prefetch:
+        enabled: false
+  consensus:
+    genesis:
+      addressBook:
+        ledgerId: "0x01"
+        chainId: "298"
+        externalAddresses: []

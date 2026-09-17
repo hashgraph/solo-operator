@@ -143,3 +143,13 @@ func TestSelectedSourceFromWinner_CarriesLayerHashes(t *testing.T) {
 		t.Errorf("layer hashes not carried from comp.Registries: %+v", src.LayerHashes)
 	}
 }
+
+func TestSelectedSourceFromWinner_CarriesVerificationSkipped(t *testing.T) {
+	comp := compNonDeterministicWithHashes("img-a", nil)
+	winner := RegistryResult{Image: "img-a", VerificationSkipped: true}
+
+	src := SelectedSourceFromWinner(comp, winner)
+	if !src.VerificationSkipped || src.Digest != "" {
+		t.Fatalf("unexpected selected source: %+v", src)
+	}
+}

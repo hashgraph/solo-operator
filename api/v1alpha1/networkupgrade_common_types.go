@@ -176,7 +176,7 @@ func (s *SelectedSources) FirstUnpinned() (ComponentName, bool) {
 		return "", false
 	}
 	for _, name := range AllUpgradeComponents {
-		if src := s.Get(name); src != nil && src.Digest == "" {
+		if src := s.Get(name); src != nil && src.Digest == "" && !src.VerificationSkipped {
 			return name, true
 		}
 	}
@@ -201,11 +201,18 @@ func (s *SelectedSources) HasResolved() bool {
 type Sha256Digest string
 
 type SelectedSource struct {
-	Image  string       `json:"image"`
-	Digest Sha256Digest `json:"digest"`
+	Image string `json:"image"`
+	// Digest is empty when the component opted out of image verification.
+	// +optional
+	Digest Sha256Digest `json:"digest,omitempty"`
 	// LayerHashesVerified is true when expected hashes were configured and matched
 	// what the registry served; false when no hashes were configured or on mismatch.
 	LayerHashesVerified bool `json:"layerHashesVerified"`
+	// VerificationSkipped is true when the component explicitly opted out of
+	// verification (deterministic.supported=false, no per-registry hashes),
+	// which is why Digest is empty — not a bug to flag as unpinned.
+	// +optional
+	VerificationSkipped bool `json:"verificationSkipped,omitempty"`
 	// LayerHashes stores the per-platform hashes used during initial selection so
 	// re-validation doesn't need to re-scan comp.Registries. Keyed by platform.
 	// +optional

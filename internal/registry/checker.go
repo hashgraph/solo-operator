@@ -136,6 +136,7 @@ func (c OCIChecker) Check(ctx context.Context, spec operatorv1alpha1.ImageRegist
 			return res
 		}
 		res.State = StateValid
+		res.VerificationSkipped = true
 		return res
 	}
 
