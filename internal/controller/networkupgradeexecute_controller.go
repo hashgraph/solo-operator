@@ -177,10 +177,11 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		ucfg, err := r.resolveUpgradeConfig(ctx, capsule)
+		orbit, err := r.getOrbit(ctx, capsule)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
+		ucfg := operatorv1alpha1.ResolveUpgradeConfig(orbit)
 
 		if prepare == nil || prepare.Status.Phase != operatorv1alpha1.PhaseSucceeded {
 			common.Info(ctx, ReasonWaitingForPrepare).Msg("waiting for NetworkUpgradePrepare to succeed")
@@ -228,11 +229,8 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		// reconcilePendingNodeUpgrade; the offline flag stays the single source of
 		// truth for the bring-online step, so scale-down and scale-up can't drift.
 		if mode == uc.ModeMainnet {
-			infraAccess, err := r.requiresInfraAccess(ctx, &execute, capsule)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-			if !(ucfg.SkipScaleDown && !infraAccess) {
+			skipScaleDown := ucfg.SkipScaleDown && !requiresInfraAccess(&execute, orbit)
+			if !skipScaleDown {
 				if err := r.ensureCapsuleOffline(ctx, &execute, capsule); err != nil {
 					return ctrl.Result{}, err
 				}
@@ -363,10 +361,11 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	ucfg, err := r.resolveUpgradeConfig(ctx, capsule)
+	orbit, err := r.getOrbit(ctx, capsule)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+	ucfg := operatorv1alpha1.ResolveUpgradeConfig(orbit)
 	if capsule == nil {
 		return ctrl.Result{RequeueAfter: ucfg.NodeReadyRequeueInterval}, nil
 	}
@@ -388,11 +387,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	infraAccess, err := r.requiresInfraAccess(ctx, execute, capsule)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	skipScaleDown := ucfg.SkipScaleDown && !infraAccess
+	skipScaleDown := ucfg.SkipScaleDown && !requiresInfraAccess(execute, orbit)
 
 	capsulePatched := findCondition(execute.Status.Conditions, operatorv1alpha1.CondConsensusCapsulePatched)
 	if capsulePatched == nil || capsulePatched.Status != metav1.ConditionTrue {
@@ -727,29 +722,28 @@ func (r *NetworkUpgradeExecuteReconciler) resolveUpgradeConfig(ctx context.Conte
 	return operatorv1alpha1.ResolveUpgradeConfig(orbit), nil
 }
 
-// requiresInfraAccess compares the declared provisioner versions on the Execute
-// CR spec against the Orbit CR annotations. Returns true when either version
-// differs (or the annotation is absent but a version is declared — safe fallback).
-func (r *NetworkUpgradeExecuteReconciler) requiresInfraAccess(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute, capsule *operatorv1alpha1.ConsensusCapsule) (bool, error) {
+// requiresInfraAccess reports whether the upgrade needs host-level provisioner
+// work: it compares the declared provisioner versions on the Execute CR spec
+// against the Orbit CR annotations, returning true when either differs (or the
+// annotation is absent but a version is declared — safe fallback). The Orbit is
+// passed in (already fetched by the caller alongside ResolveUpgradeConfig) so the
+// check adds no extra Get per reconcile.
+func requiresInfraAccess(execute *operatorv1alpha1.NetworkUpgradeExecute, orbit *operatorv1alpha1.Orbit) bool {
 	prov := execute.Spec.Provisioner
 	if prov == nil || (prov.DaemonVersion == "" && prov.CLIVersion == "") {
-		return false, nil
-	}
-	orbit, err := r.getOrbit(ctx, capsule)
-	if err != nil {
-		return false, err
+		return false
 	}
 	if orbit == nil {
-		return prov.DaemonVersion != "" || prov.CLIVersion != "", nil
+		return prov.DaemonVersion != "" || prov.CLIVersion != ""
 	}
 	ann := orbit.GetAnnotations()
 	if prov.DaemonVersion != "" && prov.DaemonVersion != ann[operatorv1alpha1.AnnotationProvisionerDaemonVersion] {
-		return true, nil
+		return true
 	}
 	if prov.CLIVersion != "" && prov.CLIVersion != ann[operatorv1alpha1.AnnotationProvisionerCLIVersion] {
-		return true, nil
+		return true
 	}
-	return false, nil
+	return false
 }
 
 func (r *NetworkUpgradeExecuteReconciler) ensureCapsuleOffline(
