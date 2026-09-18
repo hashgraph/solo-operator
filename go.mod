@@ -7,7 +7,7 @@ go 1.26.6
 require (
 	github.com/automa-saga/daemonkit v0.4.0
 	github.com/automa-saga/errx v1.0.0
-	github.com/automa-saga/logx v0.5.1
+	github.com/automa-saga/logx v0.6.0
 	github.com/automa-saga/version v1.0.1
 	github.com/go-logr/logr v1.4.4
 	github.com/google/go-containerregistry v0.22.1
@@ -182,5 +182,3 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect
 )
-
-replace github.com/automa-saga/logx => github.com/arturre/logx v0.0.0-20260918004040-81d33c86b77a

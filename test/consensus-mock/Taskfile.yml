@@ -395,18 +395,19 @@ tasks:
         echo
         echo "── containerd: new pod sandbox / container timing (ns precision, from the runtime itself) ──"
         NODE={{.CLUSTER}}-control-plane
-        SANDBOX=$(docker exec "$NODE" crictl pods --name node0-0 -q 2>/dev/null | tail -1)
-        if [ -n "$SANDBOX" ]; then
-          docker exec "$NODE" crictl inspectp "$SANDBOX" 2>/dev/null | grep "\"createdAt\"" | sed "s/^/  sandbox created: /"
-          for cname in genesis-init consensus-node uc; do
-            CID=$(docker exec "$NODE" crictl ps -a --pod "$SANDBOX" --name "$cname" -q 2>/dev/null | tail -1)
-            [ -n "$CID" ] || continue
-            echo "  $cname:"
-            docker exec "$NODE" crictl inspect "$CID" 2>/dev/null | grep -E "\"createdAt\"|\"startedAt\"|\"finishedAt\"" | sed "s/^/    /"
-          done
-        else
-          echo "(new pod sandbox not found on $NODE)"
-        fi
+        SANDBOX_PRINTED=0
+        for cname in genesis-init consensus-node uc; do
+          CID=$(kubectl get pod node0-0 -n {{.NS}} -o jsonpath="{.status.initContainerStatuses[?(@.name==\"$cname\")].containerID}{.status.containerStatuses[?(@.name==\"$cname\")].containerID}" 2>/dev/null | sed "s#containerd://##")
+          [ -n "$CID" ] || continue
+          INSPECT=$(docker exec "$NODE" crictl inspect "$CID" 2>/dev/null)
+          if [ "$SANDBOX_PRINTED" = 0 ]; then
+            SANDBOX=$(echo "$INSPECT" | grep -o "\"sandboxID\": *\"[^\"]*\"" | head -1 | sed "s/.*\"\(.*\)\"/\1/")
+            [ -n "$SANDBOX" ] && docker exec "$NODE" crictl inspectp "$SANDBOX" 2>/dev/null | grep "\"createdAt\"" | sed "s/^/  sandbox created: /"
+            SANDBOX_PRINTED=1
+          fi
+          echo "  $cname:"
+          echo "$INSPECT" | grep -E "\"createdAt\"|\"startedAt\"|\"finishedAt\"" | sed "s/^/    /"
+        done
 
         echo
         echo "── uc: MarkerDetected / CRDelivered ──"
