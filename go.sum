@@ -28,14 +28,14 @@ github.com/antlr4-go/antlr/v4 v4.13.1 h1:SqQKkuVZ+zWkMMNkjy5FZe5mr5WURWnlpmOuzYW
 github.com/antlr4-go/antlr/v4 v4.13.1/go.mod h1:GKmUxMtwp6ZgGwZSva4eWPC5mS6vUAmOABFgjdkM7Nw=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 h1:0CwZNZbxp69SHPdPJAN/hZIm0C4OItdklCFmMRWYpio=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5/go.mod h1:wHh0iHkYZB8zMSxRWpUBQtwG5a7fFgvEO+odwuTv2gs=
+github.com/arturre/logx v0.0.0-20260918004040-81d33c86b77a h1:r88LT7uWRUsg9KPpJ009zaU80MuBhSkmJqz9cf61Ws8=
+github.com/arturre/logx v0.0.0-20260918004040-81d33c86b77a/go.mod h1:wajii4J5s2jK4pe42FU0+jUKUZ41x/gbYTG4dusbln4=
 github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 h1:DklsrG3dyBCFEj5IhUbnKptjxatkF07cF2ak3yi77so=
 github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2/go.mod h1:WaHUgvxTVq04UNunO+XhnAqY/wQc+bxr74GqbsZ/Jqw=
 github.com/automa-saga/daemonkit v0.4.0 h1:htV7m1sIjmkvJEVW1UA+7mMXn4OQnEbvqRSHTNkDsRk=
 github.com/automa-saga/daemonkit v0.4.0/go.mod h1:qVU+rZyBQdx2IGEghC7K5z/wsVWtm+bCVwjSL4FJveU=
 github.com/automa-saga/errx v1.0.0 h1:2VDWBD2toBp3YmGF8P9+RTR1aaevkLMbB3qm2yzktBs=
 github.com/automa-saga/errx v1.0.0/go.mod h1:b2x9NigWF35P0Nnv6QtY5lmHGFmGY7/DallDeZCgscI=
-github.com/automa-saga/logx v0.5.1 h1:U8Sn0SIvqIFau2T4+Oe9gSVSZnYt16oDYAOD7vmuHEw=
-github.com/automa-saga/logx v0.5.1/go.mod h1:wajii4J5s2jK4pe42FU0+jUKUZ41x/gbYTG4dusbln4=
 github.com/automa-saga/version v1.0.1 h1:mD/mJaDN3a/DtZP1SR5YWJIu/xLyIiffzi85VZDkfn0=
 github.com/automa-saga/version v1.0.1/go.mod h1:mIfObF4OX15sq4FkH9UfJxlpjSQ3eTYpBZzSUxXvCgg=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=

@@ -102,6 +102,7 @@ func main() {
 	if err := logx.Initialize(logx.LoggingConfig{
 		Level:          logLevel,
 		ConsoleLogging: consoleLogging,
+		TimeFormat:     "2006-01-02T15:04:05.000Z07:00",
 	}); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to initialize logging: %v\n", err)
 		os.Exit(1)
