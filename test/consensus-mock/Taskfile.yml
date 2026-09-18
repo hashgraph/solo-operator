@@ -157,7 +157,6 @@ tasks:
         echo "----------------------------------------"
         '
 
-  # ── local kind harness (0.1.0 -> 0.2.0 upgrade flow via beacon Jobs) ────────
 
   docker:build:v1:
     desc: "Build consensus-mock image tagged {{.V1}}"
@@ -326,10 +325,11 @@ tasks:
         set -euo pipefail
         BASELINE="$(kubectl get networkupgradefreezes -n {{.NS}} -o jsonpath="{.items[*].metadata.name}" 2>/dev/null)"
 
-        # node0-0 gets deleted+recreated by Execute; capture its logs live so they survive that
+        # node0-0 and the operator log buffer both get replaced/rotated; capture live to survive that
         rm -f /tmp/consensus-mock-freeze-window-*.log
         nohup kubectl logs -f node0-0 -c consensus-node -n {{.NS}} > /tmp/consensus-mock-freeze-window-consensus-node.log 2>&1 &
         nohup kubectl logs -f node0-0 -c uc -n {{.NS}} > /tmp/consensus-mock-freeze-window-uc.log 2>&1 &
+        nohup kubectl logs -f -l app.kubernetes.io/name=solo-operator -n solo-operator > /tmp/consensus-mock-freeze-window-operator.log 2>&1 &
 
         kubectl delete job beacon-freeze-upgrade -n {{.NS}} --ignore-not-found >/dev/null
         START=$(date -u -v+{{.FREEZE_DELAY_SECS}}S "+%Y-%m-%d.%H:%M:%S" 2>/dev/null \
@@ -389,8 +389,17 @@ tasks:
         grep -E "freeze_scheduled|now_frozen|freeze:" /tmp/consensus-mock-freeze-window-consensus-node.log 2>/dev/null || echo "(no consensus-node capture found)"
 
         echo
+        echo "── consensus-node: old pod stop / new pod start (ns precision, from the process itself) ──"
+        grep "consensus-mock: stopped at" /tmp/consensus-mock-freeze-window-consensus-node.log 2>/dev/null || echo "(old pod stop not captured)"
+        kubectl logs node0-0 -c consensus-node -n {{.NS}} 2>/dev/null | grep "consensus-mock: started at" | tail -1 || echo "(new pod start not found)"
+
+        echo
         echo "── uc: MarkerDetected / CRDelivered ──"
         grep -E "MarkerDetected|CRDelivered" /tmp/consensus-mock-freeze-window-uc.log 2>/dev/null || echo "(no uc capture found)"
+
+        echo
+        echo "── operator: ReconcileStart / PhaseTransition / ReconcileFinish (ms precision) ──"
+        grep -E "ReconcileStart|PhaseTransition|ReconcileFinish" /tmp/consensus-mock-freeze-window-operator.log 2>/dev/null | grep "name=$NAME" || echo "(no operator capture found)"
 
         echo
         echo "── NetworkUpgradeExecute CR timing ──"

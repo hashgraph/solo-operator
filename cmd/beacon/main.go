@@ -193,7 +193,7 @@ func initLogging(level string) error {
 	if err := logx.Initialize(logx.LoggingConfig{
 		Level:          level,
 		ConsoleLogging: true,
-		TimeFormat:     "2006-01-02T15:04:05.000Z07:00",
+		TimeFormat:     time.RFC3339Nano,
 	}); err != nil {
 		return err
 	}
