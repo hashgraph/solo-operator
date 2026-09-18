@@ -38,7 +38,7 @@ func parseFlags() mockConfig {
 		"Directory to write UC marker files into")
 	flag.StringVar(&cfg.consensusLogFile, "consensus-log-file", envOr("MOCK_CONSENSUS_LOG_FILE", uc.DefaultConsensusLogFile),
 		"Path to the consensus log file the UC log monitor tails for PLATFORM_STATUS transitions")
-	flag.DurationVar(&cfg.startupActiveDelay, "startup-active-delay", 3*time.Second,
+	flag.DurationVar(&cfg.startupActiveDelay, "startup-active-delay", 0*time.Millisecond,
 		"Delay before transitioning STARTING_UP -> ACTIVE")
 	flag.DurationVar(&cfg.freezeCompleteDelay, "freeze-complete-delay", time.Second,
 		"Delay before transitioning FREEZING -> FREEZE_COMPLETE after now_frozen.mf is written")

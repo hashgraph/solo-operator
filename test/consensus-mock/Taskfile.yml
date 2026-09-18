@@ -389,9 +389,24 @@ tasks:
         grep -E "freeze_scheduled|now_frozen|freeze:" /tmp/consensus-mock-freeze-window-consensus-node.log 2>/dev/null || echo "(no consensus-node capture found)"
 
         echo
-        echo "── consensus-node: old pod stop / new pod start (ns precision, from the process itself) ──"
+        echo "── consensus-node: old pod stop (ns precision, from the process itself) ──"
         grep "consensus-mock: stopped at" /tmp/consensus-mock-freeze-window-consensus-node.log 2>/dev/null || echo "(old pod stop not captured)"
-        kubectl logs node0-0 -c consensus-node -n {{.NS}} 2>/dev/null | grep "consensus-mock: started at" | tail -1 || echo "(new pod start not found)"
+
+        echo
+        echo "── containerd: new pod sandbox / container timing (ns precision, from the runtime itself) ──"
+        NODE={{.CLUSTER}}-control-plane
+        SANDBOX=$(docker exec "$NODE" crictl pods --name node0-0 -q 2>/dev/null | tail -1)
+        if [ -n "$SANDBOX" ]; then
+          docker exec "$NODE" crictl inspectp "$SANDBOX" 2>/dev/null | grep "\"createdAt\"" | sed "s/^/  sandbox created: /"
+          for cname in genesis-init consensus-node uc; do
+            CID=$(docker exec "$NODE" crictl ps -a --pod "$SANDBOX" --name "$cname" -q 2>/dev/null | tail -1)
+            [ -n "$CID" ] || continue
+            echo "  $cname:"
+            docker exec "$NODE" crictl inspect "$CID" 2>/dev/null | grep -E "\"createdAt\"|\"startedAt\"|\"finishedAt\"" | sed "s/^/    /"
+          done
+        else
+          echo "(new pod sandbox not found on $NODE)"
+        fi
 
         echo
         echo "── uc: MarkerDetected / CRDelivered ──"
