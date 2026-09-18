@@ -344,13 +344,17 @@ func newClusterOnlyOrbit() *operatorv1alpha1.Orbit {
 	}
 }
 
-// TestExecuteReconcile_MainnetScalesDownBeforeReady asserts that in mainnet mode
-// the operator scales the capsule down (offline=true) as it enters
-// ReadyForProvisionerDaemon, so the host provisioner daemon operates on a stopped
-// node.
-func TestExecuteReconcile_MainnetScalesDownBeforeReady(t *testing.T) {
+// TestExecuteReconcile_MainnetInfraUpgradeScalesDownBeforeReady asserts that in
+// mainnet mode WITH an infra upgrade required (declared provisioner version differs
+// from the Orbit annotation), the operator scales the capsule down (offline=true) as
+// it enters ReadyForProvisionerDaemon, so the host provisioner daemon operates on a
+// stopped node during the infra teardown.
+func TestExecuteReconcile_MainnetInfraUpgradeScalesDownBeforeReady(t *testing.T) {
 	execute := newExecuteForTest()
 	execute.Status.Phase = "" // start at initialization, before ReadyForProvisionerDaemon
+	// Declared provisioner version differs from the (absent) Orbit annotation →
+	// requiresInfraAccess=true → skipScaleDown=false → scale down at init.
+	execute.Spec.Provisioner = &operatorv1alpha1.DeclaredProvisionerVersions{DaemonVersion: "0.33.0"}
 	capsule := newOnlineCapsule("node0")
 
 	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil),
@@ -368,7 +372,37 @@ func TestExecuteReconcile_MainnetScalesDownBeforeReady(t *testing.T) {
 		t.Fatalf("get capsule: %v", err)
 	}
 	if !updated.Spec.Offline {
-		t.Error("expected capsule Offline=true at ReadyForProvisionerDaemon in mainnet mode")
+		t.Error("expected capsule Offline=true at ReadyForProvisionerDaemon in mainnet mode with an infra upgrade")
+	}
+}
+
+// TestExecuteReconcile_MainnetConfigOnlyKeepsPodUpAtReady asserts that a config-only
+// mainnet upgrade (no provisioner version declared, default SkipScaleDown=true) does
+// NOT scale the pod down at init — it behaves like cluster-only, because the daemon's
+// config step is pod-state-agnostic. This is the option-B invariant: skipScaleDown is
+// honored in both modes when no infra work is required.
+func TestExecuteReconcile_MainnetConfigOnlyKeepsPodUpAtReady(t *testing.T) {
+	execute := newExecuteForTest()
+	execute.Status.Phase = "" // start at initialization
+	// No provisioner declared → requiresInfraAccess=false → skipScaleDown=true (default).
+	capsule := newOnlineCapsule("node0")
+
+	res := reconcileExecuteWith(t, execute, newExecuteChecker(nil, nil),
+		newSucceededPrepare("default", "op-001"), newSucceededFreeze("default", "op-001"),
+		capsule, newMainnetOrbit())
+
+	if res.err != nil {
+		t.Fatalf("unexpected error: %v", res.err)
+	}
+	if res.execute.Status.Phase != operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon {
+		t.Errorf("expected ReadyForProvisionerDaemon, got %s", res.execute.Status.Phase)
+	}
+	var updated operatorv1alpha1.ConsensusCapsule
+	if err := res.client.Get(context.Background(), client.ObjectKey{Name: "node0", Namespace: "default"}, &updated); err != nil {
+		t.Fatalf("get capsule: %v", err)
+	}
+	if updated.Spec.Offline {
+		t.Error("expected capsule to stay online at ReadyForProvisionerDaemon for a config-only mainnet upgrade (skipScaleDown honored)")
 	}
 }
 
@@ -1146,6 +1180,82 @@ func TestExecuteReconcile_PendingNodeUpgrade_BringsCapsuleOnline(t *testing.T) {
 	}
 	if got := countContaining(evts, "CapsulesOnline"); got == 0 {
 		t.Errorf("expected CapsulesOnline event, got none in %v", evts)
+	}
+}
+
+// TestExecuteReconcile_PendingNodeUpgrade_BringsCapsuleOnlineWhenSkipScaleDown is
+// the regression test for the mainnet strand-at-zero bug: mainnet mode scales the
+// capsule offline unconditionally at init, but this upgrade declares no provisioner
+// version bump, so requiresInfraAccess is false and skipScaleDown resolves to the
+// Orbit default true. The bring-online step must key off the capsule's Offline flag,
+// not skipScaleDown — otherwise the pod is stranded at 0 replicas forever.
+func TestExecuteReconcile_PendingNodeUpgrade_BringsCapsuleOnlineWhenSkipScaleDown(t *testing.T) {
+	execute := newExecuteForTest()
+	// No Provisioner versions declared → requiresInfraAccess=false → with the Orbit
+	// default SkipScaleDown=true, skipScaleDown=true. The capsule is nonetheless
+	// Offline=true (mainnet init scaled it down before the daemon handoff).
+	execute.Status.Phase = operatorv1alpha1.ExecutePhasePendingNodeUpgrade
+	execute.Status.NodeUpgradeStartTime = &metav1.Time{Time: time.Now()}
+	execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{
+		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.75.0", Digest: executeDigest},
+	}
+	setCondition(&execute.Status.Conditions, metav1.Condition{
+		Type:               operatorv1alpha1.CondConsensusCapsulePatched,
+		Status:             metav1.ConditionTrue,
+		Reason:             operatorv1alpha1.ReasonPatchApplied.String(),
+		LastTransitionTime: metav1.Now(),
+	})
+
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "default", Labels: map[string]string{common.LabelOrbit: "test-orbit"}},
+		Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+			Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1,
+			Log4j2ConfigRef: "network-log4j2",
+			Offline:         true,
+			PodProperties: operatorv1alpha1.ConsensusPodProperties{Containers: operatorv1alpha1.ConsensusContainers{ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
+				SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "reg-a", ImageName: "cn", ImageTag: "0.75.0"},
+			}}},
+		},
+	}
+
+	scheme := newControllerTestScheme()
+	c := withExecuteIndexes(fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(execute, capsule, newMainnetOrbit()).
+		WithStatusSubresource(execute)).Build()
+	if err := c.Status().Update(context.Background(), execute); err != nil {
+		t.Fatalf("pre-set execute status: %v", err)
+	}
+
+	rec := events.NewFakeRecorder(8)
+	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
+	r.Recorder = rec
+	r.Checker = newExecuteChecker(nil, nil)
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(execute)})
+	close(rec.Events)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var updatedCapsule operatorv1alpha1.ConsensusCapsule
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(capsule), &updatedCapsule); err != nil {
+		t.Fatalf("get capsule: %v", err)
+	}
+	if updatedCapsule.Spec.Offline {
+		t.Error("expected Offline=false: an offline capsule must be brought online even when skipScaleDown=true")
+	}
+
+	var updatedExecute operatorv1alpha1.NetworkUpgradeExecute
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(execute), &updatedExecute); err != nil {
+		t.Fatalf("get execute: %v", err)
+	}
+	cond := findCondition(updatedExecute.Status.Conditions, operatorv1alpha1.CondCapsulesOnline)
+	if cond == nil || cond.Status != metav1.ConditionTrue {
+		t.Fatalf("expected CapsulesOnline=True, got %v", cond)
+	}
+	if cond.Message != "ConsensusCapsule brought online" {
+		t.Errorf("expected 'brought online' message when recovering an offline capsule, got %q", cond.Message)
 	}
 }
 
