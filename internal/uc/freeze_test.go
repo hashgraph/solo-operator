@@ -93,6 +93,7 @@ func seedSucceededPrepare(t *testing.T, f *Factory, operationID string, selected
 		Create(context.Background(), cr, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("seed succeeded prepare: %v", err)
 	}
+	waitForCached(t, f, networkUpgradePrepareGVR, operationID, 1)
 }
 
 func getFreeze(t *testing.T, f *Factory, operationID string) *unstructured.Unstructured {

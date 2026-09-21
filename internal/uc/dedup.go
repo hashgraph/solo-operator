@@ -9,18 +9,10 @@ import (
 	"github.com/automa-saga/errx"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
-
-// specOperationIDField is the CR field the UC filters on. The NetworkUpgrade*
-// CRDs declare it as a selectableField (apiextensions; requires k8s >=1.32), so
-// a FieldSelector on it is honoured server-side. spec.operationId — not the
-// operation-id label — is the source of truth: it is a hard-required field on
-// every CR, whereas the label is a human-facing convenience.
-const specOperationIDField = "spec.operationId"
 
 // Operation-id deduplication (HIP-1496 §"Operation-id Deduplication").
 //
@@ -41,12 +33,9 @@ const specOperationIDField = "spec.operationId"
 //     and create paths above — it is never the sole basis for correctness.
 
 // alreadyCreated reports whether a CR for operationID+step already exists and
-// returns its current status phase (empty string when not found or unknown). It
-// consults the in-memory cache first; on a miss it falls back to the
-// authoritative cluster query (by spec.operationId field selector on gvr) and
-// records every step+phase it observes. A K8s API error invalidates the cache
-// and is returned to the caller so the action is retried on the next tick.
-func (f *Factory) alreadyCreated(ctx context.Context, gvr schema.GroupVersionResource, operationID, step string) (exists bool, phase string, _ error) {
+// returns its current status phase (empty string when not found or unknown).
+// It consults the in-memory cache first, then falls back to listCached.
+func (f *Factory) alreadyCreated(_ context.Context, gvr schema.GroupVersionResource, operationID, step string) (exists bool, phase string, _ error) {
 	f.mu.Lock()
 	if steps, ok := f.cache[operationID]; ok {
 		if phase, done := steps[step]; done {
@@ -56,11 +45,7 @@ func (f *Factory) alreadyCreated(ctx context.Context, gvr schema.GroupVersionRes
 	}
 	f.mu.Unlock()
 
-	listCtx, cancel := context.WithTimeout(ctx, listTimeout)
-	defer cancel()
-
-	list, err := f.client.Resource(gvr).Namespace(f.cfg.Namespace).
-		List(listCtx, metav1.ListOptions{FieldSelector: fields.OneTermEqualSelector(specOperationIDField, operationID).String()})
+	items, err := f.listCached(gvr, operationID)
 	if err != nil {
 		// Cache accuracy is suspect after an API failure — drop this operationId so
 		// the next tick re-queries instead of trusting a stale (in)existence.
@@ -74,13 +59,7 @@ func (f *Factory) alreadyCreated(ctx context.Context, gvr schema.GroupVersionRes
 
 	found := false
 	foundPhase := ""
-	for i := range list.Items {
-		item := &list.Items[i]
-		// Re-verify against the spec field rather than trusting a server/fake-client
-		// that might not honour the field selector.
-		if obsOpID, _, _ := unstructured.NestedString(item.Object, "spec", "operationId"); obsOpID != operationID {
-			continue
-		}
+	for _, item := range items {
 		observed := item.GetLabels()[operatorv1alpha1.LabelStep]
 		if observed == "" {
 			continue

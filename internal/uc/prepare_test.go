@@ -96,7 +96,24 @@ func newFakeFactory(t *testing.T, cfg Config) *Factory {
 		t.Fatalf("add to scheme: %v", err)
 	}
 	client := dynamicfake.NewSimpleDynamicClient(scheme)
-	return NewFactory(cfg, client)
+	f := NewFactory(cfg, client)
+	if err := f.startInformers(t.Context()); err != nil {
+		t.Fatalf("start informers: %v", err)
+	}
+	return f
+}
+
+// waitForCached blocks until count instances of gvr/operationID are cached (async watch delivery).
+func waitForCached(t *testing.T, f *Factory, gvr schema.GroupVersionResource, operationID string, count int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if items, err := f.listCached(gvr, operationID); err == nil && len(items) >= count {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %d %s operationId=%s to appear in informer cache", count, gvr.Resource, operationID)
 }
 
 func TestParseComponentsManifestValid(t *testing.T) {

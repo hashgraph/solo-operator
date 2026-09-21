@@ -53,6 +53,7 @@ func seedPrepareCR(t *testing.T, f *Factory, operationID, phase string) {
 		Create(context.Background(), cr, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("seed prepare: %v", err)
 	}
+	waitForCached(t, f, networkUpgradePrepareGVR, operationID, 1)
 }
 
 func getAbort(t *testing.T, f *Factory, operationID string) *unstructured.Unstructured {
@@ -186,6 +187,7 @@ func TestFetchPreparePayload_DeterministicPickOnDuplicate(t *testing.T) {
 	// by name before picking Items[0] makes the selection deterministic: "aaa" wins.
 	mk("zzz-dup", "0.75.0")
 	mk("aaa-dup", "0.75.1")
+	waitForCached(t, f, networkUpgradePrepareGVR, wantOperationID, 2)
 
 	images, _, cr, ready, err := f.fetchPreparePayload(context.Background(), wantOperationID)
 	if err != nil {

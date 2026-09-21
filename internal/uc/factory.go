@@ -16,9 +16,12 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/dynamic/dynamicinformer"
+	"k8s.io/client-go/tools/cache"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
@@ -34,6 +37,12 @@ import (
 type Factory struct {
 	cfg    Config
 	client dynamic.Interface
+
+	// informerFactory backs listCached, avoiding a live List() per marker tick.
+	informerFactory dynamicinformer.DynamicSharedInformerFactory
+	// informersOnce makes startInformers safe to call more than once.
+	informersOnce     sync.Once
+	informersStartErr error
 
 	// events writes the per-operation JSONL audit trail (#1127). Nil-safe: a nil
 	// sink no-ops, so tests and events-disabled configs need no special casing.
@@ -69,15 +78,65 @@ type rejectKey struct {
 // re-reject) on every tick.
 const admissionRejectRetryCooldown = 5 * time.Minute
 
+// informerResyncPeriod backstops a long-lived watch that silently misses an event.
+const informerResyncPeriod = 10 * time.Minute
+
 // NewFactory constructs the CR factory.
 func NewFactory(cfg Config, client dynamic.Interface) *Factory {
 	return &Factory{
-		cfg:      cfg,
-		client:   client,
-		store:    NewCRStore(cfg.CRPersistPath),
-		cache:    make(map[string]map[string]string),
-		rejected: make(map[rejectKey]time.Time),
+		cfg:             cfg,
+		client:          client,
+		informerFactory: dynamicinformer.NewFilteredDynamicSharedInformerFactory(client, informerResyncPeriod, cfg.Namespace, nil),
+		store:           NewCRStore(cfg.CRPersistPath),
+		cache:           make(map[string]map[string]string),
+		rejected:        make(map[rejectKey]time.Time),
 	}
+}
+
+// startInformers starts the informers backing listCached and blocks until synced.
+func (f *Factory) startInformers(ctx context.Context) error {
+	f.informersOnce.Do(func() {
+		gvrs := []schema.GroupVersionResource{
+			networkUpgradePrepareGVR, networkUpgradeFreezeGVR, networkUpgradeExecuteGVR, networkUpgradeFreezeAbortGVR,
+		}
+		synced := make([]cache.InformerSynced, len(gvrs))
+		for i, gvr := range gvrs {
+			informer := f.informerFactory.ForResource(gvr).Informer()
+			// client-go otherwise only logs watch failures via klog, invisible in UC's own log.
+			if err := informer.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
+				logx.As().Warn().Err(err).Str("reason", ReasonInformerWatchError.String()).
+					Str("resource", gvr.Resource).Msg("NetworkUpgrade* informer watch error; reflector will retry")
+			}); err != nil {
+				f.informersStartErr = errx.WithReason(errK8sAPI.Wrap(err, "set watch error handler for %s", gvr.Resource), ReasonInformerCacheSyncFailed)
+				return
+			}
+			synced[i] = informer.HasSynced
+		}
+		f.informerFactory.Start(ctx.Done())
+		if !cache.WaitForCacheSync(ctx.Done(), synced...) {
+			f.informersStartErr = errx.WithReason(errK8sAPI.New("context cancelled waiting for NetworkUpgrade* informer cache sync"), ReasonInformerCacheSyncFailed)
+		}
+	})
+	return f.informersStartErr
+}
+
+// listCached returns the cached gvr objects in f.cfg.Namespace matching operationID.
+func (f *Factory) listCached(gvr schema.GroupVersionResource, operationID string) ([]*unstructured.Unstructured, error) {
+	objs, err := f.informerFactory.ForResource(gvr).Lister().List(labels.Everything())
+	if err != nil {
+		return nil, err
+	}
+	matched := make([]*unstructured.Unstructured, 0, len(objs))
+	for _, obj := range objs {
+		u, ok := obj.(*unstructured.Unstructured)
+		if !ok {
+			continue
+		}
+		if opID, _, _ := unstructured.NestedString(u.Object, "spec", "operationId"); opID == operationID {
+			matched = append(matched, u)
+		}
+	}
+	return matched, nil
 }
 
 // RecoverOnStartup reconciles cluster state and persisted CRs on disk so the
@@ -98,6 +157,10 @@ func NewFactory(cfg Config, client dynamic.Interface) *Factory {
 // which handles it on every terminal Execute or FreezeAbort CR observation —
 // both on startup (list) and live (watch).
 func (f *Factory) RecoverOnStartup(ctx context.Context) error {
+	if err := f.startInformers(ctx); err != nil {
+		return err
+	}
+
 	if err := f.seedCache(ctx); err != nil {
 		common.LogErr(logx.As().Warn(), err, ReasonUCCacheSeedFailed).
 			Msg("could not seed op-id dedup cache on startup; per-action queries remain authoritative")
@@ -440,21 +503,15 @@ func (f *Factory) HandleFreezeScheduled(ctx context.Context) error {
 //
 // ready is false and err is nil with a Halted log when the Prepare has Failed —
 // a Failed Prepare cannot recover, so there is no retry value.
-func (f *Factory) fetchPreparePayload(ctx context.Context, operationID string) (operatorv1alpha1.UpgradeImagesSpec, operatorv1alpha1.SelectedSources, *unstructured.Unstructured, bool, error) {
-	listCtx, cancel := context.WithTimeout(ctx, listTimeout)
-	defer cancel()
-
-	list, err := f.client.Resource(networkUpgradePrepareGVR).Namespace(f.cfg.Namespace).
-		List(listCtx, metav1.ListOptions{
-			FieldSelector: "spec.operationId=" + operationID,
-		})
+func (f *Factory) fetchPreparePayload(_ context.Context, operationID string) (operatorv1alpha1.UpgradeImagesSpec, operatorv1alpha1.SelectedSources, *unstructured.Unstructured, bool, error) {
+	items, err := f.listCached(networkUpgradePrepareGVR, operationID)
 	if err != nil {
 		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil, false, errx.WithHints(
 			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradePrepare for operationId %s", operationID), ReasonPrepareListFailed),
 			"Confirm the UC ServiceAccount has list permission on networkupgradeprepares."+operatorv1alpha1.GroupVersion.Group,
 		)
 	}
-	if len(list.Items) == 0 {
+	if len(items) == 0 {
 		logx.As().Warn().Str("reason", ReasonFreezeWithoutPrepare.String()).
 			Str("operation_id", operationID).Str("marker", MarkerFreezeScheduled).
 			Msg("no NetworkUpgradePrepare CR found for operationId — will retry next tick")
@@ -463,8 +520,8 @@ func (f *Factory) fetchPreparePayload(ctx context.Context, operationID string) (
 
 	// operationId is expected to be unique, but if multiple CRs match, sort by name so
 	// the selected one is deterministic rather than list-order dependent.
-	sort.Slice(list.Items, func(i, j int) bool { return list.Items[i].GetName() < list.Items[j].GetName() })
-	prepare := &list.Items[0]
+	sort.Slice(items, func(i, j int) bool { return items[i].GetName() < items[j].GetName() })
+	prepare := items[0]
 	phase, _, _ := unstructured.NestedString(prepare.Object, "status", "phase")
 	switch operatorv1alpha1.Phase(phase) {
 	case operatorv1alpha1.PhaseFailed:
@@ -683,21 +740,15 @@ func (f *Factory) HandleNowFrozen(ctx context.Context) error {
 // Failed — a Failed Freeze cannot recover, so there is no retry value and the
 // Execute CR must not be created (mirrors the Prepare.Failed gate in
 // fetchPreparePayload; see HandleNowFrozen's gate note).
-func (f *Factory) fetchExecutePayload(ctx context.Context, operationID string) (operatorv1alpha1.UpgradeImagesSpec, operatorv1alpha1.SelectedSources, *unstructured.Unstructured, bool, error) {
-	listCtx, cancel := context.WithTimeout(ctx, listTimeout)
-	defer cancel()
-
-	list, err := f.client.Resource(networkUpgradeFreezeGVR).Namespace(f.cfg.Namespace).
-		List(listCtx, metav1.ListOptions{
-			FieldSelector: "spec.operationId=" + operationID,
-		})
+func (f *Factory) fetchExecutePayload(_ context.Context, operationID string) (operatorv1alpha1.UpgradeImagesSpec, operatorv1alpha1.SelectedSources, *unstructured.Unstructured, bool, error) {
+	items, err := f.listCached(networkUpgradeFreezeGVR, operationID)
 	if err != nil {
 		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil, false, errx.WithHints(
 			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradeFreeze for operationId %s", operationID), ReasonFreezeListFailed),
 			"Confirm the UC ServiceAccount has list permission on networkupgradefreezes."+operatorv1alpha1.GroupVersion.Group,
 		)
 	}
-	if len(list.Items) == 0 {
+	if len(items) == 0 {
 		logx.As().Warn().Str("reason", ReasonExecuteWithoutFreeze.String()).
 			Str("operation_id", operationID).Str("marker", MarkerNowFrozen).
 			Msg("no NetworkUpgradeFreeze CR found for operationId — will retry next tick")
@@ -706,8 +757,8 @@ func (f *Factory) fetchExecutePayload(ctx context.Context, operationID string) (
 
 	// operationId is expected to be unique, but if multiple CRs match, sort by name so
 	// the selected one is deterministic rather than list-order dependent.
-	sort.Slice(list.Items, func(i, j int) bool { return list.Items[i].GetName() < list.Items[j].GetName() })
-	freeze := &list.Items[0]
+	sort.Slice(items, func(i, j int) bool { return items[i].GetName() < items[j].GetName() })
+	freeze := items[0]
 	phase, _, _ := unstructured.NestedString(freeze.Object, "status", "phase")
 	switch operatorv1alpha1.Phase(phase) {
 	case operatorv1alpha1.PhaseFailed:

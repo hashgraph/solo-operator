@@ -4,13 +4,11 @@ package uc
 
 import (
 	"context"
-	"errors"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
 
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stesting "k8s.io/client-go/testing"
@@ -30,9 +28,7 @@ func countReactor(counter *int64) k8stesting.ReactionFunc {
 	}
 }
 
-// TestHandleExecuteImmediateCacheAvoidsAPIOnSteadyState verifies that after the
-// CR is created once, subsequent ticks (marker still on disk) are served from
-// the in-memory cache without any List or Create round-trip.
+// TestHandleExecuteImmediateCacheAvoidsAPIOnSteadyState verifies the dedup query never issues a live List.
 func TestHandleExecuteImmediateCacheAvoidsAPIOnSteadyState(t *testing.T) {
 	root := writePackage(t, validComponentsYAML)
 	f := newFakeFactory(t, testConfig(root, t.TempDir()))
@@ -42,12 +38,12 @@ func TestHandleExecuteImmediateCacheAvoidsAPIOnSteadyState(t *testing.T) {
 	fake.PrependReactor("list", "networkupgradeprepares", countReactor(&lists))
 	fake.PrependReactor("create", "networkupgradeprepares", countReactor(&creates))
 
-	// First tick: cache miss -> one List (dedup query) + one Create.
+	// First tick: dedup reads the informer cache (no live List) -> one Create.
 	if err := f.HandleExecuteImmediate(context.Background()); err != nil {
 		t.Fatalf("first tick: %v", err)
 	}
-	if lists != 1 || creates != 1 {
-		t.Fatalf("first tick: lists=%d creates=%d, want 1/1", lists, creates)
+	if lists != 0 || creates != 1 {
+		t.Fatalf("first tick: lists=%d creates=%d, want 0/1", lists, creates)
 	}
 
 	// Subsequent ticks: cache hit -> no further API calls at all.
@@ -56,8 +52,8 @@ func TestHandleExecuteImmediateCacheAvoidsAPIOnSteadyState(t *testing.T) {
 			t.Fatalf("tick %d: %v", i, err)
 		}
 	}
-	if lists != 1 {
-		t.Fatalf("steady-state ticks issued %d List calls, want 1 (cache should serve them)", lists)
+	if lists != 0 {
+		t.Fatalf("steady-state ticks issued %d List calls, want 0 (cache should serve them)", lists)
 	}
 	if creates != 1 {
 		t.Fatalf("steady-state ticks issued %d Create calls, want exactly 1", creates)
@@ -96,51 +92,6 @@ func TestDedupSeededCacheSkipsCreate(t *testing.T) {
 	if creates != 0 {
 		t.Fatalf("create issued %d times against an already-existing CR, want 0", creates)
 	}
-}
-
-// TestDedupAPIErrorInvalidatesCache verifies that a List failure during the
-// dedup query drops the cache entry and propagates the error (so the action
-// retries), and that the next attempt re-queries rather than trusting stale
-// state.
-func TestDedupAPIErrorInvalidatesCache(t *testing.T) {
-	root := writePackage(t, validComponentsYAML)
-	f := newFakeFactory(t, testConfig(root, t.TempDir()))
-
-	// Prime the cache with a (now stale) entry to prove the error path clears it.
-	f.markCreated(wantOperationID, operatorv1alpha1.StepFreeze, "")
-
-	var fail atomic.Bool
-	fail.Store(true)
-	var lists int64
-	f.client.(*dynamicfake.FakeDynamicClient).
-		PrependReactor("list", "networkupgradeprepares", func(k8stesting.Action) (bool, runtime.Object, error) {
-			atomic.AddInt64(&lists, 1)
-			if fail.Load() {
-				return true, nil, k8serrors.NewInternalError(errors.New("boom"))
-			}
-			return false, nil, nil
-		})
-
-	// First tick: the dedup query fails -> error returned, cache invalidated.
-	if err := f.HandleExecuteImmediate(context.Background()); err == nil {
-		t.Fatal("expected dedup query error to propagate")
-	}
-	f.mu.Lock()
-	_, present := f.cache[wantOperationID]
-	f.mu.Unlock()
-	if present {
-		t.Fatal("cache entry survived an API error; want it invalidated")
-	}
-
-	// Next tick: API recovers -> re-queries and proceeds to create the CR.
-	fail.Store(false)
-	if err := f.HandleExecuteImmediate(context.Background()); err != nil {
-		t.Fatalf("recovery tick: %v", err)
-	}
-	if lists < 2 {
-		t.Fatalf("expected a re-query after invalidation, got %d List calls", lists)
-	}
-	getPrepare(t, f, wantOperationID) // CR now exists
 }
 
 // TestHandleExecuteImmediateConcurrentNeverDuplicates verifies that concurrent
