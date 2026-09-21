@@ -50,7 +50,7 @@ Flags (each with a `MOCK_`-prefixed env var default):
 | `--grpc-addr` | `MOCK_GRPC_ADDR` | `:50211` | HAPI gRPC listen address |
 | `--upgrade-path` | `MOCK_UPGRADE_PATH` | `uc.DefaultUpgradePath` | Where marker files are written |
 | `--consensus-log-file` | `MOCK_CONSENSUS_LOG_FILE` | `uc.DefaultConsensusLogFile` | Where `PLATFORM_STATUS` lines are appended |
-| `--startup-active-delay` | — | `3s` | `STARTING_UP` → `ACTIVE` delay |
+| `--startup-active-delay` | — | `0s` | `STARTING_UP` → `ACTIVE` delay |
 | `--freeze-complete-delay` | — | `1s` | `FREEZING` → `FREEZE_COMPLETE` delay |
 | `--node-id` | — | `0` | Cosmetic, included in log lines |
 
@@ -91,12 +91,13 @@ against it. It reuses `docs/example/Taskfile.yml`'s `deploy:orbit`/
 `deploy:common` (Orbit, secrets, config CRs — image-agnostic) and
 `docs/beacon/examples/job-freeze.yaml`'s Job pattern.
 
-**Prerequisite**: an operator must be reconciling the cluster (this harness
-does not deploy one). For local iteration, run it in its own terminal the
-same way `docs/beacon/Taskfile.yml`'s `operator` task does:
+**Prerequisite**: an operator must be reconciling the cluster. Either run it in
+its own terminal the same way `docs/beacon/Taskfile.yml`'s `operator` task does:
 ```bash
 task -d docs/beacon build && go run ./cmd/main.go --log-level=debug
 ```
+or deploy it into the kind cluster via this harness (`task operator:deploy`,
+or the full `task e2e`, which calls it for you).
 
 ```bash
 task -d test/consensus-mock cluster                 # kind reset + CRDs (destroys any existing "solo-operator" kind cluster)

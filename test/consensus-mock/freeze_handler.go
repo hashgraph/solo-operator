@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -22,6 +23,9 @@ type freezeServer struct {
 	upgradePath         string
 	status              *platformStatusWriter
 	freezeCompleteDelay time.Duration
+
+	mu             sync.Mutex
+	nowFrozenTimer *time.Timer
 }
 
 func (s *freezeServer) Freeze(_ context.Context, tx *services.Transaction) (*services.TransactionResponse, error) {
@@ -42,6 +46,7 @@ func (s *freezeServer) Freeze(_ context.Context, tx *services.Transaction) (*ser
 		s.touchMarkerLogged(uc.MarkerExecuteImmediate, "PREPARE_UPGRADE")
 
 	case services.FreezeType_FREEZE_ABORT:
+		s.cancelNowFrozen()
 		s.touchMarkerLogged(uc.MarkerFreezeAborted, "FREEZE_ABORT")
 
 	case services.FreezeType_FREEZE_ONLY, services.FreezeType_FREEZE_UPGRADE, services.FreezeType_TELEMETRY_UPGRADE:
@@ -60,13 +65,20 @@ func (s *freezeServer) Freeze(_ context.Context, tx *services.Transaction) (*ser
 	return &services.TransactionResponse{NodeTransactionPrecheckCode: services.ResponseCodeEnum_OK}, nil
 }
 
-// scheduleNowFrozen fires immediately if startSeconds is already past.
+// scheduleNowFrozen fires immediately if startSeconds is already past. A prior
+// pending timer (e.g. from an earlier FREEZE_UPGRADE) is cancelled first, so
+// only the latest schedule can ever fire.
 func (s *freezeServer) scheduleNowFrozen(startSeconds int64) {
 	delay := time.Until(time.Unix(startSeconds, 0))
 	if delay < 0 {
 		delay = 0
 	}
-	time.AfterFunc(delay, func() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.nowFrozenTimer != nil {
+		s.nowFrozenTimer.Stop()
+	}
+	s.nowFrozenTimer = time.AfterFunc(delay, func() {
 		if err := touchMarker(s.upgradePath, uc.MarkerNowFrozen); err != nil {
 			log.Printf("consensus-mock: now-frozen: %v", err)
 			return
@@ -74,6 +86,17 @@ func (s *freezeServer) scheduleNowFrozen(startSeconds int64) {
 		log.Printf("consensus-mock: freeze: reached scheduled time -> %s", uc.MarkerNowFrozen)
 		s.status.freezeSequence(s.freezeCompleteDelay)
 	})
+}
+
+// cancelNowFrozen stops a pending now_frozen.mf timer armed by an earlier
+// FREEZE_UPGRADE, so a FREEZE_ABORT actually prevents it from firing.
+func (s *freezeServer) cancelNowFrozen() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.nowFrozenTimer != nil {
+		s.nowFrozenTimer.Stop()
+		s.nowFrozenTimer = nil
+	}
 }
 
 func (s *freezeServer) touchMarkerLogged(marker, label string) {

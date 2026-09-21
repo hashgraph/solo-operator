@@ -26,12 +26,16 @@ const selectSlowDelay = 4 * time.Second
 // StateUnreachable, "slow" images report StateValid after selectSlowDelay, others StateValid immediately.
 type selectiveImageChecker struct{}
 
-func (selectiveImageChecker) Check(_ context.Context, spec operatorv1alpha1.ImageRegistrySpec, _ operatorv1alpha1.ImageDeterministicSpec) registry.RegistryResult {
+func (selectiveImageChecker) Check(ctx context.Context, spec operatorv1alpha1.ImageRegistrySpec, _ operatorv1alpha1.ImageDeterministicSpec) registry.RegistryResult {
 	if strings.Contains(spec.Image, "unreachable") {
 		return registry.RegistryResult{Image: spec.Image, State: registry.StateUnreachable}
 	}
 	if strings.Contains(spec.Image, "slow") {
-		time.Sleep(selectSlowDelay)
+		select {
+		case <-time.After(selectSlowDelay):
+		case <-ctx.Done():
+			return registry.RegistryResult{Image: spec.Image, State: registry.StateUnreachable, Err: ctx.Err()}
+		}
 	}
 	return registry.RegistryResult{
 		Image:               spec.Image,
