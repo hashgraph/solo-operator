@@ -386,7 +386,7 @@ var _ = Describe("NetworkUpgradeFreeze Controller", func() {
 					Images: operatorv1alpha1.UpgradeImagesSpec{
 						ConsensusNode: operatorv1alpha1.ImageComponentSpec{
 							Version:    "0.75.0",
-							Registries: []operatorv1alpha1.ImageRegistrySpec{{Image: "gcr.io/a/cn:0.75.0"}},
+							Registries: []operatorv1alpha1.ImageRegistrySpec{{Image: "gcr.io/a/cn-slow:0.75.0"}},
 						},
 					},
 				},
