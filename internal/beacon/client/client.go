@@ -15,6 +15,7 @@ package client
 import (
 	"fmt"
 	"net"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -232,7 +233,11 @@ func (c *Client) WaitReachable(endpoint string, timeout time.Duration) error {
 func (c *Client) probeHAPI() error {
 	done := make(chan error, 1)
 	go func() {
-		_, err := hiero.NewNetworkVersionQuery().Execute(c.hc)
+		// Guard inside the goroutine: a panic from the SDK's Execute here would
+		// otherwise crash the process with no caller able to recover it.
+		_, err := guardSDKPanic("HAPI probe", func() (hiero.NetworkVersionInfo, error) {
+			return hiero.NewNetworkVersionQuery().Execute(c.hc)
+		})
 		done <- err
 	}()
 	select {
@@ -256,17 +261,49 @@ func (c *Client) probeHAPI() error {
 // Transaction.Execute (precheck only, no receipt). All other transactions keep
 // the standard path.
 func submitTransaction(tx hiero.TransactionInterface, hc *hiero.Client) (hiero.TransactionResponse, error) {
-	if fa, ok := tx.(*hiero.FileAppendTransaction); ok {
-		if !fa.IsFrozen() {
-			if _, err := fa.FreezeWith(hc); err != nil {
-				return hiero.TransactionResponse{}, err
+	return guardSDKPanic("submit", func() (hiero.TransactionResponse, error) {
+		if fa, ok := tx.(*hiero.FileAppendTransaction); ok {
+			if !fa.IsFrozen() {
+				if _, err := fa.FreezeWith(hc); err != nil {
+					return hiero.TransactionResponse{}, err
+				}
 			}
+			// fa.Transaction is the embedded base *Transaction; its Execute submits
+			// without the chunked executor's per-chunk GetReceipt.
+			return fa.Transaction.Execute(hc)
 		}
-		// fa.Transaction is the embedded base *Transaction; its Execute submits
-		// without the chunked executor's per-chunk GetReceipt.
-		return fa.Transaction.Execute(hc)
-	}
-	return hiero.TransactionExecute(tx, hc)
+		return hiero.TransactionExecute(tx, hc)
+	})
+}
+
+// guardSDKPanic runs a single SDK call and converts a panic into a retryable
+// error. The SDK can panic instead of returning an error on some internal states
+// (observed: an index-out-of-range in _BuildTransaction when its node list is
+// momentarily empty after a network hiccup). beacon must never take the process
+// down over a third-party panic — least of all one raised on an SDK-internal
+// goroutine, which no caller could recover — so the panic becomes an error the
+// caller can retry. what names the operation (e.g. "submit", "HAPI probe") for
+// the log line and error message. The recover runs on whichever goroutine calls
+// this, so callers that run the SDK in their own goroutine must call it there.
+func guardSDKPanic[T any](what string, call func() (T, error)) (result T, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			logx.As().Error().
+				Str("reason", reasonSDKPanic.String()).
+				Str("operation", what).
+				Str("panic", fmt.Sprintf("%v", r)).
+				Bytes("stack", debug.Stack()).
+				Msg("recovered from hiero-sdk panic")
+			var zero T
+			result = zero
+			err = errx.Decorate(
+				errNetworkOp.New("hiero-sdk panic during %s: %v", what, r),
+				reasonSDKPanic,
+				"The operation did not complete; re-run the command to retry (a resumable upload continues from its last verified checkpoint)",
+			)
+		}
+	}()
+	return call()
 }
 
 // Hiero returns the underlying SDK client so operations can build transactions

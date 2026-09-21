@@ -16,39 +16,41 @@
 
 ## 1. Summary
 
-`beacon` is a standalone, node-operator-facing command-line tool that submits **HAPI transactions** to a running Hedera consensus network. It is the Go replacement for the Java [`yahcli`](https://github.com/hiero-ledger/hiero-consensus-node/tree/main/hedera-node/yahcli) DevOps CLI, scoped first and foremost to **driving and testing the consensus-node (CN) software-upgrade flow** described in hip-1496, and secondarily to the general operational transactions (accounts, system files, DAB nodes, version) that yahcli provides.
+`beacon` is a standalone, node-operator-facing CLI that submits individual HAPI transactions to a running Hedera network. It is the Go replacement for the Java [`yahcli`](https://github.com/hiero-ledger/hiero-consensus-node/tree/main/hedera-node/yahcli) DevOps command, with its first focus on the consensus-node software-upgrade flow in hip-1496 and a secondary focus on the broad operational transactions yahcli already exposes.
 
-It is a **protocol-layer control plane**: a thin, ergonomic CLI over [`hiero-sdk-go`](https://github.com/hiero-ledger/hiero-sdk-go) that builds, signs, submits, and verifies individual privileged transactions against live nodes over gRPC. It is deliberately *not* a Kubernetes/infrastructure tool and *not* a load generator.
+In short, `beacon` is a protocol-layer control plane: a thin, ergonomic wrapper around [`hiero-sdk-go`](https://github.com/hiero-ledger/hiero-sdk-go) that builds, signs, submits, and verifies privileged transactions over gRPC. It is intentionally not a Kubernetes controller, not an infrastructure actuator, and not a load generator.
 
 ## 2. Motivation
 
-The globally-synchronized network upgrade (hip-1496) is triggered by a specific, ordered sequence of HAPI transactions against the live network — staging the upgrade artifact into a system file, telling the network to validate and prepare it, then scheduling the freeze that boots the new software. Today the only tool that performs this sequence is `yahcli`, a Java program tightly coupled to the `hedera-services` BDD test framework and distributed as a Docker image running a slow-to-start JAR.
+The globally synchronized network upgrade in hip-1496 is initiated by a specific, ordered sequence of HAPI transactions against the live network: stage the artifact into a special system file, validate and prepare it, then schedule the freeze that boots the new software. Today, the only tool that performs this flow is `yahcli`, a Java program tightly coupled to the `hedera-services` BDD framework and distributed as a slow-starting Docker image.
 
-For the Solo toolkit we need a control-plane trigger that:
+The Solo toolkit needs a trigger that:
 
-- is a **single static Go binary** (fast start, trivial to run by hand or in CI, no JVM);
-- is built on the **same SDK the rest of Solo already uses** (`hiero-sdk-go`, already a direct dependency of `solo-operator`);
-- shares the repository, conventions, and release pipeline of the operator that owns the upgrade CRDs and the UC sidecar it complements — while staying loosely coupled enough to graduate into a standalone `solo-beacon` repo later;
-- can be extended to the wider yahcli operational surface (accounts, sysfiles, DAB) as needed.
+- ships as a **single static Go binary** (fast to start, easy to run by hand or in CI, no JVM);
+- uses the **same SDK already used across Solo** (`hiero-sdk-go` is already a direct dependency of `solo-operator`);
+- shares the repository, conventions, and release pipeline of the operator that owns the upgrade CRDs and the UC sidecar it complements, while still staying loosely coupled enough to graduate to a standalone `solo-beacon` repo later;
+- can be extended to the wider yahcli operational surface (accounts, system files, DAB nodes, version checks) as needed.
 
 ## 3. Goals / Non-Goals
 
 ### Goals
-- Fully drive and test the CN upgrade flow end-to-end: stage artifact → verify hash → `freeze prepare` → `freeze upgrade` → confirm new version.
-- Reproduce yahcli's freeze family under a `freeze` group: `freeze only`, `freeze upgrade`, `freeze prepare`, `freeze abort`, `freeze telemetry`.
-- Provide the supporting operations needed around an upgrade: system-file upload/download (incl. special files `0.0.150`/`0.0.159`), special-file hash check, network version query, account balance/info, and DAB `nodes` create/update/delete.
-- Keep yahcli's key material on-disk conventions so existing keys transfer as-is (`<network>/keys/account<N>.pem[/.pass]`); the config is reshaped to one file per network for safety (§10), not the shared multi-network `config.yml`.
-- Be safe by default for privileged operations: explicit target selection, dry-run where feasible, clear success/failure exit codes.
+
+- Drive and validate the CN upgrade flow end-to-end: stage artifact → verify hash → `freeze prepare` → `freeze upgrade` → confirm new version.
+- Reproduce yahcli's freeze family under a `freeze` group: `freeze only`, `freeze upgrade`, `freeze prepare`, `freeze abort`, and `freeze telemetry`.
+- Provide the supporting operations needed around an upgrade: system-file upload/download (including special files `0.0.150` and `0.0.159`), special-file hash checks, network version queries, account balance/info calls, and DAB `nodes` create/update/delete operations.
+- Preserve yahcli's key material conventions so existing keys transfer as-is (`<network>/keys/account<N>.pem[/.pass]`); the config is reshaped to one file per network for safety (§10), rather than a shared multi-network `config.yml`.
+- Prefer safety for privileged operations: explicit target selection, dry-run where feasible, and clear exit codes for success and failure.
 
 ### Non-Goals
-- **Not** a Kubernetes/infra actuator. It never touches kubeconfig, Helm, pods, or host filesystems. That is the job of `solo-operator` (controllers) and `solo-provisioner` (host/daemon execute phase).
-- **Not** a load generator. Sustained transaction load under chaos is [`hammer`](https://github.com/hashgraph/solo-chaos)'s job.
-- **Not** a long-running service or reconciler. Each invocation performs one bounded operation and exits.
-- **No** multi-sig payer support in the MVP (matching yahcli's current limitation).
+
+- Not a Kubernetes/infra actuator. It never touches kubeconfig, Helm, pods, or host filesystems; that is handled by `solo-operator` (controllers) and `solo-provisioner` (host/daemon execute phase).
+- Not a load generator. Sustained transaction load under chaos remains [`hammer`](https://github.com/hashgraph/solo-chaos)'s responsibility.
+- Not a long-running service or reconciler. Each invocation performs one bounded operation and exits.
+- No multi-sig payer support in the MVP, matching yahcli's current limitation.
 
 ## 4. Where `beacon` fits in the upgrade choreography
 
-The network upgrade (hip-1496) is a pipeline across **four distinct components at three layers**. `beacon` is the **trigger at the front**; it must not be confused with the infra actuators at the back.
+The network upgrade (hip-1496) is a pipeline across four distinct components and three layers. `beacon` sits at the front as the trigger; it is not the infrastructure actuator behind the scenes.
 
 ```
    PROTOCOL LAYER                 KUBERNETES CONTROL LAYER              HOST / INFRA LAYER
@@ -69,27 +71,27 @@ The network upgrade (hip-1496) is a pipeline across **four distinct components a
    Hedera account keys           in-cluster RBAC                       scoped kubeconfig
 ```
 
-Reading the pipeline:
+The flow is straightforward:
 
-1. **`beacon` (this tool) — the trigger.** A node operator (or CI) stages the deployment package (hip-1494) into system file `0.0.150`, then submits `freeze prepare` and `freeze upgrade` HAPI transactions to the **live network**. This is what sets the whole upgrade in motion.
-2. **UC sidecar** (`cmd/uc` in this repo) — watches each node's host-mounted marker directory and translates markers into `NetworkUpgrade*` Custom Resources.
-3. **`solo-operator` controllers** — reconcile those CRs, advancing the upgrade through its phases until a `NetworkUpgradeExecute` CR reaches phase `ReadyForProvisionerDaemon`.
-4. **`solo-provisioner` daemon** — the infra actuator; watches `NetworkUpgradeExecute`, and on that phase performs the host-side execute step (swap binaries, restart the node process).
+1. **`beacon` — the trigger.** A node operator or CI job stages the deployment package (hip-1494) into system file `0.0.150`, then submits `freeze prepare` and `freeze upgrade` HAPI transactions to the live network.
+2. **UC sidecar** — watches each node's host-mounted marker directory and translates markers into `NetworkUpgrade*` Custom Resources.
+3. **`solo-operator` controllers** — reconcile those CRs and advance the upgrade through its phases until a `NetworkUpgradeExecute` CR reaches `ReadyForProvisionerDaemon`.
+4. **`solo-provisioner` daemon** — watches `NetworkUpgradeExecute` and performs the host-side execute step: swap binaries and restart the node process.
 
-**Why this places `beacon` here and nowhere else:**
+**Why this placement is correct:**
 
 | Dimension | `beacon` (trigger) | `solo-provisioner` (reactor) | `hammer` (load) |
 |---|---|---|---|
 | Layer | HAPI protocol client | K8s/host infra actuator | HAPI protocol client |
-| Direction | **initiates** the flow | **reacts** to CRs (watch→execute) | fires continuous load |
+| Direction | **initiates** the flow | **reacts** to CRs | fires continuous load |
 | Execution | one bounded op, verified | daemon, event-driven | massively concurrent |
-| Deps | `hiero-sdk-go` | `client-go`, host ops | `hiero-sdk-go` |
+| Dependencies | `hiero-sdk-go` | `client-go`, host ops | `hiero-sdk-go` |
 | Credentials | privileged **Hedera keys** | scoped **kubeconfig** | one operator key |
-| Binding | network-agnostic (any net) | one cluster / one CN | one target net |
+| Binding | network-agnostic | one cluster / one CN | one target net |
 
-`beacon` and `solo-provisioner` are complementary halves of the same upgrade, at opposite ends and opposite directions — not candidates to merge. Folding the initiator into the reactor would invert the choreography and mix two trust models (Hedera signing keys vs. a cluster kubeconfig) in one binary. `beacon` and `hammer` share the SDK but serve opposite purposes (precise, verified single ops vs. aggregate throughput under fault).
+`beacon` and `solo-provisioner` are complementary halves of the same upgrade, at opposite ends and in opposite directions. They should not be merged. Folding the initiator into the reactor would invert the choreography and mix two trust models in one binary: Hedera signing keys versus a cluster kubeconfig. `beacon` and `hammer` share the SDK, but they serve opposite purposes: precise, verified single operations versus aggregate throughput under fault.
 
-`solo-operator` is the correct starting home because it is the one repository that already (a) depends on `hiero-sdk-go`, (b) owns the `NetworkUpgrade*` CRDs, and (c) ships the UC sidecar — so a node-operator-facing HAPI CLI is the natural manual complement to that automated machinery, sharing its SDK plumbing and staying at the same protocol layer. Should it later warrant its own release cadence and identity, the substrate (§5.1) is structured to lift out cleanly into a standalone `solo-beacon` repository.
+`solo-operator` is the right starting home because it already (a) depends on `hiero-sdk-go`, (b) owns the `NetworkUpgrade*` CRDs, and (c) ships the UC sidecar. A node-operator-facing HAPI CLI is the natural manual complement to that automated machinery, sharing the same protocol-layer plumbing while staying distinct from the host-side execution path. If it later warrants its own cadence and identity, the structure in §5.1 makes it straightforward to lift the substrate into a standalone `solo-beacon` repository.
 
 ## 5. Architecture
 
@@ -219,14 +221,73 @@ Most commands are a near-mechanical mapping to `hiero-sdk-go` (see §9). Two are
 
 ### 8.1 Special-file upload to `0.0.150`
 
-This is the only genuinely involved piece. Special files (`0.0.150`, `0.0.159`) have no 1 MB size cap and the network tracks their running SHA-384 in the file memo. The upload:
+This is the only genuinely involved piece. Special files (`0.0.150`, `0.0.159`) have no 1 MB size cap, and the network tracks their running SHA-384 in the file memo. The basic shape of the upload is:
 
-1. Read the raw deployment-package zip (special files are uploaded verbatim; other sysfiles first go through JSON→proto serdes).
-2. **Initial op:** `FileUpdateTransaction(0.0.150)` with `contents = firstChunk` (first `bytesPerOp` bytes). yahcli defaults: `bytesPerOp = 4096`.
-3. **Then N × `FileAppendTransaction(0.0.150)`**, each up to `bytesPerOp` bytes, until the file is fully written. (`hiero-sdk-go`'s `FileAppendTransaction` can auto-chunk; we must raise its defaults — see §9 gaps.)
-4. Each op signed by the payer (privileged `0.0.2` / `0.0.50` / `0.0.58`).
+- A Hedera special file is written as one `FileUpdate` followed by many `FileAppend` operations.
+- Data is split into 4 KiB chunks (`bytesPerOp = 4096`, matching yahcli).
+- Chunk `0` goes in a `FileUpdate`, which replaces the file contents and makes a restart-from-zero safe.
+- Every remaining chunk is a single-chunk `FileAppend` (`SetMaxChunkSize(4096).SetMaxChunks(1)`), submitted in order to a single node so consensus applies them in order.
+- Each operation is signed by the payer (`0.0.2`, `0.0.50`, or `0.0.58`), as required for privileged system-file writes.
 
-yahcli batches appends into concurrent "bursts" (default 256/burst) purely for throughput; for the MVP, **sequential appends are acceptable** and simpler. Burst concurrency can be a later optimization.
+This means a file with a size of 109 MB (`chunks=27975`) is roughly about 28k 4 KiB operations. `hiero-sdk-go` can auto-chunk `FileAppendTransaction`, but we intentionally drive it manually so we can control progress, resume behavior, and the fire/verify policy described below.
+
+yahcli batches appends into concurrent bursts (default `256/burst`) purely for throughput. For the MVP, **sequential appends are acceptable** and simpler. Burst concurrency can be added later as an optimization.
+
+#### 8.1.1 Throughput optimizations (as implemented)
+
+The naive loop pays one consensus receipt per chunk, pinning the upload to N round-trips. The driver (`internal/beacon/ops/files.go`, `internal/beacon/client/client.go`) removes that while keeping the upload verifiable:
+
+Optimization 1 — Fire-and-forget instead of receipt-per-chunk (the big win)
+
+This is the central trick, and it is why the Hiero SDK `FileAppendTransaction` receipt gotcha matters here.
+
+The SDK's `hiero.TransactionExecute` special-cases `FileAppendTransaction` into a chunked executor that calls `GetReceipt` after every chunk — a full consensus round-trip per 4 KiB. That silently paces a 28k-chunk upload to one consensus round-trip × 28,000.
+
+Beacon bypasses it (`submitTransaction`, `client.go:258`): for a `FileAppend` it freezes the transaction and calls the embedded base `fa.Transaction.Execute(hc)`, which returns at the node's precheck ACK — no receipt wait. This is the `Fire` path. The upload then runs at the node's ingest rate rather than at consensus latency. That is the 80–90% class of speedup.
+
+Two seams model this (`Uploader` struct):
+
+- `Fire` — submit + precheck only (used for the bulk of chunks)
+- `Verify` — submit + await `SUCCESS` receipt (used sparingly)
+
+Optimization 2 — Periodic checkpoints bound the blast radius
+
+Firing blindly is risky: a silently rejected chunk would only surface at the very end. So every `CheckpointEvery` chunks (default `128`, and always on chunk `0` and the final chunk) beacon switches to `Verify` — awaiting a real receipt. That is `isCheckpoint := i == total-1 || (i+1)%every == 0`.
+
+A `SUCCESS` receipt on a checkpoint append proves, by consensus ordering, that it and every prior fired chunk landed. So a bad chunk is caught within 128 chunks instead of 28,000 — bounding how much resume must redo. The log shows checkpoints firing at chunk 256, 384, 512, confirming `every=128`.
+
+Optimization 3 — Running-hash verification at each checkpoint
+
+The network stores the running SHA-384 of staged contents in the file memo (§7). Beacon keeps a mirror `sha512.New384()` locally, writing each chunk into it as it fires. At each checkpoint it reads the on-chain memo (`ReadMemo`) and compares it to `localRunningHash.Sum(nil)`. A match means the checkpoint verified: the staged hash matches. A mismatch means a fired chunk silently failed, and the code errors early with a resume hint.
+
+The final on-chain read-back (`VerifyUploadedHash`) makes "success" mean an observably correct staged file, not merely "writes accepted."
+
+Optimization 4 — Cheap resume via boundary-only hash matching
+
+`ResumeUpload` continues an interrupted upload without re-sending chunks the network already has (§8.2):
+
+1. Read the file memo (the running SHA-384 that the network has committed so far).
+2. `matchRunningHash` advances an incremental hash one chunk at a time and compares only at chunk boundaries — O(#chunks) comparisons over O(len(data)) hashing, reusing prior work via `h.Sum(nil)` snapshots (no reset).
+3. Resume `FileAppend` from the first missing chunk, seeding the local running hash with the already-staged prefix.
+4. If nothing matches (empty or garbage memo), fall back to a full upload from chunk `0` — safe because `FileUpdate` resets the file contents. It never re-sends `FileUpdate` past a match, which would truncate the file.
+
+Optimization 5 — Zero-copy chunking & tiered logging
+
+`chunkBytes` slices data in place (aliases, no copy) — important at 100+ MB. `logUploadProgress` emits a per-chunk line only at debug, plus an info line at each 10% boundary and completion, so a normal run is not flooded with 28k log lines.
+
+Summary:
+
+| Technique | Purpose |
+|---|---|
+| Fire (precheck-only, bypass SDK chunked executor) | Removes per-chunk consensus round-trip — the main speedup |
+| Checkpoint every `N` (default `128`) with `Verify` | Catches a failed fired chunk within `N` chunks |
+| Running SHA-384 memo compare at checkpoints | Detects silent divergence, not just rejections |
+| Boundary-only incremental-hash resume | Restart without re-sending staged chunks |
+| `FileUpdate` first + single-node ordered appends | Correct running hash; safe full restart |
+| Final hash read-back | "Success" = staged file provably matches local artifact |
+| Zero-copy chunks + tiered logging | Handles 100 MB+ files without copy/log blowup |
+
+**Interval choice.** `CheckpointEvery` is a static default (`128`), overridable via `--checkpoint-every` (≥ 1). It is deliberately not auto-tuned on file size: the proportional overhead is `RTT / (N × t_fire)`, in which chunk count cancels out, so a fixed `N` is already size-invariant. The axis that matters is network latency, which the flag exposes — raise `N` on high-latency links, lower it to tighten failure detection.
 
 ### 8.2 `--restart-from-failure` (resumable upload)
 
@@ -234,9 +295,9 @@ A multi-thousand-append upload must be resumable. The design ports yahcli's hash
 
 1. `FileInfoQuery(0.0.150)` → read the file **memo** = the running SHA-384 the network has committed so far.
 2. Walk **only the append/chunk boundaries** — i.e. the exact positions the upload commits at (`min(bytesPerOp, len)`, then `2·bytesPerOp`, `3·bytesPerOp`, …), computing `sha384(zip[0:boundary])` at each until one matches the on-chain memo. Constraining the search to these boundaries makes it **O(#chunks)**, not O(file size); hashing arbitrary prefix lengths would be needlessly expensive on a multi-MB zip.
-3. Skip exactly the appends up to the matched boundary and resume from there.
+3. Skip exactly the appends up to the matched boundary and resume from there, seeding the local running hash (§8.1.1) with the already-staged prefix so subsequent checkpoints stay valid.
 
-This makes an interrupted upload cheap to continue and is the trickiest logic to get byte-exact; it warrants dedicated unit tests with a known-vector zip.
+Resume is the default: a fresh file simply uploads from chunk 0, and if no boundary matches (empty/unreadable memo, or a mismatch) it safely falls back to a full upload — the initial `FileUpdate` *replaces* the file's contents, so restarting from zero never leaves a truncated remnant. `--from-scratch` forces that full re-upload. This makes an interrupted upload cheap to continue and is the trickiest logic to get byte-exact; it warrants dedicated unit tests with a known-vector zip.
 
 ### 8.3 Time & hash parsing
 
@@ -260,7 +321,7 @@ All required types already exist in `hiero-sdk-go/v2` (a direct `solo-operator` 
 
 ### Gaps requiring application logic (no SDK equivalent)
 
-1. **Append defaults differ.** `FileAppendTransaction` defaults to `chunkSize: 2048, maxChunks: 20`. A deployment-package zip is tens of MB → thousands of appends. We must `SetChunkSize(4096)` and raise `SetMaxChunks` well beyond 20, or drive the update/append loop manually for full control over progress and resume.
+1. **Append defaults differ.** `FileAppendTransaction` defaults to `chunkSize: 2048, maxChunks: 20`. A deployment-package zip is tens of MB → thousands of appends. We drive the update/append loop manually (single-chunk `FileAppend` with `SetMaxChunkSize(4096)`/`SetMaxChunks(1)`) for full control over progress, resume, and the fire-and-forget/checkpoint scheme in §8.1.1.
 2. **Initial-update-then-append split.** The SDK appends to an existing file; yahcli's pattern is *`FileUpdate`(chunk 0) then append the rest*. We replicate that split explicitly.
 3. **Restart-from-failure.** No SDK support; port the memo hash-prefix logic (§8.2).
 4. **Sysfile serdes** (JSON⇄proto for `0.0.121/122`, fee schedules, throttles) live in the Java services code, not the SDK. Only needed for Phase 2 non-special sysfiles — **not required for the software-upgrade path**, since `0.0.150`/`0.0.159` are raw bytes.
