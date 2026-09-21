@@ -395,6 +395,11 @@ tasks:
         echo
         echo "── containerd: new pod sandbox / container timing (ns precision, from the runtime itself) ──"
         NODE={{.CLUSTER}}-control-plane
+        for i in $(seq 1 20); do
+          UC_CID=$(kubectl get pod node0-0 -n {{.NS}} -o jsonpath="{.status.containerStatuses[?(@.name==\"uc\")].containerID}" 2>/dev/null)
+          [ -n "$UC_CID" ] && break
+          sleep 0.5
+        done
         SANDBOX_PRINTED=0
         for cname in genesis-init consensus-node uc; do
           CID=$(kubectl get pod node0-0 -n {{.NS}} -o jsonpath="{.status.initContainerStatuses[?(@.name==\"$cname\")].containerID}{.status.containerStatuses[?(@.name==\"$cname\")].containerID}" 2>/dev/null | sed "s#containerd://##")
