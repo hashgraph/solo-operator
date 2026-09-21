@@ -150,6 +150,7 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(commands.FreezeCommands(resolve))
 	root.AddCommand(commands.FileCommands(resolve))
 	root.AddCommand(commands.NetworkCommand(resolve))
+	root.AddCommand(commands.NodeCommands(resolve))
 
 	return root
 }

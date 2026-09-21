@@ -18,4 +18,7 @@ const (
 	reasonExpectedHashMismatch errx.Reason = "ExpectedHashMismatch"
 	reasonNotPrivilegedPayer   errx.Reason = "NotPrivilegedPayer"
 	reasonInvalidCheckpoint    errx.Reason = "InvalidCheckpoint"
+
+	// Genesis DAB registration (HIP-869 node create-from-genesis).
+	reasonGenesisNetworkReadFailed errx.Reason = "GenesisNetworkReadFailed"
 )

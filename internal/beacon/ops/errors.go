@@ -21,4 +21,9 @@ var (
 	// round-trip — an empty upload, a malformed start time or hash, or a staged
 	// hash that does not match. Terminal.
 	errValidation = errNS.NewType("validation")
+
+	// errNodeIDMismatch: the network assigned a NodeCreateTransaction a
+	// different node ID than the classic address book expects. Terminal — the
+	// mismatch cannot be retried away.
+	errNodeIDMismatch = errNS.NewType("node_id_mismatch")
 )

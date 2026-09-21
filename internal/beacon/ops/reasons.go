@@ -23,4 +23,8 @@ const (
 
 	// Verification queries (design §6.2).
 	reasonVersionQueryFailed errx.Reason = "VersionQueryFailed"
+
+	// Genesis DAB registration (HIP-869 node create-from-genesis).
+	reasonGenesisNetworkInvalid errx.Reason = "GenesisNetworkInvalid"
+	reasonNodeIDMismatch        errx.Reason = "NodeIDMismatch"
 )
