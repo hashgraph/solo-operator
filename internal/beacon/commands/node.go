@@ -13,11 +13,7 @@ import (
 )
 
 // NodeCommands returns the `node` command group: HIP-869 dynamic address book
-// operations. `create-from-genesis` works around genesis-bootstrapped clusters
-// whose consensus-node build never registered the classic genesis roster into
-// the DAB — without it, NodeUpdateTransaction/NodeDeleteTransaction against a
-// genesis node fails with INVALID_NODE_ID even though the node works fine in
-// the classic address book.
+// operations.
 func NodeCommands(resolve SessionFunc) *cobra.Command {
 	c := defaultConfirmer()
 	node := &cobra.Command{
@@ -30,8 +26,9 @@ func NodeCommands(resolve SessionFunc) *cobra.Command {
 
 func createFromGenesisCmd(resolve SessionFunc, c confirmer) *cobra.Command {
 	var (
-		path string
-		yes  bool
+		path         string
+		adminKeysDir string
+		yes          bool
 	)
 	cmd := &cobra.Command{
 		Use:   "create-from-genesis",
@@ -39,23 +36,27 @@ func createFromGenesisCmd(resolve SessionFunc, c confirmer) *cobra.Command {
 		Long: "Submits one NodeCreateTransaction per node in a genesis-network.json (the file solo-operator's " +
 			"NetworkGenesis controller writes into the genesis-config ConfigMap), in ascending node-id order, " +
 			"so genesis-bootstrapped nodes exist in the HIP-869 dynamic address book (the \"Node\" entity) as " +
-			"well as the classic roster. It never sets a node's admin key — no private key is available " +
-			"in-cluster to co-sign it at genesis time; apply one later with NodeUpdateTransaction once " +
-			"provisioned. Each submission's assigned node id is verified against the classic id before " +
-			"continuing; a mismatch stops the run rather than silently drifting from the classic roster. " +
-			"Assumes the payer (--payer/-p) can sign for each node's account, which holds for genesis system " +
-			"accounts — they all share bootstrap.genesisPublicKey.",
+			"well as the classic roster. With --admin-keys-dir it also sets and co-signs each node's AdminKey " +
+			"from hashgen's node-node<N>-admin.key files (as bundled into the system-account-keys Secret); " +
+			"without it, AdminKey is left unset — apply one later with NodeUpdateTransaction once provisioned. " +
+			"Each submission's assigned node id is verified against the classic id before continuing; a " +
+			"mismatch stops the run rather than silently drifting from the classic roster. Assumes the payer " +
+			"(--payer/-p) can sign for each node's account, which holds for genesis system accounts — they all " +
+			"share bootstrap.genesisPublicKey.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runCreateFromGenesis(cmd, resolve, c, yes, path)
+			return runCreateFromGenesis(cmd, resolve, c, yes, path, adminKeysDir)
 		},
 	}
 	cmd.Flags().StringVar(&path, "genesis-network", "", "Path to the genesis-network.json extracted from the genesis-config ConfigMap (required)")
+	cmd.Flags().StringVar(&adminKeysDir, "admin-keys-dir", "",
+		"Directory of hashgen's node-node<N>-admin.key files (the system-account-keys Secret, mounted). "+
+			"When set, each node's AdminKey is set and co-signed at creation instead of left unset.")
 	cmd.Flags().BoolVar(&yes, "yes", false, "Skip the interactive confirmation (required for non-interactive use)")
 	_ = cmd.MarkFlagRequired("genesis-network")
 	return cmd
 }
 
-func runCreateFromGenesis(cmd *cobra.Command, resolve SessionFunc, c confirmer, yes bool, path string) error {
+func runCreateFromGenesis(cmd *cobra.Command, resolve SessionFunc, c confirmer, yes bool, path, adminKeysDir string) error {
 	if err := c.confirm(yes, "register the genesis address book into the dynamic address book"); err != nil {
 		return err
 	}
@@ -83,6 +84,20 @@ func runCreateFromGenesis(cmd *cobra.Command, resolve SessionFunc, c confirmer, 
 
 	out := cmd.OutOrStdout()
 	for _, node := range nodes {
+		if adminKeysDir != "" {
+			adminKey, err := ops.LoadAdminKey(adminKeysDir, node.Expected)
+			if err != nil {
+				return err
+			}
+			node.Transaction.SetAdminKey(adminKey.PublicKey())
+			// A newly-set AdminKey must co-sign to prove control; Submit adds the
+			// payer's signature separately on execute.
+			if _, err := node.Transaction.FreezeWith(session.Client.Hiero()); err != nil {
+				return fmt.Errorf("node %d: freeze for admin-key co-sign: %w", node.Expected, err)
+			}
+			node.Transaction.Sign(adminKey)
+		}
+
 		result, err := session.Client.Submit(node.Transaction, nil)
 		if err != nil {
 			return fmt.Errorf("node %d: %w", node.Expected, err)

@@ -82,3 +82,20 @@ func TestCreateFromGenesis_InvalidGenesisNetworkFailsBeforeResolve(t *testing.T)
 		t.Error("session resolved despite genesis-network.json having no node entries")
 	}
 }
+
+func TestCreateFromGenesis_MissingAdminKeyFails(t *testing.T) {
+	genesisPath := filepath.Join(t.TempDir(), "genesis-network.json")
+	genesisJSON := `{"nodeMetadata": [{"node": {"nodeId": "0", "accountId": {"shardNum": "0", "realmNum": "0", "accountNum": "3"}, "gossipCaCertificate": ""}}]}`
+	if err := os.WriteFile(genesisPath, []byte(genesisJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// No node-node0-admin.key placed here — the load must fail before any
+	// network call.
+	adminKeysDir := t.TempDir()
+
+	resolve := func() (*Session, error) { return &Session{}, nil }
+	cmd := createFromGenesisCmd(resolve, ttyConfirmer("yes\n"))
+
+	_, err := runCmd(t, cmd, "--genesis-network", genesisPath, "--admin-keys-dir", adminKeysDir, "--yes")
+	wantReason(t, err, errx.Reason("AdminKeyReadFailed")) // ops package's reason, not exported from commands
+}

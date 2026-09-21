@@ -6,37 +6,34 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/automa-saga/errx"
 	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
 )
 
 // GenesisNode is one node's parsed "node" entry from a genesis-network.json
-// document (com.hedera.node.internal.network.Network's
-// nodeMetadata[].node) — the same file solo-operator's NetworkGenesis
-// controller writes into the genesis-config ConfigMap.
+// document — the same file solo-operator's NetworkGenesis controller writes
+// into the genesis-config ConfigMap.
 type GenesisNode struct {
-	// Expected is the classic address-book node ID (config.txt's "address, N,
-	// ...") this node create must land on. NodeCreateTransaction itself has no
-	// way to request a specific ID — the network auto-assigns the next one —
-	// so callers must verify the assigned ID against Expected after submission
-	// (see CheckNodeID).
+	// Expected is the classic address-book node ID this create must land on;
+	// NodeCreateTransaction can't request an ID, so callers must verify it via
+	// CheckNodeID after submission.
 	Expected uint64
-	// Transaction is the unfrozen, unsigned NodeCreateTransaction built from the
-	// node's genesis entry. It never sets AdminKey: genesis material only ever
-	// carries the node's admin PUBLIC key, and NodeCreateTransaction requires
-	// the admin key itself to co-sign when set — there is no private key
-	// in-cluster to provide that signature at genesis time.
+	// Transaction has AdminKey unset (genesis-network.json only carries the
+	// public key). Callers with the matching private key (LoadAdminKey) may
+	// set AdminKey and co-sign before submitting.
 	Transaction *hiero.NodeCreateTransaction
 }
 
 // ParseGenesisNetwork parses a genesis-network.json document into one
-// GenesisNode per entry that carries a "node" object, sorted ascending by
-// node ID. Entries with no "node" object (a roster-only passthrough) are
-// skipped; if every entry is roster-only, that is reported as an error rather
-// than silently returning nothing to create.
+// GenesisNode per "node" entry, sorted ascending by node ID. Roster-only
+// entries are skipped; if every entry is roster-only that's an error rather
+// than an empty result.
 func ParseGenesisNetwork(data []byte) ([]GenesisNode, error) {
 	var file genesisNetworkFile
 	if err := json.Unmarshal(data, &file); err != nil {
@@ -77,11 +74,9 @@ func ParseGenesisNetwork(data []byte) ([]GenesisNode, error) {
 	return nodes, nil
 }
 
-// CheckNodeID confirms the network assigned the node the classic node ID it
-// was meant to mirror. NodeCreateTransaction cannot request an ID, so this is
-// the only place a mismatch can be caught — and it must be caught, since a
-// silently wrong DAB node ID would leave later NodeUpdateTransaction/
-// NodeDeleteTransaction calls targeting the wrong entity.
+// CheckNodeID fails if the network assigned a node ID other than expected —
+// the only point a mismatch can be caught, since NodeCreateTransaction can't
+// request a specific ID.
 func CheckNodeID(expected uint64, receipt hiero.TransactionReceipt) error {
 	if receipt.NodeID != expected {
 		return errx.Decorate(
@@ -92,6 +87,30 @@ func CheckNodeID(expected uint64, receipt hiero.TransactionReceipt) error {
 		)
 	}
 	return nil
+}
+
+// LoadAdminKey reads a node's admin private key from
+// dir/node-node<ID>-admin.key — hashgen's raw-hex ed25519 seed format, as
+// bundled into the system-account-keys Secret.
+func LoadAdminKey(dir string, nodeID uint64) (hiero.PrivateKey, error) {
+	path := filepath.Join(dir, fmt.Sprintf("node-node%d-admin.key", nodeID))
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return hiero.PrivateKey{}, errx.Decorate(
+			errValidation.Wrap(err, "read admin key %q", path),
+			reasonAdminKeyReadFailed,
+			fmt.Sprintf("Confirm the admin key for node %d exists at %q (from the system-account-keys Secret)", nodeID, path),
+		)
+	}
+	key, err := hiero.PrivateKeyFromStringEd25519(strings.TrimSpace(string(data)))
+	if err != nil {
+		return hiero.PrivateKey{}, errx.Decorate(
+			errValidation.Wrap(err, "decode admin key %q", path),
+			reasonAdminKeyReadFailed,
+			"Confirm the file holds a raw hex ed25519 seed (hashgen's node-<alias>-admin.key format)",
+		)
+	}
+	return key, nil
 }
 
 func genesisNodeFromEntry(e genesisNodeEntry) (GenesisNode, error) {
@@ -166,9 +185,8 @@ func invalidGenesisField(field, value string, cause error) error {
 	)
 }
 
-// genesisNetworkFile and its nested types mirror exactly the proto3-JSON shape
-// internal/operations/genesis/genesis_network.go writes (uint64 as strings,
-// bytes as base64) — the wire format for com.hedera.node.internal.network.Network.
+// genesisNetworkFile mirrors the proto3-JSON shape
+// internal/operations/genesis/genesis_network.go writes.
 type genesisNetworkFile struct {
 	NodeMetadata []genesisNodeMetadata `json:"nodeMetadata"`
 }

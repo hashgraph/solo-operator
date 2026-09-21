@@ -5,6 +5,9 @@ package ops
 import (
 	"encoding/base64"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
@@ -144,5 +147,40 @@ func TestCheckNodeID(t *testing.T) {
 	t.Run("mismatch fails", func(t *testing.T) {
 		err := CheckNodeID(2, hiero.TransactionReceipt{NodeID: 5})
 		wantReason(t, err, reasonNodeIDMismatch)
+	})
+}
+
+func TestLoadAdminKey(t *testing.T) {
+	dir := t.TempDir()
+	seedHex := strings.Repeat("ab", 32) // 32-byte raw ed25519 seed
+	if err := os.WriteFile(filepath.Join(dir, "node-node0-admin.key"), []byte(seedHex+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	want, err := hiero.PrivateKeyFromStringEd25519(seedHex)
+	if err != nil {
+		t.Fatalf("PrivateKeyFromStringEd25519: %v", err)
+	}
+
+	t.Run("loads and trims trailing newline", func(t *testing.T) {
+		got, err := LoadAdminKey(dir, 0)
+		if err != nil {
+			t.Fatalf("LoadAdminKey: %v", err)
+		}
+		if got.PublicKey().String() != want.PublicKey().String() {
+			t.Errorf("public key = %s, want %s", got.PublicKey(), want.PublicKey())
+		}
+	})
+
+	t.Run("missing file", func(t *testing.T) {
+		_, err := LoadAdminKey(dir, 1)
+		wantReason(t, err, reasonAdminKeyReadFailed)
+	})
+
+	t.Run("malformed key", func(t *testing.T) {
+		if err := os.WriteFile(filepath.Join(dir, "node-node2-admin.key"), []byte("not-hex"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		_, err := LoadAdminKey(dir, 2)
+		wantReason(t, err, reasonAdminKeyReadFailed)
 	})
 }

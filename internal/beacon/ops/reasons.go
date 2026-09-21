@@ -27,4 +27,5 @@ const (
 	// Genesis DAB registration (HIP-869 node create-from-genesis).
 	reasonGenesisNetworkInvalid errx.Reason = "GenesisNetworkInvalid"
 	reasonNodeIDMismatch        errx.Reason = "NodeIDMismatch"
+	reasonAdminKeyReadFailed    errx.Reason = "AdminKeyReadFailed"
 )
