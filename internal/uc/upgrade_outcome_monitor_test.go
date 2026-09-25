@@ -95,7 +95,20 @@ func TestPruneStaleOperations(t *testing.T) {
 	m.opFirstSeen[freshOp] = time.Date(2026, 7, 5, 0, 0, 0, 0, time.UTC)    // 10d → kept
 	m.opFirstSeen[timelessOp] = time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC) // old → stale
 
+	// The sweep must also evict aged-out ops from the Factory dedup cache via
+	// onDelete — CRs are archived, not deleted, so this sweep is the only thing
+	// that bounds f.cache for completed operations.
+	evicted := map[string]bool{}
+	m.onDelete = func(operationID string) { evicted[operationID] = true }
+
 	m.pruneStaleOperations(now)
+
+	if !evicted[oldOp] || !evicted[timelessOp] {
+		t.Errorf("stale ops not evicted from Factory cache via onDelete: %v", evicted)
+	}
+	if evicted[freshOp] {
+		t.Error("fresh op wrongly evicted from Factory cache via onDelete")
+	}
 
 	if _, ok := m.daemonTriggered[oldOp]; ok {
 		t.Error("stale daemonTriggered entry not pruned")

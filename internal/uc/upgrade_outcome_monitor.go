@@ -795,6 +795,13 @@ func (m *UpgradeOutcomeMonitor) recordFirstSeenLocked(operationID string) {
 // bound in a UC that runs for months. Age is taken from opFirstSeen, which is
 // seeded from the operationId timestamp when available and wall-clock otherwise —
 // so even timestampless ids are eventually reclaimed.
+//
+// The sweep also evicts the aged-out op from the Factory dedup cache via onDelete
+// (the same callback used on watch Deleted). Because CRs are archived, not
+// deleted, onDelete never fires for a completed op on its own, so without this the
+// Factory's f.cache would retain one entry per historical operation forever. This
+// sweep is the single age basis (opFirstSeen) that bounds both the monitor's maps
+// and f.cache together.
 func (m *UpgradeOutcomeMonitor) pruneStaleOperations(now time.Time) {
 	cutoff := now.Add(-maxOperationAge)
 	var stale []string
@@ -832,6 +839,11 @@ func (m *UpgradeOutcomeMonitor) pruneStaleOperations(now time.Time) {
 		m.events.error(opID, ReasonStaleOperationPruned.String(),
 			"evicted after exceeding the retention window without reaching a terminal phase; inspect the on-disk upgrade package")
 		m.events.closeOp(opID) // release the (still-open) event-log handle
+		// Bound the Factory dedup cache with the same age sweep: onDelete is
+		// factory.invalidate, so the aged-out op is dropped from f.cache too.
+		if m.onDelete != nil {
+			m.onDelete(opID)
+		}
 		// Channel 2: structured stdout log (reason= is alertable in Loki).
 		logx.As().Warn().Str("reason", ReasonStaleOperationPruned.String()).
 			Str("operation_id", opID).

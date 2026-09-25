@@ -12,12 +12,14 @@ import (
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stesting "k8s.io/client-go/testing"
 
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 )
 
 // countReactor returns a reactor that counts how many times a verb is invoked.
@@ -95,6 +97,44 @@ func TestDedupSeededCacheSkipsCreate(t *testing.T) {
 	}
 	if creates != 0 {
 		t.Fatalf("create issued %d times against an already-existing CR, want 0", creates)
+	}
+}
+
+// TestSeedCacheExcludesArchived verifies the startup seed hydrates the dedup
+// cache only from in-flight CRs, skipping archived (terminal) ones so f.cache is
+// bounded to live operations rather than the full audit history.
+func TestSeedCacheExcludesArchived(t *testing.T) {
+	root := writePackage(t, validComponentsYAML)
+	f := newFakeFactory(t, testConfig(root, t.TempDir()))
+
+	inFlight := newTestCR("NetworkUpgradePrepare", "prep-live", "solo", "upgrade-live-20260413T120000Z", operatorv1alpha1.StepPrepare)
+
+	archived := newTestCR("NetworkUpgradePrepare", "prep-old", "solo", "upgrade-old-20260101T120000Z", operatorv1alpha1.StepPrepare)
+	labels := archived.GetLabels()
+	labels[common.LabelLifecycle] = common.LifecycleArchived
+	archived.SetLabels(labels)
+
+	for _, cr := range []*unstructured.Unstructured{inFlight, archived} {
+		if _, err := f.client.Resource(networkUpgradePrepareGVR).Namespace("solo").
+			Create(context.Background(), cr, metav1.CreateOptions{}); err != nil {
+			t.Fatalf("pre-create %s: %v", cr.GetName(), err)
+		}
+	}
+
+	if err := f.seedCache(context.Background()); err != nil {
+		t.Fatalf("seedCache: %v", err)
+	}
+
+	f.mu.Lock()
+	_, liveSeeded := f.cache["upgrade-live-20260413T120000Z"]
+	_, archivedSeeded := f.cache["upgrade-old-20260101T120000Z"]
+	f.mu.Unlock()
+
+	if !liveSeeded {
+		t.Error("in-flight operation not seeded into dedup cache")
+	}
+	if archivedSeeded {
+		t.Error("archived operation seeded into dedup cache; want it excluded by listNotArchivedSelector")
 	}
 }
 
