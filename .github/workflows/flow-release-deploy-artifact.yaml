@@ -31,6 +31,7 @@ permissions:
   issues: write
   pull-requests: write
   packages: write
+  id-token: write
 
 jobs:
   release:
@@ -50,6 +51,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -103,13 +105,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Setup JFrog CLI
+        id: jfrog-cli
+        if: ${{ inputs.jfrog-enabled }}
+        uses: step-security/setup-jfrog-cli@3054b554c0fb4915b3d58847fb7730c593dbb934 # v5.0.0
+        env:
+          JF_URL: ${{ vars.JF_URL }}
+        with:
+          oidc-provider-name: hashgraph
+
       - name: Docker Login (JFrog)
         if: ${{ inputs.jfrog-enabled }}
         uses: step-security/docker-login-action@8c7b695d8738c5699a679ff5254baf0f19f20a94 # v4.6.0
         with:
           registry: ${{ env.JF_OCI_REGISTRY }}
-          username: ${{ vars.JF_USERNAME }}
-          password: ${{ secrets.JF_ACCESS_TOKEN }}
+          username: ${{ steps.jfrog-cli.outputs.oidc-user }}
+          password: ${{ steps.jfrog-cli.outputs.oidc-token }}
 
       - name: Build and Push Docker Image (GitHub)
         uses: step-security/docker-build-push-action@144392094f7fc3199dda455efe3b70dbea4b72a0 # v7.3.0
