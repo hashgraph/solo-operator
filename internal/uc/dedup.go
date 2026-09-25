@@ -144,17 +144,28 @@ func (f *Factory) invalidate(operationID string) {
 	delete(f.cache, operationID)
 }
 
-// seedCache populates the in-memory cache by querying every NetworkUpgrade* CR
-// in the namespace and recording its spec.operationId + step label. It is the
-// startup half of dedup: after seeding, steady-state ticks for already-handled
-// markers are served from cache without an API call. A query error is returned
-// so startup recovery can surface it; the cache stays best-effort (partial
-// seeding is harmless because the per-action query remains authoritative).
+// seedCache populates the in-memory cache by querying every in-flight
+// NetworkUpgrade* CR in the namespace and recording its spec.operationId + step
+// label. It is the startup half of dedup: after seeding, steady-state ticks for
+// already-handled markers are served from cache without an API call. A query
+// error is returned so startup recovery can surface it; the cache stays
+// best-effort (partial seeding is harmless because the per-action query remains
+// authoritative).
+//
+// The List excludes archived (terminal) CRs via listNotArchivedSelector so the
+// seed — and the resulting f.cache — is bounded to in-flight operations rather
+// than the full audit history (CRs are never deleted, only archived), which would
+// otherwise grow the startup List O(total history). The archive filter is safe
+// HERE because it only shrinks a best-effort hint: the per-action live query in
+// alreadyCreated stays unfiltered and authoritative, so a terminal-but-still-
+// actionable op (e.g. a Failed Execute whose marker persists on disk) is still
+// found there and re-populates the cache on its first re-check. The filter must
+// never be applied to that authoritative query.
 func (f *Factory) seedCache(ctx context.Context) error {
 	for _, gvr := range allUpgradeGVRs {
 		listCtx, cancel := context.WithTimeout(ctx, listTimeout)
 		list, err := f.client.Resource(gvr).Namespace(f.cfg.Namespace).
-			List(listCtx, metav1.ListOptions{})
+			List(listCtx, metav1.ListOptions{LabelSelector: listNotArchivedSelector})
 		cancel()
 		if err != nil {
 			return errx.WithHints(
