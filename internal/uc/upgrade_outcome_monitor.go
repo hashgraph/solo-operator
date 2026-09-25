@@ -285,7 +285,7 @@ func (m *UpgradeOutcomeMonitor) listAndSeed(ctx context.Context) (prepareRV, fre
 	// Safety-net sweep of stuck-operation state on every list cycle (startup and
 	// each ~5-minute watch reconnect). Terminal operations are cleaned up inline in
 	// observePhase; this bounds the pathological never-terminal case.
-	m.pruneStaleOperations(time.Now())
+	m.pruneStaleOperations(ctx, time.Now())
 
 	listCtx, cancel := context.WithTimeout(ctx, listTimeout)
 	defer cancel()
@@ -371,15 +371,12 @@ func (m *UpgradeOutcomeMonitor) listAndSeed(ctx context.Context) (prepareRV, fre
 		}
 	}
 
-	// Archive any terminal CRs that survived a prior UC restart unarchived.
-	// Runs in the background so it does not block the watch startup path.
+	// Archive any operation whose final step (Execute or FreezeAbort) survived a prior
+	// UC restart unarchived; archiveOperation sweeps the sibling Prepare/Freeze too
+	// (#1349). Only the operation-terminal steps are checked — a Prepare/Freeze whose
+	// operation is still in flight must stay in the working set. Runs in the background
+	// so it does not block the watch startup path.
 	go func() {
-		for i := range prepareList.Items {
-			m.archiveIfTerminalPhase(ctx, &prepareList.Items[i])
-		}
-		for i := range freezeList.Items {
-			m.archiveIfTerminalPhase(ctx, &freezeList.Items[i])
-		}
 		for i := range execList.Items {
 			m.archiveIfTerminalPhase(ctx, &execList.Items[i])
 		}
@@ -802,7 +799,12 @@ func (m *UpgradeOutcomeMonitor) recordFirstSeenLocked(operationID string) {
 // Factory's f.cache would retain one entry per historical operation forever. This
 // sweep is the single age basis (opFirstSeen) that bounds both the monitor's maps
 // and f.cache together.
-func (m *UpgradeOutcomeMonitor) pruneStaleOperations(now time.Time) {
+//
+// It also archives the aged-out operation's CRs (archiveOperation). Operations are
+// normally archived when their final step completes (#1349); an operation that
+// never reached that step would otherwise keep its Prepare/Freeze CRs in the
+// non-archived working set forever — this sweep reclaims those too.
+func (m *UpgradeOutcomeMonitor) pruneStaleOperations(ctx context.Context, now time.Time) {
 	cutoff := now.Add(-maxOperationAge)
 	var stale []string
 
@@ -844,6 +846,9 @@ func (m *UpgradeOutcomeMonitor) pruneStaleOperations(now time.Time) {
 		if m.onDelete != nil {
 			m.onDelete(opID)
 		}
+		// Archive the aged-out operation's CRs so an abandoned/stuck operation (whose
+		// final step was never observed) leaves the non-archived working set too (#1349).
+		m.archiveOperation(ctx, opID)
 		// Channel 2: structured stdout log (reason= is alertable in Loki).
 		logx.As().Warn().Str("reason", ReasonStaleOperationPruned.String()).
 			Str("operation_id", opID).
@@ -909,24 +914,65 @@ func (m *UpgradeOutcomeMonitor) handleTerminalAbort(cr *unstructured.Unstructure
 	discardUpgradePackage(m.cfg.UpgradePath, operationIDOf(cr))
 }
 
-// archiveIfTerminalPhase stamps lifecycle=archived on a terminal CR so future
-// List calls with the archive-exclusion selector skip it. No-op for non-terminal phases.
+// archiveIfTerminalPhase archives the whole operation once its final step (Execute
+// or FreezeAbort) reaches a terminal phase — see archiveOperation. Prepare/Freeze
+// reaching Succeeded are NOT operation-terminal (later steps follow), so they are
+// never archived on their own; archiving is op-id-scoped and happens once, when the
+// operation completes (#1349). No-op for a non-operation-terminal phase, or for a CR
+// already archived (the archive patch echoes back through the unfiltered watch — skip
+// the redundant op-id list on that echo).
 func (m *UpgradeOutcomeMonitor) archiveIfTerminalPhase(ctx context.Context, cr *unstructured.Unstructured) {
 	phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
-	if phase == string(operatorv1alpha1.PhaseSucceeded) || phase == string(operatorv1alpha1.PhaseFailed) {
-		m.archiveCR(ctx, cr)
+	if !isOperationTerminal(cr, phase) {
+		return
 	}
-}
-
-// archiveCR patches the lifecycle=archived label onto a CR. Idempotent.
-func (m *UpgradeOutcomeMonitor) archiveCR(ctx context.Context, cr *unstructured.Unstructured) {
 	if cr.GetLabels()[common.LabelLifecycle] == common.LifecycleArchived {
 		return
 	}
-	gvr, ok := kindToGVR(cr.GetKind())
-	if !ok {
-		logx.As().Warn().Str("reason", ReasonCRArchiveFailed.String()).
-			Str("kind", cr.GetKind()).Msg("unknown CR kind — cannot archive")
+	m.archiveOperation(ctx, operationIDOf(cr))
+}
+
+// archiveOperation stamps lifecycle=archived on every NetworkUpgrade* CR sharing
+// operationID, so a completed (or aged-out) operation's Prepare/Freeze/Execute (or
+// FreezeAbort) leave the working set together rather than each self-archiving at its own
+// terminal phase (#1349). Best-effort and idempotent (archiveCR skips CRs already
+// archived); a list failure is logged and retried on the next terminal observation or
+// list cycle. The op-id is re-verified in code because a fake client (tests) may not
+// honour the field selector.
+func (m *UpgradeOutcomeMonitor) archiveOperation(ctx context.Context, operationID string) {
+	if operationID == "" {
+		return
+	}
+	for _, gvr := range allUpgradeGVRs {
+		listCtx, cancel := context.WithTimeout(ctx, listTimeout)
+		// Field-select by operationId (source of truth) so the result is bounded to
+		// this one operation's CRs, not the full history; also exclude already-archived
+		// siblings so a re-observation or stale-sweep of an already-archived operation
+		// returns nothing to do.
+		list, err := m.client.Resource(gvr).Namespace(m.cfg.Namespace).
+			List(listCtx, metav1.ListOptions{
+				FieldSelector: specOperationIDField + "=" + operationID,
+				LabelSelector: listNotArchivedSelector,
+			})
+		cancel()
+		if err != nil {
+			logx.As().Warn().Err(err).Str("reason", ReasonCRArchiveFailed.String()).
+				Str("operation_id", operationID).Str("resource", gvr.Resource).
+				Msg("failed to list CRs for operation archive — will retry")
+			continue
+		}
+		for i := range list.Items {
+			if operationIDOf(&list.Items[i]) != operationID {
+				continue
+			}
+			m.archiveCR(ctx, gvr, &list.Items[i])
+		}
+	}
+}
+
+// archiveCR patches the lifecycle=archived label onto cr (of type gvr). Idempotent.
+func (m *UpgradeOutcomeMonitor) archiveCR(ctx context.Context, gvr schema.GroupVersionResource, cr *unstructured.Unstructured) {
+	if cr.GetLabels()[common.LabelLifecycle] == common.LifecycleArchived {
 		return
 	}
 	patch := []byte(fmt.Sprintf(
@@ -936,28 +982,13 @@ func (m *UpgradeOutcomeMonitor) archiveCR(ctx context.Context, cr *unstructured.
 	if _, err := m.client.Resource(gvr).Namespace(cr.GetNamespace()).
 		Patch(patchCtx, cr.GetName(), types.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
 		logx.As().Warn().Str("reason", ReasonCRArchiveFailed.String()).
-			Str("cr_name", cr.GetName()).Str("kind", cr.GetKind()).Err(err).
+			Str("cr_name", cr.GetName()).Str("resource", gvr.Resource).Err(err).
 			Msg("failed to archive CR — will retry on next list cycle")
 		return
 	}
 	logx.As().Info().Str("reason", ReasonCRArchived.String()).
 		Str("cr_name", cr.GetName()).Str("operation_id", operationIDOf(cr)).
-		Msg("archived terminal CR")
-}
-
-func kindToGVR(kind string) (schema.GroupVersionResource, bool) {
-	switch kind {
-	case kindNetworkUpgradePrepare:
-		return networkUpgradePrepareGVR, true
-	case kindNetworkUpgradeFreeze:
-		return networkUpgradeFreezeGVR, true
-	case kindNetworkUpgradeExecute:
-		return networkUpgradeExecuteGVR, true
-	case kindNetworkUpgradeFreezeAbort:
-		return networkUpgradeFreezeAbortGVR, true
-	default:
-		return schema.GroupVersionResource{}, false
-	}
+		Msg("archived operation CR")
 }
 
 // matchesDiskOperationID returns true when the CR's operationID matches the
