@@ -9,9 +9,9 @@ ignore:
         expires: 2025-10-01T00:00:00.000Z
   SNYK-JAVA-ORGAPACHECOMMONS-10734078:
     - com.puppycrawl.tools:checkstyle > org.apache.maven.doxia:doxia-core > org.apache.commons:commons-lang3:
-      reason: "Vulnerability is in a transitive dependency of Checkstyle, not used at runtime"
-      expires: 2025-12-31T23:59:59Z
+        reason: "Vulnerability is in a transitive dependency of Checkstyle, not used at runtime"
+        expires: 2025-12-31T23:59:59Z
     - com.puppycrawl.tools:checkstyle > org.apache.maven.doxia:doxia-core > org.apache.commons:commons-text > org.apache.commons:commons-lang3:
-      reason: "Vulnerability is in a transitive dependency of Checkstyle, not used at runtime"
-      expires: 2025-12-31T23:59:59Z
+        reason: "Vulnerability is in a transitive dependency of Checkstyle, not used at runtime"
+        expires: 2025-12-31T23:59:59Z
 patch: {}
