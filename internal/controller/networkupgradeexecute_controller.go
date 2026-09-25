@@ -72,7 +72,7 @@ func (r *NetworkUpgradeExecuteReconciler) logPhaseElapsed(ctx context.Context, e
 	common.Info(ctx, ReasonPhaseTransition).
 		Str("phase", phase).
 		Str("elapsed", elapsed.String()).
-		Msg("execute phase transition")
+		Msg("Execute phase transition")
 }
 
 func (r *NetworkUpgradeExecuteReconciler) WithStrategy(name string) *NetworkUpgradeExecuteReconciler {
@@ -351,7 +351,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingInfraUpgrade(ctx conte
 		// condition without advancing the phase (a non-atomic handoff). Log each tick
 		// so a stall here leaves a forensic trail instead of a silent poll.
 		common.Info(ctx, ReasonWaitingForDaemonPhaseAdvance).
-			Msg("config CRs applied; waiting for daemon to advance phase to PendingNodeUpgrade")
+			Msg("Config CRs applied; waiting for daemon to advance phase to PendingNodeUpgrade")
 	}
 	return ctrl.Result{RequeueAfter: ucfg.PrereqRequeueInterval}, nil
 }

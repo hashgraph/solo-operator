@@ -79,7 +79,7 @@ func (c *Client) Submit(tx hiero.TransactionInterface, verify VerifyFunc) (*Resu
 		Str("status", receipt.Status.String()).
 		Int64("execute_ms", execMs).
 		Int64("receipt_ms", time.Since(rcptStart).Milliseconds()).
-		Msg("transaction reached SUCCESS")
+		Msg("Transaction reached SUCCESS")
 
 	if verify != nil {
 		if err := verify(c, result); err != nil {
@@ -113,7 +113,7 @@ func (c *Client) Fire(tx hiero.TransactionInterface) error {
 		Str("reason", reasonTxSubmitted.String()).
 		Str("transaction_id", resp.TransactionID.String()).
 		Int64("execute_ms", time.Since(start).Milliseconds()).
-		Msg("transaction fired")
+		Msg("Submitted transaction")
 	return nil
 }
 

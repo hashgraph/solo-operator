@@ -293,7 +293,7 @@ func guardSDKPanic[T any](what string, call func() (T, error)) (result T, err er
 				Str("operation", what).
 				Str("panic", fmt.Sprintf("%v", r)).
 				Bytes("stack", debug.Stack()).
-				Msg("recovered from hiero-sdk panic")
+				Msg("Recovered from hiero-sdk panic")
 			var zero T
 			result = zero
 			err = errx.Decorate(

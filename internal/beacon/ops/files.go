@@ -85,7 +85,7 @@ func UploadRawFile(u Uploader, fileID hiero.FileID, data []byte) error {
 		Uint64("file", fileID.File).
 		Int("bytes", len(data)).
 		Int("chunks", len(chunks)).
-		Msg("uploading special file")
+		Msg("Uploading special file")
 	return uploadChunks(u, fileID, chunks, 0)
 }
 
@@ -116,7 +116,7 @@ func ResumeUpload(u Uploader, readMemo MemoFunc, fileID hiero.FileID, data []byt
 			Str("reason", reasonUploadResumed.String()).
 			Uint64("file", fileID.File).
 			Int("chunks", total).
-			Msg("upload already complete; nothing to resume")
+			Msg("Upload already complete; nothing to resume")
 		return nil
 	}
 	logx.As().Info().
@@ -125,7 +125,7 @@ func ResumeUpload(u Uploader, readMemo MemoFunc, fileID hiero.FileID, data []byt
 		Int("bytes", len(data)).
 		Int("chunks", total).
 		Int("resume_from", done).
-		Msg("resuming special-file upload")
+		Msg("Resuming special-file upload")
 	return uploadChunks(u, fileID, chunks, done)
 }
 
@@ -185,7 +185,7 @@ func uploadChunks(u Uploader, fileID hiero.FileID, chunks [][]byte, start int) e
 			Int("percent", done*100/total).
 			Str("hash", hex.EncodeToString(want)).
 			Str("elapsed", time.Since(t0).Truncate(time.Millisecond).String()).
-			Msg("checkpoint verified: staged hash matches")
+			Msg("Verified checkpoint: staged hash matches")
 		return nil
 	}
 
@@ -268,7 +268,7 @@ func decodeMemo(fileID hiero.FileID, memo string) []byte {
 			Str("reason", reasonUploadResumed.String()).
 			Uint64("file", fileID.File).
 			Str("memo", memo).
-			Msg("file memo is not hex; restarting upload from the beginning")
+			Msg("Restarting upload from the beginning: file memo is not hex")
 		return nil
 	}
 	return raw
@@ -373,7 +373,7 @@ func logUploadProgress(fileID hiero.FileID, done, total int, t0 time.Time) {
 		Int("chunks", total).
 		Int("percent", pct).
 		Str("elapsed", elapsed).
-		Msg("chunk uploaded")
+		Msg("Uploaded chunk")
 	prev := (done - 1) * 100 / total
 	if done == total || pct/10 != prev/10 {
 		logx.As().Info().
@@ -383,6 +383,6 @@ func logUploadProgress(fileID hiero.FileID, done, total int, t0 time.Time) {
 			Int("chunks", total).
 			Int("percent", pct).
 			Str("elapsed", elapsed).
-			Msg("upload progress")
+			Msg("Upload progress")
 	}
 }
