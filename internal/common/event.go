@@ -12,9 +12,12 @@ import (
 	"k8s.io/client-go/tools/events"
 )
 
-// Eventf records a K8s event and a paired log line; Warning events log at Warn, others at Info.
+// Eventf records a K8s event and a paired log line; Warning events log at Warn.
+// Normal events log at Debug: they fire on every reconcile (e.g. skipped optional
+// sidecars) and would otherwise flood INFO, while the K8s Event is still recorded
+// for `kubectl describe`.
 func Eventf(ctx context.Context, recorder events.EventRecorder, obj runtime.Object, eventtype string, reason errx.Reason, action, format string, args ...any) {
-	open := Info
+	open := Debug
 	if eventtype == corev1.EventTypeWarning {
 		open = Warn
 	}

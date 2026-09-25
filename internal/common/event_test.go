@@ -48,15 +48,15 @@ func TestEventf_EmitsEventAndPairedLog(t *testing.T) {
 	}
 }
 
-func TestEventf_NormalEventLogsAtInfo(t *testing.T) {
+func TestEventf_NormalEventLogsAtDebug(t *testing.T) {
 	buf := captureLogs(t)
 	rec := events.NewFakeRecorder(1)
 
 	Eventf(context.Background(), rec, &corev1.Pod{}, corev1.EventTypeNormal, "CapsulePatched", "Execute", "patched")
 
 	m := decodeLine(t, buf)
-	if got, _ := m["level"].(string); got != "info" {
-		t.Errorf("level = %q, want info (Normal event)", got)
+	if got, _ := m["level"].(string); got != "debug" {
+		t.Errorf("level = %q, want debug (Normal event; keeps per-reconcile INFO quiet)", got)
 	}
 }
 
