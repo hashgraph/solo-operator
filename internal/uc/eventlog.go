@@ -107,7 +107,7 @@ func (s *eventSink) writer(operationID string) *events.Writer {
 		s.failed[operationID] = struct{}{}
 		logx.As().Warn().Err(err).Str("reason", ReasonEventLogOpenFailed.String()).
 			Str("operation_id", operationID).
-			Msg("could not open UC event log; JSONL audit disabled for this operation")
+			Msg("Failed to open UC event log; JSONL audit disabled for this operation")
 		return nil
 	}
 	s.writers[operationID] = w

@@ -115,7 +115,7 @@ func (m *MarkerMonitor) Run(ctx context.Context) (retErr error) {
 		if r := recover(); r != nil {
 			logx.As().Error().Str("reason", ReasonMarkerMonitorPanic.String()).
 				Str("upgrade_path", m.cfg.UpgradePath).Interface("panic", r).
-				Msg("panic in marker monitor — recovering")
+				Msg("Recovering from panic in marker monitor")
 			retErr = errx.WithReason(errPanic.New("recovered panic in marker monitor: %v", r), ReasonMarkerMonitorPanic)
 		}
 	}()
@@ -124,7 +124,7 @@ func (m *MarkerMonitor) Run(ctx context.Context) (retErr error) {
 		Str("reason", ReasonMarkerMonitorStarted.String()).
 		Str("upgrade_path", m.cfg.UpgradePath).
 		Dur("poll_interval", m.cfg.PollInterval).
-		Msg("marker monitor started")
+		Msg("Started marker monitor")
 
 	// Startup retention: keep only the last events.RetainCount upgrade-*.jsonl
 	// event logs (story 9.1, same policy as the consensus daemon). A failure is
@@ -132,7 +132,7 @@ func (m *MarkerMonitor) Run(ctx context.Context) (retErr error) {
 	if err := events.Prune(m.cfg.EventsPath); err != nil {
 		logx.As().Warn().Err(err).Str("reason", ReasonEventLogPruneFailed.String()).
 			Str("events_path", m.cfg.EventsPath).
-			Msg("failed to prune upgrade event logs — continuing")
+			Msg("Continuing despite failure to prune upgrade event logs")
 	}
 
 	// TODO(#998): restart recovery — reconcile cluster (source of truth) -> disk
@@ -140,7 +140,7 @@ func (m *MarkerMonitor) Run(ctx context.Context) (retErr error) {
 	// upgrade artifacts. Then seed the in-memory operation-id cache (#997).
 	if err := m.factory.RecoverOnStartup(ctx); err != nil {
 		logx.As().Warn().Err(err).Str("reason", ReasonUCStartupRecoveryError.String()).
-			Msg("startup recovery encountered an error — continuing")
+			Msg("Continuing despite error in startup recovery")
 	}
 
 	interval := m.cfg.PollInterval
@@ -156,7 +156,7 @@ func (m *MarkerMonitor) Run(ctx context.Context) (retErr error) {
 			next := m.poll(ctx, interval)
 			if next != interval {
 				logx.As().Info().Str("reason", ReasonPollIntervalChanged.String()).
-					Dur("from", interval).Dur("to", next).Msg("Changed poll interval")
+					Dur("from", interval).Dur("to", next).Msgf("Changed poll interval: %s → %s", interval, next)
 				interval = next
 			}
 			timer.Reset(interval)
@@ -202,7 +202,7 @@ func (m *MarkerMonitor) poll(ctx context.Context, current time.Duration) time.Du
 				Str("reason", ReasonMarkerDetected.String()).
 				Str("marker", name).
 				Dur("latency", detectionLatency).
-				Msg("marker detected")
+				Msgf("Detected new marker file %s", name)
 			m.seen[name] = struct{}{}
 		}
 		if err := m.dispatch(ctx, name); err != nil {

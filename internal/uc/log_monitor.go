@@ -90,7 +90,7 @@ func (m *LogMonitor) Run(ctx context.Context) (retErr error) {
 	logx.As().Info().
 		Str("reason", ReasonLogMonitorStarted.String()).
 		Str("file", m.cfg.ConsensusLogFile).
-		Msg("log monitor started")
+		Msg("Started log monitor")
 
 	m.loadPersisted()
 	m.seedFromTail()
@@ -124,7 +124,7 @@ func (m *LogMonitor) loadPersisted() {
 		logx.As().Info().
 			Str("reason", ReasonLogMonitorRestored.String()).
 			Int32("code", state.Code).Str("status", state.Status).
-			Msg("log monitor restored persisted status")
+			Msg("Restored persisted platform status")
 	}
 }
 
@@ -235,10 +235,14 @@ func (m *LogMonitor) updateStatus(code int32, name string) {
 		prevName = prev.Status
 	}
 	if prevName != name {
+		from := prevName
+		if from == "" {
+			from = nonePhase
+		}
 		logx.As().Info().
 			Str("reason", ReasonLogStatusChanged.String()).
 			Str("from", prevName).Str("to", name).Int32("code", code).
-			Msg("log monitor detected platform status transition")
+			Msgf("Detected platform status transition: %s → %s (code %d)", from, name, code)
 	}
 
 	m.persist(code, name)

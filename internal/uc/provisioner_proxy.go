@@ -158,7 +158,7 @@ func (p *ProvisionerProxy) Handle(ctx context.Context, cr *unstructured.Unstruct
 		if active != operationID {
 			logx.As().Warn().Str("reason", ReasonProvisionerProxyBusy.String()).
 				Str("active", active).Str("incoming", operationID).
-				Msg("another transition is in-flight — rejecting")
+				Msg("Rejecting: another transition is in-flight")
 		}
 		return
 	}
@@ -263,7 +263,7 @@ func (p *ProvisionerProxy) handleExecute(ctx context.Context, cr *unstructured.U
 	}
 	logx.As().Info().Str("reason", ReasonPendingNodeUpgrade.String()).
 		Str("operation_id", operationID).Str("cr_name", cr.GetName()).
-		Msg("advanced Execute CR to PendingNodeUpgrade")
+		Msg("Advanced Execute CR to PendingNodeUpgrade")
 	return nil
 }
 
@@ -358,7 +358,7 @@ func (p *ProvisionerProxy) reportFailure(ctx context.Context, cr *unstructured.U
 		return
 	}
 	logx.As().Warn().Str("reason", reason).Str("cr_name", cr.GetName()).
-		Msg("wrote DaemonResult=False — operator will mark Execute CR Failed")
+		Msg("Wrote DaemonResult=False; operator will mark Execute CR Failed")
 }
 
 // handoffDeadlineExceeded reports whether the handoff budget, measured from when

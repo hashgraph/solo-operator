@@ -118,7 +118,7 @@ func (m *PlatformStatusMonitor) Run(ctx context.Context) (retErr error) {
 		if r := recover(); r != nil {
 			logx.As().Error().Str("reason", ReasonPlatformStatusMonitorPanic.String()).
 				Str("capsule", m.cfg.CapsuleName()).Interface("panic", r).
-				Msg("panic in platform-status monitor — recovering")
+				Msg("Recovering from panic in platform-status monitor")
 			retErr = errx.WithReason(errPanic.New("recovered panic in platform-status monitor: %v", r), ReasonPlatformStatusMonitorPanic)
 		}
 	}()
@@ -128,7 +128,7 @@ func (m *PlatformStatusMonitor) Run(ctx context.Context) (retErr error) {
 		Str("capsule", m.cfg.CapsuleName()).
 		Str("metrics_url", m.cfg.MetricsURL).
 		Dur("poll_interval", m.cfg.PlatformPollInterval).
-		Msg("platform-status monitor started")
+		Msg("Started platform-status monitor")
 
 	ticker := time.NewTicker(m.cfg.PlatformPollInterval)
 	defer ticker.Stop()
@@ -140,7 +140,7 @@ func (m *PlatformStatusMonitor) Run(ctx context.Context) (retErr error) {
 		select {
 		case <-ctx.Done():
 			logx.As().Info().Str("reason", ReasonPlatformStatusMonitorStopped.String()).
-				Msg("platform-status monitor stopped")
+				Msg("Stopped platform-status monitor")
 			return nil
 		case <-ticker.C:
 			m.poll(ctx)
@@ -170,7 +170,7 @@ func (m *PlatformStatusMonitor) poll(ctx context.Context) {
 		common.LogErr(logx.As().Error(), err, ReasonPlatformStatusPatchFailed).
 			Str("pod", m.cfg.PodName).
 			Str("platform_status", name).
-			Msg("failed to patch pod platform-status condition")
+			Msg("Failed to patch pod platform-status condition")
 		return // leave m.last/m.lastCode unchanged so the next tick retries
 	}
 	// Only a name change is a real platform-status transition worth recording. A
@@ -254,7 +254,7 @@ func platformStatusConditionPatch(name string, code int32, lastTransition string
 	if name == operatorv1alpha1.PlatformStatusUnknown {
 		condStatus = corev1.ConditionUnknown
 	}
-	message := fmt.Sprintf("platform status %s (code %d)", name, code)
+	message := fmt.Sprintf("Platform status %s (code %d)", name, code)
 	return []byte(fmt.Sprintf(
 		`{"status":{"conditions":[{"type":%q,"status":%q,"reason":%q,"message":%q,"lastTransitionTime":%q}]}}`,
 		operatorv1alpha1.PodConditionPlatformStatus, condStatus, name, message, lastTransition))
@@ -266,7 +266,7 @@ func (m *PlatformStatusMonitor) recordTransition(prev, name string, code int32) 
 	if prev == "" {
 		prev = nonePhase
 	}
-	msg := fmt.Sprintf("platform status %s -> %s (code %d)", prev, name, code)
+	msg := fmt.Sprintf("Changed platform status: %s → %s (code %d)", prev, name, code)
 	logx.As().Info().
 		Str("reason", ReasonPlatformStatusChanged.String()).
 		Str("capsule", m.cfg.CapsuleName()).

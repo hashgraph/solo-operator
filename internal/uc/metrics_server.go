@@ -112,7 +112,7 @@ func runMetricsServer(ctx context.Context, addr string, reg *prometheus.Registry
 	logx.As().Info().
 		Str("reason", ReasonMetricsServerStarted.String()).
 		Str("addr", addr).
-		Msg("metrics server started")
+		Msg("Started metrics server")
 
 	select {
 	case <-ctx.Done():
