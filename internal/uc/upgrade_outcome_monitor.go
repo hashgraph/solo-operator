@@ -220,13 +220,13 @@ func (m *UpgradeOutcomeMonitor) Run(ctx context.Context) (retErr error) {
 	}()
 
 	logx.As().Info().Str("reason", ReasonUpgradeOutcomeMonitorStarted.String()).
-		Str("namespace", m.cfg.Namespace).Msg("upgrade-outcome monitor started")
+		Str("namespace", m.cfg.Namespace).Msg("Started upgrade-outcome monitor")
 
 	backoff := outcomeBackoffInitial
 	for {
 		prepareRV, freezeRV, executeRV, abortRV, listErr := m.listAndSeed(ctx)
 		if ctx.Err() != nil {
-			logx.As().Info().Str("reason", ReasonUpgradeOutcomeMonitorStopped.String()).Msg("upgrade-outcome monitor stopped")
+			logx.As().Info().Str("reason", ReasonUpgradeOutcomeMonitorStopped.String()).Msg("Stopped upgrade-outcome monitor")
 			return nil
 		}
 		if listErr != nil {
@@ -234,7 +234,7 @@ func (m *UpgradeOutcomeMonitor) Run(ctx context.Context) (retErr error) {
 			m.setConnectivityError(listReason.String(), listErr.Error(),
 				fmt.Sprintf("Verify RBAC for all networkupgrade* CRs in namespace %s", m.cfg.Namespace))
 			logx.As().Warn().Err(listErr).Str("reason", listReason.String()).
-				Dur("retry_in", backoff).Msg("list error — retrying")
+				Dur("retry_in", backoff).Msg("Error occurred during list, retrying")
 			if !sleepCtx(ctx, backoff) {
 				return nil
 			}
@@ -245,7 +245,7 @@ func (m *UpgradeOutcomeMonitor) Run(ctx context.Context) (retErr error) {
 
 		err := m.runWatch(ctx, prepareRV, freezeRV, executeRV, abortRV)
 		if ctx.Err() != nil {
-			logx.As().Info().Str("reason", ReasonUpgradeOutcomeMonitorStopped.String()).Msg("upgrade-outcome monitor stopped")
+			logx.As().Info().Str("reason", ReasonUpgradeOutcomeMonitorStopped.String()).Msg("Stopped upgrade-outcome monitor")
 			return nil
 		}
 		if err == nil {
@@ -259,12 +259,12 @@ func (m *UpgradeOutcomeMonitor) Run(ctx context.Context) (retErr error) {
 			m.setConnectivityError(ReasonProvisionerProxyAuthError.String(), err.Error(),
 				"Restore RBAC for the UC ServiceAccount on networkupgradeexecutes and networkupgradefreezeaborts")
 			logx.As().Warn().Err(err).Str("reason", ReasonProvisionerProxyAuthError.String()).
-				Dur("retry_in", backoff).Msg("auth error watching NetworkUpgrade* CRs")
+				Dur("retry_in", backoff).Msg("Failed to watch NetworkUpgrade* CRs (auth error), retrying")
 		} else {
 			m.setConnectivityError(ReasonProvisionerProxyWatchError.String(), err.Error(),
 				"Check connectivity to the Kubernetes API server")
 			logx.As().Warn().Err(err).Str("reason", ReasonProvisionerProxyWatchError.String()).
-				Dur("retry_in", backoff).Msg("watch error — retrying")
+				Dur("retry_in", backoff).Msg("Error occurred during watch, retrying")
 		}
 		if !sleepCtx(ctx, backoff) {
 			return nil
@@ -657,9 +657,10 @@ func (m *UpgradeOutcomeMonitor) observePhase(cr *unstructured.Unstructured) {
 	if from == "" {
 		from = nonePhase
 	}
+	kind := cr.GetKind()
 	logx.As().Info().Str("reason", ReasonPhaseChanged.String()).Str("operation_id", operationID).
-		Str("cr_kind", cr.GetKind()).Str("step", step).Str("phase", phase).Str("previous_phase", from).
-		Msg("CR phase changed")
+		Str("cr_kind", kind).Str("step", step).Str("phase", phase).Str("previous_phase", from).
+		Msgf("Changed %s phase: %s → %s", kind, from, phase)
 	m.events.info(operationID, ReasonPhaseChanged.String(),
 		fmt.Sprintf("%s phase %s -> %s", step, from, phase))
 

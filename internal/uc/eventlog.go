@@ -79,7 +79,7 @@ func (s *eventSink) write(isErr bool, operationID, reason, msg string) {
 		// deduped, tracking state advanced before the write), so this is not retried
 		// on later ticks — no per-tick spam, and no need to disable the log.
 		logx.As().Warn().Err(err).Str("reason", ReasonEventLogWriteFailed.String()).
-			Str("operation_id", operationID).Msg("could not append UC event-log line")
+			Str("operation_id", operationID).Msg("Failed to append UC event-log line")
 	}
 }
 
@@ -128,7 +128,7 @@ func (s *eventSink) closeOp(operationID string) {
 	defer s.mu.Unlock()
 	if w, ok := s.writers[operationID]; ok {
 		if err := w.Close(); err != nil {
-			logx.As().Warn().Err(err).Str("operation_id", operationID).Msg("error closing UC event log")
+			logx.As().Warn().Err(err).Str("operation_id", operationID).Msg("Failed to close UC event log")
 		}
 		delete(s.writers, operationID)
 	}
@@ -147,7 +147,7 @@ func (s *eventSink) Close() {
 	defer s.mu.Unlock()
 	for id, w := range s.writers {
 		if err := w.Close(); err != nil {
-			logx.As().Warn().Err(err).Str("operation_id", id).Msg("error closing UC event log")
+			logx.As().Warn().Err(err).Str("operation_id", id).Msg("Failed to close UC event log")
 		}
 		delete(s.writers, id)
 	}

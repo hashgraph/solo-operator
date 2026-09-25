@@ -82,7 +82,7 @@ func (m *LogMonitor) Run(ctx context.Context) (retErr error) {
 	defer func() {
 		if r := recover(); r != nil {
 			logx.As().Error().Str("reason", ReasonLogMonitorPanic.String()).
-				Interface("panic", r).Msg("panic in log monitor — recovering")
+				Interface("panic", r).Msg("Recovering from panic in log monitor")
 			retErr = errx.WithReason(errPanic.New("recovered panic in log monitor: %v", r), ReasonLogMonitorPanic)
 		}
 	}()
@@ -101,7 +101,7 @@ func (m *LogMonitor) Run(ctx context.Context) (retErr error) {
 	for {
 		select {
 		case <-ctx.Done():
-			logx.As().Info().Str("reason", ReasonLogMonitorStopped.String()).Msg("log monitor stopped")
+			logx.As().Info().Str("reason", ReasonLogMonitorStopped.String()).Msg("Stopped log monitor")
 			return nil
 		case <-ticker.C:
 			m.poll()

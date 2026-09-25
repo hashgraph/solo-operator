@@ -138,7 +138,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
-	common.Debug(ctx, ReasonRegistryStrategy).Str("defaultStrategy", r.StrategyName).Msg("registry iteration strategy default (per-component selectionStrategy overrides)")
+	common.Debug(ctx, ReasonRegistryStrategy).Str("defaultStrategy", r.StrategyName).Msg("Using default registry iteration strategy (per-component selectionStrategy overrides)")
 
 	// Build the image checker with a keychain derived from the namespace's ConsensusCapsule
 	// pull secrets, so verification pulls can reach private/authenticated registries.
@@ -172,25 +172,25 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 			case registry.StateValid:
 			case registry.StateUnreachable:
 				unreachable++
-				common.Info(ctx, ReasonRegistryUnreachable).Str("component", string(name)).Str("image", res.Image).AnErr("error", res.Err).Msg("registry unreachable")
+				common.Info(ctx, ReasonRegistryUnreachable).Str("component", string(name)).Str("image", res.Image).AnErr("error", res.Err).Msg("Failed to reach registry")
 			case registry.StateHashMismatch:
 				allHashesValid = false
-				common.Info(ctx, ReasonRegistryHashMismatch).Str("component", string(name)).Str("image", res.Image).AnErr("error", res.Err).Msg("registry failed layer hash verification")
+				common.Info(ctx, ReasonRegistryHashMismatch).Str("component", string(name)).Str("image", res.Image).AnErr("error", res.Err).Msg("Registry failed layer hash verification")
 				r.eventf(ctx, &prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
 					"%s: registry %s failed layer hash verification: %v", name, res.Image, res.Err)
 			case registry.StateNoHashes:
 				allHashesValid = false
-				common.Info(ctx, ReasonRegistryNoHashes).Str("component", string(name)).Str("image", res.Image).AnErr("error", res.Err).Msg("image has no layer hashes configured")
+				common.Info(ctx, ReasonRegistryNoHashes).Str("component", string(name)).Str("image", res.Image).AnErr("error", res.Err).Msg("Found no layer hashes configured for image")
 				r.eventf(ctx, &prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
 					"%s: image %s has no layer hashes configured: %v", name, res.Image, res.Err)
 			case registry.StateDenied:
 				unreachable++
 				allHashesValid = false
-				common.Info(ctx, ReasonRegistryDenied).Str("component", string(name)).Str("image", res.Image).AnErr("error", res.Err).Msg("registry host denied by allow-list")
+				common.Info(ctx, ReasonRegistryDenied).Str("component", string(name)).Str("image", res.Image).AnErr("error", res.Err).Msg("Denied registry host by allow-list")
 				r.eventf(ctx, &prepare, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryDenied,
 					"%s: registry %s is not a permitted host", name, res.Image)
 			default:
-				common.Info(ctx, ReasonRegistryUnexpectedState).Str("component", string(name)).Str("image", res.Image).Str("state", string(res.State)).Msg("unexpected registry state")
+				common.Info(ctx, ReasonRegistryUnexpectedState).Str("component", string(name)).Str("image", res.Image).Str("state", string(res.State)).Msg("Encountered unexpected registry state")
 			}
 		}
 
@@ -300,7 +300,7 @@ func (r *NetworkUpgradePrepareReconciler) createPrefetchJobs(ctx context.Context
 	if !ucfg.PrefetchEnabled {
 		// Prefetch turned off via orbit.spec.upgrade.consensusNode.prefetch.enabled.
 		// Record it and let Freeze/Execute run normal registry validation.
-		common.Info(ctx, operatorv1alpha1.ReasonPrefetchDisabled).Msg("image prefetch disabled; skipping")
+		common.Info(ctx, operatorv1alpha1.ReasonPrefetchDisabled).Msg("Skipping image prefetch (disabled)")
 		setCondition(&prepare.Status.Conditions, metav1.Condition{
 			Type:    operatorv1alpha1.CondImagePrefetchCreated,
 			Status:  metav1.ConditionFalse,

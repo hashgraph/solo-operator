@@ -39,13 +39,13 @@ func RevalidateComponents(
 		}
 		current := selected.Get(name)
 		if current == nil {
-			common.Info(ctx, ReasonNoSelectedSource).Str("component", string(name)).Msg("no selectedSource in spec for component, skipping")
+			common.Info(ctx, ReasonNoSelectedSource).Str("component", string(name)).Msg("Skipping component: no selectedSource in spec")
 			continue
 		}
 
 		result, err := RevalidateAndFailover(ctx, checker, comp, *current, timeout, rng, strategyName)
 		if err != nil {
-			common.Warn(ctx, ReasonComponentInvalid).Str("component", string(name)).Err(err).Msg("no valid registry for component")
+			common.Warn(ctx, ReasonComponentInvalid).Str("component", string(name)).Err(err).Msg("Found no valid registry for component")
 			if onInvalid != nil {
 				onInvalid(name, err)
 			}

@@ -150,13 +150,13 @@ func (m *MarkerMonitor) Run(ctx context.Context) (retErr error) {
 	for {
 		select {
 		case <-ctx.Done():
-			logx.As().Info().Str("reason", ReasonMarkerMonitorStopped.String()).Msg("marker monitor stopped")
+			logx.As().Info().Str("reason", ReasonMarkerMonitorStopped.String()).Msg("Stopped marker monitor")
 			return nil
 		case <-timer.C:
 			next := m.poll(ctx, interval)
 			if next != interval {
 				logx.As().Info().Str("reason", ReasonPollIntervalChanged.String()).
-					Dur("from", interval).Dur("to", next).Msg("poll interval changed")
+					Dur("from", interval).Dur("to", next).Msg("Changed poll interval")
 				interval = next
 			}
 			timer.Reset(interval)
@@ -207,7 +207,7 @@ func (m *MarkerMonitor) poll(ctx context.Context, current time.Duration) time.Du
 		}
 		if err := m.dispatch(ctx, name); err != nil {
 			common.LogErr(logx.As().Error(), err, ReasonMarkerHandlerFailed).
-				Str("marker", name).Msg("failed to handle marker")
+				Str("marker", name).Msg("Failed to handle marker")
 			continue
 		}
 		switch name {

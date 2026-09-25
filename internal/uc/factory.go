@@ -233,7 +233,7 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 		ev = ev.Str(d.key, d.val)
 		msg += " " + d.key + "=" + d.val
 	}
-	ev.Msg("upgrade marker detected")
+	ev.Msg("Detected upgrade marker")
 	f.events.info(operationID, ReasonMarkerDetected.String(), msg)
 
 	if _, err := f.store.Persist(operationID, step, cr); err != nil {
@@ -253,7 +253,7 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 			f.clearRejected(operationID, step)
 			if delErr := f.store.Delete(operationID, step); delErr != nil {
 				logx.As().Warn().Err(delErr).Str("reason", ReasonCRPersistCleanupFailed.String()).
-					Str("operation_id", operationID).Msg("failed to delete persisted CR after AlreadyExists")
+					Str("operation_id", operationID).Msg("Failed to delete persisted CR after AlreadyExists")
 			}
 			logx.As().Debug().Str("reason", ReasonCRExists.String()).Str("operation_id", operationID).
 				Str("step", step).Str("cr_name", cr.GetName()).Msg("CR already exists — skipping create")
@@ -284,7 +284,7 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 			f.events.error(operationID, ReasonCRRejected.String(), "Admission rejected "+kind+"/"+cr.GetName())
 			if delErr := f.store.Delete(operationID, step); delErr != nil {
 				logx.As().Warn().Err(delErr).Str("reason", ReasonCRPersistCleanupFailed.String()).
-					Str("operation_id", operationID).Msg("failed to delete persisted CR after admission rejection")
+					Str("operation_id", operationID).Msg("Failed to delete persisted CR after admission rejection")
 			}
 			f.recordRejected(operationID, step)
 			return nil
@@ -303,10 +303,10 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 	f.clearRejected(operationID, step)
 	if err := f.store.Delete(operationID, step); err != nil {
 		logx.As().Warn().Err(err).Str("reason", ReasonCRPersistCleanupFailed.String()).
-			Str("operation_id", operationID).Msg("failed to delete persisted CR after create")
+			Str("operation_id", operationID).Msg("Failed to delete persisted CR after create")
 	}
 	logx.As().Info().Str("reason", ReasonCRDelivered.String()).Str("operation_id", operationID).
-		Str("cr_name", cr.GetName()).Str("cr_kind", kind).Msg("created CR")
+		Str("cr_name", cr.GetName()).Str("cr_kind", kind).Msg("Created CR")
 	f.events.info(operationID, ReasonCRDelivered.String(),
 		"Created "+kind+"/"+cr.GetName())
 	return nil

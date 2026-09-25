@@ -121,7 +121,7 @@ func (r *ConsensusCapsuleReconciler) resolveImageSources(ctx context.Context, ca
 			if resolved, ok := softwareVersionFromCache(sc.source, cached); ok {
 				pins = append(pins, pendingPin{target: sc.target, resolved: resolved})
 				common.Debug(ctx, ReasonImageSourceResolved).
-					Str("container", sc.name).Str("image", cached.Image).Msg("reusing cached resolved image")
+					Str("container", sc.name).Str("image", cached.Image).Msg("Reusing cached resolved image")
 				continue
 			}
 			// Cache reference no longer maps to a candidate — fall through and re-resolve.
@@ -148,7 +148,7 @@ func (r *ConsensusCapsuleReconciler) resolveImageSources(ctx context.Context, ca
 			requeue = true
 			r.eventImageSource(capsule, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
 				"%s: no valid registry available for softwareVersionSource", sc.name)
-			common.Warn(ctx, ReasonNoValidRegistry).Str("container", sc.name).Msg("no valid registry for softwareVersionSource")
+			common.Warn(ctx, ReasonNoValidRegistry).Str("container", sc.name).Msg("Found no valid registry for softwareVersionSource")
 			continue
 		}
 
@@ -174,7 +174,7 @@ func (r *ConsensusCapsuleReconciler) resolveImageSources(ctx context.Context, ca
 		statusChanged = true
 		r.eventImageSource(capsule, corev1.EventTypeNormal, operatorv1alpha1.EventRegistrySelected,
 			"%s: selected %s (digest %s, layerHashesVerified %v)", sc.name, winner.Image, winner.Digest, winner.LayerHashesVerified)
-		common.Info(ctx, ReasonImageSourceResolved).Str("container", sc.name).Str("image", winner.Image).Msg("resolved softwareVersionSource")
+		common.Info(ctx, ReasonImageSourceResolved).Str("container", sc.name).Str("image", winner.Image).Msg("Resolved softwareVersionSource")
 	}
 
 	if statusChanged {

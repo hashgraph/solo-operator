@@ -193,7 +193,7 @@ func (p *ProvisionerProxy) Handle(ctx context.Context, cr *unstructured.Unstruct
 		}()
 		if err := p.handleExecute(ctx, cr); err != nil {
 			logx.As().Error().Err(err).Str("reason", ReasonProvisionerProxyTransitionFailed.String()).
-				Str("operation_id", operationID).Msg("transition to PendingNodeUpgrade failed")
+				Str("operation_id", operationID).Msg("Failed to transition to PendingNodeUpgrade")
 			// HIP-1496 termination guarantee: fatal failures are reported as
 			// DaemonResult=False immediately so the operator marks the CR Failed.
 			// Transient failures are retried on the next watch tick (op-id left out
@@ -344,7 +344,7 @@ func (p *ProvisionerProxy) reportFailure(ctx context.Context, cr *unstructured.U
 	patch, err := buildProvisionerFailurePatch(cr, reason, message)
 	if err != nil {
 		logx.As().Error().Err(err).Str("reason", ReasonExecutePatchFailed.String()).
-			Str("cr_name", cr.GetName()).Msg("build DaemonResult=False patch failed")
+			Str("cr_name", cr.GetName()).Msg("Failed to build DaemonResult=False patch")
 		return
 	}
 
@@ -354,7 +354,7 @@ func (p *ProvisionerProxy) reportFailure(ctx context.Context, cr *unstructured.U
 	if _, err := resource.Patch(patchCtx, cr.GetName(), types.MergePatchType, patch,
 		metav1.PatchOptions{}, "status"); err != nil {
 		logx.As().Error().Err(err).Str("reason", ReasonExecutePatchFailed.String()).
-			Str("cr_name", cr.GetName()).Msg("patch DaemonResult=False failed")
+			Str("cr_name", cr.GetName()).Msg("Failed to patch DaemonResult=False")
 		return
 	}
 	logx.As().Warn().Str("reason", reason).Str("cr_name", cr.GetName()).

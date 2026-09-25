@@ -177,7 +177,7 @@ func scanConfigFiles(upgradePath string) ([]scannedFile, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			logx.As().Info().Str("reason", ReasonConfigDirAbsent.String()).
-				Str("dir", configDir).Msg("data/config/ absent — no config CRs to deploy")
+				Str("dir", configDir).Msg("Skipping config CR deployment: data/config/ directory is absent")
 		} else {
 			return nil, errx.WithHints(
 				errx.WithReason(errPersist.Wrap(err, "read config dir %s", configDir), ReasonUpgradePathUnreadable),
@@ -314,11 +314,11 @@ func (p *ProvisionerProxy) createConfigCR(ctx context.Context, operationID strin
 	case createErr == nil:
 		logx.As().Info().Str("reason", ReasonCRDelivered.String()).
 			Str("operation_id", operationID).Str("cr_kind", kind).
-			Str("cr_name", cr.GetName()).Msg("created config CR")
+			Str("cr_name", cr.GetName()).Msg("Created config CR")
 	case k8serrors.IsAlreadyExists(createErr):
 		logx.As().Debug().Str("reason", ReasonCRExists.String()).
 			Str("operation_id", operationID).Str("cr_kind", kind).
-			Str("cr_name", cr.GetName()).Msg("config CR already exists — skipping create")
+			Str("cr_name", cr.GetName()).Msg("Skipping create: config CR already exists")
 	default:
 		return configCRRef{}, errx.WithHints(
 			errx.WithReason(errK8sAPI.Wrap(createErr, "create %s %s", kind, cr.GetName()), ReasonConfigCRCreateFailed),

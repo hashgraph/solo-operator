@@ -159,7 +159,7 @@ func (s *CRStore) List() ([]PersistedCR, error) {
 					"A persisted CR file is corrupt; remove it from --cr-persist-path to let recovery proceed",
 				),
 				ReasonCRPersistCorrupt,
-			).Str("path", path).Msg("skipping corrupt persisted CR")
+			).Str("path", path).Msg("Skipping corrupt persisted CR")
 			continue
 		}
 		out = append(out, PersistedCR{
