@@ -121,9 +121,11 @@ type ConsensusNodeUpgrade struct {
 	// ConsensusCapsule images in-place and lets the StatefulSet RollingUpdate
 	// strategy restart the pod, skipping the scale-down-to-0 / scale-up-to-1
 	// sequence and saving ~10s. When false it uses the scale-down sequence.
-	// The operator forces the scale-down path regardless when a host-level
-	// provisioner daemon requires the pod to be fully absent before
-	// infrastructure work can proceed.
+	// Applies to both cluster-only and mainnet (provisioner-daemon) modes: a
+	// config-only upgrade behaves the same in either, because the config step is
+	// pod-state-agnostic. The operator forces the scale-down path regardless of
+	// this flag when the upgrade requires host-level infrastructure work (the pod
+	// must be fully absent before the provisioner daemon can proceed).
 	// +kubebuilder:default=true
 	// +optional
 	SkipScaleDown *bool `json:"skipScaleDown,omitempty"`
