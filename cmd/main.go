@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,10 +34,25 @@ import (
 	"github.com/hashgraph/solo-operator/internal/resources/helm"
 )
 
+// envPrefix maps a flag to <PREFIX><UPPER_SNAKE_FLAG>, e.g. --console-logging →
+// SOLO_OPERATOR_CONSOLE_LOGGING (matches the UC_/BEACON_ convention).
+const envPrefix = "SOLO_OPERATOR_"
+
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
 )
+
+// envBool seeds a flag default from a bool env var, so an explicit flag still
+// wins (flag > env > default). Returns def when unset or unparseable.
+func envBool(name string, def bool) bool {
+	if v, ok := os.LookupEnv(name); ok {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
+		}
+	}
+	return def
+}
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
@@ -61,8 +77,9 @@ func main() {
 	flag.BoolVar(&showVersion, "version", false, "Print version information and exit.")
 	flag.StringVar(&logLevel, "log-level", "info",
 		"Log level: trace, debug, info, warn, error.")
-	flag.BoolVar(&consoleLogging, "console-logging", false,
-		"If set, logs use the human-readable console writer instead of structured JSON.")
+	flag.BoolVar(&consoleLogging, "console-logging", envBool(envPrefix+"CONSOLE_LOGGING", true),
+		"Use the human-readable console writer (default). Set --console-logging=false or "+
+			envPrefix+"CONSOLE_LOGGING=false for structured JSON (the flag overrides the env var).")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -109,16 +126,13 @@ func main() {
 		fmt.Fprintf(os.Stderr, "failed to initialize logging: %v\n", err)
 		os.Exit(1)
 	}
-	// Stamp the build identity onto every log line so operators can tell which
-	// build is running. Image tags are reused (CI stamps 0.0.0-<sha>) and the
-	// version may be a fixed placeholder, so build_commit is the always-reliable
-	// discriminator. Done before SetLogger so controller-runtime's logr lines
-	// inherit the fields too.
+	// Stamp build identity on every line (both As() and the slog bridge) so a
+	// running build is identifiable; build_commit is the reliable discriminator
+	// since image tags/versions are reused.
 	logx.SetGlobalContext(func(c zerolog.Context) zerolog.Context {
 		return c.Str("build_version", version.Version).
 			Str("build_commit", version.Commit)
 	})
-	// Route controller-runtime's own logs through logx.
 	ctrl.SetLogger(logr.FromSlogHandler(logx.NewSlogHandler()))
 	bi := version.Get()
 	setupLog.Info("Starting solo-operator manager",
