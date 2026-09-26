@@ -152,7 +152,7 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 			return ctrl.Result{}, err
 		}
 		if sibling {
-			msg := fmt.Sprintf("operationId %q + consensusCapsule %q already used by another NetworkUpgradeExecute", execute.Spec.OperationID, execute.Spec.ConsensusCapsule)
+			msg := fmt.Sprintf("Duplicate operationId %q + consensusCapsule %q; already used by another NetworkUpgradeExecute", execute.Spec.OperationID, execute.Spec.ConsensusCapsule)
 			r.eventf(ctx, &execute, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
 			execute.Status.Phase = operatorv1alpha1.ExecutePhaseFailed
 			execute.Status.ObservedGeneration = execute.Generation
@@ -242,7 +242,7 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		}
 		r.logPhaseElapsed(ctx, &execute, string(operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon))
 		r.eventf(ctx, &execute, corev1.EventTypeNormal, operatorv1alpha1.EventReadyForDaemon,
-			"waiting for provisioner for operationId %q", execute.Spec.OperationID)
+			"Waiting for provisioner for operationId %q", execute.Spec.OperationID)
 		return ctrl.Result{Requeue: true}, nil
 	}
 
@@ -290,7 +290,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcileWaitingForDaemon(ctx context.
 			return ctrl.Result{}, wrapStatusUpdate(err, "updating status to failed")
 		}
 		r.eventf(ctx, execute, corev1.EventTypeWarning, operatorv1alpha1.EventUpgradeFailed,
-			"provisioner daemon reported failure: %s", daemonCond.Reason)
+			"Provisioner daemon reported failure: %s", daemonCond.Reason)
 		return ctrl.Result{}, nil
 	}
 
@@ -451,7 +451,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 					return ctrl.Result{}, wrapStatusUpdate(err, "updating status to failed")
 				}
 				r.eventf(ctx, execute, corev1.EventTypeWarning, operatorv1alpha1.EventUpgradeFailed,
-					"registry validation failed for operationId %q", execute.Spec.OperationID)
+					"Registry validation failed for operationId %q", execute.Spec.OperationID)
 				return ctrl.Result{}, errx.WithHints(
 					errx.WithReason(errReconcile.New("no valid registry for one or more components"), ReasonNoValidRegistry),
 					"Confirm at least one configured registry serves a valid image for each component")
@@ -569,7 +569,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 		}
 		r.logPhaseElapsed(ctx, execute, string(operatorv1alpha1.ExecutePhaseSucceeded))
 		r.eventf(ctx, execute, corev1.EventTypeNormal, operatorv1alpha1.EventUpgradeSucceeded,
-			"upgrade succeeded for operationId %q capsule %s", execute.Spec.OperationID, capsule.Name)
+			"Upgrade succeeded for operationId %q capsule %s", execute.Spec.OperationID, capsule.Name)
 		return ctrl.Result{}, nil
 
 	default: // upgradeWaiting — the consensus node has not yet reached ACTIVE.
@@ -658,7 +658,7 @@ func (r *NetworkUpgradeExecuteReconciler) warnDeadlineExceeded(
 	}
 
 	r.eventf(ctx, execute, corev1.EventTypeWarning, operatorv1alpha1.EventNodeActiveDeadlineExceeded,
-		"consensus node has not reached ACTIVE after %s for operationId %q; upgrade is still in progress",
+		"Consensus node has not reached ACTIVE after %s for operationId %q; upgrade is still in progress",
 		elapsed, execute.Spec.OperationID)
 
 	return ctrl.Result{RequeueAfter: alertEvery}, nil
@@ -762,7 +762,7 @@ func (r *NetworkUpgradeExecuteReconciler) ensureCapsuleOffline(
 			"Confirm the operator has patch permission on consensuscapsules")
 	}
 	r.eventf(ctx, execute, corev1.EventTypeNormal, operatorv1alpha1.EventPodScaledDown,
-		"scaled down ConsensusCapsule %s/%s for operationId %q", capsule.Namespace, capsule.Name, execute.Spec.OperationID)
+		"Scaled down ConsensusCapsule %s/%s for operationId %q", capsule.Namespace, capsule.Name, execute.Spec.OperationID)
 	return nil
 }
 

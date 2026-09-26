@@ -120,7 +120,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, err
 	}
 	if sibling {
-		msg := fmt.Sprintf("operationId %q already used by another NetworkUpgradePrepare", prepare.Spec.OperationID)
+		msg := fmt.Sprintf("Duplicate operationId %q; already used by another NetworkUpgradePrepare", prepare.Spec.OperationID)
 		r.eventf(ctx, &prepare, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
 		prepare.Status.Phase = operatorv1alpha1.PhaseFailed
 		prepare.Status.ObservedGeneration = prepare.Generation
@@ -402,13 +402,13 @@ func (r *NetworkUpgradePrepareReconciler) createPrefetchJobs(ctx context.Context
 
 	targetCount := len(targets)
 	r.eventf(ctx, prepare, corev1.EventTypeNormal, operatorv1alpha1.EventPrefetchCreated,
-		"created %d prefetch Jobs across %d nodes for %d images", targetCount, targetCount, len(images))
+		"Created %d prefetch Jobs across %d nodes for %d images", targetCount, targetCount, len(images))
 
 	setCondition(&prepare.Status.Conditions, metav1.Condition{
 		Type:    operatorv1alpha1.CondImagePrefetchCreated,
 		Status:  metav1.ConditionTrue,
 		Reason:  operatorv1alpha1.ReasonPrefetchCreated.String(),
-		Message: fmt.Sprintf("created %d prefetch Jobs across %d nodes for %d images", targetCount, targetCount, len(images)),
+		Message: fmt.Sprintf("Created %d prefetch Jobs across %d nodes for %d images", targetCount, targetCount, len(images)),
 	})
 	if err := r.Status().Update(ctx, prepare); err != nil {
 		return ctrl.Result{}, wrapStatusUpdate(err, "updating prefetch created status")
@@ -689,7 +689,7 @@ func (r *NetworkUpgradePrepareReconciler) checkPrefetchJobs(ctx context.Context,
 		if jobHasCondition(j, batchv1.JobFailed) {
 			anyFailed = true
 			r.eventf(ctx, prepare, corev1.EventTypeWarning, operatorv1alpha1.EventPrefetchFailed,
-				"prefetch Job %s failed", j.Name)
+				"Prefetch Job %s failed", j.Name)
 			continue
 		}
 		allDone = false
@@ -711,7 +711,7 @@ func (r *NetworkUpgradePrepareReconciler) checkPrefetchJobs(ctx context.Context,
 	} else {
 		cond.Message = "all prefetch Jobs succeeded; images cached on nodes"
 		r.eventf(ctx, prepare, corev1.EventTypeNormal, operatorv1alpha1.EventPrefetchCompleted,
-			"all prefetch Jobs succeeded for operationId %q", prepare.Spec.OperationID)
+			"All prefetch Jobs succeeded for operationId %q", prepare.Spec.OperationID)
 	}
 	setCondition(&prepare.Status.Conditions, cond)
 	if err := r.Status().Update(ctx, prepare); err != nil {

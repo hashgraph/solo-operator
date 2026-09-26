@@ -42,7 +42,7 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 			Reason:             "InvalidXML",
 			Message:            err.Error(),
 		})
-		common.Eventf(ctx, r.Recorder, obj, corev1.EventTypeWarning, common.ReasonInvalidContent, "ConfigMap", "invalid log4j2 XML: %s", err.Error())
+		common.Eventf(ctx, r.Recorder, obj, corev1.EventTypeWarning, common.ReasonInvalidContent, "ConfigMap", "Invalid log4j2 XML: %s", err.Error())
 		return ctrl.Result{}, nil
 	}
 

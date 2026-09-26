@@ -814,7 +814,7 @@ func (r *ConsensusCapsuleReconciler) emitPhaseEvent(capsule *operatorv1alpha1.Co
 	switch newPhase {
 	case operatorv1alpha1.PhaseActive:
 		r.Recorder.Eventf(capsule, nil, corev1.EventTypeNormal, operatorv1alpha1.EventConsensusNodeActive.String(),
-			"UpdateStatus", "consensus node reached platform status ACTIVE")
+			"UpdateStatus", "Consensus node reached platform status ACTIVE")
 	case operatorv1alpha1.PhaseFailed:
 		msg := "consensus node pod entered Failed phase"
 		if capsule.Status.PlatformStatus == operatorv1alpha1.PlatformStatusCatastrophicFailure {
@@ -969,7 +969,7 @@ func (r *ConsensusCapsuleReconciler) finalizeManualStopped(ctx context.Context, 
 
 	if up {
 		if r.Recorder != nil && oldPhase != operatorv1alpha1.PhaseRunning {
-			r.Recorder.Eventf(capsule, nil, corev1.EventTypeNormal, operatorv1alpha1.EventConsensusNodeRunning.String(), "UpdateStatus", "platform metrics unavailable but consensus process running")
+			r.Recorder.Eventf(capsule, nil, corev1.EventTypeNormal, operatorv1alpha1.EventConsensusNodeRunning.String(), "UpdateStatus", "Platform metrics unavailable but consensus process running")
 		}
 		return operatorv1alpha1.PhaseRunning
 	}
