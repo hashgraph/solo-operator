@@ -624,8 +624,11 @@ func volumeOrEmptyDir(name, pvcName string, spec *corev1.PersistentVolumeClaimSp
 	}
 }
 
+// event records sidecar skip/disabled events. These fire on every reconcile, so
+// the paired log line uses EventfDebug to stay out of the default INFO stream;
+// the K8s Event is still recorded for `kubectl describe`.
 func (r *StatefulSetSubReconciler) event(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule, eventtype string, reason errx.Reason, msg string) {
-	common.Eventf(ctx, r.Recorder, capsule, eventtype, reason, "StatefulSet", "%s", msg)
+	common.EventfDebug(ctx, r.Recorder, capsule, eventtype, reason, "StatefulSet", "%s", msg)
 }
 
 // addSidecarContainers adds optional sidecar containers to the StatefulSet pod template.
