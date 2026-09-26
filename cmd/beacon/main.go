@@ -193,6 +193,8 @@ func initLogging(level string) error {
 	if err := logx.Initialize(logx.LoggingConfig{
 		Level:          level,
 		ConsoleLogging: true,
+		UTC:            true,
+		IncludeCaller:  true,
 	}); err != nil {
 		return err
 	}

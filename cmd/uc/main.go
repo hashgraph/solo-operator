@@ -190,6 +190,8 @@ func run(cmd *cobra.Command, _ []string) error {
 	if err := logx.Initialize(logx.LoggingConfig{
 		Level:          flagLogLevel,
 		ConsoleLogging: true,
+		UTC:            true,
+		IncludeCaller:  true,
 	}); err != nil {
 		return err
 	}

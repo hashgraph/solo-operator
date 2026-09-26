@@ -102,6 +102,8 @@ func main() {
 	if err := logx.Initialize(logx.LoggingConfig{
 		Level:          logLevel,
 		ConsoleLogging: consoleLogging,
+		UTC:            true,
+		IncludeCaller:  true,
 	}); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to initialize logging: %v\n", err)
 		os.Exit(1)
