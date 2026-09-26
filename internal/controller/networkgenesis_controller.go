@@ -156,7 +156,7 @@ func (r *NetworkGenesisReconciler) run(ctx context.Context, ng *operatorv1alpha1
 		}
 
 		if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.PublicKeysConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,
-			genesis.BuildPublicKeys(materials), nil); err != nil {
+			genesis.BuildPublicKeys(materials, orbit.NodeNameZeroBased()), nil); err != nil {
 			return nil, errx.WithHints(
 				errx.WithReason(errK8sAPI.Wrap(err, "upsert %s", genesis.PublicKeysConfigMapName), ReasonConfigMapUpsert),
 				"Confirm the operator has create and update permission on configmaps")

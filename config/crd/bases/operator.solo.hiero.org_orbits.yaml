@@ -51,6 +51,21 @@ spec:
               consensus:
                 description: Consensus contains shared configuration for all ConsensusCapsules
                 properties:
+                  featureGates:
+                    description: |-
+                      FeatureGates holds transitional, rollout-only consensus feature gates. See
+                      ConsensusFeatureGates.
+                    properties:
+                      nodeNameZeroBased:
+                        default: false
+                        description: |-
+                          NodeNameZeroBased switches gossip key-file naming node<id+1> → node<id>.
+                          Maturity: Alpha. Default: false (node<id+1>). Removal: delete once 0-based is GA in
+                          the CN.
+                          ⚠ Flip to true ONLY in lockstep with a CN version whose EnhancedKeyStoreLoader loads
+                            0-based names — a forward-compat seam, inert (and breaking) until then.
+                        type: boolean
+                    type: object
                   genesis:
                     description: Genesis contains genesis-specific configuration
                     properties:
@@ -171,6 +186,10 @@ spec:
                       When true the UC sidecar runs as UC_MODE=mainnet (defers the execute phase
                       to the host daemon). When false (default) the UC runs as UC_MODE=cluster-only
                       and fulfils the provisioner role itself.
+
+                      Deprecated: promoted to network-wide config at OrbitSpec.ProvisionerDaemonEnabled.
+                      Retained for one release of dual-read back-compat; new writers should set the
+                      top-level field. Read the resolved value via Orbit.IsProvisionerDaemonEnabled().
                     type: boolean
                   provisioningModel:
                     description: ProvisioningModel specifies how consensus nodes are
@@ -200,6 +219,15 @@ spec:
                 description: Lifetime specifies the duration for this Orbit (e.g.,
                   "P2DT15H" or "2 days 15 hours")
                 type: string
+              provisionerDaemonEnabled:
+                description: |-
+                  ProvisionerDaemonEnabled indicates that a host-level provisioner daemon
+                  (solo-provisioner) runs on bare-metal nodes rather than inside Kubernetes.
+                  When true the consensus UC sidecar runs as UC_MODE=mainnet (defers the execute
+                  phase to the host daemon); when false (or unset) the UC runs as UC_MODE=cluster-only.
+                  Pointer for back-compat: when unset, falls back to the deprecated
+                  Consensus.ProvisionerDaemonEnabled. Read via Orbit.IsProvisionerDaemonEnabled().
+                type: boolean
               requireDigestOnDeploy:
                 description: |-
                   RequireDigestOnDeploy, when true, requires every ConsensusCapsule in this Orbit to run
