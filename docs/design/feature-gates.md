@@ -44,11 +44,30 @@ so a gate reads as visibly temporary versus permanent config. Example:
 The override is the manual escape hatch; the default is what makes a flip happen
 automatically on operator upgrade.
 
-> Ship the gate as a nullable `*bool` with **no** `kubebuilder` default from Alpha.
-> A materialized default would persist an explicit value into every Orbit, which
+> Ship boolean gates as a nullable `*bool` with **no** `kubebuilder` default (and
+> non-boolean gates likewise optional, with no persisted default), from Alpha. A
+> materialized default would persist an explicit value into every Orbit, which
 > later reads as a stale override and blocks the operator-default flip — forcing a
 > data-cleanup migration. With no persisted default, unset Orbits follow the
 > operator default automatically and the flip needs no data rewrite.
+
+### Explicit overrides are a temporary hold, not a permanent pin
+
+An override is only valid **within a component-compatible window** — use it to hold
+a single cluster briefly (canary, rollback), not to pin a convention forever.
+
+- **Alpha:** an explicit value equal to the default is harmless.
+- **Beta:** once the infra-upgrade brings the new component baseline and the
+  operator default flips, an override pinning the **old** value is now incompatible
+  with the deployed component (for node-name: the CN loads 0-based names but the
+  operator would mount 1-based → the node can't load its keys). The safety-net
+  migration's main job is to clear such incompatible overrides (→ unset) so the
+  Orbit follows the operator default; the operator may also surface a warning. This
+  is why the "optional" migration is worth keeping — it earns its keep for clusters
+  that set an explicit value.
+- **GA:** the field is removed from the CRD and unread; the apiserver prunes any
+  leftover value on next write and behavior is hardcoded. A stale override has no
+  effect.
 
 ## Flip lifecycle
 
