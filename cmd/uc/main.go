@@ -193,6 +193,7 @@ func run(cmd *cobra.Command, _ []string) error {
 		ConsoleLogging: true,
 		UTC:            true,
 		IncludeCaller:  true,
+		IncludePackage: true,
 	}); err != nil {
 		return err
 	}

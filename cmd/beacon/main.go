@@ -196,6 +196,7 @@ func initLogging(level string) error {
 		ConsoleLogging: true,
 		UTC:            true,
 		IncludeCaller:  true,
+		IncludePackage: true,
 	}); err != nil {
 		return err
 	}

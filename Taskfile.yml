@@ -107,7 +107,7 @@ tasks:
   run:
     desc: Run the operator locally
     cmds:
-      - go run cmd/main.go --log-level=debug
+      - go run ./cmd --log-level=debug
 
   test:setup:
     desc: Setup envtest binaries for integration tests

@@ -122,6 +122,7 @@ func main() {
 		ConsoleLogging: consoleLogging,
 		UTC:            true,
 		IncludeCaller:  true,
+		IncludePackage: true,
 	}); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to initialize logging: %v\n", err)
 		os.Exit(1)
