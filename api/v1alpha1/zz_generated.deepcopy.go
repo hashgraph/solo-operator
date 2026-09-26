@@ -3459,11 +3459,6 @@ func (in *OrbitSpec) DeepCopyInto(out *OrbitSpec) {
 		*out = new(OrbitUpgrade)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.ProvisionerDaemonEnabled != nil {
-		in, out := &in.ProvisionerDaemonEnabled, &out.ProvisionerDaemonEnabled
-		*out = new(bool)
-		**out = **in
-	}
 	in.Consensus.DeepCopyInto(&out.Consensus)
 }
 

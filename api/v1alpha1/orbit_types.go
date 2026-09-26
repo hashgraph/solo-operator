@@ -48,11 +48,11 @@ type OrbitSpec struct {
 	// ProvisionerDaemonEnabled indicates that a host-level provisioner daemon
 	// (solo-provisioner) runs on bare-metal nodes rather than inside Kubernetes.
 	// When true the consensus UC sidecar runs as UC_MODE=mainnet (defers the execute
-	// phase to the host daemon); when false (or unset) the UC runs as UC_MODE=cluster-only.
-	// Pointer for back-compat: when unset, falls back to the deprecated
-	// Consensus.ProvisionerDaemonEnabled. Read via Orbit.IsProvisionerDaemonEnabled().
+	// phase to the host daemon); when false (default) the UC runs as UC_MODE=cluster-only.
+	// This is a host-level, cross-component infra fact, so it is network-wide config.
+	// +kubebuilder:default=false
 	// +optional
-	ProvisionerDaemonEnabled *bool `json:"provisionerDaemonEnabled,omitempty"`
+	ProvisionerDaemonEnabled bool `json:"provisionerDaemonEnabled,omitempty"`
 
 	// Consensus contains shared configuration for all ConsensusCapsules
 	Consensus OrbitConsensus `json:"consensus"`
@@ -237,19 +237,6 @@ type OrbitConsensus struct {
 	// +optional
 	ProvisioningModel string `json:"provisioningModel,omitempty"`
 
-	// ProvisionerDaemonEnabled indicates that a host-level provisioner daemon
-	// (solo-provisioner) runs on bare-metal nodes rather than inside Kubernetes.
-	// When true the UC sidecar runs as UC_MODE=mainnet (defers the execute phase
-	// to the host daemon). When false (default) the UC runs as UC_MODE=cluster-only
-	// and fulfils the provisioner role itself.
-	//
-	// Deprecated: promoted to network-wide config at OrbitSpec.ProvisionerDaemonEnabled.
-	// Retained for one release of dual-read back-compat; new writers should set the
-	// top-level field. Read the resolved value via Orbit.IsProvisionerDaemonEnabled().
-	// +kubebuilder:default=false
-	// +optional
-	ProvisionerDaemonEnabled bool `json:"provisionerDaemonEnabled,omitempty"`
-
 	// FeatureGates holds transitional, rollout-only consensus feature gates. See
 	// ConsensusFeatureGates.
 	// +optional
@@ -353,15 +340,6 @@ type Orbit struct {
 
 	Spec   OrbitSpec   `json:"spec,omitempty"`
 	Status OrbitStatus `json:"status,omitempty"`
-}
-
-// IsProvisionerDaemonEnabled resolves the provisioner-daemon setting, preferring the
-// top-level OrbitSpec field and falling back to the deprecated Consensus-scoped field.
-func (o *Orbit) IsProvisionerDaemonEnabled() bool {
-	if o.Spec.ProvisionerDaemonEnabled != nil {
-		return *o.Spec.ProvisionerDaemonEnabled
-	}
-	return o.Spec.Consensus.ProvisionerDaemonEnabled
 }
 
 // IsNodeNameZeroBased resolves the consensus nodeNameZeroBased feature gate (default false).

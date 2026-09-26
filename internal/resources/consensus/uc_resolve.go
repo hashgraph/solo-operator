@@ -37,7 +37,7 @@ func ResolveUCMode(ctx context.Context, c client.Client, capsule *operatorv1alph
 		return uc.ModeClusterOnly, errx.WithReason(errConfigInvalid.Wrap(err, "get Orbit %s", capsule.Spec.Orbit), ReasonOrbitRequired)
 	}
 
-	if orbit.IsProvisionerDaemonEnabled() {
+	if orbit.Spec.ProvisionerDaemonEnabled {
 		return uc.ModeMainnet, nil
 	}
 	return uc.ModeClusterOnly, nil

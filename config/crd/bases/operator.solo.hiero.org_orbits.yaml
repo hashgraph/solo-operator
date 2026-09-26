@@ -176,19 +176,6 @@ spec:
                     required:
                     - addressBook
                     type: object
-                  provisionerDaemonEnabled:
-                    default: false
-                    description: |-
-                      ProvisionerDaemonEnabled indicates that a host-level provisioner daemon
-                      (solo-provisioner) runs on bare-metal nodes rather than inside Kubernetes.
-                      When true the UC sidecar runs as UC_MODE=mainnet (defers the execute phase
-                      to the host daemon). When false (default) the UC runs as UC_MODE=cluster-only
-                      and fulfils the provisioner role itself.
-
-                      Deprecated: promoted to network-wide config at OrbitSpec.ProvisionerDaemonEnabled.
-                      Retained for one release of dual-read back-compat; new writers should set the
-                      top-level field. Read the resolved value via Orbit.IsProvisionerDaemonEnabled().
-                    type: boolean
                   provisioningModel:
                     description: ProvisioningModel specifies how consensus nodes are
                       deployed
@@ -218,13 +205,13 @@ spec:
                   "P2DT15H" or "2 days 15 hours")
                 type: string
               provisionerDaemonEnabled:
+                default: false
                 description: |-
                   ProvisionerDaemonEnabled indicates that a host-level provisioner daemon
                   (solo-provisioner) runs on bare-metal nodes rather than inside Kubernetes.
                   When true the consensus UC sidecar runs as UC_MODE=mainnet (defers the execute
-                  phase to the host daemon); when false (or unset) the UC runs as UC_MODE=cluster-only.
-                  Pointer for back-compat: when unset, falls back to the deprecated
-                  Consensus.ProvisionerDaemonEnabled. Read via Orbit.IsProvisionerDaemonEnabled().
+                  phase to the host daemon); when false (default) the UC runs as UC_MODE=cluster-only.
+                  This is a host-level, cross-component infra fact, so it is network-wide config.
                 type: boolean
               requireDigestOnDeploy:
                 description: |-
