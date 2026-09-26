@@ -39,7 +39,7 @@ func capsuleRegistryChecker(ctx context.Context, c client.Client, override regis
 		// A malformed pull secret must not fail the reconcile (which would infinite-backoff
 		// and block even public upgrades). Log it and fall back to the default keychain.
 		common.Warn(ctx, ReasonKeychainBuildFailed).AnErr("error", err).
-			Msg("building registry keychain from capsule pull secrets failed; falling back to default keychain")
+			Msg("Falling back to default keychain: failed to build registry keychain from capsule pull secrets")
 		return registry.OCIChecker{AllowedHosts: allowedHosts}, nil
 	}
 	return registry.OCIChecker{Keychain: kc, AllowedHosts: allowedHosts}, nil

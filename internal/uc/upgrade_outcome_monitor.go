@@ -4,6 +4,7 @@ package uc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -214,19 +215,19 @@ func (m *UpgradeOutcomeMonitor) Run(ctx context.Context) (retErr error) {
 		if r := recover(); r != nil {
 			logx.As().Error().Str("reason", ReasonUpgradeOutcomeMonitorPanic.String()).
 				Str("namespace", m.cfg.Namespace).Interface("panic", r).
-				Msg("panic in upgrade-outcome monitor — recovering")
+				Msg("Recovering from panic in upgrade-outcome monitor")
 			retErr = errx.WithReason(errPanic.New("recovered panic in upgrade-outcome monitor: %v", r), ReasonUpgradeOutcomeMonitorPanic)
 		}
 	}()
 
 	logx.As().Info().Str("reason", ReasonUpgradeOutcomeMonitorStarted.String()).
-		Str("namespace", m.cfg.Namespace).Msg("upgrade-outcome monitor started")
+		Str("namespace", m.cfg.Namespace).Msg("Started upgrade-outcome monitor")
 
 	backoff := outcomeBackoffInitial
 	for {
 		prepareRV, freezeRV, executeRV, abortRV, listErr := m.listAndSeed(ctx)
 		if ctx.Err() != nil {
-			logx.As().Info().Str("reason", ReasonUpgradeOutcomeMonitorStopped.String()).Msg("upgrade-outcome monitor stopped")
+			logx.As().Info().Str("reason", ReasonUpgradeOutcomeMonitorStopped.String()).Msg("Stopped upgrade-outcome monitor")
 			return nil
 		}
 		if listErr != nil {
@@ -234,7 +235,7 @@ func (m *UpgradeOutcomeMonitor) Run(ctx context.Context) (retErr error) {
 			m.setConnectivityError(listReason.String(), listErr.Error(),
 				fmt.Sprintf("Verify RBAC for all networkupgrade* CRs in namespace %s", m.cfg.Namespace))
 			logx.As().Warn().Err(listErr).Str("reason", listReason.String()).
-				Dur("retry_in", backoff).Msg("list error — retrying")
+				Dur("retry_in", backoff).Msg("Error occurred during list, retrying")
 			if !sleepCtx(ctx, backoff) {
 				return nil
 			}
@@ -245,7 +246,7 @@ func (m *UpgradeOutcomeMonitor) Run(ctx context.Context) (retErr error) {
 
 		err := m.runWatch(ctx, prepareRV, freezeRV, executeRV, abortRV)
 		if ctx.Err() != nil {
-			logx.As().Info().Str("reason", ReasonUpgradeOutcomeMonitorStopped.String()).Msg("upgrade-outcome monitor stopped")
+			logx.As().Info().Str("reason", ReasonUpgradeOutcomeMonitorStopped.String()).Msg("Stopped upgrade-outcome monitor")
 			return nil
 		}
 		if err == nil {
@@ -259,12 +260,12 @@ func (m *UpgradeOutcomeMonitor) Run(ctx context.Context) (retErr error) {
 			m.setConnectivityError(ReasonProvisionerProxyAuthError.String(), err.Error(),
 				"Restore RBAC for the UC ServiceAccount on networkupgradeexecutes and networkupgradefreezeaborts")
 			logx.As().Warn().Err(err).Str("reason", ReasonProvisionerProxyAuthError.String()).
-				Dur("retry_in", backoff).Msg("auth error watching NetworkUpgrade* CRs")
+				Dur("retry_in", backoff).Msg("Failed to watch NetworkUpgrade* CRs (auth error), retrying")
 		} else {
 			m.setConnectivityError(ReasonProvisionerProxyWatchError.String(), err.Error(),
 				"Check connectivity to the Kubernetes API server")
 			logx.As().Warn().Err(err).Str("reason", ReasonProvisionerProxyWatchError.String()).
-				Dur("retry_in", backoff).Msg("watch error — retrying")
+				Dur("retry_in", backoff).Msg("Error occurred during watch, retrying")
 		}
 		if !sleepCtx(ctx, backoff) {
 			return nil
@@ -413,7 +414,7 @@ func (m *UpgradeOutcomeMonitor) runWatch(ctx context.Context, prepareRV, freezeR
 	defer func() {
 		if r := recover(); r != nil {
 			logx.As().Error().Str("reason", ReasonProvisionerProxyWatchPanic.String()).Interface("panic", r).
-				Msg("panic in watch loop — recovering")
+				Msg("Recovering from panic in watch loop")
 			retErr = errx.WithReason(errK8sAPI.New("recovered panic in watch loop: %v", r), ReasonProvisionerProxyWatchPanic)
 		}
 	}()
@@ -657,9 +658,10 @@ func (m *UpgradeOutcomeMonitor) observePhase(cr *unstructured.Unstructured) {
 	if from == "" {
 		from = nonePhase
 	}
+	kind := cr.GetKind()
 	logx.As().Info().Str("reason", ReasonPhaseChanged.String()).Str("operation_id", operationID).
-		Str("cr_kind", cr.GetKind()).Str("step", step).Str("phase", phase).Str("previous_phase", from).
-		Msg("CR phase changed")
+		Str("cr_kind", kind).Str("step", step).Str("phase", phase).Str("previous_phase", from).
+		Msgf("Changed %s phase: %s → %s", kind, from, phase)
 	m.events.info(operationID, ReasonPhaseChanged.String(),
 		fmt.Sprintf("%s phase %s -> %s", step, from, phase))
 
@@ -852,7 +854,7 @@ func (m *UpgradeOutcomeMonitor) pruneStaleOperations(ctx context.Context, now ti
 		// Channel 2: structured stdout log (reason= is alertable in Loki).
 		logx.As().Warn().Str("reason", ReasonStaleOperationPruned.String()).
 			Str("operation_id", opID).
-			Msg("evicted in-memory state for an operation past the retention window that never reached a terminal phase; the on-disk data/upgrade/current package may warrant inspection")
+			Msg("Evicted in-memory state for an operation past the retention window that never reached a terminal phase; the on-disk data/upgrade/current package may warrant inspection")
 	}
 }
 
@@ -956,9 +958,16 @@ func (m *UpgradeOutcomeMonitor) archiveOperation(ctx context.Context, operationI
 			})
 		cancel()
 		if err != nil {
-			logx.As().Warn().Err(err).Str("reason", ReasonCRArchiveFailed.String()).
+			// A canceled context is the expected shutdown path (the parent ctx is
+			// canceled mid-list), not a real archive failure — log it at debug so
+			// clean shutdowns stay quiet.
+			ev := logx.As().Warn()
+			if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+				ev = logx.As().Debug()
+			}
+			ev.Err(err).Str("reason", ReasonCRArchiveFailed.String()).
 				Str("operation_id", operationID).Str("resource", gvr.Resource).
-				Msg("failed to list CRs for operation archive — will retry")
+				Msg("Failed to list CRs for operation archive, retrying")
 			continue
 		}
 		for i := range list.Items {
@@ -983,12 +992,12 @@ func (m *UpgradeOutcomeMonitor) archiveCR(ctx context.Context, gvr schema.GroupV
 		Patch(patchCtx, cr.GetName(), types.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
 		logx.As().Warn().Str("reason", ReasonCRArchiveFailed.String()).
 			Str("cr_name", cr.GetName()).Str("resource", gvr.Resource).Err(err).
-			Msg("failed to archive CR — will retry on next list cycle")
+			Msg("Failed to archive CR; will retry on next list cycle")
 		return
 	}
 	logx.As().Info().Str("reason", ReasonCRArchived.String()).
 		Str("cr_name", cr.GetName()).Str("operation_id", operationIDOf(cr)).
-		Msg("archived operation CR")
+		Msg("Archived operation CR")
 }
 
 // matchesDiskOperationID returns true when the CR's operationID matches the
@@ -1014,7 +1023,7 @@ func (m *UpgradeOutcomeMonitor) matchesDiskOperationID(cr *unstructured.Unstruct
 	diskOpID, _, _, found, err := deriveOperationIDPrimary(m.cfg.UpgradePath, m.cfg.NodeID)
 	if err != nil {
 		addExtra(logx.As().Warn().Err(err).Str("reason", ReasonUpgradePackageRotateFailed.String())).
-			Msg("could not read disk operationId — skipping")
+			Msg("Skipping: failed to read disk operationId")
 		return false
 	}
 	if found {
@@ -1036,12 +1045,12 @@ func (m *UpgradeOutcomeMonitor) matchesDiskOperationID(cr *unstructured.Unstruct
 	entries, err := os.ReadDir(m.cfg.UpgradePath)
 	if err != nil {
 		addExtra(logx.As().Warn().Err(err).Str("reason", ReasonUpgradePackageRotateFailed.String())).
-			Msg("could not read upgrade dir for fallback timestamp check — skipping")
+			Msg("Skipping: failed to read upgrade dir for fallback timestamp check")
 		return false
 	}
 	if len(entries) == 0 {
 		addExtra(logx.As().Debug().Str("reason", ReasonUpgradePackageRotated.String())).
-			Msg("no execute_immediate.mf and current/ is empty — already rotated, skipping")
+			Msg("Skipping: no execute_immediate.mf and current/ is empty (already rotated)")
 		return false
 	}
 	if !crCreatedAt.IsZero() {
@@ -1051,7 +1060,7 @@ func (m *UpgradeOutcomeMonitor) matchesDiskOperationID(cr *unstructured.Unstruct
 				addExtra(logx.As().Info().
 					Str("newest_file_mtime", info.ModTime().UTC().Format(time.RFC3339)).
 					Str("cr_created_at", crCreatedAt.UTC().Format(time.RFC3339))).
-					Msg("files in current/ are newer than CR — CN is writing a new package, skipping")
+					Msg("Skipping: files in current/ are newer than CR (CN is writing a new package)")
 				return false
 			}
 		}
@@ -1063,13 +1072,13 @@ func (m *UpgradeOutcomeMonitor) matchesDiskOperationID(cr *unstructured.Unstruct
 	crVersion, ok := versionFromOperationID(operationID)
 	if !ok {
 		addExtra(logx.As().Debug().Str("reason", ReasonManifestInvalid.String())).
-			Msg("no execute_immediate.mf and operationId has unrecognised format — skipping")
+			Msg("Skipping: no execute_immediate.mf and operationId has unrecognised format")
 		return false
 	}
 	diskVersion, _, versionFound, versionErr := parseVersionFile(m.cfg.UpgradePath)
 	if versionErr != nil {
 		addExtra(logx.As().Warn().Err(versionErr).Str("reason", ReasonUpgradePackageRotateFailed.String())).
-			Msg("could not read VERSION file — skipping")
+			Msg("Skipping: failed to read VERSION file")
 		return false
 	}
 	if versionFound && diskVersion != crVersion {
@@ -1079,6 +1088,6 @@ func (m *UpgradeOutcomeMonitor) matchesDiskOperationID(cr *unstructured.Unstruct
 	}
 
 	addExtra(logx.As().Debug().Str("disk_version", diskVersion)).
-		Msg("no execute_immediate.mf but files predate CR and version matches — treating current/ as stale package")
+		Msg("Treating current/ as stale package: no execute_immediate.mf, files predate CR, version matches")
 	return true
 }

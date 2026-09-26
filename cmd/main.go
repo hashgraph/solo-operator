@@ -118,7 +118,7 @@ func main() {
 	// Route controller-runtime's own logs through logx.
 	ctrl.SetLogger(logr.FromSlogHandler(logx.NewSlogHandler()))
 	bi := version.Get()
-	setupLog.Info("starting solo-operator manager",
+	setupLog.Info("Starting solo-operator manager",
 		"build_date", bi.Date, "go_version", bi.GoVersion)
 
 	// If the enable-http2 flag is false (the default), http/2 should be disabled
@@ -126,7 +126,7 @@ func main() {
 	// prevent from being affected by the HTTP/2 Stream Cancellation and
 	// Rapid Reset CVEs.
 	disableHTTP2 := func(c *tls.Config) {
-		setupLog.Info("disabling http/2")
+		setupLog.Info("Disabling HTTP/2")
 		c.NextProtos = []string{"http/1.1"}
 	}
 
@@ -380,7 +380,7 @@ func main() {
 	}
 
 	info := version.Get()
-	setupLog.Info("starting manager", "version", info.Version, "commit", info.Commit, "buildDate", info.Date)
+	setupLog.Info("Starting manager", "version", info.Version, "commit", info.Commit, "buildDate", info.Date)
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)

@@ -81,7 +81,7 @@ func (k *Keystore) Load(account uint64) (hiero.PrivateKey, error) {
 		Uint64("account", account).
 		Str("algorithm", Algorithm(key)).
 		Str("public_key", key.PublicKey().String()).
-		Msg("loaded signing key")
+		Msg("Loaded signing key")
 
 	return key, nil
 }

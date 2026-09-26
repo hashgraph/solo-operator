@@ -177,7 +177,7 @@ func scanConfigFiles(upgradePath string) ([]scannedFile, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			logx.As().Info().Str("reason", ReasonConfigDirAbsent.String()).
-				Str("dir", configDir).Msg("data/config/ absent — no config CRs to deploy")
+				Str("dir", configDir).Msg("Skipping config CR deployment: data/config/ directory is absent")
 		} else {
 			return nil, errx.WithHints(
 				errx.WithReason(errPersist.Wrap(err, "read config dir %s", configDir), ReasonUpgradePathUnreadable),
@@ -207,7 +207,7 @@ func scanConfigFiles(upgradePath string) ([]scannedFile, error) {
 		if _, skip := ignoredConfigFilenames[name]; skip {
 			logx.As().Info().Str("reason", ReasonConfigFileIgnored.String()).
 				Str("filename", name).Str("dir", configDir).
-				Msg("config file is skipped (no config CR)")
+				Msg("Skipped config file (no config CR)")
 			continue
 		}
 		entry, ok := configFileKinds[name]
@@ -215,7 +215,7 @@ func scanConfigFiles(upgradePath string) ([]scannedFile, error) {
 			logx.As().Error().Str("reason", ReasonConfigFileUnrecognised.String()).
 				Str("filename", name).Str("dir", configDir).
 				Strs("recognised", knownConfigFilenames()).
-				Msg("unrecognised config filename — aborting execute phase")
+				Msg("Aborting execute phase: unrecognised config filename")
 			return nil, errx.WithHints(
 				errx.WithReason(errConfigFileInvalid.New("unrecognised config filename %q in %s", name, configDir), ReasonConfigFileUnrecognised),
 				"Remove or rename the unrecognised file from data/config/ in the upgrade package",
@@ -314,11 +314,11 @@ func (p *ProvisionerProxy) createConfigCR(ctx context.Context, operationID strin
 	case createErr == nil:
 		logx.As().Info().Str("reason", ReasonCRDelivered.String()).
 			Str("operation_id", operationID).Str("cr_kind", kind).
-			Str("cr_name", cr.GetName()).Msg("created config CR")
+			Str("cr_name", cr.GetName()).Msg("Created config CR")
 	case k8serrors.IsAlreadyExists(createErr):
 		logx.As().Debug().Str("reason", ReasonCRExists.String()).
 			Str("operation_id", operationID).Str("cr_kind", kind).
-			Str("cr_name", cr.GetName()).Msg("config CR already exists — skipping create")
+			Str("cr_name", cr.GetName()).Msg("Skipping create: config CR already exists")
 	default:
 		return configCRRef{}, errx.WithHints(
 			errx.WithReason(errK8sAPI.Wrap(createErr, "create %s %s", kind, cr.GetName()), ReasonConfigCRCreateFailed),
@@ -375,7 +375,7 @@ func (p *ProvisionerProxy) deployConfigCRs(ctx context.Context, operationID stri
 	if len(refs) == 0 {
 		logx.As().Info().Str("reason", ReasonConfigDirAbsent.String()).
 			Str("operation_id", operationID).
-			Msg("no config files in upgrade package — skipping config CR deployment")
+			Msg("Skipping config CR deployment: no config files in upgrade package")
 		return nil
 	}
 
@@ -410,7 +410,7 @@ func (p *ProvisionerProxy) deployBlockNodesConfigCR(ctx context.Context, operati
 		if os.IsNotExist(err) {
 			logx.As().Info().Str("reason", ReasonConfigDirAbsent.String()).
 				Str("operation_id", operationID).Str("path", path).
-				Msg("no per-node block-node config in upgrade package — skipping")
+				Msg("Skipping: no per-node block-node config in upgrade package")
 			return nil, nil
 		}
 		return nil, errx.WithHints(
@@ -487,7 +487,7 @@ func waitForConfigCRsValid(ctx context.Context, client dynamic.Interface, namesp
 			if err != nil {
 				logx.As().Warn().Err(err).Str("reason", ReasonConfigCRGetFailed.String()).
 					Str("operation_id", operationID).Str("cr_kind", ref.kind).Str("cr_name", name).
-					Msg("could not get config CR — will retry")
+					Msg("Failed to get config CR, retrying")
 				continue
 			}
 
@@ -495,7 +495,7 @@ func waitForConfigCRsValid(ctx context.Context, client dynamic.Interface, namesp
 			if !condFound {
 				logx.As().Debug().
 					Str("operation_id", operationID).Str("cr_kind", ref.kind).Str("cr_name", name).
-					Msg("config CR has no Valid condition yet — waiting")
+					Msg("Waiting for config CR Valid condition")
 				continue
 			}
 
@@ -503,7 +503,7 @@ func waitForConfigCRsValid(ctx context.Context, client dynamic.Interface, namesp
 			case string(metav1.ConditionTrue):
 				logx.As().Info().Str("reason", ReasonConfigCRsDeployed.String()).
 					Str("operation_id", operationID).Str("cr_kind", ref.kind).Str("cr_name", name).
-					Msg("config CR reconciled — Valid=True")
+					Msg("Reconciled config CR (Valid=True)")
 				delete(pending, name)
 
 			case string(metav1.ConditionFalse):
@@ -511,7 +511,7 @@ func waitForConfigCRsValid(ctx context.Context, client dynamic.Interface, namesp
 				logx.As().Error().Str("reason", ReasonConfigCRFailed.String()).
 					Str("operation_id", operationID).Str("cr_kind", ref.kind).Str("cr_name", name).
 					Str("condition_message", msg).
-					Msg("config CR is invalid — operator rejected content, aborting execute phase")
+					Msg("Aborting execute phase: config CR is invalid (operator rejected content)")
 				return errx.WithHints(
 					errx.WithReason(errK8sAPI.New("%s %s is Valid=False: %s", ref.kind, name, msg), ReasonConfigCRFailed),
 					"Inspect the "+ref.kind+" CR status and fix the config file content in the upgrade package",
@@ -556,7 +556,7 @@ func waitForConfigCRsValid(ctx context.Context, client dynamic.Interface, namesp
 
 	logx.As().Info().Str("reason", ReasonConfigCRsDeployed.String()).
 		Str("operation_id", operationID).Int("count", len(refs)).
-		Msg("all config CRs are Valid — proceeding to PendingNodeUpgrade")
+		Msg("Proceeding to PendingNodeUpgrade: all config CRs are Valid")
 	return nil
 }
 

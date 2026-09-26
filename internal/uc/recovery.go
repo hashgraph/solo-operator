@@ -27,7 +27,7 @@ func (f *Factory) recoverPersistedCRs(ctx context.Context) error {
 		// Can't enumerate persisted CRs — log and continue; the per-action
 		// dedup query remains authoritative so skipping the re-send list is safe.
 		logx.As().Warn().Err(err).Str("reason", ReasonCRPersistListFailed.String()).
-			Msg("could not list persisted CRs for restart recovery — skipping re-send pass")
+			Msg("Skipping re-send pass: failed to list persisted CRs for restart recovery")
 		return nil
 	}
 	if len(crs) == 0 {
@@ -42,7 +42,7 @@ func (f *Factory) recoverPersistedCRs(ctx context.Context) error {
 			logx.As().Warn().
 				Str("reason", ReasonCRResentFailed.String()).
 				Str("operation_id", pcr.OperationID).Str("step", pcr.Step).
-				Msg("persisted CR has unknown step — skipping")
+				Msg("Skipping persisted CR: unknown step")
 			continue
 		}
 
@@ -54,7 +54,7 @@ func (f *Factory) recoverPersistedCRs(ctx context.Context) error {
 			logx.As().Warn().Err(err).
 				Str("reason", ReasonCRResentFailed.String()).
 				Str("operation_id", pcr.OperationID).Str("step", pcr.Step).
-				Msg("cluster query failed during restart recovery — leaving persisted CR for next restart")
+				Msg("Leaving persisted CR for next restart: cluster query failed during recovery")
 			continue
 		}
 		if exists {
@@ -63,12 +63,12 @@ func (f *Factory) recoverPersistedCRs(ctx context.Context) error {
 				logx.As().Warn().Err(delErr).
 					Str("reason", ReasonCRPersistCleanupFailed.String()).
 					Str("operation_id", pcr.OperationID).Str("step", pcr.Step).
-					Msg("failed to delete persisted CR that already exists in cluster")
+					Msg("Failed to delete persisted CR that already exists in cluster")
 			} else {
 				logx.As().Debug().
 					Str("reason", ReasonCRExists.String()).
 					Str("operation_id", pcr.OperationID).Str("step", pcr.Step).
-					Msg("persisted CR already in cluster — deleted stale disk copy")
+					Msg("Deleted stale disk copy: persisted CR already in cluster")
 			}
 			continue
 		}
@@ -87,12 +87,12 @@ func (f *Factory) recoverPersistedCRs(ctx context.Context) error {
 					logx.As().Warn().Err(delErr).
 						Str("reason", ReasonCRPersistCleanupFailed.String()).
 						Str("operation_id", pcr.OperationID).Str("step", pcr.Step).
-						Msg("failed to delete persisted CR after AlreadyExists during recovery")
+						Msg("Failed to delete persisted CR after AlreadyExists during recovery")
 				}
 				logx.As().Debug().
 					Str("reason", ReasonCRExists.String()).
 					Str("operation_id", pcr.OperationID).Str("step", pcr.Step).
-					Msg("persisted CR created in a race — treated as success")
+					Msg("Treated persisted CR as success (created in a race)")
 				continue
 			}
 			// Transient failure — leave on disk for the next restart.
@@ -100,7 +100,7 @@ func (f *Factory) recoverPersistedCRs(ctx context.Context) error {
 				Err(errx.WithReason(errK8sAPI.Wrap(createErr, "re-send persisted CR %s/%s", pcr.OperationID, pcr.Step), ReasonCRResentFailed)).
 				Str("reason", ReasonCRResentFailed.String()).
 				Str("operation_id", pcr.OperationID).Str("step", pcr.Step).
-				Msg("failed to re-send persisted CR — leaving on disk for next restart")
+				Msg("Failed to re-send persisted CR; leaving on disk for next restart")
 			continue
 		}
 
@@ -109,12 +109,12 @@ func (f *Factory) recoverPersistedCRs(ctx context.Context) error {
 			logx.As().Warn().Err(delErr).
 				Str("reason", ReasonCRPersistCleanupFailed.String()).
 				Str("operation_id", pcr.OperationID).Str("step", pcr.Step).
-				Msg("failed to delete persisted CR after successful re-send")
+				Msg("Failed to delete persisted CR after successful re-send")
 		}
 		logx.As().Info().
 			Str("reason", ReasonCRResent.String()).
 			Str("operation_id", pcr.OperationID).Str("step", pcr.Step).
-			Msg("re-sent persisted CR that was not yet in cluster")
+			Msg("Re-sent persisted CR that was not yet in cluster")
 	}
 	return nil
 }

@@ -121,7 +121,7 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, err
 	}
 	if prepare == nil || prepare.Status.Phase != operatorv1alpha1.PhaseSucceeded {
-		common.Info(ctx, ReasonWaitingForPrepare).Msg("waiting for NetworkUpgradePrepare to succeed")
+		common.Info(ctx, ReasonWaitingForPrepare).Msg("Waiting for NetworkUpgradePrepare to succeed")
 		return ctrl.Result{RequeueAfter: freezePrereqRequeueAfter}, nil
 	}
 
@@ -143,7 +143,7 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 		// content — so skipping the registry health check here is sound, not
 		// trust-by-tag. If any digest is missing (should not happen for a selected
 		// source), we fall through to RevalidateComponents rather than skip.
-		common.Info(ctx, operatorv1alpha1.ReasonPrefetchCompleted).Msg("images prefetched by digest; skipping registry health check")
+		common.Info(ctx, operatorv1alpha1.ReasonPrefetchCompleted).Msg("Prefetched images by digest; skipping registry health check")
 		now := metav1.Now()
 		freeze.Status.CompletionTime = &now
 		freeze.Status.Phase = operatorv1alpha1.PhaseSucceeded

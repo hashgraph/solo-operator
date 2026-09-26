@@ -101,7 +101,7 @@ func Open(dir, operationID, nodeID string, opts ...OpenOption) (*Writer, error) 
 		logx.As().Warn().
 			Str("reason", "OperationIDMissingTimestamp").
 			Str("operationId", operationID).
-			Msg("operationId has no parseable timestamp; its event log will be retained by mtime, not by operation time")
+			Msg("Retaining event log by mtime, not operation time: operationId has no parseable timestamp")
 	}
 	logger, err := eventlog.NewAppend(dir, operationID+".jsonl")
 	if err != nil {

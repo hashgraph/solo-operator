@@ -139,7 +139,7 @@ func (c OCIChecker) Check(ctx context.Context, spec operatorv1alpha1.ImageRegist
 		// without the credential before declaring the registry unreachable. Warn so a
 		// stale/misscoped credential is still visible even when the retry succeeds.
 		common.Warn(ctx, ReasonCredentialRejected).Str("image", spec.Image).AnErr("error", err).
-			Msg("configured pull secret was rejected (401/403); retrying anonymously")
+			Msg("Retrying anonymously: configured pull secret was rejected (401/403)")
 		digest, diffIDs, err = c.anonymousSource().Inspect(ctx, spec.Image, platforms)
 	}
 	if err != nil {

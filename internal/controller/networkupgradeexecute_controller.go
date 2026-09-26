@@ -72,7 +72,7 @@ func (r *NetworkUpgradeExecuteReconciler) logPhaseElapsed(ctx context.Context, e
 	common.Info(ctx, ReasonPhaseTransition).
 		Str("phase", phase).
 		Str("elapsed", elapsed.String()).
-		Msg("execute phase transition")
+		Msg("Execute phase transition")
 }
 
 func (r *NetworkUpgradeExecuteReconciler) WithStrategy(name string) *NetworkUpgradeExecuteReconciler {
@@ -184,7 +184,7 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		ucfg := operatorv1alpha1.ResolveUpgradeConfig(orbit)
 
 		if prepare == nil || prepare.Status.Phase != operatorv1alpha1.PhaseSucceeded {
-			common.Info(ctx, ReasonWaitingForPrepare).Msg("waiting for NetworkUpgradePrepare to succeed")
+			common.Info(ctx, ReasonWaitingForPrepare).Msg("Waiting for NetworkUpgradePrepare to succeed")
 			return ctrl.Result{RequeueAfter: ucfg.PrereqRequeueInterval}, nil
 		}
 
@@ -193,7 +193,7 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 			return ctrl.Result{}, err
 		}
 		if freeze == nil || freeze.Status.Phase != operatorv1alpha1.PhaseSucceeded {
-			common.Info(ctx, ReasonWaitingForFreeze).Msg("waiting for NetworkUpgradeFreeze to succeed")
+			common.Info(ctx, ReasonWaitingForFreeze).Msg("Waiting for NetworkUpgradeFreeze to succeed")
 			return ctrl.Result{RequeueAfter: ucfg.PrereqRequeueInterval}, nil
 		}
 
@@ -257,7 +257,7 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		return r.reconcilePendingNodeUpgrade(ctx, &execute)
 
 	default:
-		common.Info(ctx, ReasonUnhandledPhase).Str("phase", string(execute.Status.Phase)).Msg("unhandled execute phase")
+		common.Info(ctx, ReasonUnhandledPhase).Str("phase", string(execute.Status.Phase)).Msg("Encountered unhandled execute phase")
 		return ctrl.Result{}, nil
 	}
 }
@@ -345,13 +345,13 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingInfraUpgrade(ctx conte
 	// window. CondConfigCRsApplied is surfaced for observability while we wait.
 	cond := findCondition(execute.Status.Conditions, operatorv1alpha1.CondConfigCRsApplied)
 	if cond == nil || cond.Status != metav1.ConditionTrue {
-		common.Info(ctx, ReasonWaitingForConfigCRsApplied).Msg("waiting for daemon to set CondConfigCRsApplied=True")
+		common.Info(ctx, ReasonWaitingForConfigCRsApplied).Msg("Waiting for daemon to set CondConfigCRsApplied=True")
 	} else {
 		// ConfigCRsApplied=True but still in PendingInfraUpgrade: the daemon set the
 		// condition without advancing the phase (a non-atomic handoff). Log each tick
 		// so a stall here leaves a forensic trail instead of a silent poll.
 		common.Info(ctx, ReasonWaitingForDaemonPhaseAdvance).
-			Msg("config CRs applied; waiting for daemon to advance phase to PendingNodeUpgrade")
+			Msg("Config CRs applied; waiting for daemon to advance phase to PendingNodeUpgrade")
 	}
 	return ctrl.Result{RequeueAfter: ucfg.PrereqRequeueInterval}, nil
 }
@@ -405,7 +405,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 		if _, prefetchOK := prefetchCompleted(prepare); prefetchOK {
 			// Prefetch succeeded — skip registry re-validation. The images are
 			// likely cached on nodes; the kubelet uses them via IfNotPresent.
-			common.Info(ctx, operatorv1alpha1.ReasonPrefetchCompleted).Msg("images prefetched; skipping registry re-validation")
+			common.Info(ctx, operatorv1alpha1.ReasonPrefetchCompleted).Msg("Prefetched images; skipping registry re-validation")
 			ss := execute.Spec.SelectedSources
 			execute.Status.SelectedSources = &ss
 			setCondition(&execute.Status.Conditions, metav1.Condition{
