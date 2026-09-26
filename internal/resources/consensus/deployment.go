@@ -86,8 +86,9 @@ func (r *StatefulSetSubReconciler) Reconcile(ctx context.Context, capsule *opera
 	return ctrl.Result{}, common.WarnOnConflict(ctx, r.Client.Update(ctx, existing))
 }
 
-// buildStatefulSet builds the desired StatefulSet purely from the capsule spec; it
-// never reads the existing StatefulSet, so an omitted sidecar section is removed.
+// buildStatefulSet builds the desired StatefulSet from the capsule spec and the owning
+// Orbit (fetched once here for the node-name gate and UC mode); it never reads the
+// existing StatefulSet, so an omitted sidecar section is removed.
 func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (*appsv1.StatefulSet, error) {
 	replicas := int32(1)
 	if capsule.Spec.Offline {
@@ -96,10 +97,11 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 	selectorLabels := SelectorLabels(capsule)
 	podLabels := PodLabels(capsule)
 
-	zeroBased, err := ResolveNodeNameZeroBased(ctx, r.Client, capsule)
+	orbit, err := ResolveOrbit(ctx, r.Client, capsule)
 	if err != nil {
 		return nil, err
 	}
+	zeroBased := orbit != nil && orbit.IsNodeNameZeroBased()
 	volumes, volumeMounts := r.buildVolumes(capsule, zeroBased)
 
 	consensusContainer, err := r.buildConsensusNodeContainer(capsule, volumeMounts)
@@ -158,7 +160,7 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 
 	ucMode := uc.ModeClusterOnly
 	if containers := capsule.Spec.PodProperties.Containers; containers.UC != nil && containers.UC.Enabled {
-		ucMode, err = ResolveUCMode(ctx, r.Client, capsule)
+		ucMode, err = ucModeFromOrbit(capsule, orbit)
 		if err != nil {
 			return nil, err
 		}

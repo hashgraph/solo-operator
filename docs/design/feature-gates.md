@@ -44,6 +44,10 @@ so a gate reads as visibly temporary versus permanent config. Example:
 The override is the manual escape hatch; the default is what makes a flip happen
 automatically on operator upgrade.
 
+> This nullable-override shape lands at **Beta**. The **Alpha** gate ships as a
+> plain `bool` (explicit, default off); see the per-phase split in the worked
+> example below.
+
 ## Flip lifecycle = versioned migration in solo-provisioner
 
 A gate flip is a **versioned, idempotent migration run by solo-provisioner** — not
