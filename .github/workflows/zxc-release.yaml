@@ -42,8 +42,6 @@ on:
         required: false
       GIT_USER_EMAIL:
         required: false
-      JF_ACCESS_TOKEN:
-        required: false
     outputs:
       version:
         description: "Version produced by semantic-release (empty if no release)"
@@ -175,6 +173,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -244,12 +243,24 @@ jobs:
               --username ${{ github.actor }} \
               --password-stdin
 
+      - name: Setup JFrog CLI
+        id: jfrog-cli
+        if: ${{ !inputs.dry-run && inputs.jfrog-enabled }}
+        uses: step-security/setup-jfrog-cli@3054b554c0fb4915b3d58847fb7730c593dbb934 # v5.0.0
+        env:
+          JF_URL: ${{ vars.JF_URL }}
+        with:
+          oidc-provider-name: hashgraph
+
       - name: Helm Registry Login (JFrog)
         if: ${{ !inputs.dry-run && inputs.jfrog-enabled }}
+        env:
+          JF_OIDC_USER: ${{ steps.jfrog-cli.outputs.oidc-user }}
+          JF_OIDC_TOKEN: ${{ steps.jfrog-cli.outputs.oidc-token }}
         run: |
-          echo "${{ secrets.JF_ACCESS_TOKEN }}" | \
+          printf '%s' "${JF_OIDC_TOKEN}" | \
             helm registry login ${{ vars.JF_HELM_REGISTRY }} \
-              --username ${{ vars.JF_USERNAME }} \
+              --username "${JF_OIDC_USER}" \
               --password-stdin
 
       - name: Helm Push (GitHub)
