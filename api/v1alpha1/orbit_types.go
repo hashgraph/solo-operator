@@ -252,11 +252,11 @@ type OrbitConsensus struct {
 // maturity stage, default, and removal criteria.
 type ConsensusFeatureGates struct {
 	// NodeNameZeroBased switches gossip key-file naming node<id+1> → node<id>.
-	// Alpha; default false. Removal: delete once 0-based naming is GA in the CN.
+	// Alpha; default false (unset). Removal: delete once 0-based naming is GA in the CN.
 	// Flip to true only in lockstep with a CN version that loads 0-based names.
-	// +kubebuilder:default=false
+	// Nullable override: unset defers to the operator default; set forces the value.
 	// +optional
-	NodeNameZeroBased bool `json:"nodeNameZeroBased,omitempty"`
+	NodeNameZeroBased *bool `json:"nodeNameZeroBased,omitempty"`
 }
 
 // OrbitGenesis contains genesis initialization configuration
@@ -342,10 +342,12 @@ type Orbit struct {
 	Status OrbitStatus `json:"status,omitempty"`
 }
 
-// IsNodeNameZeroBased resolves the consensus nodeNameZeroBased feature gate (default false).
+// IsNodeNameZeroBased resolves the consensus nodeNameZeroBased feature gate: an explicit
+// override when set, otherwise the operator default (false today; a compile-time constant
+// once the gate reaches Beta).
 func (o *Orbit) IsNodeNameZeroBased() bool {
-	if o.Spec.Consensus.FeatureGates != nil {
-		return o.Spec.Consensus.FeatureGates.NodeNameZeroBased
+	if fg := o.Spec.Consensus.FeatureGates; fg != nil && fg.NodeNameZeroBased != nil {
+		return *fg.NodeNameZeroBased
 	}
 	return false
 }

@@ -44,31 +44,38 @@ so a gate reads as visibly temporary versus permanent config. Example:
 The override is the manual escape hatch; the default is what makes a flip happen
 automatically on operator upgrade.
 
-> This nullable-override shape lands at **Beta**. The **Alpha** gate ships as a
-> plain `bool` (explicit, default off); see the per-phase split in the worked
-> example below.
+> Ship the gate as a nullable `*bool` with **no** `kubebuilder` default from Alpha.
+> A materialized default would persist an explicit value into every Orbit, which
+> later reads as a stale override and blocks the operator-default flip — forcing a
+> data-cleanup migration. With no persisted default, unset Orbits follow the
+> operator default automatically and the flip needs no data rewrite.
 
-## Flip lifecycle = versioned migration in solo-provisioner
+## Flip lifecycle
 
-A gate flip is a **versioned, idempotent migration run by solo-provisioner** — not
-a manual `kubectl edit` — executed in the infra-upgrade window alongside the
-solo-operator upgrade.
+The flip is **carried by the operator upgrade** and applied when pods recreate
+during the infra-upgrade window — not by a manual `kubectl edit`. Because unset
+Orbits defer to the operator default (see §Resolution), a redeploy moves the fleet
+on its own, with no Orbit data rewrite.
+
+solo-provisioner additionally ships a **versioned, idempotent migration as a safety
+net** — optional, not on the critical path, but worth having.
 
 - **The operator upgrade carries the flip.** The release cut for the new era
   defaults the gate on; operator + chart + UC ship lockstep, so it is one
   coordinated version bump.
-- **The migration handles residue + safety, idempotently:** clear stale
-  overrides, force any regeneration the flip requires, and verify the rollout
-  reports the new behavior. Re-runnable; no-ops when already migrated.
-- **What the migration requires depends on the gate's coupling:**
+- **The migration is an optional safety net, idempotent:** verify the rollout
+  reports the new behavior, force any regeneration the flip needs, and clean up
+  the rare explicit override that would pin the old value. Re-runnable; no-ops when
+  nothing needs doing.
+- **What the flip requires depends on the gate's coupling:**
   - **Component-coupled** (e.g. node-name ↔ CN version) → requires infra-upgrade
     **and** operator upgrade, because the paired component version and a pod
     recreate are both preconditions.
   - **Operator-only** (an internal reconcile toggle) → requires just the operator
     upgrade; the infra step no-ops.
 
-Keeping every flip on the same migration harness — even operator-only ones — gives
-one repeatable, version-gated, auditable path instead of ad-hoc edits.
+Running every flip's safety net through the same migration harness gives one
+repeatable, version-gated, auditable path.
 
 ### How it maps to solo-provisioner's migration framework
 
@@ -93,12 +100,14 @@ well-known keys such as installed/target version), not held on the migration.
 
 ## Graduation
 
-- **Alpha:** explicit gate, default off; solo-provisioner sets it in lockstep.
-- **Beta:** operator owns the default; the gate becomes an override; the
-  solo-provisioner migration is idempotent and version-gated.
-- **GA:** remove the gate and hardcode the behavior; drop gate-writing/override
-  handling in solo-provisioner. An idempotent migration may remain — it simply
-  no-ops once every cluster has migrated.
+- **Alpha:** nullable gate, operator default off; left unset in the happy path
+  (override available). Inert forward-compat seam.
+- **Beta:** operator owns the default and flips it in lockstep with the paired
+  component; the gate stays a nullable override. An optional idempotent
+  solo-provisioner migration provides verification + edge cleanup.
+- **GA:** remove the gate and hardcode the behavior; drop override handling in
+  solo-provisioner. The optional migration may remain — it simply no-ops once
+  every cluster has migrated.
 
 ## Worked example: node-name convention (`nodeNameZeroBased`)
 
@@ -131,18 +140,19 @@ public-keys regeneration.
 
 ### Per-phase specifics
 
-- **Alpha (this PR):** `ConsensusFeatureGates.NodeNameZeroBased` (bool, default
-  false); both sites routed through `FormatNodeName`; behavior byte-identical
-  (1-based). solo-provisioner mirrors `ConsensusNodeName` but leaves the gate false.
+- **Alpha (this PR):** `ConsensusFeatureGates.NodeNameZeroBased` (nullable `*bool`,
+  no persisted default); both sites routed through `FormatNodeName`; behavior
+  byte-identical (1-based). solo-provisioner mirrors `ConsensusNodeName` and leaves
+  the gate unset.
 - **Beta:** operator adds `defaultNodeNameZeroBased` (still false until the paired
-  CN baseline loads 0-based); gate becomes a `*bool` override; a pure flip must
-  update the pod template (forces RollingUpdate) and regenerate the public-keys
-  ConfigMap; operator surfaces the resolved convention for verification. The
-  operator release cut alongside the 0-based CN baseline flips the default, so the
-  infra-upgrade flips naming fleet-wide with zero Orbit edits. solo-provisioner
-  ships a consensus-scope `VersionMigration` (minVersion = that release) that
-  clears stale overrides, triggers public-keys regeneration, and verifies the
-  rollout.
+  CN baseline loads 0-based); a pure flip must update the pod template (forces
+  RollingUpdate) and regenerate the public-keys ConfigMap; operator surfaces the
+  resolved convention for verification. The operator release cut alongside the
+  0-based CN baseline flips the default, so the infra-upgrade flips naming
+  fleet-wide with zero Orbit edits — unset Orbits follow automatically, no data
+  migration required. solo-provisioner may ship an optional consensus-scope
+  `VersionMigration` (minVersion = that release) that verifies the rollout and
+  cleans up any explicit override that pins the old value.
 - **GA:** delete the gate; hardcode `FormatNodeName` to 0-based.
 
 ### Rollback

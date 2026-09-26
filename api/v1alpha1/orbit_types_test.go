@@ -5,13 +5,25 @@ package v1alpha1
 import "testing"
 
 func TestOrbit_NodeNameZeroBased(t *testing.T) {
-	o := &Orbit{}
-	if o.IsNodeNameZeroBased() {
-		t.Error("default should be false when featureGates unset")
-	}
+	boolPtr := func(b bool) *bool { return &b }
 
-	o.Spec.Consensus.FeatureGates = &ConsensusFeatureGates{NodeNameZeroBased: true}
-	if !o.IsNodeNameZeroBased() {
-		t.Error("expected true when gate set")
+	cases := []struct {
+		name string
+		gate *ConsensusFeatureGates
+		want bool
+	}{
+		{"featureGates unset", nil, false},
+		{"gate unset (nil override)", &ConsensusFeatureGates{}, false},
+		{"explicit false", &ConsensusFeatureGates{NodeNameZeroBased: boolPtr(false)}, false},
+		{"explicit true", &ConsensusFeatureGates{NodeNameZeroBased: boolPtr(true)}, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			o := &Orbit{}
+			o.Spec.Consensus.FeatureGates = c.gate
+			if got := o.IsNodeNameZeroBased(); got != c.want {
+				t.Errorf("IsNodeNameZeroBased() = %v, want %v", got, c.want)
+			}
+		})
 	}
 }
