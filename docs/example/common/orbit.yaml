@@ -62,11 +62,8 @@ spec:
       #   # consensus pod instead. Default: 30. Set 0 to always use pod-node targeting.
       #   maxNodes: 30
   consensus:
-    # Rollout-only feature gates (graduate, then get removed), distinct from config.
-    featureGates:
-      # Alpha, default false: gossip key-file naming node<id+1> vs node<id>.
-      # Flip to true only in lockstep with a CN version that loads 0-based names.
-      nodeNameZeroBased: false
+    # consensus.featureGates holds transitional, rollout-only gates. Leave unset to
+    # defer to the operator default; see docs/design/feature-gates.md.
     genesis:
       addressBook:
         # ledgerId is the consensus node's ledger.id (network identity);
