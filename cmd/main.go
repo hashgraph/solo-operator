@@ -13,6 +13,7 @@ import (
 	"github.com/automa-saga/logx"
 	"github.com/automa-saga/version"
 	"github.com/go-logr/logr"
+	"github.com/rs/zerolog"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -113,10 +114,10 @@ func main() {
 	// version may be a fixed placeholder, so build_commit is the always-reliable
 	// discriminator. Done before SetLogger so controller-runtime's logr lines
 	// inherit the fields too.
-	logx.SetLogger(logx.As().With().
-		Str("build_version", version.Version).
-		Str("build_commit", version.Commit).
-		Logger())
+	logx.SetGlobalContext(func(c zerolog.Context) zerolog.Context {
+		return c.Str("build_version", version.Version).
+			Str("build_commit", version.Commit)
+	})
 	// Route controller-runtime's own logs through logx.
 	ctrl.SetLogger(logr.FromSlogHandler(logx.NewSlogHandler()))
 	bi := version.Get()
