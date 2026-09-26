@@ -265,10 +265,8 @@ type OrbitConsensus struct {
 // maturity stage, default, and removal criteria.
 type ConsensusFeatureGates struct {
 	// NodeNameZeroBased switches gossip key-file naming node<id+1> → node<id>.
-	// Maturity: Alpha. Default: false (node<id+1>). Removal: delete once 0-based is GA in
-	// the CN.
-	// ⚠ Flip to true ONLY in lockstep with a CN version whose EnhancedKeyStoreLoader loads
-	//   0-based names — a forward-compat seam, inert (and breaking) until then.
+	// Alpha; default false. Removal: delete once 0-based naming is GA in the CN.
+	// Flip to true only in lockstep with a CN version that loads 0-based names.
 	// +kubebuilder:default=false
 	// +optional
 	NodeNameZeroBased bool `json:"nodeNameZeroBased,omitempty"`

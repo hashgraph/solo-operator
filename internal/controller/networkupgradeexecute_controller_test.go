@@ -324,10 +324,11 @@ func TestExecuteReconcile_InitializesStatus(t *testing.T) {
 // newMainnetOrbit returns an Orbit with the host-level provisioner daemon
 // enabled, so ResolveUCMode reports mainnet.
 func newMainnetOrbit() *operatorv1alpha1.Orbit {
+	enabled := true
 	return &operatorv1alpha1.Orbit{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
 		Spec: operatorv1alpha1.OrbitSpec{
-			Consensus: operatorv1alpha1.OrbitConsensus{ProvisionerDaemonEnabled: true},
+			ProvisionerDaemonEnabled: &enabled,
 		},
 	}
 }
@@ -336,10 +337,11 @@ func newMainnetOrbit() *operatorv1alpha1.Orbit {
 // ResolveUCMode reports cluster-only. The Orbit CR exists in both modes; only
 // ProvisionerDaemonEnabled distinguishes them.
 func newClusterOnlyOrbit() *operatorv1alpha1.Orbit {
+	disabled := false
 	return &operatorv1alpha1.Orbit{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
 		Spec: operatorv1alpha1.OrbitSpec{
-			Consensus: operatorv1alpha1.OrbitConsensus{ProvisionerDaemonEnabled: false},
+			ProvisionerDaemonEnabled: &disabled,
 		},
 	}
 }
