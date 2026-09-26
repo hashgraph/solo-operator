@@ -66,6 +66,27 @@ solo-operator upgrade.
 Keeping every flip on the same migration harness — even operator-only ones — gives
 one repeatable, version-gated, auditable path instead of ad-hoc edits.
 
+### How it maps to solo-provisioner's migration framework
+
+solo-provisioner runs migrations through a small registry (see its
+`internal/migration` package). Each migration implements `Applies`, `Execute`, and
+`Rollback`, is registered per scope in chronological order, and composes into an
+automa workflow that rolls back on error. State is passed via a context bag (with
+well-known keys such as installed/target version), not held on the migration.
+
+- **Idempotency + version-gating live in `Applies`.** The `VersionMigration` base
+  applies only when crossing a boundary — installed `< minVersion` and target
+  `>= minVersion` — so it self-skips once the fleet is past that boundary. A gate
+  flip registers with `minVersion` = the solo-operator/CN release that defaults the
+  gate on.
+- **`Execute` does the residue + safety work:** clear stale overrides, trigger any
+  regeneration the flip needs, verify the rollout reports the new behavior.
+- **`Rollback`** restores (best-effort) for the workflow's rollback-on-error path.
+- **Scope decides when it runs:** startup-scope migrations run on every invocation
+  before commands; component-scope migrations (e.g. consensus) run during the
+  upgrade workflow. A component-coupled gate registers under its component scope,
+  and any host-level step is enqueued on the solo-provisioner daemon.
+
 ## Graduation
 
 - **Alpha:** explicit gate, default off; solo-provisioner sets it in lockstep.
@@ -114,7 +135,10 @@ public-keys regeneration.
   update the pod template (forces RollingUpdate) and regenerate the public-keys
   ConfigMap; operator surfaces the resolved convention for verification. The
   operator release cut alongside the 0-based CN baseline flips the default, so the
-  infra-upgrade flips naming fleet-wide with zero Orbit edits.
+  infra-upgrade flips naming fleet-wide with zero Orbit edits. solo-provisioner
+  ships a consensus-scope `VersionMigration` (minVersion = that release) that
+  clears stale overrides, triggers public-keys regeneration, and verifies the
+  rollout.
 - **GA:** delete the gate; hardcode `FormatNodeName` to 0-based.
 
 ### Rollback
