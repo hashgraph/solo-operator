@@ -33,12 +33,12 @@ func TestOrbit_IsProvisionerDaemonEnabled(t *testing.T) {
 
 func TestOrbit_NodeNameZeroBased(t *testing.T) {
 	o := &Orbit{}
-	if o.NodeNameZeroBased() {
+	if o.IsNodeNameZeroBased() {
 		t.Error("default should be false when featureGates unset")
 	}
 
 	o.Spec.Consensus.FeatureGates = &ConsensusFeatureGates{NodeNameZeroBased: true}
-	if !o.NodeNameZeroBased() {
+	if !o.IsNodeNameZeroBased() {
 		t.Error("expected true when gate set")
 	}
 }

@@ -366,8 +366,8 @@ func (o *Orbit) IsProvisionerDaemonEnabled() bool {
 	return o.Spec.Consensus.ProvisionerDaemonEnabled
 }
 
-// NodeNameZeroBased resolves the consensus nodeNameZeroBased feature gate (default false).
-func (o *Orbit) NodeNameZeroBased() bool {
+// IsNodeNameZeroBased resolves the consensus nodeNameZeroBased feature gate (default false).
+func (o *Orbit) IsNodeNameZeroBased() bool {
 	if o.Spec.Consensus.FeatureGates != nil {
 		return o.Spec.Consensus.FeatureGates.NodeNameZeroBased
 	}

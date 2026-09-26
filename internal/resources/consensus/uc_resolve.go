@@ -57,5 +57,5 @@ func ResolveNodeNameZeroBased(ctx context.Context, c client.Client, capsule *ope
 		}
 		return false, errx.WithReason(errConfigInvalid.Wrap(err, "get Orbit %s", capsule.Spec.Orbit), ReasonOrbitRequired)
 	}
-	return orbit.NodeNameZeroBased(), nil
+	return orbit.IsNodeNameZeroBased(), nil
 }
