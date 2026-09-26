@@ -85,8 +85,9 @@ public-keys regeneration. This is what keeps the migration cheap to automate.
 - **Operator:** delete `NodeNameZeroBased` (and `ConsensusFeatureGates` if it is
   the only gate), hardcode `FormatNodeName` to 0-based, remove override plumbing,
   regenerate CRD + deepcopy.
-- **Weaver:** remove the migration command and gate handling; `ConsensusNodeName`
-  hardcodes 0-based.
+- **Weaver:** drop gate-writing/override handling; `ConsensusNodeName` hardcodes
+  0-based. The migration command stays — it is idempotent and only acts when
+  required, so it no-ops once every cluster is already 0-based.
 - **Exit:** no cluster runs a pre-0-based CN; deprecation window elapsed.
 
 ## Rollback
