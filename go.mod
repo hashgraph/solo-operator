@@ -7,7 +7,7 @@ go 1.26.6
 require (
 	github.com/automa-saga/daemonkit v0.4.0
 	github.com/automa-saga/errx v1.0.0
-	github.com/automa-saga/logx v0.7.0
+	github.com/automa-saga/logx v0.9.0
 	github.com/automa-saga/version v1.0.1
 	github.com/go-logr/logr v1.4.4
 	github.com/google/go-containerregistry v0.22.1

@@ -16,6 +16,7 @@ import (
 	"github.com/automa-saga/errx"
 	"github.com/automa-saga/logx"
 	"github.com/automa-saga/version"
+	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -192,21 +193,18 @@ func run(cmd *cobra.Command, _ []string) error {
 		ConsoleLogging: true,
 		UTC:            true,
 		IncludeCaller:  true,
+		IncludePackage: true,
 	}); err != nil {
 		return err
 	}
-	// Stamp the build identity onto every log line so operators can tell which
-	// UC build produced a given log. Image tags are reused (local :dev, CI
-	// 0.0.0-<sha>) and the version string may be a fixed placeholder, so
-	// build_commit is the always-reliable discriminator; build_version aids
-	// released builds. The full build date + Go version go on the startup banner.
-	logx.SetLogger(logx.As().With().
-		Str("build_version", version.Version).
-		Str("build_commit", version.Commit).
-		Logger())
-	// Bridge the stdlib log/slog seam to logx so the daemonkit kernel (which
-	// logs via slog) emits to the same zerolog sinks logx just configured. Done
-	// after SetLogger so slog lines inherit the uc_version field too.
+	// Stamp build identity on every line; build_commit is the reliable
+	// discriminator since image tags/versions are reused.
+	logx.SetGlobalContext(func(c zerolog.Context) zerolog.Context {
+		return c.Str("build_version", version.Version).
+			Str("build_commit", version.Commit)
+	})
+	// Route the stdlib slog seam (used by the daemonkit kernel) through logx so
+	// its logs share logx's sinks and global fields.
 	slog.SetDefault(slog.New(logx.NewSlogHandler()))
 
 	if err := cfg.Validate(); err != nil {
