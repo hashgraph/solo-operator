@@ -95,16 +95,26 @@ well-known keys such as installed/target version), not held on the migration.
   upgrade workflow. A component-coupled gate registers under its component scope,
   and any host-level step is enqueued on the solo-provisioner daemon.
 
-## Graduation
+## Graduation (Alpha → Beta → GA)
 
-- **Alpha:** gate ships inert (default `false`); solo-provisioner may set it to
-  validate the new behavior against a compatible component. Forward-compat seam.
-- **Beta:** solo-provisioner drives the flip via a version-gated migration that sets
-  the gate `true` when it deploys a component `>=` the threshold; the operator stays
-  a dumb reader (no operator upgrade required to flip).
-- **GA:** remove the gate and hardcode the behavior; drop gate handling in
-  solo-provisioner. Leftover gate values are pruned by the apiserver on next write
-  and ignored by the operator.
+A gate moves through three stages as the new behavior becomes trusted, and is
+deleted at the end. Using `nodeNameZeroBased` as the example:
+
+- **Alpha — the code is there, but switched off.** The operator already contains
+  both the old and new behavior, and the gate defaults to `false`, so nothing
+  changes for anyone. The switch exists so we can turn it on for a single test
+  network (running a matching CN version) and confirm the new behavior works,
+  without affecting everyone else.
+- **Beta — the switch gets flipped during an upgrade, automatically.** When a
+  cluster is upgraded to a CN version that expects the new behavior, an in-cluster
+  step (a solo-provisioner migration or a job) sets the gate to `true` at the same
+  time. The operator simply reads the gate and follows it — it does **not** need to
+  be reinstalled or upgraded to change behavior. That step only runs when the
+  version actually reaches the point where the new behavior is needed, so running it
+  again does nothing.
+- **GA — the switch is removed for good.** Once every cluster uses the new behavior,
+  we delete the gate and make the new behavior the only code path. Any leftover
+  value someone set is ignored and cleaned up automatically.
 
 ## FAQ — why it is shaped this way
 
