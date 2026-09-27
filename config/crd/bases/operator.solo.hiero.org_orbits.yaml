@@ -57,11 +57,12 @@ spec:
                       ConsensusFeatureGates.
                     properties:
                       nodeNameZeroBased:
+                        default: false
                         description: |-
                           NodeNameZeroBased switches gossip key-file naming node<id+1> → node<id>.
-                          Alpha; default false (unset). Removal: delete once 0-based naming is GA in the CN.
-                          Flip to true only in lockstep with a CN version that loads 0-based names.
-                          Nullable override: unset defers to the operator default; set forces the value.
+                          Alpha; default false. Removal: delete once 0-based naming is GA in the CN.
+                          Set to true only in lockstep with a CN version that loads 0-based names —
+                          solo-provisioner sets it to match the deployed CN; the operator only honors it.
                         type: boolean
                     type: object
                   genesis:

@@ -5,17 +5,14 @@ package v1alpha1
 import "testing"
 
 func TestOrbit_NodeNameZeroBased(t *testing.T) {
-	boolPtr := func(b bool) *bool { return &b }
-
 	cases := []struct {
 		name string
 		gate *ConsensusFeatureGates
 		want bool
 	}{
 		{"featureGates unset", nil, false},
-		{"gate unset (nil override)", &ConsensusFeatureGates{}, false},
-		{"explicit false", &ConsensusFeatureGates{NodeNameZeroBased: boolPtr(false)}, false},
-		{"explicit true", &ConsensusFeatureGates{NodeNameZeroBased: boolPtr(true)}, true},
+		{"gate default", &ConsensusFeatureGates{}, false},
+		{"gate true", &ConsensusFeatureGates{NodeNameZeroBased: true}, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
