@@ -60,9 +60,9 @@ spec:
                         default: false
                         description: |-
                           NodeNameZeroBased switches gossip key-file naming node<id+1> → node<id>.
-                          Alpha; default false. Removal: delete once 0-based naming is GA in the CN.
-                          Set to true only in lockstep with a CN version that loads 0-based names —
-                          solo-provisioner sets it to match the deployed CN; the operator only honors it.
+                          Default false. Remove once 0-based naming is the only convention the CN supports.
+                          Set to true only with a CN version that loads 0-based names — solo-provisioner
+                          sets it to match the deployed CN; the operator only honors it.
                         type: boolean
                     type: object
                   genesis:

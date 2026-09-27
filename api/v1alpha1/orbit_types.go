@@ -247,14 +247,14 @@ type OrbitConsensus struct {
 }
 
 // ConsensusFeatureGates holds transitional, rollout-only feature gates for consensus
-// behavior. Unlike configuration (permanent desired state), each gate graduates
-// Alpha→Beta→GA and is then removed. Convention: every gate's doc comment carries its
-// maturity stage, default, and removal criteria.
+// behavior. Unlike configuration (permanent desired state), each gate is removed once
+// its behavior is everywhere. Convention: every gate's doc comment states its default
+// and when to remove it.
 type ConsensusFeatureGates struct {
 	// NodeNameZeroBased switches gossip key-file naming node<id+1> → node<id>.
-	// Alpha; default false. Removal: delete once 0-based naming is GA in the CN.
-	// Set to true only in lockstep with a CN version that loads 0-based names —
-	// solo-provisioner sets it to match the deployed CN; the operator only honors it.
+	// Default false. Remove once 0-based naming is the only convention the CN supports.
+	// Set to true only with a CN version that loads 0-based names — solo-provisioner
+	// sets it to match the deployed CN; the operator only honors it.
 	// +kubebuilder:default=false
 	// +optional
 	NodeNameZeroBased bool `json:"nodeNameZeroBased,omitempty"`
