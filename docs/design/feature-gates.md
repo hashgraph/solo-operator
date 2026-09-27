@@ -62,21 +62,23 @@ solo-provisioner packages this as a migration (`internal/migration`): a step wit
 
 ## Lifecycle (Alpha → Beta → GA)
 
-Using `nodeNameZeroBased` as the example:
+The operator has only **two code states** for a gate: the gate exists (default off),
+or the gate is gone (GA). The stages in between describe how much we trust the new
+behavior, tracked as a maturity label in the gate's doc comment. Using
+`nodeNameZeroBased` as the example:
 
-- **Alpha — the code is there, but switched off.** The operator ships both the old
-  and new behavior; the gate defaults to `false`, so nothing changes. The switch
-  lets us turn it on for one test network (with a matching CN) to confirm the new
-  behavior works, without affecting anyone else.
-- **Beta — the switch flips during an upgrade, automatically.** When a cluster moves
-  to a CN version that expects the new behavior, an in-cluster step (a
-  solo-provisioner migration or a job) sets the gate to `true` at the same time. The
-  operator just reads it — no reinstall or upgrade needed. The step runs only when
-  the version reaches the point where the new behavior is needed, so re-running does
-  nothing.
-- **GA — the switch is removed for good.** Once every cluster uses the new behavior,
-  we delete the gate and make it the only code path. Any leftover value is ignored
-  and cleaned up automatically.
+- **Alpha — shipped, off, for testing.** The operator contains both behaviors; the
+  gate defaults to `false`. We turn it on by hand only on a test network (with a
+  matching CN) to confirm it works. Nobody flips it in production.
+- **Beta — cleared to flip in production.** Once we trust it, we do two things: bump
+  the maturity label in the doc comment from Alpha to Beta, and let
+  solo-provisioner/jobs set the gate to `true` during upgrades. **The operator's
+  behavior code does not change here** — only the label and the rollout policy do. So
+  reaching Beta is a deliberate step that *includes* updating the doc comment; it
+  won't drift out of date on its own.
+- **GA — removed for good.** Once every cluster runs the new behavior, we delete the
+  gate and make it the only code path. This is the one real operator code change
+  after Alpha. Any leftover value is ignored and cleaned up automatically.
 
 ## FAQ
 
