@@ -46,19 +46,29 @@ Because the operator has no auto-flipping default, a plain `bool` is enough — 
 persisted `false` blocks nothing (solo-provisioner overwrites it to `true` when it
 flips), so there is no need for a nullable `*bool` and no data-cleanup migration.
 
-## Flip lifecycle: solo-provisioner sets the gate in-window
+## Flip lifecycle: an authorized actor sets the gate in-window
 
 The gate's code ships **inert** in the operator (default off). Activating the new
-behavior needs only the gate set — so the flip is driven by **solo-provisioner
-writing the gate during the upgrade window, with no operator upgrade required**.
+behavior needs only the gate set — so the flip is driven by **any authorized actor
+writing the gate during the upgrade window, with no operator upgrade required**. The
+operator is agnostic to who sets it; the flipper is pluggable:
+
+- **solo-provisioner migration** — the CLI/daemon path, when solo-provisioner
+  orchestrates the whole upgrade (component + gate together).
+- **In-cluster job** — the HIP's jobs capability (`build/jobs/`) can run the same
+  version-gated, idempotent flip as a cluster-native step, for GitOps-only
+  environments or when you don't want to drive it from the external CLI.
+
+Both carry the version-coupling logic (set the gate to match the deployed
+component); pick whichever fits how that upgrade is orchestrated.
 
 - **No operator upgrade to flip.** The already-running operator (any release ≥ the
   one that introduced the gate) reads the new value and acts on it. You upgrade the
   operator only for actual operator changes — one fewer deployment per flip.
-- **Window = component upgrade + solo-provisioner migration.** For a
-  component-coupled gate, solo-provisioner upgrades the component (e.g. the CN) and
-  sets the gate together; the single pod recreate that applies the change rides the
-  component's image upgrade, so there is no extra restart and no re-keying.
+- **Window = component upgrade + gate flip.** For a component-coupled gate, the
+  component (e.g. the CN) and the gate move together; the single pod recreate that
+  applies the change rides the component's image upgrade, so there is no extra
+  restart and no re-keying.
 - **Fresh installs** get the gate set at create time to match the component being
   deployed, so a new cluster is correct from the start.
 - **Idempotent + version-gated.** The migration self-skips once past the version
@@ -106,8 +116,14 @@ validation seam, in-place rollback, and GitOps-visible intent — none of which 
 binary-only default gives.
 
 **Do we upgrade the operator to flip a gate?**
-No. solo-provisioner sets the gate during the window and the already-running
+No. An authorized actor sets the gate during the window and the already-running
 operator honors it. Upgrade the operator only for real operator changes.
+
+**Who can flip the gate?**
+Any actor with RBAC to patch the Orbit — the operator does not care who. Today that
+is solo-provisioner's migration or the HIP's in-cluster jobs capability
+(`build/jobs/`); both run the same version-gated, idempotent flip. Manual `kubectl`
+works but is discouraged (bypasses version-gating).
 
 **Does the operator own the flip or track component versions?**
 No. The operator is a dumb reader: honor the gate, default to old behavior when
@@ -166,10 +182,10 @@ public-keys regeneration.
   default `false`); both sites routed through `FormatNodeName`; behavior
   byte-identical (1-based). solo-provisioner mirrors `ConsensusNodeName` and leaves
   the gate `false`.
-- **Beta:** solo-provisioner ships a consensus-scope `VersionMigration`
-  (`minVersion` = the CN release that loads 0-based names) that sets the gate `true`
-  and verifies the rollout, alongside the CN upgrade — no operator upgrade needed to
-  flip. The operator remains a dumb reader.
+- **Beta:** a consensus-scope `VersionMigration` (`minVersion` = the CN release that
+  loads 0-based names), run by solo-provisioner or an equivalent in-cluster job, sets
+  the gate `true` and verifies the rollout alongside the CN upgrade — no operator
+  upgrade needed to flip. The operator remains a dumb reader.
 - **GA:** delete the gate; hardcode `FormatNodeName` to 0-based.
 
 ### Rollback

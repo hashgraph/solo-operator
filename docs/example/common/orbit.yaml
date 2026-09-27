@@ -62,8 +62,9 @@ spec:
       #   # consensus pod instead. Default: 30. Set 0 to always use pod-node targeting.
       #   maxNodes: 30
   consensus:
-    # consensus.featureGates holds transitional, rollout-only gates. Leave unset to
-    # defer to the operator default; see docs/design/feature-gates.md.
+    # consensus.featureGates holds transitional, rollout-only gates. Leave unset
+    # (defaults off); set by solo-provisioner/jobs to match the deployed CN.
+    # See docs/design/feature-gates.md.
     genesis:
       addressBook:
         # ledgerId is the consensus node's ledger.id (network identity);
