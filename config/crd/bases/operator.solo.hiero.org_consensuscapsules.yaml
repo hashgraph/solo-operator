@@ -4938,7 +4938,9 @@ spec:
                                 type: object
                             type: object
                           softwareVersion:
-                            description: container image spec
+                            description: |-
+                              container image spec; mutually optional with softwareVersionSource — at least one must be set.
+                              When softwareVersionSource is also set it takes precedence and this field is ignored.
                             properties:
                               digest:
                                 description: |-
@@ -5130,9 +5132,11 @@ spec:
                             - imageRepositories
                             - imageVerificationSpec
                             type: object
-                        required:
-                        - softwareVersion
                         type: object
+                        x-kubernetes-validations:
+                        - message: one of softwareVersion or softwareVersionSource
+                            is required
+                          rule: has(self.softwareVersion) || has(self.softwareVersionSource)
                       eventsUploader:
                         description: CheetahUploader is the Cheetah uploader configuration
                         properties:
