@@ -62,8 +62,8 @@ func (r *OrbitReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	ctx = common.ReconcileContext(ctx, "orbit", "Orbit", orbitObj)
-	common.Info(ctx, ReasonReconcileStart).Msg("Starting Orbit reconciliation")
-	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished Orbit reconciliation")
+	common.Debug(ctx, ReasonReconcileStart).Msg("Starting Orbit reconciliation")
+	defer common.Debug(ctx, ReasonReconcileFinish).Msg("Finished Orbit reconciliation")
 
 	if !orbitObj.DeletionTimestamp.IsZero() {
 		return r.handleDeletion(ctx, orbitObj)

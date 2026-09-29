@@ -122,8 +122,11 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	ctx = common.ReconcileContext(ctx, "networkupgradeexecute", "NetworkUpgradeExecute", &execute)
-	common.Info(ctx, ReasonReconcileStart).Msg("Starting NetworkUpgradeExecute reconciliation")
-	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished NetworkUpgradeExecute reconciliation")
+	common.Info(ctx, ReasonReconcileStart).
+		Str("phase", string(execute.Status.Phase)).
+		Int64("generation", execute.Generation).
+		Int64("observedGeneration", execute.Status.ObservedGeneration).
+		Msg("Reconciling NetworkUpgradeExecute")
 
 	if res, err := ensureFinalizer(ctx, r.Client, &execute, FinalizerNetworkUpgradeExecute); res != nil {
 		return *res, err

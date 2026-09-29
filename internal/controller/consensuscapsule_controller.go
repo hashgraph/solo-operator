@@ -157,8 +157,8 @@ func (r *ConsensusCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	originalRunState := capsule.Status.RunState
 	ctx = common.ReconcileContext(ctx, "consensuscapsule", "ConsensusCapsule", capsule)
-	common.Info(ctx, ReasonReconcileStart).Msg("Starting ConsensusCapsule reconciliation")
-	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished ConsensusCapsule reconciliation")
+	common.Debug(ctx, ReasonReconcileStart).Msg("Starting ConsensusCapsule reconciliation")
+	defer common.Debug(ctx, ReasonReconcileFinish).Msg("Finished ConsensusCapsule reconciliation")
 
 	if !capsule.DeletionTimestamp.IsZero() {
 		return r.handleDeletion(ctx, capsule)

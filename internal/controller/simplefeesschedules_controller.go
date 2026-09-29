@@ -46,8 +46,8 @@ func (r *SimpleFeesSchedulesReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 
 	ctx = common.ReconcileContext(ctx, "simplefeesschedules", "SimpleFeesSchedules", obj)
-	common.Info(ctx, ReasonReconcileStart).Msg("Starting SimpleFeesSchedules reconciliation")
-	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished SimpleFeesSchedules reconciliation")
+	common.Debug(ctx, ReasonReconcileStart).Msg("Starting SimpleFeesSchedules reconciliation")
+	defer common.Debug(ctx, ReasonReconcileFinish).Msg("Finished SimpleFeesSchedules reconciliation")
 
 	result, err := r.subreconciler.Reconcile(ctx, obj)
 	if err != nil {

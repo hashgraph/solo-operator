@@ -59,8 +59,8 @@ func (r *NetworkGenesisReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	ctx = common.ReconcileContext(ctx, "networkgenesis", "NetworkGenesis", ng)
-	common.Info(ctx, ReasonReconcileStart).Msg("Starting NetworkGenesis reconciliation")
-	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished NetworkGenesis reconciliation")
+	common.Debug(ctx, ReasonReconcileStart).Msg("Starting NetworkGenesis reconciliation")
+	defer common.Debug(ctx, ReasonReconcileFinish).Msg("Finished NetworkGenesis reconciliation")
 
 	if !ng.DeletionTimestamp.IsZero() {
 		return r.handleDeletion(ctx, ng)

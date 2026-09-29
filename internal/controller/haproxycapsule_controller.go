@@ -61,8 +61,8 @@ func (r *HAProxyCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	ctx = common.ReconcileContext(ctx, "haproxycapsule", "HAProxyCapsule", haproxyObj)
-	common.Info(ctx, ReasonReconcileStart).Msg("Starting HAProxyCapsule reconciliation")
-	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished HAProxyCapsule reconciliation")
+	common.Debug(ctx, ReasonReconcileStart).Msg("Starting HAProxyCapsule reconciliation")
+	defer common.Debug(ctx, ReasonReconcileFinish).Msg("Finished HAProxyCapsule reconciliation")
 
 	// Handle deletion
 	if !haproxyObj.DeletionTimestamp.IsZero() {

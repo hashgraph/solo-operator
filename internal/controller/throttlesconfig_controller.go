@@ -46,8 +46,8 @@ func (r *ThrottlesConfigReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	ctx = common.ReconcileContext(ctx, "throttlesconfig", "ThrottlesConfig", obj)
-	common.Info(ctx, ReasonReconcileStart).Msg("Starting ThrottlesConfig reconciliation")
-	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished ThrottlesConfig reconciliation")
+	common.Debug(ctx, ReasonReconcileStart).Msg("Starting ThrottlesConfig reconciliation")
+	defer common.Debug(ctx, ReasonReconcileFinish).Msg("Finished ThrottlesConfig reconciliation")
 
 	result, err := r.subreconciler.Reconcile(ctx, obj)
 	if err != nil {

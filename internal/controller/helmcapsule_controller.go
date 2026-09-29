@@ -86,7 +86,7 @@ func (r *HelmCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	ctx = common.ReconcileContext(ctx, "helmcapsule", "HelmCapsule", hc)
-	common.Info(ctx, ReasonReconcileStart).Msg("Reconciling HelmCapsule")
+	common.Debug(ctx, ReasonReconcileStart).Msg("Reconciling HelmCapsule")
 
 	if !hc.DeletionTimestamp.IsZero() {
 		return r.handleDeletion(ctx, hc)

@@ -46,8 +46,8 @@ func (r *BootstrapPropertiesReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 
 	ctx = common.ReconcileContext(ctx, "bootstrapproperties", "BootstrapProperties", obj)
-	common.Info(ctx, ReasonReconcileStart).Msg("Starting BootstrapProperties reconciliation")
-	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished BootstrapProperties reconciliation")
+	common.Debug(ctx, ReasonReconcileStart).Msg("Starting BootstrapProperties reconciliation")
+	defer common.Debug(ctx, ReasonReconcileFinish).Msg("Finished BootstrapProperties reconciliation")
 
 	result, err := r.subreconciler.Reconcile(ctx, obj)
 	if err != nil {
