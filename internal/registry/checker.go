@@ -128,18 +128,6 @@ func (c OCIChecker) Check(ctx context.Context, spec operatorv1alpha1.ImageRegist
 		expected = spec.LayerHashes
 	}
 
-	// Supported=false with no hashes is a deliberate opt-out; still reject a malformed reference.
-	if !deterministic.Supported && len(expected) == 0 {
-		if _, err := name.ParseReference(spec.Image); err != nil {
-			res.State = StateUnreachable
-			res.Err = err
-			return res
-		}
-		res.State = StateValid
-		res.VerificationSkipped = true
-		return res
-	}
-
 	platforms := make([]string, 0, len(expected))
 	for p := range expected {
 		platforms = append(platforms, p)

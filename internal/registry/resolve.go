@@ -63,7 +63,6 @@ func SelectedSourceFromWinner(comp operatorv1alpha1.ImageComponentSpec, winner R
 		Image:               winner.Image,
 		Digest:              winner.Digest,
 		LayerHashesVerified: winner.LayerHashesVerified,
-		VerificationSkipped: winner.VerificationSkipped,
 		LayerHashes:         SpecForImage(comp, winner.Image).LayerHashes,
 	}
 }

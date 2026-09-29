@@ -781,7 +781,7 @@ func (r *NetworkUpgradeExecuteReconciler) applyImagePatch(
 		if src == nil {
 			return "", "", false, false
 		}
-		if src.Digest == "" && !src.VerificationSkipped && pinErr == nil {
+		if src.Digest == "" && pinErr == nil {
 			pinErr = errx.WithReason(
 				errReconcile.New("selected source for component %q (operationId %s) has no content digest; refusing to deploy an unpinned (mutable-tag) image", name, execute.Spec.OperationID),
 				ReasonSourceUnpinned)

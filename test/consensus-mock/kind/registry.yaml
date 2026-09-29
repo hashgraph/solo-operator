@@ -1,7 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# Fixed ClusterIP: must resolve from both node-level containerd and the
-# operator's in-pod verification client, neither of which can use Service DNS.
 apiVersion: v1
 kind: Namespace
 metadata:

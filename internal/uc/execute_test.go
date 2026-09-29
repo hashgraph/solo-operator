@@ -125,14 +125,6 @@ func TestEnsureDigestsPinned(t *testing.T) {
 		t.Error("expected an error for a present source without a digest")
 	}
 
-	// A source that explicitly opted out of verification has no digest by design.
-	skipped := operatorv1alpha1.SelectedSources{
-		ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "gcr.io/cn:v1", VerificationSkipped: true},
-	}
-	if err := ensureDigestsPinned(&skipped, "op", "NetworkUpgradePrepare"); err != nil {
-		t.Errorf("expected nil for a verification-skipped source, got %v", err)
-	}
-
 	// Empty / nil sources are the "not resolved yet, retry" race — not an error here.
 	empty := operatorv1alpha1.SelectedSources{}
 	if err := ensureDigestsPinned(&empty, "op", "NetworkUpgradePrepare"); err != nil {

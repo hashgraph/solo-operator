@@ -271,8 +271,10 @@ tasks:
 
   kind:create:
     desc: Create a kind cluster for testing
+    vars:
+      KIND_CONFIG: '{{.KIND_CONFIG | default ""}}'
     cmds:
-      - kind create cluster --name solo-operator || true
+      - kind create cluster --name solo-operator{{if .KIND_CONFIG}} --config {{.KIND_CONFIG}}{{end}} || true
 
   kind:delete:
     desc: Delete the kind cluster
@@ -380,11 +382,14 @@ tasks:
 
   kind:reset:
     desc: Reset kind cluster with fresh CRDs (delete+generate run in parallel)
+    vars:
+      KIND_CONFIG: '{{.KIND_CONFIG | default ""}}'
     deps:
       - kind:delete
       - generate:all
     cmds:
       - task: kind:create
+        vars: { KIND_CONFIG: '{{.KIND_CONFIG}}' }
       - task: install
 
   clean:

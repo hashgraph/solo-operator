@@ -25,8 +25,6 @@ type RegistryResult struct {
 	State  RegistryState
 	// true when expected layer hashes were configured and matched the image
 	LayerHashesVerified bool
-	// true when the component explicitly opted out of verification (Supported=false, no hashes)
-	VerificationSkipped bool
 	// recorded, never propagated, so one failure can't abort sibling checks
 	Err error
 }

@@ -623,8 +623,8 @@ spec:
                   backupUploader:
                     properties:
                       digest:
-                        description: Digest is empty when the component opted out
-                          of image verification.
+                        description: Sha256Digest is an OCI sha256 digest ("sha256:"
+                          + 64 lowercase hex chars).
                         pattern: ^sha256:[a-f0-9]{64}$
                         type: string
                       image:
@@ -646,21 +646,16 @@ spec:
                           LayerHashesVerified is true when expected hashes were configured and matched
                           what the registry served; false when no hashes were configured or on mismatch.
                         type: boolean
-                      verificationSkipped:
-                        description: |-
-                          VerificationSkipped is true when the component explicitly opted out of
-                          verification (deterministic.supported=false, no per-registry hashes),
-                          which is why Digest is empty — not a bug to flag as unpinned.
-                        type: boolean
                     required:
+                    - digest
                     - image
                     - layerHashesVerified
                     type: object
                   blockStreamUploader:
                     properties:
                       digest:
-                        description: Digest is empty when the component opted out
-                          of image verification.
+                        description: Sha256Digest is an OCI sha256 digest ("sha256:"
+                          + 64 lowercase hex chars).
                         pattern: ^sha256:[a-f0-9]{64}$
                         type: string
                       image:
@@ -682,21 +677,16 @@ spec:
                           LayerHashesVerified is true when expected hashes were configured and matched
                           what the registry served; false when no hashes were configured or on mismatch.
                         type: boolean
-                      verificationSkipped:
-                        description: |-
-                          VerificationSkipped is true when the component explicitly opted out of
-                          verification (deterministic.supported=false, no per-registry hashes),
-                          which is why Digest is empty — not a bug to flag as unpinned.
-                        type: boolean
                     required:
+                    - digest
                     - image
                     - layerHashesVerified
                     type: object
                   consensusNode:
                     properties:
                       digest:
-                        description: Digest is empty when the component opted out
-                          of image verification.
+                        description: Sha256Digest is an OCI sha256 digest ("sha256:"
+                          + 64 lowercase hex chars).
                         pattern: ^sha256:[a-f0-9]{64}$
                         type: string
                       image:
@@ -718,21 +708,16 @@ spec:
                           LayerHashesVerified is true when expected hashes were configured and matched
                           what the registry served; false when no hashes were configured or on mismatch.
                         type: boolean
-                      verificationSkipped:
-                        description: |-
-                          VerificationSkipped is true when the component explicitly opted out of
-                          verification (deterministic.supported=false, no per-registry hashes),
-                          which is why Digest is empty — not a bug to flag as unpinned.
-                        type: boolean
                     required:
+                    - digest
                     - image
                     - layerHashesVerified
                     type: object
                   eventStreamUploader:
                     properties:
                       digest:
-                        description: Digest is empty when the component opted out
-                          of image verification.
+                        description: Sha256Digest is an OCI sha256 digest ("sha256:"
+                          + 64 lowercase hex chars).
                         pattern: ^sha256:[a-f0-9]{64}$
                         type: string
                       image:
@@ -754,21 +739,16 @@ spec:
                           LayerHashesVerified is true when expected hashes were configured and matched
                           what the registry served; false when no hashes were configured or on mismatch.
                         type: boolean
-                      verificationSkipped:
-                        description: |-
-                          VerificationSkipped is true when the component explicitly opted out of
-                          verification (deterministic.supported=false, no per-registry hashes),
-                          which is why Digest is empty — not a bug to flag as unpinned.
-                        type: boolean
                     required:
+                    - digest
                     - image
                     - layerHashesVerified
                     type: object
                   recordStreamUploader:
                     properties:
                       digest:
-                        description: Digest is empty when the component opted out
-                          of image verification.
+                        description: Sha256Digest is an OCI sha256 digest ("sha256:"
+                          + 64 lowercase hex chars).
                         pattern: ^sha256:[a-f0-9]{64}$
                         type: string
                       image:
@@ -790,21 +770,16 @@ spec:
                           LayerHashesVerified is true when expected hashes were configured and matched
                           what the registry served; false when no hashes were configured or on mismatch.
                         type: boolean
-                      verificationSkipped:
-                        description: |-
-                          VerificationSkipped is true when the component explicitly opted out of
-                          verification (deterministic.supported=false, no per-registry hashes),
-                          which is why Digest is empty — not a bug to flag as unpinned.
-                        type: boolean
                     required:
+                    - digest
                     - image
                     - layerHashesVerified
                     type: object
                   uc:
                     properties:
                       digest:
-                        description: Digest is empty when the component opted out
-                          of image verification.
+                        description: Sha256Digest is an OCI sha256 digest ("sha256:"
+                          + 64 lowercase hex chars).
                         pattern: ^sha256:[a-f0-9]{64}$
                         type: string
                       image:
@@ -826,13 +801,8 @@ spec:
                           LayerHashesVerified is true when expected hashes were configured and matched
                           what the registry served; false when no hashes were configured or on mismatch.
                         type: boolean
-                      verificationSkipped:
-                        description: |-
-                          VerificationSkipped is true when the component explicitly opted out of
-                          verification (deterministic.supported=false, no per-registry hashes),
-                          which is why Digest is empty — not a bug to flag as unpinned.
-                        type: boolean
                     required:
+                    - digest
                     - image
                     - layerHashesVerified
                     type: object

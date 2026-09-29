@@ -30,7 +30,7 @@ It is a real drop-in replacement for the `consensusNode` container image in a
   for real and `NetworkUpgradeExecute`'s phase gate isn't stuck.
 
 It does **not** implement `FileService` or generate/copy any upgrade
-manifest itself — see "Testing `PREPARE_UPGRADE`" below.
+manifest itself — see "Local kind harness" below.
 
 The image also ships trivial stubs for `/package/admin/s6/command/{s6-svc,s6-svstat}`
 — `internal/resources/consensus/exec.go`'s `ActuationSubReconciler` execs
@@ -91,23 +91,42 @@ against it. It reuses `docs/example/Taskfile.yml`'s `deploy:orbit`/
 `deploy:common` (Orbit, secrets, config CRs — image-agnostic) and
 `docs/beacon/examples/job-freeze.yaml`'s Job pattern.
 
-**Prerequisite**: an operator must be reconciling the cluster. Either run it in
-its own terminal the same way `docs/beacon/Taskfile.yml`'s `operator` task does:
+The operator's `NetworkUpgradePrepareReconciler` only marks a Prepare CR
+`Succeeded` once it verifies the upgrade target's `layerHashes` against the
+**real, network-reachable** image (`internal/registry/checker.go` pulls the
+image config and compares RootFS `diff_ids` — there is no opt-out: a
+component that can't be verified is never deployed). `kind/registry.yaml`
+runs a small `registry:2` Deployment inside the cluster for exactly this —
+`0.2.0` (the upgrade target) is pushed there and verified for real; `0.1.0`
+(the initial deploy) is only ever `kind load`ed and never goes through
+verification, since that only applies to `NetworkUpgrade*` targets, not a
+capsule's first deploy.
+
+**Prerequisites**: `crane` (`go install
+github.com/google/go-containerregistry/cmd/crane@v0.22.0`) and `jq`, used by
+`build:manifest` to compute real deterministic layer hashes. An operator must
+also be reconciling the cluster — either run it in its own terminal the same
+way `docs/beacon/Taskfile.yml`'s `operator` task does:
 ```bash
 task -d docs/beacon build && go run ./cmd/main.go --log-level=debug
 ```
 or deploy it into the kind cluster via this harness (`task operator:deploy`,
-or the full `task e2e`, which calls it for you).
+or the full `task e2e`, which calls it for you) — note that mode allow-lists
+the in-cluster registry's ClusterIP via `--allowed-registry-hosts` (the
+operator's registry client denies private-IP hosts by default as an SSRF
+guard); running the operator on the host instead needs the same flag set
+manually, pointed at the registry's ClusterIP (`REGISTRY_CLUSTER_IP` in the
+Taskfile, currently `10.96.100.100`).
 
 ```bash
-task -d test/consensus-mock cluster                 # kind reset + CRDs (destroys any existing "solo-operator" kind cluster)
+task -d test/consensus-mock cluster                 # kind reset + CRDs + in-cluster registry (destroys any existing "solo-operator" kind cluster)
 task -d test/consensus-mock docker:build:versions   # consensus-mock:0.1.0 + :0.2.0 (ghcr.io/hashgraph/solo-operator/consensus-mock)
-task -d test/consensus-mock kind:load:versions
+task -d test/consensus-mock images:load:versions    # 0.1.0 -> kind load; 0.2.0 -> pushed to the in-cluster registry
 task -d test/consensus-mock kind:load:beacon
 # also needed once per cluster: task docker:build:uc && task kind:load:uc  (root Taskfile)
 task -d test/consensus-mock deploy                  # orbit+common+node0(mock:0.1.0)+genesis, ready in seconds
 task -d test/consensus-mock beacon:config
-task -d test/consensus-mock beacon:prepare          # PREPARE_UPGRADE Job; execute_immediate.mf appears
+task -d test/consensus-mock beacon:prepare          # generates a real layerHashes manifest against the in-cluster registry, then PREPARE_UPGRADE
 task -d test/consensus-mock beacon:freeze           # FREEZE_UPGRADE Job (10s out by default; FREEZE_DELAY_SECS=30 to override)
 task -d test/consensus-mock beacon:abort            # FREEZE_ABORT Job — alternate path
 task -d test/consensus-mock beacon:watch            # poll NetworkUpgrade* CRs (leave running in its own terminal)
@@ -117,46 +136,15 @@ task -d test/consensus-mock uc:logs                 # tail the UC sidecar
 `deploy` accepts `MOCK_TAG=0.2.0` to redeploy node0 straight onto the
 "upgraded" tag without going through the Job flow, as a quick sanity check.
 
-**Known limitation**: `beacon:prepare` submits a real `PREPARE_UPGRADE` and
-consensus-mock reacts correctly (`execute_immediate.mf` appears, the UC logs
-`MarkerDetected`), but the UC then fails with `ManifestReadFailed` — no
-`manifests/consensus-node-components.yaml` exists yet. Reaching a
-`NetworkUpgradePrepare` CR requires the additional push + `build:manifest` +
-`kubectl cp` steps in "Testing `PREPARE_UPGRADE`" above; this harness makes
-iterating on that follow-up fast, it doesn't replace it.
-
-## Testing `PREPARE_UPGRADE`
-
-The operator's `NetworkUpgradePrepareReconciler` only marks a Prepare CR
-`Succeeded` once it verifies the manifest's `layerHashes` against the
-**real, network-reachable** target image (`internal/registry/checker.go`
-pulls the image config and compares RootFS `diff_ids` — a placeholder hash
-never passes, and `kind load docker-image` alone is not enough since this
-check does a real registry pull). So:
-
-1. Push (not just `kind load`) two consensus-mock images to a reachable
-   registry, e.g. `ghcr.io/<you>/consensus-mock:v1` and `:v2`.
-2. Generate the manifest for the v1→v2 upgrade:
-   ```bash
-   task -d test/consensus-mock build:manifest IMAGE=ghcr.io/<you>/consensus-mock:v2
-   ```
-3. Stage the generated file into the running pod's shared `upgrade` volume
-   before submitting `PREPARE_UPGRADE` (consensus-mock does not do this
-   itself):
-   ```bash
-   kubectl exec <pod> -c <consensus-node-container> -- mkdir -p <upgrade-path>/manifests
-   kubectl cp manifests/consensus-node-components.yaml \
-     <namespace>/<pod>:<upgrade-path>/manifests/consensus-node-components.yaml -c <consensus-node-container>
-   ```
-
-The same generated file is a useful verification fixture on its own — e.g.
-hand-edit a copy with a wrong `layerHashes` entry to confirm the Prepare CR
-correctly fails verification.
+The manifest `beacon:prepare` generates (`manifests/consensus-node-components.yaml`,
+via `build:manifest`) is also a useful verification fixture on its own — e.g.
+hand-edit a copy with a wrong `layerHashes` entry, re-stage it with
+`kubectl cp`, and confirm the Prepare CR correctly fails verification instead
+of silently passing.
 
 ## Timing the full flow
 
-Once `beacon:prepare`'s Prepare CR reaches `Succeeded` (see "Testing
-`PREPARE_UPGRADE`"), `beacon:freeze`'s `NetworkUpgradeFreeze` CR should
+Once `beacon:prepare`'s Prepare CR reaches `Succeeded`, `beacon:freeze`'s `NetworkUpgradeFreeze` CR should
 follow, and eventually `NetworkUpgradeExecute` reaches
 `ReadyForProvisionerDaemon`, the operator swaps the StatefulSet pod to
 `:0.2.0`, and the new pod reaches `Active` again with the Execute CR
