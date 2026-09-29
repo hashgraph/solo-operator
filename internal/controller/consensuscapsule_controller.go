@@ -121,7 +121,7 @@ func NewConsensusCapsuleReconciler(c client.Client, scheme *runtime.Scheme, rest
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",resources=pods/exec,verbs=get
+// +kubebuilder:rbac:groups="",resources=pods/exec,verbs=get;create
 // +kubebuilder:rbac:groups="",resources=pods/status,verbs=patch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch

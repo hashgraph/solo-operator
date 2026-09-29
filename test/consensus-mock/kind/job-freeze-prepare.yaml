@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Submits PREPARE_UPGRADE against consensus-mock as a Kubernetes Job.
+# consensus-mock never validates --upgrade-zip-hash (beacon's
+# ParseUpgradeHash only checks it is well-formed SHA-384 hex), so a fixed
+# placeholder is used — no real `beacon file upload` is needed for this
+# harness. Mirrors docs/beacon/examples/job-freeze.yaml.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: beacon-freeze-prepare
+  namespace: solo-orbit
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 65532
+      containers:
+        - name: beacon
+          image: ghcr.io/hashgraph/solo-operator/beacon:dev
+          imagePullPolicy: IfNotPresent
+          args:
+            - "freeze"
+            - "prepare"
+            - "-c"
+            - "/etc/beacon/config.yaml"
+            - "--upgrade-zip-hash"
+            - "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+            - "--yes"
+          volumeMounts:
+            - { name: config, mountPath: /etc/beacon/config.yaml, subPath: config.yaml, readOnly: true }
+            - { name: keys, mountPath: /etc/beacon/keys, readOnly: true }
+      volumes:
+        - name: config
+          configMap: { name: beacon-config }
+        - name: keys
+          secret: { secretName: beacon-keys }

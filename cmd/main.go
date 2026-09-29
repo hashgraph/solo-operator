@@ -120,6 +120,7 @@ func main() {
 	if err := logx.Initialize(logx.LoggingConfig{
 		Level:          logLevel,
 		ConsoleLogging: consoleLogging,
+		TimeFormat:     time.RFC3339Nano,
 		UTC:            true,
 		IncludeCaller:  true,
 		IncludePackage: true,

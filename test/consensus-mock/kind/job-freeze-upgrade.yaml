@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Submits FREEZE_UPGRADE against consensus-mock as a Kubernetes Job.
+# ${START_TIME} is substituted by the Taskfile (envsubst) with a near-future
+# UTC timestamp computed fresh on every run — consensus-mock schedules
+# now_frozen.mf against this time, so a stale, already-past timestamp would
+# fire it immediately instead of exercising the scheduled-wait path.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: beacon-freeze-upgrade
+  namespace: solo-orbit
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 65532
+      containers:
+        - name: beacon
+          image: ghcr.io/hashgraph/solo-operator/beacon:dev
+          imagePullPolicy: IfNotPresent
+          args:
+            - "freeze"
+            - "upgrade"
+            - "-c"
+            - "/etc/beacon/config.yaml"
+            - "--start-time"
+            - "${START_TIME}"
+            - "--upgrade-zip-hash"
+            - "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+            - "--yes"
+          volumeMounts:
+            - { name: config, mountPath: /etc/beacon/config.yaml, subPath: config.yaml, readOnly: true }
+            - { name: keys, mountPath: /etc/beacon/keys, readOnly: true }
+      volumes:
+        - name: config
+          configMap: { name: beacon-config }
+        - name: keys
+          secret: { secretName: beacon-keys }

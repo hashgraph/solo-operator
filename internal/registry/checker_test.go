@@ -135,6 +135,19 @@ func TestOCIChecker_NoExpectedHashes_Error(t *testing.T) {
 	}
 }
 
+func TestOCIChecker_NonDeterministic_NoHashes_Error(t *testing.T) {
+	src := fakeSource{digest: "sha256:abc"}
+	res := checkerWith(src).Check(context.Background(), operatorv1alpha1.ImageRegistrySpec{Image: "gcr.io/a/cn:1"},
+		operatorv1alpha1.ImageDeterministicSpec{Supported: false})
+
+	if res.State != StateNoHashes || res.Err == nil {
+		t.Fatalf("expected StateNoHashes with error when no per-registry hashes configured, got %+v", res)
+	}
+	if res.LayerHashesVerified {
+		t.Error("LayerHashesVerified must be false when no hashes configured")
+	}
+}
+
 func TestOCIChecker_Unreachable(t *testing.T) {
 	src := fakeSource{err: fmt.Errorf("connection refused")}
 	res := checkerWith(src).Check(context.Background(), operatorv1alpha1.ImageRegistrySpec{Image: "gcr.io/a/cn:1"},

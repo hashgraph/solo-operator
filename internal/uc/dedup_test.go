@@ -100,6 +100,47 @@ func TestDedupSeededCacheSkipsCreate(t *testing.T) {
 	}
 }
 
+// TestDedupAPIErrorInvalidatesCache verifies a failed dedup List drops the
+// cache entry and propagates the error, so the next attempt re-queries.
+func TestDedupAPIErrorInvalidatesCache(t *testing.T) {
+	root := writePackage(t, validComponentsYAML)
+	f := newFakeFactory(t, testConfig(root, t.TempDir()))
+
+	// stale entry, to prove the error path clears it
+	f.markCreated(wantOperationID, operatorv1alpha1.StepFreeze, "")
+
+	var fail atomic.Bool
+	fail.Store(true)
+	var lists int64
+	f.client.(*dynamicfake.FakeDynamicClient).
+		PrependReactor("list", "networkupgradeprepares", func(k8stesting.Action) (bool, runtime.Object, error) {
+			atomic.AddInt64(&lists, 1)
+			if fail.Load() {
+				return true, nil, k8serrors.NewInternalError(errors.New("boom"))
+			}
+			return false, nil, nil
+		})
+
+	if err := f.HandleExecuteImmediate(context.Background()); err == nil {
+		t.Fatal("expected dedup query error to propagate")
+	}
+	f.mu.Lock()
+	_, present := f.cache[wantOperationID]
+	f.mu.Unlock()
+	if present {
+		t.Fatal("cache entry survived an API error; want it invalidated")
+	}
+
+	fail.Store(false)
+	if err := f.HandleExecuteImmediate(context.Background()); err != nil {
+		t.Fatalf("recovery tick: %v", err)
+	}
+	if lists < 2 {
+		t.Fatalf("expected a re-query after invalidation, got %d List calls", lists)
+	}
+	getPrepare(t, f, wantOperationID)
+}
+
 // TestSeedCacheExcludesArchived verifies the startup seed hydrates the dedup
 // cache only from in-flight CRs, skipping archived (terminal) ones so f.cache is
 // bounded to live operations rather than the full audit history.
@@ -136,51 +177,6 @@ func TestSeedCacheExcludesArchived(t *testing.T) {
 	if archivedSeeded {
 		t.Error("archived operation seeded into dedup cache; want it excluded by listNotArchivedSelector")
 	}
-}
-
-// TestDedupAPIErrorInvalidatesCache verifies that a List failure during the
-// dedup query drops the cache entry and propagates the error (so the action
-// retries), and that the next attempt re-queries rather than trusting stale
-// state.
-func TestDedupAPIErrorInvalidatesCache(t *testing.T) {
-	root := writePackage(t, validComponentsYAML)
-	f := newFakeFactory(t, testConfig(root, t.TempDir()))
-
-	// Prime the cache with a (now stale) entry to prove the error path clears it.
-	f.markCreated(wantOperationID, operatorv1alpha1.StepFreeze, "")
-
-	var fail atomic.Bool
-	fail.Store(true)
-	var lists int64
-	f.client.(*dynamicfake.FakeDynamicClient).
-		PrependReactor("list", "networkupgradeprepares", func(k8stesting.Action) (bool, runtime.Object, error) {
-			atomic.AddInt64(&lists, 1)
-			if fail.Load() {
-				return true, nil, k8serrors.NewInternalError(errors.New("boom"))
-			}
-			return false, nil, nil
-		})
-
-	// First tick: the dedup query fails -> error returned, cache invalidated.
-	if err := f.HandleExecuteImmediate(context.Background()); err == nil {
-		t.Fatal("expected dedup query error to propagate")
-	}
-	f.mu.Lock()
-	_, present := f.cache[wantOperationID]
-	f.mu.Unlock()
-	if present {
-		t.Fatal("cache entry survived an API error; want it invalidated")
-	}
-
-	// Next tick: API recovers -> re-queries and proceeds to create the CR.
-	fail.Store(false)
-	if err := f.HandleExecuteImmediate(context.Background()); err != nil {
-		t.Fatalf("recovery tick: %v", err)
-	}
-	if lists < 2 {
-		t.Fatalf("expected a re-query after invalidation, got %d List calls", lists)
-	}
-	getPrepare(t, f, wantOperationID) // CR now exists
 }
 
 // TestHandleExecuteImmediateConcurrentNeverDuplicates verifies that concurrent

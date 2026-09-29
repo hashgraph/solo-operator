@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Publishes registry.yaml's NodePort as localhost:5001 for host-side docker push/crane.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 30500
+        hostPort: 5001
+        protocol: TCP

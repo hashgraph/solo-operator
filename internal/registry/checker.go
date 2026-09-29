@@ -127,6 +127,7 @@ func (c OCIChecker) Check(ctx context.Context, spec operatorv1alpha1.ImageRegist
 	if !deterministic.Supported {
 		expected = spec.LayerHashes
 	}
+
 	platforms := make([]string, 0, len(expected))
 	for p := range expected {
 		platforms = append(platforms, p)

@@ -70,6 +70,8 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	ctx = common.ReconcileContext(ctx, "networkupgradefreeze", "NetworkUpgradeFreeze", &freeze)
+	common.Info(ctx, ReasonReconcileStart).Msg("Starting NetworkUpgradeFreeze reconciliation")
+	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished NetworkUpgradeFreeze reconciliation")
 
 	if res, err := ensureFinalizer(ctx, r.Client, &freeze, FinalizerNetworkUpgradeFreeze); res != nil {
 		return *res, err

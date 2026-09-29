@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/automa-saga/errx"
 	"github.com/automa-saga/logx"
@@ -191,6 +192,7 @@ func run(cmd *cobra.Command, _ []string) error {
 	if err := logx.Initialize(logx.LoggingConfig{
 		Level:          flagLogLevel,
 		ConsoleLogging: true,
+		TimeFormat:     time.RFC3339Nano,
 		UTC:            true,
 		IncludeCaller:  true,
 		IncludePackage: true,

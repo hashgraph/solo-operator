@@ -5,6 +5,7 @@ package integration
 import (
 	"context"
 	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -18,13 +19,23 @@ import (
 	"github.com/hashgraph/solo-operator/internal/registry"
 )
 
-// selectiveImageChecker is the suite-level ImageChecker. Images whose name
-// contains "unreachable" are reported as StateUnreachable; all others as StateValid.
+// selectSlowDelay holds a "slow" image's CR non-terminal without racing an instant checker.
+const selectSlowDelay = 4 * time.Second
+
+// selectiveImageChecker is the suite-level ImageChecker: "unreachable" images report
+// StateUnreachable, "slow" images report StateValid after selectSlowDelay, others StateValid immediately.
 type selectiveImageChecker struct{}
 
-func (selectiveImageChecker) Check(_ context.Context, spec operatorv1alpha1.ImageRegistrySpec, _ operatorv1alpha1.ImageDeterministicSpec) registry.RegistryResult {
+func (selectiveImageChecker) Check(ctx context.Context, spec operatorv1alpha1.ImageRegistrySpec, _ operatorv1alpha1.ImageDeterministicSpec) registry.RegistryResult {
 	if strings.Contains(spec.Image, "unreachable") {
 		return registry.RegistryResult{Image: spec.Image, State: registry.StateUnreachable}
+	}
+	if strings.Contains(spec.Image, "slow") {
+		select {
+		case <-time.After(selectSlowDelay):
+		case <-ctx.Done():
+			return registry.RegistryResult{Image: spec.Image, State: registry.StateUnreachable, Err: ctx.Err()}
+		}
 	}
 	return registry.RegistryResult{
 		Image:               spec.Image,

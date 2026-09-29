@@ -78,6 +78,8 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	ctx = common.ReconcileContext(ctx, "networkupgradeprepare", "NetworkUpgradePrepare", &prepare)
+	common.Info(ctx, ReasonReconcileStart).Msg("Starting NetworkUpgradePrepare reconciliation")
+	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished NetworkUpgradePrepare reconciliation")
 
 	if res, err := ensureFinalizer(ctx, r.Client, &prepare, FinalizerNetworkUpgradePrepare); res != nil {
 		return *res, err

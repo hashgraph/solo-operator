@@ -15,11 +15,8 @@ import (
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
 
-// specOperationIDField is the CR field the UC filters on. The NetworkUpgrade*
-// CRDs declare it as a selectableField (apiextensions; requires k8s >=1.32), so
-// a FieldSelector on it is honoured server-side. spec.operationId — not the
-// operation-id label — is the source of truth: it is a hard-required field on
-// every CR, whereas the label is a human-facing convenience.
+// specOperationIDField is a selectableField (k8s >=1.32) the UC filters on; it's
+// the source of truth over the operation-id label, which is just a convenience.
 const specOperationIDField = "spec.operationId"
 
 // Operation-id deduplication (HIP-1496 §"Operation-id Deduplication").
@@ -41,11 +38,7 @@ const specOperationIDField = "spec.operationId"
 //     and create paths above — it is never the sole basis for correctness.
 
 // alreadyCreated reports whether a CR for operationID+step already exists and
-// returns its current status phase (empty string when not found or unknown). It
-// consults the in-memory cache first; on a miss it falls back to the
-// authoritative cluster query (by spec.operationId field selector on gvr) and
-// records every step+phase it observes. A K8s API error invalidates the cache
-// and is returned to the caller so the action is retried on the next tick.
+// its current status phase (empty when not found or unknown).
 func (f *Factory) alreadyCreated(ctx context.Context, gvr schema.GroupVersionResource, operationID, step string) (exists bool, phase string, _ error) {
 	f.mu.Lock()
 	if steps, ok := f.cache[operationID]; ok {
@@ -76,8 +69,7 @@ func (f *Factory) alreadyCreated(ctx context.Context, gvr schema.GroupVersionRes
 	foundPhase := ""
 	for i := range list.Items {
 		item := &list.Items[i]
-		// Re-verify against the spec field rather than trusting a server/fake-client
-		// that might not honour the field selector.
+		// re-verify: a fake client in tests may not honour the field selector.
 		if obsOpID, _, _ := unstructured.NestedString(item.Object, "spec", "operationId"); obsOpID != operationID {
 			continue
 		}
