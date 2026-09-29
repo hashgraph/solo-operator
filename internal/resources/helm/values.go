@@ -140,7 +140,7 @@ func mirrorValues(ctx context.Context, c client.Client, namespace string, capsul
 			}
 		}
 	} else if !apierrors.IsNotFound(err) {
-		common.Err(ctx, err, ReasonAddressBookReadFailed).Msg("failed to read addressbook-bin ConfigMap")
+		common.Err(ctx, err, ReasonAddressBookReadFailed).Msg("Failed to read addressbook-bin ConfigMap")
 	}
 
 	return vals, nil

@@ -9,10 +9,15 @@ import (
 	"github.com/automa-saga/errx"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
+
+// specOperationIDField is a selectableField (k8s >=1.32) the UC filters on; it's
+// the source of truth over the operation-id label, which is just a convenience.
+const specOperationIDField = "spec.operationId"
 
 // Operation-id deduplication (HIP-1496 §"Operation-id Deduplication").
 //
@@ -33,9 +38,8 @@ import (
 //     and create paths above — it is never the sole basis for correctness.
 
 // alreadyCreated reports whether a CR for operationID+step already exists and
-// returns its current status phase (empty string when not found or unknown).
-// It consults the in-memory cache first, then falls back to listCached.
-func (f *Factory) alreadyCreated(_ context.Context, gvr schema.GroupVersionResource, operationID, step string) (exists bool, phase string, _ error) {
+// its current status phase (empty when not found or unknown).
+func (f *Factory) alreadyCreated(ctx context.Context, gvr schema.GroupVersionResource, operationID, step string) (exists bool, phase string, _ error) {
 	f.mu.Lock()
 	if steps, ok := f.cache[operationID]; ok {
 		if phase, done := steps[step]; done {
@@ -45,7 +49,11 @@ func (f *Factory) alreadyCreated(_ context.Context, gvr schema.GroupVersionResou
 	}
 	f.mu.Unlock()
 
-	items, err := f.listCached(gvr, operationID)
+	listCtx, cancel := context.WithTimeout(ctx, listTimeout)
+	defer cancel()
+
+	list, err := f.client.Resource(gvr).Namespace(f.cfg.Namespace).
+		List(listCtx, metav1.ListOptions{FieldSelector: fields.OneTermEqualSelector(specOperationIDField, operationID).String()})
 	if err != nil {
 		// Cache accuracy is suspect after an API failure — drop this operationId so
 		// the next tick re-queries instead of trusting a stale (in)existence.
@@ -59,7 +67,12 @@ func (f *Factory) alreadyCreated(_ context.Context, gvr schema.GroupVersionResou
 
 	found := false
 	foundPhase := ""
-	for _, item := range items {
+	for i := range list.Items {
+		item := &list.Items[i]
+		// re-verify: a fake client in tests may not honour the field selector.
+		if obsOpID, _, _ := unstructured.NestedString(item.Object, "spec", "operationId"); obsOpID != operationID {
+			continue
+		}
 		observed := item.GetLabels()[operatorv1alpha1.LabelStep]
 		if observed == "" {
 			continue
@@ -123,17 +136,28 @@ func (f *Factory) invalidate(operationID string) {
 	delete(f.cache, operationID)
 }
 
-// seedCache populates the in-memory cache by querying every NetworkUpgrade* CR
-// in the namespace and recording its spec.operationId + step label. It is the
-// startup half of dedup: after seeding, steady-state ticks for already-handled
-// markers are served from cache without an API call. A query error is returned
-// so startup recovery can surface it; the cache stays best-effort (partial
-// seeding is harmless because the per-action query remains authoritative).
+// seedCache populates the in-memory cache by querying every in-flight
+// NetworkUpgrade* CR in the namespace and recording its spec.operationId + step
+// label. It is the startup half of dedup: after seeding, steady-state ticks for
+// already-handled markers are served from cache without an API call. A query
+// error is returned so startup recovery can surface it; the cache stays
+// best-effort (partial seeding is harmless because the per-action query remains
+// authoritative).
+//
+// The List excludes archived (terminal) CRs via listNotArchivedSelector so the
+// seed — and the resulting f.cache — is bounded to in-flight operations rather
+// than the full audit history (CRs are never deleted, only archived), which would
+// otherwise grow the startup List O(total history). The archive filter is safe
+// HERE because it only shrinks a best-effort hint: the per-action live query in
+// alreadyCreated stays unfiltered and authoritative, so a terminal-but-still-
+// actionable op (e.g. a Failed Execute whose marker persists on disk) is still
+// found there and re-populates the cache on its first re-check. The filter must
+// never be applied to that authoritative query.
 func (f *Factory) seedCache(ctx context.Context) error {
 	for _, gvr := range allUpgradeGVRs {
 		listCtx, cancel := context.WithTimeout(ctx, listTimeout)
 		list, err := f.client.Resource(gvr).Namespace(f.cfg.Namespace).
-			List(listCtx, metav1.ListOptions{})
+			List(listCtx, metav1.ListOptions{LabelSelector: listNotArchivedSelector})
 		cancel()
 		if err != nil {
 			return errx.WithHints(

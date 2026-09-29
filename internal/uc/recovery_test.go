@@ -45,7 +45,6 @@ func seedExecuteCR(t *testing.T, f *Factory, operationID string, phase operatorv
 		Create(context.Background(), cr, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("seed execute CR: %v", err)
 	}
-	waitForCached(t, f, networkUpgradeExecuteGVR, operationID, 1)
 }
 
 // persistCROnDisk writes a fake persisted CR for operationId+step to the store

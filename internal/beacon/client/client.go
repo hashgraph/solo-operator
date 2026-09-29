@@ -187,7 +187,7 @@ func (c *Client) WaitReachable(endpoint string, timeout time.Duration) error {
 			lastErr = err
 			logx.As().Warn().Str("reason", reasonNodeUnreachable.String()).
 				Str("endpoint", endpoint).Int("attempt", attempt).Dur("retry_in", backoff).
-				Err(err).Msg("node endpoint not reachable (TCP) — waiting")
+				Err(err).Msg("Waiting for node endpoint to become reachable over TCP")
 		} else {
 			_ = conn.Close()
 			// Port is open; confirm the node answers HAPI before we proceed.
@@ -195,10 +195,10 @@ func (c *Client) WaitReachable(endpoint string, timeout time.Duration) error {
 				lastErr = err
 				logx.As().Warn().Str("reason", reasonNodeUnreachable.String()).
 					Str("endpoint", endpoint).Int("attempt", attempt).Dur("retry_in", backoff).
-					Err(err).Msg("endpoint open but node not answering HAPI yet — waiting")
+					Err(err).Msg("Waiting for node to answer HAPI (TCP endpoint open)")
 			} else {
 				logx.As().Info().Str("reason", reasonNodeReachable.String()).
-					Str("endpoint", endpoint).Int("attempt", attempt).Msg("node reachable")
+					Str("endpoint", endpoint).Int("attempt", attempt).Msg("Confirmed node is reachable")
 				return nil
 			}
 		}
@@ -293,7 +293,7 @@ func guardSDKPanic[T any](what string, call func() (T, error)) (result T, err er
 				Str("operation", what).
 				Str("panic", fmt.Sprintf("%v", r)).
 				Bytes("stack", debug.Stack()).
-				Msg("recovered from hiero-sdk panic")
+				Msg("Recovered from hiero-sdk panic")
 			var zero T
 			result = zero
 			err = errx.Decorate(

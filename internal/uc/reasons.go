@@ -155,8 +155,4 @@ const (
 	// Lifecycle archiving.
 	ReasonCRArchived      errx.Reason = "CRArchived"
 	ReasonCRArchiveFailed errx.Reason = "CRArchiveFailed"
-
-	// NetworkUpgrade* informer cache (backs listCached).
-	ReasonInformerCacheSyncFailed errx.Reason = "InformerCacheSyncFailed"
-	ReasonInformerWatchError      errx.Reason = "InformerWatchError"
 )

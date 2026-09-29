@@ -72,7 +72,7 @@ func (r *NetworkUpgradeExecuteReconciler) logPhaseElapsed(ctx context.Context, e
 	common.Info(ctx, ReasonPhaseTransition).
 		Str("phase", phase).
 		Str("elapsed", elapsed.String()).
-		Msg("execute phase transition")
+		Msg("Execute phase transition")
 }
 
 func (r *NetworkUpgradeExecuteReconciler) WithStrategy(name string) *NetworkUpgradeExecuteReconciler {
@@ -179,13 +179,14 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		ucfg, err := r.resolveUpgradeConfig(ctx, capsule)
+		orbit, err := r.getOrbit(ctx, capsule)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
+		ucfg := operatorv1alpha1.ResolveUpgradeConfig(orbit)
 
 		if prepare == nil || prepare.Status.Phase != operatorv1alpha1.PhaseSucceeded {
-			common.Info(ctx, ReasonWaitingForPrepare).Msg("waiting for NetworkUpgradePrepare to succeed")
+			common.Info(ctx, ReasonWaitingForPrepare).Msg("Waiting for NetworkUpgradePrepare to succeed")
 			return ctrl.Result{RequeueAfter: ucfg.PrereqRequeueInterval}, nil
 		}
 
@@ -194,7 +195,7 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 			return ctrl.Result{}, err
 		}
 		if freeze == nil || freeze.Status.Phase != operatorv1alpha1.PhaseSucceeded {
-			common.Info(ctx, ReasonWaitingForFreeze).Msg("waiting for NetworkUpgradeFreeze to succeed")
+			common.Info(ctx, ReasonWaitingForFreeze).Msg("Waiting for NetworkUpgradeFreeze to succeed")
 			return ctrl.Result{RequeueAfter: ucfg.PrereqRequeueInterval}, nil
 		}
 
@@ -211,21 +212,30 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		execute.Status.ObservedGeneration = execute.Generation
 
 		// Both modes transition to ReadyForProvisionerDaemon; the difference is who
-		// advances it and whether the pod is scaled down first:
+		// performs the config step and, in mainnet, whether the pod is scaled down
+		// first:
 		//
-		//   - Mainnet: the host-level provisioner daemon takes over and may tear
-		//     down the cluster for infra upgrades, so the pod is scaled down first.
-		//     The daemon (a host process surviving pod termination) then does the
-		//     config step and advances the phase.
-		//   - Cluster-only: the pod stays up. The in-pod UC sidecar reads the upgrade
-		//     package from its PVC, deploys the config CRs, and advances the phase —
-		//     none of which the operator can do, as only the UC can read data/config/.
-		//     ReadyForProvisionerDaemon is precisely the window in which config CRs
-		//     are applied while the pod (and UC) is still alive; scale-down is
-		//     therefore deferred to reconcilePendingNodeUpgrade.
+		//   - Mainnet: the host-level provisioner daemon does the config step (and,
+		//     when an infra upgrade is required, may tear down the cluster). The pod
+		//     is scaled down here ONLY when infra work is required — i.e. the same
+		//     skipScaleDown gate cluster-only uses. A config-only mainnet upgrade
+		//     (skipScaleDown=true, no infra) leaves the pod up: the daemon's config
+		//     step is pod-state-agnostic (it writes host-trusted paths + Create-only
+		//     config CRs, never the live pod volume), so it behaves like cluster-only.
+		//   - Cluster-only: the pod stays up. The in-pod UC provisioner-proxy reads the
+		//     upgrade package from its PVC, deploys the config CRs, and advances the
+		//     phase — none of which the operator can do, as only the UC can read
+		//     data/config/. Scale-down is deferred to reconcilePendingNodeUpgrade.
+		//
+		// skipScaleDown = SkipScaleDown && !infraAccess is recomputed identically in
+		// reconcilePendingNodeUpgrade; the offline flag stays the single source of
+		// truth for the bring-online step, so scale-down and scale-up can't drift.
 		if mode == uc.ModeMainnet {
-			if err := r.ensureCapsuleOffline(ctx, &execute, capsule); err != nil {
-				return ctrl.Result{}, err
+			skipScaleDown := ucfg.SkipScaleDown && !requiresInfraAccess(&execute, orbit)
+			if !skipScaleDown {
+				if err := r.ensureCapsuleOffline(ctx, &execute, capsule); err != nil {
+					return ctrl.Result{}, err
+				}
 			}
 		}
 		execute.Status.Phase = operatorv1alpha1.ExecutePhaseReadyForProvisionerDaemon
@@ -249,7 +259,7 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 		return r.reconcilePendingNodeUpgrade(ctx, &execute)
 
 	default:
-		common.Info(ctx, ReasonUnhandledPhase).Str("phase", string(execute.Status.Phase)).Msg("unhandled execute phase")
+		common.Info(ctx, ReasonUnhandledPhase).Str("phase", string(execute.Status.Phase)).Msg("Encountered unhandled execute phase")
 		return ctrl.Result{}, nil
 	}
 }
@@ -337,13 +347,13 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingInfraUpgrade(ctx conte
 	// window. CondConfigCRsApplied is surfaced for observability while we wait.
 	cond := findCondition(execute.Status.Conditions, operatorv1alpha1.CondConfigCRsApplied)
 	if cond == nil || cond.Status != metav1.ConditionTrue {
-		common.Info(ctx, ReasonWaitingForConfigCRsApplied).Msg("waiting for daemon to set CondConfigCRsApplied=True")
+		common.Info(ctx, ReasonWaitingForConfigCRsApplied).Msg("Waiting for daemon to set CondConfigCRsApplied=True")
 	} else {
 		// ConfigCRsApplied=True but still in PendingInfraUpgrade: the daemon set the
 		// condition without advancing the phase (a non-atomic handoff). Log each tick
 		// so a stall here leaves a forensic trail instead of a silent poll.
 		common.Info(ctx, ReasonWaitingForDaemonPhaseAdvance).
-			Msg("config CRs applied; waiting for daemon to advance phase to PendingNodeUpgrade")
+			Msg("Config CRs applied; waiting for daemon to advance phase to PendingNodeUpgrade")
 	}
 	return ctrl.Result{RequeueAfter: ucfg.PrereqRequeueInterval}, nil
 }
@@ -353,10 +363,11 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	ucfg, err := r.resolveUpgradeConfig(ctx, capsule)
+	orbit, err := r.getOrbit(ctx, capsule)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+	ucfg := operatorv1alpha1.ResolveUpgradeConfig(orbit)
 	if capsule == nil {
 		return ctrl.Result{RequeueAfter: ucfg.NodeReadyRequeueInterval}, nil
 	}
@@ -378,11 +389,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	infraAccess, err := r.requiresInfraAccess(ctx, execute, capsule)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	skipScaleDown := ucfg.SkipScaleDown && !infraAccess
+	skipScaleDown := ucfg.SkipScaleDown && !requiresInfraAccess(execute, orbit)
 
 	capsulePatched := findCondition(execute.Status.Conditions, operatorv1alpha1.CondConsensusCapsulePatched)
 	if capsulePatched == nil || capsulePatched.Status != metav1.ConditionTrue {
@@ -400,7 +407,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 		if _, prefetchOK := prefetchCompleted(prepare); prefetchOK {
 			// Prefetch succeeded — skip registry re-validation. The images are
 			// likely cached on nodes; the kubelet uses them via IfNotPresent.
-			common.Info(ctx, operatorv1alpha1.ReasonPrefetchCompleted).Msg("images prefetched; skipping registry re-validation")
+			common.Info(ctx, operatorv1alpha1.ReasonPrefetchCompleted).Msg("Prefetched images; skipping registry re-validation")
 			ss := execute.Spec.SelectedSources
 			execute.Status.SelectedSources = &ss
 			setCondition(&execute.Status.Conditions, metav1.Condition{
@@ -490,7 +497,16 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 
 	capsulesOnline := findCondition(execute.Status.Conditions, operatorv1alpha1.CondCapsulesOnline)
 	if capsulesOnline == nil || capsulesOnline.Status != metav1.ConditionTrue {
-		if !skipScaleDown && capsule.Spec.Offline {
+		// Bring the capsule online whenever it is offline — the operator owns that
+		// lifecycle regardless of skipScaleDown. Both modes gate scale-down on the same
+		// skipScaleDown = SkipScaleDown && !infraAccess (mainnet at init, cluster-only
+		// here), but the timing differs, so the current skipScaleDown value is not a
+		// reliable proxy for whether a scale-down actually happened. The offline flag is:
+		// if the capsule is offline, an online patch is owed. Gating this on
+		// !skipScaleDown instead stranded the pod at 0 replicas whenever the gate that
+		// scaled it down disagreed with the gate evaluated here.
+		wasOffline := capsule.Spec.Offline
+		if wasOffline {
 			patch := client.MergeFrom(capsule.DeepCopy())
 			capsule.Spec.Offline = false
 			if err := r.Patch(ctx, capsule, patch); err != nil {
@@ -500,7 +516,7 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 			}
 		}
 		onlineMsg := "ConsensusCapsule brought online"
-		if skipScaleDown {
+		if !wasOffline {
 			onlineMsg = "ConsensusCapsule images patched in-place; RollingUpdate will restart the pod"
 		}
 		setCondition(&execute.Status.Conditions, metav1.Condition{
@@ -708,29 +724,28 @@ func (r *NetworkUpgradeExecuteReconciler) resolveUpgradeConfig(ctx context.Conte
 	return operatorv1alpha1.ResolveUpgradeConfig(orbit), nil
 }
 
-// requiresInfraAccess compares the declared provisioner versions on the Execute
-// CR spec against the Orbit CR annotations. Returns true when either version
-// differs (or the annotation is absent but a version is declared — safe fallback).
-func (r *NetworkUpgradeExecuteReconciler) requiresInfraAccess(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute, capsule *operatorv1alpha1.ConsensusCapsule) (bool, error) {
+// requiresInfraAccess reports whether the upgrade needs host-level provisioner
+// work: it compares the declared provisioner versions on the Execute CR spec
+// against the Orbit CR annotations, returning true when either differs (or the
+// annotation is absent but a version is declared — safe fallback). The Orbit is
+// passed in (already fetched by the caller alongside ResolveUpgradeConfig) so the
+// check adds no extra Get per reconcile.
+func requiresInfraAccess(execute *operatorv1alpha1.NetworkUpgradeExecute, orbit *operatorv1alpha1.Orbit) bool {
 	prov := execute.Spec.Provisioner
 	if prov == nil || (prov.DaemonVersion == "" && prov.CLIVersion == "") {
-		return false, nil
-	}
-	orbit, err := r.getOrbit(ctx, capsule)
-	if err != nil {
-		return false, err
+		return false
 	}
 	if orbit == nil {
-		return prov.DaemonVersion != "" || prov.CLIVersion != "", nil
+		return prov.DaemonVersion != "" || prov.CLIVersion != ""
 	}
 	ann := orbit.GetAnnotations()
 	if prov.DaemonVersion != "" && prov.DaemonVersion != ann[operatorv1alpha1.AnnotationProvisionerDaemonVersion] {
-		return true, nil
+		return true
 	}
 	if prov.CLIVersion != "" && prov.CLIVersion != ann[operatorv1alpha1.AnnotationProvisionerCLIVersion] {
-		return true, nil
+		return true
 	}
-	return false, nil
+	return false
 }
 
 func (r *NetworkUpgradeExecuteReconciler) ensureCapsuleOffline(

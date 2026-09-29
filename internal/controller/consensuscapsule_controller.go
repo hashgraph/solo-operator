@@ -720,7 +720,7 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 	// ready set, so this never re-fires on transient platform-status dips.
 	if isReadyPhase(phase) && !isReadyPhase(oldPhase) {
 		if err := r.markGenesisInitialized(ctx, capsule); err != nil {
-			common.Err(ctx, err, ReasonCheckpointUpdateFailed).Msg("failed to update checkpoint")
+			common.Err(ctx, err, ReasonCheckpointUpdateFailed).Msg("Failed to update checkpoint")
 		}
 	}
 
@@ -963,7 +963,7 @@ func (r *ConsensusCapsuleReconciler) finalizeManualStopped(ctx context.Context, 
 	up, err := r.S6.IsUp(ctx, capsule)
 	if err != nil {
 		*requeue = true
-		common.Warn(ctx, ReasonS6ProbeFailed).Err(err).Msg("s6 probe error during finalization")
+		common.Warn(ctx, ReasonS6ProbeFailed).Err(err).Msg("S6 probe failed during finalization")
 		return oldPhase
 	}
 

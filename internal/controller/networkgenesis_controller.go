@@ -90,7 +90,7 @@ func (r *NetworkGenesisReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	orbit, err := r.run(ctx, ng)
 	if err != nil {
 		if _, ferr := r.fail(ctx, ng, err.Error()); ferr != nil {
-			common.Err(ctx, ferr, ReasonStatusUpdateAfterErrorFailed).Msg("failed to update status after error")
+			common.Err(ctx, ferr, ReasonStatusUpdateAfterErrorFailed).Msg("Failed to update status after error")
 		}
 		return ctrl.Result{}, err
 	}

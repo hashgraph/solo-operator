@@ -22,6 +22,7 @@ import (
 	"github.com/automa-saga/logx"
 	"github.com/automa-saga/version"
 	"github.com/joomcode/errorx"
+	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -194,13 +195,16 @@ func initLogging(level string) error {
 		Level:          level,
 		ConsoleLogging: true,
 		TimeFormat:     time.RFC3339Nano,
+		UTC:            true,
+		IncludeCaller:  true,
+		IncludePackage: true,
 	}); err != nil {
 		return err
 	}
-	logx.SetLogger(logx.As().With().
-		Str("build_version", version.Version).
-		Str("build_commit", version.Commit).
-		Logger())
+	logx.SetGlobalContext(func(c zerolog.Context) zerolog.Context {
+		return c.Str("build_version", version.Version).
+			Str("build_commit", version.Commit)
+	})
 	return nil
 }
 

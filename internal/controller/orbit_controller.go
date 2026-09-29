@@ -50,6 +50,7 @@ func NewOrbitReconciler(c client.Client, scheme *runtime.Scheme) *OrbitReconcile
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=simplefeesschedules,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=applicationoverrideproperties,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=bootstrapproperties,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkgeneses,verbs=get;list;watch;delete
 
 func (r *OrbitReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	orbitObj := &operatorv1alpha1.Orbit{}
@@ -162,6 +163,7 @@ func (r *OrbitReconciler) deleteOwnedCapsules(ctx context.Context, orbitObj *ope
 	sfsList := &operatorv1alpha1.SimpleFeesSchedulesList{}
 	aoList := &operatorv1alpha1.ApplicationOverridePropertiesList{}
 	bpList := &operatorv1alpha1.BootstrapPropertiesList{}
+	ngList := &operatorv1alpha1.NetworkGenesisList{}
 
 	for _, e := range []entry{
 		{
@@ -308,6 +310,17 @@ func (r *OrbitReconciler) deleteOwnedCapsules(ctx context.Context, orbitObj *ope
 				return s
 			},
 			func(o client.Object) string { return o.(*operatorv1alpha1.BootstrapProperties).Spec.Orbit },
+		},
+		{
+			ngList,
+			func() []client.Object {
+				s := make([]client.Object, len(ngList.Items))
+				for i := range ngList.Items {
+					s[i] = &ngList.Items[i]
+				}
+				return s
+			},
+			func(o client.Object) string { return o.(*operatorv1alpha1.NetworkGenesis).Spec.Orbit },
 		},
 	} {
 		if err := do(e.list, e.getItems, e.getOrbit); err != nil {

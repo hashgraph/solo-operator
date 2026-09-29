@@ -56,7 +56,28 @@ func TestEventf_NormalEventLogsAtInfo(t *testing.T) {
 
 	m := decodeLine(t, buf)
 	if got, _ := m["level"].(string); got != "info" {
-		t.Errorf("level = %q, want info (Normal event)", got)
+		t.Errorf("level = %q, want info (milestone Normal event stays visible at INFO)", got)
+	}
+}
+
+func TestEventfDebug_NormalEventLogsAtDebug(t *testing.T) {
+	buf := captureLogs(t)
+	rec := events.NewFakeRecorder(1)
+
+	EventfDebug(context.Background(), rec, &corev1.Pod{}, corev1.EventTypeNormal, "ComponentSkipped", "StatefulSet", "skipped")
+
+	m := decodeLine(t, buf)
+	if got, _ := m["level"].(string); got != "debug" {
+		t.Errorf("level = %q, want debug (high-frequency event kept out of INFO)", got)
+	}
+	// The K8s Event is still recorded.
+	select {
+	case e := <-rec.Events:
+		if !strings.Contains(e, "ComponentSkipped") {
+			t.Errorf("event = %q, want reason ComponentSkipped", e)
+		}
+	default:
+		t.Error("no event recorded")
 	}
 }
 

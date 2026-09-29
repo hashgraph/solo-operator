@@ -83,7 +83,6 @@ func seedFreezeCR(t *testing.T, f *Factory, operationID string, phase operatorv1
 		Create(context.Background(), cr, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("seed freeze: %v", err)
 	}
-	waitForCached(t, f, networkUpgradeFreezeGVR, operationID, 1)
 }
 
 func getExecute(t *testing.T, f *Factory, operationID string) *unstructured.Unstructured {

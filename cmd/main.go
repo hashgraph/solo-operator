@@ -7,12 +7,14 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/automa-saga/logx"
 	"github.com/automa-saga/version"
 	"github.com/go-logr/logr"
+	"github.com/rs/zerolog"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -32,10 +34,25 @@ import (
 	"github.com/hashgraph/solo-operator/internal/resources/helm"
 )
 
+// envPrefix maps a flag to <PREFIX><UPPER_SNAKE_FLAG>, e.g. --console-logging →
+// SOLO_OPERATOR_CONSOLE_LOGGING (matches the UC_/BEACON_ convention).
+const envPrefix = "SOLO_OPERATOR_"
+
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
 )
+
+// envBool seeds a flag default from a bool env var, so an explicit flag still
+// wins (flag > env > default). Returns def when unset or unparseable.
+func envBool(name string, def bool) bool {
+	if v, ok := os.LookupEnv(name); ok {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
+		}
+	}
+	return def
+}
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
@@ -60,8 +77,9 @@ func main() {
 	flag.BoolVar(&showVersion, "version", false, "Print version information and exit.")
 	flag.StringVar(&logLevel, "log-level", "info",
 		"Log level: trace, debug, info, warn, error.")
-	flag.BoolVar(&consoleLogging, "console-logging", false,
-		"If set, logs use the human-readable console writer instead of structured JSON.")
+	flag.BoolVar(&consoleLogging, "console-logging", envBool(envPrefix+"CONSOLE_LOGGING", true),
+		"Use the human-readable console writer (default). Set --console-logging=false or "+
+			envPrefix+"CONSOLE_LOGGING=false for structured JSON (the flag overrides the env var).")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -103,23 +121,23 @@ func main() {
 		Level:          logLevel,
 		ConsoleLogging: consoleLogging,
 		TimeFormat:     time.RFC3339Nano,
+		UTC:            true,
+		IncludeCaller:  true,
+		IncludePackage: true,
 	}); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to initialize logging: %v\n", err)
 		os.Exit(1)
 	}
-	// Stamp the build identity onto every log line so operators can tell which
-	// build is running. Image tags are reused (CI stamps 0.0.0-<sha>) and the
-	// version may be a fixed placeholder, so build_commit is the always-reliable
-	// discriminator. Done before SetLogger so controller-runtime's logr lines
-	// inherit the fields too.
-	logx.SetLogger(logx.As().With().
-		Str("build_version", version.Version).
-		Str("build_commit", version.Commit).
-		Logger())
-	// Route controller-runtime's own logs through logx.
+	// Stamp build identity on every line (both As() and the slog bridge) so a
+	// running build is identifiable; build_commit is the reliable discriminator
+	// since image tags/versions are reused.
+	logx.SetGlobalContext(func(c zerolog.Context) zerolog.Context {
+		return c.Str("build_version", version.Version).
+			Str("build_commit", version.Commit)
+	})
 	ctrl.SetLogger(logr.FromSlogHandler(logx.NewSlogHandler()))
 	bi := version.Get()
-	setupLog.Info("starting solo-operator manager",
+	setupLog.Info("Starting solo-operator manager",
 		"build_date", bi.Date, "go_version", bi.GoVersion)
 
 	// If the enable-http2 flag is false (the default), http/2 should be disabled
@@ -127,7 +145,7 @@ func main() {
 	// prevent from being affected by the HTTP/2 Stream Cancellation and
 	// Rapid Reset CVEs.
 	disableHTTP2 := func(c *tls.Config) {
-		setupLog.Info("disabling http/2")
+		setupLog.Info("Disabling HTTP/2")
 		c.NextProtos = []string{"http/1.1"}
 	}
 
@@ -381,7 +399,7 @@ func main() {
 	}
 
 	info := version.Get()
-	setupLog.Info("starting manager", "version", info.Version, "commit", info.Commit, "buildDate", info.Date)
+	setupLog.Info("Starting manager", "version", info.Version, "commit", info.Commit, "buildDate", info.Date)
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)

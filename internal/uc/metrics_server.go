@@ -112,14 +112,14 @@ func runMetricsServer(ctx context.Context, addr string, reg *prometheus.Registry
 	logx.As().Info().
 		Str("reason", ReasonMetricsServerStarted.String()).
 		Str("addr", addr).
-		Msg("metrics server started")
+		Msg("Started metrics server")
 
 	select {
 	case <-ctx.Done():
 		shutCtx, cancel := context.WithTimeout(context.Background(), metricsShutdownTimeout)
 		defer cancel()
 		if shutErr := srv.Shutdown(shutCtx); shutErr != nil {
-			logx.As().Warn().Err(shutErr).Msg("metrics server shutdown error")
+			logx.As().Warn().Err(shutErr).Msg("Failed to shut down metrics server")
 		}
 		return nil
 	case serveErr := <-errCh:

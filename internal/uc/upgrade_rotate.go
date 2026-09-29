@@ -53,7 +53,7 @@ func rotateUpgradePackage(currentPath, previousPath, operationID string) {
 			Str("reason", ReasonUpgradePackageRotated.String()).
 			Str("operation_id", operationID).
 			Str("current_path", currentPath).
-			Msg("rotate: current/ absent — recreating after post-rename crash")
+			Msg("Recreating current/ after post-rename crash")
 		recreateDir(currentPath, previousPath, operationID)
 		return
 	}
@@ -64,7 +64,7 @@ func rotateUpgradePackage(currentPath, previousPath, operationID string) {
 			Str("reason", ReasonUpgradePackageRotateFailed.String()).
 			Str("operation_id", operationID).
 			Str("current_path", currentPath).
-			Msg("rotate: cannot read current dir — skipping rotation")
+			Msg("Skipping rotation: cannot read current dir")
 		return
 	}
 	if len(entries) == 0 {
@@ -82,7 +82,7 @@ func rotateUpgradePackage(currentPath, previousPath, operationID string) {
 		Str("operation_id", operationID).
 		Str("current_path", currentPath).
 		Str("previous_path", previousPath).
-		Msg("rotate: atomic rename failed — deleting current contents (package not archived)")
+		Msg("Deleting current contents: atomic rename failed (package not archived)")
 	clearDir(currentPath, operationID)
 }
 
@@ -111,7 +111,7 @@ func rotateIntoPrevious(currentPath, previousPath, operationID string) bool {
 				Str("reason", ReasonUpgradePackageRotateFailed.String()).
 				Str("operation_id", operationID).
 				Str("previous_path", previousPath).
-				Msg("rotate: cannot read previous dir — falling back to delete current")
+				Msg("Falling back to delete current: cannot read previous dir")
 			return false
 		}
 		for _, e := range prevEntries {
@@ -121,7 +121,7 @@ func rotateIntoPrevious(currentPath, previousPath, operationID string) bool {
 					Str("reason", ReasonUpgradePackageRotateFailed.String()).
 					Str("operation_id", operationID).
 					Str("path", target).
-					Msg("rotate: failed to clear previous entry — falling back to delete current")
+					Msg("Falling back to delete current: failed to clear previous entry")
 				return false
 			}
 		}
@@ -130,7 +130,7 @@ func rotateIntoPrevious(currentPath, previousPath, operationID string) bool {
 				Str("reason", ReasonUpgradePackageRotateFailed.String()).
 				Str("operation_id", operationID).
 				Str("previous_path", previousPath).
-				Msg("rotate: failed to rmdir previous — falling back to delete current")
+				Msg("Falling back to delete current: failed to rmdir previous")
 			return false
 		}
 	}
@@ -144,7 +144,7 @@ func rotateIntoPrevious(currentPath, previousPath, operationID string) bool {
 			Str("reason", ReasonUpgradePackageRotateFailed.String()).
 			Str("operation_id", operationID).
 			Str("src", currentPath).Str("dst", previousPath).
-			Msg("rotate: atomic rename failed — falling back to delete current")
+			Msg("Falling back to delete current: atomic rename failed")
 		return false
 	}
 
@@ -158,7 +158,7 @@ func rotateIntoPrevious(currentPath, previousPath, operationID string) bool {
 		Str("operation_id", operationID).
 		Str("current_path", currentPath).
 		Str("previous_path", previousPath).
-		Msg("upgrade package rotated: current → previous")
+		Msg("Rotated upgrade package: current → previous")
 	return true
 }
 
@@ -175,7 +175,7 @@ func recreateDir(path, permSource, operationID string) {
 			Str("reason", ReasonUpgradePackageRotateFailed.String()).
 			Str("operation_id", operationID).
 			Str("path", path).
-			Msg("rotate: failed to recreate current dir — MarkerMonitor will retry on next poll")
+			Msg("Failed to recreate current dir; MarkerMonitor will retry on next poll")
 	}
 }
 
@@ -192,7 +192,7 @@ func discardUpgradePackage(currentPath, operationID string) {
 		logx.As().Warn().Err(err).
 			Str("reason", ReasonUpgradePackageRotateFailed.String()).
 			Str("operation_id", operationID).Str("path", currentPath).
-			Msg("abort: cannot read current dir — staged package may remain")
+			Msg("Failed to read current dir on abort; staged package may remain")
 		return
 	}
 	var discardErr bool
@@ -203,14 +203,14 @@ func discardUpgradePackage(currentPath, operationID string) {
 			logx.As().Warn().Err(rmErr).
 				Str("reason", ReasonUpgradePackageRotateFailed.String()).
 				Str("operation_id", operationID).Str("path", target).
-				Msg("abort: failed to remove entry from current — manual cleanup may be required")
+				Msg("Failed to remove entry from current on abort; manual cleanup may be required")
 		}
 	}
 	if !discardErr {
 		logx.As().Info().
 			Str("reason", ReasonUpgradePackageDiscarded.String()).
 			Str("operation_id", operationID).Str("path", currentPath).
-			Msg("discarded staged upgrade package on abort (current wiped, previous untouched)")
+			Msg("Discarded staged upgrade package on abort (current wiped, previous untouched)")
 	}
 }
 
@@ -222,7 +222,7 @@ func clearDir(dir, operationID string) {
 			Str("reason", ReasonUpgradePackageRotateFailed.String()).
 			Str("operation_id", operationID).
 			Str("path", dir).
-			Msg("rotate: cannot read dir for clearDir")
+			Msg("Failed to read dir for clearDir")
 		return
 	}
 	var clearErr bool
@@ -234,7 +234,7 @@ func clearDir(dir, operationID string) {
 				Str("reason", ReasonUpgradePackageRotateFailed.String()).
 				Str("operation_id", operationID).
 				Str("path", target).
-				Msg("rotate: failed to remove entry from current")
+				Msg("Failed to remove entry from current")
 		}
 	}
 	if !clearErr {
@@ -242,6 +242,6 @@ func clearDir(dir, operationID string) {
 			Str("reason", ReasonUpgradePackageDiscarded.String()).
 			Str("operation_id", operationID).
 			Str("path", dir).
-			Msg("upgrade package cleared from current (no previous dir — contents discarded, not archived)")
+			Msg("Cleared upgrade package from current (no previous dir; contents discarded, not archived)")
 	}
 }

@@ -224,7 +224,7 @@ func TestLoad_NeverLogsKeyMaterial(t *testing.T) {
 	}
 
 	out := buf.String()
-	if !strings.Contains(out, "loaded signing key") || !strings.Contains(out, "public_key") {
+	if !strings.Contains(out, "Loaded signing key") || !strings.Contains(out, "public_key") {
 		t.Errorf("expected a debug line with the public key, got: %s", out)
 	}
 	for _, secret := range []string{key.String(), key.StringRaw(), pass} {

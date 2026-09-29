@@ -16,12 +16,9 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/dynamic/dynamicinformer"
-	"k8s.io/client-go/tools/cache"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
@@ -37,12 +34,6 @@ import (
 type Factory struct {
 	cfg    Config
 	client dynamic.Interface
-
-	// informerFactory backs listCached, avoiding a live List() per marker tick.
-	informerFactory dynamicinformer.DynamicSharedInformerFactory
-	// informersOnce makes startInformers safe to call more than once.
-	informersOnce     sync.Once
-	informersStartErr error
 
 	// events writes the per-operation JSONL audit trail (#1127). Nil-safe: a nil
 	// sink no-ops, so tests and events-disabled configs need no special casing.
@@ -78,65 +69,15 @@ type rejectKey struct {
 // re-reject) on every tick.
 const admissionRejectRetryCooldown = 5 * time.Minute
 
-// informerResyncPeriod backstops a long-lived watch that silently misses an event.
-const informerResyncPeriod = 10 * time.Minute
-
 // NewFactory constructs the CR factory.
 func NewFactory(cfg Config, client dynamic.Interface) *Factory {
 	return &Factory{
-		cfg:             cfg,
-		client:          client,
-		informerFactory: dynamicinformer.NewFilteredDynamicSharedInformerFactory(client, informerResyncPeriod, cfg.Namespace, nil),
-		store:           NewCRStore(cfg.CRPersistPath),
-		cache:           make(map[string]map[string]string),
-		rejected:        make(map[rejectKey]time.Time),
+		cfg:      cfg,
+		client:   client,
+		store:    NewCRStore(cfg.CRPersistPath),
+		cache:    make(map[string]map[string]string),
+		rejected: make(map[rejectKey]time.Time),
 	}
-}
-
-// startInformers starts the informers backing listCached and blocks until synced.
-func (f *Factory) startInformers(ctx context.Context) error {
-	f.informersOnce.Do(func() {
-		gvrs := []schema.GroupVersionResource{
-			networkUpgradePrepareGVR, networkUpgradeFreezeGVR, networkUpgradeExecuteGVR, networkUpgradeFreezeAbortGVR,
-		}
-		synced := make([]cache.InformerSynced, len(gvrs))
-		for i, gvr := range gvrs {
-			informer := f.informerFactory.ForResource(gvr).Informer()
-			// client-go otherwise only logs watch failures via klog, invisible in UC's own log.
-			if err := informer.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
-				logx.As().Warn().Err(err).Str("reason", ReasonInformerWatchError.String()).
-					Str("resource", gvr.Resource).Msg("NetworkUpgrade* informer watch error; reflector will retry")
-			}); err != nil {
-				f.informersStartErr = errx.WithReason(errK8sAPI.Wrap(err, "set watch error handler for %s", gvr.Resource), ReasonInformerCacheSyncFailed)
-				return
-			}
-			synced[i] = informer.HasSynced
-		}
-		f.informerFactory.Start(ctx.Done())
-		if !cache.WaitForCacheSync(ctx.Done(), synced...) {
-			f.informersStartErr = errx.WithReason(errK8sAPI.New("context cancelled waiting for NetworkUpgrade* informer cache sync"), ReasonInformerCacheSyncFailed)
-		}
-	})
-	return f.informersStartErr
-}
-
-// listCached returns the cached gvr objects in f.cfg.Namespace matching operationID.
-func (f *Factory) listCached(gvr schema.GroupVersionResource, operationID string) ([]*unstructured.Unstructured, error) {
-	objs, err := f.informerFactory.ForResource(gvr).Lister().List(labels.Everything())
-	if err != nil {
-		return nil, err
-	}
-	matched := make([]*unstructured.Unstructured, 0, len(objs))
-	for _, obj := range objs {
-		u, ok := obj.(*unstructured.Unstructured)
-		if !ok {
-			continue
-		}
-		if opID, _, _ := unstructured.NestedString(u.Object, "spec", "operationId"); opID == operationID {
-			matched = append(matched, u)
-		}
-	}
-	return matched, nil
 }
 
 // RecoverOnStartup reconciles cluster state and persisted CRs on disk so the
@@ -157,16 +98,12 @@ func (f *Factory) listCached(gvr schema.GroupVersionResource, operationID string
 // which handles it on every terminal Execute or FreezeAbort CR observation —
 // both on startup (list) and live (watch).
 func (f *Factory) RecoverOnStartup(ctx context.Context) error {
-	if err := f.startInformers(ctx); err != nil {
-		return err
-	}
-
 	if err := f.seedCache(ctx); err != nil {
 		common.LogErr(logx.As().Warn(), err, ReasonUCCacheSeedFailed).
-			Msg("could not seed op-id dedup cache on startup; per-action queries remain authoritative")
+			Msg("Failed to seed op-id dedup cache on startup; per-action queries remain authoritative")
 	} else {
 		logx.As().Info().Str("reason", ReasonUCCacheSeeded.String()).
-			Msg("seeded op-id dedup cache from existing NetworkUpgrade CRs")
+			Msg("Seeded op-id dedup cache from existing NetworkUpgrade CRs")
 	}
 
 	// Re-send crash-window survivors (persist-before-send, #992).
@@ -174,7 +111,7 @@ func (f *Factory) RecoverOnStartup(ctx context.Context) error {
 		// recoverPersistedCRs is already best-effort and returns nil; this guard is
 		// defensive against future refactors that promote individual errors.
 		common.LogErr(logx.As().Warn(), err, ReasonUCStartupRecoveryError).
-			Msg("startup CR re-send pass encountered an error — continuing")
+			Msg("Continuing despite error in startup CR re-send pass")
 	}
 
 	return nil
@@ -202,7 +139,7 @@ func (f *Factory) HandleExecuteImmediate(ctx context.Context) error {
 			// it. Log and halt without creating a CR (no retry value).
 			logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).
 				Str("marker", MarkerExecuteImmediate).
-				Msg("invalid consensus-node-components.yaml or operationId — halting prepare")
+				Msg("Halting prepare: invalid consensus-node-components.yaml or operationId")
 			return nil
 		}
 		// Transient IO error — retry next tick.
@@ -296,7 +233,7 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 		ev = ev.Str(d.key, d.val)
 		msg += " " + d.key + "=" + d.val
 	}
-	ev.Msg("upgrade marker detected")
+	ev.Msgf("Detected %s marker for %s", marker, kind)
 	f.events.info(operationID, ReasonMarkerDetected.String(), msg)
 
 	if _, err := f.store.Persist(operationID, step, cr); err != nil {
@@ -316,7 +253,7 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 			f.clearRejected(operationID, step)
 			if delErr := f.store.Delete(operationID, step); delErr != nil {
 				logx.As().Warn().Err(delErr).Str("reason", ReasonCRPersistCleanupFailed.String()).
-					Str("operation_id", operationID).Msg("failed to delete persisted CR after AlreadyExists")
+					Str("operation_id", operationID).Msg("Failed to delete persisted CR after AlreadyExists")
 			}
 			logx.As().Debug().Str("reason", ReasonCRExists.String()).Str("operation_id", operationID).
 				Str("step", step).Str("cr_name", cr.GetName()).Msg("CR already exists — skipping create")
@@ -343,11 +280,11 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 			logx.As().Error().Err(err).Str("reason", ReasonCRRejected.String()).
 				Str("operation_id", operationID).Str("step", step).
 				Str("cr_name", cr.GetName()).Str("cr_kind", kind).
-				Msg("admission rejected CR (label invariant violation) — backing off; the UC always sets the required labels, so this usually indicates a UC bug or a mis-configured VAP")
+				Msg("Backing off: admission rejected CR (label invariant violation); the UC always sets the required labels, so this usually indicates a UC bug or a mis-configured VAP")
 			f.events.error(operationID, ReasonCRRejected.String(), "Admission rejected "+kind+"/"+cr.GetName())
 			if delErr := f.store.Delete(operationID, step); delErr != nil {
 				logx.As().Warn().Err(delErr).Str("reason", ReasonCRPersistCleanupFailed.String()).
-					Str("operation_id", operationID).Msg("failed to delete persisted CR after admission rejection")
+					Str("operation_id", operationID).Msg("Failed to delete persisted CR after admission rejection")
 			}
 			f.recordRejected(operationID, step)
 			return nil
@@ -366,10 +303,10 @@ func (f *Factory) deliverCR(ctx context.Context, gvr schema.GroupVersionResource
 	f.clearRejected(operationID, step)
 	if err := f.store.Delete(operationID, step); err != nil {
 		logx.As().Warn().Err(err).Str("reason", ReasonCRPersistCleanupFailed.String()).
-			Str("operation_id", operationID).Msg("failed to delete persisted CR after create")
+			Str("operation_id", operationID).Msg("Failed to delete persisted CR after create")
 	}
 	logx.As().Info().Str("reason", ReasonCRDelivered.String()).Str("operation_id", operationID).
-		Str("cr_name", cr.GetName()).Str("cr_kind", kind).Msg("created CR")
+		Str("cr_name", cr.GetName()).Str("cr_kind", kind).Msgf("Created %s CR", kind)
 	f.events.info(operationID, ReasonCRDelivered.String(),
 		"Created "+kind+"/"+cr.GetName())
 	return nil
@@ -409,7 +346,7 @@ func (f *Factory) HandleFreezeScheduled(ctx context.Context) error {
 		if errorx.IsOfType(err, errManifestInvalid) {
 			logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).
 				Str("marker", MarkerFreezeScheduled).
-				Msg("cannot parse scheduled timestamp in freeze_scheduled.mf — halting; delete freeze_scheduled.mf to stop retrying")
+				Msg("Halting: cannot parse scheduled timestamp in freeze_scheduled.mf; delete freeze_scheduled.mf to stop retrying")
 			return nil
 		}
 		return err
@@ -421,7 +358,7 @@ func (f *Factory) HandleFreezeScheduled(ctx context.Context) error {
 		if errorx.IsOfType(err, errManifestInvalid) {
 			logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).
 				Str("marker", MarkerFreezeScheduled).
-				Msg("invalid consensus-node-components.yaml — halting freeze; delete freeze_scheduled.mf to stop retrying")
+				Msg("Halting freeze: invalid consensus-node-components.yaml; delete freeze_scheduled.mf to stop retrying")
 			return nil
 		}
 		return err
@@ -433,21 +370,21 @@ func (f *Factory) HandleFreezeScheduled(ctx context.Context) error {
 			logx.As().Warn().Str("reason", ReasonStaleMarker.String()).
 				Str("marker", MarkerFreezeScheduled).
 				Time("freeze_mtime", freezeMarkerMtime).Time("execute_mtime", executeMtime).
-				Msg("stale freeze_scheduled.mf — marker predates current execute_immediate.mf; skipping until refreshed")
+				Msg("Skipping stale freeze_scheduled.mf: marker predates current execute_immediate.mf; waiting for refresh")
 			return nil
 		}
 	} else {
 		// execute_immediate.mf absent — attempt fallback via manifest version.
 		logx.As().Warn().Str("reason", ReasonFreezeWithoutPrepare.String()).
 			Str("marker", MarkerFreezeScheduled).
-			Msg("execute_immediate.mf missing — attempting fallback resolution via manifest version")
+			Msg("Attempting fallback resolution via manifest version: execute_immediate.mf missing")
 
 		manifestPath := filepath.Join(f.cfg.UpgradePath, manifestsSubdir, componentsManifestFile)
 		manifest, mErr := parseComponentsManifest(manifestPath)
 		if mErr != nil {
 			logx.As().Error().Err(mErr).Str("reason", ReasonOperationIDExhausted.String()).
 				Str("marker", MarkerFreezeScheduled).
-				Msg("execute_immediate.mf and manifest both absent — cannot resolve operationId; delete freeze_scheduled.mf to stop retrying")
+				Msg("Cannot resolve operationId: execute_immediate.mf and manifest both absent; delete freeze_scheduled.mf to stop retrying")
 			return nil
 		}
 
@@ -459,12 +396,12 @@ func (f *Factory) HandleFreezeScheduled(ctx context.Context) error {
 		if operationID == "" {
 			logx.As().Error().Str("reason", ReasonOperationIDExhausted.String()).
 				Str("marker", MarkerFreezeScheduled).
-				Msg("all operationId fallbacks exhausted — no matching Prepare found; delete freeze_scheduled.mf to stop retrying")
+				Msg("Cannot resolve operationId: all fallbacks exhausted, no matching Prepare found; delete freeze_scheduled.mf to stop retrying")
 			return nil
 		}
 		logx.As().Warn().Str("reason", ReasonFreezeWithoutPrepare.String()).
 			Str("operation_id", operationID).Str("marker", MarkerFreezeScheduled).
-			Msg("resolved operationId via fallback (execute_immediate.mf was absent)")
+			Msg("Resolved operationId via fallback (execute_immediate.mf was absent)")
 	}
 
 	images, selectedSources, prepare, ready, err := f.fetchPreparePayload(ctx, operationID)
@@ -480,7 +417,7 @@ func (f *Factory) HandleFreezeScheduled(ctx context.Context) error {
 		logx.As().Warn().Str("reason", ReasonStaleMarker.String()).
 			Str("marker", MarkerFreezeScheduled).Str("operation_id", operationID).
 			Time("freeze_mtime", freezeMarkerMtime).Time("prepare_created", prepareCreationTime).
-			Msg("stale freeze_scheduled.mf — marker predates Prepare CR; skipping until refreshed")
+			Msg("Skipping stale freeze_scheduled.mf: marker predates Prepare CR; waiting for refresh")
 		return nil
 	}
 
@@ -503,25 +440,31 @@ func (f *Factory) HandleFreezeScheduled(ctx context.Context) error {
 //
 // ready is false and err is nil with a Halted log when the Prepare has Failed —
 // a Failed Prepare cannot recover, so there is no retry value.
-func (f *Factory) fetchPreparePayload(_ context.Context, operationID string) (operatorv1alpha1.UpgradeImagesSpec, operatorv1alpha1.SelectedSources, *unstructured.Unstructured, bool, error) {
-	items, err := f.listCached(networkUpgradePrepareGVR, operationID)
+func (f *Factory) fetchPreparePayload(ctx context.Context, operationID string) (operatorv1alpha1.UpgradeImagesSpec, operatorv1alpha1.SelectedSources, *unstructured.Unstructured, bool, error) {
+	listCtx, cancel := context.WithTimeout(ctx, listTimeout)
+	defer cancel()
+
+	list, err := f.client.Resource(networkUpgradePrepareGVR).Namespace(f.cfg.Namespace).
+		List(listCtx, metav1.ListOptions{
+			FieldSelector: "spec.operationId=" + operationID,
+		})
 	if err != nil {
 		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil, false, errx.WithHints(
 			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradePrepare for operationId %s", operationID), ReasonPrepareListFailed),
 			"Confirm the UC ServiceAccount has list permission on networkupgradeprepares."+operatorv1alpha1.GroupVersion.Group,
 		)
 	}
-	if len(items) == 0 {
+	if len(list.Items) == 0 {
 		logx.As().Warn().Str("reason", ReasonFreezeWithoutPrepare.String()).
 			Str("operation_id", operationID).Str("marker", MarkerFreezeScheduled).
-			Msg("no NetworkUpgradePrepare CR found for operationId — will retry next tick")
+			Msg("Waiting for NetworkUpgradePrepare CR for operationId; will retry next tick")
 		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil, false, nil
 	}
 
 	// operationId is expected to be unique, but if multiple CRs match, sort by name so
 	// the selected one is deterministic rather than list-order dependent.
-	sort.Slice(items, func(i, j int) bool { return items[i].GetName() < items[j].GetName() })
-	prepare := items[0]
+	sort.Slice(list.Items, func(i, j int) bool { return list.Items[i].GetName() < list.Items[j].GetName() })
+	prepare := &list.Items[0]
 	phase, _, _ := unstructured.NestedString(prepare.Object, "status", "phase")
 	switch operatorv1alpha1.Phase(phase) {
 	case operatorv1alpha1.PhaseFailed:
@@ -632,7 +575,7 @@ func (f *Factory) HandleNowFrozen(ctx context.Context) error {
 		if errorx.IsOfType(err, errManifestInvalid) {
 			logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).
 				Str("marker", MarkerNowFrozen).
-				Msg("invalid consensus-node-components.yaml — halting execute; delete now_frozen.mf to stop retrying")
+				Msg("Halting execute: invalid consensus-node-components.yaml; delete now_frozen.mf to stop retrying")
 			return nil
 		}
 		return err
@@ -646,14 +589,14 @@ func (f *Factory) HandleNowFrozen(ctx context.Context) error {
 			logx.As().Warn().Str("reason", ReasonStaleMarker.String()).
 				Str("marker", MarkerNowFrozen).
 				Time("frozen_mtime", frozenMarkerMtime).Time("execute_mtime", executeMtime).
-				Msg("stale now_frozen.mf — marker predates current execute_immediate.mf; skipping until refreshed")
+				Msg("Skipping stale now_frozen.mf: marker predates current execute_immediate.mf; waiting for refresh")
 			return nil
 		}
 	} else {
 		// execute_immediate.mf absent — attempt fallback via manifest version.
 		logx.As().Warn().Str("reason", ReasonExecuteWithoutPrepare.String()).
 			Str("marker", MarkerNowFrozen).
-			Msg("execute_immediate.mf missing — attempting fallback resolution via manifest version")
+			Msg("Attempting fallback resolution via manifest version: execute_immediate.mf missing")
 
 		manifestPath := filepath.Join(f.cfg.UpgradePath, manifestsSubdir, componentsManifestFile)
 		manifest, mErr := parseComponentsManifest(manifestPath)
@@ -663,7 +606,7 @@ func (f *Factory) HandleNowFrozen(ctx context.Context) error {
 				// re-reading the same bytes will not help. Halt with the accurate reason.
 				logx.As().Error().Err(mErr).Str("reason", ReasonManifestInvalid.String()).
 					Str("marker", MarkerNowFrozen).
-					Msg("execute_immediate.mf absent and consensus-node-components.yaml is invalid — cannot resolve operationId; delete now_frozen.mf to stop retrying")
+					Msg("Cannot resolve operationId: execute_immediate.mf absent and consensus-node-components.yaml is invalid; delete now_frozen.mf to stop retrying")
 				return nil
 			}
 			// Transient read error (manifest absent or volume briefly unavailable) —
@@ -679,12 +622,12 @@ func (f *Factory) HandleNowFrozen(ctx context.Context) error {
 		if operationID == "" {
 			logx.As().Error().Str("reason", ReasonOperationIDExhausted.String()).
 				Str("marker", MarkerNowFrozen).
-				Msg("all operationId fallbacks exhausted — no matching Prepare found; delete now_frozen.mf to stop retrying")
+				Msg("Cannot resolve operationId: all fallbacks exhausted, no matching Prepare found; delete now_frozen.mf to stop retrying")
 			return nil
 		}
 		logx.As().Warn().Str("reason", ReasonExecuteWithoutPrepare.String()).
 			Str("operation_id", operationID).Str("marker", MarkerNowFrozen).
-			Msg("resolved operationId via fallback (execute_immediate.mf was absent)")
+			Msg("Resolved operationId via fallback (execute_immediate.mf was absent)")
 	}
 
 	images, selectedSources, freeze, ready, err := f.fetchExecutePayload(ctx, operationID)
@@ -701,7 +644,7 @@ func (f *Factory) HandleNowFrozen(ctx context.Context) error {
 		logx.As().Warn().Str("reason", ReasonStaleMarker.String()).
 			Str("marker", MarkerNowFrozen).Str("operation_id", operationID).
 			Time("frozen_mtime", frozenMarkerMtime).Time("freeze_created", freezeCreationTime).
-			Msg("stale now_frozen.mf — marker predates Freeze CR; skipping until refreshed")
+			Msg("Skipping stale now_frozen.mf: marker predates Freeze CR; waiting for refresh")
 		return nil
 	}
 
@@ -715,7 +658,7 @@ func (f *Factory) HandleNowFrozen(ctx context.Context) error {
 		// returns nil,nil and is not an error — no infra work declared.)
 		common.LogErr(logx.As().Error(), provErr, ReasonManifestReadFailed).
 			Str("operation_id", operationID).
-			Msg("cannot determine declared provisioner versions; retrying before creating Execute CR")
+			Msg("Retrying before creating Execute CR: cannot determine declared provisioner versions")
 		return provErr
 	}
 	cr, err := buildExecuteCR(f.cfg, operationID, images, selectedSources, provisioner)
@@ -740,25 +683,31 @@ func (f *Factory) HandleNowFrozen(ctx context.Context) error {
 // Failed — a Failed Freeze cannot recover, so there is no retry value and the
 // Execute CR must not be created (mirrors the Prepare.Failed gate in
 // fetchPreparePayload; see HandleNowFrozen's gate note).
-func (f *Factory) fetchExecutePayload(_ context.Context, operationID string) (operatorv1alpha1.UpgradeImagesSpec, operatorv1alpha1.SelectedSources, *unstructured.Unstructured, bool, error) {
-	items, err := f.listCached(networkUpgradeFreezeGVR, operationID)
+func (f *Factory) fetchExecutePayload(ctx context.Context, operationID string) (operatorv1alpha1.UpgradeImagesSpec, operatorv1alpha1.SelectedSources, *unstructured.Unstructured, bool, error) {
+	listCtx, cancel := context.WithTimeout(ctx, listTimeout)
+	defer cancel()
+
+	list, err := f.client.Resource(networkUpgradeFreezeGVR).Namespace(f.cfg.Namespace).
+		List(listCtx, metav1.ListOptions{
+			FieldSelector: "spec.operationId=" + operationID,
+		})
 	if err != nil {
 		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil, false, errx.WithHints(
 			errx.WithReason(errK8sAPI.Wrap(err, "list NetworkUpgradeFreeze for operationId %s", operationID), ReasonFreezeListFailed),
 			"Confirm the UC ServiceAccount has list permission on networkupgradefreezes."+operatorv1alpha1.GroupVersion.Group,
 		)
 	}
-	if len(items) == 0 {
+	if len(list.Items) == 0 {
 		logx.As().Warn().Str("reason", ReasonExecuteWithoutFreeze.String()).
 			Str("operation_id", operationID).Str("marker", MarkerNowFrozen).
-			Msg("no NetworkUpgradeFreeze CR found for operationId — will retry next tick")
+			Msg("Waiting for NetworkUpgradeFreeze CR for operationId; will retry next tick")
 		return operatorv1alpha1.UpgradeImagesSpec{}, operatorv1alpha1.SelectedSources{}, nil, false, nil
 	}
 
 	// operationId is expected to be unique, but if multiple CRs match, sort by name so
 	// the selected one is deterministic rather than list-order dependent.
-	sort.Slice(items, func(i, j int) bool { return items[i].GetName() < items[j].GetName() })
-	freeze := items[0]
+	sort.Slice(list.Items, func(i, j int) bool { return list.Items[i].GetName() < list.Items[j].GetName() })
+	freeze := &list.Items[0]
 	phase, _, _ := unstructured.NestedString(freeze.Object, "status", "phase")
 	switch operatorv1alpha1.Phase(phase) {
 	case operatorv1alpha1.PhaseFailed:
@@ -829,7 +778,7 @@ func (f *Factory) HandleFreezeAborted(ctx context.Context) error {
 		if errorx.IsOfType(err, errManifestInvalid) {
 			logx.As().Error().Err(err).Str("reason", ReasonManifestInvalid.String()).
 				Str("marker", MarkerFreezeAborted).
-				Msg("invalid consensus-node-components.yaml — halting abort; delete freeze_aborted.mf to stop retrying")
+				Msg("Halting abort: invalid consensus-node-components.yaml; delete freeze_aborted.mf to stop retrying")
 			return nil
 		}
 		return err
@@ -841,21 +790,21 @@ func (f *Factory) HandleFreezeAborted(ctx context.Context) error {
 			logx.As().Warn().Str("reason", ReasonStaleMarker.String()).
 				Str("marker", MarkerFreezeAborted).
 				Time("abort_mtime", abortMarkerMtime).Time("execute_mtime", executeMtime).
-				Msg("stale freeze_aborted.mf — marker predates current execute_immediate.mf; skipping until refreshed")
+				Msg("Skipping stale freeze_aborted.mf: marker predates current execute_immediate.mf; waiting for refresh")
 			return nil
 		}
 	} else {
 		// execute_immediate.mf absent — attempt fallback via manifest version.
 		logx.As().Warn().Str("reason", ReasonAbortWithoutPrepare.String()).
 			Str("marker", MarkerFreezeAborted).
-			Msg("execute_immediate.mf missing — attempting fallback resolution via manifest version")
+			Msg("Attempting fallback resolution via manifest version: execute_immediate.mf missing")
 
 		manifestPath := filepath.Join(f.cfg.UpgradePath, manifestsSubdir, componentsManifestFile)
 		manifest, mErr := parseComponentsManifest(manifestPath)
 		if mErr != nil {
 			logx.As().Error().Err(mErr).Str("reason", ReasonOperationIDExhausted.String()).
 				Str("marker", MarkerFreezeAborted).
-				Msg("execute_immediate.mf and manifest both absent — cannot resolve operationId; delete freeze_aborted.mf to stop retrying")
+				Msg("Cannot resolve operationId: execute_immediate.mf and manifest both absent; delete freeze_aborted.mf to stop retrying")
 			return nil
 		}
 
@@ -867,12 +816,12 @@ func (f *Factory) HandleFreezeAborted(ctx context.Context) error {
 		if operationID == "" {
 			logx.As().Error().Str("reason", ReasonOperationIDExhausted.String()).
 				Str("marker", MarkerFreezeAborted).
-				Msg("all operationId fallbacks exhausted — no matching Prepare found; delete freeze_aborted.mf to stop retrying")
+				Msg("Cannot resolve operationId: all fallbacks exhausted, no matching Prepare found; delete freeze_aborted.mf to stop retrying")
 			return nil
 		}
 		logx.As().Warn().Str("reason", ReasonAbortWithoutPrepare.String()).
 			Str("operation_id", operationID).Str("marker", MarkerFreezeAborted).
-			Msg("resolved operationId via fallback (execute_immediate.mf was absent)")
+			Msg("Resolved operationId via fallback (execute_immediate.mf was absent)")
 	}
 
 	cr, err := buildFreezeAbortCR(f.cfg, operationID)

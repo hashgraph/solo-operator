@@ -4,6 +4,7 @@ package uc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -214,19 +215,19 @@ func (m *UpgradeOutcomeMonitor) Run(ctx context.Context) (retErr error) {
 		if r := recover(); r != nil {
 			logx.As().Error().Str("reason", ReasonUpgradeOutcomeMonitorPanic.String()).
 				Str("namespace", m.cfg.Namespace).Interface("panic", r).
-				Msg("panic in upgrade-outcome monitor — recovering")
+				Msg("Recovering from panic in upgrade-outcome monitor")
 			retErr = errx.WithReason(errPanic.New("recovered panic in upgrade-outcome monitor: %v", r), ReasonUpgradeOutcomeMonitorPanic)
 		}
 	}()
 
 	logx.As().Info().Str("reason", ReasonUpgradeOutcomeMonitorStarted.String()).
-		Str("namespace", m.cfg.Namespace).Msg("upgrade-outcome monitor started")
+		Str("namespace", m.cfg.Namespace).Msg("Started upgrade-outcome monitor")
 
 	backoff := outcomeBackoffInitial
 	for {
 		prepareRV, freezeRV, executeRV, abortRV, listErr := m.listAndSeed(ctx)
 		if ctx.Err() != nil {
-			logx.As().Info().Str("reason", ReasonUpgradeOutcomeMonitorStopped.String()).Msg("upgrade-outcome monitor stopped")
+			logx.As().Info().Str("reason", ReasonUpgradeOutcomeMonitorStopped.String()).Msg("Stopped upgrade-outcome monitor")
 			return nil
 		}
 		if listErr != nil {
@@ -234,7 +235,7 @@ func (m *UpgradeOutcomeMonitor) Run(ctx context.Context) (retErr error) {
 			m.setConnectivityError(listReason.String(), listErr.Error(),
 				fmt.Sprintf("Verify RBAC for all networkupgrade* CRs in namespace %s", m.cfg.Namespace))
 			logx.As().Warn().Err(listErr).Str("reason", listReason.String()).
-				Dur("retry_in", backoff).Msg("list error — retrying")
+				Dur("retry_in", backoff).Msg("Error occurred during list, retrying")
 			if !sleepCtx(ctx, backoff) {
 				return nil
 			}
@@ -245,7 +246,7 @@ func (m *UpgradeOutcomeMonitor) Run(ctx context.Context) (retErr error) {
 
 		err := m.runWatch(ctx, prepareRV, freezeRV, executeRV, abortRV)
 		if ctx.Err() != nil {
-			logx.As().Info().Str("reason", ReasonUpgradeOutcomeMonitorStopped.String()).Msg("upgrade-outcome monitor stopped")
+			logx.As().Info().Str("reason", ReasonUpgradeOutcomeMonitorStopped.String()).Msg("Stopped upgrade-outcome monitor")
 			return nil
 		}
 		if err == nil {
@@ -259,12 +260,12 @@ func (m *UpgradeOutcomeMonitor) Run(ctx context.Context) (retErr error) {
 			m.setConnectivityError(ReasonProvisionerProxyAuthError.String(), err.Error(),
 				"Restore RBAC for the UC ServiceAccount on networkupgradeexecutes and networkupgradefreezeaborts")
 			logx.As().Warn().Err(err).Str("reason", ReasonProvisionerProxyAuthError.String()).
-				Dur("retry_in", backoff).Msg("auth error watching NetworkUpgrade* CRs")
+				Dur("retry_in", backoff).Msg("Failed to watch NetworkUpgrade* CRs (auth error), retrying")
 		} else {
 			m.setConnectivityError(ReasonProvisionerProxyWatchError.String(), err.Error(),
 				"Check connectivity to the Kubernetes API server")
 			logx.As().Warn().Err(err).Str("reason", ReasonProvisionerProxyWatchError.String()).
-				Dur("retry_in", backoff).Msg("watch error — retrying")
+				Dur("retry_in", backoff).Msg("Error occurred during watch, retrying")
 		}
 		if !sleepCtx(ctx, backoff) {
 			return nil
@@ -285,7 +286,7 @@ func (m *UpgradeOutcomeMonitor) listAndSeed(ctx context.Context) (prepareRV, fre
 	// Safety-net sweep of stuck-operation state on every list cycle (startup and
 	// each ~5-minute watch reconnect). Terminal operations are cleaned up inline in
 	// observePhase; this bounds the pathological never-terminal case.
-	m.pruneStaleOperations(time.Now())
+	m.pruneStaleOperations(ctx, time.Now())
 
 	listCtx, cancel := context.WithTimeout(ctx, listTimeout)
 	defer cancel()
@@ -371,15 +372,12 @@ func (m *UpgradeOutcomeMonitor) listAndSeed(ctx context.Context) (prepareRV, fre
 		}
 	}
 
-	// Archive any terminal CRs that survived a prior UC restart unarchived.
-	// Runs in the background so it does not block the watch startup path.
+	// Archive any operation whose final step (Execute or FreezeAbort) survived a prior
+	// UC restart unarchived; archiveOperation sweeps the sibling Prepare/Freeze too
+	// (#1349). Only the operation-terminal steps are checked — a Prepare/Freeze whose
+	// operation is still in flight must stay in the working set. Runs in the background
+	// so it does not block the watch startup path.
 	go func() {
-		for i := range prepareList.Items {
-			m.archiveIfTerminalPhase(ctx, &prepareList.Items[i])
-		}
-		for i := range freezeList.Items {
-			m.archiveIfTerminalPhase(ctx, &freezeList.Items[i])
-		}
 		for i := range execList.Items {
 			m.archiveIfTerminalPhase(ctx, &execList.Items[i])
 		}
@@ -416,7 +414,7 @@ func (m *UpgradeOutcomeMonitor) runWatch(ctx context.Context, prepareRV, freezeR
 	defer func() {
 		if r := recover(); r != nil {
 			logx.As().Error().Str("reason", ReasonProvisionerProxyWatchPanic.String()).Interface("panic", r).
-				Msg("panic in watch loop — recovering")
+				Msg("Recovering from panic in watch loop")
 			retErr = errx.WithReason(errK8sAPI.New("recovered panic in watch loop: %v", r), ReasonProvisionerProxyWatchPanic)
 		}
 	}()
@@ -660,9 +658,10 @@ func (m *UpgradeOutcomeMonitor) observePhase(cr *unstructured.Unstructured) {
 	if from == "" {
 		from = nonePhase
 	}
+	kind := cr.GetKind()
 	logx.As().Info().Str("reason", ReasonPhaseChanged.String()).Str("operation_id", operationID).
-		Str("cr_kind", cr.GetKind()).Str("step", step).Str("phase", phase).Str("previous_phase", from).
-		Msg("CR phase changed")
+		Str("cr_kind", kind).Str("step", step).Str("phase", phase).Str("previous_phase", from).
+		Msgf("Changed %s phase: %s → %s", kind, from, phase)
 	m.events.info(operationID, ReasonPhaseChanged.String(),
 		fmt.Sprintf("%s phase %s -> %s", step, from, phase))
 
@@ -795,7 +794,19 @@ func (m *UpgradeOutcomeMonitor) recordFirstSeenLocked(operationID string) {
 // bound in a UC that runs for months. Age is taken from opFirstSeen, which is
 // seeded from the operationId timestamp when available and wall-clock otherwise —
 // so even timestampless ids are eventually reclaimed.
-func (m *UpgradeOutcomeMonitor) pruneStaleOperations(now time.Time) {
+//
+// The sweep also evicts the aged-out op from the Factory dedup cache via onDelete
+// (the same callback used on watch Deleted). Because CRs are archived, not
+// deleted, onDelete never fires for a completed op on its own, so without this the
+// Factory's f.cache would retain one entry per historical operation forever. This
+// sweep is the single age basis (opFirstSeen) that bounds both the monitor's maps
+// and f.cache together.
+//
+// It also archives the aged-out operation's CRs (archiveOperation). Operations are
+// normally archived when their final step completes (#1349); an operation that
+// never reached that step would otherwise keep its Prepare/Freeze CRs in the
+// non-archived working set forever — this sweep reclaims those too.
+func (m *UpgradeOutcomeMonitor) pruneStaleOperations(ctx context.Context, now time.Time) {
 	cutoff := now.Add(-maxOperationAge)
 	var stale []string
 
@@ -832,10 +843,18 @@ func (m *UpgradeOutcomeMonitor) pruneStaleOperations(now time.Time) {
 		m.events.error(opID, ReasonStaleOperationPruned.String(),
 			"evicted after exceeding the retention window without reaching a terminal phase; inspect the on-disk upgrade package")
 		m.events.closeOp(opID) // release the (still-open) event-log handle
+		// Bound the Factory dedup cache with the same age sweep: onDelete is
+		// factory.invalidate, so the aged-out op is dropped from f.cache too.
+		if m.onDelete != nil {
+			m.onDelete(opID)
+		}
+		// Archive the aged-out operation's CRs so an abandoned/stuck operation (whose
+		// final step was never observed) leaves the non-archived working set too (#1349).
+		m.archiveOperation(ctx, opID)
 		// Channel 2: structured stdout log (reason= is alertable in Loki).
 		logx.As().Warn().Str("reason", ReasonStaleOperationPruned.String()).
 			Str("operation_id", opID).
-			Msg("evicted in-memory state for an operation past the retention window that never reached a terminal phase; the on-disk data/upgrade/current package may warrant inspection")
+			Msg("Evicted in-memory state for an operation past the retention window that never reached a terminal phase; the on-disk data/upgrade/current package may warrant inspection")
 	}
 }
 
@@ -897,24 +916,72 @@ func (m *UpgradeOutcomeMonitor) handleTerminalAbort(cr *unstructured.Unstructure
 	discardUpgradePackage(m.cfg.UpgradePath, operationIDOf(cr))
 }
 
-// archiveIfTerminalPhase stamps lifecycle=archived on a terminal CR so future
-// List calls with the archive-exclusion selector skip it. No-op for non-terminal phases.
+// archiveIfTerminalPhase archives the whole operation once its final step (Execute
+// or FreezeAbort) reaches a terminal phase — see archiveOperation. Prepare/Freeze
+// reaching Succeeded are NOT operation-terminal (later steps follow), so they are
+// never archived on their own; archiving is op-id-scoped and happens once, when the
+// operation completes (#1349). No-op for a non-operation-terminal phase, or for a CR
+// already archived (the archive patch echoes back through the unfiltered watch — skip
+// the redundant op-id list on that echo).
 func (m *UpgradeOutcomeMonitor) archiveIfTerminalPhase(ctx context.Context, cr *unstructured.Unstructured) {
 	phase, _, _ := unstructured.NestedString(cr.Object, "status", "phase")
-	if phase == string(operatorv1alpha1.PhaseSucceeded) || phase == string(operatorv1alpha1.PhaseFailed) {
-		m.archiveCR(ctx, cr)
+	if !isOperationTerminal(cr, phase) {
+		return
 	}
-}
-
-// archiveCR patches the lifecycle=archived label onto a CR. Idempotent.
-func (m *UpgradeOutcomeMonitor) archiveCR(ctx context.Context, cr *unstructured.Unstructured) {
 	if cr.GetLabels()[common.LabelLifecycle] == common.LifecycleArchived {
 		return
 	}
-	gvr, ok := kindToGVR(cr.GetKind())
-	if !ok {
-		logx.As().Warn().Str("reason", ReasonCRArchiveFailed.String()).
-			Str("kind", cr.GetKind()).Msg("unknown CR kind — cannot archive")
+	m.archiveOperation(ctx, operationIDOf(cr))
+}
+
+// archiveOperation stamps lifecycle=archived on every NetworkUpgrade* CR sharing
+// operationID, so a completed (or aged-out) operation's Prepare/Freeze/Execute (or
+// FreezeAbort) leave the working set together rather than each self-archiving at its own
+// terminal phase (#1349). Best-effort and idempotent (archiveCR skips CRs already
+// archived); a list failure is logged and retried on the next terminal observation or
+// list cycle. The op-id is re-verified in code because a fake client (tests) may not
+// honour the field selector.
+func (m *UpgradeOutcomeMonitor) archiveOperation(ctx context.Context, operationID string) {
+	if operationID == "" {
+		return
+	}
+	for _, gvr := range allUpgradeGVRs {
+		listCtx, cancel := context.WithTimeout(ctx, listTimeout)
+		// Field-select by operationId (source of truth) so the result is bounded to
+		// this one operation's CRs, not the full history; also exclude already-archived
+		// siblings so a re-observation or stale-sweep of an already-archived operation
+		// returns nothing to do.
+		list, err := m.client.Resource(gvr).Namespace(m.cfg.Namespace).
+			List(listCtx, metav1.ListOptions{
+				FieldSelector: specOperationIDField + "=" + operationID,
+				LabelSelector: listNotArchivedSelector,
+			})
+		cancel()
+		if err != nil {
+			// A canceled context is the expected shutdown path (the parent ctx is
+			// canceled mid-list), not a real archive failure — log it at debug so
+			// clean shutdowns stay quiet.
+			ev := logx.As().Warn()
+			if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+				ev = logx.As().Debug()
+			}
+			ev.Err(err).Str("reason", ReasonCRArchiveFailed.String()).
+				Str("operation_id", operationID).Str("resource", gvr.Resource).
+				Msg("Failed to list CRs for operation archive, retrying")
+			continue
+		}
+		for i := range list.Items {
+			if operationIDOf(&list.Items[i]) != operationID {
+				continue
+			}
+			m.archiveCR(ctx, gvr, &list.Items[i])
+		}
+	}
+}
+
+// archiveCR patches the lifecycle=archived label onto cr (of type gvr). Idempotent.
+func (m *UpgradeOutcomeMonitor) archiveCR(ctx context.Context, gvr schema.GroupVersionResource, cr *unstructured.Unstructured) {
+	if cr.GetLabels()[common.LabelLifecycle] == common.LifecycleArchived {
 		return
 	}
 	patch := []byte(fmt.Sprintf(
@@ -924,28 +991,13 @@ func (m *UpgradeOutcomeMonitor) archiveCR(ctx context.Context, cr *unstructured.
 	if _, err := m.client.Resource(gvr).Namespace(cr.GetNamespace()).
 		Patch(patchCtx, cr.GetName(), types.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
 		logx.As().Warn().Str("reason", ReasonCRArchiveFailed.String()).
-			Str("cr_name", cr.GetName()).Str("kind", cr.GetKind()).Err(err).
-			Msg("failed to archive CR — will retry on next list cycle")
+			Str("cr_name", cr.GetName()).Str("resource", gvr.Resource).Err(err).
+			Msg("Failed to archive CR; will retry on next list cycle")
 		return
 	}
 	logx.As().Info().Str("reason", ReasonCRArchived.String()).
 		Str("cr_name", cr.GetName()).Str("operation_id", operationIDOf(cr)).
-		Msg("archived terminal CR")
-}
-
-func kindToGVR(kind string) (schema.GroupVersionResource, bool) {
-	switch kind {
-	case kindNetworkUpgradePrepare:
-		return networkUpgradePrepareGVR, true
-	case kindNetworkUpgradeFreeze:
-		return networkUpgradeFreezeGVR, true
-	case kindNetworkUpgradeExecute:
-		return networkUpgradeExecuteGVR, true
-	case kindNetworkUpgradeFreezeAbort:
-		return networkUpgradeFreezeAbortGVR, true
-	default:
-		return schema.GroupVersionResource{}, false
-	}
+		Msg("Archived operation CR")
 }
 
 // matchesDiskOperationID returns true when the CR's operationID matches the
@@ -971,7 +1023,7 @@ func (m *UpgradeOutcomeMonitor) matchesDiskOperationID(cr *unstructured.Unstruct
 	diskOpID, _, _, found, err := deriveOperationIDPrimary(m.cfg.UpgradePath, m.cfg.NodeID)
 	if err != nil {
 		addExtra(logx.As().Warn().Err(err).Str("reason", ReasonUpgradePackageRotateFailed.String())).
-			Msg("could not read disk operationId — skipping")
+			Msg("Skipping: failed to read disk operationId")
 		return false
 	}
 	if found {
@@ -993,12 +1045,12 @@ func (m *UpgradeOutcomeMonitor) matchesDiskOperationID(cr *unstructured.Unstruct
 	entries, err := os.ReadDir(m.cfg.UpgradePath)
 	if err != nil {
 		addExtra(logx.As().Warn().Err(err).Str("reason", ReasonUpgradePackageRotateFailed.String())).
-			Msg("could not read upgrade dir for fallback timestamp check — skipping")
+			Msg("Skipping: failed to read upgrade dir for fallback timestamp check")
 		return false
 	}
 	if len(entries) == 0 {
 		addExtra(logx.As().Debug().Str("reason", ReasonUpgradePackageRotated.String())).
-			Msg("no execute_immediate.mf and current/ is empty — already rotated, skipping")
+			Msg("Skipping: no execute_immediate.mf and current/ is empty (already rotated)")
 		return false
 	}
 	if !crCreatedAt.IsZero() {
@@ -1008,7 +1060,7 @@ func (m *UpgradeOutcomeMonitor) matchesDiskOperationID(cr *unstructured.Unstruct
 				addExtra(logx.As().Info().
 					Str("newest_file_mtime", info.ModTime().UTC().Format(time.RFC3339)).
 					Str("cr_created_at", crCreatedAt.UTC().Format(time.RFC3339))).
-					Msg("files in current/ are newer than CR — CN is writing a new package, skipping")
+					Msg("Skipping: files in current/ are newer than CR (CN is writing a new package)")
 				return false
 			}
 		}
@@ -1020,13 +1072,13 @@ func (m *UpgradeOutcomeMonitor) matchesDiskOperationID(cr *unstructured.Unstruct
 	crVersion, ok := versionFromOperationID(operationID)
 	if !ok {
 		addExtra(logx.As().Debug().Str("reason", ReasonManifestInvalid.String())).
-			Msg("no execute_immediate.mf and operationId has unrecognised format — skipping")
+			Msg("Skipping: no execute_immediate.mf and operationId has unrecognised format")
 		return false
 	}
 	diskVersion, _, versionFound, versionErr := parseVersionFile(m.cfg.UpgradePath)
 	if versionErr != nil {
 		addExtra(logx.As().Warn().Err(versionErr).Str("reason", ReasonUpgradePackageRotateFailed.String())).
-			Msg("could not read VERSION file — skipping")
+			Msg("Skipping: failed to read VERSION file")
 		return false
 	}
 	if versionFound && diskVersion != crVersion {
@@ -1036,6 +1088,6 @@ func (m *UpgradeOutcomeMonitor) matchesDiskOperationID(cr *unstructured.Unstruct
 	}
 
 	addExtra(logx.As().Debug().Str("disk_version", diskVersion)).
-		Msg("no execute_immediate.mf but files predate CR and version matches — treating current/ as stale package")
+		Msg("Treating current/ as stale package: no execute_immediate.mf, files predate CR, version matches")
 	return true
 }

@@ -95,7 +95,20 @@ func TestPruneStaleOperations(t *testing.T) {
 	m.opFirstSeen[freshOp] = time.Date(2026, 7, 5, 0, 0, 0, 0, time.UTC)    // 10d → kept
 	m.opFirstSeen[timelessOp] = time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC) // old → stale
 
-	m.pruneStaleOperations(now)
+	// The sweep must also evict aged-out ops from the Factory dedup cache via
+	// onDelete — CRs are archived, not deleted, so this sweep is the only thing
+	// that bounds f.cache for completed operations.
+	evicted := map[string]bool{}
+	m.onDelete = func(operationID string) { evicted[operationID] = true }
+
+	m.pruneStaleOperations(context.Background(), now)
+
+	if !evicted[oldOp] || !evicted[timelessOp] {
+		t.Errorf("stale ops not evicted from Factory cache via onDelete: %v", evicted)
+	}
+	if evicted[freshOp] {
+		t.Error("fresh op wrongly evicted from Factory cache via onDelete")
+	}
 
 	if _, ok := m.daemonTriggered[oldOp]; ok {
 		t.Error("stale daemonTriggered entry not pruned")
@@ -670,62 +683,102 @@ func newTestCR(kind, name, namespace, operationID, step string) *unstructured.Un
 	}
 }
 
-func TestArchiveIfTerminalPhase_AllKinds(t *testing.T) {
+// TestArchiveOperation_OnOperationTerminal verifies that when an operation's final
+// step (Execute or FreezeAbort) reaches a terminal phase, archiveIfTerminalPhase
+// archives every CR sharing that operationId — the Prepare/Freeze siblings included
+// (#1349) — and leaves an unrelated operation's CRs untouched.
+func TestArchiveOperation_OnOperationTerminal(t *testing.T) {
 	cases := []struct {
+		name      string
+		finalKind string
+		finalStep string
+		finalGVR  schema.GroupVersionResource
+		phase     string
+	}{
+		{"execute/succeeded", kindNetworkUpgradeExecute, operatorv1alpha1.StepExecute, networkUpgradeExecuteGVR, string(operatorv1alpha1.PhaseSucceeded)},
+		{"execute/failed", kindNetworkUpgradeExecute, operatorv1alpha1.StepExecute, networkUpgradeExecuteGVR, string(operatorv1alpha1.PhaseFailed)},
+		{"freezeabort/succeeded", kindNetworkUpgradeFreezeAbort, operatorv1alpha1.StepAbort, networkUpgradeFreezeAbortGVR, string(operatorv1alpha1.PhaseSucceeded)},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newOutcomeMonitor(t, t.TempDir())
+			op := "upgrade-0.75.0-20260413T120000Z"
+			other := "upgrade-0.75.0-20260101T120000Z"
+
+			prepare := newTestCR("NetworkUpgradePrepare", "prep", "solo", op, operatorv1alpha1.StepPrepare)
+			_ = unstructured.SetNestedField(prepare.Object, string(operatorv1alpha1.PhaseSucceeded), "status", "phase")
+			freeze := newTestCR("NetworkUpgradeFreeze", "frz", "solo", op, operatorv1alpha1.StepFreeze)
+			_ = unstructured.SetNestedField(freeze.Object, string(operatorv1alpha1.PhaseSucceeded), "status", "phase")
+			final := newTestCR(tc.finalKind, "final", "solo", op, tc.finalStep)
+			_ = unstructured.SetNestedField(final.Object, tc.phase, "status", "phase")
+			otherPrep := newTestCR("NetworkUpgradePrepare", "prep-other", "solo", other, operatorv1alpha1.StepPrepare)
+			_ = unstructured.SetNestedField(otherPrep.Object, string(operatorv1alpha1.PhaseSucceeded), "status", "phase")
+
+			create := func(gvr schema.GroupVersionResource, cr *unstructured.Unstructured) {
+				if _, err := m.client.Resource(gvr).Namespace("solo").Create(context.Background(), cr, metav1.CreateOptions{}); err != nil {
+					t.Fatalf("pre-create %s: %v", cr.GetName(), err)
+				}
+			}
+			create(networkUpgradePrepareGVR, prepare)
+			create(networkUpgradeFreezeGVR, freeze)
+			create(tc.finalGVR, final)
+			create(networkUpgradePrepareGVR, otherPrep)
+
+			m.archiveIfTerminalPhase(context.Background(), final)
+
+			isArchived := func(gvr schema.GroupVersionResource, name string) bool {
+				got, err := m.client.Resource(gvr).Namespace("solo").Get(context.Background(), name, metav1.GetOptions{})
+				if err != nil {
+					t.Fatalf("get %s: %v", name, err)
+				}
+				return got.GetLabels()[common.LabelLifecycle] == common.LifecycleArchived
+			}
+
+			if !isArchived(networkUpgradePrepareGVR, "prep") {
+				t.Error("Prepare sibling not archived")
+			}
+			if !isArchived(networkUpgradeFreezeGVR, "frz") {
+				t.Error("Freeze sibling not archived")
+			}
+			if !isArchived(tc.finalGVR, "final") {
+				t.Error("final CR not archived")
+			}
+			if isArchived(networkUpgradePrepareGVR, "prep-other") {
+				t.Error("unrelated operation's CR wrongly archived")
+			}
+		})
+	}
+}
+
+// TestArchiveIfTerminalPhase_PrepareFreezeNotArchivedAlone verifies a Prepare or
+// Freeze reaching a terminal phase is NOT archived on its own — archiving waits for
+// the operation's final step (#1349).
+func TestArchiveIfTerminalPhase_PrepareFreezeNotArchivedAlone(t *testing.T) {
+	for _, tc := range []struct {
 		kind string
 		step string
 		gvr  schema.GroupVersionResource
 	}{
 		{"NetworkUpgradePrepare", operatorv1alpha1.StepPrepare, networkUpgradePrepareGVR},
 		{"NetworkUpgradeFreeze", operatorv1alpha1.StepFreeze, networkUpgradeFreezeGVR},
-		{kindNetworkUpgradeExecute, operatorv1alpha1.StepExecute, networkUpgradeExecuteGVR},
-		{kindNetworkUpgradeFreezeAbort, operatorv1alpha1.StepAbort, networkUpgradeFreezeAbortGVR},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.kind+"/Succeeded", func(t *testing.T) {
+	} {
+		t.Run(tc.kind, func(t *testing.T) {
 			m := newOutcomeMonitor(t, t.TempDir())
 			cr := newTestCR(tc.kind, "test-cr", "solo", "upgrade-0.75.0-20260413T120000Z", tc.step)
 			_ = unstructured.SetNestedField(cr.Object, string(operatorv1alpha1.PhaseSucceeded), "status", "phase")
-
-			_, err := m.client.Resource(tc.gvr).Namespace("solo").
-				Create(context.Background(), cr, metav1.CreateOptions{})
-			if err != nil {
+			if _, err := m.client.Resource(tc.gvr).Namespace("solo").Create(context.Background(), cr, metav1.CreateOptions{}); err != nil {
 				t.Fatalf("pre-create: %v", err)
 			}
 
 			m.archiveIfTerminalPhase(context.Background(), cr)
 
-			got, err := m.client.Resource(tc.gvr).Namespace("solo").
-				Get(context.Background(), cr.GetName(), metav1.GetOptions{})
+			got, err := m.client.Resource(tc.gvr).Namespace("solo").Get(context.Background(), cr.GetName(), metav1.GetOptions{})
 			if err != nil {
-				t.Fatalf("get after archive: %v", err)
+				t.Fatalf("get: %v", err)
 			}
-			if got.GetLabels()[common.LabelLifecycle] != common.LifecycleArchived {
-				t.Errorf("lifecycle label = %q, want %q", got.GetLabels()[common.LabelLifecycle], common.LifecycleArchived)
-			}
-		})
-
-		t.Run(tc.kind+"/Failed", func(t *testing.T) {
-			m := newOutcomeMonitor(t, t.TempDir())
-			cr := newTestCR(tc.kind, "test-cr", "solo", "upgrade-0.75.0-20260413T120000Z", tc.step)
-			_ = unstructured.SetNestedField(cr.Object, string(operatorv1alpha1.PhaseFailed), "status", "phase")
-
-			_, err := m.client.Resource(tc.gvr).Namespace("solo").
-				Create(context.Background(), cr, metav1.CreateOptions{})
-			if err != nil {
-				t.Fatalf("pre-create: %v", err)
-			}
-
-			m.archiveIfTerminalPhase(context.Background(), cr)
-
-			got, err := m.client.Resource(tc.gvr).Namespace("solo").
-				Get(context.Background(), cr.GetName(), metav1.GetOptions{})
-			if err != nil {
-				t.Fatalf("get after archive: %v", err)
-			}
-			if got.GetLabels()[common.LabelLifecycle] != common.LifecycleArchived {
-				t.Errorf("lifecycle label = %q, want %q", got.GetLabels()[common.LabelLifecycle], common.LifecycleArchived)
+			if got.GetLabels()[common.LabelLifecycle] == common.LifecycleArchived {
+				t.Errorf("%s archived on its own terminal phase; want archiving deferred to the operation's final step", tc.kind)
 			}
 		})
 	}
