@@ -315,14 +315,16 @@ type UcSidecar struct {
 }
 
 // ConsensusNodeContainer configures the main consensus node container.
+// +kubebuilder:validation:XValidation:rule="has(self.softwareVersion) || has(self.softwareVersionSource)",message="one of softwareVersion or softwareVersionSource is required"
 type ConsensusNodeContainer struct {
 	// +kubebuilder:default="consensus-node"
 	// +optional
 	Name string `json:"name,omitempty"`
 
-	// container image spec
-	// +kubebuilder:validation:Required
-	SoftwareVersion *SoftwareVersion `json:"softwareVersion"`
+	// container image spec; mutually optional with softwareVersionSource — at least one must be set.
+	// When softwareVersionSource is also set it takes precedence and this field is ignored.
+	// +optional
+	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
 
 	// SoftwareVersionSource declares multiple candidate registries (with layer hashes)
 	// for this container's image; when set it takes precedence over SoftwareVersion and
