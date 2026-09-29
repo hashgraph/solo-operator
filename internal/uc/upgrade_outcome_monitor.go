@@ -992,12 +992,12 @@ func (m *UpgradeOutcomeMonitor) archiveCR(ctx context.Context, gvr schema.GroupV
 		Patch(patchCtx, cr.GetName(), types.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
 		logx.As().Warn().Str("reason", ReasonCRArchiveFailed.String()).
 			Str("cr_name", cr.GetName()).Str("resource", gvr.Resource).Err(err).
-			Msg("Failed to archive CR; will retry on next list cycle")
+			Msgf("Failed to archive %s CR; will retry on next list cycle", cr.GetKind())
 		return
 	}
 	logx.As().Info().Str("reason", ReasonCRArchived.String()).
 		Str("cr_name", cr.GetName()).Str("operation_id", operationIDOf(cr)).
-		Msg("Archived operation CR")
+		Msgf("Archived %s CR (retained for audit)", cr.GetKind())
 }
 
 // matchesDiskOperationID returns true when the CR's operationID matches the

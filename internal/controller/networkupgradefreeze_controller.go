@@ -101,7 +101,7 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, err
 	}
 	if sibling {
-		msg := fmt.Sprintf("operationId %q already used by another NetworkUpgradeFreeze", freeze.Spec.OperationID)
+		msg := fmt.Sprintf("Duplicate operationId %q; already used by another NetworkUpgradeFreeze", freeze.Spec.OperationID)
 		r.eventf(ctx, &freeze, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
 		freeze.Status.Phase = operatorv1alpha1.PhaseFailed
 		freeze.Status.ObservedGeneration = freeze.Generation

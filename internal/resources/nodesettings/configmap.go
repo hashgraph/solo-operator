@@ -42,7 +42,7 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 			Reason:             "InvalidContent",
 			Message:            err.Error(),
 		})
-		common.Eventf(ctx, r.Recorder, obj, corev1.EventTypeWarning, common.ReasonInvalidContent, "ConfigMap", "invalid settings.txt: %s", err.Error())
+		common.Eventf(ctx, r.Recorder, obj, corev1.EventTypeWarning, common.ReasonInvalidContent, "ConfigMap", "Invalid settings.txt: %s", err.Error())
 		return ctrl.Result{}, nil
 	}
 

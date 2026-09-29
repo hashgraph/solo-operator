@@ -71,7 +71,7 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, err
 	}
 	if sibling {
-		msg := fmt.Sprintf("operationId %q already used by another NetworkUpgradeFreezeAbort", abort.Spec.OperationID)
+		msg := fmt.Sprintf("Duplicate operationId %q; already used by another NetworkUpgradeFreezeAbort", abort.Spec.OperationID)
 		r.eventf(ctx, &abort, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
 		abort.Status.Phase = operatorv1alpha1.PhaseFailed
 		abort.Status.ObservedGeneration = abort.Generation
@@ -119,7 +119,7 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 		})
 	} else {
 		r.eventf(ctx, &abort, corev1.EventTypeNormal, operatorv1alpha1.EventAbortProcessed,
-			"abort processed for operationId %q; upgrade cancelled before freeze", abort.Spec.OperationID)
+			"Abort processed for operationId %q; upgrade cancelled before freeze", abort.Spec.OperationID)
 		abort.Status.Phase = operatorv1alpha1.PhaseSucceeded
 		setCondition(&abort.Status.Conditions, metav1.Condition{
 			Type:    operatorv1alpha1.CondAbortProcessed,

@@ -112,7 +112,7 @@ func (r *NetworkGenesisReconciler) run(ctx context.Context, ng *operatorv1alpha1
 		// Validate before writing; on failure emit an event and surface the error.
 		if err := genesis.ValidatePassthroughJSON(ng.Spec.GenesisNetworkJSON); err != nil {
 			common.Eventf(ctx, r.Recorder, ng, corev1.EventTypeWarning, operatorv1alpha1.EventInvalidGenesisJSON, "NetworkGenesis",
-				"pre-built genesis-network.json rejected: %v", err)
+				"Pre-built genesis-network.json rejected: %v", err)
 			return nil, fmt.Errorf("invalid genesisNetworkJSON: %w", err)
 		}
 		if err := genesis.UpsertConfigMap(ctx, r.Client, ng.Namespace, genesis.GenesisConfigMapName, ng.Spec.Orbit, ng.Spec.OperationID,
