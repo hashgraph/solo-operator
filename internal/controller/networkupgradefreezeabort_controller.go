@@ -40,8 +40,11 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 	}
 
 	ctx = common.ReconcileContext(ctx, "networkupgradefreezeabort", "NetworkUpgradeFreezeAbort", &abort)
-	common.Info(ctx, ReasonReconcileStart).Msg("Starting NetworkUpgradeFreezeAbort reconciliation")
-	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished NetworkUpgradeFreezeAbort reconciliation")
+	common.Info(ctx, ReasonReconcileStart).
+		Str("phase", string(abort.Status.Phase)).
+		Int64("generation", abort.Generation).
+		Int64("observedGeneration", abort.Status.ObservedGeneration).
+		Msg("Reconciling NetworkUpgradeFreezeAbort")
 
 	if res, err := ensureFinalizer(ctx, r.Client, &abort, FinalizerNetworkUpgradeFreezeAbort); res != nil {
 		return *res, err

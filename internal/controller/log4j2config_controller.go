@@ -46,8 +46,8 @@ func (r *Log4j2ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	ctx = common.ReconcileContext(ctx, "log4j2config", "Log4j2Config", obj)
-	common.Info(ctx, ReasonReconcileStart).Msg("Starting Log4j2Config reconciliation")
-	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished Log4j2Config reconciliation")
+	common.Debug(ctx, ReasonReconcileStart).Msg("Starting Log4j2Config reconciliation")
+	defer common.Debug(ctx, ReasonReconcileFinish).Msg("Finished Log4j2Config reconciliation")
 
 	result, err := r.subreconciler.Reconcile(ctx, obj)
 	if err != nil {

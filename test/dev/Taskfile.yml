@@ -54,6 +54,20 @@ vars:
   # what the operator computes via go-containerregistry. The version is supplied
   # per build (base or upgrade) by build:one.
   CN_IMAGE: "gcr.io/hedera-registry/consensus-node"
+  # Extra registries that publish the SAME consensus-node image, listed as space-
+  # separated repos (no tag; the tag is CN_VERSION). Each is added to the manifest
+  # as a second registry ONLY when it publishes CN_VERSION with identical layer
+  # hashes, so the multi-registry SoftwareVersionSource path can be exercised. A
+  # mirror that lacks the version (or differs) is skipped, so the manifest stays
+  # valid. Set to "" to force a single-registry manifest.
+  CN_IMAGE_MIRRORS: "artifacts.hashgraph.io/consensus-node-docker-release-local/consensus-node"
+  # Optional decoy registry (full image ref WITH tag) added as an extra candidate to
+  # test the operator skipping a registry it cannot pull from: a real public host but
+  # an image/tag that does not exist. Empty by default so the normal build is not
+  # affected. It is appended AFTER the valid registries (never registries[0], which
+  # weaver uses for the single SoftwareVersion fallback), and its layer hashes are not
+  # checked. Set e.g. CN_DECOY_REGISTRY=artifacts.hashgraph.io/consensus-node-docker-release-local/consensus-node:0.0.0-invalid
+  CN_DECOY_REGISTRY: ""
   # Space-separated platforms to emit layer hashes for. A platform the image
   # does not publish is skipped with a warning.
   CN_PLATFORMS: "linux/amd64 linux/arm64"
@@ -154,11 +168,16 @@ tasks:
         info "Computing deterministic layer hashes for $IMAGE"
         mkdir -p "$OUT_DIR"
 
-        # Build the layerHashes block in a temp file so we can fail if no platform
-        # yielded any diff_ids (a bad image ref must not produce an empty manifest).
+        # Compute layer hashes (RootFS diff_ids) per platform. Save each platform diff_ids
+        # to a temp file so a mirror can be checked byte-identical before it is listed as
+        # a second registry. Fail if no platform yielded any diff_ids (a bad image ref must
+        # not produce an empty manifest). Temp files, not bash associative arrays, so this
+        # also runs on the macOS system bash (3.2).
         layers_block="$(mktemp)"
-        trap "rm -f \"$layers_block\"" EXIT
-        emitted=0
+        registries_block="$(mktemp)"
+        ids_dir="$(mktemp -d)"
+        trap "rm -rf \"$layers_block\" \"$registries_block\" \"$ids_dir\"" EXIT
+        emitted_platforms=""
         for p in {{ .CN_PLATFORMS }}; do
           if ! cfg="$(crane config "$IMAGE" --platform "$p" 2>/dev/null)"; then
             warn "skip $p — image does not publish this platform"
@@ -169,14 +188,46 @@ tasks:
             warn "skip $p — no rootfs.diff_ids in config"
             continue
           fi
+          printf "%s" "$ids" > "$ids_dir/$(printf "%s" "$p" | tr / _)"
+          emitted_platforms="$emitted_platforms $p"
           {
             echo "        $p:"
             while IFS= read -r d; do echo "          - \"$d\""; done <<< "$ids"
           } >> "$layers_block"
           ok "$p: $(printf "%s\n" "$ids" | grep -c .) layer hash(es)"
-          emitted=$((emitted+1))
         done
-        [ "$emitted" -gt 0 ] || { err "no layer hashes computed for $IMAGE on any of: {{ .CN_PLATFORMS }}"; exit 1; }
+        [ -n "$emitted_platforms" ] || { err "no layer hashes computed for $IMAGE on any of: {{ .CN_PLATFORMS }}"; exit 1; }
+
+        # registries: the primary image, plus any mirror that publishes CN_VERSION
+        # with identical diff_ids on every emitted platform. A mirror that lacks the
+        # version or differs is skipped, so the manifest stays valid and deterministic.
+        echo "      - image: \"$IMAGE\"" >> "$registries_block"
+        for m in {{ .CN_IMAGE_MIRRORS }}; do
+          mref="$m:{{ .CN_VERSION }}"
+          match=1
+          for p in $emitted_platforms; do
+            if mcfg="$(crane config "$mref" --platform "$p" 2>/dev/null)"; then
+              mids="$(printf "%s" "$mcfg" | jq -r ".rootfs.diff_ids[]?")"
+              [ "$mids" = "$(cat "$ids_dir/$(printf "%s" "$p" | tr / _)")" ] || match=0
+            else
+              match=0
+            fi
+          done
+          if [ "$match" = 1 ]; then
+            echo "      - image: \"$mref\"" >> "$registries_block"
+            ok "mirror matches, added as a registry: $mref"
+          else
+            warn "mirror skipped (missing version or non-deterministic): $mref"
+          fi
+        done
+
+        # Optional decoy: a reachable public host with an image/tag that does not
+        # exist, appended last so registries[0] stays valid. Exercises the operator
+        # skipping a candidate it cannot pull.
+        if [ -n "{{ .CN_DECOY_REGISTRY }}" ]; then
+          echo "      - image: \"{{ .CN_DECOY_REGISTRY }}\"" >> "$registries_block"
+          warn "decoy registry added (intentionally unpullable): {{ .CN_DECOY_REGISTRY }}"
+        fi
 
         {
           echo "schemaVersion: 1"
@@ -188,7 +239,7 @@ tasks:
           echo "      layerHashes:"
           cat "$layers_block"
           echo "    registries:"
-          echo "      - image: \"$IMAGE\""
+          cat "$registries_block"
         } > "$MANIFEST"
 
         ok "Wrote $MANIFEST"

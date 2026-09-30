@@ -61,8 +61,8 @@ func (r *EnvoyProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	ctx = common.ReconcileContext(ctx, "envoyproxy", "EnvoyProxy", envoyObj)
-	common.Info(ctx, ReasonReconcileStart).Msg("Starting EnvoyProxy reconciliation")
-	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished EnvoyProxy reconciliation")
+	common.Debug(ctx, ReasonReconcileStart).Msg("Starting EnvoyProxy reconciliation")
+	defer common.Debug(ctx, ReasonReconcileFinish).Msg("Finished EnvoyProxy reconciliation")
 
 	// Handle deletion
 	if !envoyObj.DeletionTimestamp.IsZero() {

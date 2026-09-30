@@ -46,8 +46,8 @@ func (r *BlockNodesConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	ctx = common.ReconcileContext(ctx, "blocknodesconfig", "BlockNodesConfig", obj)
-	common.Info(ctx, ReasonReconcileStart).Msg("Starting BlockNodesConfig reconciliation")
-	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished BlockNodesConfig reconciliation")
+	common.Debug(ctx, ReasonReconcileStart).Msg("Starting BlockNodesConfig reconciliation")
+	defer common.Debug(ctx, ReasonReconcileFinish).Msg("Finished BlockNodesConfig reconciliation")
 
 	result, err := r.subreconciler.Reconcile(ctx, obj)
 	if err != nil {

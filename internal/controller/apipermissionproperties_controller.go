@@ -46,8 +46,8 @@ func (r *ApiPermissionPropertiesReconciler) Reconcile(ctx context.Context, req c
 	}
 
 	ctx = common.ReconcileContext(ctx, "apipermissionproperties", "ApiPermissionProperties", obj)
-	common.Info(ctx, ReasonReconcileStart).Msg("Starting ApiPermissionProperties reconciliation")
-	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished ApiPermissionProperties reconciliation")
+	common.Debug(ctx, ReasonReconcileStart).Msg("Starting ApiPermissionProperties reconciliation")
+	defer common.Debug(ctx, ReasonReconcileFinish).Msg("Finished ApiPermissionProperties reconciliation")
 
 	result, err := r.subreconciler.Reconcile(ctx, obj)
 	if err != nil {

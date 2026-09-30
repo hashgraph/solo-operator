@@ -46,8 +46,8 @@ func (r *ApplicationOverridePropertiesReconciler) Reconcile(ctx context.Context,
 	}
 
 	ctx = common.ReconcileContext(ctx, "applicationoverrideproperties", "ApplicationOverrideProperties", obj)
-	common.Info(ctx, ReasonReconcileStart).Msg("Starting ApplicationOverrideProperties reconciliation")
-	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished ApplicationOverrideProperties reconciliation")
+	common.Debug(ctx, ReasonReconcileStart).Msg("Starting ApplicationOverrideProperties reconciliation")
+	defer common.Debug(ctx, ReasonReconcileFinish).Msg("Finished ApplicationOverrideProperties reconciliation")
 
 	result, err := r.subreconciler.Reconcile(ctx, obj)
 	if err != nil {

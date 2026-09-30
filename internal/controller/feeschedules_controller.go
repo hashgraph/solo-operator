@@ -46,8 +46,8 @@ func (r *FeeSchedulesReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	ctx = common.ReconcileContext(ctx, "feeschedules", "FeeSchedules", obj)
-	common.Info(ctx, ReasonReconcileStart).Msg("Starting FeeSchedules reconciliation")
-	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished FeeSchedules reconciliation")
+	common.Debug(ctx, ReasonReconcileStart).Msg("Starting FeeSchedules reconciliation")
+	defer common.Debug(ctx, ReasonReconcileFinish).Msg("Finished FeeSchedules reconciliation")
 
 	result, err := r.subreconciler.Reconcile(ctx, obj)
 	if err != nil {

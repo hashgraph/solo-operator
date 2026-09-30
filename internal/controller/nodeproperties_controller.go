@@ -46,8 +46,8 @@ func (r *NodePropertiesReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	ctx = common.ReconcileContext(ctx, "nodeproperties", "NodePropertiesConfig", obj)
-	common.Info(ctx, ReasonReconcileStart).Msg("Starting NodeProperties reconciliation")
-	defer common.Info(ctx, ReasonReconcileFinish).Msg("Finished NodeProperties reconciliation")
+	common.Debug(ctx, ReasonReconcileStart).Msg("Starting NodeProperties reconciliation")
+	defer common.Debug(ctx, ReasonReconcileFinish).Msg("Finished NodeProperties reconciliation")
 
 	result, err := r.subreconciler.Reconcile(ctx, obj)
 	if err != nil {
